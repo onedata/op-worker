@@ -59,6 +59,16 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             {undefined, undefined}
     end,
 
+    ProvidersWithReadonlyStorage = maps:fold(fun(ProviderId, ProviderStorages, Acc) ->
+        IsNotReadonly = lists:any(fun(StorageId) ->
+            not storage:is_readonly(StorageId)
+        end, ProviderStorages),
+        case IsNotReadonly of
+            true -> Acc;
+            false -> [ProviderId | Acc]
+        end
+    end, [], Space#od_space.storages_by_provider),
+
     Result = #{
         <<"name">> => Space#od_space.name,
         <<"effUserList">> => gri:serialize(#gri{
@@ -86,7 +96,8 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             scope = private
         }),
         <<"rootDir">> => utils:undefined_to_null(RootDir),
-        <<"preferableWriteBlockSize">> => utils:undefined_to_null(PreferableWriteBlockSize)
+        <<"preferableWriteBlockSize">> => utils:undefined_to_null(PreferableWriteBlockSize),
+        <<"providersWithReadonlyStorage">> => ProvidersWithReadonlyStorage
     },
     fun
         (?USER(Id)) -> 

@@ -302,11 +302,8 @@ has_non_auto_luma_feed(Storage) ->
 
 -spec is_local(id()) -> boolean().
 is_local(StorageId) ->
-    case storage_logic:get_provider(StorageId) of
-        ?ERROR_FORBIDDEN -> false;
-        {error, _} = Error -> throw(Error);
-        {ok, ProviderId} -> oneprovider:is_self(ProviderId)
-    end.
+    provider_logic:has_storage(StorageId).
+
 
 -spec is_posix_compatible(id() | data()) -> boolean().
 is_posix_compatible(StorageDataOrId) ->

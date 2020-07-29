@@ -429,7 +429,7 @@ open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink) ->
     FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), new_file(), boolean()) ->
     no_return() | {storage_driver:handle_id(), file_location:record(), file_ctx:ctx()}.
 open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExists) ->
-    {StorageId, FileCtx1} = file_ctx:get_storage(FileCtx0),
+    {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx0),
     maybe_assert_not_readonly(StorageId, Flag),
     FileCtx2 = verify_file_exists(FileCtx1, HandleId0),
     SpaceID = file_ctx:get_space_id_const(FileCtx2),
@@ -441,10 +441,9 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
         maybe_open_on_storage(FileCtx3, SessId, Flag, IsDirectIO, HandleId),
         {HandleId, FileLocation, FileCtx3}
     catch
-        % TODO needed?
-%%        throw:?EROFS ->
-%%            % this error is thrown on attempt to open file for writing on a readonly storage
-%%            throw(?EROFS);
+        throw:?EROFS ->
+            % this error is thrown on attempt to open file for writing on a readonly storage
+            throw(?EROFS);
         throw:?ENOENT ->
             % this error is thrown on race between opening the file and deleting it on storage
             ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_uuid_const(FileCtx2)]),
@@ -553,9 +552,12 @@ check_and_register_release(_FileCtx, _SessId, _HandleId) ->
 -spec create_location(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
     {file_location:record(), file_ctx:ctx()}.
 create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
-    {#document{value = FL}, FileCtx2} =
-        sd_utils:create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
-    {FL, FileCtx2}.
+    case sd_utils:create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) of
+        {#document{value = FL}, FileCtx2} ->
+            {FL, FileCtx2};
+        {error, Reason} ->
+            throw(Reason)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -763,7 +765,9 @@ check_if_file_exists_or_is_opened(FileCtx, SessionId) ->
             end
     end.
 
--spec maybe_assert_not_readonly(storage:id(), fslogic_worker:open_flag()) -> ok.
+-spec maybe_assert_not_readonly(undefined | storage:id(), fslogic_worker:open_flag()) -> ok.
+maybe_assert_not_readonly(undefined, _) ->
+    throw(space_not_supported);
 maybe_assert_not_readonly(_Storage, read) ->
     ok;
 maybe_assert_not_readonly(Storage, _) ->

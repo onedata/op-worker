@@ -170,6 +170,8 @@ schedule_file_replication(
     ViewName, QueryViewParams
 ) ->
     data_constraints:assert_not_readonly_mode(UserCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx0),
+    data_constraints:assert_not_readonly_target(TargetProviderId, SpaceId),
 
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,

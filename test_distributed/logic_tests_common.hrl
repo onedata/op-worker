@@ -137,7 +137,10 @@
 -define(PROVIDER_SUBDOMAIN(__Provider), undefined).
 -define(PROVIDER_SPACES_VALUE(__Provider), #{?SPACE_1 => 1000000000, ?SPACE_2 => 1000000000}).
 -define(PROVIDER_SPACES_MATCHER(__Provider), #{?SPACE_1 := 1000000000, ?SPACE_2 := 1000000000}).
--define(PROVIDER_STORAGES(__Provider), [?STORAGE_1, ?STORAGE_2]).
+-define(PROVIDER_STORAGES(__Provider), case __Provider of
+    ?PROVIDER_1 -> [?STORAGE_1];
+    ?PROVIDER_2 -> [?STORAGE_2]
+end).
 -define(PROVIDER_EFF_USERS(__Provider), [?USER_1, ?USER_2]).
 -define(PROVIDER_EFF_GROUPS(__Provider), [?GROUP_1, ?GROUP_2]).
 -define(PROVIDER_LATITUDE(__Provider), 0.0).
@@ -291,13 +294,13 @@
 }}).
 
 
--define(PROVIDER_PRIVATE_DATA_MATCHER(__Provider), #document{key = __Provider, value = #od_provider{
+-define(PROVIDER_PRIVATE_DATA_MATCHER(__Provider, __Storages), #document{key = __Provider, value = #od_provider{
     name = ?PROVIDER_NAME(__Provider),
     admin_email = ?PROVIDER_ADMIN_EMAIL(__Provider),
     subdomain_delegation = ?PROVIDER_SUBDOMAIN_DELEGATION(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
     online = ?PROVIDER_ONLINE(__Provider),
-    storages = ?PROVIDER_STORAGES(__Provider),
+    storages = __Storages,
     eff_spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
     eff_users = ?PROVIDER_EFF_USERS(__Provider),
     eff_groups = ?PROVIDER_EFF_GROUPS(__Provider)
@@ -351,7 +354,8 @@
     provider = ?PROVIDER_1,
     spaces = [],
     qos_parameters = #{},
-    imported = false
+    imported = false,
+    readonly = false
 }}).
 
 
@@ -512,9 +516,16 @@ end).
     <<"provider">> => ?PROVIDER_1,
     <<"spaces">> => [],
     <<"qosParameters">> => #{},
-    <<"imported">> => false
+    <<"imported">> => false,
+    <<"readonly">> => false
 }).
 
+-define(STORAGE_SHARED_DATA_VALUE(__StorageId), #{
+    <<"revision">> => 1,
+    <<"gri">> => gri:serialize(#gri{type = od_storage, id = __StorageId, aspect = instance, scope = shared}),
+    <<"provider">> => ?PROVIDER_2,
+    <<"qosParameters">> => #{}
+}).
 
 -define(TOKEN_SHARED_DATA_VALUE(__TokenId), #{
     <<"revision">> => 1,

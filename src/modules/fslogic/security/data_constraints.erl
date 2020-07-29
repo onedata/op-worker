@@ -40,7 +40,7 @@
 
 
 %% API
--export([get_allow_all_constraints/0, get/1, assert_not_readonly_mode/1, inspect/4]).
+-export([get_allow_all_constraints/0, get/1, assert_not_readonly_mode/1, inspect/4, assert_not_readonly_target/2]).
 
 -ifdef(TEST).
 -export([
@@ -137,6 +137,22 @@ assert_not_readonly_mode(UserCtx) ->
     case DataConstraints#constraints.readonly of
         true -> throw(?EACCES);
         false -> ok
+    end.
+
+
+-spec assert_not_readonly_target(od_provider:id(), od_space:id()) -> ok | no_return().
+assert_not_readonly_target(ProviderId, SpaceId) ->
+    case space_logic:get_provider_storage_ids(SpaceId, ProviderId) of
+        {ok, StorageIds} ->
+            IsNotReadonly = lists:any(fun(StorageId) ->
+                not storage:is_readonly(StorageId)
+            end, StorageIds),
+            case IsNotReadonly of
+                true -> ok;
+                false -> throw(?EROFS)
+            end;
+        {error, Reason} ->
+            throw(Reason)
     end.
 
 

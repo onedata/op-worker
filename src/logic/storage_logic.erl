@@ -37,7 +37,7 @@
 -export([revoke_space_support/2]).
 -export([get_name/1]).
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
--export([get_provider/1]).
+-export([get_provider/2]).
 -export([get_spaces/1]).
 -export([is_imported/1, is_readonly/1]).
 -export([is_local_storage_supporting_space/2]).
@@ -184,13 +184,12 @@ get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
     end.
 
 
--spec get_provider(storage:id()) -> {ok, od_provider:id()} | errors:error().
-get_provider(StorageId) ->
-    case get(StorageId) of
+-spec get_provider(storage:id(), od_space:id()) -> {ok, od_provider:id()} | errors:error().
+get_provider(StorageId, SpaceId) ->
+    case get_shared_data(StorageId, SpaceId) of
         {ok, #document{value = #od_storage{provider = Provider}}} -> {ok, Provider};
         Error -> Error
     end.
-
 
 -spec get_spaces(storage:id()) -> {ok, [od_space:id()]} | errors:error().
 get_spaces(StorageId) ->

@@ -96,8 +96,12 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
 translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Result) ->
     Storages = maps:get(<<"storages">>, Result),
 
-    {ok, ProviderStorageIds} = provider_logic:get_storage_ids(),
-    LocalStorageIds = [X || X <- ProviderStorageIds, Y <- maps:keys(Storages), X == Y],
+    StoragesByProvider = lists:foldl(fun(StorageId, Acc) ->
+        {ok, ProviderId} = storage_logic:get_provider(StorageId, Id),
+        maps:update_with(ProviderId, fun(ProviderStorages) ->
+            [StorageId | ProviderStorages]
+        end, [StorageId], Acc)
+    end, #{}, maps:keys(Storages)),
 
     #document{
         key = Id,
@@ -111,7 +115,7 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
             eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result)),
 
             storages = Storages,
-            local_storages = LocalStorageIds,
+            storages_by_provider = StoragesByProvider,
 
             providers = maps:get(<<"providers">>, Result),
             shares = maps:get(<<"shares">>, Result),

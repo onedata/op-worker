@@ -1125,6 +1125,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
             end, UserIds)),
             Storages = proplists:get_value(SpaceId, SpacesToStorages,
                 maps:from_list([{St, 1000000000} || St <- CustomStorages])),
+            StoragesByProvider = lists:foldl(fun({StorageId, ProviderId}, Acc) ->
+                maps:update_with(ProviderId, fun(ProviderStorages) ->
+                    [StorageId | ProviderStorages]
+                end, [StorageId], Acc)
+            end, #{}, maps:keys(Storages)),
             {ok, #document{key = SpaceId, value = #od_space{
                 name = SpaceName,
                 providers = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
@@ -1136,7 +1141,8 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
                 storages = maps:fold(fun({StorageName, _Provider}, Support, Acc) ->
                     % StorageName is the same as Id
                     Acc#{StorageName => Support}
-                end, #{}, Storages)
+                end, #{}, Storages),
+                storages_by_provider = StoragesByProvider
             }}}
     end,
 
@@ -1405,12 +1411,6 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
             GetStorageIdsFun(PID)
         end),
 
-    test_utils:mock_expect(AllWorkers, provider_logic, get_storage_ids,
-        fun() ->
-            GetStorageIdsFun(oneprovider:get_id())
-        end),
-
-
     test_utils:mock_expect(AllWorkers, provider_logic, has_eff_user,
         fun(UserId) ->
             HasEffUserFun(?ROOT_SESS_ID, oneprovider:get_id(), UserId)
@@ -1436,6 +1436,11 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
             GetSupportSizeFun(?ROOT_SESS_ID, oneprovider:get_id(), SpaceId)
         end),
 
+    test_utils:mock_expect(AllWorkers, provider_logic, has_storage,
+        fun(StorageId) ->
+            {ok, StorageIds} = GetStorageIdsFun(oneprovider:get_id()),
+            lists:member(StorageId, StorageIds)
+        end),
 
     test_utils:mock_expect(AllWorkers, provider_logic, zone_time_seconds,
         fun() ->
@@ -1557,8 +1562,8 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
         end),
 
     ok = test_utils:mock_expect(Workers, storage_logic, get_provider,
-        fun(StorageId) ->
-            {ok, maps:get(<<"provider_id">>, maps:get(StorageId, StorageMap, #{}), #{})}
+        fun(StorageId, _SpaceId) ->
+            {ok, maps:get(<<"provider_id">>, maps:get(StorageId, StorageMap, #{}))}
         end),
 
     ok = test_utils:mock_expect(Workers, storage_logic, get_name,
