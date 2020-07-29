@@ -23,6 +23,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/storage/storage.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -37,7 +38,7 @@
 -export([get_id/1, get_helper/1, get_helper_name/1, get_luma_feed/1, get_luma_config/1]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_readonly/1]).
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 
@@ -71,8 +72,9 @@
 -type qos_parameters() :: od_storage:qos_parameters().
 -type luma_feed() :: luma:feed().
 -type luma_config() :: luma_config:config().
+-type access_type() :: ?READONLY_STORAGE | ?READWRITE_STORAGE.
 
--export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0]).
+-export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0, access_type/0]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -286,13 +288,17 @@ is_imported(StorageId) when is_binary(StorageId) ->
 is_imported(StorageData) ->
     is_imported(storage:get_id(StorageData)).
 
-
--spec is_readonly(id() | data()) -> boolean().
+-spec is_readonly(id()) -> boolean().
 is_readonly(StorageId) when is_binary(StorageId) ->
-    {ok, Readonly} = ?throw_on_error(storage_logic:is_readonly(StorageId, <<"fixme">>)), %@ fixme SpaceId
+    {ok, Readonly} = ?throw_on_error(storage_logic:is_local_storage_readonly(StorageId)),
+    Readonly.
+
+-spec is_readonly(id() | data(), od_space:id()) -> boolean().
+is_readonly(StorageId, SpaceId) when is_binary(StorageId) ->
+    {ok, Readonly} = ?throw_on_error(storage_logic:is_storage_readonly(StorageId, SpaceId)),
     Readonly;
-is_readonly(StorageData) ->
-    is_readonly(storage:get_id(StorageData)).
+is_readonly(StorageData, SpaceId) ->
+    is_readonly(storage:get_id(StorageData), SpaceId).
 
 
 -spec has_non_auto_luma_feed(data()) -> boolean().

@@ -307,7 +307,8 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
 maybe_remove_file_on_storage(FileCtx, UserCtx) ->
     try
         {StorageId, FileCtx2} = file_ctx:get_storage(FileCtx),
-        case storage:is_readonly(StorageId) of
+        SpaceId = file_ctx:get_space_id_const(FileCtx2),
+        case storage:is_readonly(StorageId, SpaceId) of
             true ->
                 {ok, FileCtx2};
             false ->

@@ -299,7 +299,8 @@ maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize > NewSize
             {ok, FileCtx2};
         false ->
             {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-            case storage:is_readonly(StorageId) of
+            SpaceId = file_ctx:get_space_id_const(FileCtx3),
+            case storage:is_readonly(StorageId, SpaceId) of
                 true ->
                     {ok, FileCtx3};
                 false ->

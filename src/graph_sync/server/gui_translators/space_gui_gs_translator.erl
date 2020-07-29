@@ -59,17 +59,9 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             {undefined, undefined}
     end,
 
-
-
-    ProvidersWithReadonlyStorage = maps:fold(fun(ProviderId, ProviderStorages, Acc) ->
-        IsNotReadonly = lists:any(fun(StorageId) ->
-            not storage:is_readonly(StorageId)
-        end, ProviderStorages),
-        case IsNotReadonly of
-            true -> Acc;
-            false -> [ProviderId | Acc]
-        end
-    end, [], Space#od_space.storages_by_provider),
+    ProvidersWithReadonlyStorage = lists:filter(fun(ProviderId) ->
+        space_logic:has_readonly_support_from(SpaceId, ProviderId)
+    end, maps:keys(Space#od_space.storages_by_provider)),
 
     Result = #{
         <<"name">> => Space#od_space.name,

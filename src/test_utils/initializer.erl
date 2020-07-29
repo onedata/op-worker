@@ -861,7 +861,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
 
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
-    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters, CustomStorages),
+    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters, CustomStorages, StoragesSetupMap),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
@@ -1100,8 +1100,8 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
 
 -spec space_logic_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}],
-    [{binary(), [binary()]}], [{binary(), binary()}]) -> ok.
-space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvesters, CustomStorages) ->
+    [{binary(), [binary()]}], [{binary(), binary()}], map()) -> ok.
+space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvesters, CustomStorages, StoragesSetupMap) ->
     test_utils:mock_new(Workers, space_logic),
 
     GetSpaceFun = fun
@@ -1120,16 +1120,25 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         (_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
             UserIds = proplists:get_value(SpaceId, Users, []),
+
             EffUsers = maps:from_list(lists:map(fun(UID) ->
                 {UID, node_get_mocked_space_user_privileges(SpaceId, UID)}
             end, UserIds)),
+
             Storages = proplists:get_value(SpaceId, SpacesToStorages,
                 maps:from_list([{St, 1000000000} || St <- CustomStorages])),
+
             StoragesByProvider = lists:foldl(fun({StorageId, ProviderId}, Acc) ->
+                StorageConfig = maps:get(StorageId, maps:get(ProviderId, StoragesSetupMap, #{}), #{}),
+                AccessType = case maps:get(<<"readonly">>, StorageConfig, false) of
+                    true -> readonly;
+                    false -> readwrite
+                end,
                 maps:update_with(ProviderId, fun(ProviderStorages) ->
-                    [StorageId | ProviderStorages]
-                end, [StorageId], Acc)
+                    ProviderStorages#{StorageId => AccessType}
+                end, #{StorageId => AccessType}, Acc)
             end, #{}, maps:keys(Storages)),
+
             {ok, #document{key = SpaceId, value = #od_space{
                 name = SpaceName,
                 providers = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
@@ -1545,6 +1554,18 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
         end
     end,
 
+    GetStorageSharedFun = fun(SM) ->
+        fun(StorageId, _SpaceId) ->
+            StorageDesc = maps:get(StorageId, SM, #{}),
+            {ok, #document{value = #od_storage{
+                % storage name is equal to its id
+                name = StorageId,
+                qos_parameters = maps:get(<<"qos_parameters">>, StorageDesc, #{}),
+                readonly = maps:get(<<"readonly">>, StorageDesc, false)
+            }}}
+        end
+    end,
+
     GetQosParametersFun = fun(StorageId) ->
         {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} = storage_logic:get(StorageId),
         {ok, QosParameters}
@@ -1553,6 +1574,8 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     ok = test_utils:mock_new(Workers, storage_logic),
 
     ok = test_utils:mock_expect(Workers, storage_logic, get, GetStorageFun(StorageMap)),
+
+    ok = test_utils:mock_expect(Workers, storage_logic, get_shared_data, GetStorageSharedFun(StorageMap)),
 
     ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_local_storage, GetQosParametersFun),
 
@@ -1581,9 +1604,9 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
             {ok, ImportedStorage}
         end),
 
-    ok = test_utils:mock_expect(Workers, storage_logic, is_readonly,
+    ok = test_utils:mock_expect(Workers, storage_logic, is_storage_readonly,
         fun(StorageId, SpaceId) ->
-            {ok, #document{value = #od_storage{readonly = Readonly}}} = storage_logic:get(StorageId, SpaceId),
+            {ok, #document{value = #od_storage{readonly = Readonly}}} = storage_logic:get_shared_data(StorageId, SpaceId),
             {ok, Readonly}
         end),
     

@@ -21,6 +21,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/storage/storage.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -34,6 +35,7 @@
 -export([get_provider_ids/1, get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([is_supported_by_storage/2]).
+-export([has_readonly_support_from/2]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
@@ -255,6 +257,24 @@ is_supported_by_storage(SpaceId, StorageId) ->
     case get_all_storage_ids(SpaceId) of
         {ok, AllStorageIds} -> lists:member(StorageId, AllStorageIds);
         _ -> false
+    end.
+
+-spec has_readonly_support_from(od_space:id() | od_space:record(), od_provider:id()) -> boolean().
+has_readonly_support_from(#od_space{storages_by_provider = StoragesByProvider}, ProviderId) ->
+    case maps:get(ProviderId, StoragesByProvider, #{}) of
+        ProviderStorages when map_size(ProviderStorages) =:= 0 ->
+            throw(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId));
+        ProviderStorages ->
+            lists:all(fun(AccessMode) ->
+                AccessMode =:= ?READONLY_STORAGE
+            end, maps:values(ProviderStorages))
+    end;
+has_readonly_support_from(SpaceId, ProviderId) ->
+    case space_logic:get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = Space}} ->
+            has_readonly_support_from(Space, ProviderId);
+        {error, _} = Error ->
+            throw(Error)
     end.
 
 

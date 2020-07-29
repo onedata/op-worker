@@ -40,7 +40,7 @@
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([get_provider/2]).
 -export([get_spaces/1]).
--export([is_imported/1, is_readonly/2]).
+-export([is_imported/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([is_local_storage_supporting_space/2]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
@@ -224,9 +224,16 @@ is_imported(StorageId) ->
         Error -> Error
     end.
 
+-spec is_local_storage_readonly(storage:id()) -> {ok, boolean()} | errors:error().
+is_local_storage_readonly(StorageId) ->
+    case storage_logic:get(StorageId) of
+        {ok, #document{value = #od_storage{readonly = Readonly}}} ->
+            {ok, Readonly};
+        Error -> Error
+    end.
 
--spec is_readonly(storage:id(), od_space:id()) -> {ok, boolean()} | errors:error().
-is_readonly(StorageId, SpaceId) ->
+-spec is_storage_readonly(storage:id(), od_space:id()) -> {ok, boolean()} | errors:error().
+is_storage_readonly(StorageId, SpaceId) ->
     case get_shared_data(StorageId, SpaceId) of
         {ok, #document{value = #od_storage{readonly = Readonly}}} ->
             {ok, Readonly};

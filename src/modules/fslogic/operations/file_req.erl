@@ -204,7 +204,8 @@ release(UserCtx, FileCtx, HandleId) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     {StorageId, ParentFileCtx2} = file_ctx:get_storage_id(ParentFileCtx),
-    storage_req:assert_not_readonly(StorageId),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
+    storage_req:assert_not_readonly(StorageId, SpaceId),
     {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
@@ -296,7 +297,8 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     {StorageId, ParentFileCtx2} = file_ctx:get_storage_id(ParentFileCtx),
-    storage_req:assert_not_readonly(StorageId),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
+    storage_req:assert_not_readonly(StorageId, SpaceId),
     {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
@@ -430,7 +432,8 @@ open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink) ->
     no_return() | {storage_driver:handle_id(), file_location:record(), file_ctx:ctx()}.
 open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExists) ->
     {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx0),
-    maybe_assert_not_readonly(StorageId, Flag),
+    SpaceId = file_ctx:get_space_id_const(FileCtx1),
+    maybe_assert_not_readonly(StorageId, SpaceId, Flag),
     FileCtx2 = verify_file_exists(FileCtx1, HandleId0),
     SpaceID = file_ctx:get_space_id_const(FileCtx2),
     SessId = user_ctx:get_session_id(UserCtx),
@@ -765,10 +768,8 @@ check_if_file_exists_or_is_opened(FileCtx, SessionId) ->
             end
     end.
 
--spec maybe_assert_not_readonly(undefined | storage:id(), fslogic_worker:open_flag()) -> ok.
-maybe_assert_not_readonly(undefined, _) ->
-    throw(space_not_supported);
-maybe_assert_not_readonly(_Storage, read) ->
+-spec maybe_assert_not_readonly(storage:id(), od_space:id(), fslogic_worker:open_flag()) -> ok.
+maybe_assert_not_readonly(_Storage, _SpaceId, read) ->
     ok;
-maybe_assert_not_readonly(Storage, _) ->
-    storage_req:assert_not_readonly(Storage).
+maybe_assert_not_readonly(Storage, SpaceId, _) ->
+    storage_req:assert_not_readonly(Storage, SpaceId).

@@ -19,12 +19,11 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/storage/storage.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type handle() :: helpers:helper_handle() | helpers:file_handle().
-
--type operation_type() :: constant | modification.
 
 %%%===================================================================
 %%% API functions
@@ -32,19 +31,19 @@
 
 
 -spec run_and_handle_error
-    (SDHandle, Operation, OperationType) -> Result when
+    (SDHandle, Operation, SufficientAccessType) -> Result when
     SDHandle :: storage_driver:handle(),
     Operation :: fun((helpers:helper_handle()) -> Result),
-    OperationType :: operation_type(),
+    SufficientAccessType :: storage:access_type(),
     Result :: ok | {ok, term()} | {error, term()}.
 run_and_handle_error(SDHandle = #sd_handle{
     session_id = SessionId,
     space_id = SpaceId,
     storage_id = StorageId
-}, Operation, OperationType) ->
+}, Operation, SufficientAccessType) ->
     case session_helpers:get_helper(SessionId, SpaceId, StorageId) of
         {ok, HelperHandle} ->
-            run_and_handle_error(SDHandle, HelperHandle, Operation, OperationType);
+            run_and_handle_error(SDHandle, HelperHandle, Operation, SufficientAccessType);
         {error, not_found} ->
             throw(?EACCES);
         {error, Reason} ->
@@ -52,23 +51,23 @@ run_and_handle_error(SDHandle = #sd_handle{
     end.
 
 -spec run_with_file_handle_and_handle_error
-    (SDHandle, Operation, OperationType) -> Result when
+    (SDHandle, Operation, SufficientAccessType) -> Result when
     SDHandle :: storage_driver:handle(),
     Operation :: fun((helpers:file_handle()) -> Result),
-    OperationType :: operation_type(),
+    SufficientAccessType :: storage:access_type(),
     Result :: ok | {ok, term()} | {error, term()}.
-run_with_file_handle_and_handle_error(SDHandle = #sd_handle{file_handle = FileHandle}, Operation, OperationType) ->
-    run_and_handle_error(SDHandle, FileHandle, Operation, OperationType).
+run_with_file_handle_and_handle_error(SDHandle = #sd_handle{file_handle = FileHandle}, Operation, SufficientAccessType) ->
+    run_and_handle_error(SDHandle, FileHandle, Operation, SufficientAccessType).
 
 -spec run_and_handle_error
-    (SDHandle, Handle, Operation, AccessType) -> Result when
+    (SDHandle, Handle, Operation, SufficientAccessType) -> Result when
     SDHandle :: storage_driver:handle(),
     Handle :: handle(),
     Operation :: fun((handle()) -> Result),
-    AccessType :: operation_type(),
+    SufficientAccessType :: storage:access_type(),
     Result :: ok | {ok, term()} | {error, term()}.
-run_and_handle_error(SDHandle, FileOrHelperHandle, Operation, OperationType) ->
-    case is_storage_access_type_satisfied(SDHandle, OperationType) of
+run_and_handle_error(SDHandle, FileOrHelperHandle, Operation, SufficientAccessType) ->
+    case is_storage_access_type_sufficient(SDHandle, SufficientAccessType) of
         true ->
             case Operation(FileOrHelperHandle) of
                 Error = {error, _} ->
@@ -111,8 +110,8 @@ handle_ekeyexpired(FileOrHelperHandle, #sd_handle{
             {error, ?EKEYEXPIRED}
     end.
 
--spec is_storage_access_type_satisfied(storage_driver:handle(), operation_type()) -> boolean().
-is_storage_access_type_satisfied(_SDHandle, constant) ->
+-spec is_storage_access_type_sufficient(storage_driver:handle(), storage:access_type()) -> boolean().
+is_storage_access_type_sufficient(_SDHandle, ?READONLY_STORAGE) ->
     true;
-is_storage_access_type_satisfied(#sd_handle{storage_id = StorageId}, modification) ->
-    not storage:is_readonly(StorageId).
+is_storage_access_type_sufficient(#sd_handle{storage_id = StorageId, space_id = SpaceId}, ?READWRITE_STORAGE) ->
+    not storage:is_readonly(StorageId, SpaceId).

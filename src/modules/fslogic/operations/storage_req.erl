@@ -30,7 +30,7 @@
 
 %% API
 -export([get_configuration/1, get_helper_params/4, create_storage_test_file/3,
-    verify_storage_test_file/5, remove_storage_test_file/5, assert_not_readonly/1]).
+    verify_storage_test_file/5, remove_storage_test_file/5, assert_not_readonly/2]).
 
 %%%===================================================================
 %%% API
@@ -180,9 +180,9 @@ verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
--spec assert_not_readonly(storage:id() | storage:data()) -> ok.
-assert_not_readonly(Storage) ->
-    case storage:is_readonly(Storage) of
+-spec assert_not_readonly(storage:id() | storage:data(), od_space:id()) -> ok.
+assert_not_readonly(Storage, SpaceId) ->
+    case storage:is_readonly(Storage, SpaceId) of
         true -> throw(?EROFS);
         false -> ok
     end.

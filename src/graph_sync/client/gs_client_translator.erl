@@ -15,6 +15,7 @@
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("global_definitions.hrl").
+-include("modules/storage/storage.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -98,9 +99,14 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
 
     StoragesByProvider = lists:foldl(fun(StorageId, Acc) ->
         {ok, ProviderId} = storage_logic:get_provider(StorageId, Id),
+        IsReadonly = storage:is_readonly(StorageId, Id),
+        AccessType = case IsReadonly of
+            true -> ?READONLY_STORAGE;
+            false -> ?READWRITE_STORAGE
+        end,
         maps:update_with(ProviderId, fun(ProviderStorages) ->
-            [StorageId | ProviderStorages]
-        end, [StorageId], Acc)
+            ProviderStorages#{StorageId => AccessType}
+        end, #{StorageId => AccessType}, Acc)
     end, #{}, maps:keys(Storages)),
 
     #document{

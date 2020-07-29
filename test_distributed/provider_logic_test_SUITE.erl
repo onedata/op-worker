@@ -45,16 +45,16 @@ get_test(Config) ->
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph, od_provider),
-
+    Provider1Storages = ?PROVIDER_STORAGES(?PROVIDER_1),
     ?assertMatch(
-        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1)},
+        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1, Provider1Storages)},
         rpc:call(Node, provider_logic, get, [?ROOT_SESS_ID, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_provider)),
 
     % Provider private data should now be cached
     ?assertMatch(
-        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1)},
+        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1, Provider1Storages)},
         rpc:call(Node, provider_logic, get, [?ROOT_SESS_ID, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_provider)),
@@ -149,8 +149,9 @@ mixed_get_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_provider)),
     ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, od_provider)),
 
+    Provider1Storages = ?PROVIDER_STORAGES(?PROVIDER_1),
     ?assertMatch(
-        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1)},
+        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1, Provider1Storages)},
         rpc:call(Node, provider_logic, get, [?ROOT_SESS_ID, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_provider)),
@@ -165,7 +166,7 @@ mixed_get_test(Config) ->
     ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_provider)),
 
     ?assertMatch(
-        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1)},
+        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1, Provider1Storages)},
         rpc:call(Node, provider_logic, get, [?ROOT_SESS_ID, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_provider)),
@@ -210,8 +211,9 @@ subscribe_test(Config) ->
 
     % private scope
     logic_tests_common:invalidate_cache(Config, od_provider, ?PROVIDER_1),
+    Provider1Storages = ?PROVIDER_STORAGES(?PROVIDER_1),
     ?assertMatch(
-        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1)},
+        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1, Provider1Storages)},
         rpc:call(Node, provider_logic, get, [?ROOT_SESS_ID, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_provider)),
@@ -251,7 +253,7 @@ subscribe_test(Config) ->
     % Simulate a 'nosub' push and see if cache was invalidated, fetch the
     % record first.
     ?assertMatch(
-        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1)},
+        {ok, ?PROVIDER_PRIVATE_DATA_MATCHER(?PROVIDER_1, Provider1Storages)},
         rpc:call(Node, provider_logic, get, [?ROOT_SESS_ID, ?PROVIDER_1])
     ),
 

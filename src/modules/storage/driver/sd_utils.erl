@@ -302,7 +302,8 @@ rmdir(DirCtx, UserCtx) ->
 -spec create_storage_file(storage_driver:handle(), file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 create_storage_file(SDHandle, FileCtx) ->
     {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
-    storage_req:assert_not_readonly(StorageId),
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    storage_req:assert_not_readonly(StorageId, SpaceId),
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     Mode = file_meta:get_mode(FileDoc),
     Result = case file_meta:get_type(FileDoc) of
