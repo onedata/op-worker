@@ -94,6 +94,7 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
         }
     };
 
+
 translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Result) ->
     Storages = maps:get(<<"storages">>, Result),
 
@@ -113,6 +114,8 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
         key = Id,
         value = #od_space{
             name = maps:get(<<"name">>, Result),
+
+            owners = maps:get(<<"owners">>, Result),
 
             direct_users = privileges_to_atoms(maps:get(<<"users">>, Result)),
             eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result)),
@@ -322,6 +325,8 @@ apply_scope_mask(Doc = #document{value = User = #od_user{}}, shared) ->
 apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
     Doc#document{
         value = Space#od_space{
+            owners = [],
+
             direct_users = #{},
             eff_users = #{},
 

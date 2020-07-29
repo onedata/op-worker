@@ -318,7 +318,7 @@ receive_result(Helper) ->
     end.
 
 run(Fun, ThreadsNum) ->
-    Results = utils:pmap(fun(_) ->
+    Results = lists_utils:pmap(fun(_) ->
         Fun(),
         ok
     end, lists:seq(1, ThreadsNum)),

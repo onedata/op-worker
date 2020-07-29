@@ -122,7 +122,7 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     %% Create dirs and files on storage
 
     DirsNumber = 200,
-    utils:pforeach(fun(N) ->
+    lists_utils:pforeach(fun(N) ->
         NBin = integer_to_binary(N),
         DirPath = storage_sync_test_base:storage_path(?SPACE_ID, NBin, MountSpaceInRoot),
         FilePath = filename:join([DirPath, integer_to_binary(N)]),
@@ -803,8 +803,6 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
 
-    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
-
     % create first file
     {ok, G1} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, 8#644),
     {ok, H1} = lfm_proxy:open(W1, SessId, {guid, G1}, write),
@@ -813,9 +811,10 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
 
     % open file
     ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, G1}, read), ?ATTEMPTS),
-
     % delete file
     ok = lfm_proxy:unlink(W1, SessId, {guid, G1}),
+    %ensure that space_dir mtime will change
+    timer:sleep(timer:seconds(1)),
 
     % there should be 1 file on storage
     ?assertMatch({ok, [_]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, 0, 10, StorageType)),

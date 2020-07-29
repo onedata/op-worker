@@ -30,6 +30,7 @@
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
+-export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storage_ids/1,
     get_local_storage_id/1, get_storage_ids_by_provider/2, get_all_storage_ids/1]).
 -export([get_provider_ids/1, get_provider_ids/2]).
@@ -126,11 +127,10 @@ has_eff_privilege(SpaceDocOrId, UserId, Privilege) ->
 
 -spec has_eff_privileges(od_space:doc() | od_space:id(), od_user:id(),
     [privileges:space_privilege()]) -> boolean().
-has_eff_privileges(#document{value = #od_space{eff_users = EffUsers}}, UserId, Privileges) ->
+has_eff_privileges(#document{value = #od_space{eff_users = EffUsers}} = SpaceDoc, UserId, Privileges) ->
     UserPrivileges = maps:get(UserId, EffUsers, []),
-    lists:all(fun(Privilege) ->
-        lists:member(Privilege, UserPrivileges)
-    end, Privileges);
+    % space owners have all the privileges, regardless of those assigned
+    lists_utils:is_subset(Privileges, UserPrivileges) orelse is_owner(SpaceDoc, UserId);
 has_eff_privileges(SpaceId, UserId, Privileges) ->
     case get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{} = SpaceDoc} ->
@@ -138,6 +138,18 @@ has_eff_privileges(SpaceId, UserId, Privileges) ->
         _ ->
             false
     end.
+
+
+-spec is_owner(od_space:id() | od_space:doc(), od_user:id()) -> boolean().
+is_owner(SpaceId, UserId) when is_binary(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{} = SpaceDoc} ->
+            is_owner(SpaceDoc, UserId);
+        _ ->
+            false
+    end;
+is_owner(#document{value = #od_space{owners = Owners}}, UserId) ->
+    lists:member(UserId, Owners).
 
 
 -spec get_eff_groups(gs_client_worker:client(), od_space:id()) ->

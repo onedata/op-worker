@@ -430,9 +430,8 @@ register_in_oz_dev(NodeList, ProviderName, Token) ->
 %%--------------------------------------------------------------------
 -spec get_all_nodes_ips(NodeList :: [node()]) -> [binary()].
 get_all_nodes_ips(NodeList) ->
-    utils:pmap(
-        fun(Node) ->
-            {ok, IPAddr} = rpc:call(Node, oz_providers, check_ip_address, [none]),
-            IPAddr
-        end, NodeList).
+    lists_utils:pmap(fun(Node) ->
+        {ok, IPAddr} = rpc:call(Node, oz_providers, check_ip_address, [none]),
+        IPAddr
+    end, NodeList).
 

@@ -104,6 +104,7 @@
 
 % Mocked space data
 -define(SPACE_NAME(__Space), __Space).
+-define(SPACE_OWNERS(__Space), [?USER_1]).
 -define(SPACE_DIRECT_USERS_VALUE(__Space), ?USER_PERMS_IN_SPACE_VALUE_BINARIES).
 -define(SPACE_DIRECT_USERS_MATCHER(__Space), ?USER_PERMS_IN_SPACE_MATCHER_ATOMS).
 -define(SPACE_EFF_USERS_VALUE(__Space), ?USER_PERMS_IN_SPACE_VALUE_BINARIES).
@@ -258,6 +259,7 @@ end).
 
 -define(SPACE_PRIVATE_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
+    owners = ?SPACE_OWNERS(__Space),
     direct_users = ?SPACE_DIRECT_USERS_MATCHER(__Space),
     eff_users = ?SPACE_EFF_USERS_MATCHER(__Space),
     direct_groups = ?SPACE_DIRECT_GROUPS_MATCHER(__Space),
@@ -269,6 +271,7 @@ end).
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
+    owners = [],
     direct_users = #{},
     eff_users = #{},
     direct_groups = #{},
@@ -419,6 +422,8 @@ end).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{
         <<"gri">> => gri:serialize(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = private}),
+        <<"owners">> => ?SPACE_OWNERS(__SpaceId),
+
         <<"users">> => ?SPACE_DIRECT_USERS_VALUE(__SpaceId),
         <<"effectiveUsers">> => ?SPACE_EFF_USERS_VALUE(__SpaceId),
 

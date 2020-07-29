@@ -98,6 +98,8 @@
 -record(od_space, {
     name :: undefined | binary(),
 
+    owners = [] :: [od_user:id()],
+
     direct_users = #{} :: #{od_user:id() => [privileges:space_privilege()]},
     eff_users = #{} :: #{od_user:id() => [privileges:space_privilege()]},
 

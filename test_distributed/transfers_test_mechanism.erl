@@ -227,7 +227,7 @@ cancel_replication_on_target_nodes_by_scheduling_user(Config, #scenario{
         {TargetNode, Tid, Guid, Path}
     end, ReplicatingNodes),
 
-    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
         await_replication_starts(TargetNode, Tid),
         cancel_transfer(TargetNode, User, User, replication, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
@@ -250,7 +250,7 @@ cancel_replication_on_target_nodes_by_other_user(Config, #scenario{
         {TargetNode, Tid, Guid, Path}
     end, ReplicatingNodes),
 
-    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
         await_replication_starts(TargetNode, Tid),
         cancel_transfer(TargetNode, User1, User2, replication, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
@@ -323,7 +323,7 @@ remove_file_during_replication(Config, #scenario{
         end, FilesGuidsAndPaths)
     end, ReplicatingNodes),
 
-    utils:pforeach(fun({TargetNode, Tid, Guid, Path}) ->
+    lists_utils:pforeach(fun({TargetNode, Tid, Guid, Path}) ->
         FileKey = file_key(Guid, Path, FileKeyType),
         await_replication_starts(TargetNode, Tid),
         ok = remove_file(TargetNode, User, FileKey, Config)
@@ -405,7 +405,7 @@ cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, #scenario{
         {EvictingNode, Tid, Guid, Path}
     end, EvictingNodes),
 
-    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
         await_replica_eviction_starts(TargetNode, Tid),
         cancel_transfer(TargetNode, User, User, eviction, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
@@ -428,7 +428,7 @@ cancel_replica_eviction_on_target_nodes_by_other_user(Config, #scenario{
         {EvictingNode, Tid, Guid, Path}
     end, EvictingNodes),
 
-    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
         await_replica_eviction_starts(TargetNode, Tid),
         cancel_transfer(TargetNode, User1, User2, eviction, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
@@ -500,7 +500,7 @@ remove_file_during_eviction(Config, #scenario{
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
     
-    utils:pforeach(fun({EvictingNode, Tid, Guid, Path}) ->
+    lists_utils:pforeach(fun({EvictingNode, Tid, Guid, Path}) ->
         FileKey = file_key(Guid, Path, FileKeyType),
         await_transfer_starts(EvictingNode, Tid),
         ok = remove_file(EvictingNode, User, FileKey, Config)
@@ -600,7 +600,7 @@ cancel_migration_on_target_nodes_by_scheduling_user(Config, #scenario{
         end, EvictingNodes)
     end, ReplicatingNodes),
 
-    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
         await_replication_starts(TargetNode, Tid),
         cancel_transfer(TargetNode, User, User, migration, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),
@@ -627,7 +627,7 @@ cancel_migration_on_target_nodes_by_other_user(Config, #scenario{
         end, EvictingNodes)
     end, ReplicatingNodes),
 
-    utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
+    lists_utils:pforeach(fun({TargetNode, Tid, _Guid, _Path}) ->
         await_replication_starts(TargetNode, Tid),
         cancel_transfer(TargetNode, User1, User2, migration, Tid, Config, Type)
     end, NodesTransferIdsAndFiles),

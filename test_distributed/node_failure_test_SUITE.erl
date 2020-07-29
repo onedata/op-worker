@@ -7,7 +7,6 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This file contains test of behaviour in case of node failure.
-%%% NOTE: Currently it is impossible to fix node after failure during the tests so SUITE should contain single test.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(node_failure_test_SUITE).

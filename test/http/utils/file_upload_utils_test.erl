@@ -123,8 +123,8 @@ single_chunk_should_be_written_at_once_regardless_of_offset(_) ->
 start() ->
     Self = self(),
 
-    meck:new([file_upload_utils, lfm, lfm_context], [passthrough]),
-    meck:expect(file_upload_utils, get_storage_preferable_write_block_size, fun(_) ->
+    meck:new([storage, lfm, lfm_context], [passthrough]),
+    meck:expect(storage, get_block_size, fun(_) ->
         ?PREFERABLE_STORAGE_WRITE_BLOCK_SIZE
     end),
     meck:expect(lfm, write, fun(FileHandle, Offset, Chunk) ->
@@ -138,7 +138,7 @@ start() ->
 
 
 stop(_) ->
-    ?assert(meck:validate([file_upload_utils, lfm, lfm_context])),
+    ?assert(meck:validate([storage, lfm, lfm_context])),
     meck:unload().
 
 

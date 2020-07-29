@@ -458,7 +458,7 @@ VFS-5933 Remove the concept of default space
 -   VFS-5076 add retries to functions in communicator
 -   VFS-5076 change directory tree in session
 -   VFS-5232 Update acl usage by rules
--   VFS-5076 add retries to communicator\\\'s communicate
+-   VFS-5076 add retries to communicator\'s communicate
 -   VFS-5232 Improve file deletion verification by request handlers
 -   VFS-5232 Improve rules verification
 -   VFS-5076 refactor communicator
@@ -502,7 +502,7 @@ VFS-5933 Remove the concept of default space
     tree\_id is not\_found
 -   VFS-5165 return error when index referenced by explicit name and
     tree\_id is not\_found
--   VFS-5165 handle conflicting indexes\\\' names
+-   VFS-5165 handle conflicting indexes\' names
 -   VFS-5190 Add REST enpoint for creating shares, make sure only
     directories can be shared and only one share per dir is allowed
 -   fix missing function clauses for encoding and decoding webdav
@@ -671,7 +671,7 @@ VFS-5933 Remove the concept of default space
 -   VFS-4146 Renmae ip\_string to ip in clproto
 -   VFS-4146 Prevent silencing of failure in resolving peer domain
 -   VFS-4146 Introduce proto message with rtransfer nodes
--   VFS-4029 Implement responding to Let\\\'s Encrypt http challenge
+-   VFS-4029 Implement responding to Let\'s Encrypt http challenge
 -   VFS-4660 Allow configuration of sync priorities
 -   VFS-4660 Set sync priorities
 -   VFS-4656 Added cephrados to luma cache
@@ -859,7 +859,7 @@ VFS-5933 Remove the concept of default space
 
 ### 18.02.0-beta5
 
--   don\\\'t count files\\\' attrs hash when update is set to
+-   don\'t count files\' attrs hash when update is set to
     write\_once
 -   Upgrade rtransfer\_link.
 -   VFS-4310 Update replica management
@@ -941,7 +941,7 @@ VFS-5933 Remove the concept of default space
 -   Updating GUI, including: VFS-4206 \* VFS-4206 Changed speed units on
     transfers view to bps
 -   VFS-4209 Fix synchronization blocking with many spaces
--   VFS-4207 Do not match listener\\\'s stopping to ok to avoid crashes
+-   VFS-4207 Do not match listener\'s stopping to ok to avoid crashes
     when it is not running
 -   VFS-4207 Move listener restarting logic from onepanel to
     oneprovider, restart GS connection after ssl restart
@@ -984,7 +984,7 @@ VFS-5933 Remove the concept of default space
 
 ### 18.02.0-beta1
 
--   VFS-4080 Verify other providers\\\' domains while connecting via IP
+-   VFS-4080 Verify other providers\' domains while connecting via IP
     addresses
 -   VFS-3927 Remove support for IdP access token authorization and basic
     auth, only macaroon auth is now supported
@@ -1282,7 +1282,7 @@ VFS-5933 Remove the concept of default space
     last\_update\_finish\_time in storage\_strategies
 -   VFS-3384 save luma\_api\_key in luma\_config, fix storage\_sync
     chmod\_file\_update2 test
--   VFS-3448 Use single \\\'onedata\\\' bucket
+-   VFS-3448 Use single \'onedata\' bucket
 -   VFS-3384 implementation of reverse\_luma and luma\_cache\_behaviour,
     update of luma tests
 -   VFS-3378 Enabled native GlusterFS support on OSX
@@ -1312,7 +1312,7 @@ VFS-5933 Remove the concept of default space
 -   VFS-3363 Fix concurent delete
 -   VFS-3361 Return updated file\_ctx from
     storage\_file\_manager:new\_handle.
--   VFS-3361 Add \\\'storage\_file\_created\\\' field to file\_location.
+-   VFS-3361 Add \'storage\_file\_created\' field to file\_location.
     Split sfm\_utils\_create\_storage file into two functions creating
     file and location.
 -   VFS-3361 Remove empty block from file\_location response.
@@ -1365,7 +1365,7 @@ VFS-5933 Remove the concept of default space
 -   Disable storage helpers buffering
 -   VFS-3233 Add support for sig v2 to AWS S3 helper
 -   VFS-3244 Switch level of dbsync periodic status logs to debug
--   VFS-3244 Do not fail on deletion\_worker\\\'s init when we cannot
+-   VFS-3244 Do not fail on deletion\_worker\'s init when we cannot
     list file handles for cleanup.
 -   VFS-3244 Add file\_objectid to custom\_metadata document.
 -   VFS-3251 Updating GUI to 3.0.0-rc15
@@ -1562,16 +1562,16 @@ VFS-5933 Remove the concept of default space
     Block guest users from reading non shared files
 -   VFS-2567 Fix some bugs in code responsible for checking view
     privileges
--   VFS-2594 Add check of \\\'other\\\' perms for share files.
+-   VFS-2594 Add check of \'other\' perms for share files.
 -   VFS-2567 Check view permissions in groups and shares gui backend
 -   VFS-2594 Refactor lfm\_proxy module.
 -   VFS-2594 Move xattr name definitions to header, do not alow direct
-    modification of xattrs with \\\'onedata\_\\\' prefix.
+    modification of xattrs with \'onedata\_\' prefix.
 -   VFS-2594 Add remove\_metadata operation.
 -   VFS-2567 Check view permissions in space gui backend
 -   VFS-2594 Add has\_custom\_metadata method to logical\_file\_manager.
 -   VFS-2180 Implement support for read only spaces
--   VFS-2180 Add provider\\\'s ID to file\_attr message
+-   VFS-2180 Add provider\'s ID to file\_attr message
 -   VFS 2557 Update tests init/teardown
 -   VFS-2456 Add metadata to public view
 -   VFS-2456 Implement first version of metadata backend
@@ -1604,9 +1604,9 @@ VFS-5933 Remove the concept of default space
 
 -   VFS-2180 Improve links conflict resolution
 -   VFS-2582 Using GUI fix for blank notifications
--   VFS-2180 Adapt code to cluster\_worker\\\'s API change
+-   VFS-2180 Adapt code to cluster\_worker\'s API change
 -   VFS-2180 Improve dbsync implementation
--   VFS-2180 Use gen\_server2 instead of erlang\\\'s gen\_server module
+-   VFS-2180 Use gen\_server2 instead of erlang\'s gen\_server module
 -   VFS-2390 Fix handlers specification in REST API
 -   VFS-2390 Update rebar to version 3
 -   Update memory management
@@ -1627,7 +1627,7 @@ VFS-5933 Remove the concept of default space
 -   VFS-2534 Improve events processing
 -   VFS-2426 Add check\_perms operation to logical\_file\_manager.
 -   VFS-2472 Add 1.1 as possible cdmi version, improve documentation.
--   VFS-2472 Handle acl identifier without \\\'\#\\\' separator.
+-   VFS-2472 Handle acl identifier without \'\#\' separator.
 -   VFS-2472 Add correct handling of key and keys parameters to
     query\_index handler.
 -   VFS-2490 Update op-gui-default ref
@@ -1639,7 +1639,7 @@ VFS-5933 Remove the concept of default space
     internals.
 -   VFS-2472 Add inherited option to getting json metadata.
 -   VFS-2472 Add json merging function.
--   VFS-2472 Add \\\'inherited\\\' option to list\_xattr and
+-   VFS-2472 Add \'inherited\' option to list\_xattr and
     get\_metadata interface.
 -   VFS-2472 Add escaping of user defined js function.
 -   VFS-2309 oz test mock updated to match actual implementation
@@ -1701,7 +1701,7 @@ VFS-5933 Remove the concept of default space
 -   VFS-2215 Exclude file removal originator from event recipients.
 -   VFS-2049 Make file\_consistency work after system restart.
 -   VFS-1847 Refactor LUMA and helpers modules
--   Squashed \\\'appmock/\\\' changes from 71733d3..1f49f58
+-   Squashed \'appmock/\' changes from 71733d3..1f49f58
 -   VFS-2049 Improve file\_consistency model.
 -   VFS-2233 Extract file entry to generic fuse request
 -   VFS-2049 Basic consistency checking before executing hook.
@@ -1740,7 +1740,7 @@ VFS-5933 Remove the concept of default space
 -   VFS-2292, Update dbsync batches storing
 -   VFS-2215 Disable blocks prefetching.
 -   VFS-2215 Exclude file removal originator from event recipients.
--   VFS-2215 Wrap event\_manager\\\'s handle\_cast in try/catch.
+-   VFS-2215 Wrap event\_manager\'s handle\_cast in try/catch.
 -   VFS-2292 Session managmenet update
 -   VFS-2292 Minor initializer update
 -   VFS-2292 Add os-mon
@@ -1767,7 +1767,7 @@ VFS-5933 Remove the concept of default space
 
 -   VFS-2225 Update GUI docker image
 -   VFS-1882 Postpone deletion of open files
--   VFS-2170 Improve dbsync\\\'s protocol reliability
+-   VFS-2170 Improve dbsync\'s protocol reliability
 -   VFS-2143, Improve dbsync\_worker stashed changes management
 -   VFS-2187 Add automatic file removal when upload fails
 -   VFS-2187 Adjust rest\_test to new OZ client API
@@ -1793,8 +1793,8 @@ VFS-5933 Remove the concept of default space
 -   VFS-2081 Make dbsync singleton
 -   VFS-2018 Add response after rename
 -   VFS-1506 Fix sending file attributes after replica reconciliation.
--   VFS-1506 Include file gaps in file\_location\\\'s blocks.
--   VFS-1999 Use message origin instead of message sender as dbsync\\\'s
+-   VFS-1506 Include file gaps in file\_location\'s blocks.
+-   VFS-1999 Use message origin instead of message sender as dbsync\'s
     provider context
 -   VFS-1506 Add permission checking to utime operation.
 -   VFS-2071 Adjust code to the new S3 helper
@@ -1848,7 +1848,7 @@ VFS-5933 Remove the concept of default space
 -   VFS-1618 Sort synchronization keys to avoid potential deadlocks
 -   VFS-1975 Add uuid to release message, update release routing
 -   VFS-1618 Add synchronization for file\_meta:rename
--   VFS-1854 Improve dbsync\\\'s temp state clearing
+-   VFS-1854 Improve dbsync\'s temp state clearing
 -   VFS-1854 Disable rereplication in dbsync
 -   VFS-1954 Make session:get\_connections const.
 -   VFS-1854 Fix GUI upload
@@ -1866,7 +1866,7 @@ VFS-5933 Remove the concept of default space
 -   VFS-1618 Change tests to check acl on proper provider
 -   VFS-1618 Change moving into itself detection to
     interprovider-friendly
--   VFS-1854 Fix fslogic\\\'s events subscribtion
+-   VFS-1854 Fix fslogic\'s events subscribtion
 -   VFS-1618 Improve permissions handling
 -   VFS-1618 Enable grpca in rename tests
 -   VFS-1887 Add missing implementation of release.
@@ -1940,7 +1940,7 @@ VFS-5933 Remove the concept of default space
 
 -   VFS-1802 Improve proxyio performance.
 -   VFS-1521: Get providers for space from cache instead of OZ
--   VFS-1521: Resolve issues with too long document.key in dbsync\\\'s
+-   VFS-1521: Resolve issues with too long document.key in dbsync\'s
     state
 -   VFS-1768: BS Tooltip component; style improvements in file chunks
     modal
@@ -1982,7 +1982,7 @@ VFS-5933 Remove the concept of default space
 ### 3.0.0-alpha3
 
 -   VFS-1598 Fix oz\_plugin module.
--   Add DBSync\\\'s stream restarter
+-   Add DBSync\'s stream restarter
 -   VFS-1558: Changes in Polish i18n
 -   Include Erlang ERTS include directory when building c\_src/ .
 
@@ -2123,7 +2123,7 @@ VFS-5933 Remove the concept of default space
 -   implement generic transactions in datastore ensure file\_meta name
     uniqueness witihin its parent scope
 -   VFS-1178, Cache controller uses non-transactional saves
--   move worker\_host\\\'s state to ETS table
+-   move worker\_host\'s state to ETS table
 -   use couchbase 4.0
 -   VFS-1147 Integration with new protocol.
 -   VFS-1147 Implementation of first operations on directories.
@@ -2140,7 +2140,7 @@ VFS-5933 Remove the concept of default space
 -   VFS-1049 add check\_permissions annotation
 -   VFS-1049 add initial fslogic file structure
 -   VFS-1051 change worker startup order
--   implement datastore: \\\'delete with predicates\\\' and list
+-   implement datastore: \'delete with predicates\' and list
 -   VFS-997 Add event stream periodic emission ct test.
 -   VFS-997 Add event stream crash ct test.
 -   VFS-997 Event manager ct test.
@@ -2153,7 +2153,7 @@ VFS-5933 Remove the concept of default space
 -   change location of message\_id header
 -   extract certificate\_info to separate header
 -   client\_communicator lib
--   VFS-1000, add logical and storage file manager\\\'s API design
+-   VFS-1000, add logical and storage file manager\'s API design
 -   oneproxy CertificateInfo message
 -   new handshake
 -   VFS-1000, add sequence support for response mocking
@@ -2253,7 +2253,7 @@ VFS-5933 Remove the concept of default space
 -   versioning improvement
 -   change versioning to fit short version format
 -   change versioning not to include commit hash
--   package deb in gzip format (it\\\'s easier to sign such package with
+-   package deb in gzip format (it\'s easier to sign such package with
     dpkg-sig)
 -   VFS-923 Remove unnecessary provider hostname variable from start
     oneclient instruction.
@@ -2337,7 +2337,7 @@ VFS-5933 Remove the concept of default space
     functions. Management functions include certificates management.
 -   provide Web GUI for administrators which offers monitoring and logs
     preview (also Fuse clients logs).
--   provide users\\\' authentication via OpenID and certificates.
+-   provide users\' authentication via OpenID and certificates.
 -   provide rule management subsystem (version 1.0).
 -   reconfigure *oneclient* using callbacks.
 

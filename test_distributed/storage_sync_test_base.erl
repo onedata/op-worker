@@ -426,7 +426,7 @@ create_directory_import_many_test(Config, MountSpaceInRoot) ->
     DirsNumber = 200,
     RDWRStorage = get_rdwr_storage(Config, W1),
     %% Create dirs on storage
-    utils:pforeach(fun(N) ->
+    lists_utils:pforeach(fun(N) ->
         DirPath = storage_path(?SPACE_ID, integer_to_binary(N), MountSpaceInRoot),
         SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, DirPath, RDWRStorage),
         ok = sd_test_utils:mkdir(W1, SDHandle, 8#775)
@@ -817,7 +817,7 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     RDWRStorage = get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
     DirsNumber = 200,
-    utils:pforeach(fun(N) ->
+    lists_utils:pforeach(fun(N) ->
         NBin = integer_to_binary(N),
         DirPath = storage_path(?SPACE_ID, NBin, MountSpaceInRoot),
         FilePath = filename:join([DirPath, integer_to_binary(N)]),
@@ -1355,9 +1355,9 @@ close_file_import_race_test(Config, StorageType) ->
         meck:passthrough([FileName, ParentCtx])
     end),
 
+    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
     ?EXEC_ON_POSIX_ONLY(fun() ->
         % touch space_dir to ensure that it will be updated
-        timer:sleep(timer:seconds(1)),
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>, MountInRoot),
         touch(W1, ContainerStorageSpacePath)
