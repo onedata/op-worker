@@ -143,8 +143,8 @@
     % (can't be called via shared guid == no share mode).
     available_in_share_mode = false :: boolean() | inapplicable,
 
-    % Tells whether operation should be performed by space owner regardless of
-    % permissions set or not.
+    % Tells whether operation should be allowed for space owner regardless of
+    % permissions.
     applicable_to_space_owner = true :: boolean(),
 
     % Operation being tested. It will be called for various combinations of
