@@ -49,6 +49,10 @@
 }).
 
 -define(STATE_ID, session).
+-define(INITIALIZATION_STATUS_KEY, initialization_status).
+-define(INITIALIZATION_STATUS_FINISHED_VALUE, initialization_finished).
+-define(LOCAL_CALL_TIMEOUT, timer:minutes(1)).
+-define(REMOTE_CALL_TIMEOUT, timer:minutes(10)).
 
 %%%===================================================================
 %%% API
@@ -319,7 +323,7 @@ get_provider(_, SessId, FileCtx) ->
 %% @private
 %% @doc
 %% Handles request locally (in caller process) or delegates it to manager
-%% if manager initialization is not finished.
+%% if manager has not finished initialization..
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_locally(Request :: term(), Manager :: pid()) -> ok.
@@ -328,13 +332,13 @@ handle_locally(#event{} = Evt, Manager) ->
 handle_locally(#flush_events{} = FlushRequest, Manager) ->
     handle_flush(FlushRequest, Manager, true);
 handle_locally(Request, Manager) ->
-    gen_server2:call(Manager, Request, timer:minutes(1)).
+    call_manager(Manager, Request).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Handles event locally (in caller process) or delegates it to manager
-%% if manager initialization is not finished.
+%% if manager has not finished initialization..
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_event(Evt :: event:base(), Manager :: pid(), VerifyManager :: boolean()) -> ok.
@@ -344,9 +348,9 @@ handle_event(Evt, Manager, VerifyManager) ->
         {{ok, Stm}, _} ->
             ok = event_stream:send(Stm, Evt);
         {_, true} ->
-            case ets_state:get(?STATE_ID, Manager, initiialized) of
-                {ok, true} -> handle_event(Evt, Manager, false);
-                _ -> gen_server2:call(Manager, Evt, timer:minutes(1))
+            case ets_state:get(?STATE_ID, Manager, ?INITIALIZATION_STATUS_KEY) of
+                {ok, ?INITIALIZATION_STATUS_FINISHED_VALUE} -> handle_event(Evt, Manager, false);
+                _ -> call_manager(Manager, Evt)
             end,
             ok;
         _ ->
@@ -357,7 +361,7 @@ handle_event(Evt, Manager, VerifyManager) ->
 %% @private
 %% @doc
 %% Handles flush request locally (in caller process) or delegates it to manager
-%% if manager initialization is not finished.
+%% if manager has not finished initialization..
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_flush(FlushRequest :: #flush_events{}, Manager :: pid(),
@@ -387,9 +391,9 @@ handle_flush(#flush_events{subscription_id = SubId, notify = NotifyFun} = FlushR
 maybe_retry_flush(_FlushRequest, _Manager, false) ->
     ok;
 maybe_retry_flush(FlushRequest, Manager, true) ->
-    case ets_state:get(?STATE_ID, Manager, initiialized) of
-        {ok, true} -> handle_flush(FlushRequest, Manager, false);
-        _ -> gen_server2:call(Manager, FlushRequest, timer:minutes(1))
+    case ets_state:get(?STATE_ID, Manager, ?INITIALIZATION_STATUS_KEY) of
+        {ok, ?INITIALIZATION_STATUS_FINISHED_VALUE} -> handle_flush(FlushRequest, Manager, false);
+        _ -> call_manager(Manager, FlushRequest)
     end.
 
 %%--------------------------------------------------------------------
@@ -489,7 +493,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
             % VFS-5206 - handle heartbeats
             #server_message{message_body = #status{}} = Msg ->
                 Notify(Msg)
-        after timer:minutes(10) ->
+        after ?REMOTE_CALL_TIMEOUT ->
             Notify(#server_message{message_body = #status{code = ?EAGAIN}})
         end
     end),
@@ -588,7 +592,7 @@ start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) 
         add_to_memory(streams, StmKey, Stm)
     end, Docs),
 
-    ets_state:save(?STATE_ID, self(), initiialized, true),
+    ets_state:save(?STATE_ID, self(), ?INITIALIZATION_STATUS_KEY, ?INITIALIZATION_STATUS_FINISHED_VALUE),
     State#state{
         streams_sup = StmsSup
     }.
@@ -705,3 +709,8 @@ delete_memory() ->
     ets_state:delete_collection(?STATE_ID, sub_to_guid),
     ets_state:delete(?STATE_ID, self(), session_id),
     ets_state:delete(?STATE_ID, self(), proxy_via).
+
+%% @private
+-spec call_manager(pid(), term()) -> term().
+call_manager(Manager, Request) ->
+    gen_server2:call(Manager, Request, ?LOCAL_CALL_TIMEOUT).
