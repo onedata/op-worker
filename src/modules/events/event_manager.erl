@@ -323,7 +323,7 @@ get_provider(_, SessId, FileCtx) ->
 %% @private
 %% @doc
 %% Handles request locally (in caller process) or delegates it to manager
-%% if manager has not finished initialization..
+%% if manager has not finished initialization.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_locally(Request :: term(), Manager :: pid()) -> ok.
@@ -338,7 +338,7 @@ handle_locally(Request, Manager) ->
 %% @private
 %% @doc
 %% Handles event locally (in caller process) or delegates it to manager
-%% if manager has not finished initialization..
+%% if manager has not finished initialization.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_event(Evt :: event:base(), Manager :: pid(), VerifyManager :: boolean()) -> ok.
@@ -361,7 +361,7 @@ handle_event(Evt, Manager, VerifyManager) ->
 %% @private
 %% @doc
 %% Handles flush request locally (in caller process) or delegates it to manager
-%% if manager has not finished initialization..
+%% if manager has not finished initialization.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_flush(FlushRequest :: #flush_events{}, Manager :: pid(),
