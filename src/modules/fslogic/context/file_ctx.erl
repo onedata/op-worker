@@ -87,7 +87,8 @@
     get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
     get_file_size_from_remote_locations/1, get_owner/1, get_local_storage_file_size/1,
     is_space_synced/1, get_and_cache_file_doc_including_deleted/1]).
--export([is_dir/1, is_imported_storage/1, is_storage_file_created/1]).
+-export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
+-export([assert_not_readonly_storage/1]).
 
 %%%===================================================================
 %%% API
@@ -1241,6 +1242,20 @@ is_dir(FileCtx = #file_ctx{is_dir = undefined}) ->
     {IsDir, FileCtx2#file_ctx{is_dir = IsDir}};
 is_dir(FileCtx = #file_ctx{is_dir = IsDir}) ->
     {IsDir, FileCtx}.
+
+-spec is_readonly_storage(ctx()) -> {boolean(), ctx()}.
+is_readonly_storage(FileCtx) ->
+    {StorageId, FileCtx2} = get_storage_id(FileCtx),
+    SpaceId = get_space_id_const(FileCtx2),
+    IsReadonly = storage:is_readonly(StorageId, SpaceId),
+    {IsReadonly, FileCtx2}.
+
+-spec assert_not_readonly_storage(ctx()) -> ctx().
+assert_not_readonly_storage(FileCtx) ->
+    case is_readonly_storage(FileCtx) of
+        {true, _} -> throw(?EROFS);
+        {false, FileCtx2} -> FileCtx2
+    end.
 
 %%%===================================================================
 %%% Internal functions

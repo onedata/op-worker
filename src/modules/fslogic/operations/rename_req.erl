@@ -38,9 +38,7 @@
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    {StorageId, TargetParentFileCtx2} = file_ctx:get_storage_id(TargetParentFileCtx),
-    SpaceId = file_ctx:get_space_id_const(TargetParentFileCtx2),
-    storage_req:assert_not_readonly(StorageId, SpaceId),
+    TargetParentFileCtx2 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx),
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
     TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx2),
     case SourceSpaceId =:= TargetSpaceId of

@@ -157,9 +157,8 @@ get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
 ) ->
     fslogic_worker:fuse_response().
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
-    {StorageId, ParentFileCtx2} = file_ctx:get_storage_id(ParentFileCtx),
+    ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
-    storage_req:assert_not_readonly(StorageId, SpaceId),
     CTime = time_utils:cluster_time_seconds(),
     Owner = user_ctx:get_user_id(UserCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),

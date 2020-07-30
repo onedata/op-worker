@@ -203,9 +203,7 @@ release(UserCtx, FileCtx, HandleId) ->
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-    {StorageId, ParentFileCtx2} = file_ctx:get_storage_id(ParentFileCtx),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
-    storage_req:assert_not_readonly(StorageId, SpaceId),
+    ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
     {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
@@ -296,9 +294,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 -spec make_file_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
-    {StorageId, ParentFileCtx2} = file_ctx:get_storage_id(ParentFileCtx),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
-    storage_req:assert_not_readonly(StorageId, SpaceId),
+    ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
     {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
@@ -431,9 +427,10 @@ open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink) ->
     FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), new_file(), boolean()) ->
     no_return() | {storage_driver:handle_id(), file_location:record(), file_ctx:ctx()}.
 open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExists) ->
-    {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx0),
-    SpaceId = file_ctx:get_space_id_const(FileCtx1),
-    maybe_assert_not_readonly(StorageId, SpaceId, Flag),
+    FileCtx1 = case Flag == read of
+        true -> FileCtx0;
+        false -> file_ctx:assert_not_readonly_storage(FileCtx0)
+    end,
     FileCtx2 = verify_file_exists(FileCtx1, HandleId0),
     SpaceID = file_ctx:get_space_id_const(FileCtx2),
     SessId = user_ctx:get_session_id(UserCtx),
@@ -768,8 +765,8 @@ check_if_file_exists_or_is_opened(FileCtx, SessionId) ->
             end
     end.
 
--spec maybe_assert_not_readonly(storage:id(), od_space:id(), fslogic_worker:open_flag()) -> ok.
-maybe_assert_not_readonly(_Storage, _SpaceId, read) ->
-    ok;
-maybe_assert_not_readonly(Storage, SpaceId, _) ->
-    storage_req:assert_not_readonly(Storage, SpaceId).
+-spec maybe_assert_not_readonly(file_ctx:ctx(), fslogic_worker:open_flag()) -> file_ctx:ctx().
+maybe_assert_not_readonly(FileCtx, read) ->
+    FileCtx;
+maybe_assert_not_readonly(FileCtx, _) ->
+    file_ctx:assert_not_readonly_storage(FileCtx).

@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% This file contains macros with asserts to be used
+%%% for checking distribution of files' blocks in tests.
 %%% @end
 %%%-------------------------------------------------------------------
 

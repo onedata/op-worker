@@ -56,7 +56,7 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(Name, ImportedStorage, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), boolean(), boolean()) -> {ok, storage:id()} | errors:error().
+-spec create_in_zone(od_storage:name(), storage:imported(), storage:readonly()) -> {ok, storage:id()} | errors:error().
 create_in_zone(Name, ImportedStorage, Readonly) ->
     create_in_zone(Name, ImportedStorage, Readonly, undefined).
 
@@ -66,7 +66,7 @@ create_in_zone(Name, ImportedStorage, Readonly) ->
 %% Creates document containing storage public information in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), boolean() | unknown, boolean(), storage:id() | undefined) ->
+-spec create_in_zone(od_storage:name(), storage:imported() | unknown, storage:readonly(), storage:id() | undefined) ->
     {ok, storage:id()} | errors:error().
 create_in_zone(Name, ImportedStorage, Readonly, StorageId) ->
     PartialData = case ImportedStorage of
@@ -224,6 +224,7 @@ is_imported(StorageId) ->
         Error -> Error
     end.
 
+
 -spec is_local_storage_readonly(storage:id()) -> {ok, boolean()} | errors:error().
 is_local_storage_readonly(StorageId) ->
     case storage_logic:get(StorageId) of
@@ -231,6 +232,7 @@ is_local_storage_readonly(StorageId) ->
             {ok, Readonly};
         Error -> Error
     end.
+
 
 -spec is_storage_readonly(storage:id(), od_space:id()) -> {ok, boolean()} | errors:error().
 is_storage_readonly(StorageId, SpaceId) ->

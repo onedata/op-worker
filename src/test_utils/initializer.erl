@@ -16,6 +16,7 @@
 -include("http/gui_paths.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/storage/storage.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
@@ -1133,8 +1134,8 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
             StoragesByProvider = lists:foldl(fun({StorageId, ProviderId}, Acc) ->
                 StorageConfig = maps:get(StorageId, maps:get(ProviderId, StoragesSetupMap, #{}), #{}),
                 AccessType = case maps:get(<<"readonly">>, StorageConfig, false) of
-                    true -> readonly;
-                    false -> readwrite
+                    true -> ?READONLY_STORAGE;
+                    false -> ?READWRITE_STORAGE
                 end,
                 maps:update_with(ProviderId, fun(ProviderStorages) ->
                     ProviderStorages#{StorageId => AccessType}

@@ -67,12 +67,12 @@ chmod(UserCtx, FileCtx, Mode) ->
 -spec rename(user_ctx:ctx(), od_space:id(), storage:id(),
     file_meta:uuid(), helpers:file_id(), file_ctx:ctx() | undefined, helpers:file_id()) -> ok | {error, term()}.
 rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, TargetFileId) ->
-    storage_req:assert_not_readonly(StorageId, SpaceId),
-    case TargetParentCtx =/= undefined of
+    TargetParentCtx2 = file_ctx:assert_not_readonly_storage(TargetParentCtx),
+    case TargetParentCtx2 =/= undefined of
         true ->
             % we know target parent uuid, so we can create parent directories with correct mode
             % ensure all target parent directories are created
-            {ok, _} = mkdir_deferred(TargetParentCtx, UserCtx);
+            {ok, _} = mkdir_deferred(TargetParentCtx2, UserCtx);
         false ->
             % we don't know target parent uuid because it is a remote rename
             % create parent directories with default mode
@@ -302,9 +302,7 @@ rmdir(DirCtx, UserCtx) ->
 
 -spec create_storage_file(storage_driver:handle(), file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 create_storage_file(SDHandle, FileCtx) ->
-    {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    storage_req:assert_not_readonly(StorageId, SpaceId),
+    FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx),
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     Mode = file_meta:get_mode(FileDoc),
     Result = case file_meta:get_type(FileDoc) of

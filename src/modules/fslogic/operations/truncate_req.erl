@@ -50,9 +50,7 @@ truncate(UserCtx, FileCtx0, Size) ->
     Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
 truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes) ->
-    {StorageId, FileCtx1} = file_ctx:get_storage(FileCtx0),
-    SpaceId = file_ctx:get_space_id_const(FileCtx1),
-    storage_req:assert_not_readonly(StorageId, SpaceId),
+    FileCtx1 = file_ctx:assert_not_readonly_storage(FileCtx0),
     FileCtx2 = update_quota(FileCtx1, Size),
     SessId = user_ctx:get_session_id(UserCtx),
     {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),

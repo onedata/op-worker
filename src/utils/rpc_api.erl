@@ -134,7 +134,7 @@ apply(Function, Args) ->
 %%%===================================================================
 
 -spec storage_create(storage:name(), helpers:helper(),
-    storage:luma_config(), boolean(), boolean(), storage:qos_parameters()) ->
+    storage:luma_config(), storage:imported(), storage:readonly(), storage:qos_parameters()) ->
     storage:id() | {error, term()}.
 storage_create(Name, Helpers, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
     storage:create(Name, Helpers, LumaConfig, ImportedStorage, Readonly, QosParameters).

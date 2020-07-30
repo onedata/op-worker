@@ -30,7 +30,7 @@
 
 %% API
 -export([get_configuration/1, get_helper_params/4, create_storage_test_file/3,
-    verify_storage_test_file/5, remove_storage_test_file/5, assert_not_readonly/2]).
+    verify_storage_test_file/5, remove_storage_test_file/5]).
 
 %%%===================================================================
 %%% API
@@ -103,7 +103,6 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
 -spec create_storage_test_file(user_ctx:ctx(), fslogic_worker:file_guid(),
     storage:id()) -> #fuse_response{}.
 create_storage_test_file(UserCtx, Guid, StorageId) ->
-    % TODO do not perform on RO storage
     % TODO VFS-6121 pass SpaceId instead of Guid here
     SpaceId = try file_id:guid_to_space_id(Guid) of
         <<_/binary>> = Id -> Id
@@ -125,6 +124,8 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             throw(?ENOENT)
     end,
 
+    SpaceCtx2 = file_ctx:assert_not_readonly_storage(SpaceCtx),
+
     case is_root_credentials(SessionId, UserId) of
         true ->
             % This should never happen as client cannot pass root credentials
@@ -138,7 +139,7 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
         {ok, ClientStorageUserCtx} ->
             {ok, ServerStorageUserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
-            {SpaceStorageFileId, _SpaceCtx2} = file_ctx:get_storage_file_id(SpaceCtx),
+            {SpaceStorageFileId, _SpaceCtx3} = file_ctx:get_storage_file_id(SpaceCtx2),
             DirName = filename:dirname(SpaceStorageFileId),
             TestFileName = storage_detector:generate_file_id(),
             TestFileId = fslogic_path:join([DirName, TestFileName]),
@@ -179,13 +180,6 @@ verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     {ok, StorageUserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
     verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
-
--spec assert_not_readonly(storage:id() | storage:data(), od_space:id()) -> ok.
-assert_not_readonly(Storage, SpaceId) ->
-    case storage:is_readonly(Storage, SpaceId) of
-        true -> throw(?EROFS);
-        false -> ok
-    end.
 
 %%%===================================================================
 %%% Internal functions

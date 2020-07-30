@@ -298,12 +298,10 @@ maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize > NewSize
         true ->
             {ok, FileCtx2};
         false ->
-            {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-            SpaceId = file_ctx:get_space_id_const(FileCtx3),
-            case storage:is_readonly(StorageId, SpaceId) of
-                true ->
+            case file_ctx:is_readonly_storage(FileCtx2) of
+                {true, FileCtx3} ->
                     {ok, FileCtx3};
-                false ->
+                {false, FileCtx3} ->
                     {SDHandle, FileCtx4} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx3),
                     case storage_driver:open(SDHandle, write) of
                         {ok, Handle} ->

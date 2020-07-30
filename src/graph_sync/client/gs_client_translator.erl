@@ -95,13 +95,12 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
     };
 
 
-translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Result) ->
+translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private}, Result) ->
     Storages = maps:get(<<"storages">>, Result),
 
     StoragesByProvider = lists:foldl(fun(StorageId, Acc) ->
-        {ok, ProviderId} = storage_logic:get_provider(StorageId, Id),
-        IsReadonly = storage:is_readonly(StorageId, Id),
-        AccessType = case IsReadonly of
+        {ok, ProviderId} = storage_logic:get_provider(StorageId, SpaceId),
+        AccessType = case storage:is_readonly(StorageId, SpaceId) of
             true -> ?READONLY_STORAGE;
             false -> ?READWRITE_STORAGE
         end,
@@ -111,7 +110,7 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
     end, #{}, maps:keys(Storages)),
 
     #document{
-        key = Id,
+        key = SpaceId,
         value = #od_space{
             name = maps:get(<<"name">>, Result),
 

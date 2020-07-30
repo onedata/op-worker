@@ -76,8 +76,11 @@
 -type luma_feed() :: luma:feed().
 -type luma_config() :: luma_config:config().
 -type access_type() :: ?READONLY_STORAGE | ?READWRITE_STORAGE.
+-type imported() :: boolean().
+-type readonly() :: boolean().
 
--export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0, access_type/0]).
+-export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0, access_type/0,
+    imported/0, readonly/0]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -92,7 +95,7 @@ end).
 %%%===================================================================
 
 -spec create(name(), helpers:helper(), luma_config(),
-    boolean(), boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
+    imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
     lock_on_storage_by_name(Name, fun() ->
         case is_name_occupied(Name) of
@@ -106,7 +109,7 @@ create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
 
 %% @private
 -spec create_insecure(name(), helpers:helper(), luma_config(),
-    boolean(), boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
+    imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
     case storage_logic:create_in_zone(Name, ImportedStorage, Readonly) of
         {ok, Id} ->
@@ -355,11 +358,11 @@ update_luma_config(StorageId, Diff) ->
     end.
 
 
--spec set_imported(id(), boolean()) -> ok | {error, term()}.
+-spec set_imported(id(), imported()) -> ok | {error, term()}.
 set_imported(StorageId, Imported) ->
     storage_logic:set_imported(StorageId, Imported).
 
--spec set_readonly(id(), boolean()) -> ok | {error, term()}.
+-spec set_readonly(id(), readonly()) -> ok | {error, term()}.
 set_readonly(StorageId, Readonly) ->
     storage_logic:set_readonly(StorageId, Readonly).
 

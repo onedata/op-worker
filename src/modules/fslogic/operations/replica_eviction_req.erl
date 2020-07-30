@@ -43,12 +43,12 @@ schedule_replica_eviction(
     MigrationProviderId, ViewName, QueryViewParams
 ) ->
     data_constraints:assert_not_readonly_mode(UserCtx),
-    case MigrationProviderId =/= undefined of
+    case MigrationProviderId =:= undefined of
         true ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx0),
-            data_constraints:assert_not_readonly_target(MigrationProviderId, SpaceId);
+            ok;
         false ->
-            ok
+            SpaceId = file_ctx:get_space_id_const(FileCtx0),
+            data_constraints:assert_not_readonly_target(MigrationProviderId, SpaceId)
     end,
 
     FileCtx1 = fslogic_authz:ensure_authorized(
