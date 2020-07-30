@@ -22,7 +22,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -117,6 +117,9 @@ event_manager_should_terminate_event_stream_on_subscription_cancellation(Config)
 
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
+
+end_per_suite(_) ->
+    ok.
 
 
 init_per_testcase(event_manager_should_start_stream_on_subscription = Case, Config) ->

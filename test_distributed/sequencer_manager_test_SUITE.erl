@@ -23,7 +23,7 @@
 -include_lib("proto/oneclient/server_messages.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -178,6 +178,9 @@ sequencer_manager_should_start_sequencer_in_stream_on_first_message(Config) ->
 
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
+
+end_per_suite(_) ->
+    ok.
 
 init_per_testcase(Case, Config) when
     Case =:= sequencer_manager_should_unregister_sequencer_in_stream;
