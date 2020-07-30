@@ -232,8 +232,16 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
         undefined ->
             ReqCtx;
         DataSpec ->
+            RawDataWithIdAndAspect = case RawData of
+                undefined ->
+                    #{id => Id, aspect => Aspect};
+                _ when is_map(RawData) ->
+                    RawData#{id => Id, aspect => Aspect};
+                _ ->
+                    throw(?ERROR_MALFORMED_DATA)
+            end,
             SanitizedData = middleware_sanitizer:sanitize_data(
-                RawData#{id => Id, aspect => Aspect}, DataSpec
+                RawDataWithIdAndAspect, DataSpec
             ),
             ReqCtx#req_ctx{req = Req#op_req{
                 data = maps:without([id, aspect], SanitizedData)

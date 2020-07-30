@@ -118,6 +118,9 @@
     },
     "test_global_setup": {
         "users": {
+            "owner": {
+                "default_space": "space1"
+            },
             "user1": {
                 "default_space": "space1"
             },
@@ -144,6 +147,7 @@
             "space1": {
                 "displayed_name": "space1",
                 "users": [
+                    "owner",
                     "user1",
                     "user2"
                 ],
@@ -165,6 +169,7 @@
             "space2": {
                 "displayed_name": "space2",
                 "users": [
+                    "owner",
                     "user3"
                 ],
                 "providers": {
@@ -181,6 +186,7 @@
             "space3": {
                 "displayed_name": "space3",
                 "users": [
+                    "owner",
                     "user2"
                 ],
                 "providers": {

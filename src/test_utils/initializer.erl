@@ -861,7 +861,9 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
 
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
-    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters, CustomStorages, StoragesSetupMap),
+
+    SpacesOwners = ?config(spaces_owners, Config, []),
+    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters, CustomStorages, SpacesOwners, StoragesSetupMap),
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
@@ -1100,8 +1102,8 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
 
 -spec space_logic_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}],
-    [{binary(), [binary()]}], [{binary(), binary()}], map()) -> ok.
-space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvesters, CustomStorages, StoragesSetupMap) ->
+    [{binary(), [binary()]}], [{binary(), binary()}], [binary()], map()) -> ok.
+space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvesters, CustomStorages, SpacesOwners, StoragesSetupMap) ->
     test_utils:mock_new(Workers, space_logic),
 
     GetSpaceFun = fun
@@ -1211,6 +1213,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     test_utils:mock_expect(Workers, space_logic, is_supported, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->
         {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
         maps:is_key(ProviderId, Providers)
+    end),
+
+    test_utils:mock_expect(Workers, space_logic, is_owner, fun(_, UserId) ->
+        lists:member(UserId, SpacesOwners)
     end),
 
     test_utils:mock_expect(Workers, space_logic, get_harvesters, fun(SpaceId) ->
@@ -1609,7 +1615,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
             {ok, #document{value = #od_storage{readonly = Readonly}}} = storage_logic:get_shared_data(StorageId, SpaceId),
             {ok, Readonly}
         end),
-    
+
     % NOTE this function changes qos parameters only on the node where it was executed
     ok = test_utils:mock_expect(Workers, storage_logic, set_qos_parameters,
         fun(StorageId, QosParameters) ->
