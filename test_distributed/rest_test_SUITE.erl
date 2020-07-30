@@ -238,6 +238,7 @@ mock_space_logic(Config) ->
                 providers = #{?PROVIDER_ID => 1000000000}
             }}}
         end),
+    test_utils:mock_expect(Workers, space_logic, is_owner, fun(_, _) -> false end),
     test_utils:mock_expect(Workers, space_logic, get_name,
         fun(_, ?SPACE_ID) ->
             {ok, ?SPACE_NAME}
