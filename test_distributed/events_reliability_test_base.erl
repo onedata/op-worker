@@ -62,8 +62,8 @@ events_aggregation_stream_error_test(Config) ->
 
     test_utils:mock_expect(Workers, event_stream, send,
         fun(Stream, Message) ->
-            case get(first_tested) of
-                undefined ->
+            case {Message, get(first_tested)} of
+                {#event{type = #file_read_event{}}, undefined} ->
                     put(first_tested, true),
                     meck:passthrough([error, Message]);
                 _ ->
@@ -105,8 +105,8 @@ events_aggregation_manager_error_test(Config) ->
 
     test_utils:mock_expect(Workers, event_manager, handle,
         fun(Stream, Message) ->
-            case get(first_tested) of
-                undefined ->
+            case {Message, get(first_tested)} of
+                {#event{type = #file_read_event{}}, undefined} ->
                     put(first_tested, true),
                     throw(error);
                 _ ->
@@ -156,8 +156,8 @@ events_flush_stream_error_test(Config) ->
 
     test_utils:mock_expect(Workers, event_stream, send,
         fun(Stream, Message) ->
-            case get(first_tested) of
-                undefined ->
+            case {Message, get(first_tested)} of
+                {#event{type = #file_written_event{}}, undefined} ->
                     put(first_tested, true),
                     meck:passthrough([error, Message]);
                 _ ->
@@ -306,7 +306,9 @@ init_per_suite(Config) ->
         NewConfig2 = initializer:setup_storage(NewConfig1),
         application:start(ssl),
         hackney:start(),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
+        FinalConfig = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        timer:sleep(2000), % Time to process events connected with initialization and connect providers
+        FinalConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, events_reliability_test_base]} | Config].
 
