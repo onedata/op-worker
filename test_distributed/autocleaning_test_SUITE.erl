@@ -106,22 +106,14 @@ end, lists:zip(ProviderIds, Sizes))).
 end, __Distributions))).
 
 -define(assertDistribution(Worker, SessionId, ExpectedDistribution, FileGuid),
-    try
-        ?assertEqual(?normalizeDistribution(ExpectedDistribution), try
-            {ok, __FileBlocks} = lfm_proxy:get_file_distribution(Worker, SessionId, {guid, FileGuid}),
-            lists:sort(__FileBlocks)
-    catch
-            _:_ ->
-                error
-        end, ?ATTEMPTS)
+    ?assertEqual(?normalizeDistribution(ExpectedDistribution), try
+        {ok, __FileBlocks} = lfm_proxy:get_file_distribution(Worker, SessionId, {guid, FileGuid}),
+        lists:sort(__FileBlocks)
     catch
         _:_ ->
-            ct:pal(
-                "DISTRIBUTION ASSERTION FAILED FOR ~p on ~p. Expected distribution: ~p~n"
-                "Stacktrace: ~p",
-                [FileGuid, Worker, ExpectedDistribution, erlang:get_stacktrace()]),
-            ct:fail({distribution_assert_failed, FileGuid})
-    end
+            error
+    end,
+    ?ATTEMPTS)
 ).
 
 -define(assertFilesInView(Worker, SpaceId, ExpectedGuids),
