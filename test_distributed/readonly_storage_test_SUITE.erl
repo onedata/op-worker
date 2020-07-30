@@ -46,10 +46,14 @@
     read_should_succeed/1,
     write_should_fail/1,
     chmod_should_succeed_but_not_change_mode_on_storage/1,
+    rename_should_fail/1,
+    mv_should_fail/1,
     unlink_should_succeed_but_should_leave_files_on_storage/1,
     recursive_rm_should_succeed_but_should_leave_files_on_storage/1,
     truncate_should_fail/1,
     remote_chmod_should_not_change_mode_on_storage/1,
+    remote_rename_should_not_rename_file_on_storage/1,
+    remote_move_should_not_rename_file_on_storage/1,
     remote_unlink_should_not_trigger_unlinking_files_on_local_storage/1,
     remote_recursive_rm_should_not_trigger_removal_of_files_on_local_storage/1,
     remote_truncate_should_not_trigger_truncate_on_storage/1,
@@ -65,6 +69,7 @@
 -define(RO_STORAGE_ID, <<"/mnt/st1_ro">>).
 -define(RW_STORAGE_ID, <<"/mnt/st1_rdwr">>).
 -define(SPACE_NAME, <<"space_name1">>).
+-define(SPACE_PATH, ?PATH(<<"">>)).
 -define(SESS_ID(W, Config), ?SESS_ID(W, ?USER1, Config)).
 -define(SESS_ID(W, User, Config), ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)).
 -define(PATH(FileRelativePath), fslogic_path:join([<<"/">>, ?SPACE_NAME, FileRelativePath])).
@@ -88,11 +93,14 @@ all() -> [
     read_should_succeed,
     write_should_fail,
     chmod_should_succeed_but_not_change_mode_on_storage,
-%%    mv_should_fail,   % TODO przetestować mov !!!
+    rename_should_fail,
+    mv_should_fail,
     unlink_should_succeed_but_should_leave_files_on_storage,
     recursive_rm_should_succeed_but_should_leave_files_on_storage,
     truncate_should_fail,
     remote_chmod_should_not_change_mode_on_storage,
+    remote_rename_should_not_rename_file_on_storage,
+    remote_move_should_not_rename_file_on_storage,
     remote_unlink_should_not_trigger_unlinking_files_on_local_storage,
     remote_recursive_rm_should_not_trigger_removal_of_files_on_local_storage,
     remote_truncate_should_not_trigger_truncate_on_storage,
@@ -103,7 +111,6 @@ all() -> [
     migration_job_should_fail
 ].
 
-% todo ogarnac zeby nie bylo brzydkich bledow  logach przy probie replikacji onf albo job !!!!
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -170,17 +177,63 @@ chmod_should_succeed_but_not_change_mode_on_storage(Config) ->
     % file should still have old mode on storage
     ?assertMatch({ok, #statbuf{st_mode = ?DEFAULT_FILE_MODE}}, sd_test_utils:stat(W1, SDHandle)).
 
-%%mv_should_fail(Config) ->
-%%    [W1 | _] = ?config(op_worker_nodes, Config),
-%%    SessId = ?SESS_ID(W1, Config),
-%%    FileName = ?FILE_NAME,
-%%
-%%    {Guid, _} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
-%%
-%%    % move should fail
-%%    ?assertMatch({error, ?EROFS}, lfm_proxy:mv(W1, SessId, {guid, Guid}, read)),
-%%    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W1, H, 0, 100)),
-%%    ok = lfm_proxy:close(W1, H).
+rename_should_fail(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(W1, Config),
+    FileName = ?FILE_NAME,
+    TargetName = ?FILE_NAME,
+    {Guid, SDHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
+
+    % rename should fail
+    ?assertMatch({error, ?EROFS}, lfm_proxy:mv(W1, SessId, {guid, Guid}, ?PATH(TargetName))),
+
+    ?assertMatch({ok, [{Guid, FileName}]}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?PATH(FileName)})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?PATH(TargetName)})),
+
+    % file should still be visible on storage under old path
+    ?assertMatch({ok, #statbuf{st_mode = ?DEFAULT_FILE_MODE}}, sd_test_utils:stat(W1, SDHandle)),
+    SpaceDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, <<"">>),
+
+    % target file shouldn't have been created on storage
+    ?assertMatch({ok, [FileName]}, sd_test_utils:ls(W1, SpaceDirSDHandle, 0, 10)),
+    TargetFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetName])),
+    ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, TargetFileSDHandle)).
+
+
+mv_should_fail(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(W1, Config),
+    SessId2 = ?SESS_ID(W2, Config),
+    FileName = ?FILE_NAME,
+    TargetFileName = ?FILE_NAME,
+    TargetDir = ?DIR_NAME,
+    TargetPath = fslogic_path:join([TargetDir, TargetFileName]),
+
+    {Guid, SDHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
+
+    % create directory in W2
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId2, ?PATH(TargetDir))),
+    % wait for the directory to be synchronized to W1
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?PATH(TargetDir)}), ?ATTEMPTS),
+
+    % wait for the file to be synchronized to W2
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {path, ?PATH(FileName)}), ?ATTEMPTS),
+
+    % mv should fail
+    ?assertMatch({error, ?EROFS}, lfm_proxy:mv(W1, SessId, {guid, Guid}, ?PATH(TargetPath))),
+
+    % file should still be visible on storage under old path
+    ?assertMatch({ok, #statbuf{st_mode = ?DEFAULT_FILE_MODE}}, sd_test_utils:stat(W1, SDHandle)),
+
+    % target file shouldn't have been created on storage
+    SpaceDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, <<"">>),
+    ?assertMatch({ok, [FileName]}, sd_test_utils:ls(W1, SpaceDirSDHandle, 0, 10)),
+    DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetDir])),
+    ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, DirSDHandle)),
+    TargetFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetPath])),
+    ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, TargetFileSDHandle)).
+
 
 unlink_should_succeed_but_should_leave_files_on_storage(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -254,6 +307,96 @@ remote_chmod_should_not_change_mode_on_storage(Config) ->
 
     % file should still have old mode on storage
     ?assertMatch({ok, #statbuf{st_mode = ?DEFAULT_FILE_MODE}}, sd_test_utils:stat(W1, SDHandle)).
+
+remote_rename_should_not_rename_file_on_storage(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(W1, Config),
+    SessId2 = ?SESS_ID(W2, Config),
+    FileName = ?FILE_NAME,
+    TargetFileName = ?FILE_NAME,
+
+    {Guid, SDHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
+
+    % wait for file to be synchronized to W2
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, read), ?ATTEMPTS),
+    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, 100), ?ATTEMPTS),
+    ok = lfm_proxy:close(W2, H),
+
+    % rename file
+    ?assertEqual({ok, Guid}, lfm_proxy:mv(W2, SessId2, {guid, Guid}, ?PATH(TargetFileName))),
+
+    % file should be renamed in W1
+    ?assertMatch({ok, [{Guid, TargetFileName}]}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?PATH(TargetFileName)})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?PATH(FileName)})),
+
+    % wait for file_location to be synchronized as that's what triggers rename of fie on storage
+    timer:sleep(timer:seconds(20)),
+
+    % W1 should still have up to date version of the file
+    {ok, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, Guid}, read), ?ATTEMPTS),
+    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W1, H2, 0, 100), ?ATTEMPTS),
+    ok = lfm_proxy:close(W1, H2),
+
+    SpaceDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, <<"">>),
+    NewFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetFileName])),
+    % file should still be visible on storage with old name
+    ?assertMatch({ok, [FileName]}, sd_test_utils:ls(W1, SpaceDirSDHandle, 0, 10)),
+    ?assertMatch({ok, _}, sd_test_utils:stat(W1, SDHandle)),
+    % new file shouldn't have been created
+    ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, NewFileSDHandle)).
+
+
+remote_move_should_not_rename_file_on_storage(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(W1, Config),
+    SessId2 = ?SESS_ID(W2, Config),
+    FileName = ?FILE_NAME,
+    TargetDir = ?DIR_NAME,
+    TargetFileName = ?FILE_NAME,
+    TargetPath = fslogic_path:join([TargetDir, TargetFileName]),
+
+    {Guid, SDHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
+
+
+    % create directory in W2
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId2, ?PATH(TargetDir))),
+    % wait for the directory to be synchronized to W1
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?PATH(TargetDir)}), ?ATTEMPTS),
+
+    % wait for file to be synchronized to W2
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+
+    % move file
+    ?assertEqual({ok, Guid}, lfm_proxy:mv(W2, SessId2, {guid, Guid}, ?PATH(TargetPath))),
+
+    % file should be renamed in W1
+    ?assertMatch({ok, [{Guid, TargetFileName}]}, lfm_proxy:get_children(W1, SessId, {path, ?PATH(TargetDir)}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?PATH(TargetPath)})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?PATH(FileName)})),
+
+    % wait for file_location to be synchronized as that's what triggers rename of fie on storage
+    timer:sleep(timer:seconds(20)),
+
+    % W1 should still have up to date version of the file
+    {ok, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, Guid}, read), ?ATTEMPTS),
+    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W1, H2, 0, 100), ?ATTEMPTS),
+    ok = lfm_proxy:close(W1, H2),
+
+
+    % file should still be visible on storage with old name
+    SpaceDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, <<"">>),
+    ?assertMatch({ok, [FileName]}, sd_test_utils:ls(W1, SpaceDirSDHandle, 0, 10)),
+    ?assertMatch({ok, _}, sd_test_utils:stat(W1, SDHandle)),
+
+    % new files shouldn't have been created
+    DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetDir])),
+    ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, DirSDHandle)),
+    NewFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetPath])),
+    ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, NewFileSDHandle)).
+
 
 remote_unlink_should_not_trigger_unlinking_files_on_local_storage(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -475,6 +618,9 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 end_per_testcase(_Case, Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    clean_space(W1, ?SPACE_ID, Config),
+    clean_storage(W1, ?SPACE_ID, ?RW_STORAGE_ID),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -513,3 +659,38 @@ ensure_parent_dirs_created_on_storage(Worker, SpaceId, StorageFileId) ->
 
 provider_id(Worker) ->
     rpc:call(Worker, oneprovider, get_id, []).
+
+clean_space(Worker, SpaceId, Config) ->
+    SessId = ?SESS_ID(Worker, Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    BatchSize = 1000,
+    clean_space(Worker, SessId, SpaceGuid, 0, BatchSize),
+    ensure_space_empty(SpaceId, Config).
+
+clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
+    {ok, GuidsAndPaths} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
+    FilesNum = length(GuidsAndPaths),
+    delete_files(Worker, SessId, GuidsAndPaths),
+    case FilesNum < BatchSize of
+        true ->
+            ok;
+        false ->
+            clean_space(Worker, SessId, SpaceGuid, Offset + BatchSize, BatchSize)
+    end.
+
+delete_files(Worker, SessId, GuidsAndPaths) ->
+    lists:foreach(fun({G, _P}) ->
+        lfm_proxy:rm_recursive(Worker, SessId, {guid, G})
+    end, GuidsAndPaths).
+
+ensure_space_empty(SpaceId, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    lists:foreach(fun(W) ->
+        ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?SESS_ID(W, Config), {guid, Guid}, 0, 1), ?ATTEMPTS)
+    end, Workers).
+
+clean_storage(Worker, SpaceId, StorageId) ->
+    SDHandle = sd_test_utils:new_handle(Worker, SpaceId, <<"/">>, StorageId),
+    sd_test_utils:recursive_rm(Worker, SDHandle, true),
+    ?assertMatch({ok, []}, sd_test_utils:ls(Worker, SDHandle, 0, 1)).

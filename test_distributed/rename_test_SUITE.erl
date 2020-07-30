@@ -133,6 +133,7 @@ rename_dbsync_test(Config) ->
     ?assertEqual({ok, 5}, lfm_proxy:write(W1, Handle1, 0, <<"test1">>)),
     ?assertEqual(ok, lfm_proxy:close(W1, Handle1)),
     ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId1, {guid, File1Guid}, filename(4, TestDir, "/nested/renamed_file1_target"))),
+    ?assertMatch({ok, [{_, <<"renamed_file1_target">>}]}, lfm_proxy:get_children(W2, SessId2, {path, filename(4, TestDir, "/nested")}, 0, 10), 30),
     {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {path, filename(4, TestDir, "/nested/renamed_file1_target")}, read), 30),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W2, Handle3, 0, 10), 30),
     ?assertEqual(ok, lfm_proxy:close(W2, Handle3)).

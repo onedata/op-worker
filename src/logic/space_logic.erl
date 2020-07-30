@@ -213,7 +213,7 @@ get_storage_ids_by_provider(SpaceId, ProviderId) ->
     % called by module to be mocked in tests
     case space_logic:get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{value = #od_space{storages_by_provider = StoragesByProvider}}} ->
-            {ok, maps:get(ProviderId, StoragesByProvider, [])};
+            {ok, maps:values(maps:get(ProviderId, StoragesByProvider, #{}))};
         {error, _} = Error ->
             Error
     end.

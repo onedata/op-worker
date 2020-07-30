@@ -67,6 +67,7 @@ chmod(UserCtx, FileCtx, Mode) ->
 -spec rename(user_ctx:ctx(), od_space:id(), storage:id(),
     file_meta:uuid(), helpers:file_id(), file_ctx:ctx() | undefined, helpers:file_id()) -> ok | {error, term()}.
 rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, TargetFileId) ->
+    storage_req:assert_not_readonly(StorageId, SpaceId),
     case TargetParentCtx =/= undefined of
         true ->
             % we know target parent uuid, so we can create parent directories with correct mode

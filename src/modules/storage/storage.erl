@@ -41,7 +41,7 @@
 ]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_readonly/2]).
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_readonly/1, is_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 

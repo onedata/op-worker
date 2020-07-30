@@ -157,21 +157,25 @@ rename_or_delete(FileCtx,
         true ->
             NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
             {TargetStorageId, NewFileCtx2} = file_ctx:get_storage_id(NewFileCtx),
-            % TODO VFS-6155 properly handle remote rename, target parent doc may not be synchronized yet, how do we know its mode?
-            case sd_utils:rename(user_ctx:new(?ROOT_SESS_ID), TargetSpaceId,
-                TargetStorageId, FileUuid, SourceFileId, undefined, RemoteTargetFileId)
-            of
-                ok -> ok;
-                {error, ?ENOENT} -> ok
-            end,
-
-            RenamedDoc = Doc#document{value = Loc#file_location{
-                file_id = RemoteTargetFileId,
-                space_id = TargetSpaceId,
-                storage_id = TargetStorageId,
-                last_rename = LastRename
-            }},
-            {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx2};
+            case storage:is_readonly(TargetStorageId) of
+                true ->
+                    {skipped, NewFileCtx2};
+                false ->
+                    % TODO VFS-6155 properly handle remote rename, target parent doc may not be synchronized yet, how do we know its mode?
+                    case sd_utils:rename(user_ctx:new(?ROOT_SESS_ID), TargetSpaceId,
+                        TargetStorageId, FileUuid, SourceFileId, undefined, RemoteTargetFileId)
+                    of
+                        ok -> ok;
+                        {error, ?ENOENT} -> ok
+                    end,
+                    RenamedDoc = Doc#document{value = Loc#file_location{
+                        file_id = RemoteTargetFileId,
+                        space_id = TargetSpaceId,
+                        storage_id = TargetStorageId,
+                        last_rename = LastRename
+                    }},
+                    {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx2}
+            end;
         false ->
             %% TODO: VFS-2299 delete file locally without triggering deletion
             %% on other providers, also make sure all locally modified blocks
