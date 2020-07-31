@@ -47,8 +47,7 @@ schedule_replica_eviction(
         true ->
             ok;
         false ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx0),
-            data_constraints:assert_not_readonly_target(MigrationProviderId, SpaceId)
+            file_ctx:assert_not_readonly_target_storage_const(FileCtx0, MigrationProviderId)
     end,
 
     FileCtx1 = fslogic_authz:ensure_authorized(

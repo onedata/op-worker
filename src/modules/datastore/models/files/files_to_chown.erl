@@ -139,7 +139,7 @@ chown_file(FileCtx, OwnerId) ->
     {ok, StorageCredentials} = luma:map_to_storage_credentials(OwnerId, SpaceId, Storage),
     Uid = binary_to_integer(maps:get(<<"uid">>, StorageCredentials)),
     Gid = binary_to_integer(maps:get(<<"gid">>, StorageCredentials)),
-    case storage:is_readonly(Storage, SpaceId) of
+    case storage:is_storage_readonly(Storage, SpaceId) of
         true -> ok;
         false -> storage_driver:chown(SDHandle, Uid, Gid)
     end,

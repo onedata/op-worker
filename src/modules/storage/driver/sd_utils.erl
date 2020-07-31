@@ -74,7 +74,7 @@ rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, Tar
             % ensure all target parent directories are created
             {ok, _} = mkdir_deferred(TargetParentCtx2, UserCtx);
         false ->
-            case storage:is_readonly(StorageId, SpaceId) of
+            case storage:is_storage_readonly(StorageId, SpaceId) of
                 true -> throw(?EROFS);
                 false -> ok
             end,

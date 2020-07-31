@@ -308,7 +308,7 @@ maybe_remove_file_on_storage(FileCtx, UserCtx) ->
     try
         {StorageId, FileCtx2} = file_ctx:get_storage(FileCtx),
         SpaceId = file_ctx:get_space_id_const(FileCtx2),
-        case storage:is_readonly(StorageId, SpaceId) of
+        case storage:is_storage_readonly(StorageId, SpaceId) of
             true ->
                 {ok, FileCtx2};
             false ->

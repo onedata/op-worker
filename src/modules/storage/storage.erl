@@ -41,7 +41,7 @@
 ]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_readonly/1, is_readonly/2]).
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 
@@ -163,7 +163,7 @@ describe(StorageData) ->
         <<"name">> => fetch_name(StorageId),
         <<"type">> => helper:get_name(Helper),
         <<"importedStorage">> => is_imported(StorageId),
-        <<"readonly">> => is_readonly(StorageId),
+        <<"readonly">> => is_local_storage_readonly(StorageId),
         <<"qosParameters">> => fetch_qos_parameters_of_local_storage(StorageId)
     }}.
 
@@ -305,17 +305,17 @@ is_imported(StorageId) when is_binary(StorageId) ->
 is_imported(StorageData) ->
     is_imported(storage:get_id(StorageData)).
 
--spec is_readonly(id()) -> boolean().
-is_readonly(StorageId) when is_binary(StorageId) ->
+-spec is_local_storage_readonly(id()) -> boolean().
+is_local_storage_readonly(StorageId) when is_binary(StorageId) ->
     {ok, Readonly} = ?throw_on_error(storage_logic:is_local_storage_readonly(StorageId)),
     Readonly.
 
--spec is_readonly(id() | data(), od_space:id()) -> boolean().
-is_readonly(StorageId, SpaceId) when is_binary(StorageId) ->
+-spec is_storage_readonly(id() | data(), od_space:id()) -> boolean().
+is_storage_readonly(StorageId, SpaceId) when is_binary(StorageId) ->
     {ok, Readonly} = ?throw_on_error(storage_logic:is_storage_readonly(StorageId, SpaceId)),
     Readonly;
-is_readonly(StorageData, SpaceId) ->
-    is_readonly(storage:get_id(StorageData), SpaceId).
+is_storage_readonly(StorageData, SpaceId) ->
+    is_storage_readonly(storage:get_id(StorageData), SpaceId).
 
 
 -spec has_non_auto_luma_feed(data()) -> boolean().

@@ -100,7 +100,7 @@ translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private
 
     StoragesByProvider = lists:foldl(fun(StorageId, Acc) ->
         {ok, ProviderId} = storage_logic:get_provider(StorageId, SpaceId),
-        AccessType = case storage:is_readonly(StorageId, SpaceId) of
+        AccessType = case storage:is_storage_readonly(StorageId, SpaceId) of
             true -> ?READONLY_STORAGE;
             false -> ?READWRITE_STORAGE
         end,

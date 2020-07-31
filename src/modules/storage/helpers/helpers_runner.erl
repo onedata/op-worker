@@ -66,8 +66,10 @@ run_with_file_handle_and_handle_error(SDHandle = #sd_handle{file_handle = FileHa
     Operation :: fun((handle()) -> Result),
     SufficientAccessType :: storage:access_type(),
     Result :: ok | {ok, term()} | {error, term()}.
-run_and_handle_error(SDHandle, FileOrHelperHandle, Operation, SufficientAccessType) ->
-    case is_storage_access_type_sufficient(SDHandle, SufficientAccessType) of
+run_and_handle_error(SDHandle = #sd_handle{storage_id = StorageId, space_id = SpaceId}, FileOrHelperHandle, Operation,
+    SufficientAccessType
+) ->
+    case storage_logic:supports_access_type(StorageId, SpaceId, SufficientAccessType) of
         true ->
             case Operation(FileOrHelperHandle) of
                 Error = {error, _} ->
@@ -109,9 +111,3 @@ handle_ekeyexpired(FileOrHelperHandle, #sd_handle{
         _ ->
             {error, ?EKEYEXPIRED}
     end.
-
--spec is_storage_access_type_sufficient(storage_driver:handle(), storage:access_type()) -> boolean().
-is_storage_access_type_sufficient(_SDHandle, ?READONLY_STORAGE) ->
-    true;
-is_storage_access_type_sufficient(#sd_handle{storage_id = StorageId, space_id = SpaceId}, ?READWRITE_STORAGE) ->
-    not storage:is_readonly(StorageId, SpaceId).

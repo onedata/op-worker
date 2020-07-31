@@ -65,6 +65,7 @@
     is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
     is_in_user_space_const/2]).
 -export([equals/2]).
+-export([assert_not_readonly_target_storage_const/2]).
 
 %% Functions that do not modify context but does not have _const suffix and return context.
 % TODO VFS-6119 missing _const suffix in function name
@@ -1247,7 +1248,7 @@ is_dir(FileCtx = #file_ctx{is_dir = IsDir}) ->
 is_readonly_storage(FileCtx) ->
     {StorageId, FileCtx2} = get_storage_id(FileCtx),
     SpaceId = get_space_id_const(FileCtx2),
-    IsReadonly = storage:is_readonly(StorageId, SpaceId),
+    IsReadonly = storage:is_storage_readonly(StorageId, SpaceId),
     {IsReadonly, FileCtx2}.
 
 -spec assert_not_readonly_storage(ctx()) -> ctx().
@@ -1255,6 +1256,14 @@ assert_not_readonly_storage(FileCtx) ->
     case is_readonly_storage(FileCtx) of
         {true, _} -> throw(?EROFS);
         {false, FileCtx2} -> FileCtx2
+    end.
+
+-spec assert_not_readonly_target_storage_const(ctx(), od_provider:id()) -> ok.
+assert_not_readonly_target_storage_const(FileCtx, TargetProviderId) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case space_logic:has_readonly_support_from(SpaceId, TargetProviderId) of
+        true -> throw(?EROFS);
+        false -> ok
     end.
 
 %%%===================================================================
