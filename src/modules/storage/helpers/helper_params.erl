@@ -316,9 +316,8 @@ remove_field(ToRemove, Fields) ->
 -spec parse_url(URL :: binary()) ->
     {ok, Scheme :: http | https, HostAndPort :: binary()}.
 parse_url(URL) ->
-    #{scheme := Scheme, host := Host, port := Port} = url_utils:parse(URL),
-    {ok, Scheme, str_utils:format_bin("~ts:~B", [Host, Port])}.
-
+    #{scheme := Scheme, host := Host, port := Port, path := Path} = url_utils:parse(URL),
+    {ok, Scheme, str_utils:format_bin("~ts:~B~ts", [Host, Port, Path])}.
 
 %%--------------------------------------------------------------------
 %% @private
