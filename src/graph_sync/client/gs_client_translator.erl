@@ -105,7 +105,7 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
         value = #od_space{
             name = maps:get(<<"name">>, Result),
 
-            owners = maps:get(<<"owners">>, Result),
+            owners = maps:get(<<"owners">>, Result, []),
 
             direct_users = privileges_to_atoms(maps:get(<<"users">>, Result)),
             eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result)),
