@@ -156,11 +156,11 @@ rename_or_delete(FileCtx,
     case provider_logic:supports_space(TargetSpaceId) of
         true ->
             NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
-            {TargetStorageId, NewFileCtx2} = file_ctx:get_storage_id(NewFileCtx),
-            case storage:is_readonly(TargetStorageId) of
-                true ->
+            case file_ctx:is_readonly_storage(NewFileCtx) of
+                {true, NewFileCtx2} ->
                     {skipped, NewFileCtx2};
-                false ->
+                {false, NewFileCtx2} ->
+                    {TargetStorageId, NewFileCtx3} = file_ctx:get_storage_id(NewFileCtx2),
                     % TODO VFS-6155 properly handle remote rename, target parent doc may not be synchronized yet, how do we know its mode?
                     case sd_utils:rename(user_ctx:new(?ROOT_SESS_ID), TargetSpaceId,
                         TargetStorageId, FileUuid, SourceFileId, undefined, RemoteTargetFileId)
@@ -174,7 +174,7 @@ rename_or_delete(FileCtx,
                         storage_id = TargetStorageId,
                         last_rename = LastRename
                     }},
-                    {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx2}
+                    {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx3}
             end;
         false ->
             %% TODO: VFS-2299 delete file locally without triggering deletion

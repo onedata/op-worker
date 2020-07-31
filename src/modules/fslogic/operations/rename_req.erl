@@ -38,14 +38,15 @@
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    TargetParentFileCtx2 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx),
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
-    TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx2),
+    TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
     case SourceSpaceId =:= TargetSpaceId of
         false ->
+            % TODO VFS-6627 Prevent interprovider move to RO storage
             rename_between_spaces(
-                UserCtx, SourceFileCtx, TargetParentFileCtx2, TargetName);
+                UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
         true ->
+            TargetParentFileCtx2 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx),
             rename_within_space(
                 UserCtx, SourceFileCtx, TargetParentFileCtx2, TargetName)
     end.

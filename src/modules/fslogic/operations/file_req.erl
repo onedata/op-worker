@@ -765,8 +765,3 @@ check_if_file_exists_or_is_opened(FileCtx, SessionId) ->
             end
     end.
 
--spec maybe_assert_not_readonly(file_ctx:ctx(), fslogic_worker:open_flag()) -> file_ctx:ctx().
-maybe_assert_not_readonly(FileCtx, read) ->
-    FileCtx;
-maybe_assert_not_readonly(FileCtx, _) ->
-    file_ctx:assert_not_readonly_storage(FileCtx).

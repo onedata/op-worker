@@ -93,7 +93,7 @@ upgrade_from_19_02_x_storages(Config) ->
     ?assertMatch({error, not_found}, rpc:call(Worker, datastore_model, get, [space_storage:get_ctx(), SpaceId])),
 
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, upgrade_legacy_support, 2, 1),
-    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, create_in_zone, 3, 1),
+    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, create_in_zone, 4, 1),
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, set_imported, ['_', true], 1),
     % Virtual storage should be removed in onezone
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, delete_in_zone, 1, 1),
@@ -130,7 +130,7 @@ init_per_testcase(upgrade_from_19_02_x_storages, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
-    test_utils:mock_expect(Worker, storage_logic, create_in_zone, fun(_, _, StorageId) -> {ok, StorageId} end),
+    test_utils:mock_expect(Worker, storage_logic, create_in_zone, fun(_, _, _, StorageId) -> {ok, StorageId} end),
     test_utils:mock_expect(Worker, storage_logic, delete_in_zone, fun(_) -> ok end),
     test_utils:mock_expect(Worker, storage_logic, upgrade_legacy_support, fun(_,_) -> ok end),
     test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_,_) -> ok end),

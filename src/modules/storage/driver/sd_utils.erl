@@ -67,13 +67,17 @@ chmod(UserCtx, FileCtx, Mode) ->
 -spec rename(user_ctx:ctx(), od_space:id(), storage:id(),
     file_meta:uuid(), helpers:file_id(), file_ctx:ctx() | undefined, helpers:file_id()) -> ok | {error, term()}.
 rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, TargetFileId) ->
-    TargetParentCtx2 = file_ctx:assert_not_readonly_storage(TargetParentCtx),
-    case TargetParentCtx2 =/= undefined of
+    case TargetParentCtx =/= undefined of
         true ->
+            TargetParentCtx2 = file_ctx:assert_not_readonly_storage(TargetParentCtx),
             % we know target parent uuid, so we can create parent directories with correct mode
             % ensure all target parent directories are created
             {ok, _} = mkdir_deferred(TargetParentCtx2, UserCtx);
         false ->
+            case storage:is_readonly(StorageId, SpaceId) of
+                true -> throw(?EROFS);
+                false -> ok
+            end,
             % we don't know target parent uuid because it is a remote rename
             % create parent directories with default mode
             TargetDir = filename:dirname(TargetFileId),
