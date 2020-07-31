@@ -74,12 +74,12 @@ rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, Tar
             % ensure all target parent directories are created
             {ok, _} = mkdir_deferred(TargetParentCtx2, UserCtx);
         false ->
+            % We don't know target parent uuid because it is a remote rename, check whether storage is readonly "manually"
             case storage:is_storage_readonly(StorageId, SpaceId) of
                 true -> throw(?EROFS);
                 false -> ok
             end,
-            % we don't know target parent uuid because it is a remote rename
-            % create parent directories with default mode
+            % Create parent directories with default mode
             TargetDir = filename:dirname(TargetFileId),
             TargetDirHandle = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, TargetDir),
             case storage_driver:mkdir(TargetDirHandle, ?DEFAULT_DIR_PERMS, true) of

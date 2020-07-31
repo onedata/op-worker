@@ -42,7 +42,7 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
     case SourceSpaceId =:= TargetSpaceId of
         false ->
-            % TODO VFS-6627 Prevent interprovider move to RO storage
+            % TODO VFS-6627 Handle interprovider move to RO storage
             rename_between_spaces(
                 UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
         true ->

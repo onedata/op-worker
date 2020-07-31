@@ -228,6 +228,7 @@ get_storages_by_provider(SpaceId, ProviderId) when is_binary(SpaceId)->
             Error
     end.
 
+
 -spec get_all_storage_ids(od_space:id()) -> {ok, [storage:id()]} | errors:error().
 get_all_storage_ids(SpaceId) ->
     case get(?ROOT_SESS_ID, SpaceId) of
@@ -281,6 +282,13 @@ is_supported_by_storage(SpaceId, StorageId) ->
         _ -> false
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether ALL storages with which the ProviderId supports
+%% the space are readonly.
+%% @end
+%%--------------------------------------------------------------------
 -spec has_readonly_support_from(od_space:id() | od_space:record(), od_provider:id()) -> boolean().
 has_readonly_support_from(SpaceOrId, ProviderId) ->
     case get_storages_by_provider(SpaceOrId, ProviderId) of

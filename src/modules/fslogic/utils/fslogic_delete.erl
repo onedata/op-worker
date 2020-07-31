@@ -306,12 +306,10 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
 -spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 maybe_remove_file_on_storage(FileCtx, UserCtx) ->
     try
-        {StorageId, FileCtx2} = file_ctx:get_storage(FileCtx),
-        SpaceId = file_ctx:get_space_id_const(FileCtx2),
-        case storage:is_storage_readonly(StorageId, SpaceId) of
-            true ->
+        case file_ctx:is_readonly_storage(FileCtx) of
+            {true, FileCtx2} ->
                 {ok, FileCtx2};
-            false ->
+            {false, FileCtx2} ->
                 case sd_utils:delete(FileCtx2, UserCtx) of
                     {ok, FileCtx3} -> {ok, FileCtx3};
                     {error, ?ENOENT} -> {ok, FileCtx2};
