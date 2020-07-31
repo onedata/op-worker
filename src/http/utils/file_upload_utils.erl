@@ -40,6 +40,9 @@
 ).
 
 
+-define(DEFAULT_WRITE_BLOCK_SIZE, 10485760). % 10 MB
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -86,7 +89,12 @@ upload_file(FileHandle, Offset, Req, ReadReqBodyFun, ReadReqBodyOpts) ->
 -spec get_preferable_storage_write_block_size(storage:id()) ->
     undefined | non_neg_integer().
 get_preferable_storage_write_block_size(StorageId) ->
-    storage:get_block_size(StorageId).
+    case storage:get_block_size(StorageId) of
+        0 ->
+            ?DEFAULT_WRITE_BLOCK_SIZE;
+        BlockSize ->
+            BlockSize
+    end.
 
 
 %% @private
