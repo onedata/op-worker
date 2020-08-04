@@ -26,7 +26,9 @@
     build_create_file_transfer_setup_fun/6,
     build_create_view_transfer_setup_fun/6,
 
+    await_transfer_active/3,
     await_transfer_end/3,
+    rerun_transfer/2,
 
     build_create_transfer_verify_fun/7
 ]).
@@ -188,6 +190,17 @@ build_create_view_transfer_setup_fun(TransferType, EnvRef, SrcNode, DstNode, Use
     end.
 
 
+await_transfer_active(Nodes, TransferId, TransferType) ->
+    ExpTransferStatus = case TransferType of
+        replication -> #{replication_status => active};
+        eviction -> #{eviction_status => active};
+        migration -> #{replication_status => active}
+    end,
+    lists:foreach(fun(Node) ->
+        transfers_test_utils:assert_transfer_state(Node, TransferId, ExpTransferStatus, ?ATTEMPTS)
+    end, Nodes).
+
+
 await_transfer_end(Nodes, TransferId, TransferType) ->
     ExpTransferStatus = case TransferType of
         replication ->
@@ -203,6 +216,14 @@ await_transfer_end(Nodes, TransferId, TransferType) ->
     lists:foreach(fun(Node) ->
         transfers_test_utils:assert_transfer_state(Node, TransferId, ExpTransferStatus, ?ATTEMPTS)
     end, Nodes).
+
+
+rerun_transfer(Node, TransferId) ->
+    {ok, RerunId} = ?assertMatch(
+        {ok, _},
+        rpc:call(Node, transfer, rerun_ended, [undefined, TransferId])
+    ),
+    RerunId.
 
 
 build_create_transfer_verify_fun(replication, EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->

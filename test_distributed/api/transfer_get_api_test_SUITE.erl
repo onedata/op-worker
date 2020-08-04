@@ -35,7 +35,9 @@
 
     get_view_replication_status/1,
     get_view_eviction_status/1,
-    get_view_migration_status/1
+    get_view_migration_status/1,
+
+    get_rerun_transfer_status/1
 ]).
 
 all() ->
@@ -46,7 +48,9 @@ all() ->
 
         get_view_replication_status,
         get_view_eviction_status,
-        get_view_migration_status
+        get_view_migration_status,
+
+        get_rerun_transfer_status
     ]).
 
 
@@ -172,6 +176,8 @@ build_get_transfer_status_validate_rest_call_result_fun(TransferType, DataSource
         <<"replicatingProviderId">>, <<"evictingProviderId">>,
         <<"transferStatus">>, <<"replicationStatus">>, <<"replicaEvictionStatus">>, <<"evictionStatus">>,
 
+        <<"effectiveJobStatus">>, <<"effectiveJobTransferId">>,
+
         <<"filesToProcess">>, <<"filesProcessed">>,
         <<"filesReplicated">>, <<"bytesReplicated">>,
         <<"fileReplicasEvicted">>, <<"filesEvicted">>,
@@ -211,6 +217,7 @@ assert_proper_constant_fields_in_get_status_rest_response(TransferType, DataSour
     BasicConstantFields = #{
         <<"userId">> => maps:get(user_id, Env),
         <<"rerunId">> => null,
+        <<"effectiveJobTransferId">> => maps:get(transfer_id, Env),
         <<"spaceId">> => ?SPACE_2,
         <<"callback">> => maps:get(callback, Env, null),
 
@@ -240,6 +247,7 @@ assert_proper_constant_fields_in_get_status_rest_response(TransferType, DataSour
 
 assert_proper_status_in_get_status_rest_response(ExpState, Env, #{
     <<"transferStatus">> := TransferStatus,
+    <<"effectiveJobStatus">> := EffJobStatus,
     <<"replicationStatus">> := ReplicationStatus,
     <<"replicaEvictionStatus">> := EvictionStatus,
     <<"evictionStatus">> := EvictionStatus
@@ -248,6 +256,9 @@ assert_proper_status_in_get_status_rest_response(ExpState, Env, #{
         replication_status := ExpReplicationStatus,
         eviction_status := ExpEvictionStatus
     } = maps:get(exp_transfer, Env),
+
+    % Without rerun EffJobStatus should always equal TransferStatus
+    ?assertEqual(TransferStatus, EffJobStatus),
 
     case ExpState of
         ongoing ->
@@ -427,6 +438,72 @@ build_get_transfer_status_validate_gs_call_result_fun(DataSourceType, ExpState, 
     end.
 
 
+get_rerun_transfer_status(Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+
+    TransferType = replication,
+    DataSourceType = lists_utils:random_element([file, view]),
+    ExpEffStatus = case TransferType of
+        eviction -> <<"evicting">>;
+        _ -> <<"replicating">>
+    end,
+    ct:pal("TransferType: ~p~nDataSourceType: ~p", [TransferType, DataSourceType]),
+
+    RequiredPrivs = [?SPACE_VIEW_TRANSFERS],
+    set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
+    set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
+
+    EnvRef = api_test_env:init(),
+    SetupFun = transfer_api_test_utils:build_env_with_started_transfer_setup_fun(
+        TransferType, EnvRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
+    ),
+    SetupFun(),
+
+    #{transfer_id := TransferId} = TransferDetails = api_test_env:get(EnvRef, transfer_details),
+    transfer_api_test_utils:await_transfer_end(Providers, TransferId, TransferType),
+    get_rerun_transfer_status(Config, TransferType, TransferDetails, null, TransferId, <<"completed">>),
+
+    RerunId1 = transfer_api_test_utils:rerun_transfer(P1, TransferId),
+    transfer_api_test_utils:await_transfer_active(Providers, RerunId1, TransferType),
+    get_rerun_transfer_status(Config, TransferType, TransferDetails, RerunId1, RerunId1, ExpEffStatus),
+    transfer_api_test_utils:await_transfer_end(Providers, RerunId1, TransferType),
+    get_rerun_transfer_status(Config, TransferType, TransferDetails, RerunId1, RerunId1, <<"completed">>),
+
+    RerunId2 = transfer_api_test_utils:rerun_transfer(P1, RerunId1),
+    transfer_api_test_utils:await_transfer_active(Providers, RerunId2, TransferType),
+    get_rerun_transfer_status(Config, TransferType, TransferDetails, RerunId1, RerunId2, ExpEffStatus),
+    transfer_api_test_utils:await_transfer_end(Providers, RerunId2, TransferType),
+    get_rerun_transfer_status(Config, TransferType, TransferDetails, RerunId1, RerunId2, <<"completed">>).
+
+
+get_rerun_transfer_status(Config, TransferType, Env, RerunId, EffTransferId, ExpEffStatus) ->
+    VerifyResultFun = fun(_TestCtx, Result) ->
+        {ok, _, _, Body} = ?assertMatch({ok, ?HTTP_200_OK, _, _}, Result),
+
+        ?assertEqual(RerunId, maps:get(<<"rerunId">>, Body)),
+        ?assertEqual(EffTransferId, maps:get(<<"effectiveJobTransferId">>, Body)),
+        ?assertEqual(ExpEffStatus, maps:get(<<"effectiveJobStatus">>, Body))
+    end,
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Get transfer (~p) rerun status using rest endpoint", [TransferType]),
+                    type = rest,
+                    prepare_args_fun = build_get_transfer_status_prepare_rest_args_fun(Env),
+                    validate_result_fun = VerifyResultFun
+                }
+            ],
+            data_spec = #data_spec{bad_values = [
+                {bad_id, <<"NonExistentTransfer">>, ?ERROR_NOT_FOUND}
+            ]}
+        }
+    ])).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -487,6 +564,12 @@ init_per_testcase(Case, Config) when
     transfers_test_utils:mock_prolonged_replica_eviction(Providers, 0.5, ?TRANSFER_PROLONGATION_TIME),
     init_per_testcase(all, Config);
 
+init_per_testcase(get_rerun_transfer_status, Config) ->
+    Providers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:mock_prolonged_replication(Providers, 1, ?TRANSFER_PROLONGATION_TIME),
+    transfers_test_utils:mock_prolonged_replica_eviction(Providers, 1, ?TRANSFER_PROLONGATION_TIME),
+    init_per_testcase(all, Config);
+
 init_per_testcase(_Case, Config) ->
     initializer:mock_share_logic(Config),
     ct:timetrap({minutes, 30}),
@@ -509,6 +592,12 @@ end_per_testcase(Case, Config) when
 ->
     Providers = ?config(op_worker_nodes, Config),
     transfers_test_utils:unmock_prolonged_replica_eviction(Providers),
+    end_per_testcase(all, Config);
+
+end_per_testcase(get_rerun_transfer_status, Config) ->
+    Providers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:unmock_prolonged_replica_eviction(Providers),
+    transfers_test_utils:unmock_prolonged_replication(Providers),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
