@@ -28,6 +28,7 @@
 -export([
     create_on_different_providers_test_base/1,
     basic_opts_test_base/4,
+    basic_opts_test_base/5,
     rtransfer_test_base/11,
     rtransfer_blocking_test_base/6,
     rtransfer_blocking_test_cleanup/1,
@@ -628,10 +629,13 @@ rtransfer_blocking_test_cleanup(Config) ->
 
     test_utils:mock_validate_and_unload(Workers2, [replica_synchronizer, rtransfer_config]).
 
+basic_opts_test_base(Config, User, NodesDescroption, Attempts) ->
+    basic_opts_test_base(Config, User, NodesDescroption, Attempts, true).
+
 % TODO - add reading with chunks to test prefetching
-basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
-    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
-basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, CheckSequences) ->
+    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, CheckSequences);
+basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, CheckSequences) ->
 
 %%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
@@ -721,7 +725,11 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
             _ -> {false, WorkersDbsyncStates}
         end
     end,
-    ?assertEqual(true, AreAllSeqsEqual(), 60),
+    % TODO VFS-6652 Always check sequences
+    case CheckSequences of
+        true -> ?assertEqual(true, AreAllSeqsEqual(), 60);
+        false -> ok
+    end,
 
     ok.
 
