@@ -354,8 +354,12 @@ prepare_batch(Docs, Timestamp, Until, State = #state{
                     {Docs, Timestamp, Until, State};
                 _ ->
                     {NextTimestamp, NextDocs} = ets:lookup_element(Stash, Key, 2),
+                    UsedTimestamp = case NextTimestamp of
+                        undefined -> Timestamp;
+                        _ -> NextTimestamp
+                    end,
                     ets:delete(Stash, Key),
-                    prepare_batch(Docs ++ NextDocs, NextTimestamp, NextUntil, State)
+                    prepare_batch(Docs ++ NextDocs, UsedTimestamp, NextUntil, State)
             end;
         _ ->
             {Docs, Timestamp, Until, schedule_changes_request(State)}
