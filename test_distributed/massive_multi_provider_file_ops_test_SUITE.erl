@@ -32,7 +32,8 @@
     rtransfer_multisource_test/1, rtransfer_blocking_test/1, traverse_test/1, external_traverse_test/1,
     traverse_cancel_test/1, external_traverse_cancel_test/1, traverse_external_cancel_test/1,
     queued_traverse_cancel_test/1, queued_traverse_external_cancel_test/1, traverse_restart_test/1,
-    multiple_traverse_test/1, external_multiple_traverse_test/1, mixed_multiple_traverse_test/1
+    multiple_traverse_test/1, external_multiple_traverse_test/1, mixed_multiple_traverse_test/1,
+    db_sync_basic_opts_with_errors_test/1
 ]).
 
 %% Pool callbacks
@@ -44,7 +45,8 @@
     multi_space_test, rtransfer_test, rtransfer_multisource_test, rtransfer_blocking_test,
     traverse_test, external_traverse_test, traverse_cancel_test, external_traverse_cancel_test,
     traverse_external_cancel_test, queued_traverse_cancel_test, queued_traverse_external_cancel_test,
-    traverse_restart_test, multiple_traverse_test, external_multiple_traverse_test, mixed_multiple_traverse_test
+    traverse_restart_test, multiple_traverse_test, external_multiple_traverse_test, mixed_multiple_traverse_test,
+    db_sync_basic_opts_with_errors_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -202,6 +204,9 @@ rtransfer_multisource_test(Config0) ->
     ok.
 
 db_sync_basic_opts_test(Config) ->
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60).
+
+db_sync_basic_opts_with_errors_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60).
 
 rtransfer_test(Config) ->
@@ -579,6 +584,9 @@ init_per_testcase(Case, Config) when
         ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10]))
     end, Workers),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
+    MockedConfig = multi_provider_file_ops_test_base:mock_sync_errors(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -597,6 +605,12 @@ end_per_testcase(Case, Config) when
 end_per_testcase(rtransfer_blocking_test, Config) ->
     multi_provider_file_ops_test_base:rtransfer_blocking_test_cleanup(Config),
     lfm_proxy:teardown(Config);
+end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator]),
+    RequestDelay = ?config(request_delay, Config),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
 

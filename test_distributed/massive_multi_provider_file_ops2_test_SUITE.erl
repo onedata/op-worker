@@ -31,7 +31,8 @@
     file_consistency_test/1,
     file_consistency_test_base/1,
     multi_space_test/1,
-    blocks_suiting_test/1
+    blocks_suiting_test/1,
+    db_sync_basic_opts_with_errors_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -40,7 +41,8 @@
     db_sync_distributed_modification_test,
     file_consistency_test,
     multi_space_test,
-    blocks_suiting_test
+    blocks_suiting_test,
+    db_sync_basic_opts_with_errors_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -73,6 +75,9 @@ all() ->
     ]).
 
 db_sync_basic_opts_test(Config) ->
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,2,0}, 120).
+
+db_sync_basic_opts_with_errors_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,2,0}, 120).
 
 db_sync_many_ops_test(Config) ->
@@ -244,6 +249,9 @@ init_per_testcase(file_consistency_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, file_meta, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
+init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
+    MockedConfig = multi_provider_file_ops_test_base:mock_sync_errors(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -258,6 +266,12 @@ end_per_testcase(file_consistency_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, file_meta),
     end_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
+end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator]),
+    RequestDelay = ?config(request_delay, Config),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
 
