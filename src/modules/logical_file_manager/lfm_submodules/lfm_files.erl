@@ -32,6 +32,10 @@
 
 -define(DEFAULT_SYNC_PRIORITY,
     application:get_env(?APP_NAME, default_sync_priority, 32)).
+-define(SYNC_MAX_RETRIES, application:get_env(?APP_NAME, lfm_sync_max_retries, 5)).
+-define(SYNC_MIN_BACKOFF, application:get_env(?APP_NAME, lfm_sync_min_backoff, timer:seconds(1))).
+-define(SYNC_BACKOFF_RATE, application:get_env(?APP_NAME, lfm_sync_backoff_rate, 2)).
+-define(SYNC_MAX_BACKOFF, application:get_env(?APP_NAME, lfm_sync_max_backoff, timer:minutes(1))).
 
 -type sync_options() :: {priority, non_neg_integer()} | off.
 -type check_size_option() :: verify_size | ignore_size.
@@ -706,10 +710,8 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions
                 off ->
                     ok;
                 {priority, Priority} ->
-                    ok = remote_utils:call_fslogic(SessId, file_request, FileGuid,
-                        #synchronize_block{block = #file_block{offset = Offset, size = ReadSize},
-                            prefetch = PrefetchData, priority = Priority},
-                        fun(_) -> ok end)
+                    sync_block(SessId, FileGuid, #file_block{offset = Offset, size = ReadSize},
+                        PrefetchData, Priority, 0)
             end,
 
             FileId = lfm_context:get_file_id(LfmCtx),
@@ -738,4 +740,32 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions
             );
         _ ->
             {ok, <<>>}
+    end.
+
+%% @private
+-spec sync_block(SessId :: session:id(), FileGuid :: fslogic_worker:file_guid(), Block :: fslogic_blocks:block(),
+    PrefetchData :: boolean(), Priority :: non_neg_integer(), RetryNum :: non_neg_integer()) -> ok | no_return().
+sync_block(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum) ->
+    case remote_utils:call_fslogic(SessId, file_request, FileGuid,
+        #synchronize_block{block = Block, prefetch = PrefetchData, priority = Priority},
+        fun(_) -> ok end) of
+        ok -> ok;
+        {error, Error} ->
+            ?error("Error during synchronization requested by lfm, error code: ~p", [Error]),
+            maybe_retry_sync(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum, Error)
+    end.
+
+%% @private
+-spec maybe_retry_sync(SessId :: session:id(), FileGuid :: fslogic_worker:file_guid(), Block :: fslogic_blocks:block(),
+    PrefetchData :: boolean(), Priority :: non_neg_integer(), RetryNum :: non_neg_integer(), Error :: code()) ->
+    ok | no_return().
+maybe_retry_sync(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum, Error) ->
+    MaxRetires = ?SYNC_MAX_RETRIES,
+    case RetryNum >= MaxRetires of
+        true ->
+            throw(Error);
+        false ->
+            SleepTime = round(?SYNC_MIN_BACKOFF * math:pow(?SYNC_BACKOFF_RATE, RetryNum)),
+            timer:sleep(min(SleepTime, ?SYNC_MAX_BACKOFF)),
+            sync_block(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum + 1)
     end.
