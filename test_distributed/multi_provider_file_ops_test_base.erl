@@ -49,7 +49,7 @@
     cancel_synchronizations_for_session_test_base/1,
     transfer_files_to_source_provider/1
 ]).
--export([init_env/1, teardown_env/1]).
+-export([init_env/1, teardown_env/1, mock_sync_errors/1]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, create_location/4]).
@@ -1488,7 +1488,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     BlocksCount = ?config(block_count, Config),
     UserCount = ?config(user_count, Config),
     BlockSizeBytes = BlockSize * 1024 * 1024,
-    
+
     Users = [<<"user", (integer_to_binary(Num))/binary>> || Num <- lists:seq(1, UserCount)],
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     SessId = fun(User, W) ->
@@ -1538,12 +1538,12 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     End = erlang:monotonic_time(millisecond),
 
     ct:pal("Transfers canceled"),
-    
+
     ct:pal("Block size: ~p~n"
            "Block count: ~p~n"
            "Number of users: ~p~n"
            "Total time[ms]: ~p~n"
-           "Average time per user[ms]: ~p", 
+           "Average time per user[ms]: ~p",
         [BlockSize, BlocksCount, UserCount, End-Start, lists:sum(Times)/length(Times)]).
 
 cancel_synchronizations_for_session_test_base(Config0) ->
@@ -1591,7 +1591,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
         end,
         async_synchronize(Worker1, User, SessId, FileCtx, Block)
      end, lists:seq(0, BlocksCount - 1)),
-    
+
     timer:sleep(timer:seconds(5)),
     ct:pal("Transfers started"),
 
@@ -1602,7 +1602,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     end, Users),
 
     ct:pal("Transfers canceled"),
-    
+
     {OkCount, CancelCount} = lists:foldl(fun(Promise, {Ok, Cancel}) ->
         case rpc:yield(Promise) of
             {error, cancelled} ->
@@ -1611,10 +1611,10 @@ cancel_synchronizations_for_session_test_base(Config0) ->
                 {Ok+1, Cancel}
         end
     end, {0,0}, Promises),
-    
+
     ?assertEqual(0, rpc:call(Worker1, ets, info, [rtransfer_link_requests, size]), 500),
     End = erlang:monotonic_time(millisecond),
-    
+
     ct:pal("Block size: ~p~n"
     "Block count: ~p~n"
     "Number of users: ~p~n"
@@ -1632,7 +1632,7 @@ transfer_files_to_source_provider(Config0) ->
     Worker = ?config(worker1, Config),
     FilesNum = ?config(files_num, Config),
     Size = ?config(file_size, Config),
-    
+
     Guids = utils:pmap(fun(Num) ->
         FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
         {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, 8#755),
@@ -1641,40 +1641,40 @@ transfer_files_to_source_provider(Config0) ->
         ok = lfm_proxy:close(Worker, Handle),
         Guid
     end, lists:seq(1, FilesNum)),
-    
+
     ct:pal("~p files created", [FilesNum]),
-    
+
     Start = erlang:monotonic_time(millisecond),
-    
+
     TidsAndGuids = utils:pmap(fun(Guid) ->
         {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
         {Tid, Guid}
     end, Guids),
-    
+
     utils:pforeach(fun F({Tid, Guid}) ->
         {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [Guid]),
         case Transfers of
             [Tid] ->
                 ok;
-            _ -> 
+            _ ->
                 F({Tid, Guid})
         end
     end, TidsAndGuids),
-    
+
     End = erlang:monotonic_time(millisecond),
-    
+
     StartGui = erlang:monotonic_time(millisecond),
     utils:pforeach(fun(Num) ->
-        {ok, [{_, List}]} = 
-            rpc:call(Worker, transfer_data_backend, list_transfers, 
+        {ok, [{_, List}]} =
+            rpc:call(Worker, transfer_data_backend, list_transfers,
                 [SessionId, SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),
         ?assertMatch(100, length(List))
     end, lists:seq(1, FilesNum div 100)),
     EndGui = erlang:monotonic_time(millisecond),
-    
+
     ct:pal("Transfer time[s]: ~p~n"
            "Average time per file[ms]: ~p~n"
-           "GUI time [s]: ~p", 
+           "GUI time [s]: ~p",
         [(End-Start)/1000, (End-Start)/FilesNum, (EndGui-StartGui)/1000]).
 
 
@@ -1709,6 +1709,44 @@ teardown_env(Config) ->
     hackney:stop(),
     ssl:stop().
 
+mock_sync_errors(Config) ->
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+
+    RequestDelay = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(1)),
+
+    test_utils:mock_new(Workers, [dbsync_in_stream_worker, dbsync_communicator], [passthrough]),
+
+    test_utils:mock_expect(Workers, dbsync_in_stream_worker, handle_info, fun
+        ({batch_applied, {Since, Until}, Timestamp, Ans} = Info, State) ->
+            case Ans of
+                ok ->
+                    Counter = case get(test_counter) of
+                        undefined -> 1;
+                        Val -> Val
+                    end,
+                    case Counter < 4 of
+                        true ->
+                            put(test_counter, Counter + 1),
+                            meck:passthrough([{batch_applied, {Since, max(Until - 10, Since)}, Timestamp, Ans}, State]);
+                        _ ->
+                            put(test_counter, 1),
+                            meck:passthrough([Info, State])
+                    end;
+                _ ->
+                    meck:passthrough([Info, State])
+            end;
+        (Info, State) ->
+            meck:passthrough([Info, State])
+    end),
+
+    test_utils:mock_expect(Workers, dbsync_communicator, send_changes,
+        fun(ProviderId, SpaceId, BatchSince, Until, Docs) ->
+            timer:sleep(2000),
+            meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Docs])
+        end),
+
+    [{request_delay, RequestDelay} | Config].
 
 %%%===================================================================
 %%% Internal functions
