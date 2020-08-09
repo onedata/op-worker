@@ -237,19 +237,16 @@ handle_changes_request(ProviderId, #changes_request2{
 }) ->
     Handler = fun
         (BatchSince, end_of_stream, Timestamp, Docs) ->
-            ?info("mmmmmm2 ~p", [{SpaceId, Since, Until, Timestamp}]),
             dbsync_communicator:send_changes(
                 ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs
             );
         (BatchSince, BatchUntil, Timestamp, Docs) ->
-            ?info("mmmmmm ~p", [{SpaceId, Since, Until, Timestamp}]),
             dbsync_communicator:send_changes(
                 ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
     end,
     Name = get_on_demand_changes_stream_id(SpaceId, ProviderId),
     StreamID = ?OUT_STREAM_ID(Name),
-    ?info("sssss ~p", [{SpaceId, Since, Until}]),
     critical_section:run([?MODULE, StreamID], fun() ->
         case global:whereis_name(StreamID) of
             undefined ->
