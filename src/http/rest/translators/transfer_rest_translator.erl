@@ -46,7 +46,7 @@ create_response(#gri{aspect = As}, _, value, TransferId) when
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(#gri{aspect = instance}, #transfer{
+get_response(#gri{aspect = instance, id = TransferId}, #transfer{
     file_uuid = FileUuid,
     space_id = SpaceId,
     index_name = ViewName,
@@ -74,6 +74,18 @@ get_response(#gri{aspect = instance}, #transfer{
     dy_hist = DyHist,
     mth_hist = MthHist
 } = Transfer) ->
+    {EffJobTransferId, EffJobTransfer} = case RerunId of
+        undefined ->
+            {TransferId, Transfer};
+        _ ->
+            {ok, #document{
+                key = EffTransferId,
+                value = EffTransfer
+            }} = transfer:get_effective(RerunId),
+
+            {EffTransferId, EffTransfer}
+    end,
+
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -110,6 +122,9 @@ get_response(#gri{aspect = instance}, #transfer{
         % TODO VFS-6365 remove deprecated transfer
         <<"replicaEvictionStatus">> => EvictionStatus,
         <<"evictionStatus">> => EvictionStatus,
+
+        <<"effectiveJobStatus">> => transfer:status(EffJobTransfer),
+        <<"effectiveJobTransferId">> => EffJobTransferId,
 
         <<"filesToProcess">> => FilesToProcess,
         <<"filesProcessed">> => FilesProcessed,

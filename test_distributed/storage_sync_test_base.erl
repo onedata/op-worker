@@ -426,7 +426,7 @@ create_directory_import_many_test(Config, MountSpaceInRoot) ->
     DirsNumber = 200,
     RDWRStorage = get_rdwr_storage(Config, W1),
     %% Create dirs on storage
-    utils:pforeach(fun(N) ->
+    lists_utils:pforeach(fun(N) ->
         DirPath = storage_path(?SPACE_ID, integer_to_binary(N), MountSpaceInRoot),
         SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, DirPath, RDWRStorage),
         ok = sd_test_utils:mkdir(W1, SDHandle, 8#775)
@@ -817,7 +817,7 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     RDWRStorage = get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
     DirsNumber = 200,
-    utils:pforeach(fun(N) ->
+    lists_utils:pforeach(fun(N) ->
         NBin = integer_to_binary(N),
         DirPath = storage_path(?SPACE_ID, NBin, MountSpaceInRoot),
         FilePath = filename:join([DirPath, integer_to_binary(N)]),

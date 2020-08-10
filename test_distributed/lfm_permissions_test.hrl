@@ -95,6 +95,10 @@
     % Name of root dir for test
     root_dir :: binary(),
 
+    % Id of user being owner of space. He should be allowed to perform any
+    % operation on files in space regardless of permissions set.
+    space_owner = <<"owner">> :: binary(),
+
     % Id of user belonging to space specified in `space_id` in context
     % of which all files required for tests will be created. It will be
     % used to test `user` posix bits and `OWNER@` special acl identifier
@@ -138,6 +142,10 @@
     % check is entirely inapplicable due to operation call not using file guid
     % (can't be called via shared guid == no share mode).
     available_in_share_mode = false :: boolean() | inapplicable,
+
+    % Tells whether operation should be allowed for space owner regardless of
+    % permissions.
+    applicable_to_space_owner = true :: boolean(),
 
     % Operation being tested. It will be called for various combinations of
     % either posix or acl permissions. It is expected to fail for combinations

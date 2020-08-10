@@ -120,19 +120,19 @@
 }).
 
 -record(synchronize_block, {
-    block :: #file_block{},
+    block :: fslogic_blocks:block(),
     prefetch = false :: boolean(),
     priority :: non_neg_integer()
 }).
 
 -record(synchronize_block_and_compute_checksum, {
-    block :: #file_block{},
+    block :: fslogic_blocks:block(),
     prefetch = false :: boolean(),
     priority :: non_neg_integer()
 }).
 
 -record(block_synchronization_request, {
-    block :: #file_block{},
+    block :: fslogic_blocks:block(),
     prefetch = false :: boolean(),
     priority :: non_neg_integer()
 }).

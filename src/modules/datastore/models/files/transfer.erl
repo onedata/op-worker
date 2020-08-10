@@ -26,7 +26,7 @@
 %% API
 -export([
     init/0, cleanup/0,
-    start/8, get/1, update/2, update_and_run/3, delete/1,
+    start/8, get/1, get_effective/1, update/2, update_and_run/3, delete/1,
     cancel/1, rerun_ended/2
 ]).
 
@@ -277,6 +277,23 @@ rerun_ended(UserId, TransferId) ->
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(TransferId) ->
     datastore_model:get(?CTX, TransferId).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns effective transfer document, that is document of transfer after
+%% following all `rerun_id` links (it is filled if transfer was rerun).
+%% @end
+%%-------------------------------------------------------------------
+-spec get_effective(id()) -> {ok, doc()} | {error, term()}.
+get_effective(TransferId) ->
+    case datastore_model:get(?CTX, TransferId) of
+        {ok, #document{value = #transfer{rerun_id = undefined}}} = Res ->
+            Res;
+        {ok, #document{value = #transfer{rerun_id = NextJobTransferId}}} ->
+            get_effective(NextJobTransferId);
+        {error, _} = Error ->
+            Error
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc

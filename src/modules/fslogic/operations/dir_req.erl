@@ -531,7 +531,7 @@ filtermap(Map, Filter, L, MaxProcs, Length) ->
     L :: [A]) -> [B].
 filtermap(Map, Filter, L) ->
     LWithNum = lists:zip(lists:seq(1, length(L)), L),
-    Mapped = utils:pmap(fun({Num, Element}) ->
+    Mapped = lists_utils:pmap(fun({Num, Element}) ->
         {Num, Map(Element)}
     end, LWithNum),
 

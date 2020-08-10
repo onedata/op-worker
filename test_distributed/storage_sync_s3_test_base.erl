@@ -122,7 +122,7 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     %% Create dirs and files on storage
 
     DirsNumber = 200,
-    utils:pforeach(fun(N) ->
+    lists_utils:pforeach(fun(N) ->
         NBin = integer_to_binary(N),
         DirPath = storage_sync_test_base:storage_path(?SPACE_ID, NBin, MountSpaceInRoot),
         FilePath = filename:join([DirPath, integer_to_binary(N)]),

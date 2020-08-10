@@ -232,7 +232,7 @@ wait_for_qos_fulfillment_in_parallel(Config, undefined, QosNameIdMapping, Expect
     wait_for_qos_fulfillment_in_parallel(Config, QosNamesWithWorkerList, QosNameIdMapping, ExpectedQosEntries);
 
 wait_for_qos_fulfillment_in_parallel(Config, QosToWaitForList, QosNameIdMapping, ExpectedQosEntries) ->
-    Results = utils:pmap(fun({QosName, WorkerList}) ->
+    Results = lists_utils:pmap(fun({QosName, WorkerList}) ->
         QosEntryId = maps:get(QosName, QosNameIdMapping),
 
         % try to find expected QoS entry associated with QoS name and get
@@ -252,7 +252,7 @@ wait_for_qos_fulfillment_in_parallel(Config, QosToWaitForList, QosNameIdMapping,
         end,
 
         % wait for QoS fulfillment on different worker nodes
-        utils:pmap(fun(Worker) ->
+        lists_utils:pmap(fun(Worker) ->
             wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedFulfillmentStatus)
         end, WorkerList)
     end, QosToWaitForList),

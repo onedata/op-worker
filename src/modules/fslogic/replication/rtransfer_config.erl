@@ -206,17 +206,24 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 %% Adds storage to rtransfer.
 %% @end
 %%--------------------------------------------------------------------
--spec add_storage(storage:id()) -> any().
+-spec add_storage(storage:id()) -> ok.
 add_storage(StorageId) ->
     Helper = storage:get_helper(StorageId),
     AdminCtx = helper:get_admin_ctx(Helper),
     {ok, HelperArgs} = helper:get_args_with_user_ctx(Helper, AdminCtx),
     HelperName = helper:get_name(Helper),
-    {_, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
+    {NodesAns, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, add_storage,
                                   [StorageId, HelperName, maps:to_list(HelperArgs)]),
+
     BadNodes =/= [] andalso
-        ?error("Failed to add storage ~p on nodes ~p", [StorageId, BadNodes]).
+        ?error("Failed to add storage ~p on nodes ~p", [StorageId, BadNodes]),
+
+    FilteredNodesAns = lists:filter(fun(NodeAns) -> NodeAns =/= ok end, NodesAns),
+    FilteredNodesAns =/= [] andalso
+        ?error("Error adding storage ~p, rpc answer: ~p", [StorageId, NodesAns]),
+
+    ok.
 
 
 %%--------------------------------------------------------------------

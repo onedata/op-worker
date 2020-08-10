@@ -187,7 +187,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
 
     % Emit events for different files.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-        utils:pforeach(fun(N) ->
+        lists_utils:pforeach(fun(N) ->
             lists:foreach(fun(M) ->
                 emit(Worker, #file_written_event{file_guid = ?FILE_GUID(N), size = EvtSize,
                     file_size = M * EvtSize, blocks = [#file_block{
@@ -322,7 +322,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
 
     % Emit events.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-        utils:pforeach(fun({SessId, _}) ->
+        lists_utils:pforeach(fun({SessId, _}) ->
             lists:foreach(fun(N) ->
                 emit(Worker, #file_written_event{file_guid = FileGuid, size = EvtSize,
                     file_size = N * EvtSize, blocks = [#file_block{
@@ -384,7 +384,6 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
-    initializer:mock_test_file_context(Config, <<"file_id">>),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:mock_auth_manager(Config),
     Config;
@@ -400,7 +399,6 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
-    initializer:mock_test_file_context(Config, <<"file_id">>),
     NewConfig = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config
     ),
@@ -419,7 +417,6 @@ end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:unmock_test_file_context(Config),
     test_utils:mock_unload(Workers, space_logic),
     test_utils:mock_validate_and_unload(Workers, [communicator]);
 
@@ -429,7 +426,6 @@ end_per_testcase(_Case, Config) ->
     session_teardown(Worker, SessId),
     initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:unmock_test_file_context(Config),
     test_utils:mock_unload(Workers, space_logic),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 

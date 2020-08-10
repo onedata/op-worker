@@ -300,7 +300,7 @@ do_multipart(Worker, Auth, PartsNumber, PartSize, ChunksNumber, FileGuid) ->
         <<"guid">> => FileGuid,
         <<"resumableChunkSize">> => integer_to_binary(PartsNumber*PartSize)
     },
-    utils:pforeach(fun(Chunk) ->
+    lists_utils:pforeach(fun(Chunk) ->
         rpc:call(Worker, page_file_upload, handle_multipart_req, [
             #{size => PartSize, left => PartsNumber},
             Auth,
