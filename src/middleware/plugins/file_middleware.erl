@@ -217,7 +217,9 @@ data_spec_create(#gri{aspect = register_file}) -> #{
         <<"uid">> => {integer, {not_lower_than, 0}},
         <<"gid">> => {integer, {not_lower_than, 0}},
         <<"autoDetectAttributes">> => {boolean, any},
-        <<"xattrs">> => {json, any}
+        <<"xattrs">> => {json, any},
+        <<"json">> => {json, any},
+        <<"rdf">> => {binary, any}
     }
 }.
 

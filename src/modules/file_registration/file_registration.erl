@@ -44,7 +44,9 @@
 %%       <<"uid">> => non_neg_integer(),
 %%       <<"gid">> => non_neg_integer(),
 %%       <<"autoDetectAttributes">> => boolean(),
-%%       <<"xattrs">> => json_utils:json_map()
+%%       <<"xattrs">> => json_utils:json_map(),
+%%       <<"json">> => json_utils:json_map(),
+%%       <<"rdf">> => binary() % base64 encoded RDF
 %% }
 
 %%%===================================================================
@@ -75,7 +77,9 @@ register(SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
             }),
         case FileCtx =/= undefined of
             true ->
-                set_xattrs(UserCtx, FileCtx, maps:get(<<"xattrs">>, Spec, #{})),
+                maybe_set_xattrs(UserCtx, FileCtx, maps:get(<<"xattrs">>, Spec, #{})),
+                maybe_set_json_metadata(UserCtx, FileCtx, maps:get(<<"json">>, Spec, #{})),
+                maybe_set_rdf_metadata(UserCtx, FileCtx, maps:get(<<"rdf">>, Spec, <<>>)),
                 {ok, file_ctx:get_guid_const(FileCtx)};
             false ->
                 % TODO VFS-6508 find better error
@@ -232,11 +236,28 @@ prepare_stat(StorageFileCtx, Spec) ->
     fill_in_missing_stat_fields(StorageFileCtx, Stat, Spec).
 
 
--spec set_xattrs(user_ctx:ctx(), file_ctx:ctx(), json_utils:json_map()) -> ok.
-set_xattrs(UserCtx, FileCtx, Xattrs) ->
+-spec maybe_set_xattrs(user_ctx:ctx(), file_ctx:ctx(), json_utils:json_map()) -> ok.
+maybe_set_xattrs(UserCtx, FileCtx, Xattrs) ->
     maps:fold(fun(K, V, _) ->
         xattr_req:set_xattr(UserCtx, FileCtx, #xattr{name = K, value = V}, false, false)
     end, undefined, Xattrs),
+    ok.
+
+
+-spec maybe_set_json_metadata(user_ctx:ctx(), file_ctx:ctx(), json_utils:json_map()) -> ok.
+maybe_set_json_metadata(_UserCtx, _FileCtx, JSON) when map_size(JSON) =:= 0 ->
+    ok;
+maybe_set_json_metadata(UserCtx, FileCtx, JSON) ->
+    metadata_req:set_metadata(UserCtx, FileCtx, json, JSON, [], false, false),
+    ok.
+
+
+-spec maybe_set_rdf_metadata(user_ctx:ctx(), file_ctx:ctx(), json_utils:json_map()) -> ok.
+maybe_set_rdf_metadata(_UserCtx, _FileCtx, <<>>) ->
+    ok;
+maybe_set_rdf_metadata(UserCtx, FileCtx, EncodedRdf) ->
+    RDF = base64:decode(EncodedRdf),
+    metadata_req:set_metadata(UserCtx, FileCtx, rdf, RDF, [], false, false),
     ok.
 
 
