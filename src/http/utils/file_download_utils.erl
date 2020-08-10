@@ -45,10 +45,14 @@
 
 -spec get_read_block_size(lfm_context:ctx()) -> non_neg_integer().
 get_read_block_size(FileHandle) ->
-    utils:ensure_defined(
-        storage:get_block_size(lfm_context:get_storage_id(FileHandle)),
-        ?DEFAULT_READ_BLOCK_SIZE
-    ).
+    case storage:get_block_size(lfm_context:get_storage_id(FileHandle)) of
+        undefined ->
+            ?DEFAULT_READ_BLOCK_SIZE;
+        0 ->
+            ?DEFAULT_READ_BLOCK_SIZE;
+        Int ->
+            Int
+    end.
 
 
 -spec stream_range(

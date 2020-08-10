@@ -28,6 +28,7 @@
 -export([
     create_on_different_providers_test_base/1,
     basic_opts_test_base/4,
+    basic_opts_test_base/5,
     rtransfer_test_base/11,
     rtransfer_blocking_test_base/6,
     rtransfer_blocking_test_cleanup/1,
@@ -50,7 +51,7 @@
     cancel_synchronizations_for_session_test_base/1,
     transfer_files_to_source_provider/1
 ]).
--export([init_env/1, teardown_env/1]).
+-export([init_env/1, teardown_env/1, mock_sync_errors/1]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, create_location/4]).
@@ -628,10 +629,13 @@ rtransfer_blocking_test_cleanup(Config) ->
 
     test_utils:mock_validate_and_unload(Workers2, [replica_synchronizer, rtransfer_config]).
 
+basic_opts_test_base(Config, User, NodesDescroption, Attempts) ->
+    basic_opts_test_base(Config, User, NodesDescroption, Attempts, true).
+
 % TODO - add reading with chunks to test prefetching
-basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
-    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
-basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, CheckSequences) ->
+    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, CheckSequences);
+basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, CheckSequences) ->
 
 %%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
@@ -721,7 +725,11 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
             _ -> {false, WorkersDbsyncStates}
         end
     end,
-    ?assertEqual(true, AreAllSeqsEqual(), 15),
+    % TODO VFS-6652 Always check sequences
+    case CheckSequences of
+        true -> ?assertEqual(true, AreAllSeqsEqual(), 60);
+        false -> ok
+    end,
 
     ok.
 
@@ -1750,6 +1758,44 @@ teardown_env(Config) ->
     hackney:stop(),
     ssl:stop().
 
+mock_sync_errors(Config) ->
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+
+    RequestDelay = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(1)),
+
+    test_utils:mock_new(Workers, [dbsync_in_stream_worker, dbsync_communicator], [passthrough]),
+
+    test_utils:mock_expect(Workers, dbsync_in_stream_worker, handle_info, fun
+        ({batch_applied, {Since, Until}, Timestamp, Ans} = Info, State) ->
+            case Ans of
+                ok ->
+                    Counter = case get(test_counter) of
+                        undefined -> 1;
+                        Val -> Val
+                    end,
+                    case Counter < 4 of
+                        true ->
+                            put(test_counter, Counter + 1),
+                            meck:passthrough([{batch_applied, {Since, max(Until - 10, Since)}, Timestamp, Ans}, State]);
+                        _ ->
+                            put(test_counter, 1),
+                            meck:passthrough([Info, State])
+                    end;
+                _ ->
+                    meck:passthrough([Info, State])
+            end;
+        (Info, State) ->
+            meck:passthrough([Info, State])
+    end),
+
+    test_utils:mock_expect(Workers, dbsync_communicator, send_changes,
+        fun(ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs) ->
+            timer:sleep(2000),
+            meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs])
+        end),
+
+    [{request_delay, RequestDelay} | Config].
 
 %%%===================================================================
 %%% Internal functions
