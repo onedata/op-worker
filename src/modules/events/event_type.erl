@@ -16,7 +16,7 @@
 -include("modules/monitoring/events.hrl").
 
 %% API
--export([get_routing_key/2, get_stream_key/1, get_aggregation_key/1]).
+-export([get_routing_key/2, get_attr_routing_keys/2, get_stream_key/1, get_aggregation_key/1]).
 -export([get_context/1, update_context/2]).
 
 -type aggregation_key() :: term().
@@ -61,6 +61,20 @@ get_routing_key(#helper_params_changed_event{storage_id = StorageId}, _RoutingCt
     {ok, <<"helper_params_changed.", StorageId/binary>>};
 get_routing_key(_, _) ->
     {error, session_only}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a routing keys (see get_routing_key fun) for events connected with file_attrs.
+%% Warning: It is only temporary solution as currently events framework does not allow parametrize subscriptions.
+%% Multiple routing keys for event should not be used.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_attr_routing_keys(Guid :: fslogic_worker:file_guid(), RoutingCtx :: routing_ctx()) ->
+    [{ok, Key :: subscription_manager:key()} |
+    {ok, Key :: subscription_manager:key(), od_space:id()} | {error, session_only}].
+get_attr_routing_keys(Guid, RoutingCtx) ->
+    [get_parent_connected_routing_key(<<"file_attr_changed.">>, Guid, RoutingCtx),
+        get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx)].
 
 %%--------------------------------------------------------------------
 %% @doc

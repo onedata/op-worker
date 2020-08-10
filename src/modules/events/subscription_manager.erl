@@ -15,7 +15,7 @@
 -include("modules/events/definitions.hrl").
 
 %% API
--export([add_subscriber/2, get_subscribers/2, remove_subscriber/2]).
+-export([add_subscriber/2, get_subscribers/2, get_attr_event_subscribers/2, remove_subscriber/2]).
 
 -type key() :: binary().
 % routing can require connection of several contexts, e.g., old and new parent when moving file
@@ -98,19 +98,42 @@ get_subscribers(Evt, RoutingCtx) ->
         {ok, Key, SpaceIDFilter} ->
             case get_subscribers(Key, RoutingCtx) of
                 {ok, SessIds} ->
-                    % Filter sessions when information about space dirs is broadcast
-                    % (not all clients are allowed to see particular space)
-                    {ok, lists:filter(fun(SessId) ->
-                        UserCtx = user_ctx:new(SessId),
-                        Spaces = user_ctx:get_eff_spaces(UserCtx),
-                        lists:member(SpaceIDFilter, Spaces)
-                    end, SessIds)};
+                    {ok, apply_space_id_filter(SessIds, SpaceIDFilter)};
                 Other ->
                     Other
             end;
         {error, session_only} ->
             {ok, []}
     end.
+
+-spec get_attr_event_subscribers(fslogic_worker:file_guid(), event_type:routing_ctx()) ->
+    [{ok, SessIds :: [session:id()]} | {error, Reason :: term()}].
+get_attr_event_subscribers(Guid, RoutingCtx) ->
+    lists:map(fun
+        ({ok, Key}) ->
+            subscription_manager:get_subscribers(Key, RoutingCtx);
+        ({ok, Key, SpaceIDFilter}) ->
+            case get_subscribers(Key, RoutingCtx) of
+                {ok, SessIds} ->
+                    {ok, apply_space_id_filter(SessIds, SpaceIDFilter)};
+                Other ->
+                    Other
+            end
+    end, event_type:get_attr_routing_keys(Guid, RoutingCtx)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Filter sessions when information about space dirs is broadcast
+%% (not all clients are allowed to see particular space).
+%% @end
+%%--------------------------------------------------------------------
+-spec apply_space_id_filter([session:id()], od_space:id()) -> [session:id()].
+apply_space_id_filter(SessIds, SpaceIDFilter) ->
+    lists:filter(fun(SessId) ->
+        UserCtx = user_ctx:new(SessId),
+        Spaces = user_ctx:get_eff_spaces(UserCtx),
+        lists:member(SpaceIDFilter, Spaces)
+    end, SessIds).
 
 %%--------------------------------------------------------------------
 %% @doc

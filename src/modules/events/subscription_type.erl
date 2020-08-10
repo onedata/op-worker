@@ -39,6 +39,8 @@ get_routing_key(#subscription{type = Type}) ->
     get_routing_key(Type);
 get_routing_key(#file_attr_changed_subscription{file_guid = FileGuid}) ->
     {ok, gen_routing_key_for_guid(<<"file_attr_changed.">>, FileGuid)};
+get_routing_key(#replica_status_changed_subscription{file_guid = FileGuid}) ->
+    {ok, gen_routing_key_for_guid(<<"replica_status_changed.">>, FileGuid)};
 get_routing_key(#file_location_changed_subscription{file_guid = FileGuid}) ->
     {ok, gen_routing_key_for_guid(<<"file_location_changed.">>, FileGuid)};
 get_routing_key(#file_perm_changed_subscription{file_guid = FileGuid}) ->

@@ -34,13 +34,15 @@
 }).
 
 -record(get_file_attr, {
+    include_replication_status :: undefined | boolean()
 }).
 
 -record(get_file_details, {
 }).
 
 -record(get_child_attr, {
-    name :: file_meta:name()
+    name :: file_meta:name(),
+    include_replication_status :: undefined | boolean()
 }).
 
 -record(get_file_children, {
@@ -53,7 +55,8 @@
 -record(get_file_children_attrs, {
     offset :: file_meta:offset(),
     size :: file_meta:size(),
-    index_token :: undefined | binary()
+    index_token :: undefined | binary(),
+    include_replication_status :: undefined | boolean()
 }).
 
 -record(get_file_children_details, {

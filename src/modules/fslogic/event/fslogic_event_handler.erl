@@ -111,6 +111,10 @@ aggregate_attr_changed_events(OldEvent, NewEvent) ->
             size = case NewAttr#file_attr.size of
                 undefined -> OldAttr#file_attr.size;
                 X -> X
+            end,
+            fully_replicated = case NewAttr#file_attr.fully_replicated of
+                undefined -> OldAttr#file_attr.fully_replicated;
+                FR -> FR
             end
         }
     }.
