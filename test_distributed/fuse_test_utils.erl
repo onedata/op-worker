@@ -54,7 +54,8 @@
 
 %% Subscription messages
 -export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4,
-    generate_file_attr_changed_subscription_message/5, generate_file_location_changed_subscription_message/5]).
+    generate_file_attr_changed_subscription_message/5, generate_replica_status_changed_subscription_message/5,
+    generate_file_location_changed_subscription_message/5]).
 -export([generate_subscription_cancellation_message/3, generate_quota_exceeded_subscription_message/3]).
 
 %% Misc messages
@@ -441,6 +442,12 @@ generate_file_removed_subscription_message(StreamId, SequenceNumber, SubId, File
 
 generate_file_attr_changed_subscription_message(StreamId, SequenceNumber, SubId, FileId, TimeThreshold) ->
     Type = {file_attr_changed, #'FileAttrChangedSubscription'{
+        file_uuid = FileId, time_threshold = TimeThreshold}
+    },
+    generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
+
+generate_replica_status_changed_subscription_message(StreamId, SequenceNumber, SubId, FileId, TimeThreshold) ->
+    Type = {replica_status_changed, #'ReplicaStatusChangedSubscription'{
         file_uuid = FileId, time_threshold = TimeThreshold}
     },
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).

@@ -29,7 +29,8 @@
     subscribe_on_user_root_filter_test/1,
     subscribe_on_new_space_test/1,
     subscribe_on_new_space_filter_test/1,
-    events_on_conflicts_test/1
+    events_on_conflicts_test/1,
+    subscribe_on_replication_info_test/1
 ]).
 
 all() ->
@@ -39,7 +40,8 @@ all() ->
         subscribe_on_user_root_filter_test,
         subscribe_on_new_space_test,
         subscribe_on_new_space_filter_test,
-        events_on_conflicts_test
+        events_on_conflicts_test,
+        subscribe_on_replication_info_test
     ]).
 
 -define(CONFLICTING_FILE_NAME, <<"abc">>).
@@ -199,6 +201,63 @@ events_on_conflicts_test(Config) ->
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
+subscribe_on_replication_info_test(Config) ->
+    User = <<"user1">>,
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
+    AccessToken = ?config({access_token, User}, Config),
+    EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
+
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
+    Filename = generator:gen_name(),
+    Dirname = generator:gen_name(),
+
+    % Create test dir and file
+    DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
+    fuse_test_utils:close(Sock, FileGuid, HandleId),
+
+    % Check if event is produced on subscription
+    Seq1 = get_seq(Config, User),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_replica_status_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
+    ?assertMatch([{ok, []}, {ok, [_]}],
+        rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined]), 10),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
+        [file_ctx:new_by_guid(FileGuid)]),
+    ?assertEqual(ok, receive_file_attr_changed_event()),
+
+    % Check if single event is produced on overlapping subscriptions
+    Seq2 = get_seq(Config, User),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq2, -Seq2, DirId, 500))),
+    ?assertMatch([{ok, [_]}, {ok, [_]}],
+        rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined]), 10),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
+        [file_ctx:new_by_guid(FileGuid)]),
+    ?assertEqual(ok, receive_file_attr_changed_event()),
+    ?assertEqual({error,timeout}, receive_file_attr_changed_event()),
+
+    % Check if event is produced by standard emission function
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
+    ?assertEqual(ok, receive_file_attr_changed_event()),
+
+    % Check if event is produced on subscription without replication status
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
+    ?assertMatch([{ok, [_]}, {ok, []}],
+        rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined]), 10),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
+        [file_ctx:new_by_guid(FileGuid)]),
+    ?assertEqual(ok, receive_file_attr_changed_event()),
+
+    % Cleanup subscription
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq2))),
+    ?assertEqual(ok, ssl:close(Sock)),
+    ok.
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -262,18 +321,6 @@ receive_file_attr_changed_event() ->
         #'ServerMessage'{
             message_body = {events, #'Events'{events = [#'Event'{
                 type = {file_attr_changed, #'FileAttrChangedEvent'{}}
-            }]}}
-        } -> ok;
-        Msg -> Msg
-    end.
-
-receive_file_renamed_event(Name) ->
-    case fuse_test_utils:receive_server_message([message_stream_reset, subscription, message_request,
-        message_acknowledgement, processing_status]) of
-        #'ServerMessage'{
-            message_body = {events, #'Events'{events = [#'Event'{
-                type = {file_renamed, #'FileRenamedEvent'{top_entry = #'FileRenamedEntry'{
-                    new_name = Name}}}
             }]}}
         } -> ok;
         Msg -> Msg

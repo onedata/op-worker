@@ -59,7 +59,7 @@ get_routing_key(_) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns a key of a stream responsible for processing events associated with
-%% a subscription..
+%% a subscription.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_stream_key(Sub :: subscription:base() | subscription:type()) ->
@@ -68,6 +68,7 @@ get_stream_key(#subscription{type = Type}) -> get_stream_key(Type);
 get_stream_key(#file_read_subscription{}) -> file_read;
 get_stream_key(#file_written_subscription{}) -> file_written;
 get_stream_key(#file_attr_changed_subscription{}) -> file_attr_changed;
+get_stream_key(#replica_status_changed_subscription{}) -> file_attr_changed;
 get_stream_key(#file_location_changed_subscription{}) -> file_location_changed;
 get_stream_key(#file_perm_changed_subscription{}) -> file_perm_changed;
 get_stream_key(#file_removed_subscription{}) -> file_removed;
@@ -114,6 +115,8 @@ get_context(#subscription{type = Type}) ->
     get_context(Type);
 get_context(#file_attr_changed_subscription{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
+get_context(#replica_status_changed_subscription{file_guid = FileGuid}) ->
+    {file, file_ctx:new_by_guid(FileGuid)};
 get_context(#file_location_changed_subscription{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
 get_context(#file_perm_changed_subscription{file_guid = FileGuid}) ->
@@ -137,6 +140,9 @@ update_context(#subscription{type = Type} = Sub, Ctx) ->
 update_context(#file_attr_changed_subscription{} = Object, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Object#file_attr_changed_subscription{file_guid = FileGuid};
+update_context(#replica_status_changed_subscription{} = Object, {file, FileCtx}) ->
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    Object#replica_status_changed_subscription{file_guid = FileGuid};
 update_context(#file_location_changed_subscription{} = Object, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Object#file_location_changed_subscription{file_guid = FileGuid};
