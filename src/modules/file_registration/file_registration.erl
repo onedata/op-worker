@@ -252,7 +252,7 @@ maybe_set_json_metadata(UserCtx, FileCtx, JSON) ->
     ok.
 
 
--spec maybe_set_rdf_metadata(user_ctx:ctx(), file_ctx:ctx(), json_utils:json_map()) -> ok.
+-spec maybe_set_rdf_metadata(user_ctx:ctx(), file_ctx:ctx(), binary()) -> ok.
 maybe_set_rdf_metadata(_UserCtx, _FileCtx, <<>>) ->
     ok;
 maybe_set_rdf_metadata(UserCtx, FileCtx, EncodedRdf) ->
