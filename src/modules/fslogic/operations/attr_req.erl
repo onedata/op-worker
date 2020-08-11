@@ -356,11 +356,9 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
     end,
     {ReplicationStatus, Size, FileCtx6} =
         case {Type, maps:get(include_replication_status, Opts, false), maps:get(include_size, Opts, true)} of
-            {?DIRECTORY_TYPE, _, _} ->
-                {undefined, undefined, FileCtx5};
-            {_, true, true} ->
+            {?REGULAR_FILE_TYPE, true, true} ->
                 file_ctx:get_replication_status_and_size(FileCtx5);
-            {_, true, _} ->
+            {?REGULAR_FILE_TYPE, true, _} ->
                 {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx5),
                 {RS, undefined, Ctx};
             {_, _, true} ->
