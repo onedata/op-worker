@@ -36,12 +36,12 @@
 all() ->
     ?ALL([
         subscribe_on_dir_test,
+        subscribe_on_replication_info_test,
         subscribe_on_user_root_test,
         subscribe_on_user_root_filter_test,
         subscribe_on_new_space_test,
         subscribe_on_new_space_filter_test,
-        events_on_conflicts_test,
-        subscribe_on_replication_info_test
+        events_on_conflicts_test
     ]).
 
 -define(CONFLICTING_FILE_NAME, <<"abc">>).

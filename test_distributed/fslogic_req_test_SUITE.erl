@@ -31,7 +31,10 @@
 %% tests
 -export([
     fslogic_get_file_attr_test/1,
+    fslogic_get_file_attr_with_replication_status_not_requested_test/1,
+    fslogic_get_file_attr_with_replication_status_requested_test/1,
     fslogic_get_file_children_attrs_test/1,
+    fslogic_get_file_children_attrs_with_replication_status_test/1,
     fslogic_get_child_attr_test/1,
     fslogic_mkdir_and_rmdir_test/1,
     fslogic_read_dir_test/1,
@@ -46,7 +49,10 @@
 all() ->
     ?ALL([
         fslogic_get_file_attr_test,
+        fslogic_get_file_attr_with_replication_status_not_requested_test,
+        fslogic_get_file_attr_with_replication_status_requested_test,
         fslogic_get_file_children_attrs_test,
+        fslogic_get_file_children_attrs_with_replication_status_test,
         fslogic_get_child_attr_test,
         fslogic_mkdir_and_rmdir_test,
         fslogic_read_dir_test,
@@ -71,6 +77,15 @@ all() ->
 %%%===================================================================
 
 fslogic_get_file_attr_test(Config) ->
+    fslogic_get_file_attr_test_base(Config, undefined).
+
+fslogic_get_file_attr_with_replication_status_not_requested_test(Config) ->
+    fslogic_get_file_attr_test_base(Config, false).
+
+fslogic_get_file_attr_with_replication_status_requested_test(Config) ->
+    fslogic_get_file_attr_test_base(Config, true).
+
+fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
@@ -79,43 +94,83 @@ fslogic_get_file_attr_test(Config) ->
     UserRootGuid1 = fslogic_uuid:user_root_dir_guid(UserId1),
     UserRootGuid2 = fslogic_uuid:user_root_dir_guid(UserId2),
 
-    lists:foreach(fun({SessId, Name, Mode, UID, Path, ParentGuid}) ->
+    FileName =  generator:gen_name(),
+    FilePath = <<"/space_name1/", FileName/binary>>,
+    {ok, FileGuid} = ?assertMatch({ok, _},
+        lfm_proxy:create(Worker, SessId1, FilePath, 8#664)),
+    Space1Guid = client_simulation_test_base:get_guid(Worker, SessId1, <<"/space_name1">>),
+    {{FileUid, _}, _} = rpc:call(Worker, file_ctx, get_display_credentials, [file_ctx:new_by_guid(FileGuid)]),
+
+    lists:foreach(fun({SessId, Name, Mode, UID, Path, ParentGuid, Type}) ->
         #fuse_response{fuse_response = #guid{guid = Guid}} =
             ?assertMatch(
                 #fuse_response{status = #status{code = ?OK}},
                 ?req(Worker, SessId, #resolve_guid{path = Path})
             ),
 
+        FullyReplicated = case {CheckReplicationStatus, Type} of
+            {true, ?REGULAR_FILE_TYPE} -> true;
+            _ -> undefined
+        end,
+
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
             fuse_response = #file_attr{
-                guid = Guid, name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
-                uid = UID, parent_uuid = ParentGuid
+                guid = Guid, name = Name, type = Type, mode = Mode,
+                uid = UID, parent_uuid = ParentGuid, fully_replicated = FullyReplicated
             }
-        }, ?file_req(Worker, SessId, Guid, #get_file_attr{})),
+        }, ?file_req(Worker, SessId, Guid, #get_file_attr{include_replication_status = CheckReplicationStatus})),
 
         case ParentGuid =/= undefined of
             true ->
                 ?assertMatch(#fuse_response{status = #status{code = ?OK},
                     fuse_response = #file_attr{
-                        name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
-                        uid = UID, parent_uuid = ParentGuid
+                        name = Name, type = Type, mode = Mode,
+                        uid = UID, parent_uuid = ParentGuid, fully_replicated = FullyReplicated
                     }
-                }, ?file_req(Worker, SessId, ParentGuid, #get_child_attr{name = Name}));
+                }, ?file_req(Worker, SessId, ParentGuid,
+                    #get_child_attr{name = Name, include_replication_status = CheckReplicationStatus}));
             false ->
                 ok
         end
     end, [
-        {SessId1, UserId1, 8#1755, 0, <<"/">>, undefined},
-        {SessId2, UserId2, 8#1755, 0, <<"/">>, undefined},
-        {SessId1, <<"space_name1">>, 8#775, 0, <<"/space_name1">>, UserRootGuid1},
-        {SessId2, <<"space_name2">>, 8#775, 0, <<"/space_name2">>, UserRootGuid2},
-        {SessId1, <<"space_name3">>, 8#775, 0, <<"/space_name3">>, UserRootGuid1},
-        {SessId2, <<"space_name4">>, 8#775, 0, <<"/space_name4">>, UserRootGuid2}
+        {SessId1, UserId1, 8#1755, 0, <<"/">>, undefined, ?DIRECTORY_TYPE},
+        {SessId2, UserId2, 8#1755, 0, <<"/">>, undefined, ?DIRECTORY_TYPE},
+        {SessId1, <<"space_name1">>, 8#775, 0, <<"/space_name1">>, UserRootGuid1, ?DIRECTORY_TYPE},
+        {SessId2, <<"space_name2">>, 8#775, 0, <<"/space_name2">>, UserRootGuid2, ?DIRECTORY_TYPE},
+        {SessId1, <<"space_name3">>, 8#775, 0, <<"/space_name3">>, UserRootGuid1, ?DIRECTORY_TYPE},
+        {SessId2, <<"space_name4">>, 8#775, 0, <<"/space_name4">>, UserRootGuid2, ?DIRECTORY_TYPE},
+        {SessId1, FileName, 8#664, FileUid, FilePath, Space1Guid, ?REGULAR_FILE_TYPE}
     ]),
     ?assertMatch(
         #fuse_response{status = #status{code = ?ENOENT}},
         ?req(Worker, SessId1, #resolve_guid{path = <<"/space_name1/t1_dir">>}
-    )).
+    )),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId1, {path, FilePath})).
+
+fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config),
+        ?config({user_id, <<"user2">>}, Config)},
+
+    FileName =  generator:gen_name(),
+    FilePath = <<"/space_name4/", FileName/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#664)),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker, SessId, <<"/space_name4">>),
+
+    #fuse_response{fuse_response = #file_children_attrs{child_attrs = ChildrenAttrs}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId, SpaceGuid,
+            #get_file_children_attrs{offset = 0, size = 1000, include_replication_status = true})),
+    ?assertMatch([_ | _], ChildrenAttrs),
+
+    lists:foreach(fun
+        (#file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs) ->
+            ?assertMatch(#file_attr{fully_replicated = true}, FileAttrs);
+        (FileAttrs) ->
+            ?assertMatch(#file_attr{fully_replicated = undefined}, FileAttrs)
+    end, ChildrenAttrs),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {path, FilePath})).
 
 fslogic_get_file_children_attrs_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -169,7 +224,7 @@ fslogic_get_file_children_attrs_test(Config) ->
                             #file_attr{
                                 guid = Guid2, name = Name2, type = Type2, mode = Mode2,
                                 uid = UID2, parent_uuid = ParentGuid2, provider_id = ProviderID2,
-                                owner_id = OwnerID2
+                                owner_id = OwnerID2, fully_replicated = ReplicationStatus
                             } = A2,
 
                             ?assertMatch(Guid, Guid2),
@@ -179,7 +234,8 @@ fslogic_get_file_children_attrs_test(Config) ->
                             ?assertMatch(UID, UID2),
                             ?assertMatch(ParentGuid, ParentGuid2),
                             ?assertMatch(ProviderID, ProviderID2),
-                            ?assertMatch(OwnerID, OwnerID2)
+                            ?assertMatch(OwnerID, OwnerID2),
+                            ?assertEqual(undefined, ReplicationStatus)
                         end, lists:zip(AttrsList, Attrs))
                     end, lists:seq(1, Size))
 

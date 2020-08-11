@@ -345,6 +345,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         false ->
             file_ctx:get_file_doc(FileCtx)
     end,
+    Type = file_meta:get_type(FileDoc),
 
     {{ATime, CTime, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
     {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
@@ -354,18 +355,20 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         _ -> get_masked_private_attrs(ShareId, FileCtx4, FileDoc)
     end,
     {ReplicationStatus, Size, FileCtx6} =
-        case {maps:get(include_replication_status, Opts, false), maps:get(include_size, Opts, true)} of
-        {true, true} ->
-            file_ctx:get_replication_status_and_size(FileCtx5);
-        {true, _} ->
-            {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx5),
-            {RS, undefined, Ctx};
-        {_, true} ->
-            {S, Ctx} = file_ctx:get_file_size(FileCtx5),
-            {undefined, S, Ctx};
-        _ ->
-            {undefined, undefined, FileCtx5}
-    end,
+        case {Type, maps:get(include_replication_status, Opts, false), maps:get(include_size, Opts, true)} of
+            {?DIRECTORY_TYPE, _, _} ->
+                {undefined, undefined, FileCtx5};
+            {_, true, true} ->
+                file_ctx:get_replication_status_and_size(FileCtx5);
+            {_, true, _} ->
+                {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx5),
+                {RS, undefined, Ctx};
+            {_, _, true} ->
+                {S, Ctx} = file_ctx:get_file_size(FileCtx5),
+                {undefined, S, Ctx};
+            _ ->
+                {undefined, undefined, FileCtx5}
+        end,
     {FileName, ConflictingFiles, FileCtx7} = resolve_file_name(
         UserCtx, FileDoc, FileCtx6, ParentGuid,
         maps:get(name_conflicts_resolution_policy, Opts, resolve_name_conflicts)
@@ -381,7 +384,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         atime = ATime,
         mtime = MTime,
         ctime = CTime,
-        type = file_meta:get_type(FileDoc),
+        type = Type,
         size = Size,
         shares = Shares,
         provider_id = ProviderId,
