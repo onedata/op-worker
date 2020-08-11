@@ -49,6 +49,10 @@
 }).
 
 -define(STATE_ID, session).
+-define(INITIALIZATION_STATUS_KEY, initialization_status).
+-define(INITIALIZATION_STATUS_FINISHED_VALUE, initialization_finished).
+-define(LOCAL_CALL_TIMEOUT, timer:minutes(1)).
+-define(REMOTE_CALL_TIMEOUT, timer:minutes(10)).
 
 %%%===================================================================
 %%% API
@@ -98,14 +102,14 @@ handle(Manager, Request, RetryCounter) ->
                         case Request of
                             #subscription{} = Sub ->
                                 gen_server2:cast(Manager, {cache_provider, Sub, ProviderId}),
-                                {ok, SessId} = ets_state:get(session, Manager, session_id),
+                                {ok, SessId} = ets_state:get(?STATE_ID, Manager, session_id),
                                 handle_remotely(Request, ProviderId, SessId);
                             #subscription_cancellation{id = SubId} ->
                                 gen_server2:cast(Manager, {remove_provider_cache, SubId}),
-                                {ok, SessId} = ets_state:get(session, Manager, session_id),
+                                {ok, SessId} = ets_state:get(?STATE_ID, Manager, session_id),
                                 handle_remotely(Request, ProviderId, SessId);
                             _->
-                                {ok, SessId} = ets_state:get(session, Manager, session_id),
+                                {ok, SessId} = ets_state:get(?STATE_ID, Manager, session_id),
                                 handle_remotely(Request, ProviderId, SessId)
                         end
                 end
@@ -318,34 +322,79 @@ get_provider(_, SessId, FileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handles request locally (in caller process).
+%% Handles request locally (in caller process) or delegates it to manager
+%% if manager has not finished initialization.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_locally(Request :: term(), Manager :: pid()) -> ok.
 handle_locally(#event{} = Evt, Manager) ->
+    handle_event(Evt, Manager, true);
+handle_locally(#flush_events{} = FlushRequest, Manager) ->
+    handle_flush(FlushRequest, Manager, true);
+handle_locally(Request, Manager) ->
+    call_manager(Manager, Request).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles event locally (in caller process) or delegates it to manager
+%% if manager has not finished initialization.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_event(Evt :: event:base(), Manager :: pid(), VerifyManager :: boolean()) -> ok.
+handle_event(Evt, Manager, VerifyManager) ->
     StmKey = event_type:get_stream_key(Evt),
-    case get_from_memory(Manager, streams, StmKey) of
-        {ok, Stm} ->
+    case {get_from_memory(Manager, streams, StmKey), VerifyManager} of
+        {{ok, Stm}, _} ->
             ok = event_stream:send(Stm, Evt);
+        {_, true} ->
+            case ets_state:get(?STATE_ID, Manager, ?INITIALIZATION_STATUS_KEY) of
+                {ok, ?INITIALIZATION_STATUS_FINISHED_VALUE} -> handle_event(Evt, Manager, false);
+                _ -> call_manager(Manager, Evt)
+            end,
+            ok;
         _ ->
             ok
-    end;
+    end.
 
-handle_locally(#flush_events{subscription_id = SubId, notify = NotifyFun}, Manager) ->
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles flush request locally (in caller process) or delegates it to manager
+%% if manager has not finished initialization.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_flush(FlushRequest :: #flush_events{}, Manager :: pid(),
+    VerifyManager :: boolean()) -> ok.
+handle_flush(#flush_events{subscription_id = SubId, notify = NotifyFun} = FlushRequest,
+    Manager, VerifyManager) ->
     case get_from_memory(Manager, subscriptions, SubId) of
         {ok, StmKey} ->
             case get_from_memory(Manager, streams, StmKey) of
                 {ok, Stm} ->
                     ok = event_stream:send(Stm, {flush, NotifyFun});
                 _ ->
-                    ok
+                    maybe_retry_flush(FlushRequest, Manager, VerifyManager)
             end;
         _ ->
-            ok
-    end;
+            maybe_retry_flush(FlushRequest, Manager, VerifyManager)
+    end.
 
-handle_locally(Request, Manager) ->
-    gen_server2:call(Manager, Request, timer:minutes(1)).
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Verifies if flush request handling should be retried.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_retry_flush(FlushRequest :: #flush_events{}, Manager :: pid(),
+    VerifyManager :: boolean()) -> ok.
+maybe_retry_flush(_FlushRequest, _Manager, false) ->
+    ok;
+maybe_retry_flush(FlushRequest, Manager, true) ->
+    case ets_state:get(?STATE_ID, Manager, ?INITIALIZATION_STATUS_KEY) of
+        {ok, ?INITIALIZATION_STATUS_FINISHED_VALUE} -> handle_flush(FlushRequest, Manager, false);
+        _ -> call_manager(Manager, FlushRequest)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -410,6 +459,12 @@ handle_in_process(#subscription_cancellation{id = SubId}, _State) ->
             ok
     end;
 
+handle_in_process(#event{} = Evt, _State) ->
+    handle_event(Evt, self(), false);
+
+handle_in_process(#flush_events{} = FlushRequest, _State) ->
+    handle_flush(FlushRequest, self(), false);
+
 handle_in_process(Request, _State) ->
     ?log_bad_request(Request),
     ok.
@@ -438,7 +493,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
             % VFS-5206 - handle heartbeats
             #server_message{message_body = #status{}} = Msg ->
                 Notify(Msg)
-        after timer:minutes(10) ->
+        after ?REMOTE_CALL_TIMEOUT ->
             Notify(#server_message{message_body = #status{code = ?EAGAIN}})
         end
     end),
@@ -537,6 +592,7 @@ start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) 
         add_to_memory(streams, StmKey, Stm)
     end, Docs),
 
+    ets_state:save(?STATE_ID, self(), ?INITIALIZATION_STATUS_KEY, ?INITIALIZATION_STATUS_FINISHED_VALUE),
     State#state{
         streams_sup = StmsSup
     }.
@@ -654,3 +710,8 @@ delete_memory() ->
     ets_state:delete_collection(?STATE_ID, sub_to_guid),
     ets_state:delete(?STATE_ID, self(), session_id),
     ets_state:delete(?STATE_ID, self(), proxy_via).
+
+%% @private
+-spec call_manager(pid(), term()) -> term().
+call_manager(Manager, Request) ->
+    gen_server2:call(Manager, Request, ?LOCAL_CALL_TIMEOUT).

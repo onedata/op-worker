@@ -49,6 +49,10 @@
 
 -define(PREFETCH_PRIORITY,
     application:get_env(?APP_NAME, default_prefetch_priority, 96)).
+-define(MAX_RETRIES, application:get_env(?APP_NAME, synchronizer_max_retries, 0)).
+-define(MIN_BACKOFF, application:get_env(?APP_NAME, synchronizer_min_backoff, timer:seconds(1))).
+-define(BACKOFF_RATE, application:get_env(?APP_NAME, synchronizer_backoff_rate, 1.5)).
+-define(MAX_BACKOFF, application:get_env(?APP_NAME, synchronizer_max_backoff, timer:minutes(5))).
 
 -define(FLUSH_STATS, flush_stats).
 -define(FLUSH_BLOCKS, flush_blocks).
@@ -83,7 +87,8 @@
     cached_blocks = [] :: [block()],
     caching_stats_timer :: undefined | reference(),
     caching_blocks_timer :: undefined | reference(),
-    caching_events_timer :: undefined | reference()
+    caching_events_timer :: undefined | reference(),
+    retries_number = #{} :: #{fetch_ref() => non_neg_integer()}
 }).
 
 -define(BLOCK(__Offset, __Size), #file_block{offset = __Offset, size = __Size}).
@@ -661,7 +666,7 @@ handle_info(?FLUSH_BLOCKS, State) ->
 handle_info(?FLUSH_EVENTS, State) ->
     {noreply, flush_events(State), ?DIE_AFTER};
 
-handle_info({Ref, complete, {ok, _} = _Status}, State) ->
+handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries} = State) ->
     {Block, _Priority, _AffectedFroms, FinishedFroms, State1} =
         disassociate_ref(Ref, State),
     {FinishedBlocks, ExcludeSessions, EndedTransfers, State2} =
@@ -690,9 +695,24 @@ handle_info({Ref, complete, {ok, _} = _Status}, State) ->
     end,
 
     State5 = associate_ref_with_tids(Ref, EndedTransfers, State4),
-    {noreply, State5, ?DIE_AFTER};
+    {noreply, State5#state{retries_number = maps:remove(Ref, Retries)}, ?DIE_AFTER};
 
-handle_info({FailedRef, complete, {error, disconnected}}, State) ->
+handle_info({FailedRef, complete, {error, disconnected} = ErrorStatus}, #state{retries_number = Retries} = State) ->
+    RetriesNum = maps:get(FailedRef, Retries, 0),
+    MaxRetriesNum = ?MAX_RETRIES,
+    case RetriesNum >= MaxRetriesNum of
+        true ->
+            {noreply, handle_error(FailedRef, ErrorStatus, State), ?DIE_AFTER};
+        false ->
+            Delay = min(round(?MIN_BACKOFF * math:pow(?BACKOFF_RATE, RetriesNum)), ?MAX_BACKOFF),
+            ?warning("Failed transfer ~p, replacing with new transfers after ~p seconds", [
+                FailedRef, Delay
+            ]),
+            erlang:send_after(round(Delay), self(), {replace_failed_transfer, FailedRef}),
+            {noreply, State, ?DIE_AFTER}
+    end;
+
+handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = RetriesMap} = State) ->
     try
         {Block, Priority, AffectedFroms, _FinishedFroms, State1} =
             disassociate_ref(FailedRef, State),
@@ -709,7 +729,13 @@ handle_info({FailedRef, complete, {error, disconnected}}, State) ->
                 {_, NewRefs, _} = lists:unzip3(NewTransfers),
                 State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
                 State3 = add_in_progress(NewTransfers, State2),
-                {noreply, State3}
+
+                RetriesNum = maps:get(FailedRef, RetriesMap, 0),
+                NewRetriesMap = lists:foldl(fun(Ref, Acc) ->
+                    Acc#{Ref => RetriesNum + 1}
+                end, maps:remove(FailedRef, RetriesMap), NewRefs),
+
+                {noreply, State3#state{retries_number = NewRetriesMap}, ?DIE_AFTER}
         end
     catch
         E1:E2 ->
@@ -723,19 +749,7 @@ handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, State) ->
     {noreply, State, ?DIE_AFTER};
 
 handle_info({Ref, complete, ErrorStatus}, State) ->
-    ?error("Transfer ~p failed: ~p", [Ref, ErrorStatus]),
-    {_Block, _Priority, AffectedFroms, FinishedFroms, State1} =
-        disassociate_ref(Ref, State),
-    {_FailedBlocks, _ExcludeSessions, FailedTransfers, State2} =
-        disassociate_froms(FinishedFroms, State1),
-
-    %% Cancel TransferIds that are still left (i.e. the failed ref was only a part of the transfer)
-    AffectedTransferIds = maps:values(maps:with(AffectedFroms, State2#state.from_to_transfer_id)),
-    [gen_server2:reply(From, ErrorStatus) || From <- FinishedFroms],
-    State3 = lists:foldl(fun cancel_transfer_id/2, State2, AffectedTransferIds),
-
-    State4 = associate_ref_with_tids(Ref, FailedTransfers, State3),
-    {noreply, State4, ?DIE_AFTER};
+    {noreply, handle_error(Ref, ErrorStatus, State), ?DIE_AFTER};
 
 handle_info(fslogic_cache_check_flush, State) ->
     fslogic_cache:check_flush(),
@@ -774,6 +788,22 @@ terminate(_Reason, State) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec handle_error(fetch_ref(), Error :: term(), #state{}) -> #state{}.
+handle_error(Ref, ErrorStatus, State) ->
+    ?error("Transfer ~p failed: ~p", [Ref, ErrorStatus]),
+    {_Block, _Priority, AffectedFroms, FinishedFroms, State1} =
+        disassociate_ref(Ref, State),
+    {_FailedBlocks, _ExcludeSessions, FailedTransfers, State2} =
+        disassociate_froms(FinishedFroms, State1),
+
+    %% Cancel TransferIds that are still left (i.e. the failed ref was only a part of the transfer)
+    AffectedTransferIds = maps:values(maps:with(AffectedFroms, State2#state.from_to_transfer_id)),
+    [gen_server2:reply(From, ErrorStatus) || From <- FinishedFroms],
+    State3 = lists:foldl(fun cancel_transfer_id/2, State2, AffectedTransferIds),
+
+    associate_ref_with_tids(Ref, FailedTransfers, State3).
 
 %%--------------------------------------------------------------------
 %% @private

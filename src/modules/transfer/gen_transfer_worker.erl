@@ -404,7 +404,7 @@ transfer_dir(State, FileCtx, Offset, TransferParams = #transfer_params{
 
 %% @private
 -spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
-    file_meta:uuid()) -> ok | {error, term()}.
+    file_meta:uuid() | undefined | doc_id_missing) -> ok | {error, term()}.
 transfer_files_from_view(State = #state{mod = Mod}, FileCtx, Params, LastDocId) ->
     case transfer:is_ongoing(Params#transfer_params.transfer_id) of
         true ->
@@ -417,7 +417,7 @@ transfer_files_from_view(State = #state{mod = Mod}, FileCtx, Params, LastDocId) 
 
 %% @private
 -spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
-    non_neg_integer(), file_meta:uuid()) -> ok | {error, term()}.
+    non_neg_integer(), file_meta:uuid() | undefined | doc_id_missing) -> ok | {error, term()}.
 transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
     #transfer_params{
         transfer_id = TransferId,
@@ -438,13 +438,10 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     case index:query(SpaceId, ViewName, [{limit, Chunk} | QueryViewParams2]) of
-        {ok, {Rows}} ->
+        {ok, #{<<"rows">> := Rows}} ->
             {NewLastDocId, FileCtxs} = lists:foldl(fun(Row, {_LastDocId, FileCtxsIn}) ->
-                {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
-                DocId = case lists:keyfind(<<"id">>, 1, Row) of
-                    {<<"id">>, Id} -> Id;
-                    _ -> doc_id_missing
-                end,
+                Value = maps:get(<<"value">>, Row),
+                DocId = maps:get(<<"id">>, Row, doc_id_missing),
                 ObjectIds = case is_list(Value) of
                     true -> lists:flatten(Value);
                     false -> [Value]

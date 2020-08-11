@@ -62,7 +62,8 @@
     remove_file_during_transfers_test/1,
     remove_file_on_remote_provider_ceph/1,
     evict_on_ceph/1,
-    remote_driver_internal_call_test/1
+    remote_driver_internal_call_test/1,
+    db_sync_basic_opts_with_errors_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -91,7 +92,8 @@
     remove_file_during_transfers_test,
     remove_file_on_remote_provider_ceph,
     evict_on_ceph,
-    remote_driver_internal_call_test
+    remote_driver_internal_call_test,
+    db_sync_basic_opts_with_errors_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -134,6 +136,9 @@ create_on_different_providers_test(Config) ->
     multi_provider_file_ops_test_base:create_on_different_providers_test_base(Config).
 
 db_sync_basic_opts_test(Config) ->
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+
+db_sync_basic_opts_with_errors_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 db_sync_create_after_del_test(Config) ->
@@ -676,7 +681,7 @@ remove_file_during_transfers_test(Config0) ->
     [Worker2 | _] = ?config(workers_not1, Config),
     % Create file
     SessId = fun(User, W) ->
-        ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) 
+        ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)
     end,
     SpaceName = <<"space6">>,
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>, 
@@ -964,6 +969,9 @@ init_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [datastore_doc, datastore_remote_driver], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
+init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
+    MockedConfig = multi_provider_file_ops_test_base:mock_sync_errors(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -994,5 +1002,11 @@ end_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [datastore_doc, datastore_remote_driver]),
     end_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
+end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator]),
+    RequestDelay = ?config(request_delay, Config),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

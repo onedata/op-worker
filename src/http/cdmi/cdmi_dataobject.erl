@@ -386,7 +386,11 @@ write_req_body_to_file(Req, SessId, FileKey, Truncate, Offset, CdmiPartialFlag) 
     ),
     Truncate andalso ?check(lfm:truncate(SessId, FileKey, 0)),
 
-    {ok, Req2} = write_req_body_to_file(Req, Offset, FileHandle),
+    {ok, Req2} = file_upload_utils:upload_file(
+        FileHandle, Offset, Req,
+        fun cowboy_req:read_body/2, #{}
+    ),
+
     ?check(lfm:fsync(FileHandle)),
     ?check(lfm:release(FileHandle)),
     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
@@ -395,18 +399,6 @@ write_req_body_to_file(Req, SessId, FileKey, Truncate, Offset, CdmiPartialFlag) 
         CdmiPartialFlag
     ),
     Req2.
-
-
-%% @private
--spec write_req_body_to_file(cowboy_req:req(), integer(), lfm:handle()) ->
-    {ok, cowboy_req:req()}.
-write_req_body_to_file(Req0, Offset, FileHandle) ->
-    {Status, Chunk, Req1} = cowboy_req:read_body(Req0),
-    {ok, _NewHandle, Bytes} = ?check(lfm:write(FileHandle, Offset, Chunk)),
-    case Status of
-        more -> write_req_body_to_file(Req1, Offset + Bytes, FileHandle);
-        ok -> {ok, Req1}
-    end.
 
 
 %% @private

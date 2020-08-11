@@ -18,7 +18,7 @@
 
 %% API
 -export([new/2, new/4]).
--export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, get_luma_config_map/1]).
+-export([get_id/1, get_block_size/1, get_name/1, is_readonly/1, get_helpers/1, get_luma_config_map/1]).
 -export([select_helper/2, select/1]).
 -export([get/1, exists/1, delete/1, update/2, create/1, list/0]).
 -export([supports_any_space/1]).
@@ -152,6 +152,17 @@ get_id(<<_/binary>> = StorageId) ->
     StorageId;
 get_id(#document{key = StorageId, value = #storage{}}) ->
     StorageId.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns size of block used by underlying object storage.
+%% For posix-compatible ones 'undefined' is returned.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_block_size(id()) -> non_neg_integer() | undefined.
+get_block_size(StorageId) ->
+    helper:get_block_size(hd(get_helpers(StorageId))).
 
 
 %%--------------------------------------------------------------------
