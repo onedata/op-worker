@@ -61,6 +61,7 @@
     remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged/1,
     remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged2/1,
     replication_job_should_fail/1,
+    eviction_job_should_succeed/1,
     migration_job_should_fail/1]).
 
 %% test data
@@ -108,6 +109,7 @@ all() -> [
     remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged,
     remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged2,
     replication_job_should_fail,
+    eviction_job_should_succeed,
     migration_job_should_fail
 ].
 
@@ -572,6 +574,29 @@ replication_job_should_fail(Config) ->
         <<"totalBlocksSize">> := TestDataSize
     }]}, lfm_proxy:get_file_distribution(W1, SessId, {guid, Guid}), ?ATTEMPTS),
     ?assertEqual({error, ?EROFS}, lfm_proxy:schedule_file_replication(W1, SessId, {guid, Guid}, ProviderId1)).
+
+
+eviction_job_should_succeed(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(W1, Config),
+    SessId2 = ?SESS_ID(W2, Config),
+    FileName = ?FILE_NAME,
+    TestDataSize = byte_size(?TEST_DATA),
+    ProviderId1 = provider_id(W1),
+    ProviderId2 = provider_id(W2),
+    {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
+
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, read), ?ATTEMPTS),
+    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, TestDataSize)),
+    lfm_proxy:close(W2, H),
+
+    ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [TestDataSize, TestDataSize]), Guid, ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:schedule_file_replica_eviction(W1, SessId, {guid, Guid}, ProviderId1, undefined)),
+
+    % whole file on W1 should be invalidated
+    ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [0, TestDataSize]), Guid, ?ATTEMPTS),
+    % file on storage should be unchanged
+    ?assertEqual({ok, ?TEST_DATA}, sd_test_utils:read_file(W1, SDFileHandle, 0, TestDataSize)).
 
 
 migration_job_should_fail(Config) ->
