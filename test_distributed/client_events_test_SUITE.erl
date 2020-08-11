@@ -226,7 +226,7 @@ subscribe_on_replication_info_test(Config) ->
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined]), 10),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid)]),
-    ?assertEqual(ok, receive_file_attr_changed_event()),
+    ?assertEqual({ok, true}, receive_replication_status()),
 
     % Check if single event is produced on overlapping subscriptions
     Seq2 = get_seq(Config, User),
@@ -236,12 +236,12 @@ subscribe_on_replication_info_test(Config) ->
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined]), 10),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid)]),
-    ?assertEqual(ok, receive_file_attr_changed_event()),
-    ?assertEqual({error,timeout}, receive_file_attr_changed_event()),
+    ?assertEqual({ok, true}, receive_replication_status()),
+    ?assertEqual({error,timeout}, receive_replication_status()),
 
     % Check if event is produced by standard emission function
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
-    ?assertEqual(ok, receive_file_attr_changed_event()),
+    ?assertEqual({ok, undefined}, receive_replication_status()),
 
     % Check if event is produced on subscription without replication status
     ?assertEqual(ok, ssl:send(Sock,
@@ -250,7 +250,7 @@ subscribe_on_replication_info_test(Config) ->
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined]), 10),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid)]),
-    ?assertEqual(ok, receive_file_attr_changed_event()),
+    ?assertEqual({ok, undefined}, receive_replication_status()),
 
     % Cleanup subscription
     ?assertEqual(ok, ssl:send(Sock,
@@ -323,6 +323,18 @@ receive_file_attr_changed_event() ->
                 type = {file_attr_changed, #'FileAttrChangedEvent'{}}
             }]}}
         } -> ok;
+        Msg -> Msg
+    end.
+
+receive_replication_status() ->
+    case fuse_test_utils:receive_server_message([message_stream_reset, subscription, message_request,
+        message_acknowledgement, processing_status]) of
+        #'ServerMessage'{
+            message_body = {events, #'Events'{events = [#'Event'{
+                type = {file_attr_changed, #'FileAttrChangedEvent'{
+                    file_attr = #'FileAttr'{fully_replicated = Status}}}
+            }]}}
+        } -> {ok, Status};
         Msg -> Msg
     end.
 

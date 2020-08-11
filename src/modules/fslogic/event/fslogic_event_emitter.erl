@@ -80,12 +80,12 @@ emit_file_attr_changed_with_replication_status(FileCtx) ->
                         allow_deleted_files => true,
                         include_size => true,
                         name_conflicts_resolution_policy => resolve_name_conflicts,
-                        include_replication_status => WithoutStatusSessIds =/= []
+                        include_replication_status => WithStatusSessIds =/= []
                     }),
                     emit_suffixes(OtherFiles, {ctx, FileCtx2}),
-                    event:emit(#file_attr_changed_event{file_attr = FileAttr}, WithoutStatusSessIds),
+                    event:emit(#file_attr_changed_event{file_attr = FileAttr}, WithStatusSessIds),
                     event:emit(#file_attr_changed_event{file_attr = FileAttr#file_attr{fully_replicated = undefined}},
-                        WithStatusSessIds -- WithoutStatusSessIds);
+                        WithoutStatusSessIds -- WithStatusSessIds);
                 [{error, Reason}, _] ->
                     {error, Reason};
                 [_, {error, Reason2}] ->
