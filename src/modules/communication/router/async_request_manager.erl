@@ -126,7 +126,7 @@
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([start_link/1]).
@@ -194,10 +194,10 @@ start_link(SessionId) ->
 %%--------------------------------------------------------------------
 -spec delegate_and_supervise(worker_ref(), term(), clproto_message_id:id(),
     respond_via()) -> ok | {ok, server_message()}.
-delegate_and_supervise(WorkerRef, Req, MsgId, RespondVia) ->
+delegate_and_supervise(WorkerRef, ReqOrHandlerFun, MsgId, RespondVia) ->
     try
         ReqId = {make_ref(), MsgId},
-        ok = delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia)
+        ok = delegate_request_insecure(WorkerRef, ReqOrHandlerFun, ReqId, RespondVia)
     catch
         Type:Error ->
             ?error_stacktrace("Failed to delegate request (~p) due to: ~p:~p", [
@@ -317,10 +317,10 @@ handle_info(heartbeat, #state{
     withheld_heartbeats = WH
 } = State) ->
     NewState = case session_connections:list(SessionId) of
-        {ok, Cons} ->
+        {ok, EffSessId, Cons} ->
             State#state{
-                pending_requests = check_workers_status(PR, Cons, true),
-                withheld_heartbeats = check_workers_status(WH, Cons, false),
+                pending_requests = check_workers_status(PR, EffSessId, Cons, true),
+                withheld_heartbeats = check_workers_status(WH, EffSessId, Cons, false),
                 heartbeat_timer = undefined
             };
         Error ->
@@ -375,7 +375,7 @@ delegate_request_insecure(proc, HandlerFun, ReqId, RespondVia) ->
     delegate_proc_request_insecure(node(), HandlerFun, ReqId, RespondVia);
 
 delegate_request_insecure({proc, Key}, HandlerFun, ReqId, RespondVia) ->
-    Node = datastore_key:responsible_node(Key),
+    Node = datastore_key:any_responsible_node(Key),
     delegate_proc_request_insecure(Node, HandlerFun, ReqId, RespondVia);
 
 delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
@@ -510,20 +510,20 @@ call_async_request_manager(AsyncReqManager, Msg) ->
 %% between response and heartbeats.
 %% @end
 %%--------------------------------------------------------------------
--spec check_workers_status(Workers, [pid()], boolean()) -> Workers when
+-spec check_workers_status(Workers, session:id(), [pid()], boolean()) -> Workers when
     Workers :: #{req_id() => pid() | {pid(), not_alive}}.
-check_workers_status(Workers, Cons, SendHeartbeats) ->
+check_workers_status(Workers, EffSessId, Cons, SendHeartbeats) ->
     maps:fold(
         fun
             ({_Ref, MsgId} = ReqId, {Pid, not_alive}, Acc) ->
                 ?error("Async Request Manager: process ~p handling request ~p died",
                     [Pid, ReqId]
                 ),
-                connection_api:send_via_any(?ERROR_MSG(MsgId), Cons),
+                connection_api:send_via_any(?ERROR_MSG(MsgId), EffSessId, Cons),
                 Acc;
             ({_Ref, MsgId} = ReqId, Pid, Acc) ->
                 SendHeartbeats andalso connection_api:send_via_any(
-                    ?HEARTBEAT_MSG(MsgId), Cons
+                    ?HEARTBEAT_MSG(MsgId), EffSessId, Cons
                 ),
                 case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
                     true ->

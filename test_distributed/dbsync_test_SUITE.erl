@@ -91,6 +91,7 @@ stream_should_be_started_for_new_space(Config) ->
     test_utils:mock_expect(Worker, dbsync_utils, get_spaces, fun() ->
         [NewSpaceId | SpaceIds]
     end),
+    rpc:call(Worker, dbsync_worker, start_streams, []),
 
     lists:foreach(fun(Module) ->
         ?assertEqual(true, is_pid(rpc:call(Worker, global, whereis_name,
@@ -391,7 +392,7 @@ init_per_testcase(_Case, Config) ->
     ]),
 
     initializer:mock_provider_id(
-        Workers, <<"p1">>, <<"auth-macaroon">>, <<"identity-macaroon">>
+        Workers, <<"p1">>, <<"access-token">>, <<"identity-token">>
     ),
 
     test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
@@ -432,18 +433,18 @@ init_per_testcase(_Case, Config) ->
         {dbsync_changes_request_delay, timer:seconds(1)},
         {dbsync_changes_broadcast_interval, timer:seconds(1)}
     ]),
-    rpc:call(Worker, worker_proxy, call, [dbsync_worker, streams_healthcheck]),
+    rpc:call(Worker, dbsync_worker, start_streams, []),
 
     [{spaces, [<<"s1">>, <<"s2">>, <<"s3">>]} | Config].
 
 end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(SpaceId) ->
-        rpc:call(Worker, dbsync_state, delete, [SpaceId]),
-        lists:foreach(fun(Module) ->
-            Pid = rpc:call(Worker, global, whereis_name, [{Module, SpaceId}]),
-            exit(Pid, kill)
-        end, [dbsync_in_stream, dbsync_out_stream])
+        ok = rpc:call(Worker, internal_services_manager, stop_service,
+            [dbsync_worker, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
+        ok = rpc:call(Worker, internal_services_manager, stop_service,
+            [dbsync_worker, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
+        ok = rpc:call(Worker, dbsync_state, delete, [SpaceId])
     end, ?config(spaces, Config)),
     initializer:unmock_provider_ids(Workers),
     test_utils:mock_unload(Worker, [
@@ -461,7 +462,7 @@ get_providers(SpaceId) ->
         (<<"s3">>) -> [<<"p1">>, <<"p4">>, <<"p5">>];
         (<<"s4">>) -> [<<"p2">>, <<"p3">>, <<"p4">>, <<"p5">>]
     end,
-    utils:random_shuffle(ProviderIds).
+    lists_utils:shuffle(ProviderIds).
 
 get_provider_session(ProviderId) ->
     <<"s", ProviderId/binary>>.

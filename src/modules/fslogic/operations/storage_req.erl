@@ -16,7 +16,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -69,30 +69,25 @@ get_configuration(SessId) ->
 -spec get_helper_params(user_ctx:ctx(), storage:id(),
     od_space:id(), atom()) -> #fuse_response{}.
 get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
-    {ok, Helper} = case storage:get(StorageId) of
-        {ok, StorageDoc} ->
-            fslogic_storage:select_helper(StorageDoc);
-        {error, not_found} ->
-            {ok, undefined}
-    end,
-    case HelperMode of
-        ?FORCE_DIRECT_HELPER_MODE when Helper =/= undefined ->
-            SessionId = user_ctx:get_session_id(UserCtx),
-            UserId = user_ctx:get_user_id(UserCtx),
-            HelperName = helper:get_name(Helper),
-            {ok, StorageDoc2} = storage:get(StorageId),
-            case luma:get_client_user_ctx(SessionId, UserId, SpaceId,
-                StorageDoc2, HelperName) of
+    {ok, Storage} = storage:get(StorageId),
+    Helper = storage:get_helper(Storage),
+    SessionId = user_ctx:get_session_id(UserCtx),
+    UserId = user_ctx:get_user_id(UserCtx),
+    case {HelperMode, is_root_credentials(SessionId, UserId)} of
+        {_, true} ->
+            % This should never happen as client cannot pass root credentials
+            #fuse_response{status = #status{code = ?EACCES}};
+        {?FORCE_DIRECT_HELPER_MODE, false} when Helper =/= undefined ->
+            case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
                 {ok, ClientStorageUserCtx} ->
-                    HelperParams = helper:get_params(Helper,
-                        ClientStorageUserCtx),
+                    HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
                     #fuse_response{
                         status = #status{code = ?OK},
                         fuse_response = HelperParams};
                 {error, _} ->
                     #fuse_response{status = #status{code = ?ENOENT}}
             end;
-        _ProxyOrAutoMode ->
+        {_ProxyOrAutoMode, false} ->
             HelperParams = helper:get_proxy_params(Helper, StorageId),
             #fuse_response{
                status = #status{code = ?OK},
@@ -109,35 +104,41 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
     storage:id()) -> #fuse_response{}.
 create_storage_test_file(UserCtx, Guid, StorageId) ->
     % TODO VFS-6121 pass SpaceId instead of Guid here
-    SpaceId = case file_id:guid_to_space_id(Guid) of
-        undefined ->
+    SpaceId = try file_id:guid_to_space_id(Guid) of
+        <<_/binary>> = Id -> Id
+        catch
+            error:{invalid_guid, _Guid} ->
             % TODO VFS-6121 log not existing SpaceId here
             ?error("Detecting storage ~p failed due to not existing space.", [StorageId]),
-            throw(?ENOENT);
-        <<_/binary>> = Id -> Id
+            throw(?ENOENT)
     end,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
 
-    {ok, StorageDoc} = case storage:get(StorageId) of
+    {ok, Storage} = case storage:get(StorageId) of
         {ok, Doc} -> {ok, Doc};
         {error, not_found} ->
             ?error("Detecting storage ~p failed due to not found storage document.", [StorageId]),
             throw(?ENOENT)
     end,
-    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
 
-    case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) of
+    case is_root_credentials(SessionId, UserId) of
+        true ->
+            % This should never happen as client cannot pass root credentials
+            throw(?EACCES);
+        false ->
+            ok
+    end,
+
+    Helper = storage:get_helper(Storage),
+    case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
         {ok, ClientStorageUserCtx} ->
-            {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName),
+            {ok, ServerStorageUserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
-
-            {RawStoragePath, _SpaceCtx2} = file_ctx:get_raw_storage_path(SpaceCtx),
-            DirName = filename:dirname(RawStoragePath),
-
+            {SpaceStorageFileId, _SpaceCtx2} = file_ctx:get_storage_file_id(SpaceCtx),
+            DirName = filename:dirname(SpaceStorageFileId),
             TestFileName = storage_detector:generate_file_id(),
             TestFileId = fslogic_path:join([DirName, TestFileName]),
             try
@@ -172,10 +173,9 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
 verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
-    {ok, StorageDoc} = storage:get(StorageId),
-    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
-    {ok, StorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName),
+    {ok, Storage} = storage:get(StorageId),
+    Helper = storage:get_helper(Storage),
+    {ok, StorageUserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
     verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
@@ -223,3 +223,8 @@ verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, _, At
             verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent,
                 ?ENOENT, Attempts - 1)
     end.
+
+-spec is_root_credentials(session:id(), od_user:id()) -> boolean().
+is_root_credentials(?ROOT_SESS_ID, _) -> true;
+is_root_credentials(_SessionId, ?ROOT_USER_ID) -> true;
+is_root_credentials(_, _) -> false.

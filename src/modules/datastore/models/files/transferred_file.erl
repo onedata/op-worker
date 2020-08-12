@@ -22,7 +22,9 @@
 -export([
     report_transfer_start/3,
     report_transfer_finish/4,
-    report_transfer_deletion/1
+    report_transfer_deletion/1,
+
+    get_history_limit/0
 ]).
 -export([get_transfers/1]).
 -export([clean_up/1]).
@@ -163,6 +165,16 @@ report_transfer_deletion(#document{key = TransferId, value = Transfer}) ->
         {error, not_found} -> ok;
         {error, Reason} -> {error, Reason}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns maximum number of remembered ended transfers for file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_history_limit() -> non_neg_integer().
+get_history_limit() ->
+    ?HISTORY_LIMIT.
 
 
 %%--------------------------------------------------------------------

@@ -12,6 +12,8 @@
 -module(lfm_attrs_test_SUITE).
 -author("Tomasz Lichon").
 
+-behaviour(traverse_behaviour).
+
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").

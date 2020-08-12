@@ -12,6 +12,7 @@ rebar3.crashdump
 *.pyc
 *.o
 *.d
+!config.d
 
 /cluster_manager
 /priv

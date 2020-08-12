@@ -155,15 +155,15 @@ rename_or_delete(FileCtx,
 ) ->
     case provider_logic:supports_space(TargetSpaceId) of
         true ->
-            {ok, Storage} = fslogic_storage:select_storage(TargetSpaceId),
-            case sfm_utils:rename_storage_file(?ROOT_SESS_ID, TargetSpaceId,
-                Storage, FileUuid, SourceFileId, RemoteTargetFileId)
+            NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
+            {TargetStorageId, NewFileCtx2} = file_ctx:get_storage_id(NewFileCtx),
+            % TODO VFS-6155 properly handle remote rename, target parent doc may not be synchronized yet, how do we know its mode?
+            case sd_utils:rename(user_ctx:new(?ROOT_SESS_ID), TargetSpaceId,
+                TargetStorageId, FileUuid, SourceFileId, undefined, RemoteTargetFileId)
             of
                 ok -> ok;
                 {error, ?ENOENT} -> ok
             end,
-            NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
-            {#document{key = TargetStorageId}, NewFileCtx2} = file_ctx:get_storage_doc(NewFileCtx),
 
             RenamedDoc = Doc#document{value = Loc#file_location{
                 file_id = RemoteTargetFileId,

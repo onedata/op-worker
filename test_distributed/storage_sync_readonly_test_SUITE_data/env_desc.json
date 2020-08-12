@@ -25,8 +25,15 @@
             "storages": [
                 {
                     "type": "posix",
-                    "name": "/mnt/st2",
-                    "readonly": true
+                    "name": "/mnt/rdwr_storage",
+                    "readonly": false,
+                    "group": 1
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/synced_storage",
+                    "readonly": true,
+                    "group": 1
                 }
             ],
             "users": [],
@@ -129,13 +136,21 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st1",
-                        "mounted_in_root": "true"
+                        "storage": "/mnt/st1"
                     },
                     "p2": {
-                        "storage": "/mnt/st2",
-                        "mounted_in_root": "true"
+                        "storage": "/mnt/synced_storage"
                     }
+                }
+            }
+        },
+        "storages": {
+            "p2": {
+                "/mnt/synced_storage": {
+                    "imported_storage": true
+                },
+                "/mnt/rdwr_storage": {
+                    "imported_storage": true
                 }
             }
         }

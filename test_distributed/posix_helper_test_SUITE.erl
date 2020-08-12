@@ -12,7 +12,7 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -280,10 +280,13 @@ helper_handle_server(Config) ->
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     {ok, Helper} = helper:new_helper(
         ?POSIX_HELPER_NAME,
-        #{<<"mountPoint">> => ?path(Config, "")},
-        UserCtx,
-        false,
-        ?CANONICAL_STORAGE_PATH),
+        #{
+            <<"mountPoint">> => ?path(Config, ""),
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
+            <<"skipStorageDetection">> => <<"false">>
+        },
+        UserCtx
+    ),
     Handle = helpers:get_helper_handle(Helper, UserCtx),
     helper_handle_server(Config, Handle).
 helper_handle_server(Config, Handle) ->

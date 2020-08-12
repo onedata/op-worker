@@ -14,12 +14,14 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/cdmi.hrl").
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([stream_binary/4, stream_cdmi/6]).
@@ -54,7 +56,7 @@ stream_binary(HttpStatus, Req, #cdmi_req{
         ReadBlockSize = file_download_utils:get_read_block_size(FileHandle),
 
         Req2 = cowboy_req:stream_reply(HttpStatus, #{
-            <<"content-length">> => integer_to_binary(StreamSize)
+            ?HDR_CONTENT_LENGTH => integer_to_binary(StreamSize)
         }, Req),
         lists:foreach(fun(Range) ->
             file_download_utils:stream_range(
@@ -106,7 +108,7 @@ stream_cdmi(Req, #cdmi_req{
         end,
 
         Req2 = cowboy_req:stream_reply(?HTTP_200_OK, #{
-            <<"content-length">> => integer_to_binary(StreamSize)
+            ?HDR_CONTENT_LENGTH => integer_to_binary(StreamSize)
         }, Req),
         cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
         file_download_utils:stream_range(

@@ -35,8 +35,8 @@
 %%--------------------------------------------------------------------
 -spec get_oz_url() -> string().
 get_oz_url() ->
-    {ok, Hostname} = application:get_env(?APP_NAME, oz_domain),
-    "https://" ++ str_utils:to_list(Hostname).
+    Domain = oneprovider:get_oz_domain(),
+    "https://" ++ unicode:characters_to_list(Domain).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -91,29 +91,26 @@ get_cacerts_dir() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec auth_to_rest_client(Auth :: term()) ->
-    {user, macaroon, {Macaroon :: binary(), DischargeMacaroons :: [binary()]}} |
-    {provider, Macaroon :: binary()} |
+    {user, token, tokens:serialized()} |
+    {provider, tokens:serialized()} |
     none.
 auth_to_rest_client(none) ->
     none;
 
-auth_to_rest_client(#macaroon_auth{macaroon = Mac, disch_macaroons = DMacs}) ->
-    {user, macaroon, {Mac, DMacs}};
-
 auth_to_rest_client(provider) ->
-    {ok, ProviderMacaroon} = provider_auth:get_auth_macaroon(),
-    {provider, ProviderMacaroon};
+    {ok, ProviderAccessToken} = provider_auth:get_access_token(),
+    {provider, ProviderAccessToken};
 
 auth_to_rest_client(?ROOT_SESS_ID) ->
     auth_to_rest_client(provider);
 
 auth_to_rest_client(?GUEST_SESS_ID) ->
-    auth_to_rest_client(provider);
+    none;
 
 auth_to_rest_client(SessId) when is_binary(SessId) ->
     {ok, #document{
         value = #session{
-            auth = Auth,
+            credentials = Credentials,
             type = Type
         }}} = session:get(SessId),
     case Type of
@@ -122,5 +119,8 @@ auth_to_rest_client(SessId) when is_binary(SessId) ->
         provider_incoming ->
             auth_to_rest_client(provider);
         _ ->
-            auth_to_rest_client(Auth)
-    end.
+            auth_to_rest_client(Credentials)
+    end;
+
+auth_to_rest_client(TokenCredentials) ->
+    {user, token, auth_manager:get_access_token(TokenCredentials)}.

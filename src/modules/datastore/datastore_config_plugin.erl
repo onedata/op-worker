@@ -13,7 +13,7 @@
 -author("Michal Zmuda").
 
 %% datastore_config callbacks
--export([get_models/0, get_throttled_models/0]).
+-export([get_models/0, get_throttled_models/0, get_timestamp/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -30,24 +30,25 @@ get_models() -> [
     od_handle_service,
     od_handle,
     od_harvester,
+    od_storage,
+    od_token,
+    temporary_token_secret,
     provider_auth,
-    authorization_nonce,
     file_download_code,
     subscription,
     file_subscription,
     session,
-    user_identity,
+    session_local_links,
     file_meta,
-    storage,
+    storage_config,
     file_location,
     file_local_blocks,
-    space_storage,
     dbsync_state,
     files_to_chown,
     space_quota,
     monitoring_state,
     file_handles,
-    sfm_handle,
+    sd_handle,
     custom_metadata,
     permissions_cache,
     permissions_cache_helper,
@@ -55,7 +56,6 @@ get_models() -> [
     times,
     helper_handle,
     space_strategies,
-    luma_cache,
     file_popularity,
     space_transfer_stats,
     space_transfer_stats_cache,
@@ -72,7 +72,20 @@ get_models() -> [
     file_popularity_config,
     harvesting_state,
     idp_access_token,
-    tree_traverse_job
+    tree_traverse_job,
+    file_qos,
+    qos_entry,
+    file_meta_posthooks,
+    storage_sync_links,
+    storage_traverse_job,
+    qos_status,
+    space_unsupport_job,
+    cleanup_traverse_status,
+    luma_db,
+
+    %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
+    space_storage,
+    storage
 ].
 
 %%--------------------------------------------------------------------
@@ -83,3 +96,12 @@ get_models() -> [
 -spec get_throttled_models() -> [datastore_model:model()].
 get_throttled_models() ->
     [file_meta].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns timestamp to be used to tag document.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_timestamp() -> datastore_doc:timestamp().
+get_timestamp() ->
+    provider_logic:zone_time_seconds().

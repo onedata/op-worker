@@ -15,14 +15,16 @@
 
 -behaviour(dynamic_page_behaviour).
 
--include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
+-include("http/rest.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
--define(CONN_CLOSE_HEADERS, #{<<"connection">> => <<"close">>}).
+-define(CONN_CLOSE_HEADERS, #{?HDR_CONNECTION => <<"close">>}).
 
 -export([get_file_download_url/2, handle/2]).
 
@@ -43,14 +45,16 @@
     {ok, binary()} | {error, term()}.
 get_file_download_url(SessionId, FileGuid) ->
     case lfm:check_perms(SessionId, {guid, FileGuid}, read) of
-        {ok, true} ->
+        ok ->
             Hostname = oneprovider:get_domain(),
             {ok, Code} = file_download_code:create(SessionId, FileGuid),
             URL = str_utils:format_bin("https://~s~s/~s", [
                 Hostname, ?FILE_DOWNLOAD_PATH, Code
             ]),
             {ok, URL};
-        {ok, false} ->
+        {error, ?EACCES} ->
+            ?ERROR_FORBIDDEN;
+        {error, ?EPERM} ->
             ?ERROR_FORBIDDEN;
         Error ->
             Error
@@ -66,13 +70,13 @@ get_file_download_url(SessionId, FileGuid) ->
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:consume(FileDownloadCode) of
-        false ->
-            cowboy_req:reply(?HTTP_401_UNAUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
         {true, SessionId, FileGuid} ->
             OzUrl = oneprovider:get_oz_url(),
             Req2 = gui_cors:allow_origin(OzUrl, Req),
             Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
-            handle_http_download(Req3, SessionId, FileGuid)
+            handle_http_download(Req3, SessionId, FileGuid);
+        false ->
+            send_error_response(?ERROR_BAD_DATA(<<"code">>), Req)
     end.
 
 
@@ -102,12 +106,12 @@ handle_http_download(Req, SessionId, FileGuid) ->
                                   "for user ~p - ~p:~p", [
                     FileGuid, UserId, Type, Reason
                 ]),
-                cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req)
+                send_error_response(Reason, Req)
             after
                 lfm:release(FileHandle)
             end;
-        {error, _} ->
-            cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req)
+        {error, Errno} ->
+            send_error_response(?ERROR_POSIX(Errno), Req)
     end.
 
 
@@ -120,16 +124,16 @@ handle_http_download(Req, SessionId, FileGuid) ->
 ) ->
     cowboy_req:req().
 stream_file(FileGuid, FileHandle, SessionId, Req) ->
-    {ok, #file_attr{size = FileSize, name = FileName}} = lfm:stat(
+    {ok, #file_attr{size = FileSize, name = FileName}} = ?check(lfm:stat(
         SessionId, {guid, FileGuid}
-    ),
+    )),
     ReadBlockSize = file_download_utils:get_read_block_size(FileHandle),
 
     % Reply with attachment headers and a streaming function
     AttachmentHeaders = attachment_headers(FileName),
 
     Req2 = cowboy_req:stream_reply(?HTTP_200_OK, AttachmentHeaders#{
-        <<"content-length">> => integer_to_binary(FileSize)
+        ?HDR_CONTENT_LENGTH => integer_to_binary(FileSize)
     }, Req),
     file_download_utils:stream_range(
         FileHandle, {0, FileSize-1}, Req2, fun(Data) -> Data end, ReadBlockSize
@@ -155,9 +159,22 @@ attachment_headers(FileName) ->
     {Type, Subtype, _} = cow_mimetypes:all(FileName),
     MimeType = <<Type/binary, "/", Subtype/binary>>,
     #{
-        <<"content-type">> => MimeType,
-        <<"content-disposition">> =>
+        ?HDR_CONTENT_TYPE => MimeType,
+        ?HDR_CONTENT_DISPOSITION =>
         <<"attachment; filename=\"", FileName/binary, "\"">>
         %% @todo VFS-2073 - check if needed
         %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
     }.
+
+
+%% @private
+-spec send_error_response(errors:error(), cowboy_req:req()) -> cowboy_req:req().
+send_error_response(Error, Req) ->
+    ErrorResp = rest_translator:error_response(Error),
+
+    cowboy_req:reply(
+        ErrorResp#rest_resp.code,
+        maps:merge(ErrorResp#rest_resp.headers, ?CONN_CLOSE_HEADERS),
+        json_utils:encode(ErrorResp#rest_resp.body),
+        Req
+    ).

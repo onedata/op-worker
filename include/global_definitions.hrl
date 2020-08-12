@@ -40,10 +40,4 @@
 %% ID of provider that is not currently registered in Onezone
 -define(UNREGISTERED_PROVIDER_ID, <<"unregistered_provider">>).
 
-%%%===================================================================
-%%% Global identities
-%%%===================================================================
-
--define(OZ_IDENTITY, #user_identity{user_id = <<"ONE-ZONE">>}).
-
 -endif.

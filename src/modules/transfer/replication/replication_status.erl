@@ -71,6 +71,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/transfer.hrl").
 
 -export([
     handle_enqueued/1, handle_active/1,
@@ -92,9 +93,9 @@ handle_enqueued(TransferId) ->
     EncodedPid = transfer_utils:encode_pid(self()),
     transfer:update(TransferId, fun(Transfer) ->
         case Transfer#transfer.replication_status of
-            scheduled ->
+            ?SCHEDULED_STATUS ->
                 {ok, Transfer#transfer{
-                    replication_status = enqueued,
+                    replication_status = ?ENQUEUED_STATUS,
                     start_time = provider_logic:zone_time_seconds(),
                     files_to_process = 1,
                     pid = EncodedPid
@@ -167,8 +168,8 @@ handle_cancelled(TransferId) ->
 
 %% @private
 -spec mark_active(transfer()) -> {ok, transfer()} | error().
-mark_active(Transfer = #transfer{replication_status = enqueued}) ->
-    {ok, Transfer#transfer{replication_status = active}};
+mark_active(Transfer = #transfer{replication_status = ?ENQUEUED_STATUS}) ->
+    {ok, Transfer#transfer{replication_status = ?ACTIVE_STATUS}};
 mark_active(#transfer{replication_status = Status}) ->
     {error, Status}.
 
@@ -178,7 +179,13 @@ mark_active(#transfer{replication_status = Status}) ->
 mark_aborting(Transfer) ->
     case transfer:is_replication_ongoing(Transfer) of
         true ->
-            {ok, Transfer#transfer{replication_status = aborting}};
+            {ok, Transfer#transfer{
+                replication_status = ?ABORTING_STATUS,
+                eviction_status = case transfer:is_migration(Transfer) of
+                    true -> ?ABORTING_STATUS;
+                    false -> Transfer#transfer.eviction_status
+                end
+            }};
         false ->
             {error, already_ended}
     end.
@@ -186,9 +193,9 @@ mark_aborting(Transfer) ->
 
 %% @private
 -spec mark_completed(transfer()) -> {ok, transfer()} | error().
-mark_completed(Transfer = #transfer{replication_status = active}) ->
+mark_completed(Transfer = #transfer{replication_status = ?ACTIVE_STATUS}) ->
     {ok, Transfer#transfer{
-        replication_status = completed,
+        replication_status = ?COMPLETED_STATUS,
         finish_time = case transfer:is_migration(Transfer) of
             true -> Transfer#transfer.finish_time;
             false -> provider_logic:zone_time_seconds()
@@ -200,7 +207,7 @@ mark_completed(#transfer{replication_status = Status}) ->
 
 %% @private
 -spec mark_failed(transfer()) -> {ok, transfer()} | error().
-mark_failed(Transfer = #transfer{replication_status = aborting}) ->
+mark_failed(Transfer = #transfer{replication_status = ?ABORTING_STATUS}) ->
     mark_failed_forced(Transfer);
 mark_failed(#transfer{replication_status = Status}) ->
     {error, Status}.
@@ -227,20 +234,20 @@ mark_failed_forced(Transfer) ->
 
 %% @private
 -spec mark_cancelled(transfer()) -> {ok, transfer()} | error().
-mark_cancelled(Transfer = #transfer{replication_status = scheduled}) ->
+mark_cancelled(Transfer = #transfer{replication_status = ?SCHEDULED_STATUS}) ->
     {ok, Transfer#transfer{
-        replication_status = cancelled,
+        replication_status = ?CANCELLED_STATUS,
         eviction_status = case transfer:is_migration(Transfer) of
-            true -> cancelled;
+            true -> ?CANCELLED_STATUS;
             false -> Transfer#transfer.eviction_status
         end
     }};
-mark_cancelled(Transfer = #transfer{replication_status = aborting}) ->
+mark_cancelled(Transfer = #transfer{replication_status = ?ABORTING_STATUS}) ->
     {ok, Transfer#transfer{
-        replication_status = cancelled,
+        replication_status = ?CANCELLED_STATUS,
         finish_time = provider_logic:zone_time_seconds(),
         eviction_status = case transfer:is_migration(Transfer) of
-            true -> cancelled;
+            true -> ?CANCELLED_STATUS;
             false -> Transfer#transfer.eviction_status
         end
     }};

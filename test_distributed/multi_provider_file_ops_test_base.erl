@@ -12,11 +12,12 @@
 -module(multi_provider_file_ops_test_base).
 -author("Jakub Kudzia").
 
+-include("middleware/middleware.hrl").
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -27,10 +28,11 @@
 -export([
     create_on_different_providers_test_base/1,
     basic_opts_test_base/4,
+    basic_opts_test_base/5,
     rtransfer_test_base/11,
     rtransfer_blocking_test_base/6,
     rtransfer_blocking_test_cleanup/1,
-    rtransfer_test_base2/5,
+    rtransfer_test_base2/6,
     many_ops_test_base/6,
     distributed_modification_test_base/4,
     multi_space_test_base/3,
@@ -59,6 +61,7 @@
 -export([sync_blocks/4]).
 -export([request_synchronization/3]).
 -export([async_synchronize/3]).
+-export([get_seq_and_timestamp_or_error/2]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -69,14 +72,6 @@
     end
 ).
 -define(rpcTest(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
-
--define(deny_user(UserId),
-    #access_control_entity{
-        acetype = ?deny_mask,
-        aceflags = ?no_flags_mask,
-        identifier = UserId,
-        acemask = (?read_mask bor ?write_mask bor ?execute_mask)
-    }).
 
 %%%===================================================================
 %%% Test skeletons
@@ -96,7 +91,7 @@ create_on_different_providers_test_base(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:create(W1, UserW1SessId, FilePath, 8#755)),
 
     % file creation on provider2 after synchronizing documents should fail
-    ?assertMatch({ok, [{_, FileName}]}, lfm_proxy:ls(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
+    ?assertMatch({ok, [{_, FileName}]}, lfm_proxy:get_children(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
     ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W2, UserW2SessId, FilePath, 8#755)),
 
     % file creation on provider2 after synchronizing documents should succeed
@@ -111,7 +106,7 @@ create_on_different_providers_test_base(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, UserW1SessId, DirPath, 8#755)),
 
     % dir creation on provider2 after synchronizing documents should fail
-    ?assertMatch({ok, [{_, DirName}]}, lfm_proxy:ls(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
+    ?assertMatch({ok, [{_, DirName}]}, lfm_proxy:get_children(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
     ?assertMatch({error, ?EEXIST}, lfm_proxy:mkdir(W2, UserW2SessId, DirPath, 8#755)),
 
     % file creation on provider2 after synchronizing documents should succeed
@@ -172,7 +167,7 @@ synchronizer_test_base(Config0) ->
     Blocks = case {SeparateBlocks, RandomRead} of
         {true, true} ->
             lists:map(fun(_Num) ->
-                random:uniform(FileSizeBytes)
+                rand:uniform(FileSizeBytes)
             end, lists:seq(1, BlocksCount));
         {true, _} ->
             lists:map(fun(Num) ->
@@ -250,7 +245,7 @@ synchronize_stress_test_base(Config0, RandomRead) ->
     Blocks = case RandomRead of
         true ->
             lists:map(fun(_Num) ->
-                random:uniform(FileSizeBytes)
+                rand:uniform(FileSizeBytes)
             end, lists:seq(1, BlocksCount));
         _ ->
             lists:map(fun(Num) ->
@@ -342,7 +337,7 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
             end, lists:seq(1, BlocksCount));
         random ->
             lists:map(fun(_Num) ->
-                random:uniform(FileSizeBytes)
+                rand:uniform(FileSizeBytes)
             end, lists:seq(1, BlocksCount));
         _ ->
             lists:map(fun(Num) ->
@@ -463,11 +458,11 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
 % updates per second and file location updates per second is checked.
 % For this test, environment with 2 1-node providers is assumed.
 rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
-    Attempts, TransferFileParts) ->
+    Attempts, TransferTimeout, TransferFileParts) ->
     rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1},
-        Attempts, TransferFileParts);
+        Attempts, TransferTimeout, TransferFileParts);
 rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
-    Attempts, TransferFileParts) ->
+    Attempts, TransferTimeout, TransferFileParts) ->
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
@@ -492,8 +487,8 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Start = time_utils:system_time_seconds(),
     Result = try
         verify_workers(Workers2, fun(W) ->
-            read_big_file(Config, FileSize, Level2File, W, true)
-        end, timer:seconds(Attempts)),
+            read_big_file(Config, FileSize, Level2File, W, TransferTimeout, true)
+        end, timer:seconds(TransferTimeout)),
         ok
     catch
         T:R -> {error, T, R}
@@ -553,8 +548,8 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     TransferChunksNum = 1024,
     FileSize = ChunkSize * TransferChunksNum * TransferFileParts,
     SmallFile = {1, 1, false},
-    Transfer = {TransferChunksNum, TransferFileParts, true},
-    Files = [Transfer, SmallFile],
+    TransferredFile = {TransferChunksNum, TransferFileParts, true},
+    Files = [TransferredFile, SmallFile],
 
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
     Level2File2 = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -566,7 +561,7 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
 
     % Init rtransfer using another file
     verify_workers(Workers2, fun(W) ->
-        read_big_file(Config, ChunkSize, Level2File2, W, Transfer)
+        read_big_file(Config, ChunkSize, Level2File2, W, TransferredFile)
     end, timer:minutes(5), true),
 
     lists:foreach(fun({ChunksNum, PartNum, Transfer}) ->
@@ -634,18 +629,24 @@ rtransfer_blocking_test_cleanup(Config) ->
 
     test_utils:mock_validate_and_unload(Workers2, [replica_synchronizer, rtransfer_config]).
 
+basic_opts_test_base(Config, User, NodesDescroption, Attempts) ->
+    basic_opts_test_base(Config, User, NodesDescroption, Attempts, true).
+
 % TODO - add reading with chunks to test prefetching
-basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
-    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
-basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, CheckSequences) ->
+    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, CheckSequences);
+basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, CheckSequences) ->
 
 %%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
+    SpaceId = ?config(first_space_id, Config),
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
+
+    Timestamp0 = rpc:call(Worker1, provider_logic, zone_time_seconds, []),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -688,6 +689,47 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     verify(Config, fun(W) ->
         ?assertEqual(ok, lfm_proxy:close_all(W))
     end),
+
+    ProvIds = lists:foldl(fun(W, Acc) ->
+        sets:add_element(rpc:call(W, oneprovider, get_id, []), Acc)
+    end, sets:new(), Workers),
+
+    AreAllSeqsEqual = fun() ->
+        % Get list of states of all dbsync streams (for tested space) from all workers (all providers), e.g.:
+        % WorkersDbsyncStates = [StateOnWorker1, StateOnWorker2 ... StateOnWorkerN],
+        % StateOnWorker = [ProgressOfSynWithProv1, ProgressOfSynWithProv2 ... ProgressOfSynWithProvM]
+        WorkersDbsyncStates = lists:foldl(fun(W, Acc) ->
+            WorkerState = lists:foldl(fun(ProvID, Acc2) ->
+                case get_seq_and_timestamp_or_error(W, SpaceId, ProvID) of
+                    {error, not_found} ->
+                        % provider `ProvID` does not support space so there is no synchronization progress data
+                        % on this worker
+                        Acc2;
+                    {_, Timestamp} = Ans ->
+                        ?assert(Timestamp >= Timestamp0),
+                        [Ans | Acc2]
+                end
+            end, [], sets:to_list(ProvIds)),
+
+            case WorkerState of
+                [] -> Acc; % this worker belongs to provider that does not support this space
+                _ -> [WorkerState | Acc]
+            end
+        end, [], Workers),
+
+        % States of all workers (that belong to providers that support tested space) should be equal
+        % create set from list to remove duplicates
+        WorkersDbsyncStatesSet = sets:from_list(WorkersDbsyncStates),
+        case sets:size(WorkersDbsyncStatesSet) of
+            1 -> true; % States of all workers are equal
+            _ -> {false, WorkersDbsyncStates}
+        end
+    end,
+    % TODO VFS-6652 Always check sequences
+    case CheckSequences of
+        true -> ?assertEqual(true, AreAllSeqsEqual(), 60);
+        false -> ok
+    end,
 
     ok.
 
@@ -1106,7 +1148,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     A1 = rpc:call(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
-    SpaceKey = SpaceDoc#document.key,
+%%    SpaceKey = SpaceDoc#document.key,
 %%    ct:print("Space key ~p", [SpaceKey]),
 
     DoTest = fun(TaskList) ->
@@ -1115,14 +1157,14 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         GenerateDoc = fun(Type) ->
             Name = generator:gen_name(),
             Uuid = datastore_key:new(),
-            Doc = #document{key = Uuid, value =
-            #file_meta{
-                name = Name,
-                type = Type,
-                mode = 8#775,
-                owner = User,
-                scope = SpaceKey
-            },
+            Doc = #document{
+                key = Uuid,
+                value = #file_meta{
+                    name = Name,
+                    type = Type,
+                    mode = 8#775,
+                    owner = User
+                },
                 scope = SpaceId
             },
 %%            ct:print("Doc ~p ~p", [Uuid, Name]),
@@ -1623,7 +1665,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     "Cancelled transfers: ~p~n",
         [BlockSize, BlocksCount, UserCount, (End-Start)/1000, OkCount, CancelCount]).
 
-
+% @TODO VFS-6617 fix fsync failing on timeout
 transfer_files_to_source_provider(Config0) ->
     ct:timetrap(timer:minutes(10)),
     Config = extend_config(Config0, <<"user1">>, {0, 0, 0, 0}, 0),
@@ -1633,7 +1675,7 @@ transfer_files_to_source_provider(Config0) ->
     FilesNum = ?config(files_num, Config),
     Size = ?config(file_size, Config),
 
-    Guids = utils:pmap(fun(Num) ->
+    Guids = lists_utils:pmap(fun(Num) ->
         FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
         {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, 8#755),
         {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
@@ -1646,12 +1688,12 @@ transfer_files_to_source_provider(Config0) ->
 
     Start = erlang:monotonic_time(millisecond),
 
-    TidsAndGuids = utils:pmap(fun(Guid) ->
+    TidsAndGuids = lists_utils:pmap(fun(Guid) ->
         {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
         {Tid, Guid}
     end, Guids),
 
-    utils:pforeach(fun F({Tid, Guid}) ->
+    lists_utils:pforeach(fun F({Tid, Guid}) ->
         {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [Guid]),
         case Transfers of
             [Tid] ->
@@ -1664,10 +1706,17 @@ transfer_files_to_source_provider(Config0) ->
     End = erlang:monotonic_time(millisecond),
 
     StartGui = erlang:monotonic_time(millisecond),
-    utils:pforeach(fun(Num) ->
-        {ok, [{_, List}]} =
-            rpc:call(Worker, transfer_data_backend, list_transfers,
-                [SessionId, SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),
+    lists_utils:pforeach(fun(Num) ->
+        Data = #{
+            <<"state">> => ?ENDED_TRANSFERS_STATE,
+            <<"offset">> => (Num-1)*100,
+            <<"limit">> => 100
+        },
+        {ok, value, #{<<"transfers">> := List}} = ?assertMatch({ok, value, #{}}, rpc:call(
+            Worker, space_middleware, get, [
+                #op_req{data = Data, gri = #gri{id = SpaceName, aspect = transfers}}, anything
+            ]
+        )),
         ?assertMatch(100, length(List))
     end, lists:seq(1, FilesNum div 100)),
     EndGui = erlang:monotonic_time(millisecond),
@@ -1741,9 +1790,9 @@ mock_sync_errors(Config) ->
     end),
 
     test_utils:mock_expect(Workers, dbsync_communicator, send_changes,
-        fun(ProviderId, SpaceId, BatchSince, Until, Docs) ->
+        fun(ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs) ->
             timer:sleep(2000),
-            meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Docs])
+            meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs])
         end),
 
     [{request_delay, RequestDelay} | Config].
@@ -1846,12 +1895,10 @@ set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     ok.
 
 create_location(Doc, _ParentDoc, LocId, Path) ->
-    FDoc = Doc#document.value,
     FileUuid = Doc#document.key,
     SpaceId = Doc#document.scope,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
-    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
+    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
     FileId = Path,
     Location0 = #file_location{
         blocks = [#file_block{offset = 0, size = 3}],
@@ -1874,23 +1921,22 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     {ok, _} = datastore_model:save(Ctx, LocationDoc),
 
     LeafLess = filename:dirname(FileId),
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, LeafLess, undefined),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+    SDHandle0 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, LeafLess),
+    case storage_driver:mkdir(SDHandle0, ?DEFAULT_DIR_PERMS, true) of
         ok -> ok;
         {error, eexist} ->
             ok
     end,
 
 
-    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, FileId, undefined),
+    SDHandle1 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, FileId),
     FileContent = <<"abc">>,
-    storage_file_manager:unlink(SFMHandle1, size(FileContent)),
-    ok = storage_file_manager:create(SFMHandle1, 8#775),
-    {ok, SFMHandle2} = storage_file_manager:open_insecure(SFMHandle1, write),
-    SFMHandle3 = storage_file_manager:set_size(SFMHandle2),
-    {ok, 3} = storage_file_manager:write(SFMHandle3, 0, FileContent),
-    storage_file_manager:fsync(SFMHandle3, false),
+    storage_driver:unlink(SDHandle1, size(FileContent)),
+    ok = storage_driver:create(SDHandle1, 8#775),
+    {ok, SDHandle2} = storage_driver:open_insecure(SDHandle1, write),
+    SDHandle3 = storage_driver:set_size(SDHandle2),
+    {ok, 3} = storage_driver:write(SDHandle3, 0, FileContent),
+    storage_driver:fsync(SDHandle3, false),
     ok.
 
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
@@ -1919,9 +1965,9 @@ extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfP
     end, {[], [], [], []}, Workers),
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1}, {workers2, Workers2},
-        {session, SessId}, {space_name, SpaceName}, {attempts, Attempts},
+        {session, SessId}, {first_space_id, SpaceId}, {space_name, SpaceName}, {attempts, Attempts},
         {nodes_number, {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider}} | Config].
 
 verify(Config, TestFun) ->
@@ -2052,9 +2098,12 @@ create_big_file(Config, ChunkSize, ChunksNum, PartNum, File, Worker) ->
 
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
-read_big_file(Config, _FileSize, File, Worker, true) ->
-    SessId = ?config(session, Config),
+read_big_file(Config, _FileSize, File, Worker, Transfer) ->
     Attempts = ?config(attempts, Config),
+    read_big_file(Config, _FileSize, File, Worker, Attempts, Transfer).
+
+read_big_file(Config, _FileSize, File, Worker, Attempts, true) ->
+    SessId = ?config(session, Config),
     Worker1 = ?config(worker1, Config),
 
     ProviderId = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
@@ -2062,10 +2111,9 @@ read_big_file(Config, _FileSize, File, Worker, true) ->
     {ok, TransferID} = ?assertMatch({ok, _},
         lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
             {path, File}, ProviderId)),
-    ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
-        rpc:call(Worker1, transfer, get, [TransferID]), Attempts),
+    await_replication_end(Worker1 ,TransferID, Attempts),
     timer:now_diff(os:timestamp(), Start);
-read_big_file(Config, FileSize, File, Worker, _) ->
+read_big_file(Config, FileSize, File, Worker, _Attempts, _) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
     read_big_file_loop(FileSize, File, Worker, SessId, Attempts, undefined, 0).
@@ -2193,7 +2241,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
     VerAns0 = verify(Config, fun(W) ->
         CountChilden = fun() ->
-            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 20000),
+            LSAns = lfm_proxy:get_children(W, SessId(W), {path, DirToCheck}, 0, 20000),
             ?assertMatch({ok, _}, LSAns),
             {ok, ListedDirs} = LSAns,
             length(ListedDirs)
@@ -2283,3 +2331,34 @@ do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
 
     SyncTime_2 = timer:now_diff(os:timestamp(), Start),
     {SyncTime / length(FileCtxs), SyncTime_2}.
+
+get_seq_and_timestamp_or_error(Worker, SpaceId, ProviderId) ->
+    rpc:call(Worker, ?MODULE, get_seq_and_timestamp_or_error, [SpaceId, ProviderId]).
+
+get_seq_and_timestamp_or_error(SpaceId, ProviderId) ->
+    case datastore_model:get(#{model => dbsync_state}, SpaceId) of
+        {ok, #document{value = #dbsync_state{seq = Seq}}} ->
+            maps:get(ProviderId, Seq, {error, not_found});
+        Error ->
+            Error
+    end.
+
+await_replication_end(Node, TransferId, 1) ->
+    ?assertMatch(
+        {ok, #document{value = #transfer{replication_status = completed}}},
+        rpc:call(Node, transfer, get, [TransferId])
+    );
+await_replication_end(Node, TransferId, Attempts) ->
+    case rpc:call(Node, transfer, get, [TransferId]) of
+        {ok, #document{value = #transfer{replication_status = completed}}} ->
+            ok;
+        {ok, #document{value = #transfer{replication_status = Status} = Transfer}} when
+            Status == failed;
+            Status == cancelled
+        ->
+            ct:pal("Replication failed: ~p", [Transfer]),
+            throw(replication_failed);
+        _ ->
+            timer:sleep(timer:seconds(1)),
+            await_replication_end(Node, TransferId, Attempts - 1)
+    end.

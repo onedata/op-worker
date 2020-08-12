@@ -50,5 +50,36 @@
                 }
             }
         }
+    },
+    "test_global_setup": {
+        "groups": {
+            "group1": {
+                "users": [
+                    "user1"
+                ]
+            }
+        },
+        "spaces": {
+            "space1": {
+                "displayed_name": "space_name1",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                    "group1"
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    }
+                }
+            }
+        },
+        "luma_configs": {
+            "p1": {
+                "external_feed_config_path": "external_feed_luma.json"
+            }
+        }
     }
 }

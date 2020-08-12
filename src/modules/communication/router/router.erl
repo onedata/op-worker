@@ -181,16 +181,18 @@ route_and_ignore_answer(ClientMsg = #client_message{
 }) ->
     Req = {dbsync_message, effective_session_id(ClientMsg), Msg},
     ok = worker_proxy:cast(dbsync_worker, Req);
-% Message that updates the #macaroon_auth{} record in given session
+% Message that updates the auth_manager:token_credentials() in given session
 % (originates from #'Macaroon' client message).
 route_and_ignore_answer(#client_message{
-    message_body = #macaroon_auth{} = Auth
+    message_body = #client_tokens{
+        access_token = AccessToken,
+        consumer_token = ConsumerToken
+    }
 } = Msg) ->
-    EffSessionId = effective_session_id(Msg),
-    % This function performs an async call to session manager worker.
-    {ok, _} = session:update(EffSessionId, fun(Session = #session{}) ->
-        {ok, Session#session{auth = Auth}}
-    end),
+    incoming_session_watcher:request_credentials_update(
+        effective_session_id(Msg),
+        AccessToken, ConsumerToken
+    ),
     ok;
 route_and_ignore_answer(ClientMsg) ->
     event_router:route_message(ClientMsg).
@@ -239,13 +241,12 @@ answer_or_delegate(#client_message{
     message_id = MsgId,
     message_body = #get_rtransfer_nodes_ips{}
 }, _) ->
-    {ok, Nodes} = node_manager:get_cluster_nodes(),
     IpsAndPorts = lists:map(fun(Node) ->
         {{_,_,_,_} = IP, Port} = rpc:call(
             Node, rtransfer_config, get_local_ip_and_port, []
         ),
         #ip_and_port{ip = IP, port = Port}
-    end, Nodes),
+    end, consistent_hashing:get_all_nodes()),
 
     {ok, #server_message{
         message_id = MsgId,

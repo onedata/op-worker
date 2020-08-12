@@ -11,7 +11,7 @@
 -module(s3_helper_test_SUITE).
 -author("Krzysztof Trzepla").
 
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -242,11 +242,11 @@ new_helper(Config) ->
         #{
             <<"hostname">> => atom_to_binary(?config(host_name, S3Config), utf8),
             <<"bucketName">> => ?S3_BUCKET_NAME,
-            <<"scheme">> => <<"http">>
+            <<"scheme">> => <<"http">>,
+            <<"storagePathType">> => ?FLAT_STORAGE_PATH,
+            <<"skipStorageDetection">> => <<"false">>
         },
-        UserCtx,
-        false,
-        ?FLAT_STORAGE_PATH
+        UserCtx
     ),
 
     spawn(Node, fun() ->

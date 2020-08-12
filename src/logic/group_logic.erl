@@ -37,7 +37,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_shared_data(gs_client_worker:client(), od_group:id(), gs_protocol:auth_hint()) ->
-    {ok, od_group:doc()} | gs_protocol:error().
+    {ok, od_group:doc()} | errors:error().
 get_shared_data(SessionId, GroupId, AuthHint) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -52,12 +52,12 @@ get_shared_data(SessionId, GroupId, AuthHint) ->
 %% Retrieves group name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_name(od_group:id()) -> {ok, od_group:name()} | gs_protocol:error().
+-spec get_name(od_group:id()) -> {ok, od_group:name()} | errors:error().
 get_name(GroupId) ->
     get_name(?ROOT_SESS_ID, GroupId, ?THROUGH_PROVIDER(oneprovider:get_id())).
 
 -spec get_name(gs_client_worker:client(), od_group:id(), gs_protocol:auth_hint()) ->
-    {ok, od_group:name()} | gs_protocol:error().
+    {ok, od_group:name()} | errors:error().
 get_name(SessionId, GroupId, AuthHint) ->
     case get_shared_data(SessionId, GroupId, AuthHint) of
         {ok, #document{value = #od_group{name = Name}}} ->
@@ -65,4 +65,3 @@ get_name(SessionId, GroupId, AuthHint) ->
         {error, _} = Error ->
             Error
     end.
-

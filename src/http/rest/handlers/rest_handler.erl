@@ -17,14 +17,14 @@
 
 -behaviour(cowboy_rest).
 
--include("op_logic.hrl").
 -include("http/rest.hrl").
--include("global_definitions.hrl").
+-include("middleware/middleware.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -type method() :: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'.
--type parse_body() :: ignore | as_json_params | as_is.
+-type parse_body() :: ignore | as_json_params | {as_is, KeyName :: binary()}.
 -type binding() :: {binding, atom()} | {objectid_binding, atom()} | path_binding.
 -type bound_gri() :: #b_gri{}.
 
@@ -50,9 +50,6 @@
     provide_resource/2,
     delete_resource/2
 ]).
--export([
-    rest_routes/0
-]).
 
 
 %%%===================================================================
@@ -68,7 +65,7 @@
 -spec init(cowboy_req:req(), opts()) ->
     {cowboy_rest, cowboy_req:req(), state()}.
 init(#{method := MethodBin} = Req, Opts) ->
-    Method = binary_to_method(MethodBin),
+    Method = http_utils:binary_to_method(MethodBin),
     % If given method is not allowed, it is not in the map. Such request
     % will stop execution on allowed_methods/2 callback. Use undefined if
     % the method does not exist.
@@ -86,7 +83,7 @@ init(#{method := MethodBin} = Req, Opts) ->
 -spec allowed_methods(cowboy_req:req(), state()) ->
     {[binary()], cowboy_req:req(), state()}.
 allowed_methods(Req, #state{allowed_methods = AllowedMethods} = State) ->
-    {[method_to_binary(M) || M <- AllowedMethods], Req, State}.
+    {[http_utils:method_to_binary(M) || M <- AllowedMethods], Req, State}.
 
 
 %%--------------------------------------------------------------------
@@ -138,20 +135,9 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
 -spec is_authorized(cowboy_req:req(), state()) ->
     {true | {false, binary()}, cowboy_req:req(), state()}.
 is_authorized(Req, State) ->
-    % Check if the request carries any authorization
-    Result = try
-        http_auth:authenticate(Req, rest)
-    catch
-        throw:Err ->
-            Err;
-        Type:Message ->
-            ?error_stacktrace("Unexpected error in ~p:is_authorized - ~p:~p", [
-                ?MODULE, Type, Message
-            ]),
-            ?ERROR_INTERNAL_SERVER_ERROR
-    end,
-
-    case Result of
+    % The data access caveats policy depends on requested resource,
+    % which is not known yet - it is checked later in middleware.
+    case http_auth:authenticate(Req, rest, allow_data_access_caveats) of
         {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
             {true, Req, State#state{auth = Auth}};
@@ -194,40 +180,6 @@ delete_resource(Req, State) ->
     process_request(Req, State).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns all REST routes in the cowboy router format.
-%% @end
-%%--------------------------------------------------------------------
--spec rest_routes() -> [{binary(), module(), map()}].
-rest_routes() ->
-    AllRoutes = lists:flatten([
-        file_routes:routes(),
-        monitoring_routes:routes(),
-        oneprovider_routes:routes(),
-        replica_routes:routes(),
-        share_routes:routes(),
-        space_routes:routes(),
-        transfer_routes:routes()
-    ]),
-    % Aggregate routes that share the same path
-    AggregatedRoutes = lists:foldr(fun
-        ({Path, Handler, #rest_req{method = Method} = RestReq}, [{Path, _, RoutesForPath} | Acc]) ->
-            [{Path, Handler, RoutesForPath#{Method => RestReq}} | Acc];
-        ({Path, Handler, #rest_req{method = Method} = RestReq}, Acc) ->
-            [{Path, Handler, #{Method => RestReq}} | Acc]
-    end, [], AllRoutes),
-    % Convert all routes to cowboy-compliant routes
-    % - prepend REST prefix to every route
-    % - rest handler module must be added as second element to the tuples
-    % - RoutesForPath will serve as Opts to rest handler init.
-    {ok, PrefixStr} = application:get_env(?APP_NAME, op_rest_api_prefix),
-    Prefix = str_utils:to_binary(PrefixStr),
-    lists:map(fun({Path, Handler, RoutesForPath}) ->
-        {<<Prefix/binary, Path/binary>>, Handler, RoutesForPath}
-    end, AggregatedRoutes).
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -236,7 +188,7 @@ rest_routes() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes a REST request (of any type) by calling op logic.
+%% Processes a REST request (of any type) by calling middleware.
 %% Return new Req and State (after setting cowboy response).
 %% @end
 %%--------------------------------------------------------------------
@@ -277,13 +229,13 @@ process_request(Req, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Calls op_logic and translates obtained response into REST response
+%% Calls middleware and translates obtained response into REST response
 %% using TranslatorModule.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request(#op_req{}) -> #rest_resp{}.
 handle_request(#op_req{operation = Operation, gri = GRI} = ElReq) ->
-    Result = op_logic:handle(ElReq),
+    Result = middleware:handle(ElReq),
     try
         rest_translator:response(ElReq, Result)
     catch
@@ -326,14 +278,23 @@ send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_gri_bindings(session:id(), bound_gri(), cowboy_req:req()) ->
-    op_logic:gri().
+    gri:gri().
 resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
     IdBinding = resolve_bindings(SessionId, Id, Req),
-    AspectBinding = case As of
+    AsBinding = case As of
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    #gri{type = Tp, id = IdBinding, aspect = AspectBinding, scope = Sc}.
+    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, IdBinding) of
+        true -> public;
+        false -> Sc
+    end,
+    #gri{
+        type = Tp,
+        id = IdBinding,
+        aspect = AsBinding,
+        scope = ScBinding
+    }.
 
 
 %%--------------------------------------------------------------------
@@ -348,19 +309,14 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
 resolve_bindings(_SessionId, ?BINDING(Key), Req) ->
     cowboy_req:binding(Key, Req);
 resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
-    case catch file_id:objectid_to_guid(cowboy_req:binding(Key, Req)) of
-        {ok, Guid} ->
-            Guid;
-        _Error ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
-    end;
+    middleware_utils:decode_object_id(cowboy_req:binding(Key, Req), Key);
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
     Path = filename:join([<<"/">> | cowboy_req:path_info(Req)]),
     case guid_utils:ensure_guid(SessionId, {path, Path}) of
         {guid, Guid} ->
             Guid;
         _Error ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(Path))
+            throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>))
     end;
 resolve_bindings(SessionId, {Atom, PossibleBinding}, Req) when is_atom(Atom) ->
     {Atom, resolve_bindings(SessionId, PossibleBinding, Req)};
@@ -379,7 +335,7 @@ resolve_bindings(_SessionId, Other, _Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_data(cowboy_req:req(), parse_body(), Consumes :: [term()]) ->
-    {Data :: op_logic:data(), cowboy_req:req()}.
+    {Data :: middleware:data(), cowboy_req:req()}.
 get_data(Req, ignore, _Consumes) ->
     {parse_query_string(Req), Req};
 get_data(Req, as_json_params, _Consumes) ->
@@ -395,14 +351,14 @@ get_data(Req, as_json_params, _Consumes) ->
     end,
     is_map(ParsedBody) orelse throw(?ERROR_MALFORMED_DATA),
     {maps:merge(ParsedBody, QueryParams), Req2};
-get_data(Req, as_is, Consumes) ->
+get_data(Req, {as_is, KeyName}, Consumes) ->
     QueryParams = parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ContentType = case Consumes of
         [ConsumedType] ->
             ConsumedType;
         _ ->
-            {Type, Subtype, _} = cowboy_req:parse_header(<<"content-type">>, Req2),
+            {Type, Subtype, _} = cowboy_req:parse_header(?HDR_CONTENT_TYPE, Req2),
             <<Type/binary, "/", Subtype/binary>>
     end,
     ParsedBody = case ContentType of
@@ -410,12 +366,12 @@ get_data(Req, as_is, Consumes) ->
             try
                 json_utils:decode(Body)
             catch _:_ ->
-                throw(?ERROR_BAD_VALUE_JSON(<<"request body">>))
+                throw(?ERROR_BAD_VALUE_JSON(KeyName))
             end;
         _ ->
             Body
     end,
-    {QueryParams#{ContentType => ParsedBody}, Req2}.
+    {QueryParams#{KeyName => ParsedBody}, Req2}.
 
 
 %%--------------------------------------------------------------------
@@ -450,41 +406,11 @@ ensure_list(Val) -> [Val].
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Converts a binary representing a REST method to an atom representing
-%% the method.
-%% @end
-%%--------------------------------------------------------------------
--spec binary_to_method(BinMethod :: binary()) -> method().
-binary_to_method(<<"POST">>) -> 'POST';
-binary_to_method(<<"PUT">>) -> 'PUT';
-binary_to_method(<<"GET">>) -> 'GET';
-binary_to_method(<<"PATCH">>) -> 'PATCH';
-binary_to_method(<<"DELETE">>) -> 'DELETE'.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts an atom representing a REST method to a binary representing
-%% the method.
-%% @end
-%%--------------------------------------------------------------------
--spec method_to_binary(Method :: method()) -> binary().
-method_to_binary('POST') -> <<"POST">>;
-method_to_binary('PUT') -> <<"PUT">>;
-method_to_binary('GET') -> <<"GET">>;
-method_to_binary('PATCH') -> <<"PATCH">>;
-method_to_binary('DELETE') -> <<"DELETE">>.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Converts an atom representing a REST method into operation
 %% that should be called to handle it.
 %% @end
 %%--------------------------------------------------------------------
--spec method_to_operation(method()) -> op_logic:operation().
+-spec method_to_operation(method()) -> middleware:operation().
 method_to_operation('POST') -> create;
 method_to_operation('PUT') -> create;
 method_to_operation('GET') -> get;

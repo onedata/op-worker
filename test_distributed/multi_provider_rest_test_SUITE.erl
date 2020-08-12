@@ -18,15 +18,15 @@
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("rest_test_utils.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([
@@ -36,40 +36,16 @@
 ]).
 
 -export([
-    get_simple_file_distribution/1,
+    lookup_file_objectid/1,
     transfers_should_be_ordered_by_timestamps/1,
-    posix_mode_get/1,
-    posix_mode_put/1,
-    attributes_list/1,
-    xattr_get/1,
-    xattr_put/1,
-    xattr_list/1,
     metric_get/1,
-    list_file/1,
-    list_dir/1,
-    list_dir_range/1,
     list_spaces/1,
     get_space/1,
     create_share/1,
-    create_share_id/1,
     get_share/1,
-    get_share_id/1,
-    get_share_public_id/1,
-    delete_share/1,
-    delete_share_id/1,
-    delete_share_public_id/1,
     update_share_name/1,
-    update_share_name_id/1,
-    update_share_name_public_id/1,
-    set_get_json_metadata/1,
-    set_get_json_metadata_id/1,
-    set_get_rdf_metadata/1,
-    set_get_rdf_metadata_id/1,
-    set_get_json_metadata_inherited/1,
-    set_get_xattr_inherited/1,
-    set_get_json_metadata_using_filter/1,
-    primitive_json_metadata_test/1,
-    empty_metadata_invalid_json_test/1,
+    delete_share/1,
+    download_file_test/1,
     list_transfers/1,
     track_transferred_files/1
 ]).
@@ -83,40 +59,16 @@
 
 all() ->
     ?ALL([
-        get_simple_file_distribution,
+        lookup_file_objectid,
         transfers_should_be_ordered_by_timestamps,
-        posix_mode_get,
-        posix_mode_put,
-        attributes_list,
-        xattr_get,
-        xattr_put,
-        xattr_list,
         metric_get,
-        list_file,
-        list_dir,
-        list_dir_range,
         list_spaces,
         get_space,
         create_share,
-        create_share_id,
         get_share,
-        get_share_id,
-        get_share_public_id,
-        delete_share,
-        delete_share_id,
-        delete_share_public_id,
         update_share_name,
-        update_share_name_id,
-        update_share_name_public_id,
-        set_get_json_metadata,
-        set_get_json_metadata_id,
-        set_get_rdf_metadata,
-        set_get_rdf_metadata_id,
-        set_get_json_metadata_inherited,
-        set_get_xattr_inherited,
-        set_get_json_metadata_using_filter,
-        primitive_json_metadata_test,
-        empty_metadata_invalid_json_test,
+        delete_share,
+        download_file_test,
         list_transfers,
         track_transferred_files
     ]).
@@ -179,24 +131,20 @@ end, __Distributions))).
 %%% Test functions
 %%%===================================================================
 
-get_simple_file_distribution(Config) ->
+
+lookup_file_objectid(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file0_gsfd"])),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    {ok, _} = lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
-    lfm_proxy:fsync(WorkerP1, Handle),
+    FilePath = filename:join(["/", SpaceName, "get_file_objectid"]),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, 8#700),
+    {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+        WorkerP1, <<"lookup-file-id/", FilePath/binary>>, post,
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
+    )),
+    #{<<"fileId">> := ObjectId} = json_utils:decode(Response),
+    ?assertMatch({ok, ObjectId}, file_id:guid_to_objectid(FileGuid)).
 
-    % when
-    ExpectedDistribution = [#{
-        <<"providerId">> => domain(WorkerP1),
-        <<"blocks">> => [[0, 4]]
-    }],
-
-    % then
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File).
 
 transfers_should_be_ordered_by_timestamps(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -280,150 +228,6 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid2), ?ATTEMPTS),
     ?assert(get_finish_time(WorkerP2, Tid, Config) =< get_finish_time(WorkerP2, Tid2, Config)).
 
-posix_mode_get(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_pmg"])),
-    Mode = 8#700,
-    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertEqual(
-        #{
-            <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>
-        },
-        DecodedBody
-    ).
-
-posix_mode_put(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file2_pmp"])),
-    Mode = 8#700,
-    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-
-    % when
-    NewMode = 8#777,
-    Body = json_utils:encode(#{<<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
-    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary>>, put,
-        ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Body),
-
-    % then
-    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-    DecodedBody = json_utils:decode(RespBody),
-    ?assertEqual(
-        #{
-            <<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>
-        },
-        DecodedBody
-    ).
-
-attributes_list(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_al"])),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    {ok, #file_attr{
-        atime = ATime,
-        ctime = CTime,
-        mtime = MTime,
-        gid = Gid,
-        uid = Uid
-    }} = lfm_proxy:stat(WorkerP1, SessionId, {guid, FileGuid}),
-    {ok, CdmiObjectId} = file_id:guid_to_objectid(FileGuid),
-    DecodedBody = json_utils:decode(Body),
-    ?assertEqual(
-        #{
-            <<"mode">> => <<"0700">>,
-            <<"size">> => 0,
-            <<"atime">> => ATime,
-            <<"ctime">> => CTime,
-            <<"mtime">> => MTime,
-            <<"storage_group_id">> => Gid,
-            <<"storage_user_id">> => Uid,
-            <<"name">> => <<"file1_al">>,
-            <<"owner_id">> => UserId1,
-            <<"shares">> => [],
-            <<"type">> => <<"reg">>,
-            <<"file_id">> => CdmiObjectId
-        },
-        DecodedBody
-    ).
-
-xattr_get(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_xg"])),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-    ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k1">>, value = <<"v1">>}),
-
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary, "?attribute=k1">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertEqual(
-        #{
-            <<"k1">> => <<"v1">>
-        },
-        DecodedBody
-    ).
-
-xattr_put(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file2_xp"])),
-    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-
-    % when
-    Body = json_utils:encode(#{<<"k1">> => <<"v1">>}),
-    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary>>, put,
-        ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Body),
-
-    % then
-    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary, "?attribute=k1">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-    DecodedBody = json_utils:decode(RespBody),
-    ?assertEqual(
-        #{
-            <<"k1">> => <<"v1">>
-        },
-        DecodedBody
-    ).
-
-xattr_list(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_xl"])),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-    ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k1">>, value = <<"v1">>}),
-    ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k2">>, value = <<"v2">>}),
-
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(#{
-        <<"k1">> := <<"v1">>,
-        <<"k2">> := <<"v2">>
-    }, DecodedBody).
-
 metric_get(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space2">>,
@@ -475,61 +279,6 @@ metric_get(Config) ->
     [Elem1, Elem2] = DecodedBody,
     ?assertNotEqual(maps:get(<<"providerId">>, Elem1), maps:get(<<"providerId">>, Elem2)).
 
-list_file(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    File = <<"/space2/file1_lf">>,
-    Mode = 8#700,
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-
-    % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"files/space2/file1_lf">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    ?assertEqual(
-        [#{<<"id">> => FileObjectId, <<"path">> => File}],
-        DecodedBody
-    ).
-
-list_dir(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"files">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        [
-            #{<<"id">> := _, <<"path">> := <<"/space1">>},
-            #{<<"id">> := _, <<"path">> := <<"/space2">>},
-            #{<<"id">> := _, <<"path">> := <<"/space3">>},
-            #{<<"id">> := _, <<"path">> := <<"/space4">>}
-        ],
-        lists:sort(fun(#{<<"path">> := Path1}, #{<<"path">> := Path2}) ->
-            Path1 =< Path2
-        end, DecodedBody)
-    ).
-
-list_dir_range(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"files?offset=0&limit=1">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        [
-            #{<<"id">> := _, <<"path">> := <<"/space1">>}
-        ],
-        DecodedBody
-    ).
 
 list_spaces(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -577,193 +326,102 @@ get_space(Config) ->
         DecodedBody
     ).
 
+
 create_share(Config) ->
-    create_share_base(Config, path).
-
-create_share_id(Config) ->
-    create_share_base(Config, id).
-
-create_share_base(Config, RestPathType) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
-    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
-    {ok, SharedDirObjectId} = file_id:guid_to_objectid(SharedDirGuid),
+    DirPath = filename:join(["/", SpaceName, "shared_dir"]),
+    {ok, DirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, DirPath, 8#700),
 
     % create regular file
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1"])),
-    {ok, FileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, File, 8#600),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    FilePath = filename:join(["/", SpaceName, "file1"]),
+    {ok, FileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, FilePath, 8#600),
 
-    % get rest paths
-    {SharedDirRestPath, FileRestPath} = case RestPathType of
-        path ->
-            {str_utils:format_bin("shares~s", [SharedDir]),
-            str_utils:format_bin("shares~s", [File])};
-        id ->
-            {str_utils:format_bin("shares-id/~s", [SharedDirObjectId]),
-            str_utils:format_bin("shares-id/~s", [FileObjectId])}
-    end,
-
-    % request without share name should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
-        {SupportingProviderNode, SharedDirRestPath, post, Headers, <<"">>}
-    )),
-
+    RestPath = <<"shares/">>,
     ShareName = <<"Share name">>,
-    Payload = json_utils:encode(#{<<"name">> => ShareName}),
 
-    % creating share for file should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_POSIX(?ENOTDIR),
-        {SupportingProviderNode, FileRestPath, post, Headers, Payload}
-    )),
+    lists:foreach(fun({Guid, FileType}) ->
+        PayloadWithNameOnly = json_utils:encode(#{
+            <<"name">> => ShareName
+        }),
+        FullPayload = json_utils:encode(#{
+            <<"name">> => ShareName,
+            <<"fileId">> => element(2, {ok, _} = file_id:guid_to_objectid(Guid))
+        }),
 
-    % creating share from provider that does not support space should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
-        {OtherProviderNode, SharedDirRestPath, post, Headers, Payload}
-    )),
+        % request without share name should fail
+        ?assertMatch(true, rest_test_utils:assert_request_error(
+            ?ERROR_MISSING_REQUIRED_VALUE(<<"fileId">>),
+            {SupportingProviderNode, RestPath, post, Headers, PayloadWithNameOnly}
+        )),
 
-    % creating share for directory with share name in request should succeed
-    % and return share id in response
-    {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(SupportingProviderNode, SharedDirRestPath, post, Headers, Payload)),
-    #{<<"shareId">> := ShareId} = json_utils:decode(Response),
-    ShareGuid = file_id:guid_to_share_guid(SharedDirGuid, ShareId),
+        % creating share from provider that does not support space should fail
+        ?assertMatch(true, rest_test_utils:assert_request_error(
+            ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
+            {OtherProviderNode, RestPath, post, Headers, FullPayload}
+        )),
 
-    % check that share with given name and id has been created
-    ?assertMatch(
-        {ok, #document{key = ShareId, value = #od_share{
-            root_file = ShareGuid, name = ShareName, space = SpaceId
-        }}},
-        rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])
-    ),
+        % creating with share name in request should succeed
+        % and return share id in response
+        {ok, 201, _, Response1} = ?assertMatch(
+            {ok, 201, _, _},
+            rest_test_utils:request(SupportingProviderNode, RestPath, post, Headers, FullPayload)
+        ),
+        #{<<"shareId">> := ShareId1} = json_utils:decode(Response1),
+        ShareGuid = file_id:guid_to_share_guid(Guid, ShareId1),
 
-    % creating share for directory that has existing share should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_POSIX(?EEXIST),
-        {SupportingProviderNode, SharedDirRestPath, post, Headers, Payload}
-    )),
+        % check that share with given name and id has been created
+        ?assertMatch(
+            {ok, #document{key = ShareId1, value = #od_share{
+                name = ShareName,
+                space = SpaceId,
+                root_file = ShareGuid,
+                file_type = FileType
+            }}},
+            rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId1])
+        ),
 
-    % creating share after removal of previous one should succeed
-    ok = lfm_proxy:remove_share(SupportingProviderNode, SessionId, ShareId),
-    {ok, 200, _, _}  = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(SupportingProviderNode, SharedDirRestPath, post, Headers, Payload)).
+        % file can be shared multiple times
+        {ok, 201, _, Response2} = ?assertMatch(
+            {ok, 201, _, _},
+            rest_test_utils:request(SupportingProviderNode, RestPath, post, Headers, FullPayload)
+        ),
+        #{<<"shareId">> := ShareId2} = json_utils:decode(Response2),
+
+        ?assertNotEqual(ShareId1, ShareId2)
+    end, [
+        {DirGuid, dir},
+        {FileGuid, file}
+    ]).
+
 
 get_share(Config) ->
-    get_file_share_base(Config, path).
-
-get_share_id(Config) ->
-    get_file_share_base(Config, id).
-
-get_file_share_base(Config, RestPathType) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
-    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
-    {ok, SharedDirObjectId} = file_id:guid_to_objectid(SharedDirGuid),
-
-    % create regular file
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1"])),
-    {ok, FileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, File, 8#600),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-
-    % get rest paths
-    {SharedDirRestPath, FileRestPath} = case RestPathType of
-        path ->
-            {str_utils:format_bin("shares~s", [SharedDir]),
-            str_utils:format_bin("shares~s", [File])};
-        id ->
-            {str_utils:format_bin("shares-id/~s", [SharedDirObjectId]),
-            str_utils:format_bin("shares-id/~s", [FileObjectId])}
-    end,
-
-    % getting not existing share should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_NOT_FOUND,
-        {SupportingProviderNode, SharedDirRestPath, get, Headers, <<"">>}
-    )),
-
-    % create share for directory
-    ShareName = <<"Share name">>,
-    {ok, {ShareId, ShareGuid}} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, ShareName)),
-    ExpectedPublicUrl = ?SHARE_PUBLIC_URL(ShareId),
-    ExpectedHandleId = ?SHARE_HANDLE_ID(ShareId),
-    {ok, ExpectedRootFileObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-    % getting share for regular file should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_NOT_FOUND,
-        {SupportingProviderNode, FileRestPath, get, Headers, <<"">>}
-    )),
-
-    % this mock is needed as remove_share calls share_logic:get() under the hood
-    % and share_logic mock from initializer does not propagate information to other providers
-    mock_get_share_on_other_node(OtherProviderNode, SupportingProviderNode, SessionId, ShareId),
-
-    % getting share from provider that does not support space should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
-        {OtherProviderNode, SharedDirRestPath, get, Headers, <<>>}
-    )),
-
-    % getting share for directory should succeed
-    {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(SupportingProviderNode, SharedDirRestPath, get, Headers, <<>>)),
-
-    ?assertMatch(
-        #{
-            <<"shareId">> := ShareId,
-            <<"name">> := ShareName,
-            <<"publicUrl">> := ExpectedPublicUrl,
-            <<"rootFileId">> := ExpectedRootFileObjectId,
-            <<"spaceId">> := ?SPACE1_ID,
-            <<"handleId">> := ExpectedHandleId
-        },
-        json_utils:decode(Response)
-    ),
-
-    ?assertMatch(
-        {ok, #document{key = ShareId, value = #od_share{
-            root_file = ShareGuid,
-            name = ShareName,
-            space = ?SPACE1_ID,
-            public_url = ExpectedPublicUrl,
-            handle = ExpectedHandleId
-        }}},
-        rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])).
-
-get_share_public_id(Config) ->
-    {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
-
-    % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
-    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
+    SharedDir = filename:join(["/", SpaceName, "shared_dir"]),
+    {ok, DirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
 
     % get invalid rest path
-    InvalidRestPath = str_utils:format_bin("shares-public-id/~s", [<<"invalid_share_id">>]),
+    InvalidRestPath = str_utils:format_bin("shares/~s", [<<"invalid_share_id">>]),
 
     % create share for directory
     ShareName = <<"Share name">>,
-    {ok, {ShareId, ShareGuid }} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, ShareName)),
+    {ok, ShareId} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, DirGuid}, ShareName)
+    ),
+    ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
     ExpectedPublicUrl = ?SHARE_PUBLIC_URL(ShareId),
     ExpectedHandleId = ?SHARE_HANDLE_ID(ShareId),
-    {ok, ExpectedRootFileObjectId} = file_id:guid_to_objectid(ShareGuid),
+    {ok, ExpectedRootFileObjectId} = file_id:guid_to_objectid(ShareDirGuid),
 
     % getting not existing share should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
@@ -772,7 +430,7 @@ get_share_public_id(Config) ->
     )),
 
     % get valid rest path
-    RestPath = str_utils:format_bin("shares-public-id/~s", [ShareId]),
+    RestPath = str_utils:format_bin("shares/~s", [ShareId]),
 
     % this mock is needed as remove_share calls share_logic:get() under the hood
     % and share_logic mock from initializer does not propagate information to other providers
@@ -793,6 +451,7 @@ get_share_public_id(Config) ->
             <<"shareId">> := ShareId,
             <<"name">> := ShareName,
             <<"publicUrl">> := ExpectedPublicUrl,
+            <<"fileType">> := <<"dir">>,
             <<"rootFileId">> := ExpectedRootFileObjectId,
             <<"spaceId">> := ?SPACE1_ID,
             <<"handleId">> := ExpectedHandleId
@@ -802,98 +461,85 @@ get_share_public_id(Config) ->
 
     ?assertMatch(
         {ok, #document{key = ShareId, value = #od_share{
-            root_file = ShareGuid,
+            root_file = ShareDirGuid,
             name = ShareName,
             space = ?SPACE1_ID,
             public_url = ExpectedPublicUrl,
             handle = ExpectedHandleId
         }}},
-        rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])).
+        rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])
+    ).
 
-delete_share(Config) ->
-    delete_file_share_base(Config, path).
 
-delete_share_id(Config) ->
-    delete_file_share_base(Config, id).
-
-delete_file_share_base(Config, RestPathType) ->
+update_share_name(Config) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
+    SharedDir = filename:join(["/", SpaceName, "shared_dir"]),
     {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
-    {ok, SharedDirObjectId} = file_id:guid_to_objectid(SharedDirGuid),
 
-    % create regular file
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1"])),
-    {ok, FileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, File, 8#600),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    % get invalid rest paths
+    InvalidRestPath = str_utils:format_bin("shares/~s", [<<"invalid_share_id">>]),
+    NewShareName = <<"NewShareName">>,
+    Payload = json_utils:encode(#{<<"name">> => NewShareName}),
 
-    % get rest paths
-    {SharedDirRestPath, FileRestPath} = case RestPathType of
-        path ->
-            {str_utils:format_bin("shares~s", [SharedDir]),
-            str_utils:format_bin("shares~s", [File])};
-        id ->
-            {str_utils:format_bin("shares-id/~s", [SharedDirObjectId]),
-            str_utils:format_bin("shares-id/~s", [FileObjectId])}
-    end,
-
-    % delete not existing share should fail
+    % updating share should fail when share does not exists
     ?assertMatch(true, rest_test_utils:assert_request_error(
         ?ERROR_NOT_FOUND,
-        {SupportingProviderNode, SharedDirRestPath, delete, Headers, <<"">>}
-    )),
-
-    % delete share for regular file should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_NOT_FOUND,
-        {SupportingProviderNode, FileRestPath, delete, Headers, <<"">>}
+        {SupportingProviderNode, InvalidRestPath, patch, Headers, Payload}
     )),
 
     % create share for directory
-    {ok, {ShareId, _ShareGuid}} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)),
+    {ok, ShareId} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)
+    ),
+
+    % get valid rest path
+    RestPath = str_utils:format_bin("shares/~s", [ShareId]),
 
     % this mock is needed as remove_share calls share_logic:get() under the hood
     % and share_logic mock from initializer does not propagate information to other providers
     mock_get_share_on_other_node(OtherProviderNode, SupportingProviderNode, SessionId, ShareId),
 
-    % deleting share from provider that does not support space should fail
+    % request without new share name should fail
+    ?assertMatch(true, rest_test_utils:assert_request_error(
+        ?ERROR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]),
+        {SupportingProviderNode, RestPath, patch, Headers, <<>>}
+    )),
+
+    % updating share from provider that does not support space should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
         ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
-        {OtherProviderNode, SharedDirRestPath, delete, Headers, <<>>}
+        {OtherProviderNode, RestPath, patch, Headers, Payload}
     )),
 
-    % deleting share for directory should succeed
+    % updating share name should succeed
     {ok, 204, _, _} = ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(SupportingProviderNode, SharedDirRestPath, delete, Headers, <<>>)),
+        rest_test_utils:request(SupportingProviderNode, RestPath, patch, Headers, Payload)),
 
-    ?assertMatch({error, not_found}, rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])),
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_NOT_FOUND,
-        {SupportingProviderNode, SharedDirRestPath, delete, Headers, <<>>}
-    )),
+    % check that share has been renamed
+    ?assertMatch(
+        {ok, #document{key = ShareId, value = #od_share{name = NewShareName}}},
+        rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])
+    ).
 
-    % recreating share after delete should succeed
-    {ok, {_, _}} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)).
 
-delete_share_public_id(Config) ->
+delete_share(Config) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
+    SharedDir = filename:join(["/", SpaceName, "shared_dir"]),
     {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
 
     % get invalid rest paths
-    InvalidRestPath = str_utils:format_bin("shares-public-id/~s", [<<"invalid_share_id">>]),
+    InvalidRestPath = str_utils:format_bin("shares/~s", [<<"invalid_share_id">>]),
 
     % delete not existing share should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
@@ -902,11 +548,13 @@ delete_share_public_id(Config) ->
     )),
 
     % create share for directory
-    {ok, {ShareId, _ShareGuid}} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)),
+    {ok, ShareId} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)
+    ),
 
     % get valid rest path
-    RestPath = str_utils:format_bin("shares-public-id/~s", [ShareId]),
+    RestPath = str_utils:format_bin("shares/~s", [ShareId]),
 
     % this mock is needed as remove_share calls share_logic:get() under the hood
     % and share_logic mock from initializer does not propagate information to other providers
@@ -929,359 +577,34 @@ delete_share_public_id(Config) ->
     )),
 
     % recreating share after delete should succeed
-    {ok, {_, _ }} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)).
+    ?assertMatch(
+        {ok, _},
+        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)
+    ).
 
-update_share_name(Config) ->
-    update_share_name_base(Config, path).
-
-update_share_name_id(Config) ->
-    update_share_name_base(Config, id).
-
-update_share_name_base(Config, RestPathType) ->
-    {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
+download_file_test(Config) ->
+    {OpNode, _} = get_op_nodes(Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(OpNode)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
-
-    % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
-    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
-    {ok, SharedDirObjectId} = file_id:guid_to_objectid(SharedDirGuid),
 
     % create regular file
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1"])),
-    {ok, FileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, File, 8#600),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    FilePath = filename:join(["/", SpaceName, "download_file_test"]),
+    {ok, FileGuid} = lfm_proxy:create(OpNode, SessionId, FilePath, 8#777),
 
-    % get rest paths
-    {SharedDirRestPath, FileRestPath} = case RestPathType of
-        path ->
-            {str_utils:format_bin("shares~s", [SharedDir]),
-            str_utils:format_bin("shares~s", [File])};
-        id ->
-            {str_utils:format_bin("shares-id/~s", [SharedDirObjectId]),
-            str_utils:format_bin("shares-id/~s", [FileObjectId])}
-    end,
+    DummyData = <<"DATA">>,
+    {ok, WriteHandle} = lfm_proxy:open(OpNode, SessionId, {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(OpNode, WriteHandle, 0, DummyData),
+    ok = lfm_proxy:close(OpNode, WriteHandle),
 
-    NewShareName = <<"NewShareName">>,
-    Payload = json_utils:encode(#{<<"name">> => NewShareName}),
+    % Assert file_download_url is one time use only
+    {ok, URL1} = rpc:call(OpNode, page_file_download, get_file_download_url, [SessionId, FileGuid]),
+    ?assertEqual({ok, <<"DATA">>}, download_file(OpNode, URL1, Config)),
+    ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file(OpNode, URL1, Config)),
 
-    % updating share name for regular file should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_NOT_FOUND,
-        {SupportingProviderNode, FileRestPath, patch, Headers, Payload}
-    )),
-
-    % updating share should fail when share does not exists
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_NOT_FOUND,
-        {SupportingProviderNode, SharedDirRestPath, patch, Headers, Payload}
-    )),
-
-    % create share for directory
-    {ok, {ShareId, _ShareGuid}} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)),
-
-    % this mock is needed as remove_share calls share_logic:get() under the hood
-    % and share_logic mock from initializer does not propagate information to other providers
-    mock_get_share_on_other_node(OtherProviderNode, SupportingProviderNode, SessionId, ShareId),
-
-    % request without new share name should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
-        {SupportingProviderNode, SharedDirRestPath, patch, Headers, <<"">>}
-    )),
-
-    % updating share from provider that does not support space should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
-        {OtherProviderNode, SharedDirRestPath, patch, Headers, Payload}
-    )),
-
-    % updating share name should succeed
-    {ok, 204, _, _} = ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(SupportingProviderNode, SharedDirRestPath, patch, Headers, Payload)),
-
-    % check that share has been renamed
-    ?assertMatch(
-        {ok, #document{key = ShareId, value = #od_share{name = NewShareName}}},
-        rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])
-    ).
-
-update_share_name_public_id(Config) ->
-    {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
-
-    % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
-    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
-
-    % get invalid rest paths
-    InvalidRestPath = str_utils:format_bin("shares-public-id/~s", [<<"invalid_share_id">>]),
-    NewShareName = <<"NewShareName">>,
-    Payload = json_utils:encode(#{<<"name">> => NewShareName}),
-
-    % updating share should fail when share does not exists
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_NOT_FOUND,
-        {SupportingProviderNode, InvalidRestPath, patch, Headers, Payload}
-    )),
-
-    % create share for directory
-    {ok, {ShareId, _ShareGuid}} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)),
-
-    % get valid rest path
-    RestPath = str_utils:format_bin("shares-public-id/~s", [ShareId]),
-
-    % this mock is needed as remove_share calls share_logic:get() under the hood
-    % and share_logic mock from initializer does not propagate information to other providers
-    mock_get_share_on_other_node(OtherProviderNode, SupportingProviderNode, SessionId, ShareId),
-
-    % request without new share name should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
-        {SupportingProviderNode, RestPath, patch, Headers, <<>>}
-    )),
-
-    % updating share from provider that does not support space should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
-        {OtherProviderNode, RestPath, patch, Headers, Payload}
-    )),
-
-    % updating share name should succeed
-    {ok, 204, _, _} = ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(SupportingProviderNode, RestPath, patch, Headers, Payload)),
-
-    % check that share has been renamed
-    ?assertMatch(
-        {ok, #document{key = ShareId, value = #od_share{name = NewShareName}}},
-        rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])
-    ).
-
-set_get_json_metadata(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), "{\"key\": \"value\"}")),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        #{
-            <<"key">> := <<"value">>
-        },
-        DecodedBody
-    ),
-
-    % then
-    ?assertMatch({ok, 200, _, <<"\"value\"">>},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])).
-
-set_get_json_metadata_id(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space2/file_sgjmi">>, 8#777),
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/json/", ObjectId/binary>>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), "{\"key\": \"value\"}")),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/json/", ObjectId/binary>>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        #{
-            <<"key">> := <<"value">>
-        },
-        DecodedBody
-    ),
-
-    % then
-    ?assertMatch({ok, 200, _, <<"\"value\"">>},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/json/", ObjectId/binary, "?filter_type=keypath&filter=key">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])).
-
-set_get_rdf_metadata(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/rdf/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/rdf+xml">>}]), "some_xml")),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/rdf/space2">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/rdf+xml">>}]), [])),
-    ?assertMatch(<<"some_xml">>, Body).
-
-set_get_rdf_metadata_id(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space2/file_sgrmi">>, 8#777),
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/rdf/", ObjectId/binary>>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/rdf+xml">>}]), "some_xml")),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata-id/rdf/", ObjectId/binary>>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/rdf+xml">>}]), [])),
-    ?assertMatch(<<"some_xml">>, Body).
-
-set_get_json_metadata_inherited(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\": {\"a1\": \"b1\"}, \"b\": \"c\", \"e\": \"f\"}">>)),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir">>),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2/dir">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\": {\"a2\": \"b2\"}, \"b\": \"d\"}">>)),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2/dir?inherited=true">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        #{
-            <<"a">> := #{<<"a1">> := <<"b1">>, <<"a2">> := <<"b2">>},
-            <<"b">> := <<"d">>,
-            <<"e">> := <<"f">>
-        },
-        DecodedBody
-    ).
-
-set_get_xattr_inherited(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir_test">>),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir_test/child">>),
-
-    % when
-    XattrSpace = json_utils:encode(#{<<"k1">> => <<"v1">>}),
-    XattrDir = json_utils:encode(#{<<"k2">> => <<"v2">>}),
-    XattrChild = json_utils:encode(#{<<"k2">> => <<"v22">>}),
-    XattrChild2 = json_utils:encode(#{<<"k3">> => <<"v3">>}),
-
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\":5}">>)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrSpace)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrDir)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrChild)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrChild2)),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child?inherited=true">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(#{
-        <<"k1">> := <<"v1">>,
-        <<"k2">> := <<"v22">>,
-        <<"k3">> := <<"v3">>,
-        <<"onedata_json">> := #{<<"a">> := 5}
-    }, DecodedBody).
-
-set_get_json_metadata_using_filter(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    % when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"key1\": \"value1\", \"key2\": \"value2\", \"key3\": [\"v1\", \"v2\"]}">>)),
-
-    % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key1">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(<<"value1">>, DecodedBody),
-    {_, _, _, Body2} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key3.[1]">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    DecodedBody2 = json_utils:decode(Body2),
-    ?assertMatch(<<"v2">>, DecodedBody2),
-
-    %when
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key1">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"\"value11\"">>)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"key22\": \"value22\"}">>)),
-    ?assertMatch({ok, 204, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key3.[0]">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"\"v11\"">>)),
-
-    %then
-    {_, _, _, ReponseBody} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
-    ?assertMatch(
-        #{
-            <<"key1">> := <<"value11">>,
-            <<"key2">> := #{<<"key22">> := <<"value22">>},
-            <<"key3">> := [<<"v11">>, <<"v2">>]
-        },
-        json_utils:decode(ReponseBody)).
-
-primitive_json_metadata_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    Primitives = [<<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
-        <<"null">>, <<"\"string\"">>],
-
-    lists:foreach(fun(Primitive) ->
-        ?assertMatch({ok, 204, _, _},
-            rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-                ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Primitive)),
-        ?assertMatch({ok, 200, _, Primitive},
-            rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, get,
-                ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), []))
-    end, Primitives).
-
-empty_metadata_invalid_json_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    InvalidJsons = [<<"aaa">>, <<"{">>, <<"{\"aaa\": aaa}">>],
-
-    lists:foreach(fun(InvalidJson) ->
-        ?assertMatch({ok, 400, _, _},
-            rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-                ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), InvalidJson))
-    end, InvalidJsons).
+    % Assert that trying to download deleted file should result in ?ENOENT
+    {ok, URL2} = rpc:call(OpNode, page_file_download, get_file_download_url, [SessionId, FileGuid]),
+    lfm_proxy:unlink(OpNode, SessionId, {guid, FileGuid}),
+    ?assertEqual(?ERROR_POSIX(?ENOENT), download_file(OpNode, URL2, Config)).
 
 list_transfers(Config) ->
     ct:timetrap({hours, 1}),
@@ -1500,23 +823,19 @@ init_per_testcase(list_transfers, Config) ->
     OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space4">>, <<"user1">>]),
     init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
-init_per_testcase(Case, Config) when Case =:= create_share orelse
-        Case =:= create_share_id orelse
-        Case =:= get_share orelse
-        Case =:= get_share_id orelse
-        Case =:= get_share_public_id orelse
-        Case =:= delete_share orelse
-        Case =:= delete_share_id orelse
-        Case =:= delete_share_public_id orelse
-        Case =:= update_share_name orelse
-        Case =:= update_share_name_id orelse
-        Case =:= update_share_name_public_id->
-    Workers = ?config(op_worker_nodes, Config),
+init_per_testcase(Case, Config) when
+    Case =:= create_share;
+    Case =:= get_share;
+    Case =:= get_file_shares;
+    Case =:= update_share_name;
+    Case =:= delete_share
+->
     initializer:mock_share_logic(Config),
     init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
     Config2 = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:mock_auth_manager(Config2),
     ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config2).
 
@@ -1538,18 +857,13 @@ end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     test_utils:mock_unload(Workers, changes),
     end_per_testcase(all, Config);
 
-end_per_testcase(Case, Config)  when Case =:= create_share orelse
-            Case =:= create_share_id orelse
-            Case =:= get_share orelse
-            Case =:= get_share_id orelse
-            Case =:= get_share_public_id orelse
-            Case =:= delete_share orelse
-            Case =:= delete_share_id orelse
-            Case =:= delete_share_public_id orelse
-            Case =:= update_share_name orelse
-            Case =:= update_share_name_id orelse
-            Case =:= update_share_name_public_id ->
-    Workers = ?config(op_worker_nodes, Config),
+end_per_testcase(Case, Config) when
+    Case =:= create_share;
+    Case =:= get_share;
+    Case =:= get_file_shares;
+    Case =:= update_share_name;
+    Case =:= delete_share
+->
     initializer:unmock_share_logic(Config),
     end_per_testcase(all, Config);
 
@@ -1686,7 +1000,7 @@ get_status(Worker, Tid, Config) ->
     json_utils:decode(TransferStatus).
 
 schedule_file_replication(Worker, ProviderId, File, Config) ->
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(Worker,
+    {ok, 201, _, Body} = ?assertMatch({ok, 201, _, _}, rest_test_utils:request(Worker,
         <<"replicas/", File/binary, "?provider_id=", ProviderId/binary>>,
         post, ?USER_1_AUTH_HEADERS(Config), []
     ), ?ATTEMPTS),
@@ -1695,7 +1009,7 @@ schedule_file_replication(Worker, ProviderId, File, Config) ->
     Tid.
 
 schedule_file_replication_by_id(Worker, ProviderId, FileId, Config) ->
-    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(Worker,
+    {ok, 201, _, Body} = ?assertMatch({ok, 201, _, _}, rest_test_utils:request(Worker,
         <<"replicas-id/", FileId/binary, "?provider_id=", ProviderId/binary>>,
         post, ?USER_1_AUTH_HEADERS(Config), []
     ), ?ATTEMPTS),
@@ -1784,7 +1098,7 @@ mock_get_share_on_other_node(OtherProviderNode, SupportingProviderNode, SessId, 
         true ->
             Res = rpc:call(SupportingProviderNode, share_logic, get, [SessId, ShareId]),
             test_utils:mock_expect(OtherProviderNode, share_logic, get,
-                fun (SessId, ShareId2) when ShareId2 == ShareId ->
+                fun (_SessId, ShareId2) when ShareId2 == ShareId ->
                     Res
                 end);
         false ->
@@ -1800,4 +1114,17 @@ get_op_nodes(Config) ->
             {Worker1, Worker2};
         false ->
             {Worker2, Worker1}
+    end.
+
+download_file(Node, DownloadUrl, Config) ->
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
+    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
+    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 15000}],
+
+    case http_client:request(get, DownloadUrl, maps:from_list(Headers), <<>>, Opts) of
+        {ok, ?HTTP_200_OK, _RespHeaders, Content} ->
+            {ok, Content};
+        {ok, _ErrorCode, _ErrorHeaders, ErrorResponse} ->
+            Error = maps:get(<<"error">>, json_utils:decode(ErrorResponse), #{}),
+            errors:from_json(Error)
     end.

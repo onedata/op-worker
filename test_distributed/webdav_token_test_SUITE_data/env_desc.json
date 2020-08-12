@@ -14,7 +14,23 @@
             "storages": [
                 {
                     "type": "webdav",
-                    "name": "webdav",
+                    "name": "webdav_auto_luma_feed",
+                    "credentials_type": "basic",
+                    "authorization_header": "",
+                    "credentials": "admin:password",
+                    "range_write_support": "sabredav"
+                },
+                {
+                    "type": "webdav",
+                    "name": "webdav_local_luma_feed",
+                    "credentials_type": "basic",
+                    "authorization_header": "",
+                    "credentials": "admin:password",
+                    "range_write_support": "sabredav"
+                },
+                {
+                    "type": "webdav",
+                    "name": "webdav_external_luma_feed",
                     "credentials_type": "basic",
                     "authorization_header": "",
                     "credentials": "admin:password",
@@ -73,10 +89,57 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "webdav",
+                        "storage": "webdav_auto_luma_feed",
                         "supported_size": 1000000000
                     }
                 }
+            },
+            "space2": {
+                "displayed_name": "space2",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "webdav_local_luma_feed",
+                        "supported_size": 1000000000
+                    }
+                }
+            },
+            "space3": {
+                "displayed_name": "space3",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "webdav_external_luma_feed",
+                        "supported_size": 1000000000
+                    }
+                }
+            }
+        },
+        "storages": {
+            "p1": {
+                "webdav_auto_luma_feed": {
+                    "luma": "auto"
+                },
+                "/webdav_local_luma_feed": {
+                    "luma": "local"
+                },
+                "webdav_external_luma_feed": {
+                    "luma": "external"
+                }
+            }
+        },
+        "luma_configs": {
+            "p1": {
+                "external_feed_config_path": "external_feed_luma.json",
+                "local_feed_config_path": "local_feed_luma.json"
             }
         }
     }

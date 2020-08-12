@@ -8,9 +8,9 @@
 %%% @doc
 %%% This module defines generic behaviour of `harvesting_stream`.
 %%% It also implements most of required generic functionality for such stream.
-%%% harvesting_stream is responsible for collecting #custom_metadata{} changes
-%%% from couchbase_changes_stream and sending them to Onezone which pushes them
-%%% to suitable destination.
+%%% harvesting_stream is responsible for collecting #file_meta{} and
+%%% #custom_metadata{} changes from couchbase_changes_stream and sending them
+%%% to Onezone which pushes them to suitable destination.
 %%%
 %%% Sending changes to Onezone is performed by call to
 %%% space_logic:harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)
@@ -42,10 +42,13 @@
 %%% details.
 %%%
 %%% BATCH
-%%% Changes of #custom_metadata{} documents are accumulated in
+%%% Changes of #file_meta{} and #custom_metadata{} documents are accumulated in
 %%% Accumulator :: harvesting_batch:accumulator() structure. It is ensured that
 %%% there is maximum one object associated with one file in one batch.
-%%% Before sending changes to Onezone, harvesting_batch:prepare_to_send/1
+%%% Each object is composed of data stored in both #file_meta{} and custom_metadata{}
+%%% documents. When handling a changed document (#file_meta{} or #custom_metadata{}),
+%%% counterpart document (accordingly #custom_metadata{} or #file_meta{}) is fetched
+%%% from the database. Before sending changes to Onezone, harvesting_batch:prepare_to_send/1
 %%% function must be called on Accumulator to convert it to format
 %%% accepted by space_logic:harvest_metadata/5 function.
 %%% It ensures that batch is sorted by sequence numbers and that stored
@@ -58,8 +61,8 @@
 %%%   * elapsed time from last harvesting timestamp exceeds ?FLUSH_TIMEOUT
 %%%     and Batch is empty and last seen sequence by the harvesting_stream is
 %%%     higher than last sent MaxStreamSeq. This case allows to notify Onezone
-%%%     that stream is processing changes but there hasn't been any #custom_metadata{}
-%%%     changes since last call to space_logic:harvest_metadata/5.
+%%%     that stream is processing changes but there hasn't been any #file_meta{} or
+%%%     #custom_metadata{} changes since last call to space_logic:harvest_metadata/5.
 %%%
 %%% IMPLEMENTING MODULES
 %%% There are 2 modules, that implement this behaviour:
@@ -148,7 +151,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% API
@@ -269,6 +272,8 @@
 %%-------------------------------------------------------------------
 -callback on_harvesting_doc_not_found(harvesting_stream:state()) ->
     handling_result().
+
+-callback terminate(term(), harvesting_stream:state()) -> ok.
 
 %%%===================================================================
 %%% API
@@ -417,8 +422,9 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
-terminate(Reason, State = #hs_state{name = Name}) ->
+terminate(Reason, State = #hs_state{name = Name, callback_module = Mod}) ->
     ?debug("Stopping harvesting_stream ~p due to reason: ~p", [Name, Reason]),
+    Mod:terminate(Reason, State),
     ?log_terminate(Reason, State).
 
 %%--------------------------------------------------------------------
@@ -509,20 +515,31 @@ maybe_add_doc_to_batch(State = #hs_state{
     ignoring_deleted = true
 }, Doc = #document{
     deleted = false,
-    value = #custom_metadata{}
+    value = ModelRecord,
+    seq = Seq
 }) ->
-    maybe_add_doc_to_batch(State#hs_state{ignoring_deleted = false}, Doc);
+    case is_harvested_model(ModelRecord) of
+        true ->
+            maybe_add_doc_to_batch(State#hs_state{ignoring_deleted = false}, Doc);
+        false ->
+            State#hs_state{last_seen_seq = Seq}
+    end;
 maybe_add_doc_to_batch(State = #hs_state{
     ignoring_deleted = false,
     batch = Batch,
     provider_id = ProviderId
 }, Doc = #document{
     seq = Seq,
-    value = #custom_metadata{},
+    value = ModelRecord,
     mutators = [ProviderId | _]
 }) ->
-    Batch2 = harvesting_batch:accumulate(Doc, Batch),
-    State#hs_state{batch = Batch2, last_seen_seq = Seq};
+    case is_harvested_model(ModelRecord) of
+        true ->
+            Batch2 = harvesting_batch:accumulate(Doc, Batch),
+            State#hs_state{batch = Batch2, last_seen_seq = Seq};
+        false ->
+            State#hs_state{last_seen_seq = Seq}
+    end;
 maybe_add_doc_to_batch(State, #document{seq = Seq}) ->
     State#hs_state{last_seen_seq = Seq}.
 
@@ -748,3 +765,8 @@ stream_limit_exceeded(_Since, infinity) ->
     false;
 stream_limit_exceeded(Since, Until) ->
     Since >= Until.
+
+-spec is_harvested_model(datastore:value()) -> boolean().
+is_harvested_model(#file_meta{}) -> true;
+is_harvested_model(#custom_metadata{}) -> true;
+is_harvested_model(_) -> false.

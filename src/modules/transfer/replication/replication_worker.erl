@@ -58,7 +58,7 @@ enqueue_data_transfer(FileCtx, TransferParams) ->
 %% {@link transfer_worker_behaviour} callback required_permissions/0.
 %% @end
 %%--------------------------------------------------------------------
--spec required_permissions() -> [check_permissions:raw_access_definition()].
+-spec required_permissions() -> [data_access_rights:requirement()].
 required_permissions() ->
     [traverse_ancestors, ?write_object].
 
@@ -88,7 +88,7 @@ view_querying_chunk_size() ->
 -spec enqueue_data_transfer(file_ctx:ctx(), transfer_params(),
     undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
 enqueue_data_transfer(FileCtx, TransferParams, RetriesLeft, NextRetry) ->
-    RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined, max_transfer_retries()),
+    RetriesLeft2 = utils:ensure_defined(RetriesLeft, max_transfer_retries()),
     worker_pool:cast(?REPLICATION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
         FileCtx, TransferParams, RetriesLeft2, NextRetry
     )),

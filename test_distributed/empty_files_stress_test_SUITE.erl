@@ -13,6 +13,8 @@
 -module(empty_files_stress_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-behaviour(traverse_behaviour).
+
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").

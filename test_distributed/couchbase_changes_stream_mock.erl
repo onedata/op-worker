@@ -23,10 +23,7 @@
 -export([mocked_start_link/3, mocked_stop/1]).
 
 %% API
--export([stream_changes/2, generate_changes/7, generate_changes/8]).
-
-%% RPC API
--export([]).
+-export([stream_changes/2, generate_changes/9, generate_changes/10]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -75,13 +72,18 @@ mocked_stop(Pid) ->
 stream_changes(Pid, Changes) ->
     gen_server:call(Pid, ?STREAM_CHANGES(Changes)).
 
-generate_changes(Since, Until, Count, CustomMetadataProb, EmptyValueProb, DeletedProb, ProviderIds) ->
-    generate_changes(Since, Until, Count, CustomMetadataProb, DeletedProb, EmptyValueProb, ProviderIds, undefined).
+generate_changes(Since, Until, Count, CustomMetadataProb, FileMetaProb, DeletedProb, EmptyValueProb, ProviderIds, SpaceId) ->
+    generate_changes(Since, Until, Count, CustomMetadataProb, FileMetaProb,
+        DeletedProb, EmptyValueProb, ProviderIds, SpaceId, undefined).
 
-generate_changes(Since, Until, Count, CustomMetadataProb, DeletedProb, EmptyValueProb, ProviderIds, FileId) when (Until - Since) >= Count ->
+generate_changes(Since, Until, Count, CustomMetadataProb, FileMetaProb, DeletedProb, EmptyValueProb, ProviderIds,
+    SpaceId, DocKey
+) when (Until - Since) >= Count ->
     Seqs = generate_sequences(Since, Until, Count),
     ProviderIds2 = utils:ensure_list(ProviderIds),
-    [generate_change(Seq, CustomMetadataProb, DeletedProb, EmptyValueProb, ProviderIds2, FileId) || Seq <- Seqs].
+    lists:map(fun(Seq) ->
+        generate_change(Seq, CustomMetadataProb, FileMetaProb, DeletedProb, EmptyValueProb, ProviderIds2, SpaceId, DocKey)
+    end, Seqs).
 
 %%%===================================================================
 %%% Internal API
@@ -194,12 +196,18 @@ stream_change_to_harvesting_stream(State) ->
     State.
 
 
-generate_change(Seq, CustomMetadataProb, DeletedProb, EmptyValueProb, ProviderIds, FileId) ->
+generate_change(Seq, CustomMetadataProb, FileMetaProb, DeletedProb, EmptyValueProb, ProviderIds, SpaceId, DocKey) ->
+    DocKey2 = case DocKey =:= undefined of
+        true -> generate_file_uuid();
+        false -> DocKey
+    end,
     #document{
+        key = DocKey2,
         seq = Seq,
-        value = doc_value(CustomMetadataProb, EmptyValueProb, FileId),
+        value = doc_value(DocKey2, SpaceId, CustomMetadataProb, FileMetaProb, EmptyValueProb),
         deleted = rand:uniform() < DeletedProb,
-        mutators = [utils:random_element(ProviderIds)]
+        mutators = [lists_utils:random_element(ProviderIds)],
+        scope = SpaceId
     }.
 
 generate_sequences(Since, Until, Count) ->
@@ -209,22 +217,46 @@ generate_sequences(Since, Until, Count) ->
 throw_out_random_elements(Seqs, TargetLength) when length(Seqs) =:= TargetLength ->
     Seqs;
 throw_out_random_elements(Seqs, TargetLength) ->
-    Seqs2 = Seqs -- [utils:random_element(Seqs)],
+    Seqs2 = Seqs -- [lists_utils:random_element(Seqs)],
     throw_out_random_elements(Seqs2, TargetLength).
 
-doc_value(CustomMetadataProb, EmptyValueProb, undefined) ->
-    doc_value(CustomMetadataProb, EmptyValueProb, crypto:strong_rand_bytes(10));
-doc_value(CustomMetadataProb, EmptyValueProb, FileId) ->
-    case rand:uniform() < CustomMetadataProb of
-        true -> #custom_metadata{
-            file_objectid = FileId,
-            value = metadata_value(EmptyValueProb)
-        };
-        false -> undefined
+doc_value(DocKey, SpaceId, CustomMetadataProb, FileMetaProb, EmptyValueProb) ->
+    case rand:uniform() of
+        Rand when Rand < CustomMetadataProb ->
+            custom_metadata_record(DocKey, SpaceId, EmptyValueProb);
+        Rand when Rand >= CustomMetadataProb andalso (Rand < (CustomMetadataProb + FileMetaProb)) ->
+            file_meta_record();
+        _ -> undefined
     end.
+
+custom_metadata_record(FileUuid, SpaceId, EmptyValueProb) ->
+    {ok, FileId} = file_id:guid_to_objectid(file_id:pack_guid(FileUuid, SpaceId)),
+    #custom_metadata{
+        file_objectid = FileId,
+        value = metadata_value(EmptyValueProb),
+        space_id = SpaceId
+    }.
+
+file_meta_record() ->
+    #file_meta{
+        name = get_random_string()
+    }.
+
+generate_file_uuid() ->
+    get_random_string().
 
 metadata_value(EmptyValueProb) ->
     case rand:uniform() < EmptyValueProb of
         true -> #{};
         false -> #{<<"key">> => <<"value">>}
     end.
+
+get_random_string() ->
+    get_random_string(10, "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ").
+
+get_random_string(Length, AllowedChars) ->
+    list_to_binary(lists:foldl(fun(_, Acc) ->
+        [lists:nth(rand:uniform(length(AllowedChars)),
+            AllowedChars)]
+        ++ Acc
+    end, [], lists:seq(1, Length))).

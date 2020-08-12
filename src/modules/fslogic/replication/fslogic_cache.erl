@@ -372,6 +372,8 @@ delete_doc(Key) ->
         _ ->
             ok
     end,
+    
+    delete_local_blocks(Key),
 
     delete_local_blocks(Key),
 
