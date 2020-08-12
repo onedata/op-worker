@@ -471,10 +471,12 @@ end_per_testcase(_Case, Config) ->
 mock_provider_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, provider_logic, []),
-    test_utils:mock_expect(Workers, provider_logic, has_eff_user,
-        fun(UserId) ->
-            lists:member(UserId, [?USER_ID_1, ?USER_ID_2])
-        end),
+    test_utils:mock_expect(Workers, provider_logic, get_spaces, fun() ->
+        {ok, []}
+    end),
+    test_utils:mock_expect(Workers, provider_logic, has_eff_user, fun(UserId) ->
+        lists:member(UserId, [?USER_ID_1, ?USER_ID_2])
+    end),
     test_utils:mock_expect(Workers ++ [node()], provider_logic, zone_time_seconds,
         fun() ->
             time_utils:cluster_time_seconds()
