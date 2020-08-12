@@ -781,14 +781,8 @@ is_root_authorized_to_get(_, #gri{type = od_harvester, scope = private}, _) ->
 is_root_authorized_to_get(_, #gri{type = od_storage, id = StorageId, scope = private}, _) ->
     provider_logic:has_storage(StorageId);
 
-is_root_authorized_to_get(AuthHint, #gri{type = od_storage, id = StorageId, scope = shared}, _) ->
-    case AuthHint of
-        ?THROUGH_SPACE(SpaceId) ->
-            space_logic:is_supported_by_storage(SpaceId, StorageId)
-                andalso provider_logic:supports_space(SpaceId);
-        _ ->
-            false
-    end;
+is_root_authorized_to_get(_, #gri{type = od_storage, scope = shared}, _) ->
+    true;
 
 % Provider can access shares of spaces that it supports
 is_root_authorized_to_get(_, #gri{type = od_share, scope = private}, CachedDoc) ->

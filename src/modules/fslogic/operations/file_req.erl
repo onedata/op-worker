@@ -203,11 +203,12 @@ release(UserCtx, FileCtx, HandleId) ->
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-    {FileCtx, ParentFileCtx2} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
+    {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true, false),
-        fslogic_times:update_mtime_ctime(ParentFileCtx2),
+        fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
         #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
@@ -293,10 +294,11 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 -spec make_file_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
-    {FileCtx, ParentFileCtx2} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
+    {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
-        fslogic_times:update_mtime_ctime(ParentFileCtx2),
+        fslogic_times:update_mtime_ctime(ParentFileCtx3),
         #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
             include_size => false,
@@ -403,7 +405,6 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
 %%% Internal functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -426,26 +427,32 @@ open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink) ->
     FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), new_file(), boolean()) ->
     no_return() | {storage_driver:handle_id(), file_location:record(), file_ctx:ctx()}.
 open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExists) ->
-    FileCtx = verify_file_exists(FileCtx0, HandleId0),
-    SpaceID = file_ctx:get_space_id_const(FileCtx),
+    FileCtx1 = case Flag == read of
+        true -> FileCtx0;
+        false -> file_ctx:assert_not_readonly_storage(FileCtx0)
+    end,
+    FileCtx2 = verify_file_exists(FileCtx1, HandleId0),
+    SpaceID = file_ctx:get_space_id_const(FileCtx2),
     SessId = user_ctx:get_session_id(UserCtx),
-    HandleId = check_and_register_open(FileCtx, SessId, HandleId0, NewFile),
+    HandleId = check_and_register_open(FileCtx2, SessId, HandleId0, NewFile),
     try
-        {FileLocation, FileCtx2} =
-            create_location(FileCtx, UserCtx, NewFile, CheckLocationExists),
-         maybe_open_on_storage(FileCtx2, SessId, Flag,
-             user_ctx:is_direct_io(UserCtx, SpaceID) andalso HandleId0 =:= undefined, HandleId),
-        {HandleId, FileLocation, FileCtx2}
+        {FileLocation, FileCtx3} = create_location(FileCtx2, UserCtx, NewFile, CheckLocationExists),
+        IsDirectIO = user_ctx:is_direct_io(UserCtx, SpaceID) andalso HandleId0 =:= undefined,
+        maybe_open_on_storage(FileCtx3, SessId, Flag, IsDirectIO, HandleId),
+        {HandleId, FileLocation, FileCtx3}
     catch
+        throw:?EROFS ->
+            % this error is thrown on attempt to open file for writing on a readonly storage
+            throw(?EROFS);
         throw:?ENOENT ->
-            % this error can is thrown on race between opening the file and deleting it on storage
-            ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_uuid_const(FileCtx)]),
-            check_and_register_release(FileCtx, SessId, HandleId0),
+            % this error is thrown on race between opening the file and deleting it on storage
+            ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_uuid_const(FileCtx2)]),
+            check_and_register_release(FileCtx2, SessId, HandleId0),
             throw(?ENOENT);
         Error:Reason ->
             ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
-                [Error, Reason, file_ctx:get_uuid_const(FileCtx)]),
-            check_and_register_release(FileCtx, SessId, HandleId0),
+                [Error, Reason, file_ctx:get_uuid_const(FileCtx2)]),
+            check_and_register_release(FileCtx2, SessId, HandleId0),
             throw(Reason)
     end.
 
@@ -462,8 +469,11 @@ maybe_open_on_storage(_FileCtx, _SessId, _Flag, true, _) ->
     ok; % Files are not open on server-side when client uses directIO
 maybe_open_on_storage(FileCtx, SessId, Flag, _DirectIO, HandleId) ->
     Node = read_write_req:get_proxyio_node(file_ctx:get_uuid_const(FileCtx)),
-    ok = rpc:call(Node, ?MODULE, open_on_storage,
-        [FileCtx, SessId, Flag, HandleId]).
+    case rpc:call(Node, ?MODULE, open_on_storage, [FileCtx, SessId, Flag, HandleId]) of
+        ok -> ok;
+        {error, Reason} ->
+            throw(Reason)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -480,8 +490,8 @@ open_on_storage(FileCtx, SessId, Flag, HandleId) ->
     case storage_driver:open(SDHandle2, Flag) of
         {ok, Handle} ->
             ok = session_handles:add(SessId, HandleId, Handle);
-        {error, ?ENOENT} ->
-            throw(?ENOENT)
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -542,9 +552,12 @@ check_and_register_release(_FileCtx, _SessId, _HandleId) ->
 -spec create_location(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
     {file_location:record(), file_ctx:ctx()}.
 create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
-    {#document{value = FL}, FileCtx2} =
-        sd_utils:create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
-    {FL, FileCtx2}.
+    case sd_utils:create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) of
+        {#document{value = FL}, FileCtx2} ->
+            {FL, FileCtx2};
+        {error, Reason} ->
+            throw(Reason)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -751,3 +764,4 @@ check_if_file_exists_or_is_opened(FileCtx, SessionId) ->
                 false -> throw(?ENOENT)
             end
     end.
+

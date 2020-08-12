@@ -32,6 +32,7 @@
     update_registered_file_test/1,
     stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled/1,
     registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled/1,
+    registration_should_fail_if_file_is_missing/1,
     registration_should_succeed_if_size_is_passed/1
 ]).
 
@@ -41,6 +42,7 @@
     update_registered_file_test,
     stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled,
     registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled,
+    registration_should_fail_if_file_is_missing,
     registration_should_succeed_if_size_is_passed
 ]).
 
@@ -372,6 +374,26 @@ registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attrib
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"autoDetectAttributes">> => false
+    })),
+
+    % file shouldn't have been registered
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, FilePath})).
+
+registration_should_fail_if_file_is_missing(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+
+    FileName = ?FILE_NAME,
+    FilePath = ?PATH(FileName),
+    StorageFileId = filename:join(["/", FileName]),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
+
+    ?assertMatch({ok, ?HTTP_400_BAD_REQUEST, _, _}, register_file(W1, Config, #{
+        <<"spaceId">> => ?SPACE_ID,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => 100
     })),
 
     % file shouldn't have been registered

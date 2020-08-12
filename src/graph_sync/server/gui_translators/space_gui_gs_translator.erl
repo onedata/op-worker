@@ -59,6 +59,10 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             {undefined, undefined}
     end,
 
+    ProvidersWithReadonlySupport = lists:filter(fun(ProviderId) ->
+        space_logic:has_readonly_support_from(SpaceId, ProviderId)
+    end, maps:keys(Space#od_space.storages_by_provider)),
+
     Result = #{
         <<"name">> => Space#od_space.name,
         <<"effUserList">> => gri:serialize(#gri{
@@ -86,7 +90,8 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             scope = private
         }),
         <<"rootDir">> => utils:undefined_to_null(RootDir),
-        <<"preferableWriteBlockSize">> => utils:undefined_to_null(PreferableWriteBlockSize)
+        <<"preferableWriteBlockSize">> => utils:undefined_to_null(PreferableWriteBlockSize),
+        <<"providersWithReadonlySupport">> => ProvidersWithReadonlySupport
     },
     fun
         (?USER(Id)) -> 

@@ -28,22 +28,25 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/storage/storage.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([create_in_zone/2, create_in_zone/3, get/1, delete_in_zone/1]).
+-export([create_in_zone/3, create_in_zone/4, delete_in_zone/1]).
+-export([get/1, get_shared_data/2]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
 -export([get_name/1]).
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
--export([get_provider/1]).
+-export([get_provider/2]).
 -export([get_spaces/1]).
--export([is_imported/1]).
+-export([is_imported/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([is_local_storage_supporting_space/2]).
+-export([supports_access_type/3]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
--export([set_imported/2]).
+-export([set_imported/2, set_readonly/2]).
 -export([upgrade_legacy_support/2]).
 
 -compile({no_auto_import, [get/1]}).
@@ -55,9 +58,9 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(Name, ImportedStorage, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), boolean()) -> {ok, storage:id()} | errors:error().
-create_in_zone(Name, ImportedStorage) ->
-    create_in_zone(Name, ImportedStorage, undefined).
+-spec create_in_zone(od_storage:name(), storage:imported(), storage:readonly()) -> {ok, storage:id()} | errors:error().
+create_in_zone(Name, ImportedStorage, Readonly) ->
+    create_in_zone(Name, ImportedStorage, Readonly, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -65,9 +68,9 @@ create_in_zone(Name, ImportedStorage) ->
 %% Creates document containing storage public information in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), boolean() | unknown, storage:id() | undefined) ->
+-spec create_in_zone(od_storage:name(), storage:imported() | unknown, storage:readonly(), storage:id() | undefined) ->
     {ok, storage:id()} | errors:error().
-create_in_zone(Name, ImportedStorage, StorageId) ->
+create_in_zone(Name, ImportedStorage, Readonly, StorageId) ->
     PartialData = case ImportedStorage of
         unknown-> #{};
         _ -> #{<<"imported">> => ImportedStorage}
@@ -76,21 +79,13 @@ create_in_zone(Name, ImportedStorage, StorageId) ->
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
         data = PartialData#{
-            <<"name">> => Name
+            <<"name">> => Name,
+            <<"readonly">> => Readonly
         }
     }),
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
     end)).
-
-
--spec get(storage:id()) -> {ok, od_storage:doc()} | errors:error().
-get(StorageId) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        subscribe = true
-    }).
 
 
 -spec delete_in_zone(storage:id()) -> ok | errors:error().
@@ -105,6 +100,30 @@ delete_in_zone(StorageId) ->
         % so no need to invalidate any od_space cache
         gs_client_worker:invalidate_cache(od_storage, StorageId)
     end).
+
+
+-spec get(storage:id()) -> {ok, od_storage:doc()} | errors:error().
+get(StorageId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+        subscribe = true
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves storage details shared between providers through given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_shared_data(storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().
+get_shared_data(StorageId, SpaceId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance, scope = shared},
+        subscribe = true,
+        auth_hint = ?THROUGH_SPACE(SpaceId)
+    }).
 
 
 -spec support_space(storage:id(), tokens:serialized(), od_space:support_size()) ->
@@ -183,13 +202,12 @@ get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
     end.
 
 
--spec get_provider(storage:id()) -> {ok, od_provider:id()} | errors:error().
-get_provider(StorageId) ->
-    case get(StorageId) of
+-spec get_provider(storage:id(), od_space:id()) -> {ok, od_provider:id()} | errors:error().
+get_provider(StorageId, SpaceId) ->
+    case get_shared_data(StorageId, SpaceId) of
         {ok, #document{value = #od_storage{provider = Provider}}} -> {ok, Provider};
         Error -> Error
     end.
-
 
 -spec get_spaces(storage:id()) -> {ok, [od_space:id()]} | errors:error().
 get_spaces(StorageId) ->
@@ -209,12 +227,38 @@ is_imported(StorageId) ->
     end.
 
 
+-spec is_local_storage_readonly(storage:id()) -> {ok, boolean()} | errors:error().
+is_local_storage_readonly(StorageId) ->
+    case storage_logic:get(StorageId) of
+        {ok, #document{value = #od_storage{readonly = Readonly}}} ->
+            {ok, Readonly};
+        Error -> Error
+    end.
+
+
+-spec is_storage_readonly(storage:id(), od_space:id()) -> {ok, boolean()} | errors:error().
+is_storage_readonly(StorageId, SpaceId) ->
+    case get_shared_data(StorageId, SpaceId) of
+        {ok, #document{value = #od_storage{readonly = Readonly}}} ->
+            {ok, Readonly};
+        Error -> Error
+    end.
+
+
 -spec is_local_storage_supporting_space(storage:id(), od_space:id()) -> boolean().
 is_local_storage_supporting_space(StorageId, SpaceId) ->
     case space_logic:get_local_storage_ids(SpaceId) of
         {ok, LocalStorageIds} -> lists:member(StorageId, LocalStorageIds);
         _ -> false
     end.
+
+
+-spec supports_access_type(storage:id(), od_space:id(), SufficientAccessType :: storage:access_type()) ->
+    boolean().
+supports_access_type(_StorageId, _SpaceId, ?READONLY_STORAGE) ->
+    true;
+supports_access_type(StorageId, SpaceId, ?READWRITE_STORAGE) ->
+    not storage:is_storage_readonly(StorageId, SpaceId).
 
 
 -spec update_name(storage:id(), od_storage:name()) -> ok | errors:error().
@@ -252,6 +296,19 @@ set_imported(StorageId, Imported) ->
         gs_client_worker:invalidate_cache(od_storage, StorageId)
     end).
 
+
+-spec set_readonly(storage:id(), boolean()) -> ok | errors:error().
+set_readonly(StorageId, Readonly) ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+        data = #{<<"readonly">> => Readonly}
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_storage, StorageId)
+    end).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Upgrades legacy space support in Onezone to model with new storages.
@@ -267,20 +324,4 @@ upgrade_legacy_support(StorageId, SpaceId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_legacy_support, SpaceId}}
-    }).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Retrieves storage details shared between providers through given space.
-%% @end
-%%--------------------------------------------------------------------
--spec get_shared_data(storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().
-get_shared_data(StorageId, SpaceId) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_storage, id = StorageId, aspect = instance, scope = shared},
-        subscribe = true,
-        auth_hint = ?THROUGH_SPACE(SpaceId)
     }).
