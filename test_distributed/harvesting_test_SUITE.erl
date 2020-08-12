@@ -28,6 +28,8 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -49,6 +51,7 @@
     delete_file_with_rdf_metadata/1,
     modify_rdf_many_times/1,
     set_xattr_metadata/1,
+    cdmi_xattr_should_not_be_harvested/1,
     modify_xattr_metadata/1,
     delete_xattr_metadata/1,
     delete_file_with_xattr_metadata/1,
@@ -78,6 +81,7 @@ all() ->
         delete_file_with_rdf_metadata,
         modify_rdf_many_times,
         set_xattr_metadata,
+        cdmi_xattr_should_not_be_harvested,
         modify_xattr_metadata,
         delete_xattr_metadata,
         delete_file_with_xattr_metadata,
@@ -713,6 +717,45 @@ set_xattr_metadata(Config) ->
         }
     }], ProviderId2).
 
+cdmi_xattr_should_not_be_harvested(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    FileName = ?FILE_NAME,
+    FileContent = <<"file content">>,
+
+    ObjectContentTypeHeader = {?HDR_CONTENT_TYPE, <<"application/cdmi-object">>},
+    CDMIVersionHeader = {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>},
+    UserTokenHeader = rest_test_utils:user_token_header(Config, ?USER_ID),
+
+    RequestHeaders1 = [ObjectContentTypeHeader, CDMIVersionHeader, UserTokenHeader],
+    RequestBody1 = #{<<"value">> => FileContent},
+    RawRequestBody1 = json_utils:encode((RequestBody1)),
+    {ok, _, _, Response1} = ?assertMatch({ok, ?HTTP_201_CREATED, _, _},
+        cdmi_test_utils:do_request(Worker, filename:join(?SPACE_NAME1, FileName), put, RequestHeaders1, RawRequestBody1)),
+    CdmiResponse1 = json_utils:decode(Response1),
+    FileId = maps:get(<<"objectID">>, CdmiResponse1),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2).
+
+
 modify_xattr_metadata(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
@@ -1292,11 +1335,17 @@ delete_entry_failure(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    Posthook = fun(NewConfig) ->
+        ssl:start(),
+        hackney:start(),
+        initializer:setup_storage(NewConfig)
+    end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config).
+    initializer:teardown_storage(Config),
+    hackney:stop(),
+    ssl:stop().
 
 init_per_testcase(_Case, Config) ->
     Config2 = sort_workers(Config),
