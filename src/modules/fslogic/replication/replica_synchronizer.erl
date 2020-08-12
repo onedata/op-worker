@@ -167,7 +167,8 @@ request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
 %%--------------------------------------------------------------------
 -spec update_replica(file_ctx:ctx(), fslogic_blocks:blocks(),
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
-    {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
+    {ok, ignore | emit_size_change | {emit_replica_status_change, EmissionParam :: boolean()}} |
+    {error, Reason :: term()}.
 update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
     replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion).
 

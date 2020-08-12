@@ -15,7 +15,7 @@
 -include("modules/events/definitions.hrl").
 
 %% API
--export([add_subscriber/2, get_subscribers/2, get_attr_event_subscribers/2, remove_subscriber/2]).
+-export([add_subscriber/2, get_subscribers/2, get_attr_event_subscribers/3, remove_subscriber/2]).
 
 -type key() :: binary().
 % routing can require connection of several contexts, e.g., old and new parent when moving file
@@ -106,9 +106,14 @@ get_subscribers(Evt, RoutingCtx) ->
             {ok, []}
     end.
 
--spec get_attr_event_subscribers(fslogic_worker:file_guid(), event_type:routing_ctx()) ->
+-spec get_attr_event_subscribers(fslogic_worker:file_guid(), event_type:routing_ctx(), boolean()) ->
     [{ok, SessIds :: [session:id()]} | {error, Reason :: term()}].
-get_attr_event_subscribers(Guid, RoutingCtx) ->
+get_attr_event_subscribers(Guid, RoutingCtx, SizeChanged) ->
+    Keys = case SizeChanged of
+        true -> event_type:get_attr_routing_keys(Guid, RoutingCtx);
+        false -> [event_type:get_replica_status_routing_keys(Guid, RoutingCtx)]
+    end,
+
     lists:map(fun
         ({ok, Key}) ->
             subscription_manager:get_subscribers(Key, RoutingCtx);
@@ -119,7 +124,7 @@ get_attr_event_subscribers(Guid, RoutingCtx) ->
                 Other ->
                     Other
             end
-    end, event_type:get_attr_routing_keys(Guid, RoutingCtx)).
+    end, Keys).
 
 %%--------------------------------------------------------------------
 %% @doc

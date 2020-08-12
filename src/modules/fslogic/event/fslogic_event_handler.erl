@@ -144,11 +144,15 @@ handle_file_written_event(#file_written_event{
 
     replica_synchronizer:force_flush_events(file_ctx:get_uuid_const(FileCtx)),
     case replica_synchronizer:update_replica(FileCtx, Blocks, FileSize, true) of
-        {ok, size_changed} ->
+        {ok, {emit_replica_status_change, EmissionParam}} ->
+            fslogic_times:update_mtime_ctime(FileCtx),
+            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, EmissionParam, [SessId]),
+            fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks);
+        {ok, emit_size_change} ->
             fslogic_times:update_mtime_ctime(FileCtx),
             fslogic_event_emitter:emit_file_attr_changed(FileCtx, [SessId]),
             fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks);
-        {ok, size_not_changed} ->
+        {ok, ignore} ->
             fslogic_times:update_mtime_ctime(FileCtx),
             fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks);
         {error, not_found} ->

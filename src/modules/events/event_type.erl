@@ -16,7 +16,8 @@
 -include("modules/monitoring/events.hrl").
 
 %% API
--export([get_routing_key/2, get_attr_routing_keys/2, get_stream_key/1, get_aggregation_key/1]).
+-export([get_routing_key/2, get_attr_routing_keys/2, get_replica_status_routing_keys/2,
+    get_stream_key/1, get_aggregation_key/1]).
 -export([get_context/1, update_context/2]).
 
 -type aggregation_key() :: term().
@@ -75,6 +76,19 @@ get_routing_key(_, _) ->
 get_attr_routing_keys(Guid, RoutingCtx) ->
     [get_parent_connected_routing_key(<<"file_attr_changed.">>, Guid, RoutingCtx),
         get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx)].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a routing keys (see get_routing_key fun) for events connected with change of replication status.
+%% Warning: It is only temporary solution as currently events framework does not allow parametrize subscriptions.
+%% Usually, get_routing_key function should be used.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_replica_status_routing_keys(Guid :: fslogic_worker:file_guid(), RoutingCtx :: routing_ctx()) ->
+    {ok, Key :: subscription_manager:key()} |
+    {ok, Key :: subscription_manager:key(), od_space:id()} | {error, session_only}.
+get_replica_status_routing_keys(Guid, RoutingCtx) ->
+    get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
