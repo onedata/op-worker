@@ -36,12 +36,12 @@
 all() ->
     ?ALL([
         subscribe_on_dir_test,
-        subscribe_on_replication_info_test,
         subscribe_on_user_root_test,
         subscribe_on_user_root_filter_test,
         subscribe_on_new_space_test,
         subscribe_on_new_space_filter_test,
-        events_on_conflicts_test
+        events_on_conflicts_test,
+        subscribe_on_replication_info_test
     ]).
 
 -define(CONFLICTING_FILE_NAME, <<"abc">>).
@@ -80,8 +80,11 @@ subscribe_on_dir_test(Config) ->
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker1, <<"0">>, {guid, FileGuid})),
     ?assertEqual(ok, receive_file_removed_event()),
+
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
+    ?assertMatch({ok, []},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
@@ -113,8 +116,11 @@ subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
 
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(SpaceGuid), []]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
+
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
+    ?assertMatch({ok, []},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
@@ -149,8 +155,11 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
 
     rpc:call(Worker1, file_meta, make_space_exist, [<<"space_id", SpaceNum/binary>>]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
+
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
+    ?assertMatch({ok, []},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
@@ -198,6 +207,10 @@ events_on_conflicts_test(Config) ->
         ?assertEqual(ok, ssl:send(Sock,
             fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq)))
     end, [Seq1, Seq2]),
+    ?assertMatch({ok, []},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
+    ?assertMatch({ok, []},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey2, undefined]), 10),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
@@ -273,6 +286,8 @@ subscribe_on_replication_info_test(Config) ->
     % Cleanup subscription
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq2))),
+    ?assertMatch([{ok, []}, {ok, []}],
+        rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, true]), 10),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
