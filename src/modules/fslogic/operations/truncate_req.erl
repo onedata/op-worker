@@ -36,48 +36,54 @@ truncate(UserCtx, FileCtx0, Size) ->
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_object]
     ),
-    truncate_insecure(UserCtx, FileCtx1, Size, true).
+    FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx1),
+    truncate_insecure(UserCtx, FileCtx2, Size, true).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Truncates file on storage and returns only if operation is complete.
-%% Does not change file size in #file_meta model. Model's size should be
+%% Model's size should be
 %% changed by write events.
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
     Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
-truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
-    FileCtx2 = update_quota(FileCtx, Size),
+truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes) ->
+    FileCtx1 = update_quota(FileCtx0, Size),
     SessId = user_ctx:get_session_id(UserCtx),
-    {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
-    case storage_driver:open(SDHandle, write) of
-        {ok, Handle} ->
-            {CurrentSize, _} = file_ctx:get_file_size(FileCtx3),
-            case storage_driver:truncate(Handle, Size, CurrentSize) of
-                ok ->
-                    ok;
-                Error = {error, ?EBUSY} ->
-                    log_warning(storage_driver, truncate, Error, FileCtx3)
+    {ok, FileCtx4} = case file_ctx:is_readonly_storage(FileCtx1) of
+        {true, FileCtx2} ->
+            {ok, FileCtx2};
+        {false, FileCtx2} ->
+            {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
+            case storage_driver:open(SDHandle, write) of
+                {ok, Handle} ->
+                    {CurrentSize, _} = file_ctx:get_file_size(FileCtx3),
+                    case storage_driver:truncate(Handle, Size, CurrentSize) of
+                        ok ->
+                            ok;
+                        Error = {error, ?EBUSY} ->
+                            log_warning(storage_driver, truncate, Error, FileCtx3)
+                    end,
+                    case storage_driver:release(Handle) of
+                        ok -> ok;
+                        Error2 = {error, ?EDOM} ->
+                            log_warning(storage_driver, release, Error2, FileCtx3)
+                    end;
+                {error, ?ENOENT} ->
+                    ok
             end,
-            case storage_driver:release(Handle) of
-                ok -> ok;
-                Error2 = {error, ?EDOM} ->
-                    log_warning(storage_driver, release, Error2, FileCtx3)
-            end,
-            case file_popularity:update_size(FileCtx3, Size) of
-                ok -> ok;
-                {error, not_found} -> ok
-            end;
-        {error, ?ENOENT} ->
-            ok
+            {ok, FileCtx3}
     end,
-
+    case file_popularity:update_size(FileCtx4, Size) of
+        ok -> ok;
+        {error, not_found} -> ok
+    end,
     case UpdateTimes of
         true ->
-            fslogic_times:update_mtime_ctime(FileCtx3);
+            fslogic_times:update_mtime_ctime(FileCtx4);
         false ->
             ok
     end,

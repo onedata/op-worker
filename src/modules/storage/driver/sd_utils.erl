@@ -69,12 +69,17 @@ chmod(UserCtx, FileCtx, Mode) ->
 rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, TargetFileId) ->
     case TargetParentCtx =/= undefined of
         true ->
+            TargetParentCtx2 = file_ctx:assert_not_readonly_storage(TargetParentCtx),
             % we know target parent uuid, so we can create parent directories with correct mode
             % ensure all target parent directories are created
-            {ok, _} = mkdir_deferred(TargetParentCtx, UserCtx);
+            {ok, _} = mkdir_deferred(TargetParentCtx2, UserCtx);
         false ->
-            % we don't know target parent uuid because it is a remote rename
-            % create parent directories with default mode
+            % We don't know target parent uuid because it is a remote rename, check whether storage is readonly "manually"
+            case storage:is_storage_readonly(StorageId, SpaceId) of
+                true -> throw(?EROFS);
+                false -> ok
+            end,
+            % Create parent directories with default mode
             TargetDir = filename:dirname(TargetFileId),
             TargetDirHandle = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, TargetDir),
             case storage_driver:mkdir(TargetDirHandle, ?DEFAULT_DIR_PERMS, true) of
@@ -301,7 +306,8 @@ rmdir(DirCtx, UserCtx) ->
 
 -spec create_storage_file(storage_driver:handle(), file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 create_storage_file(SDHandle, FileCtx) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx),
+    {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     Mode = file_meta:get_mode(FileDoc),
     Result = case file_meta:get_type(FileDoc) of
         ?REGULAR_FILE_TYPE ->
@@ -310,7 +316,7 @@ create_storage_file(SDHandle, FileCtx) ->
             storage_driver:mkdir(SDHandle, Mode)
     end,
     case Result of
-        ok -> {ok, FileCtx2};
+        ok -> {ok, FileCtx3};
         Error -> Error
     end.
 

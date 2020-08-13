@@ -303,16 +303,18 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
 %% Returns ok if file doesn't exist or if it was successfully deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
+-spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 maybe_remove_file_on_storage(FileCtx, UserCtx) ->
     try
-        case sd_utils:delete(FileCtx, UserCtx) of
-            {ok, FileCtx2} -> {ok, FileCtx2};
-            {error, ?ENOENT} -> {ok, FileCtx};
-            % TODO VFS-6524 do not ignore below errors
-            {error, ?EACCES} -> {ok, FileCtx};
-            {error, ?EROFS} -> {ok, FileCtx};
-            {error, _} = OtherError -> OtherError
+        case file_ctx:is_readonly_storage(FileCtx) of
+            {true, FileCtx2} ->
+                {ok, FileCtx2};
+            {false, FileCtx2} ->
+                case sd_utils:delete(FileCtx2, UserCtx) of
+                    {ok, FileCtx3} -> {ok, FileCtx3};
+                    {error, ?ENOENT} -> {ok, FileCtx2};
+                    {error, _} = OtherError -> OtherError
+                end
         end
     catch
         Error:Reason ->

@@ -3480,15 +3480,16 @@ create_list_race_test(Config, MountSpaceInRoot) ->
     TestPid = self(),
     ok = test_utils:mock_new(W1, storage_driver),
     ok = test_utils:mock_expect(W1, storage_driver, readdir, fun(SDHandle, Offset, BatchSize) ->
+        Result = meck:passthrough([SDHandle, Offset, BatchSize]),
         case SDHandle#sd_handle.file =:= <<"/">> of
             true ->
                 % hold on sync
-                TestPid ! {waiting, self(), Offset, meck:passthrough([SDHandle, Offset, BatchSize])},
+                TestPid ! {waiting, self(), Offset, Result},
                 receive continue -> ok end;
             false ->
                 ok
         end,
-        meck:passthrough([SDHandle, Offset, BatchSize])
+        Result
     end),
 
     % touch space dir to ensure that sync will try to detect deletions

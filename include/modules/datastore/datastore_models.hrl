@@ -109,7 +109,7 @@
     storages = #{} :: #{storage:id() => Size :: integer()},
 
     % This value is calculated after fetch from zone for performance reasons.
-    local_storages = [] :: [storage:id()],
+    storages_by_provider = #{} :: #{od_provider:id() => #{storage:id() => storage:access_type()}},
 
     providers = #{} :: #{od_provider:id() => Size :: integer()},
 
@@ -194,11 +194,12 @@
 }).
 
 -record(od_storage, {
-    name = <<>> :: od_storage:name(),
+    name = <<>> :: od_storage:name() | undefined,
     provider :: od_provider:id() | undefined,
     spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
-    imported = false :: boolean(),
+    imported = false :: boolean() | undefined,
+    readonly = false :: boolean(),
     cache_state = #{} :: cache_state()
 }).
 

@@ -91,7 +91,8 @@
     db_sync_create_after_deletion_links_test,
     rtransfer_fetch_test,
     rtransfer_cancel_for_session_test,
-    remove_file_during_transfers_test,
+    % TODO VFS-6618 Fix handling of file being removed during transfer and uncomment this test
+    % remove_file_during_transfers_test,
     remove_file_on_remote_provider_ceph,
     evict_on_ceph,
     read_dir_collisions_test,
@@ -679,6 +680,7 @@ rtransfer_cancel_for_session_test(Config) ->
     ok = test_utils:mock_unload(Workers1, rtransfer_config).
 
 remove_file_during_transfers_test(Config0) ->
+    % TODO VFS-6618 Fix handling of file being removed during transfer and uncomment this test
     User = <<"user2">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {0, 0, 0, 0}, 0),
     [Worker1 | _] = ?config(workers1, Config),

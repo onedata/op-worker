@@ -217,7 +217,9 @@ data_spec_create(#gri{aspect = register_file}) -> #{
         <<"uid">> => {integer, {not_lower_than, 0}},
         <<"gid">> => {integer, {not_lower_than, 0}},
         <<"autoDetectAttributes">> => {boolean, any},
-        <<"xattrs">> => {json, any}
+        <<"xattrs">> => {json, any},
+        <<"json">> => {json, any},
+        <<"rdf">> => {binary, any}
     }
 }.
 
@@ -339,7 +341,14 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     DestinationPath = maps:get(<<"destinationPath">>, Data),
     StorageId = maps:get(<<"storageId">>, Data),
     StorageFileId = maps:get(<<"storageFileId">>, Data),
-    {ok, FileGuid} = file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data),
+    {ok, FileGuid} = try
+        file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data)
+    catch
+        throw:{error, _} = Error ->
+            throw(Error);
+        throw:PosixErrno ->
+            throw(?ERROR_POSIX(PosixErrno))
+    end,
     {ok, FileId} = file_id:guid_to_objectid(FileGuid),
     {ok, value, FileId}.
 

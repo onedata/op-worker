@@ -13,6 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("kernel/include/file.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -65,16 +66,11 @@ access_test(Config) ->
     ?assertMatch(ok, call(Config, access, [File, 0])).
 
 mknod_test(Config) ->
-    lists:foreach(fun({ExpectedType, Type}) ->
-        File = gen_filename(),
-        ?assertMatch(ok, call(Config, mknod, [File, 8#644, Type])),
-        {ok, FileInfo} =
-            ?assertMatch({ok, _},
-                call(Config, file, read_file_info, [?path(Config, File)])),
-        ?assertMatch(ExpectedType, element(3, FileInfo)),
-        ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)]))
-    end, [{regular, reg}, {device, chr}, {device, blk}, {other, fifo},
-        {other, sock}]).
+    File = gen_filename(),
+    ?assertMatch(ok, call(Config, mknod, [File, 8#664, reg])),
+    ?assertMatch({ok, #file_info{type = regular}},
+        call(Config, file, read_file_info, [?path(Config, File)])),
+    ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)])).
 
 mkdir_test(Config) ->
     File = gen_filename(),

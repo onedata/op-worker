@@ -15,6 +15,7 @@
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("global_definitions.hrl").
+-include("modules/storage/storage.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -94,14 +95,22 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
     };
 
 
-translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Result) ->
+translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private}, Result) ->
     Storages = maps:get(<<"storages">>, Result),
 
-    {ok, ProviderStorageIds} = provider_logic:get_storage_ids(),
-    LocalStorageIds = [X || X <- ProviderStorageIds, Y <- maps:keys(Storages), X == Y],
+    StoragesByProvider = lists:foldl(fun(StorageId, Acc) ->
+        {ok, ProviderId} = storage_logic:get_provider(StorageId, SpaceId),
+        AccessType = case storage:is_storage_readonly(StorageId, SpaceId) of
+            true -> ?READONLY_STORAGE;
+            false -> ?READWRITE_STORAGE
+        end,
+        maps:update_with(ProviderId, fun(ProviderStorages) ->
+            ProviderStorages#{StorageId => AccessType}
+        end, #{StorageId => AccessType}, Acc)
+    end, #{}, maps:keys(Storages)),
 
     #document{
-        key = Id,
+        key = SpaceId,
         value = #od_space{
             name = maps:get(<<"name">>, Result),
 
@@ -114,7 +123,7 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
             eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result)),
 
             storages = Storages,
-            local_storages = LocalStorageIds,
+            storages_by_provider = StoragesByProvider,
 
             providers = maps:get(<<"providers">>, Result),
             shares = maps:get(<<"shares">>, Result),
@@ -245,7 +254,8 @@ translate(#gri{type = od_storage, id = Id, aspect = instance, scope = private}, 
             provider = maps:get(<<"provider">>, Result),
             spaces = maps:get(<<"spaces">>, Result),
             qos_parameters = maps:get(<<"qosParameters">>, Result),
-            imported = maps:get(<<"imported">>, Result)
+            imported = maps:get(<<"imported">>, Result),
+            readonly = maps:get(<<"readonly">>, Result)
         }
     };
 
@@ -254,7 +264,8 @@ translate(#gri{type = od_storage, id = Id, aspect = instance, scope = shared}, R
         key = Id,
         value = #od_storage{
             provider = maps:get(<<"provider">>, Result),
-            qos_parameters = maps:get(<<"qosParameters">>, Result)
+            qos_parameters = maps:get(<<"qosParameters">>, Result),
+            readonly = maps:get(<<"readonly">>, Result)
         }
     };
 
@@ -360,7 +371,9 @@ apply_scope_mask(Doc = #document{value = Handle = #od_handle{}}, public) ->
 apply_scope_mask(Doc = #document{value = Storage = #od_storage{}}, shared) ->
     Doc#document{
         value = Storage#od_storage{
-            spaces = []
+            name = undefined,
+            spaces = [],
+            imported = undefined
         }
     }.
 
