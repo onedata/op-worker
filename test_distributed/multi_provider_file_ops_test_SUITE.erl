@@ -821,6 +821,7 @@ read_dir_collisions_test(Config0) ->
     RootDirPath = <<"/", SpaceName/binary, "/read_dir_collisions_test">>,
     {ok, RootDirGuid} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), RootDirPath, 8#755)),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, RootDirGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, RootDirGuid}, lfm_proxy:resolve_guid(Worker2, SessionId(Worker2), RootDirPath), ?ATTEMPTS),
 
     GetNamesFromGetChildrenFun = fun(Node, Offset, Limit) ->
         {ok, Children} = ?assertMatch(
