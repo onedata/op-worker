@@ -281,9 +281,9 @@ notify_attrs_change_if_necessary(FileCtx,
     #document{value = #file_location{size = NewSize}} = NewDoc,
     FirstLocalBlocksBeforeUpdate
 ) ->
-    FirestLocalBlocks = fslogic_location_cache:get_blocks(NewDoc, #{count => 2}),
+    FirstLocalBlocks = fslogic_location_cache:get_blocks(NewDoc, #{count => 2}),
     ReplicationStatusChanged = replica_updater:has_replication_status_changed(
-        FirstLocalBlocksBeforeUpdate, FirestLocalBlocks, OldSize, NewSize),
+        FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize),
     case {ReplicationStatusChanged, OldSize =/= NewSize} of
         {true, SizeChanged} ->
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []);

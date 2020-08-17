@@ -45,15 +45,15 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                         size = OldSize
                     }
                 } ->
-                    FirestLocalBlocksBeforeAppend = fslogic_location_cache:get_blocks(Location, #{count => 2}),
+                    FirstLocalBlocksBeforeAppend = fslogic_location_cache:get_blocks(Location, #{count => 2}),
                     UpdatedLocation = append(Location, Blocks, BumpVersion),
                     case FileSize of
                         undefined ->
                             fslogic_location_cache:save_location(UpdatedLocation),
                             #document{value = #file_location{size = UpdatedSize}} = UpdatedLocation,
-                            FirestLocalBlocks = fslogic_location_cache:get_blocks(UpdatedLocation, #{count => 2}),
+                            FirstLocalBlocks = fslogic_location_cache:get_blocks(UpdatedLocation, #{count => 2}),
                             ReplicationStatusChanged = has_replication_status_changed(
-                                FirestLocalBlocksBeforeAppend, FirestLocalBlocks, OldSize, UpdatedSize),
+                                FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, UpdatedSize),
                             case {ReplicationStatusChanged, UpdatedSize > OldSize} of
                                 {true, SizeChanged} -> {ok, {emit_replica_status_change, SizeChanged}};
                                 {_, true} -> {ok, emit_size_change};
@@ -62,9 +62,9 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                         _ ->
                             TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
                             fslogic_location_cache:save_location(TruncatedLocation),
-                            FirestLocalBlocks = fslogic_location_cache:get_blocks(TruncatedLocation, #{count => 2}),
+                            FirstLocalBlocks = fslogic_location_cache:get_blocks(TruncatedLocation, #{count => 2}),
                             ReplicationStatusChanged = has_replication_status_changed(
-                                FirestLocalBlocksBeforeAppend, FirestLocalBlocks, OldSize, FileSize),
+                                FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, FileSize),
                             case ReplicationStatusChanged of
                                 true -> {ok, {emit_replica_status_change, true}};
                                 false -> {ok, emit_size_change}
@@ -102,8 +102,8 @@ rename(FileCtx, TargetFileId) ->
 
 -spec has_replication_status_changed(fslogic_blocks:blocks(), fslogic_blocks:blocks(),
     non_neg_integer(), non_neg_integer()) -> boolean().
-has_replication_status_changed(FirstLocalBlocksBeforeUpdate, FirestLocalBlocks, OldSize, NewSize) ->
-    is_fully_replicated(FirstLocalBlocksBeforeUpdate, OldSize) =/= is_fully_replicated(FirestLocalBlocks, NewSize).
+has_replication_status_changed(FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize) ->
+    is_fully_replicated(FirstLocalBlocksBeforeUpdate, OldSize) =/= is_fully_replicated(FirstLocalBlocks, NewSize).
 
 %%%===================================================================
 %%% Internal functions
