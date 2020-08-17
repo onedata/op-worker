@@ -48,7 +48,7 @@
 -export([put_into_cache/1]).
 -export([get_storage_id/1, get_supporting_storage_id/2, setup_luma_local_feed/3]).
 -export([local_ip_v4/0]).
--export([normalize/1]).
+-export([normalize_storage_name/1]).
 
 
 -record(user_config, {
@@ -703,8 +703,8 @@ get_supporting_storage_id(Worker, SpaceId) ->
     StorageId.
 
 
--spec normalize(binary()) -> binary().
-normalize(Suggestion) -> 
+-spec normalize_storage_name(binary()) -> binary().
+normalize_storage_name(Suggestion) -> 
     re:replace(Suggestion, <<"[^\\w_]">>, <<"">>, [{return, binary}, global]).
 
 %%%===================================================================
@@ -776,7 +776,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
                 true -> #{};
                 false -> Desc
             end,
-            Acc#{normalize(StorageId) => NewDesc} 
+            Acc#{normalize_storage_name(StorageId) => NewDesc} 
         end, #{}, StoragesMap),
         Acc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => StoragesMapNormalized}
     end, #{}, StoragesSetup),
@@ -834,7 +834,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         StorageSupp = maps:from_list(lists:filtermap(fun({PID, Info}) ->
             case proplists:get_value(<<"storage">>, Info) of
                 undefined -> false;
-                StorageName -> {true, {{normalize(StorageName), PID}, proplists:get_value(<<"supported_size">>, Info, 0)}}
+                StorageName -> {true, {{normalize_storage_name(StorageName), PID}, proplists:get_value(<<"supported_size">>, Info, 0)}}
             end
         end, Providers1)),
         case maps:size(StorageSupp) == 0 of

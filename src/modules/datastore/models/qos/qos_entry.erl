@@ -72,7 +72,6 @@
 -type record() :: #qos_entry{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type expression() :: qos_expression:expression().
 -type replicas_num() :: pos_integer().
 % Entry type denotes whether entry was created as part of internal 
 % provider logic (internal) or was created by a user (user_defined).
@@ -87,7 +86,7 @@
 }.
 -type list_apply_fun() :: fun((datastore_links:link_name()) -> any()).
 
--export_type([id/0, doc/0, record/0, type/0, expression/0, replicas_num/0]).
+-export_type([id/0, doc/0, record/0, type/0, replicas_num/0]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -110,14 +109,14 @@
 %%% Functions operating on document using datastore_model API
 %%%===================================================================
 
--spec create(od_space:id(), file_meta:uuid(), expression(),
+-spec create(od_space:id(), file_meta:uuid(), qos_expression:expression(),
     replicas_num(), type()) -> {ok, doc()} | {error, term()}.
 create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
     create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, false, 
         qos_traverse_req:build_traverse_reqs(FileUuid, [])).
 
 
--spec create(od_space:id(), file_meta:uuid(), expression(),
+-spec create(od_space:id(), file_meta:uuid(), qos_expression:expression(),
     replicas_num(), type(), boolean(), qos_traverse_req:traverse_reqs()) ->
     {ok, id()} | {error, term()}.
 create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, TraverseReqs) ->
@@ -242,7 +241,7 @@ remove_traverse_req(QosEntryId, TraverseId) ->
 %%% Functions operating on qos_entry record.
 %%%===================================================================
 
--spec get_expression(doc() | record()) -> {ok, expression()}.
+-spec get_expression(doc() | record()) -> {ok, qos_expression:expression()}.
 get_expression(#document{value = QosEntry}) ->
     get_expression(QosEntry);
 get_expression(QosEntry) ->
@@ -397,7 +396,7 @@ get_record_struct(2) ->
     {record, [
         {type, atom},
         {file_uuid, string},
-        {expression, {custom, string, {?MODULE, encode_expression, decode_expression}}}, 
+        {expression, {custom, json, {?MODULE, encode_expression, decode_expression}}}, 
         {replicas_num, integer},
         {traverse_reqs, #{string => {record, [
             {start_file_uuid, string},
@@ -418,26 +417,11 @@ upgrade_record(1, QosEntry) ->
         TraverseReqs,
         PossibilityCheck
     } = QosEntry,
-    ConvertExpressionFun = fun(PreviousExpression) ->
-        % split RPN tokens e.g: <<"a=b">> to [<<"a">>, <<"b">>, <<"=">>]
-        % convert <<"-">> to <<"\\">>
-        SplitRpnTokens = lists:flatten(lists:map(fun
-            (<<"-">>) -> <<"\\">>;
-            (RpnToken) -> 
-                case binary:split(RpnToken, [<<"=">>], [global]) of
-                    [X,Y] -> [X, Y, <<"=">>]; 
-                    _ -> RpnToken 
-                end 
-            end, PreviousExpression)
-        ),
-        % convert RPN to tree form
-        qos_expression:rpn_to_expression(SplitRpnTokens)
-    end, 
     
     {2, #qos_entry{
         type = Type,
         file_uuid = FileUuid,
-        expression = ConvertExpressionFun(Expression),
+        expression = qos_expression:convert_from_old_version_rpn(Expression),
         replicas_num = ReplicasNum,
         traverse_reqs = TraverseReqs,
         possibility_check = PossibilityCheck
@@ -531,10 +515,10 @@ resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReq
     }.
 
 
--spec encode_expression(expression()) -> binary().
+-spec encode_expression(qos_expression:expression()) -> binary().
 encode_expression(Expression) ->
     json_utils:encode(qos_expression:to_json(Expression)).
 
--spec decode_expression(binary()) -> expression().
+-spec decode_expression(binary()) -> qos_expression:expression().
 decode_expression(EncodedExpression) ->
     qos_expression:from_json(json_utils:decode(EncodedExpression)).

@@ -5,6 +5,14 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
+%%% @doc
+%%% This module is an input file for `yecc` - An LALR-1 parser generator 
+%%% for Erlang, similar to yacc. 
+%%% From this file `qos_expression_parser.erl` file is generated. 
+%%% More info about this file format, generating and usage of generated 
+%%% module can be found in README.md
+%%% @end
+%%%--------------------------------------------------------------------
 
 Nonterminals
 expression value.

@@ -238,7 +238,7 @@ entry_to_details(QosEntry, Status, SpaceId) ->
     QosRootFileGuid = file_id:pack_guid(QosRootFileUuid, SpaceId),
     {ok, QosRootFileObjectId} = file_id:guid_to_objectid(QosRootFileGuid),
     #{
-        <<"expressionRpn">> => qos_expression:expression_to_rpn(Expression),
+        <<"expression">> => Expression,
         <<"replicasNum">> => ReplicasNum,
         <<"fileId">> => QosRootFileObjectId,
         <<"status">> => Status

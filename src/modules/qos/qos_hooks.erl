@@ -107,7 +107,7 @@ reconcile_qos(FileUuid, SpaceId) ->
     reconcile_qos(FileCtx).
 
 
--spec calculate_assigned_storages(od_space:id(), qos_entry:expression(), qos_entry:replicas_num()) ->
+-spec calculate_assigned_storages(od_space:id(), qos_expression:expression(), qos_entry:replicas_num()) ->
     {true, [storage:id()]} | false.
 calculate_assigned_storages(SpaceId, QosExpression, ReplicasNum) ->
     {ok, SpaceStorages} = space_logic:get_all_storage_ids(SpaceId),
@@ -115,7 +115,7 @@ calculate_assigned_storages(SpaceId, QosExpression, ReplicasNum) ->
         Acc#{StorageId => storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId)}
     end, #{}, SpaceStorages),
     
-    MatchingStorages = qos_expression:filter(QosExpression, AllStoragesWithParams),
+    MatchingStorages = qos_expression:filter_storages(QosExpression, AllStoragesWithParams),
     CalculatedStorages = lists_utils:random_sublist(MatchingStorages, ReplicasNum, ReplicasNum),
     case CalculatedStorages of
         L when length(L) == ReplicasNum ->

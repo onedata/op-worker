@@ -35,7 +35,7 @@
 %% @equiv add_qos_entry_insecure/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:expression(),
+-spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:expression(),
     qos_entry:replicas_num(), qos_entry:type()) -> fslogic_worker:provider_response().
 add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
@@ -116,7 +116,7 @@ check_status(UserCtx, FileCtx0, QosEntryId) ->
 %% traverse should be run.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_insecure(file_ctx:ctx(), qos_entry:expression(), qos_entry:replicas_num(), 
+-spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
 add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
     % TODO: VFS-5567 for now target storage for dir is selected here and
@@ -240,7 +240,7 @@ check_status_insecure(FileCtx, QosEntryId) ->
 %% Creates new qos_entry document with appropriate traverse requests.
 %% @end
 %%--------------------------------------------------------------------
--spec add_possible_qos(file_ctx:ctx(), qos_entry:expression(), qos_entry:replicas_num(), 
+-spec add_possible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type(), [storage:id()]) -> fslogic_worker:provider_response().
 add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -269,7 +269,7 @@ add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
 %% Creates new qos_entry document and adds it to impossible list.
 %% @end
 %%--------------------------------------------------------------------
--spec add_impossible_qos(file_ctx:ctx(), qos_entry:expression(), qos_entry:replicas_num(), 
+-spec add_impossible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
 add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),

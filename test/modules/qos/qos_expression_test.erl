@@ -14,9 +14,9 @@
 
 -ifdef(TEST).
 
--include("modules/datastore/qos.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include("modules/datastore/qos.hrl").
 
 
 valid_qos_expression_test() ->
@@ -143,19 +143,31 @@ filter_storages_test() ->
     ),
     ok.
 
+
+convert_from_old_version_rpn_test() ->
+    ?assertEqual({<<"=">>, <<"a">>, <<"b">>}, 
+        qos_expression:convert_from_old_version_rpn([<<"a=b">>])),
+    ?assertEqual({<<"\\">>, {<<"=">>, <<"a">>, <<"b">>}, {<<"=">>, <<"c">>, <<"d">>}}, 
+        qos_expression:convert_from_old_version_rpn([<<"a=b">>, <<"c=d">>, <<"-">>])),
+    ?assertEqual({<<"|">>, {<<"=">>, <<"a">>, <<"b">>}, {<<"=">>, <<"c">>, <<"d">>}},
+        qos_expression:convert_from_old_version_rpn([<<"a=b">>, <<"c=d">>, <<"|">>])),
+    ?assertEqual({<<"&">>, {<<"=">>, <<"a">>, <<"b">>}, {<<"=">>, <<"c">>, <<"d">>}},
+        qos_expression:convert_from_old_version_rpn([<<"a=b">>, <<"c=d">>, <<"&">>])).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 check_valid_expression(Expression, ExpectedRpn) ->
     Tree = qos_expression:parse(Expression),
-    ?assertEqual(ExpectedRpn, qos_expression:expression_to_rpn(Tree)),
-    % Check that rpn_to_infix works correctly.
+    % Check that to_rpn works correctly.
+    ?assertEqual(ExpectedRpn, qos_expression:to_rpn(Tree)),
+    % Check that from_rpn works correctly.
+    ?assertEqual(Tree, qos_expression:from_rpn(ExpectedRpn)),
+    % Check that to_infix works correctly.
     % Because of whitespaces and parens unambiguity, instead of comparing strings 
     % check that resulting expression is equivalent.
-    ?assertEqual(Tree, qos_expression:parse(qos_expression:rpn_to_infix(ExpectedRpn))),
-    % Check that rpn_to_tree works correctly.
-    ?assertEqual(Tree, qos_expression:rpn_to_expression(ExpectedRpn)),
+    ?assertEqual(Tree, qos_expression:parse(qos_expression:to_infix(Tree))),
     % Check to_json and from_json functions.
     ?assertEqual(Tree, qos_expression:from_json(qos_expression:to_json(Tree))).
     
@@ -166,6 +178,6 @@ check_invalid_expression(Expression) ->
 
 check_filter_storages(Expression, ExpectedStorages, StoragesMap) ->
     Tree = qos_expression:parse(Expression),
-    ?assertEqual(ExpectedStorages, qos_expression:filter(Tree, StoragesMap)).
+    ?assertEqual(ExpectedStorages, qos_expression:filter_storages(Tree, StoragesMap)).
 
 -endif.

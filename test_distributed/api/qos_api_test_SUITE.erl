@@ -379,7 +379,7 @@ validate_result_fun_gs(EnvRef, get) ->
         ReplicasNum = api_test_env:get(EnvRef, replicas_num),
         Expression = api_test_env:get(EnvRef, expression),
     
-        ExpressionRpn = qos_expression:expression_to_rpn(qos_expression:parse(Expression)),
+        ExpressionRpn = qos_expression:to_rpn(qos_expression:parse(Expression)),
         ?assertMatch(#gri{type = op_file, id = Guid}, gri:deserialize(maps:get(<<"file">>, Result))),
         ?assertEqual(ExpressionRpn, maps:get(<<"expressionRpn">>, Result)),
         ?assertEqual(ReplicasNum, maps:get(<<"replicasNum">>, Result)),
