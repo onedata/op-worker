@@ -347,10 +347,18 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
         {error, not_found} ->
             case start_session(#document{key = SessId, value = Sess}) of
                 {error, already_exists} ->
-                    reuse_or_create_session(
-                        SessId, SessType, Identity, Credentials,
-                        DataConstraints, ProxyVia
-                    );
+                    case Retries of
+                        0 ->
+                            % Process that is initializing session probably hangs - return error
+                            {error, already_exists};
+                        _ ->
+                            % Other process is initializing session - wait
+                            timer:sleep(ErrorSleep),
+                            reuse_or_create_session(
+                                SessId, SessType, Identity, Credentials,
+                                DataConstraints, ProxyVia, ErrorSleep * 2, Retries - 1
+                            )
+                    end;
                 Other ->
                     Other
             end;
