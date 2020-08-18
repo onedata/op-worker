@@ -277,9 +277,9 @@ encode_entry(Entry = #{<<"operation">> := ?SUBMIT, <<"payload">> := Payload}) ->
 encode_payload(Payload) ->
     maps:fold(fun
         (<<"onedata_json">>, JSON, PayloadIn) ->
-            PayloadIn#{<<"json">> => json_utils:encode(JSON)};
+            PayloadIn#{<<"json">> => JSON};
         (<<"onedata_rdf">>, RDF, PayloadIn) ->
-            PayloadIn#{<<"rdf">> => json_utils:encode(RDF)};
+            PayloadIn#{<<"rdf">> => RDF};
         (Key, Value, PayloadIn) ->
             case is_cdmi_xattr(Key) of
                 true ->
