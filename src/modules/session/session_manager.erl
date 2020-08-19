@@ -344,15 +344,21 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
             {ok, SessId};
         {ok, #document{key = SessId}} ->
             {ok, SessId};
-        {error, update_not_needed} ->
-            {ok, SessId};
         {error, not_found} ->
             case start_session(#document{key = SessId, value = Sess}) of
                 {error, already_exists} ->
-                    reuse_or_create_session(
-                        SessId, SessType, Identity, Credentials,
-                        DataConstraints, ProxyVia
-                    );
+                    case Retries of
+                        0 ->
+                            % Process that is initializing session probably hangs - return error
+                            {error, already_exists};
+                        _ ->
+                            % Other process is initializing session - wait
+                            timer:sleep(ErrorSleep),
+                            reuse_or_create_session(
+                                SessId, SessType, Identity, Credentials,
+                                DataConstraints, ProxyVia, ErrorSleep * 2, Retries - 1
+                            )
+                    end;
                 Other ->
                     Other
             end;
@@ -388,8 +394,6 @@ maybe_restart_session_internal(SessId) ->
             {ok, SessId};
         {ok, #document{key = SessId}} ->
             {ok, SessId};
-        {error, update_not_needed} ->
-            {ok, SessId};
         {error, _Reason} = Error ->
             Error
     end.
@@ -402,14 +406,13 @@ maybe_restart_session_internal(SessId) ->
 %% session doc.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_clear_session_record(session:record()) ->
-    {ok, session:record()} | {error, update_not_needed}.
+-spec maybe_clear_session_record(session:record()) -> {ok, session:record()}.
 maybe_clear_session_record(#session{supervisor = Sup, connections = Cons} = Sess) ->
     case is_alive(Sup) of
         true ->
             case lists:partition(fun is_alive/1, Cons) of
                 {_, []} ->
-                    {error, update_not_needed};
+                    {ok, Sess};
                 {AliveCons, _DeadCons} ->
                     {ok, Sess#session{connections = AliveCons}}
             end;

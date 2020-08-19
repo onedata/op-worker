@@ -183,7 +183,6 @@ init_per_testcase(Case, Config) when
 ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
-    initializer:mock_test_file_context(Config, ?FILE_UUID),
     NewConfig = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config
     ),
@@ -203,7 +202,6 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
-    initializer:mock_test_file_context(Config, ?FILE_UUID),
     NewConfig = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config
     ),
@@ -240,7 +238,6 @@ end_per_testcase(Case, Config) when
     end, ?config(session_ids, Config)),
     initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:unmock_test_file_context(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]);
 
 end_per_testcase(_Case, Config) ->
@@ -249,7 +246,6 @@ end_per_testcase(_Case, Config) ->
     initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_unload(Workers, space_logic),
-    initializer:unmock_test_file_context(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
 end_per_suite(_Config) ->

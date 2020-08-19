@@ -55,8 +55,9 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Checks whether file associated with StorageFileCtx is a directory.
+%% Returns true if processing passed StorageFileCtx should result in
+%% master job.
 %% @end
 %%-------------------------------------------------------------------
--callback is_dir(StorageFileCtx :: storage_file_ctx:ctx()) ->
+-callback should_generate_master_job(StorageFileCtx :: storage_file_ctx:ctx()) ->
     {boolean(), StorageFileCtx2 :: storage_file_ctx:ctx()}.

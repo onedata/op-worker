@@ -125,7 +125,7 @@ increase_batches_to_process(StorageFileId, SpaceId, Number) ->
         end
     )).
 
--spec mark_processed_batch(helpers:file_id(), od_space:id(), non_neg_integer()) -> {ok, doc()}.
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | non_neg_integer()) -> {ok, doc()}.
 mark_processed_batch(StorageFileId, SpaceId, Mtime) ->
     mark_processed_batch(StorageFileId, SpaceId, Mtime, undefined, undefined, undefined, true).
 

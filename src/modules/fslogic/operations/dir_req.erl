@@ -157,10 +157,11 @@ get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
 ) ->
     fslogic_worker:fuse_response().
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
+    ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
     CTime = time_utils:cluster_time_seconds(),
     Owner = user_ctx:get_user_id(UserCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
+    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
     {ok, DirUuid} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
     {ok, _} = times:save(#document{
@@ -168,7 +169,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         value = #times{mtime = CTime, atime = CTime, ctime = CTime},
         scope = SpaceId
     }),
-    fslogic_times:update_mtime_ctime(ParentFileCtx),
+    fslogic_times:update_mtime_ctime(ParentFileCtx2),
 
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
@@ -524,7 +525,7 @@ filtermap(Map, Filter, L, MaxProcs, Length) ->
     L :: [A]) -> [B].
 filtermap(Map, Filter, L) ->
     LWithNum = lists:zip(lists:seq(1, length(L)), L),
-    Mapped = utils:pmap(fun({Num, Element}) ->
+    Mapped = lists_utils:pmap(fun({Num, Element}) ->
         {Num, Map(Element)}
     end, LWithNum),
 

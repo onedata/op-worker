@@ -36,6 +36,7 @@
     sync_should_not_reimport_deleted_but_still_opened_file/2,
     sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed/2,
     create_subfiles_and_delete_before_import_is_finished_test/2,
+    changing_max_depth_test/1,
     create_file_in_dir_update_test/2,
     create_file_in_dir_exceed_batch_update_test/2,
 
@@ -121,7 +122,7 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     %% Create dirs and files on storage
 
     DirsNumber = 200,
-    utils:pforeach(fun(N) ->
+    lists_utils:pforeach(fun(N) ->
         NBin = integer_to_binary(N),
         DirPath = storage_sync_test_base:storage_path(?SPACE_ID, NBin, MountSpaceInRoot),
         FilePath = filename:join([DirPath, integer_to_binary(N)]),
@@ -352,6 +353,162 @@ create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
+
+changing_max_depth_test(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+
+    StorageTestDirPath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_DIR, true),
+
+    Dir2Path = filename:join([?TEST_DIR, ?TEST_DIR2]),
+    StorageTestDirPath2 = storage_sync_test_base:storage_path(?SPACE_ID, Dir2Path, true),
+    SpaceTestDirPath2 = ?SPACE_TEST_DIR_PATH(Dir2Path),
+
+    StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, true),
+    StorageTestFileinDirPath = storage_sync_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), true),
+
+    File2Path = filename:join([?TEST_DIR, ?TEST_DIR2, ?TEST_FILE1]),
+    StorageTestFileinDirPath2 = storage_sync_test_base:storage_path(?SPACE_ID, File2Path, true),
+    SpaceTestFilePath2 = ?SPACE_TEST_DIR_PATH(File2Path),
+
+    %% Create directories and files on storage
+    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
+    ok = sd_test_utils:mkdir(W1, SDHandle, 8#775),
+    SDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath2, RDWRStorage),
+    ok = sd_test_utils:mkdir(W1, SDHandle2, 8#775),
+    FileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sd_test_utils:create_file(W1, FileSDHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, FileSDHandle, 0, ?TEST_DATA),
+    FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath, RDWRStorage),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle, 0, ?TEST_DATA),
+    FileInDirSDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath2, RDWRStorage),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle2, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle2, 0, ?TEST_DATA),
+
+    SyncedStorage = storage_sync_test_base:get_synced_storage(Config, W1),
+    % in init_per_testcase, max_depth for import is set to 1
+    storage_sync_test_base:enable_import(Config, ?SPACE_ID, SyncedStorage),
+
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+
+    %% Only file on 1st level should be imported
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+    ?assertMatch({ok, [_]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+
+    % in init_per_testcase, max_depth for update is set to 2, so new file should be detected
+    storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_update(Config),
+
+    %% File on 2nd level and directory on 1 st level should be imported
+    ?assertMatch({ok, [_, _]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+    ?assertMatch({ok, [_]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
+    {ok, Handle5} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle5),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 2,
+        <<"toProcess">> => 3,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 1,
+        <<"importedSum">> => 2,
+        <<"updatedSum">> => 2,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 2,
+        <<"importedDayHist">> => 2,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 2,
+        <<"updatedDayHist">> => 2,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    % run another scan with max_depth = 3
+    storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage, #{max_depth => 3}),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, 3),
+    storage_sync_test_base:disable_update(Config),
+
+    %% Directory on 2nd and file on 3rd level should be imported
+    ?assertMatch({ok, [_, _]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, SpaceTestDirPath2}), ?ATTEMPTS),
+    ?assertMatch({ok, [_]},
+        lfm_proxy:get_children(W1, SessId, {path, SpaceTestDirPath2}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, SpaceTestFilePath2}), ?ATTEMPTS),
+    {ok, Handle6} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, SpaceTestFilePath2}, read)),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(W1, Handle6, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle6),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 3,
+        <<"toProcess">> => 4,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 2,
+        <<"importedSum">> => 3,
+        <<"updatedSum">> => 3,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 3,
+        <<"importedDayHist">> => 3,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 3,
+        <<"updatedDayHist">> => 3,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID).
 
 create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     % in this test storage_sync_dir_batch_size is set in init_per_testcase to 2
@@ -646,8 +803,6 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
 
-    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
-
     % create first file
     {ok, G1} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, 8#644),
     {ok, H1} = lfm_proxy:open(W1, SessId, {guid, G1}, write),
@@ -656,9 +811,10 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
 
     % open file
     ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, G1}, read), ?ATTEMPTS),
-
     % delete file
     ok = lfm_proxy:unlink(W1, SessId, {guid, G1}),
+    %ensure that space_dir mtime will change
+    timer:sleep(timer:seconds(1)),
 
     % there should be 1 file on storage
     ?assertMatch({ok, [_]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, 0, 10, StorageType)),
@@ -1280,15 +1436,16 @@ create_list_race_test(Config, MountSpaceInRoot) ->
     TestPid = self(),
     ok = test_utils:mock_new(W1, storage_driver),
     ok = test_utils:mock_expect(W1, storage_driver, listobjects, fun(SDHandle, Marker, Offset, BatchSize) ->
+        Result = meck:passthrough([SDHandle, Marker, Offset, BatchSize]),
         case SDHandle#sd_handle.file =:= <<"/">> of
             true ->
                 % hold on sync
-                TestPid ! {waiting, self(), Offset, meck:passthrough([SDHandle, Marker, Offset, BatchSize])},
+                TestPid ! {waiting, self(), Offset, Result},
                 receive continue -> ok end;
             false ->
                 ok
         end,
-        meck:passthrough([SDHandle, Marker, Offset, BatchSize])
+        Result
     end),
 
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),

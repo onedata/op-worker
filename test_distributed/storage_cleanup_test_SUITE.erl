@@ -103,9 +103,9 @@ file_should_be_deleted_from_storage_after_deletion(Config) ->
     SpaceName = ?SPACE_NAME(Config),
     SessId = ?SESS_ID(Worker, Config),
     StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, ?FILE_NAME),
-
+    FilePath =  filename:join(["/", SpaceName, ?FILE_NAME]),
     % when
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/", ?FILE_NAME/binary>>, 8#770),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath, 8#770),
     {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, FileHandle),
@@ -128,9 +128,9 @@ file_should_be_truncated_on_storage_after_truncate(Config) ->
     TestDataSize2 = ?TEST_DATA_LENGTH - TruncateSize,
     TestData2 = binary_part(?TEST_DATA, 0, TestDataSize2),
     StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, ?FILE_NAME),
-
+    FilePath =  filename:join(["/", SpaceName, ?FILE_NAME]),
     % when
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/", ?FILE_NAME/binary>>, 8#770),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath, 8#770),
 
 
     {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
@@ -215,9 +215,9 @@ file_should_be_deleted_from_storage_after_releasing_handle(Config) ->
     SpaceName = ?SPACE_NAME(Config),
     SessId = ?SESS_ID(Worker, Config),
     StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, ?FILE_NAME),
-
+    FilePath =  filename:join(["/", SpaceName, ?FILE_NAME]),
     % when
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/", ?FILE_NAME/binary>>, 8#770),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath, 8#770),
     {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ?assertEqual({ok, ?TEST_DATA}, storage_test_utils:read_file(Worker, StorageFilePath)),
@@ -554,7 +554,7 @@ suffix_in_metadata_and_storage_test(Config) ->
     SpacePath = <<"/", SpaceName/binary>>,
 
     FileName = generator:gen_name(),
-    FilePath = <<SpacePath/binary, "/", FileName/binary>>,
+    FilePath =  filename:join([SpacePath, FileName]),
     StorageSpacePathW1 = storage_test_utils:space_path(Worker1, SpaceId),
 
     ListDir = fun(Worker, Session, Path) ->
@@ -572,7 +572,7 @@ suffix_in_metadata_and_storage_test(Config) ->
     {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath, 8#664),
 
     StorageFilePath1 = storage_test_utils:file_path(Worker1, SpaceId, FileName),
-    Uuid = rpc:call(Worker1, file_id, guid_to_uuid, [Guid2]),
+    Uuid = file_id:guid_to_uuid(Guid2),
     StorageFilePath2 = storage_test_utils:file_path(Worker1, SpaceId, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)),
 
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
@@ -623,8 +623,8 @@ suffix_in_dir_metadata_test(Config) ->
 
     DirName = generator:gen_name(),
     FileName = generator:gen_name(),
-    DirPath = <<SpacePath/binary, "/", DirName/binary>>,
-    FilePath = <<DirPath/binary, "/", FileName/binary>>,
+    DirPath = filename:join([SpacePath, DirName]),
+    FilePath = filename:join([DirPath, FileName]),
     StorageSpacePathW1 = storage_test_utils:space_path(Worker1, SpaceId),
 
     ListDir = fun(Worker, Session, Path) ->
@@ -641,7 +641,7 @@ suffix_in_dir_metadata_test(Config) ->
 
     DirStoragePath = storage_test_utils:file_path(Worker1, SpaceId, DirName),
     StorageFilePath1 = filename:join([DirStoragePath, FileName]),
-    Uuid = rpc:call(Worker1, file_id, guid_to_uuid, [Guid2]),
+    Uuid = file_id:guid_to_uuid(Guid2),
     StorageFilePath2 = filename:join([DirStoragePath, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)]),
 
     {ok, StorageFiles} = storage_test_utils:list_dir(Worker1, StorageSpacePathW1),
@@ -653,7 +653,7 @@ suffix_in_dir_metadata_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid2}), ?ATTEMPTS),
 
-    ?assertEqual(2, length(ListDir(Worker1, SessionId1, SpacePath))),
+    ?assertEqual(2, length(ListDir(Worker1, SessionId1, SpacePath)), ?ATTEMPTS),
     [{_, D1}, {_, D2}] = ListDir(Worker1, SessionId1, SpacePath),
 
     % open, write and read
@@ -706,7 +706,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     SessionId2 = ?SESS_ID(Worker2, Config),
     SpacePath = <<"/", SpaceName/binary>>,
     FileName = generator:gen_name(),
-    FilePath = <<SpacePath/binary, "/", FileName/binary>>,
+    FilePath =  filename:join([SpacePath, FileName]),
     StorageSpacePathW1 = storage_test_utils:space_path(Worker1, SpaceId),
 
     ListDir = fun(Worker, Session, Path) ->
@@ -727,7 +727,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath, 8#664),
 
     StorageFilePath1 = storage_test_utils:file_path(Worker1, SpaceId, FileName),
-    Uuid = rpc:call(Worker1, file_id, guid_to_uuid, [Guid2]),
+    Uuid = file_id:guid_to_uuid(Guid2),
     StorageFilePath2 = storage_test_utils:file_path(Worker1, SpaceId, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)),
 
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),

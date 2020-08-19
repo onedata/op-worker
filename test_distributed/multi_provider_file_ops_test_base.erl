@@ -12,6 +12,7 @@
 -module(multi_provider_file_ops_test_base).
 -author("Jakub Kudzia").
 
+-include("middleware/middleware.hrl").
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -27,10 +28,11 @@
 -export([
     create_on_different_providers_test_base/1,
     basic_opts_test_base/4,
+    basic_opts_test_base/5,
     rtransfer_test_base/11,
     rtransfer_blocking_test_base/6,
     rtransfer_blocking_test_cleanup/1,
-    rtransfer_test_base2/5,
+    rtransfer_test_base2/6,
     many_ops_test_base/6,
     distributed_modification_test_base/4,
     multi_space_test_base/3,
@@ -49,7 +51,7 @@
     cancel_synchronizations_for_session_test_base/1,
     transfer_files_to_source_provider/1
 ]).
--export([init_env/1, teardown_env/1]).
+-export([init_env/1, teardown_env/1, mock_sync_errors/1]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, create_location/4]).
@@ -456,11 +458,11 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
 % updates per second and file location updates per second is checked.
 % For this test, environment with 2 1-node providers is assumed.
 rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
-    Attempts, TransferFileParts) ->
+    Attempts, TransferTimeout, TransferFileParts) ->
     rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1},
-        Attempts, TransferFileParts);
+        Attempts, TransferTimeout, TransferFileParts);
 rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
-    Attempts, TransferFileParts) ->
+    Attempts, TransferTimeout, TransferFileParts) ->
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
@@ -485,8 +487,8 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Start = time_utils:system_time_seconds(),
     Result = try
         verify_workers(Workers2, fun(W) ->
-            read_big_file(Config, FileSize, Level2File, W, true)
-        end, timer:seconds(Attempts)),
+            read_big_file(Config, FileSize, Level2File, W, TransferTimeout, true)
+        end, timer:seconds(TransferTimeout)),
         ok
     catch
         T:R -> {error, T, R}
@@ -627,10 +629,13 @@ rtransfer_blocking_test_cleanup(Config) ->
 
     test_utils:mock_validate_and_unload(Workers2, [replica_synchronizer, rtransfer_config]).
 
+basic_opts_test_base(Config, User, NodesDescroption, Attempts) ->
+    basic_opts_test_base(Config, User, NodesDescroption, Attempts, true).
+
 % TODO - add reading with chunks to test prefetching
-basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
-    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
-basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, CheckSequences) ->
+    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, CheckSequences);
+basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, CheckSequences) ->
 
 %%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
@@ -720,7 +725,11 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
             _ -> {false, WorkersDbsyncStates}
         end
     end,
-    ?assertEqual(true, AreAllSeqsEqual(), 15),
+    % TODO VFS-6652 Always check sequences
+    case CheckSequences of
+        true -> ?assertEqual(true, AreAllSeqsEqual(), 60);
+        false -> ok
+    end,
 
     ok.
 
@@ -1521,7 +1530,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     BlocksCount = ?config(block_count, Config),
     UserCount = ?config(user_count, Config),
     BlockSizeBytes = BlockSize * 1024 * 1024,
-    
+
     Users = [<<"user", (integer_to_binary(Num))/binary>> || Num <- lists:seq(1, UserCount)],
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     SessId = fun(User, W) ->
@@ -1571,12 +1580,12 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     End = erlang:monotonic_time(millisecond),
 
     ct:pal("Transfers canceled"),
-    
+
     ct:pal("Block size: ~p~n"
            "Block count: ~p~n"
            "Number of users: ~p~n"
            "Total time[ms]: ~p~n"
-           "Average time per user[ms]: ~p", 
+           "Average time per user[ms]: ~p",
         [BlockSize, BlocksCount, UserCount, End-Start, lists:sum(Times)/length(Times)]).
 
 cancel_synchronizations_for_session_test_base(Config0) ->
@@ -1624,7 +1633,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
         end,
         async_synchronize(Worker1, User, SessId, FileCtx, Block)
      end, lists:seq(0, BlocksCount - 1)),
-    
+
     timer:sleep(timer:seconds(5)),
     ct:pal("Transfers started"),
 
@@ -1635,7 +1644,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     end, Users),
 
     ct:pal("Transfers canceled"),
-    
+
     {OkCount, CancelCount} = lists:foldl(fun(Promise, {Ok, Cancel}) ->
         case rpc:yield(Promise) of
             {error, cancelled} ->
@@ -1644,10 +1653,10 @@ cancel_synchronizations_for_session_test_base(Config0) ->
                 {Ok+1, Cancel}
         end
     end, {0,0}, Promises),
-    
+
     ?assertEqual(0, rpc:call(Worker1, ets, info, [rtransfer_link_requests, size]), 500),
     End = erlang:monotonic_time(millisecond),
-    
+
     ct:pal("Block size: ~p~n"
     "Block count: ~p~n"
     "Number of users: ~p~n"
@@ -1656,7 +1665,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     "Cancelled transfers: ~p~n",
         [BlockSize, BlocksCount, UserCount, (End-Start)/1000, OkCount, CancelCount]).
 
-
+% @TODO VFS-6617 fix fsync failing on timeout
 transfer_files_to_source_provider(Config0) ->
     ct:timetrap(timer:minutes(10)),
     Config = extend_config(Config0, <<"user1">>, {0, 0, 0, 0}, 0),
@@ -1665,8 +1674,8 @@ transfer_files_to_source_provider(Config0) ->
     Worker = ?config(worker1, Config),
     FilesNum = ?config(files_num, Config),
     Size = ?config(file_size, Config),
-    
-    Guids = utils:pmap(fun(Num) ->
+
+    Guids = lists_utils:pmap(fun(Num) ->
         FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
         {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, 8#755),
         {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
@@ -1674,40 +1683,47 @@ transfer_files_to_source_provider(Config0) ->
         ok = lfm_proxy:close(Worker, Handle),
         Guid
     end, lists:seq(1, FilesNum)),
-    
+
     ct:pal("~p files created", [FilesNum]),
-    
+
     Start = erlang:monotonic_time(millisecond),
-    
-    TidsAndGuids = utils:pmap(fun(Guid) ->
+
+    TidsAndGuids = lists_utils:pmap(fun(Guid) ->
         {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
         {Tid, Guid}
     end, Guids),
-    
-    utils:pforeach(fun F({Tid, Guid}) ->
+
+    lists_utils:pforeach(fun F({Tid, Guid}) ->
         {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [Guid]),
         case Transfers of
             [Tid] ->
                 ok;
-            _ -> 
+            _ ->
                 F({Tid, Guid})
         end
     end, TidsAndGuids),
-    
+
     End = erlang:monotonic_time(millisecond),
-    
+
     StartGui = erlang:monotonic_time(millisecond),
-    utils:pforeach(fun(Num) ->
-        {ok, [{_, List}]} = 
-            rpc:call(Worker, transfer_data_backend, list_transfers, 
-                [SessionId, SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),
+    lists_utils:pforeach(fun(Num) ->
+        Data = #{
+            <<"state">> => ?ENDED_TRANSFERS_STATE,
+            <<"offset">> => (Num-1)*100,
+            <<"limit">> => 100
+        },
+        {ok, value, #{<<"transfers">> := List}} = ?assertMatch({ok, value, #{}}, rpc:call(
+            Worker, space_middleware, get, [
+                #op_req{data = Data, gri = #gri{id = SpaceName, aspect = transfers}}, anything
+            ]
+        )),
         ?assertMatch(100, length(List))
     end, lists:seq(1, FilesNum div 100)),
     EndGui = erlang:monotonic_time(millisecond),
-    
+
     ct:pal("Transfer time[s]: ~p~n"
            "Average time per file[ms]: ~p~n"
-           "GUI time [s]: ~p", 
+           "GUI time [s]: ~p",
         [(End-Start)/1000, (End-Start)/FilesNum, (EndGui-StartGui)/1000]).
 
 
@@ -1742,6 +1758,44 @@ teardown_env(Config) ->
     hackney:stop(),
     ssl:stop().
 
+mock_sync_errors(Config) ->
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+
+    RequestDelay = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(1)),
+
+    test_utils:mock_new(Workers, [dbsync_in_stream_worker, dbsync_communicator], [passthrough]),
+
+    test_utils:mock_expect(Workers, dbsync_in_stream_worker, handle_info, fun
+        ({batch_applied, {Since, Until}, Timestamp, Ans} = Info, State) ->
+            case Ans of
+                ok ->
+                    Counter = case get(test_counter) of
+                        undefined -> 1;
+                        Val -> Val
+                    end,
+                    case Counter < 4 of
+                        true ->
+                            put(test_counter, Counter + 1),
+                            meck:passthrough([{batch_applied, {Since, max(Until - 10, Since)}, Timestamp, Ans}, State]);
+                        _ ->
+                            put(test_counter, 1),
+                            meck:passthrough([Info, State])
+                    end;
+                _ ->
+                    meck:passthrough([Info, State])
+            end;
+        (Info, State) ->
+            meck:passthrough([Info, State])
+    end),
+
+    test_utils:mock_expect(Workers, dbsync_communicator, send_changes,
+        fun(ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs) ->
+            timer:sleep(2000),
+            meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs])
+        end),
+
+    [{request_delay, RequestDelay} | Config].
 
 %%%===================================================================
 %%% Internal functions
@@ -2044,9 +2098,12 @@ create_big_file(Config, ChunkSize, ChunksNum, PartNum, File, Worker) ->
 
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
-read_big_file(Config, _FileSize, File, Worker, true) ->
-    SessId = ?config(session, Config),
+read_big_file(Config, _FileSize, File, Worker, Transfer) ->
     Attempts = ?config(attempts, Config),
+    read_big_file(Config, _FileSize, File, Worker, Attempts, Transfer).
+
+read_big_file(Config, _FileSize, File, Worker, Attempts, true) ->
+    SessId = ?config(session, Config),
     Worker1 = ?config(worker1, Config),
 
     ProviderId = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
@@ -2054,10 +2111,9 @@ read_big_file(Config, _FileSize, File, Worker, true) ->
     {ok, TransferID} = ?assertMatch({ok, _},
         lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
             {path, File}, ProviderId)),
-    ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
-        rpc:call(Worker1, transfer, get, [TransferID]), Attempts),
+    await_replication_end(Worker1 ,TransferID, Attempts),
     timer:now_diff(os:timestamp(), Start);
-read_big_file(Config, FileSize, File, Worker, _) ->
+read_big_file(Config, FileSize, File, Worker, _Attempts, _) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
     read_big_file_loop(FileSize, File, Worker, SessId, Attempts, undefined, 0).
@@ -2285,4 +2341,24 @@ get_seq_and_timestamp_or_error(SpaceId, ProviderId) ->
             maps:get(ProviderId, Seq, {error, not_found});
         Error ->
             Error
+    end.
+
+await_replication_end(Node, TransferId, 1) ->
+    ?assertMatch(
+        {ok, #document{value = #transfer{replication_status = completed}}},
+        rpc:call(Node, transfer, get, [TransferId])
+    );
+await_replication_end(Node, TransferId, Attempts) ->
+    case rpc:call(Node, transfer, get, [TransferId]) of
+        {ok, #document{value = #transfer{replication_status = completed}}} ->
+            ok;
+        {ok, #document{value = #transfer{replication_status = Status} = Transfer}} when
+            Status == failed;
+            Status == cancelled
+        ->
+            ct:pal("Replication failed: ~p", [Transfer]),
+            throw(replication_failed);
+        _ ->
+            timer:sleep(timer:seconds(1)),
+            await_replication_end(Node, TransferId, Attempts - 1)
     end.

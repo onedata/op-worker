@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("distribution_assert.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -87,32 +88,8 @@ all() -> [
 -define(RULE_SETTING(Value), ?RULE_SETTING(true, Value)).
 -define(RULE_SETTING(Enabled, Value), #{enabled => Enabled, value => Value}).
 
--define(DIST(__ProviderId, __Size),
-    (fun
-        (P, 0) -> [#{<<"providerId">> => P, <<"blocks">> => []}];
-        (P, S) -> [#{<<"providerId">> => P, <<"blocks">> => [[0, S]]}]
-    end)(__ProviderId, __Size)).
-
--define(DISTS(ProviderIds, Sizes), lists:flatmap(fun({PId, __Size}) ->
-    ?DIST(PId, __Size)
-end, lists:zip(ProviderIds, Sizes))).
-
--define(normalizeDistribution(__Distributions), lists:sort(lists:map(fun(__Distribution) ->
-    __Distribution#{
-        <<"totalBlocksSize">> => lists:foldl(fun([_Offset, __Size], __SizeAcc) ->
-            __SizeAcc + __Size
-        end, 0, maps:get(<<"blocks">>, __Distribution))
-    }
-end, __Distributions))).
-
 -define(assertDistribution(Worker, SessionId, ExpectedDistribution, FileGuid),
-    ?assertEqual(?normalizeDistribution(ExpectedDistribution), try
-        {ok, __FileBlocks} = lfm_proxy:get_file_distribution(Worker, SessionId, {guid, FileGuid}),
-        lists:sort(__FileBlocks)
-    catch
-        _:_ ->
-            error
-    end, ?ATTEMPTS)).
+    ?assertDistribution(Worker, SessionId, ExpectedDistribution, FileGuid, ?ATTEMPTS)).
 
 -define(assertFilesInView(Worker, SpaceId, ExpectedGuids),
     ?assertMatch([], begin
@@ -230,15 +207,16 @@ autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
     Size = 10,
     DomainP1 = ?GET_DOMAIN_BIN(W1),
     DomainP2 = ?GET_DOMAIN_BIN(W2),
-    enable_file_popularity(W1, ?SPACE_ID),
+    ok = enable_file_popularity(W1, ?SPACE_ID),
     Guid = write_file(W2, SessId2, ?FILE_PATH(FileName), Size),
-    configure_autocleaning(W1, ?SPACE_ID, #{
+    ok = configure_autocleaning(W1, ?SPACE_ID, #{
         enabled => true,
         target => 0,
         threshold => Size - 1
     }),
 
     % read file on W1 to replicate it
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
     read_file(W1, SessId, Guid, Size),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     ?assertOneOfReports({ok, #{
@@ -258,6 +236,7 @@ periodical_autocleaning_should_evict_file_replica_when_it_is_replicated(Config) 
     DomainP2 = ?GET_DOMAIN_BIN(W2),
     enable_file_popularity(W1, ?SPACE_ID),
     Guid = write_file(W1, SessId, ?FILE_PATH(FileName), Size),
+    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1], [Size]), Guid),
     % read file on W2 to replicate it
     read_file(W2, SessId2, Guid, Size),
 
@@ -287,6 +266,7 @@ forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated(
     DomainP2 = ?GET_DOMAIN_BIN(W2),
     enable_file_popularity(W1, ?SPACE_ID),
     Guid = write_file(W1, SessId, ?FILE_PATH(FileName), Size),
+    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1], [Size]), Guid),
     % read file on W2 to replicate it
     read_file(W2, SessId2, Guid, Size),
 
@@ -382,6 +362,7 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
     ?assertEqual(FilesNum * FileSize, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     % "On the fly" replication of the ExtraFile will cause occupancy
     % to exceed the Threshold.
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [ExtraFileSize]), EG),
     read_file(W1, SessId, EG, ExtraFileSize),
     {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
@@ -415,6 +396,7 @@ autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules(Confi
     Guid = write_file(W2, SessId2, ?FILE_PATH(FileName), Size),
 
     % read file on W1 to replicate it
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
     read_file(W1, SessId, Guid, Size),
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
@@ -666,6 +648,7 @@ autocleaning_should_not_evict_opened_file_replica(Config) ->
             max_monthly_moving_average => ?RULE_SETTING(1)
     }}),
 
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
     % read file to be replicated and leave it opened
     {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, Guid}, read), ?ATTEMPTS),
     {ok, _} = ?assertMatch({ok, _}, lfm_proxy:read(W1, H, 0, Size), ?ATTEMPTS),
@@ -724,6 +707,7 @@ cancel_autocleaning_run(Config) ->
     ?assertEqual(FilesNum * FileSize, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     % "On the fly" replication of the ExtraFile will cause occupancy
     % to exceed the Threshold.
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [ExtraFileSize]), EG),
     read_file(W1, SessId, EG, ExtraFileSize),
     {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
 
@@ -874,18 +858,15 @@ write_files(Worker, SessId, DirPath, FilePrefix, Size, Num) ->
     end, lists:seq(1, Num)).
 
 read_file(Worker, SessId, Guid, Size) ->
-    ?assertEqual(Size, begin
-        try
-            {ok, H} = lfm_proxy:open(Worker, SessId, {guid, Guid}, read),
-            {ok, Data} = lfm_proxy:read(Worker, H, 0, Size),
-            ok = lfm_proxy:close(Worker, H),
-            byte_size(Data)
-        catch
-            _:_ ->
-                error
-        end
-    end,
-        ?ATTEMPTS).
+    ?assertEqual(Size, try
+        {ok, H} = lfm_proxy:open(Worker, SessId, {guid, Guid}, read),
+        {ok, Data} = lfm_proxy:read(Worker, H, 0, Size),
+        ok = lfm_proxy:close(Worker, H),
+        byte_size(Data)
+    catch
+        _:_ ->
+            error
+    end, ?ATTEMPTS).
 
 schedule_file_replication(Worker, SessId, Guid, ProviderId) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, {guid, Guid}), ?ATTEMPTS),
@@ -924,7 +905,8 @@ ensure_space_empty(SpaceId, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     lists:foreach(fun(W) ->
-        ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?SESSION(W, Config), {guid, Guid}, 0, 1), ?ATTEMPTS)
+        ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?SESSION(W, Config), {guid, Guid}, 0, 1), ?ATTEMPTS),
+        ?assertEqual(0, current_size(W, SpaceId), ?ATTEMPTS)
     end, Workers).
 
 
@@ -973,10 +955,7 @@ list(Worker, SpaceId, LinkId, Offset, Limit) ->
     rpc:call(Worker, autocleaning_api, list_reports, [SpaceId, LinkId, Offset, Limit]).
 
 get_run_report(Worker, ARId) ->
-    Result = rpc:call(Worker, autocleaning_api, get_run_report, [ARId]),
-    % todo remove this log
-    ct:print("Result: ~p", [Result]),
-    Result.
+    rpc:call(Worker, autocleaning_api, get_run_report, [ARId]).
 
 delete(Worker, SpaceId, ARId) ->
     rpc:call(Worker, autocleaning_run, delete, [ARId, SpaceId]).

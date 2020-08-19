@@ -104,6 +104,7 @@
 
 % Mocked space data
 -define(SPACE_NAME(__Space), __Space).
+-define(SPACE_OWNERS(__Space), [?USER_1]).
 -define(SPACE_DIRECT_USERS_VALUE(__Space), ?USER_PERMS_IN_SPACE_VALUE_BINARIES).
 -define(SPACE_DIRECT_USERS_MATCHER(__Space), ?USER_PERMS_IN_SPACE_MATCHER_ATOMS).
 -define(SPACE_EFF_USERS_VALUE(__Space), ?USER_PERMS_IN_SPACE_VALUE_BINARIES).
@@ -137,7 +138,11 @@
 -define(PROVIDER_SUBDOMAIN(__Provider), undefined).
 -define(PROVIDER_SPACES_VALUE(__Provider), #{?SPACE_1 => 1000000000, ?SPACE_2 => 1000000000}).
 -define(PROVIDER_SPACES_MATCHER(__Provider), #{?SPACE_1 := 1000000000, ?SPACE_2 := 1000000000}).
--define(PROVIDER_STORAGES(__Provider), [?STORAGE_1, ?STORAGE_2]).
+-define(PROVIDER_STORAGES(__Provider), case __Provider of
+    ?PROVIDER_1 -> [?STORAGE_1];
+    ?PROVIDER_2 -> [?STORAGE_2];
+    _ -> []
+end).
 -define(PROVIDER_EFF_USERS(__Provider), [?USER_1, ?USER_2]).
 -define(PROVIDER_EFF_GROUPS(__Provider), [?GROUP_1, ?GROUP_2]).
 -define(PROVIDER_LATITUDE(__Provider), 0.0).
@@ -190,6 +195,10 @@
 
 % Mocked storage data
 -define(STORAGE_NAME(__Storage), __Storage).
+-define(STORAGE_PROVIDER(__Storage), case __Storage of
+    ?STORAGE_1 -> [?PROVIDER_1];
+    ?STORAGE_2 -> [?PROVIDER_2]
+end).
 
 
 -define(MOCK_JOIN_GROUP_TOKEN, <<"mockJoinGroupToken">>).
@@ -250,6 +259,7 @@
 
 -define(SPACE_PRIVATE_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
+    owners = ?SPACE_OWNERS(__Space),
     direct_users = ?SPACE_DIRECT_USERS_MATCHER(__Space),
     eff_users = ?SPACE_EFF_USERS_MATCHER(__Space),
     direct_groups = ?SPACE_DIRECT_GROUPS_MATCHER(__Space),
@@ -261,6 +271,7 @@
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
+    owners = [],
     direct_users = #{},
     eff_users = #{},
     direct_groups = #{},
@@ -291,13 +302,13 @@
 }}).
 
 
--define(PROVIDER_PRIVATE_DATA_MATCHER(__Provider), #document{key = __Provider, value = #od_provider{
+-define(PROVIDER_PRIVATE_DATA_MATCHER(__Provider, __Storages), #document{key = __Provider, value = #od_provider{
     name = ?PROVIDER_NAME(__Provider),
     admin_email = ?PROVIDER_ADMIN_EMAIL(__Provider),
     subdomain_delegation = ?PROVIDER_SUBDOMAIN_DELEGATION(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
     online = ?PROVIDER_ONLINE(__Provider),
-    storages = ?PROVIDER_STORAGES(__Provider),
+    storages = __Storages,
     eff_spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
     eff_users = ?PROVIDER_EFF_USERS(__Provider),
     eff_groups = ?PROVIDER_EFF_GROUPS(__Provider)
@@ -346,12 +357,19 @@
     spaces = ?HARVESTER_SPACES(__Harvester)
 }}).
 
--define(STORAGE_PRIVATE_DATA_MATCHER(__Storage), #document{key = __Storage, value = #od_storage{
+-define(STORAGE_PRIVATE_DATA_MATCHER(__Storage, __Provider), #document{key = __Storage, value = #od_storage{
     name = ?STORAGE_NAME(__Storage),
-    provider = ?PROVIDER_1,
+    provider = __Provider,
     spaces = [],
     qos_parameters = #{},
-    imported = false
+    imported = false,
+    readonly = false
+}}).
+
+-define(STORAGE_SHARED_DATA_MATCHER(__Storage, __Provider), #document{key = __Storage, value = #od_storage{
+    provider = __Provider,
+    qos_parameters = #{},
+    readonly = false
 }}).
 
 
@@ -404,6 +422,8 @@ end).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{
         <<"gri">> => gri:serialize(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = private}),
+        <<"owners">> => ?SPACE_OWNERS(__SpaceId),
+
         <<"users">> => ?SPACE_DIRECT_USERS_VALUE(__SpaceId),
         <<"effectiveUsers">> => ?SPACE_EFF_USERS_VALUE(__SpaceId),
 
@@ -509,12 +529,20 @@ end).
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_storage, id = __StorageId, aspect = instance, scope = private}),
     <<"name">> => ?STORAGE_NAME(__StorageId),
-    <<"provider">> => ?PROVIDER_1,
+    <<"provider">> => ?STORAGE_PROVIDER(__StorageId),
     <<"spaces">> => [],
     <<"qosParameters">> => #{},
-    <<"imported">> => false
+    <<"imported">> => false,
+    <<"readonly">> => false
 }).
 
+-define(STORAGE_SHARED_DATA_VALUE(__StorageId), #{
+    <<"revision">> => 1,
+    <<"gri">> => gri:serialize(#gri{type = od_storage, id = __StorageId, aspect = instance, scope = shared}),
+    <<"provider">> => ?STORAGE_PROVIDER(__StorageId),
+    <<"qosParameters">> => #{},
+    <<"readonly">> => false
+}).
 
 -define(TOKEN_SHARED_DATA_VALUE(__TokenId), #{
     <<"revision">> => 1,

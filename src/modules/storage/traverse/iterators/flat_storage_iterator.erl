@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% storage_iterator callbacks
--export([init_root_storage_file_ctx/3, get_children_and_next_batch_job/1, is_dir/1]).
+-export([init_root_storage_file_ctx/3, get_children_and_next_batch_job/1, should_generate_master_job/1]).
 
 %% API
 -export([get_virtual_directory_ctx/3]).
@@ -85,12 +85,13 @@ get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link storage_iterator} callback is_dir/1.
+%% {@link storage_iterator} callback should_generate_master_job/1.
 %% @end
 %%--------------------------------------------------------------------
--spec is_dir(StorageFileCtx :: storage_file_ctx:ctx()) ->
+-spec should_generate_master_job(StorageFileCtx :: storage_file_ctx:ctx()) ->
     {boolean(), StorageFileCtx2 :: storage_file_ctx:ctx()}.
-is_dir(StorageFileCtx) ->
+should_generate_master_job(StorageFileCtx) ->
+    % only StorageFileCtx associated with space is processed in master job on object storages
     {false, StorageFileCtx}.
 
 %%%===================================================================

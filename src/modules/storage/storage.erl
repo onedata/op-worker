@@ -23,27 +23,31 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/storage/storage.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/5, get/1, exists/1, delete/1, clear_storages/0]).
+-export([create/6, get/1, exists/1, delete/1, clear_storages/0]).
 
 %% Functions to retrieve storage details in Onepanel compatible format
 -export([describe/1, describe_luma_config/1]).
 
 %%% Functions to retrieve storage details
--export([get_id/1, get_helper/1, get_helper_name/1, get_luma_feed/1, get_luma_config/1]).
+-export([
+    get_id/1, get_block_size/1, get_helper/1, get_helper_name/1,
+    get_luma_feed/1, get_luma_config/1
+]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1]).
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
--export([set_imported/2, set_qos_parameters/2]).
+-export([set_imported/2, set_qos_parameters/2, set_readonly/2]).
 -export([update_helper_args/2, update_helper_admin_ctx/2,
     update_helper/2]).
 
@@ -71,8 +75,12 @@
 -type qos_parameters() :: od_storage:qos_parameters().
 -type luma_feed() :: luma:feed().
 -type luma_config() :: luma_config:config().
+-type access_type() :: ?READONLY_STORAGE | ?READWRITE_STORAGE.
+-type imported() :: boolean().
+-type readonly() :: boolean().
 
--export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0]).
+-export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0, access_type/0,
+    imported/0, readonly/0]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -87,23 +95,23 @@ end).
 %%%===================================================================
 
 -spec create(name(), helpers:helper(), luma_config(),
-    boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
-create(Name, Helper, LumaConfig, ImportedStorage, QosParameters) ->
+    imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
+create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
     lock_on_storage_by_name(Name, fun() ->
         case is_name_occupied(Name) of
             true ->
                 ?ERROR_ALREADY_EXISTS;
             false ->
-                create_insecure(Name, Helper, LumaConfig, ImportedStorage, QosParameters)
+                create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters)
         end
     end).
 
 
 %% @private
 -spec create_insecure(name(), helpers:helper(), luma_config(),
-    boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
-create_insecure(Name, Helper, LumaConfig, ImportedStorage, QosParameters) ->
-    case storage_logic:create_in_zone(Name, ImportedStorage) of
+    imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
+create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
+    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly) of
         {ok, Id} ->
             case storage_config:create(Id, Helper, LumaConfig) of
                 {ok, Id} ->
@@ -155,6 +163,7 @@ describe(StorageData) ->
         <<"name">> => fetch_name(StorageId),
         <<"type">> => helper:get_name(Helper),
         <<"importedStorage">> => is_imported(StorageId),
+        <<"readonly">> => is_local_storage_readonly(StorageId),
         <<"qosParameters">> => fetch_qos_parameters_of_local_storage(StorageId)
     }}.
 
@@ -229,6 +238,17 @@ get_id(StorageData) ->
     storage_config:get_id(StorageData).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns size of block used by underlying object storage.
+%% For posix-compatible ones 'undefined' is returned.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_block_size(id()) -> non_neg_integer() | undefined.
+get_block_size(StorageId) ->
+    helper:get_block_size(get_helper(StorageId)).
+
+
 -spec get_helper(data() | id()) -> helpers:helper().
 get_helper(StorageDataOrId)  ->
     storage_config:get_helper(StorageDataOrId).
@@ -285,17 +305,28 @@ is_imported(StorageId) when is_binary(StorageId) ->
 is_imported(StorageData) ->
     is_imported(storage:get_id(StorageData)).
 
+-spec is_local_storage_readonly(id()) -> boolean().
+is_local_storage_readonly(StorageId) when is_binary(StorageId) ->
+    {ok, Readonly} = ?throw_on_error(storage_logic:is_local_storage_readonly(StorageId)),
+    Readonly.
+
+-spec is_storage_readonly(id() | data(), od_space:id()) -> boolean().
+is_storage_readonly(StorageId, SpaceId) when is_binary(StorageId) ->
+    {ok, Readonly} = ?throw_on_error(storage_logic:is_storage_readonly(StorageId, SpaceId)),
+    Readonly;
+is_storage_readonly(StorageData, SpaceId) ->
+    is_storage_readonly(storage:get_id(StorageData), SpaceId).
+
+
 -spec has_non_auto_luma_feed(data()) -> boolean().
 has_non_auto_luma_feed(Storage) ->
     get_luma_feed(Storage) =/= ?AUTO_FEED.
 
+
 -spec is_local(id()) -> boolean().
 is_local(StorageId) ->
-    case storage_logic:get_provider(StorageId) of
-        ?ERROR_FORBIDDEN -> false;
-        {error, _} = Error -> throw(Error);
-        {ok, ProviderId} -> oneprovider:is_self(ProviderId)
-    end.
+    provider_logic:has_storage(StorageId).
+
 
 -spec is_posix_compatible(id() | data()) -> boolean().
 is_posix_compatible(StorageDataOrId) ->
@@ -327,10 +358,13 @@ update_luma_config(StorageId, Diff) ->
     end.
 
 
--spec set_imported(id(), boolean()) -> ok | {error, term()}.
+-spec set_imported(id(), imported()) -> ok | {error, term()}.
 set_imported(StorageId, Imported) ->
     storage_logic:set_imported(StorageId, Imported).
 
+-spec set_readonly(id(), readonly()) -> ok | {error, term()}.
+set_readonly(StorageId, Readonly) ->
+    storage_logic:set_readonly(StorageId, Readonly).
 
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
@@ -501,7 +535,10 @@ on_helper_changed(StorageId) ->
 -spec is_name_occupied(name()) -> boolean().
 is_name_occupied(Name) ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
-    lists:member(Name, lists:map(fun storage_logic:get_name/1, StorageIds)).
+    lists:member(Name, lists:map(fun(StorageId) ->
+        {ok, OccupiedName} = storage_logic:get_name(StorageId),
+        OccupiedName
+    end, StorageIds)).
 
 
 %% @private
@@ -563,7 +600,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage = #storage{name 
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, unknown, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(Name, unknown, false, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).

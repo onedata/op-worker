@@ -21,6 +21,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/storage/storage.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -29,11 +30,13 @@
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
+-export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storage_ids/1,
-    get_local_storage_id/1, get_all_storage_ids/1]).
+    get_local_storage_id/1, get_storages_by_provider/2, get_all_storage_ids/1]).
 -export([get_provider_ids/1, get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([is_supported_by_storage/2]).
+-export([has_readonly_support_from/2]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
@@ -124,11 +127,10 @@ has_eff_privilege(SpaceDocOrId, UserId, Privilege) ->
 
 -spec has_eff_privileges(od_space:doc() | od_space:id(), od_user:id(),
     [privileges:space_privilege()]) -> boolean().
-has_eff_privileges(#document{value = #od_space{eff_users = EffUsers}}, UserId, Privileges) ->
+has_eff_privileges(#document{value = #od_space{eff_users = EffUsers}} = SpaceDoc, UserId, Privileges) ->
     UserPrivileges = maps:get(UserId, EffUsers, []),
-    lists:all(fun(Privilege) ->
-        lists:member(Privilege, UserPrivileges)
-    end, Privileges);
+    % space owners have all the privileges, regardless of those assigned
+    lists_utils:is_subset(Privileges, UserPrivileges) orelse is_owner(SpaceDoc, UserId);
 has_eff_privileges(SpaceId, UserId, Privileges) ->
     case get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{} = SpaceDoc} ->
@@ -136,6 +138,18 @@ has_eff_privileges(SpaceId, UserId, Privileges) ->
         _ ->
             false
     end.
+
+
+-spec is_owner(od_space:id() | od_space:doc(), od_user:id()) -> boolean().
+is_owner(SpaceId, UserId) when is_binary(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{} = SpaceDoc} ->
+            is_owner(SpaceDoc, UserId);
+        _ ->
+            false
+    end;
+is_owner(#document{value = #od_space{owners = Owners}}, UserId) ->
+    lists:member(UserId, Owners).
 
 
 -spec get_eff_groups(gs_client_worker:client(), od_space:id()) ->
@@ -181,14 +195,35 @@ get_local_storage_id(SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of storage ids supporting given space under this provider.
+%% Returns list of storage ids supporting given space, belonging to this provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_local_storage_ids(od_space:id()) -> {ok, [storage:id()]} | errors:error().
 get_local_storage_ids(SpaceId) ->
-    case get(?ROOT_SESS_ID, SpaceId) of
-        {ok, #document{value = #od_space{local_storages = LocalStorages}}} ->
-            {ok, LocalStorages};
+    case get_storages_by_provider(SpaceId, oneprovider:get_id()) of
+        {ok, ProviderStorages} -> {ok, maps:keys(ProviderStorages)};
+        Error -> Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns map in the form #{storage:id() => storage:access_type()}
+%% with storages supporting given space, belonging to ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storages_by_provider(od_space:id() | od_space:record(), od_provider:id()) ->
+    {ok, #{storage:id() => storage:access_type()}} | errors:error().
+get_storages_by_provider(#od_space{storages_by_provider = StoragesByProvider}, ProviderId) ->
+    case maps:get(ProviderId, StoragesByProvider, undefined) of
+        undefined -> ?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId);
+        ProviderStoragesMap -> {ok, ProviderStoragesMap}
+    end;
+get_storages_by_provider(SpaceId, ProviderId) when is_binary(SpaceId)->
+    % called by module to be mocked in tests
+    case space_logic:get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = Space}} ->
+            get_storages_by_provider(Space, ProviderId);
         {error, _} = Error ->
             Error
     end.
@@ -248,6 +283,24 @@ is_supported_by_storage(SpaceId, StorageId) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether ALL storages with which the ProviderId supports
+%% the space are readonly.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_readonly_support_from(od_space:id() | od_space:record(), od_provider:id()) -> boolean().
+has_readonly_support_from(SpaceOrId, ProviderId) ->
+    case get_storages_by_provider(SpaceOrId, ProviderId) of
+        {ok, ProviderStorages} ->
+            lists:all(fun(AccessMode) ->
+                AccessMode =:= ?READONLY_STORAGE
+            end, maps:values(ProviderStorages));
+        {error, _} = Error ->
+            throw(Error)
+    end.
+
+
 -spec can_view_user_through_space(gs_client_worker:client(), od_space:id(),
     ClientUserId :: od_user:id(), TargetUserId :: od_user:id()) -> boolean().
 can_view_user_through_space(SessionId, SpaceId, ClientUserId, TargetUserId) ->
@@ -282,6 +335,7 @@ can_view_group_through_space(SessionId, SpaceId, ClientUserId, GroupId) ->
 can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
     has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso
         has_eff_group(SpaceDoc, GroupId).
+
 
 %%--------------------------------------------------------------------
 %% @doc

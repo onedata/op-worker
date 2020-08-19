@@ -113,7 +113,7 @@ all() -> [
     effective_qos_for_file_in_directory,
     effective_qos_for_file_in_nested_directories,
     effective_qos_for_files_in_different_directories_of_tree_structure,
-    
+
     % QoS clean up tests
     qos_cleanup_test,
     
@@ -747,9 +747,4 @@ mock_synchronize_transfers(Config) ->
 mock_storage_get_provider(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, storage),
-    lists:foreach(fun(Worker) ->
-    ok = test_utils:mock_expect(Workers, storage_logic, get_provider,
-        fun(_StorageId) ->
-            {ok, ?GET_DOMAIN_BIN(Worker)}
-        end)
-    end, Workers).
+    ok = test_utils:mock_expect(Workers, storage, is_local, fun(_StorageId) -> true end).

@@ -1319,6 +1319,7 @@ get_storage_file_id_by_uuid(Worker, FileUuid) ->
 override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
     test_utils:mock_unload(Workers, [space_logic]),
     test_utils:mock_new(Workers, space_logic, []),
+    test_utils:mock_expect(Workers, space_logic, is_owner, fun(_, _) -> false end),
     test_utils:mock_expect(Workers, space_logic, has_eff_user,
         fun(_Client, SpId, UsId) ->
             SpId =:= SpaceId andalso UsId =:= <<"user1">>

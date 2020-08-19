@@ -324,7 +324,7 @@ process_children_batch(CurrentMasterJob = #storage_traverse_master{
                 {true, false} ->
                     {ComputePartialResult, ChildCtx2} = compute(FoldChildrenFun, ChildCtx, Info, ComputeAcc,
                         FoldChildrenEnabled),
-                    case Iterator:is_dir(ChildCtx2) of
+                    case Iterator:should_generate_master_job(ChildCtx2) of
                         {false, ChildCtx3} ->
                             {MasterJobsIn, [get_slave_job(ChildCtx3, ResetInfo) | SlaveJobsIn], ComputePartialResult};
                         {true, ChildCtx3} ->

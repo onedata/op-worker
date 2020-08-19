@@ -14,22 +14,15 @@
             "storages": [
                 {
                     "type": "posix",
-                    "name": "/mnt/st"
+                    "name": "/mnt/st1_ro",
+                    "readonly": false,
+                    "group": 1
                 },
                 {
-                    "type": "cephrados",
-                    "name": "cephrados",
-                    "pool": "onedata:8"
-                },
-                {
-                    "type": "nulldevice",
-                    "name": "nulldevice",
-                    "latencyMin": "10",
-                    "latencyMax": "20",
-                    "timeoutProbability": "0.0",
-                    "filter": "*",
-                    "simulatedFilesystemParameters": "",
-                    "simulatedFilesystemGrowSpeed": "0.0"
+                    "type": "posix",
+                    "name": "/mnt/st1_rdwr",
+                    "readonly": false,
+                    "group": 1
                 }
             ],
             "users": [],
@@ -40,16 +33,6 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st2"
-                },
-                {
-                    "type": "nulldevice",
-                    "name": "nulldevice",
-                    "latencyMin": "10",
-                    "latencyMax": "20",
-                    "timeoutProbability": "0.0",
-                    "filter": "*",
-                    "simulatedFilesystemParameters": "",
-                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -69,27 +52,12 @@
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 2
+                        "worker_num": 1
                     }
                 }
             },
             "op_worker": {
                 "worker1": {
-                    "vm.args": {
-                        "setcookie": "test_cookie1"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
-                    }
-                },
-                "worker2": {
                     "vm.args": {
                         "setcookie": "test_cookie1"
                     },
@@ -112,42 +80,27 @@
             "cluster_manager": {
                 "cm": {
                     "vm.args": {
-                        "setcookie": "test_cookie2"
+                        "setcookie": "test_cookie1"
                     },
                     "sys.config": {
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 2
+                        "worker_num": 1
                     }
                 }
             },
             "op_worker": {
                 "worker1": {
                     "vm.args": {
-                        "setcookie": "test_cookie2"
+                        "setcookie": "test_cookie1"
                     },
                     "sys.config": {
                         "cm_nodes": [
                             "cm"
                         ],
                         "db_nodes": [
-                            "127.0.0.1:49162"
-                        ],
-                        "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
-                    }
-                },
-                "worker2": {
-                    "vm.args": {
-                        "setcookie": "test_cookie2"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49162"
+                            "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
                         "graph_sync_healthcheck_interval": 999999999
@@ -158,22 +111,42 @@
     },
     "test_global_setup": {
         "groups": {
+            "group1": {
+                "users": [
+                    "user1"
+                ]
+            }
         },
         "spaces": {
             "space1": {
-                "displayed_name": "space1",
+                "displayed_name": "space_name1",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
                 "groups": [
+                    "group1"
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st1_ro",
+                        "supported_size": 10737418240
                     },
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10737418240
                     }
+                }
+            }
+        },
+        "storages": {
+            "p1": {
+                "/mnt/st1_ro": {
+                    "imported_storage": true,
+                    "readonly": true
+                },
+                "/mnt/st1_rdwr": {
+                    "imported_storage": true
                 }
             }
         }

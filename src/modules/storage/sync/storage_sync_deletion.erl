@@ -91,7 +91,7 @@ do_master_job(Job = #storage_traverse_master{
             {error, not_found} ->
                 {ok, #{}};
             {[], _NewFMToken} ->
-                {ok, #{finish_callback => finish_callback(StorageFileCtx)}};
+                {ok, #{finish_callback => finish_callback(Job)}};
             {FMChildren2, FMToken2} ->
                 case refill_sync_links_children(SLChildren, StorageFileCtx, SLToken) of
                     {error, not_found} ->
@@ -104,7 +104,7 @@ do_master_job(Job = #storage_traverse_master{
                         {ok, #{
                             slave_jobs => SlaveJobs,
                             async_master_jobs => MasterJobs,
-                            finish_callback => finish_callback(StorageFileCtx)
+                            finish_callback => finish_callback(Job)
                         }}
                 end
         end
@@ -446,8 +446,12 @@ delete_file(FileCtx) ->
     end.
 
 
--spec finish_callback(storage_file_ctx:ctx()) -> function().
-finish_callback(StorageFileCtx) ->
+-spec finish_callback(storage_traverse:master_job()) -> function().
+finish_callback(#storage_traverse_master{
+    storage_file_ctx = StorageFileCtx,
+    depth = Depth,
+    max_depth = MaxDepth
+}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     MTime = try
         {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
@@ -458,5 +462,8 @@ finish_callback(StorageFileCtx) ->
     end,
     ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, MTime)
+        case Depth =:= MaxDepth of
+            true -> storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, undefined);
+            false -> storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, MTime)
+        end
     end).

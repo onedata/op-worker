@@ -64,7 +64,8 @@
     evict_on_ceph/1,
     read_dir_collisions_test/1,
     check_fs_stats_on_different_providers/1,
-    remote_driver_internal_call_test/1
+    remote_driver_internal_call_test/1,
+    db_sync_basic_opts_with_errors_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -90,12 +91,14 @@
     db_sync_create_after_deletion_links_test,
     rtransfer_fetch_test,
     rtransfer_cancel_for_session_test,
-    remove_file_during_transfers_test,
+    % TODO VFS-6618 Fix handling of file being removed during transfer and uncomment this test
+    % remove_file_during_transfers_test,
     remove_file_on_remote_provider_ceph,
     evict_on_ceph,
     read_dir_collisions_test,
     check_fs_stats_on_different_providers,
-    remote_driver_internal_call_test
+    remote_driver_internal_call_test,
+    db_sync_basic_opts_with_errors_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -139,6 +142,9 @@ create_on_different_providers_test(Config) ->
 
 db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+
+db_sync_basic_opts_with_errors_test(Config) ->
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60, false).
 
 db_sync_create_after_del_test(Config) ->
     multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
@@ -674,6 +680,7 @@ rtransfer_cancel_for_session_test(Config) ->
     ok = test_utils:mock_unload(Workers1, rtransfer_config).
 
 remove_file_during_transfers_test(Config0) ->
+    % TODO VFS-6618 Fix handling of file being removed during transfer and uncomment this test
     User = <<"user2">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {0, 0, 0, 0}, 0),
     [Worker1 | _] = ?config(workers1, Config),
@@ -814,6 +821,7 @@ read_dir_collisions_test(Config0) ->
     RootDirPath = <<"/", SpaceName/binary, "/read_dir_collisions_test">>,
     {ok, RootDirGuid} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), RootDirPath, 8#755)),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, RootDirGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, RootDirGuid}, lfm_proxy:resolve_guid(Worker2, SessionId(Worker2), RootDirPath), ?ATTEMPTS),
 
     GetNamesFromGetChildrenFun = fun(Node, Offset, Limit) ->
         {ok, Children} = ?assertMatch(
@@ -1166,6 +1174,9 @@ init_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [datastore_doc, datastore_remote_driver], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
+init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
+    MockedConfig = multi_provider_file_ops_test_base:mock_sync_errors(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1199,5 +1210,11 @@ end_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [datastore_doc, datastore_remote_driver]),
     end_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
+end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator]),
+    RequestDelay = ?config(request_delay, Config),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

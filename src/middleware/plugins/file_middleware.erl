@@ -216,8 +216,10 @@ data_spec_create(#gri{aspect = register_file}) -> #{
         <<"ctime">> => {integer, {not_lower_than, 0}},
         <<"uid">> => {integer, {not_lower_than, 0}},
         <<"gid">> => {integer, {not_lower_than, 0}},
-        <<"verifyExistence">> => {boolean, any},
-        <<"xattrs">> => {json, any}
+        <<"autoDetectAttributes">> => {boolean, any},
+        <<"xattrs">> => {json, any},
+        <<"json">> => {json, any},
+        <<"rdf">> => {binary, any}
     }
 }.
 
@@ -243,8 +245,7 @@ authorize_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
 authorize_create(#op_req{auth = Auth = ?USER(UserId), data = Data, gri = #gri{aspect = register_file}}, _) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
     middleware_utils:is_eff_space_member(Auth, SpaceId) andalso
-    % TODO VFS-6511 use space_register_file privilege
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_WRITE_DATA).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_REGISTER_FILES).
 
 
 %% @private
@@ -340,7 +341,14 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     DestinationPath = maps:get(<<"destinationPath">>, Data),
     StorageId = maps:get(<<"storageId">>, Data),
     StorageFileId = maps:get(<<"storageFileId">>, Data),
-    {ok, FileGuid} = ?check(file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data)),
+    {ok, FileGuid} = try
+        file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data)
+    catch
+        throw:{error, _} = Error ->
+            throw(Error);
+        throw:PosixErrno ->
+            throw(?ERROR_POSIX(PosixErrno))
+    end,
     {ok, FileId} = file_id:guid_to_objectid(FileGuid),
     {ok, value, FileId}.
 

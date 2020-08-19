@@ -44,18 +44,24 @@ translate_value(#gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space) ->
-    RootDir = case space_logic:is_supported(Space, oneprovider:get_id()) of
+    IsSpaceSupportedLocally = space_logic:is_supported(Space, oneprovider:get_id()),
+
+    {RootDir, PreferableWriteBlockSize} = case IsSpaceSupportedLocally of
         true ->
-            Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-            gri:serialize(#gri{
+            RootDirGRI = gri:serialize(#gri{
                 type = op_file,
-                id = Guid,
+                id = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
                 aspect = instance,
                 scope = private
-            });
+            }),
+            {RootDirGRI, file_upload_utils:get_preferable_write_block_size(SpaceId)};
         false ->
-            null
+            {undefined, undefined}
     end,
+
+    ProvidersWithReadonlySupport = lists:filter(fun(ProviderId) ->
+        space_logic:has_readonly_support_from(SpaceId, ProviderId)
+    end, maps:keys(Space#od_space.storages_by_provider)),
 
     Result = #{
         <<"name">> => Space#od_space.name,
@@ -83,7 +89,9 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             aspect = providers,
             scope = private
         }),
-        <<"rootDir">> => RootDir
+        <<"rootDir">> => utils:undefined_to_null(RootDir),
+        <<"preferableWriteBlockSize">> => utils:undefined_to_null(PreferableWriteBlockSize),
+        <<"providersWithReadonlySupport">> => ProvidersWithReadonlySupport
     },
     fun
         (?USER(Id)) -> 

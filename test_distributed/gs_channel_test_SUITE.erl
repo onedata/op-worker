@@ -183,7 +183,7 @@ async_request_handling_test(Config) ->
 
     % Short requests are made in parallel and the results are collected (blocks the test process)
     Start = time_utils:system_time_millis(),
-    utils:pforeach(fun(_) ->
+    lists_utils:pforeach(fun(_) ->
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     end, lists:seq(1, 20)),
     % Processing time should be shorter than for harvest requests
@@ -198,7 +198,7 @@ async_request_handling_test(Config) ->
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_INCREASING_REV),
     logic_tests_common:mock_request_processing_time(Config, 2000, 2500),
     UserIncRevSess = logic_tests_common:get_user_session(Config, ?USER_INCREASING_REV),
-    utils:pforeach(fun(_) ->
+    lists_utils:pforeach(fun(_) ->
         rpc:call(Node, user_logic, get, [UserIncRevSess, ?USER_INCREASING_REV])
     end, lists:seq(1, 20)),
 

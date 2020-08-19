@@ -64,7 +64,7 @@ session_manager_session_creation_and_reuse_test(Config) ->
     Iden2 = ?SUB(user, <<"user_id_2">>),
 
     [SessId1, SessId2] = lists:map(fun({Nonce, Iden, Workers}) ->
-        Answers = [{ok, SessId} | _] = utils:pmap(fun(Worker) ->
+        Answers = [{ok, SessId} | _] = lists_utils:pmap(fun(Worker) ->
             fuse_test_utils:reuse_or_create_fuse_session(
                 Worker, Nonce, Iden, undefined, Self
             )
@@ -185,7 +185,7 @@ session_manager_session_removal_test(Config) ->
         {Node, [SessSup, EvtMan, SeqMan]}
     end, lists:zip(SessIds, Idents)),
 
-    utils:pforeach(fun({SessId, Node, Pids, Worker}) ->
+    lists_utils:pforeach(fun({SessId, Node, Pids, Worker}) ->
         ?assertEqual(ok, rpc:call(Worker, session_manager,
             remove_session, [SessId])),
 

@@ -51,6 +51,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/metadata.hrl").
 
 %% API
 -export([new_accumulator/0, size/1, is_empty/1, accumulate/2, prepare_to_send/1,
@@ -276,15 +277,25 @@ encode_entry(Entry = #{<<"operation">> := ?SUBMIT, <<"payload">> := Payload}) ->
 encode_payload(Payload) ->
     maps:fold(fun
         (<<"onedata_json">>, JSON, PayloadIn) ->
-            PayloadIn#{<<"json">> => json_utils:encode(JSON)};
+            PayloadIn#{<<"json">> => JSON};
         (<<"onedata_rdf">>, RDF, PayloadIn) ->
-            PayloadIn#{<<"rdf">> => json_utils:encode(RDF)};
+            PayloadIn#{<<"rdf">> => RDF};
         (Key, Value, PayloadIn) ->
-            maps:update_with(<<"xattrs">>, fun(Xattrs) ->
-                Xattrs#{Key => Value}
-            end, #{Key => Value}, PayloadIn)
+            case is_cdmi_xattr(Key) of
+                true ->
+                    PayloadIn;
+                false ->
+                    maps:update_with(<<"xattrs">>, fun(Xattrs) ->
+                        Xattrs#{Key => Value}
+                    end, #{Key => Value}, PayloadIn)
+            end
     end, #{}, Payload).
 
+-spec is_cdmi_xattr(binary()) -> boolean().
+is_cdmi_xattr(XattrKey) ->
+    KeyLen = byte_size(XattrKey),
+    CdmiPrefixLen = byte_size(?CDMI_PREFIX),
+    binary:part(XattrKey, 0, min(KeyLen, CdmiPrefixLen)) =:= ?CDMI_PREFIX.
 
 -spec get_seq(batch_entry()) -> seq().
 get_seq(#{<<"seq">> := Seq}) ->

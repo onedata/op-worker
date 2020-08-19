@@ -42,11 +42,13 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
     case SourceSpaceId =:= TargetSpaceId of
         false ->
+            % TODO VFS-6627 Handle interprovider move to RO storage
             rename_between_spaces(
                 UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
         true ->
+            TargetParentFileCtx2 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx),
             rename_within_space(
-                UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)
+                UserCtx, SourceFileCtx, TargetParentFileCtx2, TargetName)
     end.
 
 %%%===================================================================

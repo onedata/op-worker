@@ -500,9 +500,15 @@ maybe_import_file(StorageFileCtx, Info) ->
     % We must ensure that there was no race with deleting file.
     % We check whether file that we found on storage and that we want to import
     % is not associated with file that has been deleted from the system.
-    case storage_driver:exists(SDHandle) of
-        true -> import_file(StorageFileCtx, Info);
-        false -> {?PROCESSED, undefined, StorageFileCtx}
+    VerifyExistence = maps:get(verify_existence, Info, true),
+    case VerifyExistence of
+        true ->
+            case storage_driver:exists(SDHandle) of
+                true -> import_file(StorageFileCtx, Info);
+                false -> {?PROCESSED, undefined, StorageFileCtx}
+            end;
+        false ->
+            import_file(StorageFileCtx, Info)
     end.
 
 -spec import_file(storage_file_ctx:ctx(), info()) ->
@@ -676,10 +682,14 @@ create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid, #{iterator_type 
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    FileMetaDoc = file_meta:new_doc(FileUuid, FileName, file_meta:type(Mode), Mode band 8#1777,
+    FileType = file_meta:type(Mode),
+    FileMetaDoc = file_meta:new_doc(FileUuid, FileName, FileType, Mode band 8#1777,
         OwnerId, ParentUuid, SpaceId),
     {ok, FinalDoc} = case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
-        {error, already_exists} when IteratorType =:= ?TREE_ITERATOR ->
+        {error, already_exists} when IteratorType =:= ?FLAT_ITERATOR andalso FileType =:= ?DIRECTORY_TYPE ->
+            % TODO VFS-6476 how to prevent conflicts on creating directories on s3?
+            {ok, FileMetaDoc};
+        {error, already_exists} ->
             % there was race with creating file by lfm
             % file will be imported with suffix
             FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
@@ -687,9 +697,6 @@ create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid, #{iterator_type 
                 OwnerId, ParentUuid, SpaceId),
             {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, FileMetaDoc2),
             {ok, FileMetaDoc2};
-        {error, already_exists} when IteratorType =:= ?FLAT_ITERATOR ->
-            % TODO VFS-6476 how to prevent conflicts on s3?
-            {ok, FileMetaDoc};
         {ok, FileUuid} ->
             {ok, FileMetaDoc}
     end,
@@ -967,8 +974,6 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
 
 -spec maybe_update_mode(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_mode(StorageFileCtx, #file_attr{}, FileCtx, #{is_posix_storage := false}) ->
-    {false, FileCtx, StorageFileCtx, ?MODE_ATTR_NAME};
 maybe_update_mode(StorageFileCtx, #file_attr{mode = OldMode}, FileCtx, _Info) ->
     {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     Result = case file_ctx:is_space_dir_const(FileCtx) of

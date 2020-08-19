@@ -250,22 +250,25 @@ handle_changes_request(ProviderId, #changes_request2{
     critical_section:run([?MODULE, StreamID], fun() ->
         case global:whereis_name(StreamID) of
             undefined ->
-                % Delete child from supervisor if it has not deregistered properly
-                supervisor:terminate_child(?DBSYNC_WORKER_SUP, StreamID),
-                supervisor:delete_child(?DBSYNC_WORKER_SUP, StreamID),
+                Node = datastore_key:any_responsible_node(SpaceId),
+                % TODO VFS-VFS-6651 - child deletion will not be needed after
+                % refactoring of supervision tree to use one_for_one supervisor
+                rpc:call(Node, supervisor, terminate_child, [?DBSYNC_WORKER_SUP, StreamID]),
+                rpc:call(Node, supervisor, delete_child, [?DBSYNC_WORKER_SUP, StreamID]),
 
                 Spec = dbsync_out_stream_spec(Name, SpaceId, [
                     {since, Since},
                     {until, Until},
-                    {except_mutator, ProviderId},
+                    {except_mutator, ProviderId}, % TODO VFS-6652 - restults in different seq numbers/timestamps
+                                                  % seen by different providers
                     {handler, Handler},
                     {handling_interval, application:get_env(
                         ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
                     )}
                 ]),
-                Node = datastore_key:any_responsible_node(SpaceId),
                 try
-                    {ok, _} = rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec])
+                    {ok, _} = rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]),
+                    ok
                 catch
                     Error:Reason  ->
                         ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
