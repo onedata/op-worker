@@ -173,7 +173,7 @@ check_valid_expression(Expression, ExpectedRpn) ->
     
 
 check_invalid_expression(Expression) ->
-    ?assertThrow(?ERROR_INVALID_QOS_EXPRESSION, qos_expression:parse(Expression)).
+    ?assertThrow(?ERROR_INVALID_QOS_EXPRESSION(_), qos_expression:parse(Expression)).
 
 
 check_filter_storages(Expression, ExpectedStorages, StoragesMap) ->

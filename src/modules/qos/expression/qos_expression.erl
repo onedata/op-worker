@@ -33,15 +33,14 @@
 % Tree: {<<"&">>, {<<"=">>, <<"country">>, <<"FR">>}, {<<"=">>, <<"type">>, <<"disk">>}}
 -type infix() :: binary(). 
 -type rpn() :: [expr_token()].
--type tree() :: 
+-type tree(TokenType) :: 
     {operator(), tree(), tree()} | 
-    {comparator(), expr_token(), expr_token() | integer()} | 
-    expr_token(). % <<"anyStorage">>
+    {comparator(), TokenType, TokenType | integer()} | 
+    TokenType. % <<"anyStorage">>
 
--opaque expression() :: tree().
+-opaque expression() :: tree(expr_token()).
 
 -export_type([expression/0, infix/0]).
-
 
 %%%===================================================================
 %%% API
@@ -49,13 +48,25 @@
 
 -spec parse(infix()) -> expression() | no_return().
 parse(InfixExpression) ->
-    try
-        {ok, Tokens, _} = qos_expression_scanner:string(str_utils:binary_to_unicode_list(InfixExpression)),
-        {ok, Tree} = qos_expression_parser:parse(Tokens),
-        Tree
-    catch _:_ ->
-        throw(?ERROR_INVALID_QOS_EXPRESSION)
-    end.
+    CheckResult = fun(Result, Module) ->
+        case element(1, Result) of
+            error ->
+                ErrorDesc = element(2, Result),
+                throw(?ERROR_INVALID_QOS_EXPRESSION(
+                    str_utils:unicode_list_to_binary(Module:format_error(element(3, ErrorDesc)))));
+            ok -> Result
+        end
+    end,
+    
+    {ok, Tokens, _} = CheckResult(
+        qos_expression_scanner:string(str_utils:binary_to_unicode_list(InfixExpression)),
+        qos_expression_scanner
+    ),
+    {ok, Tree} = CheckResult(
+        qos_expression_parser:parse(Tokens),
+        qos_expression_parser
+    ),
+    strings_to_binaries(Tree).
 
 
 to_infix(?QOS_ANY_STORAGE) ->
@@ -114,15 +125,6 @@ filter_storages({Comparator, ExprKey, ExprValue}, SM) ->
         end
     end, SM)).
 
-%% @private
--spec compare(comparator(), expr_token(), expr_token()) -> boolean().
-compare(<<"<">>, A, B) when is_integer(A) -> A < B;
-compare(<<">">>, A, B) when is_integer(A) -> A > B;
-compare(<<"<=">>, A, B) when is_integer(A) -> A =< B;
-compare(<<">=">>, A, B) when is_integer(A) -> A >= B;
-compare(<<"=">>, A, B) -> A =:= B;
-compare(_, _A, _B) -> false.
-
 
 -spec to_json(expression()) -> json_utils:json_term().
 to_json(Binary) when is_binary(Binary) ->
@@ -157,3 +159,39 @@ convert_from_old_version_rpn(PreviousExpression) ->
     ),
     % convert RPN to tree form
     from_rpn(SplitRpnTokens).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec strings_to_binaries(tree(string())) -> tree(expr_token()).
+strings_to_binaries(?QOS_ANY_STORAGE_STRING) ->
+    ?QOS_ANY_STORAGE;
+strings_to_binaries({Op, Expr1, Expr2}) when is_list(Expr1) and is_list(Expr2) ->
+    {
+        str_utils:unicode_list_to_binary(Op),
+        str_utils:unicode_list_to_binary(Expr1),
+        str_utils:unicode_list_to_binary(Expr2)
+    };
+strings_to_binaries({Op, Expr1, Expr2}) when is_list(Expr1) and is_integer(Expr2) ->
+    {
+        str_utils:unicode_list_to_binary(Op),
+        str_utils:unicode_list_to_binary(Expr1),
+        Expr2
+    };
+strings_to_binaries({Op, Expr1, Expr2}) ->
+    {
+        str_utils:unicode_list_to_binary(Op),
+        strings_to_binaries(Expr1),
+        strings_to_binaries(Expr2)
+    }.
+
+%% @private
+-spec compare(comparator(), expr_token(), expr_token()) -> boolean().
+compare(<<"<">>, A, B) when is_integer(A) -> A < B;
+compare(<<">">>, A, B) when is_integer(A) -> A > B;
+compare(<<"<=">>, A, B) when is_integer(A) -> A =< B;
+compare(<<">=">>, A, B) when is_integer(A) -> A >= B;
+compare(<<"=">>, A, B) -> A =:= B;
+compare(_, _A, _B) -> false.

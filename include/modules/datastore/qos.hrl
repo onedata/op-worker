@@ -26,6 +26,7 @@
 -define(R_PAREN, <<")">>).
 
 -define(QOS_ANY_STORAGE, <<"anyStorage">>).
+-define(QOS_ANY_STORAGE_STRING, "anyStorage").
 
 % macros used for operations on QoS bounded cache
 -define(CACHE_TABLE_NAME(SpaceId),
