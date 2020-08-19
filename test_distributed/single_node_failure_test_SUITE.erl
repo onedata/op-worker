@@ -53,7 +53,7 @@ failure_test(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        onenv_test_utils:prepare_base_test_config(NewConfig)
+        provider_onenv_test_utils:initialize(NewConfig)
     end,
     test_config:set_many(Config, [
         {add_envs, [op_worker, op_worker, [{key, value}]]},
