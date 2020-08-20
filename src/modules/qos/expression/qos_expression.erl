@@ -51,8 +51,7 @@
 -spec parse(infix()) -> expression() | no_return().
 parse(InfixExpression) ->
     call_expression_parser(
-        call_expression_scanner(
-            str_utils:binary_to_unicode_list(InfixExpression))).
+        call_expression_scanner(InfixExpression)).
 
 
 -spec to_infix(expression()) -> infix().
