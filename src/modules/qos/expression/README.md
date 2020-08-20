@@ -23,3 +23,5 @@ Can be also generated manually:
 Module `qos_expression_scanner` exports function `string/1` which takes input as a string(Erlang list) and returns list of tokens.
 
 Those tokens are an input to `qos_expression_parser` function `parse/1`.
+
+These modules are used in `qos_expression` module.

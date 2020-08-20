@@ -105,7 +105,7 @@ replicate_stage_persistence_test(Config) ->
     % Create new QoS entry representing entry created before provider restart.
     % Running stage again with existing entry should not create new one, 
     % but wait for fulfillment of previous one.
-    Expression = <<(?QOS_ANY_STORAGE)/binary, "\\ storageId=", StorageId/binary>>,
+    Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
     {ok, QosEntryId} = create_qos_entry(Worker1, SessId, SpaceGuid, Expression),
     
     StageJob = #space_unsupport_job{

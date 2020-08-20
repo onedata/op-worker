@@ -135,7 +135,7 @@
 
 % messages for QoS management
 -record(add_qos_entry, {
-    expression :: qos_entry:expression(),
+    expression :: qos_expression:expression(),
     replicas_num :: qos_entry:replicas_num(),
     entry_type = user_defined :: qos_entry:type()
 }).

@@ -24,7 +24,7 @@
     handle_qos_entry_change/2,
     handle_entry_delete/1,
     reconcile_qos/1, reconcile_qos/2,
-    calculate_assigned_storages/3,
+    try_assigning_storages/3,
     reevaluate_all_impossible_qos_in_space/1
 ]).
 
@@ -107,9 +107,9 @@ reconcile_qos(FileUuid, SpaceId) ->
     reconcile_qos(FileCtx).
 
 
--spec calculate_assigned_storages(od_space:id(), qos_expression:expression(), qos_entry:replicas_num()) ->
+-spec try_assigning_storages(od_space:id(), qos_expression:expression(), qos_entry:replicas_num()) ->
     {true, [storage:id()]} | false.
-calculate_assigned_storages(SpaceId, QosExpression, ReplicasNum) ->
+try_assigning_storages(SpaceId, QosExpression, ReplicasNum) ->
     {ok, SpaceStorages} = space_logic:get_all_storage_ids(SpaceId),
     AllStoragesWithParams = lists:foldl(fun(StorageId, Acc) ->
         Acc#{StorageId => storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId)}
@@ -153,10 +153,10 @@ reevaluate_qos(#document{key = QosEntryId} = QosEntryDoc) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    case calculate_assigned_storages(SpaceId, QosExpression, ReplicasNum) of
-        {true, StoragesList} ->
+    case try_assigning_storages(SpaceId, QosExpression, ReplicasNum) of
+        {true, AssignedStorages} ->
             AllTraverseReqs = qos_traverse_req:build_traverse_reqs(
-                file_ctx:get_uuid_const(FileCtx), StoragesList
+                file_ctx:get_uuid_const(FileCtx), AssignedStorages
             ),
             qos_entry:mark_possible(QosEntryId, SpaceId, AllTraverseReqs),
             qos_traverse_req:start_applicable_traverses(
