@@ -34,7 +34,7 @@
 -type infix() :: binary(). 
 -type rpn() :: [expr_token()].
 -type tree(TokenType) :: 
-    {operator(), tree(), tree()} | 
+    {operator(), tree(TokenType), tree(TokenType)} | 
     {comparator(), TokenType, TokenType | integer()} | 
     TokenType. % <<"anyStorage">>
 
