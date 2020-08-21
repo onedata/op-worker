@@ -931,7 +931,7 @@ check_fs_stats_on_different_providers(Config) ->
     % Values set and taken from env_desc.json
     P1StorageId = <<"cephrados">>,
     P1SupportSize = 10000,
-    P2StorageId = <<"/mnt/st2">>,
+    P2StorageId = <<"mntst2">>,
     P2SupportSize = 50000,
     ProviderToStorage = #{
         P1 => {P1StorageId, P1SupportSize},

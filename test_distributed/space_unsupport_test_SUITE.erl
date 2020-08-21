@@ -105,7 +105,7 @@ replicate_stage_persistence_test(Config) ->
     % Create new QoS entry representing entry created before provider restart.
     % Running stage again with existing entry should not create new one, 
     % but wait for fulfillment of previous one.
-    Expression = [?QOS_ANY_STORAGE, <<"storageId=", StorageId/binary>>, <<"-">>],
+    Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
     {ok, QosEntryId} = create_qos_entry(Worker1, SessId, SpaceGuid, Expression),
     
     StageJob = #space_unsupport_job{
@@ -213,7 +213,7 @@ delete_synced_documents_stage_test(Config) ->
     
     % create synced documents on remote provider
     {{DirGuid,_}, {G1, _}, {G2, _}} = create_files_and_dirs(Worker2, SessId),
-    {ok, _} = create_qos_entry(Worker2, SessId, DirGuid, [<<"key=value">>]),
+    {ok, _} = create_qos_entry(Worker2, SessId, DirGuid, <<"key=value">>),
     {ok, _} = create_replication(Worker2, SessId, G2, Worker1),
     {ok, _} = create_eviction(Worker2, SessId, G1, Worker1),
     ok = create_view(Worker2, ?SPACE_ID, Worker1),

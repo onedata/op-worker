@@ -5801,15 +5801,15 @@ find_storage(Storages, CheckStorageFun) ->
             FoundStorage
     end, undefined, Storages).
 
-is_rdwr(MountPoint, #helper{name = ?POSIX_HELPER_NAME}) ->
-    <<"rdwr_storage">> =:= filename:basename(MountPoint);
+is_rdwr(StorageId, #helper{name = ?POSIX_HELPER_NAME}) ->
+    match =:= re:run(StorageId, <<"rdwr_storage">>, [{capture, none}]);
 is_rdwr(<<"rdwr_storage">>, #helper{name = ?S3_HELPER_NAME}) ->
     true;
 is_rdwr(_, _) ->
     false.
 
-is_synced(MountPoint, #helper{name = ?POSIX_HELPER_NAME}) ->
-    <<"synced_storage">> =:= filename:basename(MountPoint);
+is_synced(StorageId, #helper{name = ?POSIX_HELPER_NAME}) ->
+    match =:= re:run(StorageId, <<"synced_storage">>, [{capture, none}]);
 is_synced(<<"synced_storage">>, #helper{name = ?S3_HELPER_NAME}) ->
     true.
 

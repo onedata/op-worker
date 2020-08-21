@@ -1,5 +1,5 @@
 {
-    "/mnt/st2": {
+    "mntst2": {
         "storageUsers": {
             "user1": {
                 "storageCredentials": {
@@ -31,7 +31,7 @@
             }
         }
     },
-    "/mnt/st5": {
+    "mntst5": {
         "storageUsers": {
             "user1": {
                 "storageCredentials": {
@@ -94,7 +94,7 @@
             } 
         }
     },
-    "/mnt/st10": {
+    "mntst10": {
         "storageUsers": {},
         "spacesDefaults": {
             "space10": {
