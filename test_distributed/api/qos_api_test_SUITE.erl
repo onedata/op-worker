@@ -72,7 +72,7 @@ create_qos_test(Config) ->
             <<"replicasNum">> => [rand:uniform(10)]
         },
         bad_values = [
-            {<<"expression">>, <<"aaa">>, ?ERROR_INVALID_QOS_EXPRESSION},
+            {<<"expression">>, <<"aaa">>, ?ERROR_INVALID_QOS_EXPRESSION(<<"syntax error before: ">>)},
             {<<"fileId">>, <<"gibberish">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
             {<<"replicasNum">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"replicasNum">>)},
             {<<"replicasNum">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"replicasNum">>, 1)}

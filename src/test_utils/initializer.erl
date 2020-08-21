@@ -1772,7 +1772,8 @@ setup_luma_local_feed(Worker, Config, LumaConfigFile) ->
     LumaConfigPath = filename:join([proplists:get_value(data_dir, Config), LumaConfigFile]),
     {ok, ConfigJSONBin} = file:read_file(LumaConfigPath),
     LumaConfig = json_utils:decode(ConfigJSONBin),
-    maps:fold(fun(StorageId, StorageLumaConfig, _) ->
+    maps:fold(fun(StorageName, StorageLumaConfig, _) ->
+        StorageId = normalize_storage_name(StorageName),
         StorageUsersLumaConfig = maps:get(<<"storageUsers">>, StorageLumaConfig, #{}),
         SpacesDefaultsLumaConfig = maps:get(<<"spacesDefaults">>, StorageLumaConfig, #{}),
         OnedataUsersLumaConfig = maps:get(<<"onedataUsers">>, StorageLumaConfig, #{}),
