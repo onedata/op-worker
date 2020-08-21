@@ -744,7 +744,7 @@ reevaluate_impossible_qos_test(Config) ->
                 qos_name = ?QOS1,
                 file_key = {path, DirPath},
                 replicas_num = 2,
-                qos_expression_in_rpn = [<<"country=PL">>],
+                qos_expression = [<<"country=PL">>],
                 possibility_check = {impossible, ?PROVIDER_ID(Worker1)}
             }
         ],
@@ -762,7 +762,7 @@ reevaluate_impossible_qos_test(Config) ->
             qos_name = ?QOS1,
             file_key = {path, DirPath},
             replicas_num = 2,
-            qos_expression_in_rpn = [<<"country=PL">>],
+            qos_expression = [<<"country=PL">>],
             possibility_check = {possible, ?PROVIDER_ID(Worker2)}
         }
     ],
@@ -814,7 +814,7 @@ reevaluate_impossible_qos_race_test(Config) ->
                 qos_name = ?QOS1,
                 file_key = {path, DirPath},
                 replicas_num = 1,
-                qos_expression_in_rpn = [<<"country=other">>],
+                qos_expression = [<<"country=other">>],
                 possibility_check = {possible, ?PROVIDER_ID(Worker2)}
             }
         ],
@@ -863,7 +863,7 @@ reevaluate_impossible_qos_conflict_test(Config) ->
                 qos_name = ?QOS1,
                 file_key = {path, DirPath},
                 replicas_num = 1,
-                qos_expression_in_rpn = [<<"country=other">>],
+                qos_expression = [<<"country=other">>],
                 possibility_check = {impossible, ?PROVIDER_ID(Worker1)}
             }
         ],
@@ -883,7 +883,7 @@ reevaluate_impossible_qos_conflict_test(Config) ->
             qos_name = ?QOS1,
             file_key = {path, DirPath},
             replicas_num = 1,
-            qos_expression_in_rpn = [<<"country=other">>],
+            qos_expression = [<<"country=other">>],
             possibility_check = {possible, ?PROVIDER_ID(Worker1)}
         }
     ],
@@ -941,7 +941,7 @@ qos_traverse_cancellation_test(Config) ->
                 workers = Workers,
                 qos_name = ?QOS1,
                 file_key = {path, QosRootFilePath},
-                qos_expression_in_rpn = [<<"country=PL">>],
+                qos_expression = [<<"country=PL">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(Worker1)}
             }
@@ -1116,7 +1116,7 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename, WaitForQos) ->
             #expected_qos_entry{
                 qos_name = ?QOS1,
                 file_key = {path, ?FILE_PATH(QosFilename)},
-                qos_expression_in_rpn = [<<"country=PT">>],
+                qos_expression = [<<"country=PT">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(Worker1)}
             }

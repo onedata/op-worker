@@ -47,7 +47,7 @@
 
     % below fields correspond to fields of QoS entry record
     file_key :: {path, file_meta:path()} | {uuid, file_meta:uuid()},
-    qos_expression_in_rpn :: qos_expression:rpn(),
+    qos_expression :: qos_entry:expression(),
     replicas_num :: qos_entry:replics_num(),
     possibility_check :: od_provider:id()
 }).
