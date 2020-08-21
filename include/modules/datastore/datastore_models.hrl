@@ -109,6 +109,7 @@
     storages = #{} :: #{storage:id() => Size :: integer()},
 
     % This value is calculated after fetch from zone for performance reasons.
+    % Contains an empty map if the provider does not support the space.
     storages_by_provider = #{} :: #{od_provider:id() => #{storage:id() => storage:access_type()}},
 
     providers = #{} :: #{od_provider:id() => Size :: integer()},

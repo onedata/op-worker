@@ -292,6 +292,10 @@ is_supported_by_storage(SpaceId, StorageId) ->
 -spec has_readonly_support_from(od_space:id() | od_space:record(), od_provider:id()) -> boolean().
 has_readonly_support_from(SpaceOrId, ProviderId) ->
     case get_storages_by_provider(SpaceOrId, ProviderId) of
+        {ok, ProviderStorages} when map_size(ProviderStorages) =:= 0 ->
+            % if the map is empty, this provider does not support the space and has
+            % no knowledge about other supports to determine if they are readonly
+            false;
         {ok, ProviderStorages} ->
             lists:all(fun(AccessMode) ->
                 AccessMode =:= ?READONLY_STORAGE
