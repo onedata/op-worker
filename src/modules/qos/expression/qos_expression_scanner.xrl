@@ -17,7 +17,7 @@
 Definitions.
 
 Digit       = [0-9]
-Char        = [A-Za-z0-9_]
+Char        = [\x{00A0}-\x{1FFF}a-zA-Z0-9_]
 Middle      = [\s-]
 Whitespace  = ([\000-\s]|%.*)
 Comparator  = (<|<=|>=|>)

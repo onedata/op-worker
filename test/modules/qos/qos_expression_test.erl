@@ -82,6 +82,7 @@ valid_qos_expression_test() ->
         <<"(a=b & anyStorage) \\ anyStorage">>, 
         [<<"a">>, <<"b">>, <<"=">>, <<"anyStorage">>, <<"&">>, <<"anyStorage">>, <<"\\">>]
     ),
+    check_valid_expression(<<"ąćóµńəłóəßœπążśźćð = _a_"/utf8>>, [<<"ąćóµńəłóəßœπążśźćð"/utf8>>, <<"_a_">>, <<"=">>]),
     ok.
     
 
@@ -104,6 +105,8 @@ invalid_qos_expression_test() ->
     check_invalid_expression(<<"a=a=a">>),
     check_invalid_expression(<<"a|a|a">>),
     check_invalid_expression(<<"a=a;">>),
+    check_invalid_expression(<<"←"/utf8>>),
+    check_invalid_expression(<<"’"/utf8>>),
     ok.
 
 
