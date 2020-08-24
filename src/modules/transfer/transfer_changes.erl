@@ -153,7 +153,7 @@ handle_scheduled_replication(Doc = #document{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_enqueued_replication(transfer:doc()) -> ok.
-handle_enqueued_replication(Doc = #document{value = #transfer{
+handle_enqueued_replication(Doc = #document{key = TransferId, value = #transfer{
     replication_status = ?ENQUEUED_STATUS,
     replicating_provider = ReplicatingProviderId,
     cancel = Cancel,
@@ -168,7 +168,7 @@ handle_enqueued_replication(Doc = #document{value = #transfer{
             false ->
                 case {FilesProcessed, BytesReplicated} > {0, 0} of
                     true ->
-                        replication_controller:mark_active(?decode_pid(Pid));
+                        replication_controller:mark_active(?decode_pid(Pid), TransferId);
                     false ->
                         ok
                 end
@@ -192,7 +192,7 @@ handle_active_replication(Doc = #document{value = #transfer{
         abort_replication(Doc, cancellation)
     end);
 
-handle_active_replication(#document{value = #transfer{
+handle_active_replication(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
     failed_files = 0,
@@ -200,10 +200,10 @@ handle_active_replication(#document{value = #transfer{
     pid = Pid
 }}) ->
     ?run_if_is_self(ReplicatingProviderId, fun() ->
-        replication_controller:mark_completed(?decode_pid(Pid))
+        replication_controller:mark_completed(?decode_pid(Pid), TransferId)
     end);
 
-handle_active_replication(#document{value = #transfer{
+handle_active_replication(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
     replicating_provider = ReplicatingProviderId,
@@ -211,10 +211,10 @@ handle_active_replication(#document{value = #transfer{
 }}) ->
     ?run_if_is_self(ReplicatingProviderId, fun() ->
         replication_controller:mark_aborting(
-            ?decode_pid(Pid), exceeded_number_of_failed_files)
+            ?decode_pid(Pid), TransferId, exceeded_number_of_failed_files)
     end);
 
-handle_active_replication(#document{value = #transfer{
+handle_active_replication(#document{key = TransferId, value = #transfer{
     failed_files = FailedFiles,
     replicating_provider = ReplicatingProviderId,
     pid = Pid
@@ -223,7 +223,7 @@ handle_active_replication(#document{value = #transfer{
         true ->
             ?run_if_is_self(ReplicatingProviderId, fun() ->
                 replication_controller:mark_aborting(
-                    ?decode_pid(Pid), exceeded_number_of_failed_files)
+                    ?decode_pid(Pid), TransferId, exceeded_number_of_failed_files)
                 end);
         false ->
             ok
@@ -242,7 +242,7 @@ abort_replication(#document{key = TransferId, value = Transfer}, Reason) ->
     DecodedPid = ?decode_pid(Transfer#transfer.pid),
     case is_process_alive(DecodedPid) of
         true ->
-            replication_controller:mark_aborting(DecodedPid, Reason);
+            replication_controller:mark_aborting(DecodedPid, TransferId, Reason);
         false ->
             replication_status:handle_aborting(TransferId)
     end,
@@ -270,11 +270,11 @@ handle_aborting_replication(#document{key = TransferId, value = #transfer{
         DecodedPid = ?decode_pid(Pid),
         case {Cancel, is_process_alive(DecodedPid)} of
             {true, true} ->
-                replication_controller:mark_cancelled(DecodedPid);
+                replication_controller:mark_cancelled(DecodedPid, TransferId);
             {true, false} ->
                 replication_status:handle_cancelled(TransferId);
             {false, true} ->
-                replication_controller:mark_failed(DecodedPid);
+                replication_controller:mark_failed(DecodedPid, TransferId);
             {false, false} ->
                 replication_status:handle_failed(TransferId, false)
         end
