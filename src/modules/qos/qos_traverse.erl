@@ -183,7 +183,7 @@ do_master_job(Job, MasterJobArgs) ->
 %%--------------------------------------------------------------------
 -spec do_slave_job(traverse:job(), traverse:id()) -> ok.
 do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInfo}, TaskId) ->
-    % TODO VFS-5574: add space check and optionally choose other storage
+    % TODO VFS-6137: add space check and optionally choose other storage
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
@@ -246,8 +246,8 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
         {error, cancelled} -> 
             ?debug("QoS file synchronization failed due to cancellation");
         {error, _} = Error ->
-            % TODO: VFS-5737 handle failures properly
-            ?error("Error during file synchronization: ~p", [Error])
+            qos_status:report_file_transfer_failure(FileCtx2, QosEntries),
+            ?error("Error during QoS file synchronization: ~p", [Error])
     end.
 
 

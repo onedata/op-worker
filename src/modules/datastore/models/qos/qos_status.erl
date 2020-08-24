@@ -75,6 +75,7 @@
     report_next_traverse_batch/6, report_traverse_finished_for_dir/3,
     report_traverse_finished_for_file/2]).
 -export([report_reconciliation_started/3, report_file_reconciled/3]).
+-export([report_file_transfer_failure/2]).
 -export([report_file_deleted/2, report_entry_deleted/2]).
 
 %% datastore_model callbacks
@@ -99,8 +100,8 @@
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
--define(RECONCILE_LINK_NAME(Path, TraverseId),
-    <<Path/binary, "###", TraverseId/binary>>).
+-define(RECONCILE_LINK_NAME(Path, TraverseId), <<Path/binary, "###", TraverseId/binary>>).
+-define(FAILED_TRANSFER_LINK_NAME(Path), <<Path/binary, "###failed_transfer">>).
 
 -define(RECONCILE_LINKS_KEY(QosEntryId), <<"qos_status_reconcile", QosEntryId/binary>>).
 -define(TRAVERSE_LINKS_KEY(TraverseId), <<"qos_status_traverse", TraverseId/binary>>).
@@ -211,7 +212,9 @@ report_reconciliation_started(TraverseId, FileCtx, QosEntries) ->
     ProviderId = oneprovider:get_id(),
     lists:foreach(fun(QosEntryId) ->
         {ok, _} = add_synced_link(
-            SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId, Link)
+            SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId, Link),
+        ok = delete_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId,
+            ?FAILED_TRANSFER_LINK_NAME(UuidBasedPath))
     end, QosEntries).
 
 
@@ -233,6 +236,21 @@ report_file_reconciled(SpaceId, TraverseId, FileUuid) ->
     lists:foreach(fun(QosEntryId) ->
         ok = delete_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId,
             ?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId))
+    end, QosEntries).
+
+
+-spec report_file_transfer_failure(file_ctx:ctx(), [qos_entry:id()]) ->
+    ok | {error, term()}.
+report_file_transfer_failure(FileCtx, QosEntries) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ok = ?extract_ok(?ok_if_exists(
+        qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_uuid_const(FileCtx)))),
+    {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
+    Link = {?FAILED_TRANSFER_LINK_NAME(UuidBasedPath), <<"failed_transfer">>},
+    ProviderId = oneprovider:get_id(),
+    lists:foreach(fun(QosEntryId) ->
+        ok = ?extract_ok(?ok_if_exists(
+            add_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId, Link)))
     end, QosEntries).
 
 

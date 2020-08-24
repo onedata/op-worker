@@ -214,6 +214,9 @@ execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
     qos_entry:apply_to_all_impossible_in_space(SpaceId, fun(QosEntryId) -> 
         qos_entry:remove_from_impossible_list(SpaceId, QosEntryId)
     end),
+    qos_entry:apply_to_all_in_failed_files_list(SpaceId, fun(FileUuid) ->
+        qos_entry:remove_from_failed_file_list(SpaceId, FileUuid)
+    end),
     unsupport_cleanup_traverse:delete_ended(SpaceId, StorageId),
     ok.
 
