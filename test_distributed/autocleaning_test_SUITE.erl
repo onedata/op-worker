@@ -615,11 +615,7 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         application:start(ssl),
         hackney:start(),
-        NewConfig2 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig),
-        Workers = ?config(op_worker_nodes, NewConfig2),
-        test_utils:set_env(Workers, op_worker, max_file_replication_retries_per_file, 5),
-        test_utils:set_env(Workers, op_worker, max_eviction_retries_per_file_replica, 5),
-        NewConfig2
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
 
