@@ -8,13 +8,18 @@
 %%% @doc
 %%% Helper module used by modules associated with harvesting metadata.
 %%% It defines a simple data structure that is used for storing
-%%% metadata changes.
+%%% metadata changes, collected from #file_meta{} and #custom_metadata{}
+%%% documents.
 %%%
 %%% BATCH ENTRY
-%%% Every #custom_metadata{} document is converted to BatchEntry :: batch_entry().
+%%% When handling a changed document, received from couchbase_changes_stream,
+%%% counterpart document is fetched from the database.
+%%% Then, data is extracted from both documents to create a BatchEntry :: batch_entry().
 %%% BatchEntry has the following format:
 %%% #{
 %%%      <<"fileId">> => file_id:objectid(),
+%%%      <<"spaceId">> => od_space:id(),
+%%%      <<"fileName">> => file_meta:name(),
 %%%      <<"operation">> => ?SUBMIT | ?DELETE,
 %%%      <<"seq">> => couchbase_changes:seq(),
 %%%      <<"payload">> => #{    % optional, makes sense only for ?SUBMIT operation
@@ -46,6 +51,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/metadata.hrl").
 
 %% API
 -export([new_accumulator/0, size/1, is_empty/1, accumulate/2, prepare_to_send/1,
@@ -59,9 +65,8 @@
 }).
 
 -type seq() :: couchbase_changes:seq() | undefined.
--type operation() :: binary(). % ?SUBMIT | ?DELETE
 -type file_id() :: file_id:objectid().
--type doc() :: custom_metadata:doc().
+-type doc() :: custom_metadata:doc() | file_meta:doc().
 -type json() :: json_utils:json_term().
 -type batch_entry() :: json().
 -type accumulator() :: #{file_id() => batch_entry()}.
@@ -92,25 +97,10 @@ is_empty(Batch) ->
     harvesting_batch:size(Batch) =:= 0.
 
 -spec accumulate(doc(), accumulator()) -> accumulator().
-accumulate(Doc = #document{
-    value = #custom_metadata{
-        file_objectid = FileId,
-        value = Metadata
-    },
-    deleted = false
-}, Accumulator) when map_size(Metadata) > 0 andalso is_map(Accumulator) ->
-    % if FileId is already in the accumulator, we can safely overwrite it because
-    % we are interested in the newest change only
-    Accumulator#{FileId => batch_entry(Doc, ?SUBMIT)};
-accumulate(Doc = #document{
-    value = #custom_metadata{
-        file_objectid = FileId
-    }
-}, Accumulator) when is_map(Accumulator) ->
-    % delete entry because one of the following happened:
-    %   * #custom_metadata document has_been deleted
-    %   * #custom_metadata.value map is empty
-    Accumulator#{FileId => batch_entry(Doc, ?DELETE)}.
+accumulate(Doc = #document{value = #file_meta{}}, Accumulator) ->
+    accumulate_file_meta(Doc, Accumulator);
+accumulate(Doc = #document{value = #custom_metadata{}}, Accumulator) ->
+    accumulate_custom_metadata(Doc, Accumulator).
 
 
 %%-------------------------------------------------------------------
@@ -180,26 +170,101 @@ strip(Batch = #harvesting_batch{entries = Entries}, StripAfter) when is_list(Ent
 %%% Internal functions
 %%%===================================================================
 
--spec batch_entry(doc(), operation()) -> batch_entry().
-batch_entry(#document{
-    value = #custom_metadata{file_objectid = FileId, value = Metadata},
-    seq = Seq
-}, ?SUBMIT) ->
+-spec accumulate_file_meta(file_meta:doc(), accumulator()) -> accumulator().
+accumulate_file_meta(FileMetaDoc = #document{
+    key = FileUuid,
+    value = #file_meta{},
+    seq = Seq,
+    deleted = false
+}, Accumulator) when is_map(Accumulator) ->
+    FileId = compute_file_id(FileMetaDoc),
+    CustomMetadataDoc = case custom_metadata:get(FileUuid) of
+        {ok, Doc} -> Doc;
+        {error, not_found} -> undefined
+    end,
+    % if FileId is already in the accumulator, we can safely overwrite it because
+    % we are interested in the newest change only
+    Accumulator#{FileId => submission_batch_entry(FileId, Seq, FileMetaDoc, CustomMetadataDoc)};
+accumulate_file_meta(FileMetaDoc = #document{
+    value = #file_meta{},
+    seq = Seq,
+    deleted = true
+}, Accumulator) when is_map(Accumulator) ->
+    % deletion operation is send only when file_meta is deleted
+    FileId = compute_file_id(FileMetaDoc),
+    Accumulator#{FileId => deletion_batch_entry(FileId, Seq)}.
+
+
+-spec accumulate_custom_metadata(custom_metadata:doc(), accumulator()) -> accumulator().
+accumulate_custom_metadata(CustomMetadataDoc = #document{
+    key = FileUuid,
+    value = #custom_metadata{file_objectid = FileId},
+    seq = Seq,
+    deleted = false
+}, Accumulator) when is_map(Accumulator) ->
+    % if FileId is already in the accumulator, we can safely overwrite it because
+    % we are interested in the newest change only
+    FileMetaDoc = case file_meta:get_including_deleted(FileUuid) of
+        {ok, Doc} -> Doc;
+        {error, not_found} -> undefined
+    end,
+    Accumulator#{FileId => submission_batch_entry(FileId, Seq, FileMetaDoc, CustomMetadataDoc)};
+accumulate_custom_metadata(#document{
+    value = #custom_metadata{},
+    deleted = true
+}, Accumulator) when is_map(Accumulator) ->
+    % deletion of custom_metadata doc is ignored as deletion of entry in the harvester will be
+    % triggered by deletion of file_meta
+    Accumulator.
+
+
+-spec submission_batch_entry(file_id(),  couchbase_changes:seq(), undefined | doc(), undefined | doc()) -> batch_entry().
+submission_batch_entry(FileId, Seq,
+    #document{value = #file_meta{name = FileName}},
+    #document{value = #custom_metadata{value = Metadata, space_id = SpaceId}}
+) ->
     #{
         <<"fileId">> => FileId,
         <<"operation">> => ?SUBMIT,
         <<"seq">> => Seq,
+        <<"spaceId">> => SpaceId,
+        <<"fileName">> => FileName,
         <<"payload">> => Metadata
     };
-batch_entry(#document{
-    value = #custom_metadata{file_objectid = FileId},
-    seq = Seq
-}, ?DELETE) ->
+submission_batch_entry(FileId, Seq,
+    #document{value = #file_meta{name = FileName}, scope = SpaceId},
+    undefined
+) ->
+    #{
+        <<"fileId">> => FileId,
+        <<"operation">> => ?SUBMIT,
+        <<"seq">> => Seq,
+        <<"spaceId">> => SpaceId,
+        <<"fileName">> => FileName,
+        <<"payload">> => #{}
+    };
+submission_batch_entry(FileId, Seq,
+    undefined,
+    #document{value = #custom_metadata{value = Metadata}, scope = SpaceId}
+) ->
+    #{
+        <<"fileId">> => FileId,
+        <<"operation">> => ?SUBMIT,
+        <<"seq">> => Seq,
+        <<"spaceId">> => SpaceId,
+        <<"fileName">> => <<>>,
+        <<"payload">> => Metadata
+    }.
+
+
+-spec deletion_batch_entry(file_id(), couchbase_changes:seq()) -> any().
+deletion_batch_entry(FileId, Seq) ->
     #{
         <<"fileId">> => FileId,
         <<"operation">> => ?DELETE,
         <<"seq">> => Seq
     }.
+
 
 -spec encode_entry(batch_entry()) -> batch_entry().
 encode_entry(Entry = #{<<"operation">> := ?DELETE}) ->
@@ -207,19 +272,37 @@ encode_entry(Entry = #{<<"operation">> := ?DELETE}) ->
 encode_entry(Entry = #{<<"operation">> := ?SUBMIT, <<"payload">> := Payload}) ->
     Entry#{<<"payload">> => encode_payload(Payload)}.
 
+
 -spec encode_payload(json()) -> json().
 encode_payload(Payload) ->
     maps:fold(fun
         (<<"onedata_json">>, JSON, PayloadIn) ->
-            PayloadIn#{<<"json">> => json_utils:encode(JSON)};
+            PayloadIn#{<<"json">> => JSON};
         (<<"onedata_rdf">>, RDF, PayloadIn) ->
-            PayloadIn#{<<"rdf">> => json_utils:encode(RDF)};
+            PayloadIn#{<<"rdf">> => RDF};
         (Key, Value, PayloadIn) ->
-            maps:update_with(<<"xattrs">>, fun(Xattrs) ->
-                Xattrs#{Key => Value}
-            end, #{Key => Value}, PayloadIn)
+            case is_cdmi_xattr(Key) of
+                true ->
+                    PayloadIn;
+                false ->
+                    maps:update_with(<<"xattrs">>, fun(Xattrs) ->
+                        Xattrs#{Key => Value}
+                    end, #{Key => Value}, PayloadIn)
+            end
     end, #{}, Payload).
+
+-spec is_cdmi_xattr(binary()) -> boolean().
+is_cdmi_xattr(XattrKey) ->
+    KeyLen = byte_size(XattrKey),
+    CdmiPrefixLen = byte_size(?CDMI_PREFIX),
+    binary:part(XattrKey, 0, min(KeyLen, CdmiPrefixLen)) =:= ?CDMI_PREFIX.
 
 -spec get_seq(batch_entry()) -> seq().
 get_seq(#{<<"seq">> := Seq}) ->
     Seq.
+
+
+-spec compute_file_id(file_meta:doc()) -> file_id().
+compute_file_id(#document{key = FileUuid, scope = SpaceId}) ->
+    {ok, FileId} = file_id:guid_to_objectid(file_id:pack_guid(FileUuid, SpaceId)),
+    FileId.

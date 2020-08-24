@@ -155,23 +155,27 @@ rename_or_delete(FileCtx,
 ) ->
     case provider_logic:supports_space(TargetSpaceId) of
         true ->
-            {ok, Storage} = fslogic_storage:select_storage(TargetSpaceId),
-            case sfm_utils:rename_storage_file(?ROOT_SESS_ID, TargetSpaceId,
-                Storage, FileUuid, SourceFileId, RemoteTargetFileId)
-            of
-                ok -> ok;
-                {error, ?ENOENT} -> ok
-            end,
             NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
-            {#document{key = TargetStorageId}, NewFileCtx2} = file_ctx:get_storage_doc(NewFileCtx),
-
-            RenamedDoc = Doc#document{value = Loc#file_location{
-                file_id = RemoteTargetFileId,
-                space_id = TargetSpaceId,
-                storage_id = TargetStorageId,
-                last_rename = LastRename
-            }},
-            {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx2};
+            case file_ctx:is_readonly_storage(NewFileCtx) of
+                {true, NewFileCtx2} ->
+                    {skipped, NewFileCtx2};
+                {false, NewFileCtx2} ->
+                    {TargetStorageId, NewFileCtx3} = file_ctx:get_storage_id(NewFileCtx2),
+                    % TODO VFS-6155 properly handle remote rename, target parent doc may not be synchronized yet, how do we know its mode?
+                    case sd_utils:rename(user_ctx:new(?ROOT_SESS_ID), TargetSpaceId,
+                        TargetStorageId, FileUuid, SourceFileId, undefined, RemoteTargetFileId)
+                    of
+                        ok -> ok;
+                        {error, ?ENOENT} -> ok
+                    end,
+                    RenamedDoc = Doc#document{value = Loc#file_location{
+                        file_id = RemoteTargetFileId,
+                        space_id = TargetSpaceId,
+                        storage_id = TargetStorageId,
+                        last_rename = LastRename
+                    }},
+                    {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx3}
+            end;
         false ->
             %% TODO: VFS-2299 delete file locally without triggering deletion
             %% on other providers, also make sure all locally modified blocks

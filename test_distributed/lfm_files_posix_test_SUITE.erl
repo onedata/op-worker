@@ -14,11 +14,14 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
@@ -32,6 +35,7 @@
     lfm_basic_rdwr_after_file_delete_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
+    lfm_get_details_test/1,
     lfm_synch_stat_test/1,
     lfm_truncate_test/1,
     lfm_acl_test/1,
@@ -43,6 +47,7 @@
     create_share_file_test/1,
     remove_share_test/1,
     share_getattr_test/1,
+    share_get_parent_test/1,
     share_list_test/1,
     share_read_test/1,
     share_child_getattr_test/1,
@@ -50,9 +55,9 @@
     share_child_read_test/1,
     share_permission_denied_test/1,
     echo_loop_test/1,
-    storage_file_creation_should_be_delayed_until_open/1,
-    delayed_creation_should_not_prevent_mv/1,
-    delayed_creation_should_not_prevent_truncate/1,
+    storage_file_creation_should_be_deferred_until_open/1,
+    deferred_creation_should_not_prevent_mv/1,
+    deferred_creation_should_not_prevent_truncate/1,
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
@@ -67,6 +72,12 @@
     readdir_should_work_with_token/1,
     readdir_should_work_with_token2/1,
     readdir_should_work_with_startid/1,
+    get_children_details_should_return_empty_result_for_empty_dir/1,
+    get_children_details_should_return_empty_result_zero_size/1,
+    get_children_details_should_work_with_zero_offset/1,
+    get_children_details_should_work_with_non_zero_offset/1,
+    get_children_details_should_work_with_size_greater_than_dir_size/1,
+    get_children_details_should_work_with_startid/1,
     lfm_recreate_handle_test/1,
     lfm_write_after_create_no_perms_test/1,
     lfm_recreate_handle_after_delete_test/1,
@@ -83,7 +94,6 @@
     mkdir_removed_opened_file_test/1,
     rename_removed_opened_file_races_test/1,
     rename_removed_opened_file_races_test2/1
-
 ]).
 
 -define(TEST_CASES, [
@@ -97,6 +107,7 @@
     lfm_basic_rdwr_after_file_delete_test,
     lfm_write_test,
     lfm_stat_test,
+    lfm_get_details_test,
     lfm_synch_stat_test,
     lfm_truncate_test,
     lfm_acl_test,
@@ -108,6 +119,7 @@
     create_share_file_test,
     remove_share_test,
     share_getattr_test,
+    share_get_parent_test,
     share_list_test,
     share_read_test,
     share_child_getattr_test,
@@ -115,14 +127,14 @@
     share_child_read_test,
     share_permission_denied_test,
     echo_loop_test,
-    storage_file_creation_should_be_delayed_until_open,
-    delayed_creation_should_not_prevent_mv,
-    delayed_creation_should_not_prevent_truncate,
+    storage_file_creation_should_be_deferred_until_open,
+    deferred_creation_should_not_prevent_mv,
+    deferred_creation_should_not_prevent_truncate,
     new_file_should_not_have_popularity_doc,
     new_file_should_have_zero_popularity,
     opening_file_should_increase_file_popularity,
     file_popularity_should_have_correct_file_size,
-    delayed_creation_should_not_prevent_truncate,
+    deferred_creation_should_not_prevent_truncate,
     readdir_plus_should_return_empty_result_for_empty_dir,
     readdir_plus_should_return_empty_result_zero_size,
     readdir_plus_should_work_with_zero_offset,
@@ -133,6 +145,12 @@
     readdir_should_work_with_token,
     readdir_should_work_with_token2,
     readdir_should_work_with_startid,
+    get_children_details_should_return_empty_result_for_empty_dir,
+    get_children_details_should_return_empty_result_zero_size,
+    get_children_details_should_work_with_zero_offset,
+    get_children_details_should_work_with_non_zero_offset,
+    get_children_details_should_work_with_size_greater_than_dir_size,
+    get_children_details_should_work_with_startid,
     lfm_recreate_handle_test,
     lfm_write_after_create_no_perms_test,
     lfm_recreate_handle_after_delete_test,
@@ -151,11 +169,11 @@
     rename_removed_opened_file_races_test2
 ]).
 
+-define(SPACE_ID, <<"space1">>).
+
 -define(PERFORMANCE_TEST_CASES, [
     ls_test, ls_with_stats_test, echo_loop_test
 ]).
-
--define(SPACE_ID, <<"space1">>).
 
 all() ->
     ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
@@ -177,12 +195,12 @@ rename_removed_opened_file_test(Config) ->
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other -> Other
     end,
     {ok, InitialDeletedDir} = case rpc:call(Worker, file, list_dir,
         [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other2 -> Other2
     end,
 
@@ -227,12 +245,12 @@ mkdir_removed_opened_file_test(Config) ->
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other -> Other
     end,
     {ok, InitialDeletedDir} = case rpc:call(Worker, file, list_dir,
         [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other2 -> Other2
     end,
 
@@ -289,18 +307,18 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other -> Other
     end,
     {ok, InitialDeletedDir} = case rpc:call(Worker, file, list_dir,
         [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other2 -> Other2
     end,
 
     case MockOpts of
         before_mv ->
-            test_utils:mock_expect(Workers, storage_file_manager, mv,
+            test_utils:mock_expect(Workers, storage_driver, mv,
                 fun(Handle, TargetFileId) ->
                     case get(mv_test) of
                         undefined ->
@@ -315,7 +333,7 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
                     meck:passthrough([Handle, TargetFileId])
                 end);
         after_mv ->
-            test_utils:mock_expect(Workers, storage_file_manager, mv,
+            test_utils:mock_expect(Workers, storage_driver, mv,
                 fun(Handle, TargetFileId) ->
                     case meck:passthrough([Handle, TargetFileId]) of
                         ok ->
@@ -434,6 +452,24 @@ readdir_should_work_with_token2(Config) ->
 readdir_should_work_with_startid(Config) ->
     lfm_files_test_base:readdir_should_work_with_startid(Config).
 
+get_children_details_should_return_empty_result_for_empty_dir(Config) ->
+    lfm_files_test_base:get_children_details_should_return_empty_result_for_empty_dir(Config).
+
+get_children_details_should_return_empty_result_zero_size(Config) ->
+    lfm_files_test_base:get_children_details_should_return_empty_result_zero_size(Config).
+
+get_children_details_should_work_with_zero_offset(Config) ->
+    lfm_files_test_base:get_children_details_should_work_with_zero_offset(Config).
+
+get_children_details_should_work_with_non_zero_offset(Config) ->
+    lfm_files_test_base:get_children_details_should_work_with_non_zero_offset(Config).
+
+get_children_details_should_work_with_size_greater_than_dir_size(Config) ->
+    lfm_files_test_base:get_children_details_should_work_with_size_greater_than_dir_size(Config).
+
+get_children_details_should_work_with_startid(Config) ->
+    lfm_files_test_base:get_children_details_should_work_with_startid(Config).
+
 echo_loop_test(Config) ->
     lfm_files_test_base:echo_loop(Config).
 
@@ -473,6 +509,9 @@ lfm_write_test(Config) ->
 lfm_stat_test(Config) ->
     lfm_files_test_base:lfm_stat(Config).
 
+lfm_get_details_test(Config) ->
+    lfm_files_test_base:lfm_get_details(Config).
+
 lfm_synch_stat_test(Config) ->
     lfm_files_test_base:lfm_synch_stat(Config).
 
@@ -500,6 +539,9 @@ remove_share_test(Config) ->
 share_getattr_test(Config) ->
     lfm_files_test_base:share_getattr(Config).
 
+share_get_parent_test(Config) ->
+    lfm_files_test_base:share_get_parent(Config).
+
 share_list_test(Config) ->
     lfm_files_test_base:share_list(Config).
 
@@ -518,14 +560,14 @@ share_child_read_test(Config) ->
 share_permission_denied_test(Config) ->
     lfm_files_test_base:share_permission_denied(Config).
 
-storage_file_creation_should_be_delayed_until_open(Config) ->
-    lfm_files_test_base:storage_file_creation_should_be_delayed_until_open(Config).
+storage_file_creation_should_be_deferred_until_open(Config) ->
+    lfm_files_test_base:storage_file_creation_should_be_deferred_until_open(Config).
 
-delayed_creation_should_not_prevent_mv(Config) ->
-    lfm_files_test_base:delayed_creation_should_not_prevent_mv(Config).
+deferred_creation_should_not_prevent_mv(Config) ->
+    lfm_files_test_base:deferred_creation_should_not_prevent_mv(Config).
 
-delayed_creation_should_not_prevent_truncate(Config) ->
-    lfm_files_test_base:delayed_creation_should_not_prevent_truncate(Config).
+deferred_creation_should_not_prevent_truncate(Config) ->
+    lfm_files_test_base:deferred_creation_should_not_prevent_truncate(Config).
 
 new_file_should_not_have_popularity_doc(Config) ->
     lfm_files_test_base:new_file_should_not_have_popularity_doc(Config).
@@ -557,14 +599,15 @@ init_per_testcase(Case, Config) when
     Case =:= rename_removed_opened_file_races_test orelse
         Case =:= rename_removed_opened_file_races_test2 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, storage_file_manager, [passthrough]),
+    test_utils:mock_new(Workers, storage_driver, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case, Config) when
     Case =:= lfm_open_in_direct_mode_test orelse
-        Case =:= lfm_recreate_handle_test orelse
-        Case =:= lfm_write_after_create_no_perms_test orelse
-        Case =:= lfm_recreate_handle_after_delete_test ->
+    Case =:= lfm_recreate_handle_test orelse
+    Case =:= lfm_write_after_create_no_perms_test orelse
+    Case =:= lfm_recreate_handle_after_delete_test
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, user_ctx, [passthrough]),
     test_utils:mock_expect(Workers, user_ctx, is_direct_io,
@@ -575,28 +618,31 @@ init_per_testcase(Case, Config) when
 
 
 init_per_testcase(Case, Config) when
-    Case =:=  lfm_open_failure_test orelse
-        Case =:= lfm_create_and_open_failure_test orelse
-        Case =:= lfm_copy_failure_test orelse
-        Case =:= lfm_open_multiple_times_failure_test orelse
-        Case =:= lfm_open_failure_multiple_users_test orelse
-        Case =:= lfm_open_and_create_open_failure_test orelse
-        Case =:= lfm_copy_failure_multiple_users_test ->
+    Case =:= lfm_open_failure_test orelse
+    Case =:= lfm_create_and_open_failure_test orelse
+    Case =:= lfm_copy_failure_test orelse
+    Case =:= lfm_open_multiple_times_failure_test orelse
+    Case =:= lfm_open_failure_multiple_users_test orelse
+    Case =:= lfm_open_and_create_open_failure_test orelse
+    Case =:= lfm_copy_failure_multiple_users_test
+->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, storage_file_manager, [passthrough]),
+    test_utils:mock_new(Workers, storage_driver, [passthrough]),
     init_per_testcase(default, Config);
 
 init_per_testcase(ShareTest, Config) when
     ShareTest =:= create_share_dir_test orelse
-        ShareTest =:= create_share_file_test orelse
-        ShareTest =:= remove_share_test orelse
-        ShareTest =:= share_getattr_test orelse
-        ShareTest =:= share_list_test orelse
-        ShareTest =:= share_read_test orelse
-        ShareTest =:= share_child_getattr_test orelse
-        ShareTest =:= share_child_list_test orelse
-        ShareTest =:= share_child_read_test orelse
-        ShareTest =:= share_permission_denied_test ->
+    ShareTest =:= create_share_file_test orelse
+    ShareTest =:= remove_share_test orelse
+    ShareTest =:= share_getattr_test orelse
+    ShareTest =:= share_get_parent_test orelse
+    ShareTest =:= share_list_test orelse
+    ShareTest =:= share_read_test orelse
+    ShareTest =:= share_child_getattr_test orelse
+    ShareTest =:= share_child_list_test orelse
+    ShareTest =:= share_child_read_test orelse
+    ShareTest =:= share_permission_denied_test
+->
     initializer:mock_share_logic(Config),
     init_per_testcase(default, Config);
 
@@ -610,41 +656,45 @@ end_per_testcase(Case, Config) when
     Case =:= rename_removed_opened_file_races_test orelse
         Case =:= rename_removed_opened_file_races_test2 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [storage_file_manager]),
+    test_utils:mock_unload(Workers, [storage_driver]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= lfm_open_in_direct_mode_test orelse
-        Case =:= lfm_recreate_handle_test orelse
-        Case =:= lfm_write_after_create_no_perms_test orelse
-        Case =:= lfm_recreate_handle_after_delete_test ->
+    Case =:= lfm_recreate_handle_test orelse
+    Case =:= lfm_write_after_create_no_perms_test orelse
+    Case =:= lfm_recreate_handle_after_delete_test
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [user_ctx]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
-    Case =:=  lfm_open_failure_test orelse
-        Case =:= lfm_create_and_open_failure_test orelse
-        Case =:= lfm_copy_failure_test orelse
-        Case =:= lfm_open_multiple_times_failure_test orelse
-        Case =:= lfm_open_failure_multiple_users_test orelse
-        Case =:= lfm_open_and_create_open_failure_test orelse
-        Case =:= lfm_copy_failure_multiple_users_test ->
+    Case =:= lfm_open_failure_test orelse
+    Case =:= lfm_create_and_open_failure_test orelse
+    Case =:= lfm_copy_failure_test orelse
+    Case =:= lfm_open_multiple_times_failure_test orelse
+    Case =:= lfm_open_failure_multiple_users_test orelse
+    Case =:= lfm_open_and_create_open_failure_test orelse
+    Case =:= lfm_copy_failure_multiple_users_test
+->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [storage_file_manager]),
+    test_utils:mock_unload(Workers, [storage_driver]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(ShareTest, Config) when
     ShareTest =:= create_share_dir_test orelse
-        ShareTest =:= create_share_file_test orelse
-        ShareTest =:= remove_share_test orelse
-        ShareTest =:= share_getattr_test orelse
-        ShareTest =:= share_list_test orelse
-        ShareTest =:= share_read_test orelse
-        ShareTest =:= share_child_getattr_test orelse
-        ShareTest =:= share_child_list_test orelse
-        ShareTest =:= share_child_read_test orelse
-        ShareTest =:= share_permission_denied_test ->
+    ShareTest =:= create_share_file_test orelse
+    ShareTest =:= remove_share_test orelse
+    ShareTest =:= share_getattr_test orelse
+    ShareTest =:= share_get_parent_test orelse
+    ShareTest =:= share_list_test orelse
+    ShareTest =:= share_read_test orelse
+    ShareTest =:= share_child_getattr_test orelse
+    ShareTest =:= share_child_list_test orelse
+    ShareTest =:= share_child_read_test orelse
+    ShareTest =:= share_permission_denied_test
+->
     initializer:unmock_share_logic(Config),
 
     end_per_testcase(?DEFAULT_CASE(ShareTest), Config);

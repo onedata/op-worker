@@ -23,7 +23,8 @@
     mixed_get_test/1,
     subscribe_test/1,
     convenience_functions_test/1,
-    create_test/1
+    create_test/1,
+    confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
@@ -32,7 +33,8 @@ all() -> ?ALL([
     mixed_get_test,
     subscribe_test,
     convenience_functions_test,
-    create_test
+    create_test,
+    confined_access_token_test
 ]).
 
 %%%===================================================================
@@ -46,13 +48,13 @@ get_test(Config) ->
     % User 3 does not belong to the handle
     User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_handle),
 
     ?assertMatch(
         {ok, ?HANDLE_PRIVATE_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     % Handle private data should now be cached
 
@@ -60,20 +62,20 @@ get_test(Config) ->
         {ok, ?HANDLE_PRIVATE_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     % Make sure that provider and other users cannot access cached data
     ?assertMatch(
         ?ERROR_FORBIDDEN,
         rpc:call(Node, handle_logic, get, [?ROOT_SESS_ID, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ?assertMatch(
         ?ERROR_FORBIDDEN,
         rpc:call(Node, handle_logic, get, [User3Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     % Make sure that provider and other users cannot access non-cached data
     logic_tests_common:invalidate_cache(Config, od_handle, ?HANDLE_1),
@@ -81,13 +83,13 @@ get_test(Config) ->
         ?ERROR_FORBIDDEN,
         rpc:call(Node, handle_logic, get, [?ROOT_SESS_ID, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ?assertMatch(
         ?ERROR_FORBIDDEN,
         rpc:call(Node, handle_logic, get, [User3Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ok.
 
@@ -99,7 +101,7 @@ get_public_data_test(Config) ->
     % User 3 does not belong to the handle
     User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_handle),
 
     % All users and providers should be able to fetch public handle data
     % when it is cached
@@ -107,25 +109,25 @@ get_public_data_test(Config) ->
         {ok, ?HANDLE_PUBLIC_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get_public_data, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ?assertMatch(
         {ok, ?HANDLE_PUBLIC_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get_public_data, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ?assertMatch(
         {ok, ?HANDLE_PUBLIC_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get_public_data, [User3Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ?assertMatch(
         {ok, ?HANDLE_PUBLIC_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get_public_data, [?ROOT_SESS_ID, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     % All users and providers should be able to fetch public handle data
     % when is is NOT cached
@@ -134,14 +136,14 @@ get_public_data_test(Config) ->
         {ok, ?HANDLE_PUBLIC_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get_public_data, [User3Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     logic_tests_common:invalidate_cache(Config, od_handle, ?HANDLE_1),
     ?assertMatch(
         {ok, ?HANDLE_PUBLIC_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get_public_data, [?ROOT_SESS_ID, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ok.
 
@@ -151,38 +153,38 @@ mixed_get_test(Config) ->
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-    UnsubCalls = logic_tests_common:count_reqs(Config, unsub),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_handle),
+    UnsubCalls = logic_tests_common:count_reqs(Config, unsub, od_handle),
 
     % Fetching rising scopes should cause an unsub and new fetch every time
     ?assertMatch(
         {ok, ?HANDLE_PUBLIC_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get_public_data, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
+    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, od_handle)),
 
     ?assertMatch(
         {ok, ?HANDLE_PRIVATE_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_handle)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_handle)),
 
     % When private data is cached, any scope should always be fetched from cache
     ?assertMatch(
         {ok, ?HANDLE_PRIVATE_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_handle)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_handle)),
 
     ?assertMatch(
         {ok, ?HANDLE_PUBLIC_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get_public_data, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_handle)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_handle)),
 
     ok.
 
@@ -192,7 +194,7 @@ subscribe_test(Config) ->
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_handle),
 
     % Simulate received updates on different scopes (in rising order)
     Handle1PublicGRI = #gri{type = od_handle, id = ?HANDLE_1, aspect = instance, scope = public},
@@ -205,14 +207,14 @@ subscribe_test(Config) ->
         {ok, ?HANDLE_PUBLIC_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get_public_data, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ChangedData1 = Handle1PublicData#{
         <<"revision">> => 4,
         <<"publicHandle">> => <<"changedPublicHandle">>
     },
     PushMessage1 = #gs_push_graph{gri = Handle1PublicGRI, data = ChangedData1, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+    logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
         {ok, #document{key = ?HANDLE_1, value = #od_handle{
@@ -221,7 +223,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, handle_logic, get_public_data, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     % private scope
     logic_tests_common:invalidate_cache(Config, od_handle, ?HANDLE_1),
@@ -229,14 +231,14 @@ subscribe_test(Config) ->
         {ok, ?HANDLE_PRIVATE_DATA_MATCHER(?HANDLE_1)},
         rpc:call(Node, handle_logic, get, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ChangedData2 = Handle1PrivateData#{
         <<"revision">> => 6,
         <<"publicHandle">> => <<"changedPublicHandle2">>
     },
     PushMessage2 = #gs_push_graph{gri = Handle1PrivateGRI, data = ChangedData2, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
+    logic_tests_common:simulate_push(Config, PushMessage2),
     ?assertMatch(
         {ok, #document{key = ?HANDLE_1, value = #od_handle{
             public_handle = <<"changedPublicHandle2">>,
@@ -244,11 +246,11 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, handle_logic, get, [User1Sess, ?HANDLE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage4 = #gs_push_graph{gri = Handle1PrivateGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    logic_tests_common:simulate_push(Config, PushMessage4),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_handle, get_from_cache, [?HANDLE_1])
@@ -263,7 +265,7 @@ subscribe_test(Config) ->
     ),
 
     PushMessage5 = #gs_push_nosub{gri = Handle1PrivateGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage5]),
+    logic_tests_common:simulate_push(Config, PushMessage5),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_handle, get_from_cache, [?HANDLE_1])
@@ -277,7 +279,7 @@ convenience_functions_test(Config) ->
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_handle),
 
     % Test convenience functions and if they fetch correct scopes
     % Eff users are within private scope
@@ -285,17 +287,17 @@ convenience_functions_test(Config) ->
         true,
         rpc:call(Node, handle_logic, has_eff_user, [User1Sess, ?HANDLE_1, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
     ?assertMatch(
         true,
         rpc:call(Node, handle_logic, has_eff_user, [User1Sess, ?HANDLE_1, ?USER_2])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
     ?assertMatch(
         false,
         rpc:call(Node, handle_logic, has_eff_user, [User1Sess, ?HANDLE_1, <<"wrongId">>])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ok.
 
@@ -305,7 +307,7 @@ create_test(Config) ->
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_handle),
 
     ?assertMatch(
         {ok, ?MOCK_CREATED_HANDLE_ID},
@@ -317,7 +319,7 @@ create_test(Config) ->
             ?HANDLE_METADATA(<<"newHandle">>)
         ])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ?assertMatch(
         ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>),
@@ -329,9 +331,33 @@ create_test(Config) ->
             ?HANDLE_METADATA(<<"newHandle">>)
         ])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_handle)),
 
     ok.
+
+
+confined_access_token_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    Caveat = #cv_data_readonly{},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenCredentials = auth_manager:build_token_credentials(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, allow_data_access_caveats
+    ),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    % Request should be denied before contacting Onezone because of the
+    % data access caveat
+    ?assertMatch(
+        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
+        rpc:call(Node, handle_logic, get, [TokenCredentials, ?HANDLE_1])
+    ),
+    % Nevertheless, GraphCalls should be increased by 3 as following requests should be made:
+    % - first to verify token credentials,
+    % - second to subscribe for token revocation notifications in oz,
+    % - third to fetch user data to initialize userRootDir, etc.
+    ?assertEqual(GraphCalls+3, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================

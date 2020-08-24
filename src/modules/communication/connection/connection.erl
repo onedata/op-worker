@@ -92,8 +92,10 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -record(state, {
     socket :: ssl:sslsocket(),
@@ -110,6 +112,7 @@
     status :: upgrading_protocol | performing_handshake | ready,
     session_id = undefined :: undefined | session:id(),
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
+    peer_ip :: inet:ip4_address(),
     verify_msg = true :: boolean(),
     connection_manager = undefined :: undefined | pid(),
 
@@ -213,6 +216,9 @@ send_msg(Pid, Msg) ->
     catch
         exit:{noproc, _} ->
             ?debug("Connection process ~p does not exist", [Pid]),
+            {error, no_connection};
+        exit:{{nodedown, Node}, _} ->
+            ?debug("Node ~p with connection process ~p is down", [Node, Pid]),
             {error, no_connection};
         exit:{normal, _} ->
             ?debug("Exit of connection process ~p for message ~s", [
@@ -472,16 +478,16 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
     try connection_utils:process_protocol_upgrade_request(Req) of
         ok ->
             Headers = cowboy_req:response_headers(#{
-                <<"connection">> => <<"Upgrade">>,
-                <<"upgrade">> => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
+                ?HDR_CONNECTION => <<"Upgrade">>,
+                ?HDR_UPGRADE => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
             }, Req),
             #{pid := Pid, streamid := StreamID} = Req,
             Pid ! {{Pid, StreamID}, {switch_protocol, Headers, ?MODULE, HandlerOpts}},
             {ok, Req, Env};
         {error, upgrade_required} ->
             NewReq = cowboy_req:reply(?HTTP_426_UPGRADE_REQUIRED, #{
-                <<"connection">> => <<"Upgrade">>,
-                <<"upgrade">> => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
+                ?HDR_CONNECTION => <<"Upgrade">>,
+                ?HDR_UPGRADE => <<?CLIENT_PROTOCOL_UPGRADE_NAME>>
             }, Req),
             {stop, NewReq}
     catch Type:Reason ->
@@ -505,6 +511,7 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
     % included in limiting the number of e.g. REST connections.
     ranch:remove_connection(Ref),
 
+    {ok, {IpAddress, _Port}} = ssl:peername(Socket),
     {Ok, Closed, Error} = Transport:messages(),
 
     State = #state{
@@ -514,6 +521,7 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
         ok = Ok,
         closed = Closed,
         error = Error,
+        peer_ip = IpAddress,
         type = incoming,
         status = performing_handshake,
         verify_msg = ?DEFAULT_VERIFY_MSG_FLAG
@@ -548,7 +556,7 @@ connect_with_provider(ProviderId, SessionId, Domain,
         _ -> str_utils:format("@ ~s:~b (~s)", [Host, Port, Domain])
     end,
     ?info("Connecting to provider ~ts ~s", [
-        provider_logic:to_string(ProviderId), DomainAndIpInfo
+        provider_logic:to_printable(ProviderId), DomainAndIpInfo
     ]),
 
     try
@@ -583,6 +591,7 @@ open_socket_to_provider(SessionId, ProviderId, Domain,
     {ok, Socket} = Transport:connect(
         binary_to_list(Host), Port, ConnectOpts, Timeout
     ),
+    {ok, {IpAddress, _Port}} = ssl:peername(Socket),
 
     {Ok, Closed, Error} = Transport:messages(),
     #state{
@@ -596,6 +605,7 @@ open_socket_to_provider(SessionId, ProviderId, Domain,
         status = upgrading_protocol,
         session_id = SessionId,
         peer_id = ProviderId,
+        peer_ip = IpAddress,
         verify_msg = ?DEFAULT_VERIFY_MSG_FLAG,
         connection_manager = ConnManager,
         rib = router:build_rib(SessionId)
@@ -621,16 +631,22 @@ handle_protocol_upgrade_response(State, Data) ->
             ?error("Received invalid protocol upgrade response: ~p", [Data]),
             {error, invalid_protocol_upgrade_response};
         true ->
+            #state{
+                socket = Socket,
+                transport = Transport,
+                peer_id = ProviderId
+            } = State,
             {ok, MsgId} = clproto_message_id:generate(self()),
-            {ok, Nonce} = authorization_nonce:create(),
+            {ok, Token} = provider_auth:get_identity_token_for_consumer(
+                ?SUB(?ONEPROVIDER, ProviderId)
+            ),
             ClientMsg = #client_message{
                 message_id = MsgId,
                 message_body = #provider_handshake_request{
                     provider_id = oneprovider:get_id(),
-                    nonce = Nonce
+                    token = Token
                 }
             },
-            #state{socket = Socket, transport = Transport} = State,
             ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
             send_client_message(State, ClientMsg)
     end.
@@ -646,9 +662,8 @@ handle_handshake(#state{type = outgoing} = State, Data) ->
 
 %% @private
 -spec handle_handshake_request(state(), binary()) -> {ok, state()} | error().
-handle_handshake_request(#state{socket = Socket} = State, Data) ->
+handle_handshake_request(#state{peer_ip = IpAddress} = State, Data) ->
     try
-        {ok, {IpAddress, _Port}} = ssl:peername(Socket),
         {ok, Msg} = clproto_serializer:deserialize_client_message(Data, undefined),
 
         {PeerId, SessionId} = connection_auth:handle_handshake(
@@ -681,18 +696,18 @@ handle_handshake_response(#state{
     try clproto_serializer:deserialize_server_message(Data, SessionId) of
         {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
             ?info("Successfully connected to provider ~ts", [
-                provider_logic:to_string(ProviderId)
+                provider_logic:to_printable(ProviderId)
             ]),
             outgoing_connection_manager:report_successful_handshake(ConnManager),
             {ok, State};
         {ok, #server_message{message_body = #handshake_response{status = Error}}} ->
             ?error("Handshake refused by provider ~ts due to ~p, closing connection.", [
-                provider_logic:to_string(ProviderId), Error
+                provider_logic:to_printable(ProviderId), Error
             ]),
             {error, handshake_failed};
         _ ->
             ?error("Received invalid handshake response from provider ~ts, closing connection.", [
-                provider_logic:to_string(ProviderId)
+                provider_logic:to_printable(ProviderId)
             ]),
             {error, handshake_failed}
     catch _:Error ->
@@ -715,11 +730,12 @@ handle_client_message(State, ?CLIENT_KEEPALIVE_MSG) ->
     {ok, State};
 handle_client_message(#state{
     peer_id = PeerId,
+    peer_ip = PeerIp,
     session_id = SessId
 } = State, Data) ->
     try
         {ok, Msg} = clproto_serializer:deserialize_client_message(Data, SessId),
-        case connection_utils:maybe_create_proxied_session(PeerId, Msg) of
+        case connection_utils:maybe_create_proxied_session(PeerId, PeerIp, Msg) of
             ok ->
                 route_message(State, Msg);
             Error ->

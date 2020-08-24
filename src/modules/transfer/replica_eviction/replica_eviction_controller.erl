@@ -37,7 +37,7 @@
     file_guid :: fslogic_worker:file_guid(),
     callback :: transfer:callback(),
     space_id :: od_space:id(),
-    status :: transfer:status(),
+    status :: transfer:subtask_status(),
     supporting_provider_id :: od_provider:id(),
     view_name :: transfer:view_name(),
     query_view_params :: transfer:query_view_params()
@@ -107,7 +107,7 @@ init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId,
         file_guid = FileGuid,
         callback = Callback,
         space_id = file_id:guid_to_space_id(FileGuid),
-        status = enqueued,
+        status = ?ENQUEUED_STATUS,
         supporting_provider_id = SupportingProviderId,
         view_name = ViewName,
         query_view_params = QueryViewParams
@@ -161,61 +161,59 @@ handle_cast(start_replica_eviction, State = #state{
                 supporting_provider = SupportingProviderId
             },
             replica_eviction_worker:enqueue_data_transfer(FileCtx, TransferParams),
-            {noreply, State#state{status = active}};
-        {error, active} ->
+            {noreply, State#state{status = ?ACTIVE_STATUS}};
+        {error, ?ACTIVE_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
-            {noreply, State#state{status = active}};
-        {error, aborting} ->
+            {noreply, State#state{status = ?ACTIVE_STATUS}};
+        {error, ?ABORTING_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
-            {noreply, State#state{status = aborting}};
-        {error, S} when S == completed orelse S == cancelled orelse S == failed ->
+            {noreply, State#state{status = ?ABORTING_STATUS}};
+        {error, S} when S == ?COMPLETED_STATUS orelse S == ?CANCELLED_STATUS orelse S == ?FAILED_STATUS ->
             {stop, normal, S}
     end;
 
 handle_cast(replica_eviction_completed, State = #state{
     transfer_id = TransferId,
     callback = Callback,
-    status = active
+    status = ?ACTIVE_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_completed(TransferId),
-    notify_callback(Callback),
+    notify_callback(Callback, TransferId),
     {stop, normal, State};
 
 handle_cast({replica_eviction_aborting, Reason}, State = #state{
     transfer_id = TransferId,
     file_guid = FileGuid,
-    status = active
+    status = ?ACTIVE_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_aborting(TransferId),
-    ?error_stacktrace("Could not evict file replica ~p due to ~p", [
-        FileGuid, Reason
-    ]),
-    {noreply, State#state{status = aborting}};
+    ?error("Could not evict file replica ~p due to ~p", [FileGuid, Reason]),
+    {noreply, State#state{status = ?ABORTING_STATUS}};
 
 % Due to asynchronous nature of transfer_changes, aborting msg can be
 % sent several times. In case the controller is already in aborting
 % state, it can be safely ignored.
 handle_cast({replica_eviction_aborting, _Reason}, State = #state{
-    status = aborting
+    status = ?ABORTING_STATUS
 }) ->
     {noreply, State};
 
 handle_cast(replica_eviction_cancelled, State = #state{
     transfer_id = TransferId,
-    status = aborting
+    status = ?ABORTING_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_cancelled(TransferId),
     {stop, normal, State};
 
 handle_cast(replica_eviction_failed, State = #state{
     transfer_id = TransferId,
-    status = aborting
+    status = ?ABORTING_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_failed(TransferId, false),
     {stop, normal, State};
 
 handle_cast(Request, State = #state{status = Status}) ->
-    ?warning("~p:~p - bad request ~p while in status ~p", [
+    ?debug("~p:~p - bad request ~p while in status ~p", [
         ?MODULE, ?LINE, Request, Status
     ]),
     {noreply, State}.
@@ -269,11 +267,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% Notifies callback about successful replica eviction
 %% @end
 %%--------------------------------------------------------------------
--spec notify_callback(transfer:callback()) -> ok.
-notify_callback(undefined) -> ok;
-notify_callback(<<>>) -> ok;
-notify_callback(Callback) ->
-    {ok, _, _, _} = http_client:get(Callback).
+-spec notify_callback(transfer:callback(), transfer:id()) -> ok.
+notify_callback(undefined, _TransferId) -> ok;
+notify_callback(<<>>, _TransferId) -> ok;
+notify_callback(Callback, TransferId) ->
+    {ok, _, _, _} = http_client:post(Callback, #{}, json_utils:encode(#{
+        <<"transferId">> => TransferId
+    })).
 
 
 %%--------------------------------------------------------------------

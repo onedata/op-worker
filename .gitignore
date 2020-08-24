@@ -12,6 +12,7 @@ rebar3.crashdump
 *.pyc
 *.o
 *.d
+!config.d
 
 /cluster_manager
 /priv
@@ -26,6 +27,7 @@ rel/vars.config
 !/test_distributed/logs/.gitkeep
 /test_distributed/cover_tmp.spec
 test_coverage
+src/modules/qos/expression/qos_expression_*.erl
 
 # OS X
 .DS_Store

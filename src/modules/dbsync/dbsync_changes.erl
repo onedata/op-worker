@@ -18,12 +18,15 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([apply_batch/2, apply/1]).
+-export([apply_batch/3, apply/1]).
 
 -type ctx() :: datastore_cache:ctx().
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
 -type model() :: datastore_model:model().
+-type timestamp() :: datastore_doc:timestamp() | undefined.
+
+-export_type([timestamp/0]).
 
 %% Time to wait for worker process
 -define(WORKER_TIMEOUT, 90000).
@@ -38,8 +41,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec apply_batch([datastore:doc()], {couchbase_changes:since(),
-    couchbase_changes:until()}) -> ok.
-apply_batch(Docs, BatchRange) ->
+    couchbase_changes:until()}, timestamp()) -> ok.
+apply_batch(Docs, BatchRange, Timestamp) ->
     Master = self(),
     spawn_link(fun() ->
         DocsGroups = group_changes(Docs),
@@ -65,7 +68,7 @@ apply_batch(Docs, BatchRange) ->
         Ref = make_ref(),
         Pids = parallel_apply(DocsList3, Ref),
         Ans = gather_answers(Pids, Ref),
-        Master ! {batch_applied, BatchRange, Ans}
+        Master ! {batch_applied, BatchRange, Timestamp, Ans}
     end),
     ok.
 
@@ -308,7 +311,7 @@ parallel_apply(DocsList, Ref) ->
 -spec gather_answers([pid()], reference()) ->
     ok | timeout | {error, datastore_doc:seq(), term()}.
 gather_answers(SlavesList, Ref) ->
-    gather_answers(SlavesList, Ref, ok).
+    gather_answers(SlavesList, Ref, ok, false).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -317,11 +320,11 @@ gather_answers(SlavesList, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gather_answers([pid()], reference(),
-    ok | {error, datastore_doc:seq(), term()}) ->
+    ok | {error, datastore_doc:seq(), term()}, boolean()) ->
     ok | timeout | {error, datastore_doc:seq(), term()}.
-gather_answers([], _Ref, Ans) ->
+gather_answers([], _Ref, Ans, _FinalCheck) ->
     Ans;
-gather_answers(Pids, Ref, TmpAns) ->
+gather_answers(Pids, Ref, TmpAns, FinalCheck) ->
     receive
         {changes_worker_ans, Ref, Pid, Ans} ->
             Merged = case {Ans, TmpAns} of
@@ -330,7 +333,7 @@ gather_answers(Pids, Ref, TmpAns) ->
                 {{error, _, _}, {error, _, _}} -> TmpAns;
                 _ -> Ans
             end,
-            gather_answers(Pids -- [Pid], Ref, Merged)
+            gather_answers(Pids -- [Pid], Ref, Merged, FinalCheck)
     after
         ?WORKER_TIMEOUT ->
             IsAnyAlive = lists:foldl(fun
@@ -339,10 +342,12 @@ gather_answers(Pids, Ref, TmpAns) ->
                 (Pid, _Acc) ->
                     erlang:is_process_alive(Pid)
             end, false, Pids),
-            case IsAnyAlive of
-                true ->
-                    gather_answers(Pids, Ref, TmpAns);
-                false ->
+            case {FinalCheck, IsAnyAlive} of
+                {false, true} ->
+                    gather_answers(Pids, Ref, TmpAns, FinalCheck);
+                {false, false} ->
+                    gather_answers(Pids, Ref, TmpAns, true);
+                _ ->
                     timeout
             end
     end.

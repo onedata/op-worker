@@ -15,7 +15,8 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include("modules/fslogic/file_popularity_view.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -132,13 +133,13 @@ update(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) 
         providers = OldProviders
     }) ->
         {ok, OldIndex#index{
-            spatial = utils:ensure_defined(Spatial, undefined, OldSpatial),
+            spatial = utils:ensure_defined(Spatial, OldSpatial),
             map_function = utils:ensure_defined(
                 view_utils:escape_js_function(MapFunction), undefined, OldMap
             ),
-            reduce_function = utils:ensure_defined(ReduceFunction, undefined, OldReduce),
+            reduce_function = utils:ensure_defined(ReduceFunction, OldReduce),
             index_options = utils:ensure_defined(Options, [], OldOptions),
-            providers = utils:ensure_defined(Providers, undefined, OldProviders)
+            providers = utils:ensure_defined(Providers, OldProviders)
         }}
     end,
     case update(Name, Diff, SpaceId) of
@@ -191,7 +192,6 @@ get_json(SpaceId, ViewName) ->
             }}} ->
                 ViewOptions = maps:from_list(Options),
                 {ok, #{
-                    <<"indexOptions">> => ViewOptions,
                     <<"viewOptions">> => ViewOptions,
                     <<"providers">> => Providers,
                     <<"mapFunction">> => MapFunction,
@@ -289,7 +289,7 @@ delete_db_view(ViewId) ->
 -spec query(od_space:id(), name(), options()) ->
     {ok, json_utils:json_term()} | {error, term()}.
 query(SpaceId, <<"file-popularity">>, Options) ->
-    query(<<"file-popularity-", SpaceId/binary>>, Options);
+    query(?FILE_POPULARITY_VIEW(SpaceId), Options);
 query(SpaceId, ViewName, Options) ->
     ?get_view_id_and_run(ViewName, SpaceId, fun(ViewId) ->
         query(ViewId, Options)
@@ -395,7 +395,7 @@ update(ViewName, Diff, SpaceId) ->
 
 
 %% @private
--spec query(id(), options()) -> {ok, json_utils:json_term()} | {error, term()}.
+-spec query(id(), options()) -> {ok, json_utils:json_map()} | {error, term()}.
 query(ViewId, Options) ->
     case couchbase_driver:query_view(?DISK_CTX, ViewId, ViewId, Options) of
         {ok, _} = Ans ->
@@ -404,6 +404,9 @@ query(ViewId, Options) ->
             {error, not_found};
         {error, {<<"not_found">>, _}} ->
             {error, not_found};
+        {error, {Category, Description}} when is_binary(Category) andalso is_binary(Description) ->
+            % this is error from Couchbase
+            ?ERROR_VIEW_QUERY_FAILED(Category, Description);
         Error ->
             Error
     end.
@@ -522,6 +525,19 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
             return filtered;
         };
 
+        function isValidKey(key){
+            if(key) {
+                if(Array.isArray(key)){
+                    if (key.length > 0)
+                        return key.every(isValidKey);
+                    else
+                        return false;
+                }
+                return true;
+            }
+            return false;
+        };
+
         var spaceId = doc['_scope'];
 
         if(spaceId == '", SpaceId/binary, "' && doc['_deleted'] == false) {
@@ -562,9 +578,10 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
             if(result) {
                 if ('list' in result) {
                     for (var keyValuePair of result['list'])
-                        emit(keyValuePair[0], keyValuePair[1]);
+                        if(isValidKey(keyValuePair[0]))
+                            emit(keyValuePair[0], keyValuePair[1]);
                 }
-                else{
+                else if(isValidKey(result[0])){
                     emit(result[0], result[1]);
                 }
             }

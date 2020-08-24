@@ -78,7 +78,10 @@ get_current_run(SpaceId) ->
 
 -spec create_or_update(id(), map()) -> ok | error().
 create_or_update(SpaceId, NewConfiguration) ->
-    {ok, SupportSize} = provider_logic:get_support_size(SpaceId),
+    SupportSize = case provider_logic:get_support_size(SpaceId) of
+        {ok, S} -> S;
+        {error, not_found} -> 0
+    end,
     case autocleaning:get(SpaceId) of
         {error, not_found} ->
             ?extract_ok(create(SpaceId, NewConfiguration, SupportSize));
@@ -119,8 +122,8 @@ delete(SpaceId) ->
     case get_current_run(SpaceId) of
         undefined -> ok;
         ARId ->
-            autocleaning_controller:stop_cleaning(SpaceId),
-            autocleaning_run:delete(ARId, SpaceId)
+            % TODO VFS-6050 stop autocleaning gracefully when space is unsupported
+            autocleaning_api:cancel_run(SpaceId, ARId)
     end,
     datastore_model:delete(?CTX, SpaceId).
 

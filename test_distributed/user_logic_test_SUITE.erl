@@ -18,82 +18,41 @@
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
 -export([
-    authorize_test/1,
-    get_by_auth_test/1,
     get_test/1,
     get_protected_data_test/1,
     get_shared_data_test/1,
     mixed_get_test/1,
     subscribe_test/1,
     convenience_functions_test/1,
-    fetch_idp_access_token_test/1
+    fetch_idp_access_token_test/1,
+    confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
-    authorize_test,
-    get_by_auth_test,
     get_test,
     get_protected_data_test,
     get_shared_data_test,
     mixed_get_test,
     subscribe_test,
     convenience_functions_test,
-    fetch_idp_access_token_test
+    fetch_idp_access_token_test,
+    confined_access_token_test
 ]).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-authorize_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    InitialCallsNum = logic_tests_common:count_reqs(Config, rpc),
-
-    ?assertMatch(
-        {ok, ?MOCK_DISCH_MACAROON},
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID])
-    ),
-
-    ?assertEqual(InitialCallsNum + 1, logic_tests_common:count_reqs(Config, rpc)),
-
-    % RPC calls are not cached
-    ?assertMatch(
-        {ok, ?MOCK_DISCH_MACAROON},
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID])
-    ),
-
-    ?assertEqual(InitialCallsNum + 2, logic_tests_common:count_reqs(Config, rpc)),
-
-    ok.
-
-
-get_by_auth_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
-    ?assertMatch(
-        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
-        rpc:call(Node, user_logic, get_by_auth, [?USER_INTERNAL_MACAROON_AUTH(?USER_1)])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-
-    % Getting user by auth is always done by delegating to onezone, so no cache
-    % works here
-    ?assertMatch(
-        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
-        rpc:call(Node, user_logic, get_by_auth, [?USER_INTERNAL_MACAROON_AUTH(?USER_1)])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ok.
-
 
 get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
+    User1AccessToken = initializer:create_access_token(?USER_1),
+    User1TokenCredentials = auth_manager:build_token_credentials(
+        User1AccessToken, undefined,
+        initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
+    ),
     User2Sess = logic_tests_common:get_user_session(Config, ?USER_2),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
@@ -111,6 +70,12 @@ get_test(Config) ->
     ?assertMatch(
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+
+    ?assertMatch(
+        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
+        rpc:call(Node, user_logic, get, [User1TokenCredentials, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
@@ -138,6 +103,25 @@ get_test(Config) ->
         rpc:call(Node, user_logic, get, [?ROOT_SESS_ID, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+
+    % Make sure that when using TokenCredentials to get non cached data get
+    % and with auth cache purged 3 requests should be made:
+    % - first to verify token credentials,
+    % - second to subscribe for token revocation notification,
+    % - third to fetch user data
+    true = rpc:call(Node, ets, delete_all_objects, [auth_cache]),
+    ?assertMatch(
+        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
+        rpc:call(Node, user_logic, get, [User1TokenCredentials, ?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph)),
+    % And will be cached for later requests
+    ?assertMatch(
+        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
+        rpc:call(Node, user_logic, get, [User1TokenCredentials, ?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph)),
+
     ok.
 
 
@@ -150,27 +134,27 @@ get_protected_data_test(Config) ->
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_2),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_user),
 
     ?assertMatch(
         {ok, ?USER_PROTECTED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     % User protected data should now be cached
     ?assertMatch(
         {ok, ?USER_PROTECTED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     % Provider should also be able to fetch the data from cache
     ?assertMatch(
         {ok, ?USER_PROTECTED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_protected_data, [?ROOT_SESS_ID, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     % Provider should also be able to fetch non-cached data
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
@@ -178,14 +162,14 @@ get_protected_data_test(Config) ->
         {ok, ?USER_PROTECTED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_protected_data, [?ROOT_SESS_ID, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     % Make sure that other users cannot access cached data
     ?assertMatch(
         ?ERROR_FORBIDDEN,
         rpc:call(Node, user_logic, get_protected_data, [User2Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     % Make sure that other users cannot access non-cached data
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
@@ -193,7 +177,7 @@ get_protected_data_test(Config) ->
         ?ERROR_FORBIDDEN,
         rpc:call(Node, user_logic, get_protected_data, [User2Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_user)),
     ok.
 
 
@@ -279,30 +263,30 @@ mixed_get_test(Config) ->
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-    UnsubCalls = logic_tests_common:count_reqs(Config, unsub),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_user),
+    UnsubCalls = logic_tests_common:count_reqs(Config, unsub, od_user),
 
     % Fetching rising scopes should cause an unsub and new fetch every time
     ?assertMatch(
         {ok, ?USER_SHARED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_shared_data, [User1Sess, ?USER_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_user)),
+    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, od_user)),
 
     ?assertMatch(
         {ok, ?USER_PROTECTED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_user)),
 
     ?assertMatch(
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 2, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_user)),
+    ?assertEqual(UnsubCalls + 2, logic_tests_common:count_reqs(Config, unsub, od_user)),
 
     % When private data is cached, any scope should always be fetched from cache
 
@@ -310,22 +294,22 @@ mixed_get_test(Config) ->
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 2, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_user)),
+    ?assertEqual(UnsubCalls + 2, logic_tests_common:count_reqs(Config, unsub, od_user)),
 
     ?assertMatch(
         {ok, ?USER_PROTECTED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 2, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_user)),
+    ?assertEqual(UnsubCalls + 2, logic_tests_common:count_reqs(Config, unsub, od_user)),
 
     ?assertMatch(
         {ok, ?USER_SHARED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_shared_data, [User1Sess, ?USER_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 2, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_user)),
+    ?assertEqual(UnsubCalls + 2, logic_tests_common:count_reqs(Config, unsub, od_user)),
 
     ok.
 
@@ -337,7 +321,7 @@ subscribe_test(Config) ->
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_user),
 
     % Simulate received updates on different scopes (in rising order)
     User1SharedGRI = #gri{type = od_user, id = ?USER_1, aspect = instance, scope = shared},
@@ -352,14 +336,14 @@ subscribe_test(Config) ->
         {ok, ?USER_SHARED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_shared_data, [User1Sess, ?USER_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     ChangedData = User1SharedData#{
         <<"revision">> => 3,
         <<"fullName">> => <<"changedName">>
     },
     PushMessage1 = #gs_push_graph{gri = User1SharedGRI, data = ChangedData, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+    logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
@@ -368,7 +352,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, user_logic, get_shared_data, [User1Sess, ?USER_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     % protected scope
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
@@ -376,13 +360,13 @@ subscribe_test(Config) ->
         {ok, ?USER_PROTECTED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
     ChangedData2 = User1ProtectedData#{
         <<"revision">> => 5,
         <<"fullName">> => <<"changedName2">>
     },
     PushMessage2 = #gs_push_graph{gri = User1ProtectedGRI, data = ChangedData2, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
+    logic_tests_common:simulate_push(Config, PushMessage2),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
@@ -391,7 +375,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     % private scope
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
@@ -399,13 +383,13 @@ subscribe_test(Config) ->
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_user)),
     ChangedData4 = User1PrivateData#{
         <<"revision">> => 8,
         <<"fullName">> => <<"changedName4">>
     },
     PushMessage4 = #gs_push_graph{gri = User1PrivateGRI, data = ChangedData4, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    logic_tests_common:simulate_push(Config, PushMessage4),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
@@ -414,11 +398,11 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage7 = #gs_push_graph{gri = User1PrivateGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage7]),
+    logic_tests_common:simulate_push(Config, PushMessage7),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_user, get_from_cache, [?USER_1])
@@ -433,7 +417,7 @@ subscribe_test(Config) ->
     ),
 
     PushMessage8 = #gs_push_nosub{gri = User1PrivateGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage8]),
+    logic_tests_common:simulate_push(Config, PushMessage8),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_user, get_from_cache, [?USER_1])
@@ -449,7 +433,7 @@ convenience_functions_test(Config) ->
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_user),
 
     % Test convenience functions and if they fetch correct scopes
 
@@ -458,56 +442,56 @@ convenience_functions_test(Config) ->
         {ok, ?USER_FULL_NAME(?USER_1)},
         rpc:call(Node, user_logic, get_full_name, [?USER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_user)),
     ?assertMatch(
         {ok, ?USER_FULL_NAME(?USER_1)},
         rpc:call(Node, user_logic, get_full_name, [User1Sess, ?USER_1, ?THROUGH_SPACE(?SPACE_1)])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     % Eff groups are within private scope
     ?assertMatch(
         true,
         rpc:call(Node, user_logic, has_eff_group, [User1Sess, ?USER_1, ?GROUP_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     ?assertMatch(
         true,
         rpc:call(Node, user_logic, has_eff_group, [User1Sess, ?USER_1, ?GROUP_2])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     ?assertMatch(
         false,
         rpc:call(Node, user_logic, has_eff_group, [User1Sess, ?USER_1, <<"wrongId">>])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     % Eff spaces are within private scope
     ?assertMatch(
         {ok, ?USER_EFF_SPACES(?USER_1)},
         rpc:call(Node, user_logic, get_eff_spaces, [User1Sess, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     ?assertMatch(
         true,
         rpc:call(Node, user_logic, has_eff_space, [User1Sess, ?USER_1, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     ?assertMatch(
         true,
         rpc:call(Node, user_logic, has_eff_space, [User1Sess, ?USER_1, ?SPACE_2])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     ?assertMatch(
         false,
         rpc:call(Node, user_logic, has_eff_space, [User1Sess, ?USER_1, <<"wrongId">>])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     ?assertMatch(
         {true, ?SPACE_1},
@@ -532,27 +516,52 @@ fetch_idp_access_token_test(Config) ->
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_user),
 
     ?assertMatch(
         {ok, {?MOCK_IDP_ACCESS_TOKEN, _Ttl}},
         rpc:call(Node, user_logic, fetch_idp_access_token, [User1Sess, ?USER_1, ?MOCK_IDP])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     ?assertMatch(
         ?ERROR_NOT_FOUND,
         rpc:call(Node, user_logic, fetch_idp_access_token, [User1Sess, <<"wrongId">>, ?MOCK_IDP])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     ?assertMatch(
         ?ERROR_NOT_FOUND,
         rpc:call(Node, user_logic, fetch_idp_access_token, [User1Sess, ?USER_1, <<"wrongId">>])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_user)),
 
     ok.
+
+
+confined_access_token_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    Caveat = #cv_data_readonly{},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenCredentials = auth_manager:build_token_credentials(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, allow_data_access_caveats
+    ),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    % Request should be denied before contacting Onezone because of
+    % data access caveat presence
+    ?assertMatch(
+        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
+        rpc:call(Node, user_logic, fetch_idp_access_token, [TokenCredentials, ?USER_1, ?MOCK_IDP])
+    ),
+    % Nevertheless, GraphCalls should be increased by 3 as following requests should be made:
+    % - first to verify token credentials,
+    % - second to subscribe for token revocation notifications in oz,
+    % - third to fetch user data to initialize userRootDir, etc.
+    ?assertEqual(GraphCalls+3, logic_tests_common:count_reqs(Config, graph)).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

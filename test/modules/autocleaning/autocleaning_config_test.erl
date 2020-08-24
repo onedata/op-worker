@@ -11,8 +11,9 @@
 -module(autocleaning_config_test).
 -author("Jakub Kudzia").
 
--include_lib("eunit/include/eunit.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -define(SETTING(Value), ?SETTING(true, Value)).
 -define(SETTING(Enabled, Value),
@@ -182,35 +183,35 @@ configuring_only_enable_param_should_leave_target_and_threshold_values_unchanged
     }}, autocleaning_config:create_or_update(?CONFIG_RECORD, #{enabled => false}, 10)).
 
 setting_enabled_to_not_boolean_value_should_throw_illegal_type_exception_test() ->
-    ?assertEqual({error, {illegal_type, enabled}},
+    ?assertEqual(?ERROR_BAD_VALUE_BOOLEAN(<<"enabled">>),
         autocleaning_config:create_or_update(?CONFIG_RECORD, #{enabled => not_boolean}, 10)).
 
 setting_target_to_not_integer_value_should_throw_illegal_type_exception_test() ->
-    ?assertEqual({error, {illegal_type, target}},
+    ?assertEqual(?ERROR_BAD_VALUE_INTEGER(<<"target">>),
         autocleaning_config:create_or_update(?CONFIG_RECORD, #{target => not_integer}, 10)).
 
 setting_threshold_to_not_integer_value_should_throw_illegal_type_exception_test() ->
-    ?assertEqual({error, {illegal_type, threshold}},
+    ?assertEqual(?ERROR_BAD_VALUE_INTEGER(<<"threshold">>),
         autocleaning_config:create_or_update(?CONFIG_RECORD, #{threshold => not_integer}, 10)).
 
 setting_target_negative_integer_value_should_throw_negative_value_exception_test() ->
-    ?assertEqual({error, {negative_value, target}},
+    ?assertEqual(?ERROR_BAD_VALUE_TOO_LOW(<<"target">>, 0),
         autocleaning_config:create_or_update(?CONFIG_RECORD, #{target => -1}, 10)).
 
 setting_threshold_negative_integer_value_should_throw_negative_value_exception_test() ->
-    ?assertEqual({error, {negative_value, threshold}},
+    ?assertEqual(?ERROR_BAD_VALUE_TOO_LOW(<<"threshold">>, 0),
         autocleaning_config:create_or_update(?CONFIG_RECORD, #{threshold => -1}, 10)).
 
 setting_target_greater_than_threshold_should_throw_value_greater_than_exception_test() ->
-    ?assertEqual({error, {value_grater_than, target, threshold}},
+    ?assertEqual(?ERROR_BAD_VALUE_TOO_HIGH(<<"target">>, 0),
         autocleaning_config:create_or_update(?CONFIG_RECORD, #{target => 1, threshold => 0}, 10)).
 
 setting_threshold_greater_than_support_size_should_throw_value_greater_than_exception_test() ->
-    ?assertEqual({error, {value_grater_than, threshold, support_size}},
+    ?assertEqual(?ERROR_BAD_VALUE_TOO_HIGH(<<"threshold">>, 10),
         autocleaning_config:create_or_update(?CONFIG_RECORD, #{threshold => 11}, 10)).
 
 setting_rule_to_negative_value_should_return_negative_value_error_test() ->
-    ?assertEqual({error, {negative_value, min_file_size}},
+    ?assertEqual(?ERROR_BAD_VALUE_TOO_LOW(<<"min_file_size.value">>, 0),
         autocleaning_config:create_or_update(?CONFIG_RECORD, #{
             rules => #{
                 min_file_size => #{value => -1}

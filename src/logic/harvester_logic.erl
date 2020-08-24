@@ -47,7 +47,7 @@
 %% Retrieves harvester doc by given HarvesterId.
 %% @end
 %%--------------------------------------------------------------------
--spec get(od_harvester:id()) -> {ok, od_harvester:doc()} | gs_protocol:error().
+-spec get(od_harvester:id()) -> {ok, od_harvester:doc()} | errors:error().
 get(HarvesterId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
@@ -60,7 +60,7 @@ get_spaces(#document{value = #od_harvester{spaces = Spaces}}) ->
     {ok, Spaces}.
 
 -spec get_indices(od_harvester:doc() |od_harvester:record() | od_harvester:id()) ->
-    {ok, [od_harvester:index()]} | gs_protocol:error().
+    {ok, [od_harvester:index()]} | errors:error().
 get_indices(#document{value = HarvesterRecord}) ->
     get_indices(HarvesterRecord);
 get_indices(#od_harvester{indices = Indices}) ->

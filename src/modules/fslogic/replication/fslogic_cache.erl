@@ -372,6 +372,8 @@ delete_doc(Key) ->
         _ ->
             ok
     end,
+    
+    delete_local_blocks(Key),
 
     delete_local_blocks(Key),
 
@@ -747,7 +749,7 @@ flush_key(Key, Type) ->
                 undefined ->
                     ok;
                 FlushPid ->
-                    wait_for_flush(Key, FlushPid)
+                    wait_for_flush(Key, FlushPid, true)
             end,
 
             Ans = case get({?FLUSHED_DOCS, Key}) =:= DocToSave of
@@ -858,17 +860,20 @@ flush_local_links(Key, DelBlocks, AddBlocks) ->
 %% Waits for flush confirmation.
 %% @end
 %%-------------------------------------------------------------------
--spec wait_for_flush(file_location:id(), pid()) -> ok.
-wait_for_flush(Key, FlushPid) ->
+-spec wait_for_flush(file_location:id(), pid(), boolean()) -> ok.
+wait_for_flush(Key, FlushPid, CheckAndRetry) ->
     receive
         {?FLUSH_CONFIRMATION, Key, Check1, Check2} ->
             verify_flush_ans(Key, Check1, Check2),
             ok
     after
         1000 ->
-            case erlang:is_process_alive(FlushPid) of
-                true ->
-                    wait_for_flush(Key, FlushPid);
+            case {CheckAndRetry, erlang:is_process_alive(FlushPid)} of
+                {true, true} ->
+                    wait_for_flush(Key, FlushPid, CheckAndRetry);
+                {true, _} ->
+                    wait_for_flush(Key, FlushPid, false); % retry last time to prevent race between
+                                                          % confirmation sending / process terminating
                 _ ->
                     ok
             end

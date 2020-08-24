@@ -26,24 +26,26 @@
 %% API
 -export([
     init/0, cleanup/0,
-    start/8, get/1, update/2, update_and_run/3, delete/1,
+    start/8, get/1, get_effective/1, update/2, update_and_run/3, delete/1,
     cancel/1, rerun_ended/2
 ]).
 
 -export([
     mark_dequeued/1, set_controller_process/1,
 
-    is_replication/1, is_eviction/1, is_migration/1, type/1,
+    is_replication/1, is_eviction/1, is_migration/1,
+    type/1, data_source_type/1,
     is_ongoing/1, is_replication_ongoing/1, is_eviction_ongoing/1,
     is_ended/1, is_replication_ended/1, is_eviction_ended/1,
+
+    replication_status/1, eviction_status/1, status/1,
 
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     increment_files_evicted_and_processed_counters/1,
     increment_files_failed_and_processed_counters/1,
     increment_files_replicated_counter/1, mark_data_replication_finished/3,
 
-    rerun_not_ended_transfers/1,
-    restart_pools/0
+    rerun_not_ended_transfers/1
 ]).
 
 % list functions
@@ -63,11 +65,20 @@
 
 -type id() :: binary().
 -type diff() :: datastore_doc:diff(transfer()).
--type status() :: scheduled | enqueued | active | completed | aborting |
-    failed | cancelled | skipped.
+% Status of transfer subtask - 'replication' or 'eviction' of data source
+% (replication and eviction consist of only 1 subtask while migration has 2).
+-type subtask_status() ::
+    ?SCHEDULED_STATUS | ?ENQUEUED_STATUS | ?ACTIVE_STATUS | ?COMPLETED_STATUS |
+    ?ABORTING_STATUS | ?FAILED_STATUS | ?CANCELLED_STATUS | ?SKIPPED_STATUS.
+% Summarized transfer status calculated taking into account all subtask statuses.
+-type transfer_status() ::
+    ?SCHEDULED_STATUS | ?ENQUEUED_STATUS | ?REPLICATING_STATUS | ?EVICTING_STATUS |
+    ?COMPLETED_STATUS | ?ABORTING_STATUS | ?FAILED_STATUS | ?CANCELLED_STATUS |
+    ?SKIPPED_STATUS.
 -type callback() :: undefined | binary().
 -type transfer() :: #transfer{}.
 -type type() :: replication | eviction | migration.
+-type data_source_type() :: file | view.
 -type doc() :: datastore_doc:doc(transfer()).
 -type timestamp() :: non_neg_integer().
 -type list_limit() :: non_neg_integer() | all.
@@ -75,7 +86,7 @@
 -type query_view_params() :: undefined | index:query_options() .
 
 -export_type([
-    id/0, transfer/0, type/0, status/0, callback/0, doc/0,
+    id/0, transfer/0, type/0, data_source_type/0, subtask_status/0, callback/0, doc/0,
     timestamp/0, list_limit/0, view_name/0, query_view_params/0
 ]).
 
@@ -138,12 +149,12 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
     ReplicatingProviderId, Callback, IndexName, QueryViewParams
 ) ->
     ReplicationStatus = case ReplicatingProviderId of
-        undefined -> skipped;
-        _ -> scheduled
+        undefined -> ?SKIPPED_STATUS;
+        _ -> ?SCHEDULED_STATUS
     end,
     EvictionStatus = case EvictingProviderId of
-        undefined -> skipped;
-        _ -> scheduled
+        undefined -> ?SKIPPED_STATUS;
+        _ -> ?SCHEDULED_STATUS
     end,
     ScheduleTime = provider_logic:zone_time_seconds(),
     SpaceId = file_id:guid_to_space_id(FileGuid),
@@ -240,7 +251,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 query_view_params = QueryViewParams
             } = Transfer,
 
-            NewUserId = utils:ensure_defined(UserId, undefined, OldUserId),
+            NewUserId = utils:ensure_defined(UserId, OldUserId),
             FileGuid = file_id:pack_guid(FileUuid, SpaceId),
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,
@@ -266,6 +277,23 @@ rerun_ended(UserId, TransferId) ->
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(TransferId) ->
     datastore_model:get(?CTX, TransferId).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns effective transfer document, that is document of transfer after
+%% following all `rerun_id` links (it is filled if transfer was rerun).
+%% @end
+%%-------------------------------------------------------------------
+-spec get_effective(id()) -> {ok, doc()} | {error, term()}.
+get_effective(TransferId) ->
+    case datastore_model:get(?CTX, TransferId) of
+        {ok, #document{value = #transfer{rerun_id = undefined}}} = Res ->
+            Res;
+        {ok, #document{value = #transfer{rerun_id = NextJobTransferId}}} ->
+            get_effective(NextJobTransferId);
+        {error, _} = Error ->
+            Error
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -354,6 +382,13 @@ type(#transfer{replicating_provider = <<_/binary>>, evicting_provider = <<_/bina
     migration.
 
 
+-spec data_source_type(transfer()) -> data_source_type().
+data_source_type(#transfer{index_name = undefined}) ->
+    file;
+data_source_type(_) ->
+    view.
+
+
 -spec is_ongoing(doc() | transfer() | id() | undefined) -> boolean().
 is_ongoing(undefined) ->
     true;
@@ -365,16 +400,16 @@ is_ongoing(TransferId) ->
 
 
 -spec is_replication_ongoing(transfer()) -> boolean().
-is_replication_ongoing(#transfer{replication_status = scheduled}) -> true;
-is_replication_ongoing(#transfer{replication_status = enqueued}) -> true;
-is_replication_ongoing(#transfer{replication_status = active}) -> true;
+is_replication_ongoing(#transfer{replication_status = ?SCHEDULED_STATUS}) -> true;
+is_replication_ongoing(#transfer{replication_status = ?ENQUEUED_STATUS}) -> true;
+is_replication_ongoing(#transfer{replication_status = ?ACTIVE_STATUS}) -> true;
 is_replication_ongoing(#transfer{replication_status = _}) -> false.
 
 
 -spec is_eviction_ongoing(transfer()) -> boolean().
-is_eviction_ongoing(#transfer{eviction_status = scheduled}) -> true;
-is_eviction_ongoing(#transfer{eviction_status = enqueued}) -> true;
-is_eviction_ongoing(#transfer{eviction_status = active}) -> true;
+is_eviction_ongoing(#transfer{eviction_status = ?SCHEDULED_STATUS}) -> true;
+is_eviction_ongoing(#transfer{eviction_status = ?ENQUEUED_STATUS}) -> true;
+is_eviction_ongoing(#transfer{eviction_status = ?ACTIVE_STATUS}) -> true;
 is_eviction_ongoing(#transfer{eviction_status = _}) -> false.
 
 
@@ -384,19 +419,58 @@ is_ended(Transfer) ->
 
 
 -spec is_replication_ended(transfer()) -> boolean().
-is_replication_ended(#transfer{replication_status = completed}) -> true;
-is_replication_ended(#transfer{replication_status = cancelled}) -> true;
-is_replication_ended(#transfer{replication_status = skipped}) -> true;
-is_replication_ended(#transfer{replication_status = failed}) -> true;
+is_replication_ended(#transfer{replication_status = ?COMPLETED_STATUS}) -> true;
+is_replication_ended(#transfer{replication_status = ?CANCELLED_STATUS}) -> true;
+is_replication_ended(#transfer{replication_status = ?SKIPPED_STATUS}) -> true;
+is_replication_ended(#transfer{replication_status = ?FAILED_STATUS}) -> true;
 is_replication_ended(#transfer{replication_status = _}) -> false.
 
 
 -spec is_eviction_ended(transfer()) -> boolean().
-is_eviction_ended(#transfer{eviction_status = completed}) -> true;
-is_eviction_ended(#transfer{eviction_status = cancelled}) -> true;
-is_eviction_ended(#transfer{eviction_status = skipped}) -> true;
-is_eviction_ended(#transfer{eviction_status = failed}) -> true;
+is_eviction_ended(#transfer{eviction_status = ?COMPLETED_STATUS}) -> true;
+is_eviction_ended(#transfer{eviction_status = ?CANCELLED_STATUS}) -> true;
+is_eviction_ended(#transfer{eviction_status = ?SKIPPED_STATUS}) -> true;
+is_eviction_ended(#transfer{eviction_status = ?FAILED_STATUS}) -> true;
 is_eviction_ended(#transfer{eviction_status = _}) -> false.
+
+
+-spec replication_status(transfer()) -> subtask_status().
+replication_status(#transfer{replication_status = Status}) -> Status.
+
+
+-spec eviction_status(transfer()) -> subtask_status().
+eviction_status(#transfer{eviction_status = Status}) -> Status.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns status of given transfer. Replaces 'active' subtask status with
+%% 'replicating' for replication and 'evicting' for eviction.
+%% In case of migration 'evicting' indicates that the replication itself has
+%% finished, but source replica eviction is still in progress.
+%% @end
+%%--------------------------------------------------------------------
+-spec status(transfer:transfer()) -> transfer_status().
+status(T = #transfer{
+    replication_status = ?COMPLETED_STATUS,
+    replicating_provider = P1,
+    evicting_provider = P2
+}) when is_binary(P1) andalso is_binary(P2) ->
+    case T#transfer.eviction_status of
+        ?SCHEDULED_STATUS -> ?EVICTING_STATUS;
+        ?ENQUEUED_STATUS -> ?EVICTING_STATUS;
+        ?ACTIVE_STATUS -> ?EVICTING_STATUS;
+        Status -> Status
+    end;
+status(T = #transfer{replication_status = ?SKIPPED_STATUS}) ->
+    case T#transfer.eviction_status of
+        ?ACTIVE_STATUS -> ?EVICTING_STATUS;
+        Status -> Status
+    end;
+status(#transfer{replication_status = ?ACTIVE_STATUS}) ->
+    ?REPLICATING_STATUS;
+status(#transfer{replication_status = Status}) ->
+    Status.
 
 
 -spec increment_files_to_process_counter(undefined | id(), non_neg_integer()) ->
@@ -513,19 +587,19 @@ mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
                     bytes_replicated = OldBytes + BytesTransferred,
                     last_update = maps:merge(LastUpdateMap, NewTimestamps),
                     min_hist = transfer_histograms:update(
-                        BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                        BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     hr_hist = transfer_histograms:update(
-                        BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                        BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     dy_hist = transfer_histograms:update(
-                        BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                        BytesPerProvider, DyHistograms, ?DAY_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     mth_hist = transfer_histograms:update(
-                        BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                        BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     )
                 }}
@@ -654,16 +728,6 @@ get_link_key_by_state(#document{key = TransferId, value = Transfer}, TransferSta
 get_link_key(TransferId, Timestamp) ->
     {ok, transfer_links:link_key(TransferId, Timestamp)}.
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Restarts worker pools used by replication and replica_eviction mechanisms.
-%% @end
-%%-------------------------------------------------------------------
--spec restart_pools() -> ok.
-restart_pools() ->
-    ok = stop_pools(),
-    ok = start_pools().
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -720,8 +784,8 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
     TargetProviderId = Transfer#transfer.replicating_provider,
     SelfId = oneprovider:get_id(),
 
-    IsReplicationAborting = Transfer#transfer.replication_status =:= aborting,
-    IsEvictionAborting = Transfer#transfer.eviction_status =:= aborting,
+    IsReplicationAborting = Transfer#transfer.replication_status =:= ?ABORTING_STATUS,
+    IsEvictionAborting = Transfer#transfer.eviction_status =:= ?ABORTING_STATUS,
     IsReplicationOngoing = is_replication_ongoing(Transfer),
     IsEvictionOngoing = is_eviction_ongoing(Transfer),
 
@@ -794,10 +858,6 @@ start_pools() ->
         {worker, {gen_transfer_worker, [?REPLICA_EVICTION_WORKER]}},
         {queue_type, lifo}
     ]),
-    {ok, _} = worker_pool:start_sup_pool(?REPLICA_DELETION_WORKERS_POOL, [
-        {workers, ?REPLICA_DELETION_WORKERS_NUM},
-        {worker, {?REPLICA_DELETION_WORKER, []}}
-    ]),
     ok.
 
 %%-------------------------------------------------------------------
@@ -811,9 +871,7 @@ start_pools() ->
 stop_pools() ->
     ok = wpool:stop_sup_pool(?REPLICATION_WORKERS_POOL),
     ok = wpool:stop_sup_pool(?REPLICATION_CONTROLLERS_POOL),
-    ok = wpool:stop_sup_pool(?REPLICA_EVICTION_WORKERS_POOL),
-    ok = wpool:stop_sup_pool(?REPLICA_DELETION_WORKERS_POOL),
-    ok.
+    ok = wpool:stop_sup_pool(?REPLICA_EVICTION_WORKERS_POOL).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -872,7 +930,7 @@ get_posthooks() ->
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(Version) ->
-    transfer_upgrader:get_record_struct(Version).
+    transfer_model:get_record_struct(Version).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -882,7 +940,7 @@ get_record_struct(Version) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(Version, Record) ->
-    transfer_upgrader:upgrade_record(Version, Record).
+    transfer_model:upgrade_record(Version, Record).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -981,12 +1039,12 @@ order_transfers(D1, D2) ->
     end.
 
 
--spec status_to_int(status()) -> integer().
-status_to_int(scheduled) -> 0;
-status_to_int(enqueued) -> 1;
-status_to_int(active) -> 2;
-status_to_int(completed) -> 3;
-status_to_int(aborting) -> 4;
-status_to_int(cancelled) -> 5;
-status_to_int(failed) -> 6;
-status_to_int(skipped) -> 7.
+-spec status_to_int(subtask_status()) -> integer().
+status_to_int(?SCHEDULED_STATUS) -> 0;
+status_to_int(?ENQUEUED_STATUS) -> 1;
+status_to_int(?ACTIVE_STATUS) -> 2;
+status_to_int(?COMPLETED_STATUS) -> 3;
+status_to_int(?ABORTING_STATUS) -> 4;
+status_to_int(?CANCELLED_STATUS) -> 5;
+status_to_int(?FAILED_STATUS) -> 6;
+status_to_int(?SKIPPED_STATUS) -> 7.

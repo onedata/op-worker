@@ -24,7 +24,7 @@
             "storages": [
                 {
                     "type": "posix",
-                    "name": "/mnt/st2"
+                    "name": "/mnt/synced_storage"
                 }
             ],
             "users": [],
@@ -130,8 +130,15 @@
                         "storage": "/mnt/st1"
                     },
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/synced_storage"
                     }
+                }
+            }
+        },
+        "storages": {
+            "p2": {
+                "/mnt/synced_storage": {
+                    "imported_storage": true
                 }
             }
         }

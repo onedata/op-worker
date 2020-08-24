@@ -1,6 +1,7 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2016-2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -9,7 +10,7 @@
 %%% Handler for streaming changes happening to `file_meta`, `file_location`,
 %%% `times` or `custom_metadata` in scope of given space.
 %%%
-%%% Possible fields to observer are shown below.
+%%% Possible fields to observe are shown below.
 %%%
 %%% fileMeta:
 %%%     - name
@@ -51,6 +52,8 @@
 %%% whether information about this record should be send always or
 %%% on this record changes only (`always` boolean flag with default value
 %%% being 'false' - not sending information on other docs changes).
+%%% Optionally `triggers`, that is list of documents whose changes
+%%% triggers sending events, can also be specified.
 %%%
 %%% <record>:
 %%%     [fields: <fields>]
@@ -62,6 +65,9 @@
 %%%
 %%% EXAMPLE REQUEST:
 %%%
+%%% triggers:
+%%%     - fileMeta,
+%%%     - times
 %%% fileMeta:
 %%%     fields: [owner]
 %%% customMetadata:
@@ -97,16 +103,14 @@
 %%%--------------------------------------------------------------------
 -module(changes_stream_handler).
 -author("Tomasz Lichon").
+-author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
--include("global_definitions.hrl").
--include("http/http_common.hrl").
 -include("http/rest.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("middleware/middleware.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([
@@ -121,13 +125,15 @@
 %% for tests
 -export([init_stream/1]).
 
+-type observable_doc() :: file_meta | file_location | times | custom_metadata.
+-type triggers() :: [observable_doc()].
+
 -record(change_req, {
-    record :: file_meta | file_location | times | custom_metadata,
+    record :: observable_doc(),
     always = false :: boolean(),
     fields = [] :: [binary()],
     exists = [] :: [binary()]
 }).
-
 -type change_req() :: #change_req{}.
 
 -define(DEFAULT_TIMEOUT, <<"infinity">>).
@@ -136,17 +142,22 @@
 -define(DEFAULT_ALWAYS, false).
 -define(ONEDATA_SPECIAL_XATTRS, [<<"onedata_json">>, <<"onedata_rdf">>]).
 
+-define(OBSERVABLE_DOCUMENTS, [
+    <<"fileMeta">>, <<"fileLocation">>, <<"times">>, <<"customMetadata">>
+]).
+
 -define(FILE_META_FIELDS, [
-    <<"name">>, <<"type">>, <<"mode">>, <<"owner">>, <<"group_owner">>,
+    <<"name">>, <<"type">>, <<"mode">>, <<"owner">>,
     <<"provider_id">>, <<"shares">>, <<"deleted">>
 ]).
 
 -define(FILE_LOCATION_FIELDS, [
-    <<"provider_id">>, <<"storage_id">>, <<"size">>, <<"space_id">>, <<"storage_file_created">>
+    <<"provider_id">>, <<"storage_id">>, <<"size">>, <<"space_id">>,
+    <<"storage_file_created">>
 ]).
 
 -define(TIME_FIELDS, [
-    <<"provider_id">>, <<"storage_id">>, <<"size">>
+    <<"atime">>, <<"mtime">>, <<"ctime">>
 ]).
 
 
@@ -169,7 +180,7 @@ init(Req, _Opts) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), map()) -> ok.
+-spec terminate(Reason :: term(), cowboy_req:req(), map()) -> ok.
 terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
     couchbase_changes:cancel_stream(Stream),
     Pid ! {Ref, stream_ended};
@@ -182,7 +193,8 @@ terminate(_, _, #{}) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), map() | {error, term()}) -> {[binary()], req(), map()}.
+-spec allowed_methods(cowboy_req:req(), map() | {error, term()}) ->
+    {[binary()], cowboy_req:req(), map()}.
 allowed_methods(Req, State) ->
     {[<<"POST">>], Req, State}.
 
@@ -190,15 +202,29 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), map()) -> {true | {false, binary()} | halt, req(), map()}.
+-spec is_authorized(cowboy_req:req(), map()) ->
+    {true | {false, binary()} | halt, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
-    http_auth:is_authorized(Req, State).
+    case http_auth:authenticate(Req, rest, disallow_data_access_caveats) of
+        {ok, ?USER(UserId, SessionId) = Auth} ->
+            case authorize(Req, Auth) of
+                ok ->
+                    {true, Req, State#{user_id => UserId, auth => SessionId}};
+                {error, _} = Error ->
+                    {stop, send_error_response(Req, Error), State}
+            end;
+        {ok, ?GUEST} ->
+            {stop, send_error_response(Req, ?ERROR_UNAUTHORIZED), State};
+        {error, _} = Error ->
+            {stop, send_error_response(Req, Error), Req}
+    end.
 
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), map()) -> {[{binary(), atom()}], req(), map()}.
+-spec content_types_accepted(cowboy_req:req(), map()) ->
+    {[{binary(), atom()}], cowboy_req:req(), map()}.
 content_types_accepted(Req, State) ->
     {[
         {<<"application/json">>, stream_space_changes}
@@ -221,13 +247,14 @@ content_types_accepted(Req, State) ->
 %% @param timeout Time of inactivity after which close stream.
 %% @param last_seq
 %%--------------------------------------------------------------------
--spec stream_space_changes(req(), map()) -> {term(), req(), map()}.
+-spec stream_space_changes(cowboy_req:req(), map()) ->
+    {term(), cowboy_req:req(), map()}.
 stream_space_changes(Req, State) ->
     try parse_params(Req, State) of
         {Req2, State2} ->
             State3 = ?MODULE:init_stream(State2),
             Req3 = cowboy_req:stream_reply(
-                ?HTTP_200_OK, #{<<"content-type">> => <<"application/json">>}, Req2
+                ?HTTP_200_OK, #{?HDR_CONTENT_TYPE => <<"application/json">>}, Req2
             ),
             stream_loop(Req3, State3),
             cowboy_req:stream_body(<<"">>, fin, Req3),
@@ -235,17 +262,7 @@ stream_space_changes(Req, State) ->
             {stop, Req3, State3}
     catch
         throw:Error ->
-            #rest_resp{
-                code = Code,
-                headers = Headers,
-                body = Body
-            } = rest_translator:error_response(Error),
-            RespBody = case Body of
-                {binary, Bin} -> Bin;
-                _ -> json_utils:encode(Body)
-            end,
-            NewReq = cowboy_req:reply(Code, Headers, RespBody, Req),
-            {stop, NewReq, State};
+            {stop, send_error_response(Req, Error), State};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:process_request - ~p:~p", [
                 ?MODULE, Type, Message
@@ -261,14 +278,39 @@ stream_space_changes(Req, State) ->
 
 
 %% @private
--spec parse_params(cowboy_req:req(), map()) -> {cowboy_req:req(), map()}.
-parse_params(Req, #{user_id := UserId} = State0) ->
+-spec authorize(cowboy_req:req(), aai:auth()) -> ok | errors:error().
+authorize(Req, ?USER(UserId) = Auth) ->
     SpaceId = cowboy_req:binding(sid, Req),
-    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_CHANGES_STREAM) of
-        true -> ok;
-        false -> throw(?ERROR_FORBIDDEN)
-    end,
 
+    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_CHANGES_STREAM) of
+        true ->
+            try
+                GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
+                api_auth:check_authorization(Auth, ?OP_WORKER, create, GRI)
+            catch
+                _:_ ->
+                    ?ERROR_INTERNAL_SERVER_ERROR
+            end;
+        false ->
+            ?ERROR_FORBIDDEN
+    end.
+
+
+%% @private
+-spec send_error_response(cowboy_req:req(), errors:error()) -> cowboy_req:req().
+send_error_response(Req, Error) ->
+    #rest_resp{
+        code = Code,
+        headers = Headers,
+        body = Body
+    } = rest_translator:error_response(Error),
+    cowboy_req:reply(Code, Headers, json_utils:encode(Body), Req).
+
+
+%% @private
+-spec parse_params(cowboy_req:req(), map()) -> {cowboy_req:req(), map()}.
+parse_params(Req, State0) ->
+    SpaceId = cowboy_req:binding(sid, Req),
     QueryParams = maps:from_list(cowboy_req:parse_qs(Req)),
     State1 = State0#{
         space_id => SpaceId,
@@ -288,13 +330,8 @@ parse_timeout(Params) ->
     case maps:get(<<"timeout">>, Params, ?DEFAULT_TIMEOUT) of
         <<"infinity">> ->
             infinity;
-        Number ->
-            try
-                binary_to_integer(Number)
-            catch
-                _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"timeout">>))
-            end
+        NumberBin ->
+            parse_integer(<<"timeout">>, NumberBin)
     end.
 
 
@@ -304,24 +341,31 @@ parse_last_seq(SpaceId, Params) ->
     case maps:get(<<"last_seq">>, Params, ?DEFAULT_LAST_SEQ) of
         <<"now">> ->
             dbsync_state:get_seq(SpaceId, oneprovider:get_id());
-        Number ->
-            try
-                binary_to_integer(Number)
-            catch
-                _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"last_seq">>))
-            end
+        NumberBin ->
+            parse_integer(<<"last_seq">>, NumberBin)
+    end.
+
+
+%% @private
+-spec parse_integer(binary(), binary()) -> integer() | no_return().
+parse_integer(Param, ValueBin) ->
+    try
+        binary_to_integer(ValueBin)
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_INTEGER(Param))
     end.
 
 
 %% @private
 -spec parse_body(binary(), map()) -> map() | no_return().
 parse_body(Body, State) ->
-    Json = json_utils:decode(Body),
-    case is_map(Json) of
+    ChangesSpecification = json_utils:decode(Body),
+    case is_map(ChangesSpecification) of
         true -> ok;
-        false -> throw(?ERROR_BAD_VALUE_JSON(<<"changes specification">>))
+        false -> throw(?ERROR_BAD_VALUE_JSON(<<"changesSpecification">>))
     end,
+
+    Triggers = parse_triggers(ChangesSpecification),
 
     ChangesReqs = maps:fold(fun
         (<<"fileMeta">> = RecName, RawSpec, Acc) when is_map(RawSpec) ->
@@ -365,12 +409,43 @@ parse_body(Body, State) ->
             [ChangesReq | Acc];
         (RecordName, _, _) ->
             throw(?ERROR_BAD_DATA(RecordName))
-    end, [], Json),
+    end, [], maps:remove(<<"triggers">>, ChangesSpecification)),
 
     case ChangesReqs of
-        [] -> throw(?ERROR_BAD_VALUE_EMPTY(<<"changes specification">>));
-        _ -> State#{changes_reqs => ChangesReqs}
+        [] ->
+            throw(?ERROR_BAD_VALUE_EMPTY(<<"changesSpecification">>));
+        _ ->
+            State#{
+                triggers => Triggers,
+                changes_reqs => ChangesReqs
+            }
     end.
+
+
+%% @private
+-spec parse_triggers(map()) -> triggers() | no_return().
+parse_triggers(ChangesSpecification) ->
+    RawTriggers = case maps:get(<<"triggers">>, ChangesSpecification, undefined) of
+        undefined ->
+            ?OBSERVABLE_DOCUMENTS;
+        TriggersSpec when is_list(TriggersSpec) ->
+            TriggersSpec;
+        _ ->
+            throw(?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"triggers">>))
+    end,
+
+    lists:usort(lists:map(fun
+        (<<"fileMeta">>) ->
+            file_meta;
+        (<<"fileLocation">>) ->
+            file_location;
+        (<<"times">>) ->
+            times;
+        (<<"customMetadata">>) ->
+            custom_metadata;
+        (_) ->
+            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"triggers">>, ?OBSERVABLE_DOCUMENTS))
+    end, RawTriggers)).
 
 
 %% @private
@@ -404,7 +479,6 @@ file_meta_field_idx(<<"name">>) -> #file_meta.name;
 file_meta_field_idx(<<"type">>) -> #file_meta.type;
 file_meta_field_idx(<<"mode">>) -> #file_meta.mode;
 file_meta_field_idx(<<"owner">>) -> #file_meta.owner;
-file_meta_field_idx(<<"group_owner">>) -> #file_meta.group_owner;
 file_meta_field_idx(<<"provider_id">>) -> #file_meta.provider_id;
 file_meta_field_idx(<<"shares">>) -> #file_meta.shares;
 file_meta_field_idx(<<"deleted">>) -> #file_meta.deleted;
@@ -438,19 +512,24 @@ times_field_idx(_FieldName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init_stream(State :: map()) -> map().
-init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
+init_stream(#{last_seq := Since, space_id := SpaceId, triggers := Triggers} = State) ->
     ?info("[ changes ]: Starting stream ~p", [Since]),
     Ref = make_ref(),
     Pid = self(),
 
     % TODO VFS-5570
-    Node = datastore_key:responsible_node(SpaceId),
-    {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
-        [<<"onedata">>, SpaceId, fun(Feed) ->
-            notify(Pid, Ref, Feed)
-        end, [{since, Since}], [Pid]]),
+    % TODO VFS-6389 - maybe restart stream in case of node failure
+    Node = datastore_key:any_responsible_node(SpaceId),
+    {ok, Stream} = rpc:call(Node, couchbase_changes, stream, [
+        <<"onedata">>,
+        SpaceId,
+        fun(Feed) -> notify(Pid, Ref, Triggers, Feed) end,
+        [{since, Since}],
+        [Pid]
+    ]),
 
     State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -458,7 +537,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
 %% Listens for events and pushes them to the socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_loop(req(), map()) -> ok.
+-spec stream_loop(cowboy_req:req(), map()) -> ok.
 stream_loop(Req, State = #{
     changes_stream := Stream,
     timeout := Timeout,
@@ -489,13 +568,14 @@ stream_loop(Req, State = #{
             ok
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Parse and send change received from db stream, to the client.
 %% @end
 %%--------------------------------------------------------------------
--spec send_change(req(), datastore:doc(), map()) -> ok.
+-spec send_change(cowboy_req:req(), datastore:doc(), map()) -> ok.
 send_change(Req, ChangedDoc = #document{
     seq = Seq,
     key = FileUuid,
@@ -525,7 +605,7 @@ send_change(Req, ChangedDoc = #document{
 
 
 %% @private
--spec send_changes(req(), datastore_doc:seq(), file_meta:uuid(),
+-spec send_changes(cowboy_req:req(), datastore_doc:seq(), file_meta:uuid(),
     datastore:doc(), map()) -> ok.
 send_changes(Req, Seq, FileUuid, ChangedDoc, State) ->
     case get_all_docs_changes(FileUuid, ChangedDoc, State) of
@@ -761,36 +841,44 @@ get_record_changes(Changed, FieldsNamesAndIndices, _Exists, #document{
 %% Forwards changes feed to a streaming process.
 %% @end
 %%--------------------------------------------------------------------
--spec notify(pid(), reference(),
+-spec notify(pid(), reference(), triggers(),
     {ok, [datastore:doc()] | datastore:doc() | end_of_stream} |
     {error, couchbase_changes:since(), term()}) -> ok.
-notify(Pid, Ref, {ok, #document{} = Doc}) ->
-    case is_file_related_doc(Doc) of
+notify(Pid, Ref, Triggers, {ok, #document{} = Doc}) ->
+    case is_observed_doc(Doc, Triggers) of
         true ->
             call_changes_stream_handler(Pid, Ref, [Doc]);
         false ->
             ok
     end,
     ok;
-notify(Pid, Ref, {ok, Docs}) when is_list(Docs) ->
-    case lists:filter(fun(Doc) -> is_file_related_doc(Doc) end, Docs) of
+notify(Pid, Ref, Triggers, {ok, Docs}) when is_list(Docs) ->
+    case lists:filter(fun(Doc) -> is_observed_doc(Doc, Triggers) end, Docs) of
         [] ->
             ok;
         RelevantDocs ->
             call_changes_stream_handler(Pid, Ref, RelevantDocs)
     end,
     ok;
-notify(Pid, Ref, {ok, end_of_stream}) ->
+notify(Pid, Ref, _Triggers, {ok, end_of_stream}) ->
     Pid ! {Ref, stream_ended},
     ok;
-notify(Pid, Ref, {error, _Seq, shutdown = Reason}) ->
+notify(Pid, Ref, _Triggers, {error, _Seq, shutdown = Reason}) ->
     ?debug("Changes stream terminated due to: ~p", [Reason]),
     Pid ! {Ref, stream_ended},
     ok;
-notify(Pid, Ref, {error, _Seq, Reason}) ->
+notify(Pid, Ref, _Triggers, {error, _Seq, Reason}) ->
     ?error("Changes stream terminated abnormally due to: ~p", [Reason]),
     Pid ! {Ref, stream_ended},
     ok.
+
+
+%% @private
+-spec is_observed_doc(datastore:doc(), triggers()) -> boolean().
+is_observed_doc(#document{value = Record}, Triggers) when is_tuple(Record) ->
+    lists:member(element(1, Record), Triggers);
+is_observed_doc(_Doc, _Triggers) ->
+    false.
 
 
 %%--------------------------------------------------------------------
@@ -807,12 +895,3 @@ call_changes_stream_handler(Pid, Ref, Msg) ->
             ok
     end,
     ok.
-
-
-%% @private
--spec is_file_related_doc(datastore:doc()) -> boolean().
-is_file_related_doc(#document{value = #file_meta{}})       -> true;
-is_file_related_doc(#document{value = #custom_metadata{}}) -> true;
-is_file_related_doc(#document{value = #times{}})           -> true;
-is_file_related_doc(#document{value = #file_location{}})   -> true;
-is_file_related_doc(_)                                     -> false.

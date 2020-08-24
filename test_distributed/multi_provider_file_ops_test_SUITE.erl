@@ -17,7 +17,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
@@ -62,6 +62,8 @@
     remove_file_during_transfers_test/1,
     remove_file_on_remote_provider_ceph/1,
     evict_on_ceph/1,
+    read_dir_collisions_test/1,
+    check_fs_stats_on_different_providers/1,
     remote_driver_internal_call_test/1,
     db_sync_basic_opts_with_errors_test/1
 ]).
@@ -89,9 +91,12 @@
     db_sync_create_after_deletion_links_test,
     rtransfer_fetch_test,
     rtransfer_cancel_for_session_test,
-    remove_file_during_transfers_test,
+    % TODO VFS-6618 Fix handling of file being removed during transfer and uncomment this test
+    % remove_file_during_transfers_test,
     remove_file_on_remote_provider_ceph,
     evict_on_ceph,
+    read_dir_collisions_test,
+    check_fs_stats_on_different_providers,
     remote_driver_internal_call_test,
     db_sync_basic_opts_with_errors_test
 ]).
@@ -139,7 +144,7 @@ db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60, false).
 
 db_sync_create_after_del_test(Config) ->
     multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
@@ -295,9 +300,9 @@ concurrent_create_test(Config) ->
             maps:put(ProvId, [Worker | maps:get(ProvId, Acc, [])], Acc)
         end, #{}, ProvIDs),
 
-    W = fun(N) ->
-        [Worker | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
-        Worker
+    Worker = fun(N) ->
+        [W | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
+        W
     end,
 
     User = <<"user1">>,
@@ -333,13 +338,13 @@ concurrent_create_test(Config) ->
                 (_, _) ->
                     lists:foreach(
                         fun(WId) ->
-                            lfm_proxy:unlink(W(WId), SessId(W(WId)), {path, DirName(N)})
+                            lfm_proxy:unlink(Worker(WId), SessId(Worker(WId)), {path, DirName(N)})
                         end, lists:seq(1, ProvIdCount)),
 
                     lists:foreach(
                         fun(WId) ->
                             spawn(fun() ->
-                                TestMaster ! {WId, lfm_proxy:mkdir(W(WId), SessId(W(WId)), DirName(N), 8#755)}
+                                TestMaster ! {WId, lfm_proxy:mkdir(Worker(WId), SessId(Worker(WId)), DirName(N), 8#755)}
                             end)
                         end, lists:seq(1, ProvIdCount)),
 
@@ -371,10 +376,10 @@ concurrent_create_test(Config) ->
     lists:foreach(
         fun(WId) ->
             Check = fun() ->
-                {ok, CL} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
-                _ExpectedChildCount = ProvIdCount * FileCount,
+                {ok, CL} = lfm_proxy:get_children(Worker(WId), SessId(Worker(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
                 {FetchedIds, FetchedNames} = lists:unzip(CL),
 
+%%                ExpectedChildCount = ProvIdCount * FileCount,
 %%                ct:print("Check ~p", [{lists:usort(Ids), lists:usort(FetchedIds)}]),
 %%                ct:print("Check ~p", [{ExpectedChildCount, CL}]),
 
@@ -382,7 +387,7 @@ concurrent_create_test(Config) ->
             end,
             ?assertMatch({ExpectedChildCount, ExpectedChildCount, ExpectedIds}, Check(), 15),
 
-            {ok, ChildList} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
+            {ok, ChildList} = lfm_proxy:get_children(Worker(WId), SessId(Worker(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
             lists:foreach(
                 fun(FileNo) ->
                     LocalIdsPerWorker = proplists:get_value(FileNo, AllFiles),
@@ -675,13 +680,14 @@ rtransfer_cancel_for_session_test(Config) ->
     ok = test_utils:mock_unload(Workers1, rtransfer_config).
 
 remove_file_during_transfers_test(Config0) ->
+    % TODO VFS-6618 Fix handling of file being removed during transfer and uncomment this test
     User = <<"user2">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {0, 0, 0, 0}, 0),
     [Worker1 | _] = ?config(workers1, Config),
     [Worker2 | _] = ?config(workers_not1, Config),
     % Create file
-    SessId = fun(User, W) ->
-        ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)
+    SessId = fun(U, W) ->
+        ?config({session_id, {U, ?GET_DOMAIN(W)}}, Config)
     end,
     SpaceName = <<"space6">>,
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>, 
@@ -736,13 +742,13 @@ remove_file_on_remote_provider_ceph(Config0) ->
     {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker1, Handle),
 
-    ?assertMatch({ok, _}, lfm_proxy:ls(Worker2, SessionId(Worker2), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({ok, _}, lfm_proxy:get_children(Worker2, SessionId(Worker2), {guid, Guid}, 0, 0), 60),
     L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
     ?assertEqual(true, length(L) > 0),
        
     lfm_proxy:unlink(Worker2, SessionId(Worker2), {guid, Guid}),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
 evict_on_ceph(Config0) ->
@@ -799,6 +805,199 @@ evict_on_ceph(Config0) ->
     [{_, Ceph} | _] = proplists:get_value(cephrados, ?config(storages, Config)),
     ContainerId = proplists:get_value(container_id, Ceph),
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
+
+read_dir_collisions_test(Config0) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
+    User = <<"user2">>,
+    SessionId = fun(Node) -> ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config) end,
+
+    [Worker1 | _] = ?config(workers1, Config),
+    Domain1 = ?GET_DOMAIN_BIN(Worker1),
+
+    [Worker2 | _] = ?config(workers_not1, Config),
+    Domain2 = ?GET_DOMAIN_BIN(Worker2),
+
+    SpaceName = <<"space7">>,
+    RootDirPath = <<"/", SpaceName/binary, "/read_dir_collisions_test">>,
+    {ok, RootDirGuid} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), RootDirPath, 8#755)),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, RootDirGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, RootDirGuid}, lfm_proxy:resolve_guid(Worker2, SessionId(Worker2), RootDirPath), ?ATTEMPTS),
+
+    GetNamesFromGetChildrenFun = fun(Node, Offset, Limit) ->
+        {ok, Children} = ?assertMatch(
+            {ok, _},
+            lfm_proxy:get_children(Node, SessionId(Node), {guid, RootDirGuid}, Offset, Limit)
+        ),
+        lists:map(fun({_Guid, Name}) -> Name end, Children)
+    end,
+    GetNamesFromGetChildrenAttrsFun = fun(Node, Offset, Limit) ->
+        {ok, ChildrenAttrs} = ?assertMatch(
+            {ok, _},
+            lfm_proxy:get_children_attrs(Node, SessionId(Node), {guid, RootDirGuid}, Offset, Limit)
+        ),
+        lists:map(fun(#file_attr{name = Name}) -> Name end, ChildrenAttrs)
+    end,
+    GetNamesFromGetChildrenDetailsFun = fun(Node, Offset, Limit) ->
+        {ok, ChildrenDetails, _} = ?assertMatch(
+            {ok, _, _},
+            lfm_proxy:get_children_details(Node, SessionId(Node), {guid, RootDirGuid}, Offset, Limit, undefined)
+        ),
+        lists:map(fun(#file_details{file_attr = #file_attr{name = Name}}) ->
+            Name
+        end, ChildrenDetails)
+    end,
+
+    FileNames = lists:map(fun(Num) ->
+        FileName = <<"file_", (integer_to_binary(Num))/binary>>,
+        FilePath = <<RootDirPath/binary, "/", FileName/binary>>,
+        {ok, Guid1} = ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessionId(Worker1), FilePath, 8#755)),
+        {ok, Guid2} = ?assertMatch({ok, _} , lfm_proxy:create(Worker2, SessionId(Worker2), FilePath, 8#755)),
+
+        % Wait for providers to synchronize state
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker1, SessionId(Worker1), {guid, Guid2}), ?ATTEMPTS),
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, Guid1}), ?ATTEMPTS),
+
+        FileName
+    end, lists:seq(0, 9)),
+
+    FilesSeenOnWorker1 = lists:flatmap(fun(Name) ->
+        [Name, <<Name/binary, "@", Domain2/binary>>]
+    end, FileNames),
+    FilesSeenOnWorker2 = lists:flatmap(fun(Name) ->
+        [<<Name/binary, "@", Domain1/binary>>, Name]
+    end, FileNames),
+
+    % Assert proper listing when only one file from all conflicted is listed in batch
+    % (it should still has suffix)
+    lists:foreach(fun({Offset, Limit}) ->
+        ExpBatchOnWorker1 = lists:sublist(FilesSeenOnWorker1, Offset+1, Limit),
+        ?assertMatch(ExpBatchOnWorker1, GetNamesFromGetChildrenFun(Worker1, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker1, GetNamesFromGetChildrenAttrsFun(Worker1, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker1, GetNamesFromGetChildrenDetailsFun(Worker1, Offset, Limit)),
+
+        ExpBatchOnWorker2 = lists:sublist(FilesSeenOnWorker2, Offset+1, Limit),
+        ?assertMatch(ExpBatchOnWorker2, GetNamesFromGetChildrenFun(Worker2, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker2, GetNamesFromGetChildrenAttrsFun(Worker2, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker2, GetNamesFromGetChildrenDetailsFun(Worker2, Offset, Limit))
+    end, [
+        % Check listing all files
+        {0, 100},
+
+        % Check listing on batches containing only one of two conflicting files
+        % (it should be suffixed nonetheless)
+        {0, 3}, {1, 3},
+        {2, 3}, {3, 3},
+        {4, 3}, {5, 3},
+        {6, 3}, {7, 3},
+        {8, 3}, {9, 3},
+        {10, 3}, {11, 3},
+        {12, 3}, {13, 3},
+        {14, 3}, {15, 3},
+        {16, 3}, {17, 3},
+
+        {0, 5}, {1, 5},
+        {4, 5}, {5, 5},
+        {8, 5}, {9, 5},
+        {12, 5}, {13, 5},
+        {16, 5}, {17, 5},
+
+        {0, 7}, {1, 7},
+        {6, 7}, {7, 7},
+        {12, 7}, {13, 7},
+
+        {0, 9}, {1, 9},
+        {8, 9}, {9, 9},
+        {16, 9}, {17, 9},
+
+        {0, 11}, {1, 11},
+        {10, 11}, {11, 11},
+
+        {0, 13}, {1, 13},
+        {12, 13}, {13, 13},
+
+        {0, 15}, {1, 15},
+        {14, 15}, {15, 15}
+    ]).
+
+check_fs_stats_on_different_providers(Config) ->
+    [P2, _, P1 | _] = ?config(op_worker_nodes, Config),
+
+    UserId = <<"user3">>,
+    GetSessId = fun(W) -> ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config) end,
+
+    SpaceId = <<"space9">>,
+    SpaceRootDir = <<"/space9/">>,
+
+    % Values set and taken from env_desc.json
+    P1StorageId = <<"cephrados">>,
+    P1SupportSize = 10000,
+    P2StorageId = <<"mntst2">>,
+    P2SupportSize = 50000,
+    ProviderToStorage = #{
+        P1 => {P1StorageId, P1SupportSize},
+        P2 => {P2StorageId, P2SupportSize}
+    },
+
+    % create file on provider1
+    [F1, F2] = Files = lists:map(fun(Node) ->
+        SessId = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(Node)}}, Config),
+        FileName = generator:gen_name(),
+        FilePath = <<SpaceRootDir/binary, FileName/binary>>,
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath, 8#755)),
+        FileGuid
+    end, [P1, P2]),
+
+    AssertEqualFSSTatsFun = fun(Node, Occupied) ->
+        SessId = GetSessId(Node),
+        {StorageId, SupportSize} = maps:get(Node, ProviderToStorage),
+
+        lists:foreach(fun(FileGuid) ->
+            ?assertEqual(
+                {ok, #fs_stats{space_id = SpaceId, storage_stats = [
+                    #storage_stats{
+                        storage_id = StorageId,
+                        size = SupportSize,
+                        occupied = Occupied
+                    }
+                ]}},
+                lfm_proxy:get_fs_stats(Node, SessId, {guid, FileGuid}),
+                ?ATTEMPTS
+            )
+        end, Files)
+    end,
+    WriteToFileFun = fun({Node, FileGuid, Offset, BytesNum}) ->
+        Content = crypto:strong_rand_bytes(BytesNum),
+        {ok, Handle} = lfm_proxy:open(Node, GetSessId(Node), {guid, FileGuid}, write),
+        {ok, _} = lfm_proxy:write(Node, Handle, Offset, Content),
+        ok = lfm_proxy:close(Node, Handle),
+        Content
+    end,
+
+    % Assert empty storages at the beginning of test
+    AssertEqualFSSTatsFun(P1, 0),
+    AssertEqualFSSTatsFun(P2, 0),
+
+    % Write to files and assert that quota was updated
+    lists:foreach(WriteToFileFun, [{P1, F1, 0, 50}, {P2, F2, 0, 80}]),
+    AssertEqualFSSTatsFun(P1, 50),
+    AssertEqualFSSTatsFun(P2, 80),
+
+    % Write to file on P2 and assert that only its quota was updated
+    WrittenContent = WriteToFileFun({P2, F1, 100, 40}),
+    AssertEqualFSSTatsFun(P1, 50),
+    AssertEqualFSSTatsFun(P2, 120),
+
+    % Read file on P1 (force rtransfer) and assert that its quota was updated
+    ExpReadContent = binary:part(WrittenContent, 0, 20),
+    {ok, ReadHandle} = lfm_proxy:open(P1, GetSessId(P1), {guid, F1}, read),
+    ?assertMatch({ok, ExpReadContent}, lfm_proxy:read(P1, ReadHandle, 100, 20), ?ATTEMPTS),
+    ok = lfm_proxy:close(P1, ReadHandle),
+
+    % Quota should be updated not by read 20 bytes but by 40. That is due to
+    % rtransfer fetching larger blocks at once (not only requested bytes)
+    AssertEqualFSSTatsFun(P1, 90),
+    AssertEqualFSSTatsFun(P2, 120).
+
 
 %%%===================================================================
 %%% Internal functions
@@ -963,8 +1162,14 @@ init_per_testcase(rtransfer_fetch_test, Config) ->
     ]),
 
     [{default_min_hole_size, HoleSize} | Config2];
-init_per_testcase(evict_on_ceph, Config) ->
+init_per_testcase(TestCase, Config) when
+    TestCase == evict_on_ceph;
+    TestCase == read_dir_collisions_test
+->
     init_per_testcase(all, [{?SPACE_ID_KEY, <<"space7">>} | Config]);
+init_per_testcase(check_fs_stats_on_different_providers, Config) ->
+    initializer:unload_quota_mocks(Config),
+    init_per_testcase(all, Config);
 init_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [datastore_doc, datastore_remote_driver], [passthrough]),
@@ -998,6 +1203,9 @@ end_per_testcase(rtransfer_fetch_test, Config) ->
         ?APP_NAME, rtransfer_min_hole_size, MinHoleSize
     ]),
     end_per_testcase(?DEFAULT_CASE(rtransfer_fetch_test), Config);
+end_per_testcase(check_fs_stats_on_different_providers, Config) ->
+    initializer:disable_quota_limit(Config),
+    end_per_testcase(all, Config);
 end_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [datastore_doc, datastore_remote_driver]),

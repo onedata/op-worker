@@ -29,8 +29,7 @@
 -export_type([doc/0]).
 
 -define(CTX, #{
-    model => ?MODULE,
-    routing => local
+    model => ?MODULE
 }).
 -define(SYNC_CTX, #{
     model => ?MODULE,
@@ -79,7 +78,7 @@ get_master_job(#document{value = #tree_traverse_job{
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }}) ->
-    {ok, Doc} = file_meta:get(DocID),
+    {ok, Doc} = file_meta:get_including_deleted(DocID),
     Job = #tree_traverse{
         doc = Doc,
         last_name = LastName,

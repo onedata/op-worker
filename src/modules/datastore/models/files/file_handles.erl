@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete/1, exists/1, list_local/0]).
+-export([delete/1, exists/1, list/0]).
 -export([register_open/4, register_release/3, mark_to_remove/2, is_removed/1,
     invalidate_session_entry/2, is_used_by_session/2, get_creation_handle/1]).
 
@@ -67,12 +67,12 @@ exists(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of all records connected to node.
+%% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec list_local() -> {ok, [doc()]} | {error, term()}.
-list_local() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+-spec list() -> {ok, [doc()]} | {error, term()}.
+list() ->
+    datastore_model:local_fold_all_nodes(?CTX, fun(Doc, InternalAcc) -> {ok, [Doc | InternalAcc]} end, []).
 
 -spec is_removed(record() | doc()) -> boolean().
 is_removed(#document{value = FileHandles}) ->

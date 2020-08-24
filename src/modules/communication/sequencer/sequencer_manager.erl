@@ -149,7 +149,7 @@ init([SeqManSup, SessId]) ->
     process_flag(trap_exit, true),
     init_state(),
     Self = self(),
-    {ok, SessId} = session:update(SessId, fun(Session = #session{}) ->
+    {ok, #document{key = SessId}} = session:update(SessId, fun(Session = #session{}) ->
         {ok, Session#session{sequencer_manager = Self}}
     end),
     {ok, #state{sequencer_manager_sup = SeqManSup, session_id = SessId}, 0}.
