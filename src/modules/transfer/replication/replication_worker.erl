@@ -69,7 +69,7 @@ required_permissions() ->
 %%--------------------------------------------------------------------
 -spec max_transfer_retries() -> non_neg_integer().
 max_transfer_retries() ->
-    application:get_env(?APP_NAME, max_file_replication_retries_per_file, 0).
+    application:get_env(?APP_NAME, max_file_replication_retries_per_file, 5).
 
 %%--------------------------------------------------------------------
 %% @doc
