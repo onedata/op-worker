@@ -68,7 +68,7 @@ rtransfer_restart_test(Config) ->
 
 % TODO - delete fun
 rtransfer_restart_test2(Config) ->
-    NewConfig = onenv_test_utils:prepare_base_test_config(Config),
+    NewConfig = provider_onenv_test_utils:initialize(Config),
     rtransfer_restart_test(NewConfig).
 
 node_restart_test(Config) ->
@@ -86,7 +86,7 @@ node_restart_test(Config) ->
 
 % TODO - delete fun
 node_restart_test2(Config) ->
-    NewConfig = onenv_test_utils:prepare_base_test_config(Config),
+    NewConfig = provider_onenv_test_utils:initialize(Config),
     node_restart_test(NewConfig).
 
 restart_test_base(Config, RestartFun) ->
@@ -156,7 +156,7 @@ init_per_suite(Config) ->
         Workers = test_config:get_all_op_worker_nodes(Config),
         test_utils:set_env(Workers, ?APP_NAME, session_validity_check_interval_seconds, 1800),
         test_utils:set_env(Workers, ?APP_NAME, fuse_session_grace_period_seconds, 1800),
-        onenv_test_utils:prepare_base_test_config(NewConfig)
+        provider_onenv_test_utils:initialize(NewConfig)
     end,
     test_config:set_many(Config, [
         {add_envs, [op_worker, op_worker, [{key, value}]]},
