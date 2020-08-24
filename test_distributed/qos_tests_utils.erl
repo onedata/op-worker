@@ -97,7 +97,7 @@ get_op_nodes_sorted(Config) ->
 
 add_multiple_qos(Config, QosToAddList) ->
     lists:foldl(fun(QosToAdd, Acc) ->
-        {ok, {QosName, QosEntryId}} =  add_qos(Config, QosToAdd),
+        {ok, {QosName, QosEntryId}} = add_qos(Config, QosToAdd),
         Acc#{QosName => QosEntryId}
     end, #{}, QosToAddList).
 
@@ -344,7 +344,7 @@ assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping) ->
 assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, Attempts) ->
     lists:foreach(fun(#expected_qos_entry{
         workers = WorkersOrUndef,
-        qos_expression_in_rpn = QosExpressionRPN,
+        qos_expression = QosExpressionRPN,
         replicas_num = ReplicasNum,
         file_key = FileKey,
         qos_name = QosName,
@@ -368,12 +368,13 @@ assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, Attempt
     end, ExpectedQosEntries).
 
 assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, ReplicasNum, Attempts, PossibilityCheck) ->
-    ExpectedQosEntry = #qos_entry{
+    ExpectedQosEntryFirstVersion = #qos_entry{
         file_uuid = FileUuid,
         expression = Expression,
         replicas_num = ReplicasNum,
         possibility_check = PossibilityCheck
     },
+    ExpectedQosEntry = upgrade_qos_entry_record(ExpectedQosEntryFirstVersion),
     GetQosEntryFun = fun() ->
         ?assertMatch({ok, _Doc}, rpc:call(Worker, qos_entry, get, [QosEntryId]), Attempts),
         {ok, #document{value = QosEntry, scope = SpaceId}} = rpc:call(Worker, qos_entry, get, [QosEntryId]),
@@ -388,6 +389,15 @@ assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, Repl
         {QosEntryWithoutTraverseReqs, ErrMsg}
     end,
     assert_match_with_err_msg(GetQosEntryFun, ExpectedQosEntry, Attempts, 200).
+
+
+upgrade_qos_entry_record(QosEntryRecordInFirstVersion) ->
+    MaxVersion = qos_entry:get_record_version(),
+    lists:foldl(fun(Version, Record) ->
+        {NewVersion, NewRecord} = qos_entry:upgrade_record(Version, Record),
+        ?assertEqual(Version + 1, NewVersion),
+        NewRecord
+    end, QosEntryRecordInFirstVersion, lists:seq(1, MaxVersion - 1)).
 
 
 get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId) ->

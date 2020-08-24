@@ -67,8 +67,8 @@
 %% test data
 -define(USER1, <<"user1">>).
 -define(SPACE_ID, <<"space1">>).
--define(RO_STORAGE_ID, <<"/mnt/st1_ro">>).
--define(RW_STORAGE_ID, <<"/mnt/st1_rdwr">>).
+-define(RO_STORAGE_ID, <<"mntst1_ro">>).
+-define(RW_STORAGE_ID, <<"mntst1_rdwr">>).
 -define(SPACE_NAME, <<"space_name1">>).
 -define(SPACE_PATH, ?PATH(<<"">>)).
 -define(SESS_ID(W, Config), ?SESS_ID(W, ?USER1, Config)).

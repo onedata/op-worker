@@ -32,12 +32,6 @@
     qos_bounded_cache_should_be_periodically_cleaned_if_overfilled/1,
     qos_bounded_cache_should_not_be_cleaned_if_not_overfilled/1,
 
-    % Invalid QoS expression tests
-    key_without_value/1,
-    two_keys_without_value_connected_with_operand/1,
-    operator_without_second_operand/1,
-    operator_without_first_operand/1,
-
     % Single QoS expression tests
     simple_key_val_qos/1,
     qos_with_intersection/1,
@@ -80,12 +74,6 @@ all() -> [
     % QoS bounded cache tests
     qos_bounded_cache_should_be_periodically_cleaned_if_overfilled,
     qos_bounded_cache_should_not_be_cleaned_if_not_overfilled,
-
-    % Invalid QoS expression tests
-    key_without_value,
-    two_keys_without_value_connected_with_operand,
-    operator_without_second_operand,
-    operator_without_first_operand,
 
     % Single QoS expression tests
     simple_key_val_qos,
@@ -277,42 +265,6 @@ qos_bounded_cache_should_not_be_cleaned_if_not_overfilled(Config) ->
 
     SizeAfterCleaning = ?GET_CACHE_TABLE_SIZE(?SPACE1_ID),
     ?assertEqual(6, SizeAfterCleaning).
-
-
-%%%===================================================================
-%%% Invalid QoS expression tests.
-%%%===================================================================
-
-key_without_value(Config) ->
-    Expr = [<<"country">>],
-    invalid_expression_test_base(Config, Expr).
-
-
-two_keys_without_value_connected_with_operand(Config) ->
-    Expr = [<<"country">>, <<"|">>, <<"type">>],
-    invalid_expression_test_base(Config, Expr).
-
-
-operator_without_second_operand(Config) ->
-    Expr = [<<"country=PL">>,<<"&">>],
-    invalid_expression_test_base(Config, Expr).
-
-
-operator_without_first_operand(Config) ->
-    Expr = [<<"country=PL">>,<<"|">>],
-    invalid_expression_test_base(Config, Expr).
-
-
-invalid_expression_test_base(Config, Expr) ->
-    [Worker] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    
-    create_test_file(Config),
-    
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, Expr, 1)
-    ).
 
 
 %%%===================================================================

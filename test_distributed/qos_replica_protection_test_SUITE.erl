@@ -827,7 +827,7 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename) ->
             #expected_qos_entry{
                 qos_name = ?QOS1,
                 file_key = {path, ?FILE_PATH(QosFilename)},
-                qos_expression_in_rpn = [<<"country=PL">>],
+                qos_expression = [<<"country=PL">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerP1)}
             }

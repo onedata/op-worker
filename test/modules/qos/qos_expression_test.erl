@@ -12,95 +12,175 @@
 -module(qos_expression_test).
 -author("Michal Cwiertnia").
 
--include("modules/datastore/qos.hrl").
--include_lib("ctool/include/errors.hrl").
+-ifdef(TEST).
+
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include("modules/datastore/qos.hrl").
 
 
-qos_expression_test() ->
+valid_qos_expression_test() ->
+    check_valid_expression(<<"country=PL">>, [<<"country">>, <<"PL">>, <<"=">>]),
+    check_valid_expression(<<"latency=8">>, [<<"latency">>, 8, <<"=">>]),
+    check_valid_expression(<<"latency>8">>, [<<"latency">>, 8, <<">">>]),
+    check_valid_expression(<<"latency<8">>, [<<"latency">>, 8, <<"<">>]),
+    check_valid_expression(<<"latency>=8">>, [<<"latency">>, 8, <<">=">>]),
+    check_valid_expression(<<"latency<=8">>, [<<"latency">>, 8, <<"<=">>]),
     
-    % test simple equality
-    Expr0 = <<"country=PL">>,
-    {ok, RPN0} = qos_expression:infix_to_rpn(Expr0),
-    ?assertEqual([<<"country=PL">>], RPN0),
-    ?assertEqual({ok, Expr0}, qos_expression:rpn_to_infix(RPN0)),
-
-    % test operators precedence
-    Operators = [<<"|">>, <<"&">>, <<"-">>],
+    Operators = [<<"|">>, <<"&">>, <<"\\">>],
     OperatorPairs = [{Op1, Op2} || Op1 <- Operators, Op2 <- Operators],
     lists:foreach(
         fun({Op1, Op2}) ->
             Expr = <<"country=PL", Op1/binary, "type=disk", Op2/binary, "country=FR">>,
-            {ok, RPN} = qos_expression:infix_to_rpn(Expr),
-            ?assertEqual([<<"country=PL">>, <<"type=disk">>, Op1, <<"country=FR">>, Op2], RPN),
-            % Because expression without brackets and expression with brackets are converted to 
-            % the same RPN form it is impossible to distinguish them when converting back. 
-            % As infix expression with brackets is unambiguous it is returned by `rpn_to_infix`.
+            Rpn = [<<"country">>, <<"PL">>, <<"=">>, <<"type">>, <<"disk">>, <<"=">>, Op1, <<"country">>, <<"FR">>, <<"=">>, Op2],
+            check_valid_expression(Expr, Rpn),
+            % Expression without brackets and expression with brackets are converted to the same RPN form. 
             ExprWithBrackets = <<"(country=PL", Op1/binary, "type=disk)", Op2/binary, "country=FR">>,
-            ?assertEqual({ok, ExprWithBrackets}, qos_expression:rpn_to_infix(RPN))
+            check_valid_expression(ExprWithBrackets, Rpn)
         end, OperatorPairs),
 
-    Expr1 = <<"country=PL&type=disk|country=FR">>,
-    {ok, RPN1} = qos_expression:infix_to_rpn(Expr1),
-    ?assertEqual([<<"country=PL">>, <<"type=disk">>, <<"&">>, <<"country=FR">>, <<"|">>], RPN1),
-    
-    % test parens
-    Expr2 = <<"(country=PL&type=disk)|country=FR">>,
-    {ok, RPN2} = qos_expression:infix_to_rpn(Expr2),
-    ?assertEqual([<<"country=PL">>, <<"type=disk">>, <<"&">>, <<"country=FR">>, <<"|">>], RPN2),
-    ?assertEqual({ok, Expr2}, qos_expression:rpn_to_infix(RPN2)),
-
-    Expr3 = <<"country=PL&(type=disk|country=FR)">>,
-    {ok, RPN3} = qos_expression:infix_to_rpn(Expr3),
-    ?assertEqual([<<"country=PL">>, <<"type=disk">>, <<"country=FR">>, <<"|">>, <<"&">>], RPN3),
-    ?assertEqual({ok, Expr3}, qos_expression:rpn_to_infix(RPN3)),
-
-    Expr4 = <<"(country=PL&type=tape)|(type=disk&country=FR)">>,
-    {ok, RPN4} = qos_expression:infix_to_rpn(Expr4),
-    ?assertEqual([<<"country=PL">>, <<"type=tape">>, <<"&">>,
-         <<"type=disk">>, <<"country=FR">>, <<"&">>, <<"|">>], RPN4),
-    ?assertEqual({ok, Expr4}, qos_expression:rpn_to_infix(RPN4)),
-
-    % test invalid expression
-    Expr5 = <<"country">>,
-    ?assertThrow(
-        ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:infix_to_rpn(Expr5)
+    check_valid_expression(
+        <<"country=PL&type=disk|latency<8">>, 
+        [<<"country">>,<<"PL">>,<<"=">>,<<"type">>,<<"disk">>, <<"=">>,<<"&">>,<<"latency">>,8,<<"<">>,<<"|">>]
     ),
 
-    Expr6 = <<"country|type">>,
-    ?assertThrow(
-        ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:infix_to_rpn(Expr6)
+    check_valid_expression(
+        <<"(country=PL&type=disk)|latency>8">>,
+        [<<"country">>,<<"PL">>,<<"=">>,<<"type">>,<<"disk">>, <<"=">>,<<"&">>,<<"latency">>,8,<<">">>,<<"|">>]
     ),
 
-    Expr7 = <<"(country=PL">>,
-    ?assertThrow(
-        ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:infix_to_rpn(Expr7)
-    ),
-
-    Expr8 = <<"type=disk)">>,
-    ?assertThrow(
-        ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:infix_to_rpn(Expr8)
-    ),
-
-    Expr9 = <<")(country=PL">>,
-    ?assertThrow(
-        ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:infix_to_rpn(Expr9)
+    check_valid_expression(
+        <<"country=PL&(type=disk|latency=8)">>, 
+        [<<"country">>,<<"PL">>,<<"=">>,<<"type">>,<<"disk">>, <<"=">>,<<"latency">>,8,<<"=">>,<<"|">>,<<"&">>] 
     ),
     
-    Expr10 = <<"country=PL&-type-disk">>,
-    ?assertThrow(
-        ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:infix_to_rpn(Expr10)
+    check_valid_expression(
+        <<"(country=PL&type=tape)|(type=disk&latency<=8)">>,
+        [<<"country">>,<<"PL">>,<<"=">>,<<"type">>,<<"tape">>, <<"=">>,<<"&">>,<<"type">>,<<"disk">>,<<"=">>,
+            <<"latency">>, 8,<<"<=">>,<<"&">>,<<"|">>]
     ),
     
-    Expr11 = <<"(type=disk|tier=t2&(country=PL)">>,
-    ?assertThrow(
-        ?ERROR_INVALID_QOS_EXPRESSION,
-        qos_expression:infix_to_rpn(Expr11)
-    ).
+    check_valid_expression(<<"a a a a = 8">>, [<<"a a a a">>, 8, <<"=">>]),
+    check_valid_expression(<<"a = a a a a">>, [<<"a">>, <<"a a a a">>, <<"=">>]),
+    check_valid_expression(<<"a-a < 8">>, [<<"a-a">>, 8, <<"<">>]),
+    check_valid_expression(<<"a-a > 8">>, [<<"a-a">>, 8, <<">">>]),
+    check_valid_expression(<<"_-_ <= 8">>, [<<"_-_">>, 8, <<"<=">>]),
+    check_valid_expression(<<"a8 <= 8">>, [<<"a8">>, 8, <<"<=">>]),
+    check_valid_expression(<<"a = a">>, [<<"a">>, <<"a">>, <<"=">>]),
+    check_valid_expression(<<"aa = aa">>, [<<"aa">>, <<"aa">>, <<"=">>]),
+    check_valid_expression(<<"8a <= 8">>, [<<"8a">>, 8, <<"<=">>]),
+    check_valid_expression(<<"a8a >= 8">>, [<<"a8a">>, 8, <<">=">>]),
+    check_valid_expression(<<"a = a8">>, [<<"a">>, <<"a8">>, <<"=">>]),
+    check_valid_expression(<<"a = 8a">>, [<<"a">>, <<"8a">>, <<"=">>]),
+    check_valid_expression(<<"a = a8a">>, [<<"a">>, <<"a8a">>, <<"=">>]),
+    check_valid_expression(<<"a = a-a">>, [<<"a">>, <<"a-a">>, <<"=">>]),
+    check_valid_expression(<<"a_a = _a_">>, [<<"a_a">>, <<"_a_">>, <<"=">>]),
+    check_valid_expression(<<"   \"  a  \t \n  = a     ">>, [<<"a">>, <<"a">>, <<"=">>]),
+    check_valid_expression(<<"anyStorage">>, [<<"anyStorage">>]),
+    check_valid_expression(<<"anyStorage \\ (a=b)">>, [<<"anyStorage">>, <<"a">>, <<"b">>, <<"=">>, <<"\\">>]),
+    check_valid_expression(
+        <<"(a=b & anyStorage) \\ anyStorage">>, 
+        [<<"a">>, <<"b">>, <<"=">>, <<"anyStorage">>, <<"&">>, <<"anyStorage">>, <<"\\">>]
+    ),
+    check_valid_expression(<<"ąćóµńəłóəßœπążśźćð = _a_"/utf8>>, [<<"ąćóµńəłóəßœπążśźćð"/utf8>>, <<"_a_">>, <<"=">>]),
+    ok.
+    
 
+invalid_qos_expression_test() ->    
+    check_invalid_expression(<<"country">>),
+    check_invalid_expression(<<"country|type">>),
+    check_invalid_expression(<<"(country=PL">>),
+    check_invalid_expression(<<"type=disk)">>),
+    check_invalid_expression(<<")(country=PL">>),
+    check_invalid_expression(<<"country=PL&\\type\\disk">>),
+    check_invalid_expression(<<"(type=disk|tier=t2&(country=PL)">>),
+    check_invalid_expression(<<"country=PL&">>),
+    check_invalid_expression(<<"geo=PL | (geo=DE & latency) <= 8">>),
+    check_invalid_expression(<<"()">>),
+    check_invalid_expression(<<"a<b">>),
+    check_invalid_expression(<<"a>b">>),
+    check_invalid_expression(<<"8=a">>),
+    check_invalid_expression(<<"8888=a">>),
+    check_invalid_expression(<<"-a-=a">>),
+    check_invalid_expression(<<"a=a=a">>),
+    check_invalid_expression(<<"a|a|a">>),
+    check_invalid_expression(<<"a=a;">>),
+    check_invalid_expression(<<"←"/utf8>>),
+    check_invalid_expression(<<"’"/utf8>>),
+    ok.
+
+
+filter_storages_test() ->
+    StoragesMap = #{
+        <<"0">> => #{<<"geo">> => <<"PL">>, <<"latency">> => 8},
+        <<"1">> => #{<<"geo">> => <<"FR">>, <<"latency">> => 2131},
+        <<"2">> => #{<<"geo">> => <<"PT">>, <<"latency">> => 0},
+        <<"3">> => #{<<"geo">> => <<"US">>, <<"latency">> => 123},
+        <<"4">> => #{<<"geo">> => <<"DE">>, <<"latency">> => 321},
+        <<"5">> => #{<<"latency">> => <<"not_integer">>}
+    },
+    check_filter_storages(<<"anyStorage">>, maps:keys(StoragesMap), StoragesMap),
+    check_filter_storages(<<"geo = PL">>, [<<"0">>], StoragesMap),
+    check_filter_storages(<<"latency = not_integer">>, [<<"5">>], StoragesMap),
+    check_filter_storages(<<"latency = 8">>, [<<"0">>], StoragesMap),
+    check_filter_storages(<<"latency > 8">>, [<<"1">>, <<"3">>, <<"4">>], StoragesMap),
+    check_filter_storages(<<"latency < 8">>, [<<"2">>], StoragesMap),
+    check_filter_storages(<<"latency >= 8">>, [<<"0">>, <<"1">>, <<"3">>, <<"4">>], StoragesMap),
+    check_filter_storages(<<"latency <= 8">>, [<<"0">>, <<"2">>], StoragesMap),
+    check_filter_storages(<<"geo=PL | geo=DE">>, [<<"0">>, <<"4">>], StoragesMap),
+    check_filter_storages(<<"geo=PL & geo=DE">>, [], StoragesMap),
+    check_filter_storages(<<"(geo=PL | geo=DE) & latency <= 8">>, [<<"0">>], StoragesMap),
+    check_filter_storages(<<"(geo=PL | geo=DE) | latency <= 8">>, [<<"0">>, <<"2">>, <<"4">>], StoragesMap),
+    check_filter_storages(<<"(geo=PL | geo=DE) \\ latency <= 8">>, [<<"4">>], StoragesMap),
+    check_filter_storages(<<"geo=PL | (geo=DE & latency <= 8)">>, [<<"0">>], StoragesMap),
+    check_filter_storages(<<"latency < 8 | latency > 320">>, [<<"1">>, <<"2">>, <<"4">>], StoragesMap),
+    check_filter_storages(<<"latency > 320 \\ latency < 400">>, [<<"1">>], StoragesMap),
+    check_filter_storages(<<"(geo=PL | geo=DE) & latency <= 8 | (latency > 320 \\ latency < 400)">>, [<<"0">>, <<"1">>], StoragesMap),
+    check_filter_storages(<<"((geo=PL | geo=DE) & latency <= 8 ) | (latency > 320 \\ latency < 400)">>, [<<"0">>, <<"1">>], StoragesMap),
+    check_filter_storages(<<"(geo=PL | geo=DE) | (latency > 320 \\ latency < 400) & latency <= 8 ">>, [<<"0">>], StoragesMap),
+    check_filter_storages(
+        <<"(((geo=PL | geo=DE) & latency <= 8 ) | (latency > 320 \\ latency < 400) 
+        | ((geo=PL | geo=DE) & latency <= 8 ) | (latency > 320 \\ latency < 400))
+        \\ ((geo=PL | geo=DE) | (latency > 320 \\ latency < 400) & latency <= 8) ">>, 
+        [<<"1">>], StoragesMap
+    ),
+    ok.
+
+
+convert_from_old_version_rpn_test() ->
+    ?assertEqual({<<"=">>, <<"a">>, <<"b">>}, 
+        qos_expression:convert_from_old_version_rpn([<<"a=b">>])),
+    ?assertEqual({<<"\\">>, {<<"=">>, <<"a">>, <<"b">>}, {<<"=">>, <<"c">>, <<"d">>}}, 
+        qos_expression:convert_from_old_version_rpn([<<"a=b">>, <<"c=d">>, <<"-">>])),
+    ?assertEqual({<<"|">>, {<<"=">>, <<"a">>, <<"b">>}, {<<"=">>, <<"c">>, <<"d">>}},
+        qos_expression:convert_from_old_version_rpn([<<"a=b">>, <<"c=d">>, <<"|">>])),
+    ?assertEqual({<<"&">>, {<<"=">>, <<"a">>, <<"b">>}, {<<"=">>, <<"c">>, <<"d">>}},
+        qos_expression:convert_from_old_version_rpn([<<"a=b">>, <<"c=d">>, <<"&">>])).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+check_valid_expression(Expression, ExpectedRpn) ->
+    Tree = qos_expression:parse(Expression),
+    % Check that to_rpn works correctly.
+    ?assertEqual(ExpectedRpn, qos_expression:to_rpn(Tree)),
+    % Check that from_rpn works correctly.
+    ?assertEqual(Tree, qos_expression:from_rpn(ExpectedRpn)),
+    % Check that to_infix works correctly.
+    % Because of whitespaces and parens unambiguity, instead of comparing strings 
+    % check that resulting expression is equivalent.
+    ?assertEqual(Tree, qos_expression:parse(qos_expression:to_infix(Tree))),
+    % Check to_json and from_json functions.
+    ?assertEqual(Tree, qos_expression:from_json(qos_expression:to_json(Tree))).
+    
+
+check_invalid_expression(Expression) ->
+    ?assertThrow(?ERROR_INVALID_QOS_EXPRESSION(_), qos_expression:parse(Expression)).
+
+
+check_filter_storages(Expression, ExpectedStorages, StoragesMap) ->
+    Tree = qos_expression:parse(Expression),
+    ?assertEqual(ExpectedStorages, qos_expression:filter_storages(Tree, StoragesMap)).
+
+-endif.
