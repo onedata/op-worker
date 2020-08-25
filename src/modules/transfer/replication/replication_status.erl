@@ -76,7 +76,8 @@
 -export([
     handle_enqueued/1, handle_active/1,
     handle_aborting/1, handle_completed/1,
-    handle_failed/2, handle_cancelled/1
+    handle_failed/2, handle_cancelled/1,
+    handle_restart/3
 ]).
 
 -type error() :: {error, term()}.
@@ -160,6 +161,32 @@ handle_cancelled(TransferId) ->
         fun transfer_links:move_from_ongoing_to_ended/1
     ).
 
+
+-spec handle_restart(transfer:id(), transfer:id(), boolean()) -> {ok, transfer:doc()} | error().
+handle_restart(TransferId, NewTransferId, MarkTransferFailed) ->
+    case MarkTransferFailed of
+        true ->
+            UpdateFun = fun(Transfer) ->
+                case mark_failed_forced(Transfer) of
+                    {ok, UpdatedTransfer} -> {ok, UpdatedTransfer#transfer{rerun_id = NewTransferId}};
+                    Other -> Other
+                end
+            end,
+
+            UpdateAns = transfer:update_and_run(
+                TransferId,
+                UpdateFun,
+                fun transfer_links:move_from_ongoing_to_ended/1
+            ),
+
+            case UpdateAns of
+                {ok, _} -> UpdateAns;
+                _ -> add_rerun_id(TransferId, NewTransferId)
+            end
+            ;
+        false ->
+            add_rerun_id(TransferId, NewTransferId)
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -253,3 +280,9 @@ mark_cancelled(Transfer = #transfer{replication_status = ?ABORTING_STATUS}) ->
     }};
 mark_cancelled(#transfer{replication_status = Status}) ->
     {error, Status}.
+
+-spec add_rerun_id(transfer:id(), transfer:id()) -> {ok, transfer:doc()} | error().
+add_rerun_id(TransferId, NewTransferId) ->
+    transfer:update(TransferId, fun(OldTransfer) ->
+        {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
+    end).

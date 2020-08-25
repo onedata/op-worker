@@ -30,26 +30,26 @@
 
 all() -> [
     rtransfer_restart_test,
-    node_restart_test,
+    node_restart_test
     % TODO - delete further tests
-    rtransfer_restart_test2,
-    node_restart_test2,
-    rtransfer_restart_test2,
-    node_restart_test2,
-    rtransfer_restart_test2,
-    node_restart_test2,
-    rtransfer_restart_test2,
-    node_restart_test2,
-    rtransfer_restart_test2,
-    node_restart_test2,
-    rtransfer_restart_test2,
-    node_restart_test2,
-    rtransfer_restart_test2,
-    node_restart_test2,
-    rtransfer_restart_test2,
-    node_restart_test2,
-    rtransfer_restart_test2,
-    node_restart_test2
+%%    rtransfer_restart_test2,
+%%    node_restart_test2,
+%%    rtransfer_restart_test2,
+%%    node_restart_test2,
+%%    rtransfer_restart_test2,
+%%    node_restart_test2,
+%%    rtransfer_restart_test2,
+%%    node_restart_test2,
+%%    rtransfer_restart_test2,
+%%    node_restart_test2,
+%%    rtransfer_restart_test2,
+%%    node_restart_test2,
+%%    rtransfer_restart_test2,
+%%    node_restart_test2,
+%%    rtransfer_restart_test2,
+%%    node_restart_test2,
+%%    rtransfer_restart_test2,
+%%    node_restart_test2
 ].
 
 -define(FILE_DATA, <<"1234567890abcd">>).
@@ -99,7 +99,7 @@ restart_test_base(Config, RestartFun, NodeRestart) ->
     SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
     SessIdP1 = SessId(P1),
     SessIdP2 = SessId(P2),
-    Attempts = 60,
+    Attempts = 120,
     FileSize = byte_size(?FILE_DATA),
     Priority = 32,
     UserCtxP2 = rpc:call(WorkerP2, user_ctx, new, [SessIdP2]),
