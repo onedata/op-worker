@@ -95,7 +95,10 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
     },
     fun
         (?USER(Id)) -> 
-            Result#{<<"currentUserEffPrivileges">> => maps:get(Id, Space#od_space.eff_users, [])};
+            Result#{
+                <<"currentUserEffPrivileges">> => maps:get(Id, Space#od_space.eff_users, []),
+                <<"currentUserIsOwner">> => lists:member(Id, Space#od_space.owners)
+            };
         (_) -> 
             Result
     end;
