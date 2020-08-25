@@ -42,7 +42,8 @@
     map_qos_names_to_ids/2,
     set_qos_parameters/2,
     mock_transfers/1,
-    finish_all_transfers/1
+    finish_all_transfers/1,
+    mock_replica_synchronizer/2
 ]).
 
 -define(USER_ID, <<"user1">>).
@@ -139,6 +140,9 @@ add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) ->
     make_rest_request(Config, Worker, URL, post, Headers, ReqBody, SpaceId, [?SPACE_MANAGE_QOS]).
 
 
+create_dir_structure(_Config, undefined) ->
+    #{};
+    
 create_dir_structure(Config, #test_dir_structure{
     worker = WorkerOrUndef,
     dir_structure = DirStructureToCreate
@@ -317,7 +321,7 @@ mock_transfers(Workers) ->
         end).
 
 
-% above mock required for this function to work
+% above mock (mock_transfers/1) required for this function to work
 finish_all_transfers([]) -> ok;
 finish_all_transfers(Files) ->
     receive {qos_slave_job, Pid, FileGuid} = Msg ->
@@ -333,6 +337,13 @@ finish_all_transfers(Files) ->
         ct:print("Transfers not started: ~p", [Files]),
         {error, transfers_not_started}
     end.
+
+
+mock_replica_synchronizer(Workers, Expected) ->
+    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
+        fun(_, _, _, _, _, _) ->
+            Expected
+        end).
 
 %%%====================================================================
 %%% Assertions

@@ -100,7 +100,7 @@ reconcile_qos(FileUuid, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec reconcile_qos_internal(file_ctx:ctx(), [Option]) -> ok  
-    when Option :: ignore_missing_file.
+    when Option :: ignore_missing_files.
 reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
     {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx1),
@@ -109,7 +109,7 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
         {error, {file_meta_missing, MissingUuid}} ->
             % new file_ctx will be generated when file_meta_posthook
             % will be executed (see function reconcile_qos/2).
-            lists:member(ignore_missing_file, Options) orelse 
+            lists:member(ignore_missing_files, Options) orelse 
                 file_meta_posthooks:add_hook(
                     MissingUuid, <<"check_qos_", FileUuid/binary>>,
                     ?MODULE, reconcile_qos, [FileUuid, SpaceId]),
@@ -188,7 +188,7 @@ reevaluate_qos(QosEntryId) when is_binary(QosEntryId) ->
 retry_failed_files(SpaceId) ->
     qos_entry:apply_to_all_in_failed_files_list(SpaceId, fun(FileUuid) ->
         FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
-        ok = reconcile_qos_internal(FileCtx, [ignore_missing_files]),
-        ok = qos_entry:remove_from_failed_file_list(SpaceId, FileUuid)
+        ok = qos_entry:remove_from_failed_file_list(SpaceId, FileUuid),
+        ok = reconcile_qos_internal(FileCtx, [ignore_missing_files])
     end).
     

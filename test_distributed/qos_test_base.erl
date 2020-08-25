@@ -54,7 +54,10 @@
     qos_status_during_traverse_file_without_qos_test_base/2,
     qos_status_during_reconciliation_test_base/4,
     qos_status_during_reconciliation_with_file_deletion_test_base/2,
-    qos_status_during_reconciliation_with_dir_deletion_test_base/2
+    qos_status_during_reconciliation_with_dir_deletion_test_base/2,
+    qos_status_after_failed_transfer/2,
+    qos_status_after_failed_transfer_deleted_file/2,
+    qos_status_after_failed_transfer_deleted_entry/2
 ]).
 
 -define(ATTEMPTS, 60).
@@ -1272,15 +1275,83 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(Config, SpaceId) ->
     end, Workers).
 
 
+qos_status_after_failed_transfer(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_tests_utils:mock_replica_synchronizer(Workers, {error, some_error}),
+    rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
+    Name = generator:gen_name(),
+    DirStructure =
+        {SpaceId, [
+            {Name, ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}
+        ]},
+    
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
+    FileGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    qos_tests_utils:mock_replica_synchronizer(Workers, {ok, ok}),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosList, ?FULFILLED), ?ATTEMPTS).
+
+
+qos_status_after_failed_transfer_deleted_file(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    qos_tests_utils:mock_replica_synchronizer(Workers, {error, some_error}),
+    rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
+    Name = generator:gen_name(),
+    DirStructure =
+        {SpaceId, [
+            {Name, [
+                {?filename(Name, 1), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}
+            ]}
+        ]},
+    
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
+    FileGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [1]), GuidsAndPaths),
+    DirGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    DeletingWorker = lists_utils:random_element(Workers),
+    ok = lfm_proxy:unlink(DeletingWorker, SessId(DeletingWorker), {guid, FileGuid}),
+    lists:foreach(fun(W) ->
+        ?assertEqual({error, enoent}, lfm_proxy:stat(W, SessId(W), {guid, FileGuid}), ?ATTEMPTS)
+    end, Workers),
+    qos_tests_utils:mock_replica_synchronizer(Workers, {ok, ok}),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [DirGuid], QosList, ?FULFILLED), ?ATTEMPTS).
+
+
+qos_status_after_failed_transfer_deleted_entry(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    qos_tests_utils:mock_replica_synchronizer(Workers, {error, some_error}),
+    rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
+    Name = generator:gen_name(),
+    DirStructure =
+        {SpaceId, [
+            {Name, ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}
+        ]},
+    
+    {GuidsAndPaths, [QosEntryId]} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
+    % add second entry to the same file
+    {_, QosEntryList} = prepare_qos_status_test_env(Config, undefined, SpaceId, Name),
+    FileGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    DeletingWorker = lists_utils:random_element(Workers),
+    ok = lfm_proxy:remove_qos_entry(DeletingWorker, SessId(DeletingWorker), QosEntryId),
+    lists:foreach(fun(W) ->
+        ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(W, SessId(W), QosEntryId), ?ATTEMPTS)
+    end, Workers),
+    qos_tests_utils:mock_replica_synchronizer(Workers, {ok, ok}),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosEntryList, ?FULFILLED), ?ATTEMPTS).
+
+
 %% @private
 prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
     [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     QosRootFilePath = filename:join([<<"/">>, SpaceId, Name]),
     
+    TestDirStructure = case DirStructure of
+        undefined -> undefined;
+        _ -> #test_dir_structure{dir_structure = DirStructure}
+    end,
+    
     QosSpec = #fulfill_qos_test_spec{
-        initial_dir_structure = #test_dir_structure{
-            dir_structure = DirStructure
-        },
+        initial_dir_structure = TestDirStructure,
         qos_to_add = [
             #qos_to_add{
                 worker = Worker1,
@@ -1306,7 +1377,7 @@ prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
     {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
     QosList = maps:values(QosNameIdMapping),
     
-    FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
+    FilesAndDirs = maps:get(files, GuidsAndPaths, []) ++ maps:get(dirs, GuidsAndPaths, []),
     FilesAndDirsGuids = lists:filtermap(fun({G, P}) when P >= Name -> {true, G}; (_) -> false end, FilesAndDirs),
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?PENDING)),
     {GuidsAndPaths, QosList}.

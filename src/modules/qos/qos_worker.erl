@@ -75,10 +75,14 @@ handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
     qos_bounded_cache:init_qos_cache_for_space(SpaceId);
 handle(?RETRY_FAILED_FILES) ->
-    {ok, Spaces} = provider_logic:get_spaces(),
-    lists:foreach(fun(SpaceId) ->
-        ok = qos_hooks:retry_failed_files(SpaceId)
-    end, Spaces),
+    case provider_logic:get_spaces() of
+        {ok, Spaces} ->
+            lists:foreach(fun(SpaceId) ->
+                ok = qos_hooks:retry_failed_files(SpaceId)
+            end, Spaces);
+        Error -> 
+            ?warning("QoS failed to retry failed files due to: ~p", [Error])
+    end,
     erlang:send_after(timer:seconds(?RETRY_FAILED_FILES_INTERVAL_SECONDS),
         ?MODULE, {sync_timer, ?RETRY_FAILED_FILES});
 handle(_Request) ->

@@ -140,7 +140,7 @@ task_finished(TaskId, _PoolName) ->
             ok = qos_entry:remove_traverse_req(QosEntryId, TaskId),
             ok = qos_status:report_traverse_finished(SpaceId, TaskId, FileUuid);
         <<"reconcile">> ->
-            ok = qos_status:report_file_reconciled(SpaceId, TaskId, FileUuid)
+            ok = qos_status:report_reconciliation_finished(SpaceId, TaskId, FileUuid)
     end.
 
 -spec task_canceled(traverse:id(), traverse:pool()) -> ok.

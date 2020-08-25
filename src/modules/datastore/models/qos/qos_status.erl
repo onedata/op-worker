@@ -74,7 +74,7 @@
 -export([report_traverse_start/2, report_traverse_finished/3,
     report_next_traverse_batch/6, report_traverse_finished_for_dir/3,
     report_traverse_finished_for_file/2]).
--export([report_reconciliation_started/3, report_file_reconciled/3]).
+-export([report_reconciliation_started/3, report_reconciliation_finished/3]).
 -export([report_file_transfer_failure/2]).
 -export([report_file_deleted/2, report_entry_deleted/2]).
 
@@ -218,9 +218,9 @@ report_reconciliation_started(TraverseId, FileCtx, QosEntries) ->
     end, QosEntries).
 
 
--spec report_file_reconciled(datastore_doc:scope(), traverse:id(), file_meta:uuid()) ->
+-spec report_reconciliation_finished(datastore_doc:scope(), traverse:id(), file_meta:uuid()) ->
     ok | {error, term()}.
-report_file_reconciled(SpaceId, TraverseId, FileUuid) ->
+report_reconciliation_finished(SpaceId, TraverseId, FileUuid) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     QosEntries = case file_qos:get_effective(FileUuid) of
         undefined -> [];
