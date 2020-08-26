@@ -791,7 +791,7 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
     IsReplicationOngoing = is_replication_ongoing(Transfer),
     IsEvictionOngoing = is_eviction_ongoing(Transfer),
 
-    Ans = case {
+    case {
         IsReplicationOngoing, IsReplicationAborting,
         IsEvictionOngoing, IsEvictionAborting, SelfId
     } of
@@ -827,15 +827,11 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
             end;
         {_, _, _, _, _} ->
             {error, non_participating_provider}
-    end,
-    ?info("xxxxxx ~p", [{TransferId, Ans}]),
-    Ans;
+    end;
 maybe_rerun(TransferId) ->
     case ?MODULE:get(TransferId) of
         {ok, Doc} -> maybe_rerun(Doc);
-        {error, Error} ->
-            ?info("xxxxxx2 ~p", [{TransferId, Error}]),
-            {error, Error}
+        {error, Error} -> {error, Error}
     end.
 
 
