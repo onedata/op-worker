@@ -23,33 +23,12 @@
 
 -export([
     rtransfer_restart_test/1,
-    node_restart_test/1,
-    rtransfer_restart_test2/1,
-    node_restart_test2/1
+    node_restart_test/1
 ]).
 
 all() -> [
     rtransfer_restart_test,
     node_restart_test
-    % TODO - delete further tests
-%%    rtransfer_restart_test2,
-%%    node_restart_test2,
-%%    rtransfer_restart_test2,
-%%    node_restart_test2,
-%%    rtransfer_restart_test2,
-%%    node_restart_test2,
-%%    rtransfer_restart_test2,
-%%    node_restart_test2,
-%%    rtransfer_restart_test2,
-%%    node_restart_test2,
-%%    rtransfer_restart_test2,
-%%    node_restart_test2,
-%%    rtransfer_restart_test2,
-%%    node_restart_test2,
-%%    rtransfer_restart_test2,
-%%    node_restart_test2,
-%%    rtransfer_restart_test2,
-%%    node_restart_test2
 ].
 
 -define(FILE_DATA, <<"1234567890abcd">>).
@@ -66,11 +45,6 @@ rtransfer_restart_test(Config) ->
 
     restart_test_base(Config, RestartFun, false).
 
-% TODO - delete fun
-rtransfer_restart_test2(Config) ->
-    NewConfig = provider_onenv_test_utils:initialize(Config),
-    rtransfer_restart_test(NewConfig).
-
 node_restart_test(Config) ->
     RestartFun = fun(Worker) ->
         ok = onenv_test_utils:kill_node(Config, Worker),
@@ -83,11 +57,6 @@ node_restart_test(Config) ->
     end,
 
     restart_test_base(Config, RestartFun, true).
-
-% TODO - delete fun
-node_restart_test2(Config) ->
-    NewConfig = provider_onenv_test_utils:initialize(Config),
-    node_restart_test(NewConfig).
 
 restart_test_base(Config, RestartFun, NodeRestart) ->
     [P1, P2] = test_config:get_providers(Config),
@@ -171,10 +140,6 @@ restart_test_base(Config, RestartFun, NodeRestart) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        % TODO - delete setting envs
-        Workers = test_config:get_all_op_worker_nodes(Config),
-        test_utils:set_env(Workers, ?APP_NAME, session_validity_check_interval_seconds, 1800),
-        test_utils:set_env(Workers, ?APP_NAME, fuse_session_grace_period_seconds, 1800),
         provider_onenv_test_utils:initialize(NewConfig)
     end,
     test_config:set_many(Config, [
