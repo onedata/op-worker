@@ -717,13 +717,16 @@ qos_status_during_reconciliation_with_dir_deletion_test(Config) ->
     qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID).
 
 qos_status_after_failed_transfers(Config) ->
-    qos_test_base:qos_status_after_failed_transfer(Config, ?SPACE_ID).
+    [_Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer(Config, ?SPACE_ID, Worker3).
 
 qos_status_after_failed_transfers_deleted_file(Config) ->
-    qos_test_base:qos_status_after_failed_transfer_deleted_file(Config, ?SPACE_ID).
+    [_Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer_deleted_file(Config, ?SPACE_ID, Worker3).
 
 qos_status_after_failed_transfers_deleted_entry(Config) ->
-    qos_test_base:qos_status_after_failed_transfer_deleted_entry(Config, ?SPACE_ID).
+    [_Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer_deleted_entry(Config, ?SPACE_ID, Worker3).
 
 
 %%%===================================================================

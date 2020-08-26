@@ -549,13 +549,16 @@ qos_status_during_traverse_file_without_qos_test(Config) ->
     qos_test_base:qos_status_during_traverse_file_without_qos_test_base(Config, ?SPACE_PATH1).
 
 qos_status_after_failed_transfers(Config) ->
-    qos_test_base:qos_status_after_failed_transfer(Config, ?SPACE_PATH1).
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer(Config, ?SPACE_PATH1, Worker1).
 
 qos_status_after_failed_transfers_deleted_file(Config) ->
-    qos_test_base:qos_status_after_failed_transfer_deleted_file(Config, ?SPACE_PATH1).
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer_deleted_file(Config, ?SPACE_PATH1, Worker1).
 
 qos_status_after_failed_transfers_deleted_entry(Config) ->
-    qos_test_base:qos_status_after_failed_transfer_deleted_entry(Config, ?SPACE_PATH1).
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer_deleted_entry(Config, ?SPACE_PATH1, Worker1).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

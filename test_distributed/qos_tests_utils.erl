@@ -339,6 +339,11 @@ finish_all_transfers(Files) ->
     end.
 
 
+mock_replica_synchronizer(Workers, passthrough) ->
+    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority])
+        end);
 mock_replica_synchronizer(Workers, Expected) ->
     ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
         fun(_, _, _, _, _, _) ->
@@ -564,7 +569,10 @@ assert_distribution_in_dir_structure(Config, #test_dir_structure{
     % if not specified in tests spec, check document on all nodes
     Workers = ensure_workers(Config, WorkersOrUndef),
 
-    assert_distribution_in_dir_structure(Config, Workers, ExpectedDirStructure, <<"/">>, GuidsAndPaths, ?ATTEMPTS).
+    assert_distribution_in_dir_structure(Config, Workers, ExpectedDirStructure, <<"/">>, GuidsAndPaths, ?ATTEMPTS);
+
+assert_distribution_in_dir_structure(Config, ExpectedDirStructure, GuidsAndPaths) ->
+    assert_distribution_in_dir_structure(Config, #test_dir_structure{dir_structure = ExpectedDirStructure}, GuidsAndPaths).
 
 assert_distribution_in_dir_structure(_Config, _Workers, _DirStructure, _Path, _GuidsAndPaths, 0) ->
     false;
