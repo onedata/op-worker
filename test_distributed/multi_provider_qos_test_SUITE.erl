@@ -65,6 +65,7 @@
     qos_status_during_reconciliation_prefix_file_test/1,
     qos_status_during_reconciliation_with_file_deletion_test/1,
     qos_status_during_reconciliation_with_dir_deletion_test/1,
+    qos_status_during_traverse_file_without_qos_test/1,
     qos_status_after_failed_transfers/1,
     qos_status_after_failed_transfers_deleted_file/1,
     qos_status_after_failed_transfers_deleted_entry/1,
@@ -112,6 +113,7 @@ all() -> [
     qos_status_during_reconciliation_prefix_file_test,
     qos_status_during_reconciliation_with_file_deletion_test,
     qos_status_during_reconciliation_with_dir_deletion_test,
+    qos_status_during_traverse_file_without_qos_test,
     qos_status_after_failed_transfers,
     qos_status_after_failed_transfers_deleted_file,
     qos_status_after_failed_transfers_deleted_entry,
@@ -716,6 +718,9 @@ qos_status_during_reconciliation_with_file_deletion_test(Config) ->
 qos_status_during_reconciliation_with_dir_deletion_test(Config) ->
     qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID).
 
+qos_status_during_traverse_file_without_qos_test(Config) ->
+    qos_test_base:qos_status_during_traverse_file_without_qos_test_base(Config, ?SPACE_ID).
+
 qos_status_after_failed_transfers(Config) ->
     [_Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     qos_test_base:qos_status_after_failed_transfer(Config, ?SPACE_ID, Worker3).
@@ -1035,6 +1040,7 @@ init_per_testcase(Case, Config) when
     Case =:= qos_status_during_reconciliation_prefix_file_test;
     Case =:= qos_status_during_reconciliation_with_file_deletion_test;
     Case =:= qos_status_during_reconciliation_with_dir_deletion_test;
+    Case =:= qos_status_during_traverse_file_without_qos_test;
     Case =:= qos_status_after_failed_transfers;
     Case =:= qos_status_after_failed_transfers_deleted_file;
     Case =:= qos_status_after_failed_transfers_deleted_entry;
