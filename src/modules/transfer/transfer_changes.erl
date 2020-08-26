@@ -360,13 +360,13 @@ handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
         DecodedPid = ?decode_pid(Pid),
         case is_process_alive(DecodedPid) of
             true ->
-                replica_eviction_controller:mark_aborting(DecodedPid, cancellation);
+                replica_eviction_controller:mark_aborting(DecodedPid, TransferId, cancellation);
             false ->
                 replica_eviction_status:handle_aborting(TransferId)
         end
     end);
 
-handle_active_replica_eviction(#document{value = #transfer{
+handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
     failed_files = 0,
@@ -374,10 +374,10 @@ handle_active_replica_eviction(#document{value = #transfer{
     pid = Pid
 }}) ->
     ?run_if_is_self(EvictingProviderId, fun() ->
-        replica_eviction_controller:mark_completed(?decode_pid(Pid))
+        replica_eviction_controller:mark_completed(?decode_pid(Pid), TransferId)
     end);
 
-handle_active_replica_eviction(#document{value = #transfer{
+handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
     evicting_provider = EvictingProviderId,
@@ -385,10 +385,10 @@ handle_active_replica_eviction(#document{value = #transfer{
 }}) ->
     ?run_if_is_self(EvictingProviderId, fun() ->
         replica_eviction_controller:mark_aborting(
-            ?decode_pid(Pid), exceeded_number_of_failed_files)
+            ?decode_pid(Pid), TransferId, exceeded_number_of_failed_files)
     end);
 
-handle_active_replica_eviction(#document{value = #transfer{
+handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
     failed_files = FailedFiles,
     evicting_provider = EvictingProviderId,
     pid = Pid
@@ -397,7 +397,7 @@ handle_active_replica_eviction(#document{value = #transfer{
         true ->
             ?run_if_is_self(EvictingProviderId, fun() ->
                 replica_eviction_controller:mark_aborting(
-                    ?decode_pid(Pid), exceeded_number_of_failed_files)
+                    ?decode_pid(Pid), TransferId, exceeded_number_of_failed_files)
             end);
         false ->
             ok
@@ -425,9 +425,9 @@ handle_aborting_replica_eviction(#document{key = TransferId, value = #transfer{
         DecodedPid = ?decode_pid(Pid),
         case {Cancel, is_process_alive(DecodedPid)} of
             {true, true} ->
-                replica_eviction_controller:mark_cancelled(DecodedPid);
+                replica_eviction_controller:mark_cancelled(DecodedPid, TransferId);
             {false, true} ->
-                replica_eviction_controller:mark_failed(DecodedPid);
+                replica_eviction_controller:mark_failed(DecodedPid, TransferId);
             {true, false} ->
                 replica_eviction_status:handle_cancelled(TransferId);
             {false, false} ->

@@ -179,11 +179,12 @@ handle_restart(TransferId, NewTransferId, MarkTransferFailed) ->
                 fun transfer_links:move_from_ongoing_to_ended/1
             ),
 
+            % Marking transfer can fail if transfer is already ended
+            % In such a case add retry adding rerun id only
             case UpdateAns of
                 {ok, _} -> UpdateAns;
                 _ -> add_rerun_id(TransferId, NewTransferId)
-            end
-            ;
+            end;
         false ->
             add_rerun_id(TransferId, NewTransferId)
     end.

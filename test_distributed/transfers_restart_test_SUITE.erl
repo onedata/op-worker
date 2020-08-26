@@ -28,7 +28,7 @@
 
 all() -> [
     rtransfer_restart_test,
-    node_restart_test
+    node_restart_test % this test has to be executed last as it restarts node
 ].
 
 -define(FILE_DATA, <<"1234567890abcd">>).
@@ -109,16 +109,25 @@ restart_test_base(Config, RestartFun, NodeRestart) ->
         rpc:call(WorkerP2, lfm, schedule_file_replication, [SessIdP2, {guid, File}, P2, undefined])
     end, Files2),
 
-    TransferIDs = lists:map(fun(Ans) ->
-        {ok, TransferID} = ?assertMatch({ok, _}, Ans),
-        TransferID
+    TransferIds = lists:map(fun(Ans) ->
+        {ok, TransferId} = ?assertMatch({ok, _}, Ans),
+
+        case NodeRestart of
+            true ->
+                ?assertMatch({ok, _}, rpc:call(WorkerP2, datastore_model, get,
+                    [#{model => transfer, memory_driver => undefined}, TransferId]), Attempts);
+            false ->
+                ok
+        end,
+
+        TransferId
     end, PMapAns),
 
     RestartFun(WorkerP2),
 
     lists:foreach(fun(TransferId) ->
         multi_provider_file_ops_test_base:await_replication_end(WorkerP2, TransferId, Attempts, get_effective)
-    end, TransferIDs),
+    end, TransferIds),
 
     FilesToCheckDistribution = case NodeRestart of
         true -> Files2;
@@ -143,10 +152,8 @@ init_per_suite(Config) ->
         provider_onenv_test_utils:initialize(NewConfig)
     end,
     test_config:set_many(Config, [
-        {add_envs, [op_worker, op_worker, [{key, value}]]},
-        {add_envs, [op_worker, cluster_worker, [{key, value}]]},
-        {add_envs, [oz_worker, cluster_worker, [{key, value}]]},
-        {add_envs, [cluster_manager, cluster_manager, [{key, value}]]},
+        {add_envs, [op_worker, op_worker, [{session_validity_check_interval_seconds, 1800}]]},
+        {add_envs, [op_worker, op_worker, [{fuse_session_grace_period_seconds, 1800}]]},
         {set_onenv_scenario, ["2op"]}, % name of yaml file in test_distributed/onenv_scenarios
         {set_posthook, Posthook}
     ]).
