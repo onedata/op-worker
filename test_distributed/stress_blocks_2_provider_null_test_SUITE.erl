@@ -81,7 +81,7 @@ init_per_testcase(stress_test, Config) ->
   ssl:start(),
   hackney:start(),
   initializer:disable_quota_limit(Config),
-  ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+  ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config, true),
   lfm_proxy:init(ConfigWithSessionInfo);
 
 init_per_testcase(_Case, Config) ->
