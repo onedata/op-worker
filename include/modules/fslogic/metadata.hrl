@@ -16,6 +16,7 @@
 -define(ONEDATA_PREFIX_STR, "onedata_").
 -define(CDMI_PREFIX, <<"cdmi_">>).
 -define(CDMI_PREFIX_STR, "cdmi_").
+-define(FAAS_PREFIX_STR, "__faas.").
 
 %% Keys of special cdmi attrs
 -define(ACL_KEY, ?ACL_XATTR_NAME).
