@@ -188,7 +188,7 @@ reevaluate_qos(QosEntryId) when is_binary(QosEntryId) ->
 retry_failed_files(SpaceId) ->
     qos_entry:apply_to_all_in_failed_files_list(SpaceId, fun(FileUuid) ->
         FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
-        ok = qos_entry:remove_from_failed_file_list(SpaceId, FileUuid),
+        ok = qos_entry:remove_from_failed_files_list(SpaceId, FileUuid),
         ok = reconcile_qos_internal(FileCtx, [ignore_missing_files])
     end).
     
