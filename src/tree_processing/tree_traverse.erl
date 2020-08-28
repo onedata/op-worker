@@ -29,7 +29,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% Main API
--export([init/4, init/5, run/2, run/3, cancel/2]).
+-export([init/4, init/5, stop/1, run/2, run/3, cancel/2]).
 % Getters API
 -export([get_traverse_info/1, set_traverse_info/2, get_doc/1, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
@@ -81,6 +81,12 @@ init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules) wh
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules) ->
     traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit,
         #{executor => oneprovider:get_id_or_undefined(), callback_modules => CallbackModules}).
+
+-spec stop(traverse:pool() | atom()) -> ok.
+stop(Pool) when is_atom(Pool) ->
+    stop(atom_to_binary(Pool, utf8));
+stop(Pool) ->
+    traverse:stop_pool(Pool).
 
 -spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx()) -> {ok, traverse:id()}.
 run(Pool, DocOrCtx) ->
