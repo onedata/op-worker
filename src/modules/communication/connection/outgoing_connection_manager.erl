@@ -178,13 +178,11 @@ handle_info(?RENEW_CONNECTIONS_REQ, #state{session_id = SessionId} = State) ->
         {ok, NewState} ->
             {noreply, NewState};
         {error, peer_offline} ->
-            stop_session(SessionId),
-            {noreply, State}
+            stop_session(SessionId, State)
     end;
 
 handle_info({'EXIT', _ConnPid, timeout}, #state{session_id = SessionId} = State) ->
-    stop_session(SessionId),
-    {noreply, State};
+    stop_session(SessionId, State);
 
 handle_info({'EXIT', ConnPid, handshake_failed}, #state{
     connections = AllConnections,
@@ -196,8 +194,7 @@ handle_info({'EXIT', ConnPid, handshake_failed}, #state{
 
     case {map_size(WorkingConnections), AfterLastConnectionRetry} of
         {0, true} ->
-            stop_session(SessionId),
-            {noreply, State};
+            stop_session(SessionId, State);
         _ ->
             NewState = State#state{connections = WorkingConnections},
             {noreply, schedule_next_renewal(NewState)}
@@ -209,8 +206,7 @@ handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons, session_id = 
         {ok, State2} ->
             {noreply, State2};
         {error, peer_offline} ->
-            stop_session(SessionId),
-            {noreply, State1}
+            stop_session(SessionId, State1)
     end;
 
 handle_info(Info, State) ->
@@ -250,11 +246,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec stop_session(session:id()) -> ok | error().
-stop_session(SessionId) ->
+%% @private
+-spec stop_session(session:id(), state()) -> {noreply, state()}.
+stop_session(SessionId, State) ->
     spawn(fun() ->
         session_manager:stop_session(SessionId)
-    end).
+    end),
+    {noreply, State#state{is_stopping = true}}.
 
 %%--------------------------------------------------------------------
 %% @private

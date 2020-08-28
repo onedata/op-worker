@@ -227,7 +227,7 @@ remove_session(SessId) ->
 -spec stop_session(session:id()) -> ok | error().
 stop_session(SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{supervisor = Sup, node = Node, connections = Cons}}} ->
+        {ok, #document{value = #session{supervisor = Sup, node = Node}}} ->
             try
                 supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup)
             catch
