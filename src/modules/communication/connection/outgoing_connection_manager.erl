@@ -64,7 +64,9 @@
     connections = #{} :: #{pid() => Hostname :: binary()},
 
     renewal_timer = undefined :: undefined | reference(),
-    renewal_interval = ?INITIAL_RENEWAL_INTERVAL :: pos_integer()
+    renewal_interval = ?INITIAL_RENEWAL_INTERVAL :: pos_integer(),
+
+    is_stopping = false :: boolean()
 }).
 
 -type state() :: #state{}.
@@ -169,39 +171,46 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(?RENEW_CONNECTIONS_REQ, State) ->
+handle_info(_, #state{is_stopping = true} = State) ->
+    {noreply, State};
+handle_info(?RENEW_CONNECTIONS_REQ, #state{session_id = SessionId} = State) ->
     case renew_connections(State#state{renewal_timer = undefined}) of
         {ok, NewState} ->
             {noreply, NewState};
         {error, peer_offline} ->
-            {stop, normal, State}
+            stop_session(SessionId),
+            {noreply, State}
     end;
 
-handle_info({'EXIT', _ConnPid, timeout}, State) ->
-    {stop, normal, State};
+handle_info({'EXIT', _ConnPid, timeout}, #state{session_id = SessionId} = State) ->
+    stop_session(SessionId),
+    {noreply, State};
 
 handle_info({'EXIT', ConnPid, handshake_failed}, #state{
     connections = AllConnections,
-    renewal_interval = Interval
+    renewal_interval = Interval,
+    session_id = SessionId
 } = State) ->
     WorkingConnections = maps:remove(ConnPid, AllConnections),
     AfterLastConnectionRetry = Interval > ?MAX_RENEWAL_INTERVAL,
 
     case {map_size(WorkingConnections), AfterLastConnectionRetry} of
         {0, true} ->
-            {stop, normal, State};
+            stop_session(SessionId),
+            {noreply, State};
         _ ->
             NewState = State#state{connections = WorkingConnections},
             {noreply, schedule_next_renewal(NewState)}
     end;
 
-handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons} = State0) ->
+handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons, session_id = SessionId} = State0) ->
     State1 = State0#state{connections = maps:remove(ConnPid, Cons)},
     case renew_connections(State1) of
         {ok, State2} ->
             {noreply, State2};
         {error, peer_offline} ->
-            {stop, normal, State1}
+            stop_session(SessionId),
+            {noreply, State1}
     end;
 
 handle_info(Info, State) ->
@@ -222,10 +231,7 @@ handle_info(Info, State) ->
     state()) -> term().
 terminate(Reason, #state{session_id = SessionId} = State) ->
     ?log_terminate(Reason, State),
-    % remove_session tears down supervision tree, so it can not be simple
-    % called as this process is also part of mentioned supervision tree.
-    % Instead new process is spawned that can call it.
-    spawn(fun() -> session_manager:remove_session(SessionId) end).
+    session_manager:clean_stopped_session(SessionId).
 
 
 %%--------------------------------------------------------------------
@@ -244,6 +250,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+-spec stop_session(session:id()) -> ok | error().
+stop_session(SessionId) ->
+    spawn(fun() ->
+        session_manager:stop_session(SessionId)
+    end).
 
 %%--------------------------------------------------------------------
 %% @private

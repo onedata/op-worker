@@ -221,7 +221,7 @@ handle_cast(Request, State) ->
     {stop, Reason :: term(), NewState :: state()}.
 handle_info(?REMOVE_SESSION, #state{session_id = SessionId} = State) ->
     spawn(fun() ->
-        session_manager:remove_session(SessionId)
+        session_manager:stop_session(SessionId)
     end),
     schedule_session_removal(?SESSION_REMOVAL_RETRY_DELAY),
     {noreply, State, hibernate};
@@ -290,9 +290,7 @@ handle_info(Info, State) ->
     State :: state()) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    spawn(fun() ->
-        session_manager:remove_session(SessId)
-    end).
+    session_manager:clean_stopped_session(SessId).
 
 
 %%--------------------------------------------------------------------

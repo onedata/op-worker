@@ -159,7 +159,7 @@ custom_workers() -> filter_disabled_workers([
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
-    ]},
+    ], [worker_first]},
     {fslogic_worker, []},
     {dbsync_worker, [
         {supervisor_flags, dbsync_worker:supervisor_flags()}
@@ -226,17 +226,17 @@ exometer_reporters() -> [].
 %% @end
 %%-------------------------------------------------------------------
 -spec filter_disabled_workers(
-    [{atom(), [any()]} |{singleton | early_init, atom(), [any()]}]) ->
-    [{atom(), [any()]} |{singleton | early_init, atom(), [any()]}].
+    [{atom(), [any()]} |{singleton, atom(), [any()]}] | {atom(), [any()], list()}) ->
+    [{atom(), [any()]} |{singleton, atom(), [any()]}] | {atom(), [any()], list()}.
 filter_disabled_workers(WorkersSpecs) ->
     DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
     DisabledWorkersSet = sets:from_list(DisabledWorkers),
     lists:filter(fun
         ({Worker, _WorkerArgs}) ->
             not sets:is_element(Worker, DisabledWorkersSet);
-        ({early_init, Worker, _WorkerArgs}) ->
-            not sets:is_element(Worker, DisabledWorkersSet);
         ({singleton, Worker, _WorkerArgs}) ->
+            not sets:is_element(Worker, DisabledWorkersSet);
+        ({Worker, _WorkerArgs, _Options}) ->
             not sets:is_element(Worker, DisabledWorkersSet)
     end, WorkersSpecs).
 

@@ -33,7 +33,9 @@
 -export([
     restart_dead_sessions/0,
     maybe_restart_session/1,
-    remove_session/1
+    remove_session/1,
+    stop_session/1,
+    clean_stopped_session/1
 ]).
 
 -type error() :: {error, Reason :: term()}.
@@ -215,6 +217,35 @@ remove_session(SessId) ->
                 exit:{shutdown, _} -> ok
             end,
             session:delete(SessId),
+            close_connections(Cons);
+        {error, not_found} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-spec stop_session(session:id()) -> ok | error().
+stop_session(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{supervisor = Sup, node = Node, connections = Cons}}} ->
+            try
+                supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup)
+            catch
+                exit:{noproc, _} -> ok;
+                exit:{shutdown, _} -> ok
+            end;
+        {error, not_found} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-spec clean_stopped_session(session:id()) -> ok | error().
+clean_stopped_session(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{connections = Cons}}} ->
+            session:delete(SessId),
+            % VFS-5155 Should connections be closed before session document is deleted?
             close_connections(Cons);
         {error, not_found} ->
             ok;
