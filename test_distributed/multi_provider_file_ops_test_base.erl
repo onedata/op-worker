@@ -62,6 +62,7 @@
 -export([request_synchronization/3]).
 -export([async_synchronize/3]).
 -export([get_seq_and_timestamp_or_error/2]).
+-export([await_replication_end/3, await_replication_end/4]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -2343,22 +2344,26 @@ get_seq_and_timestamp_or_error(SpaceId, ProviderId) ->
             Error
     end.
 
-await_replication_end(Node, TransferId, 1) ->
+await_replication_end(Node, TransferId, Attempts) ->
+    await_replication_end(Node, TransferId, Attempts, get).
+
+await_replication_end(Node, TransferId, 1, GetFun) ->
     ?assertMatch(
         {ok, #document{value = #transfer{replication_status = completed}}},
-        rpc:call(Node, transfer, get, [TransferId])
+        rpc:call(Node, transfer, GetFun, [TransferId])
     );
-await_replication_end(Node, TransferId, Attempts) ->
-    case rpc:call(Node, transfer, get, [TransferId]) of
+await_replication_end(Node, TransferId, Attempts, GetFun) ->
+    case rpc:call(Node, transfer, GetFun, [TransferId]) of
         {ok, #document{value = #transfer{replication_status = completed}}} ->
             ok;
-        {ok, #document{value = #transfer{replication_status = Status} = Transfer}} when
+        {ok, #document{key = Key, value = #transfer{replication_status = Status} = Transfer}} when
             Status == failed;
             Status == cancelled
         ->
-            ct:pal("Replication failed: ~p", [Transfer]),
+            ct:pal("Replication failed, id ~p, doc id ~p, method ~p~nrecord: ~p",
+                [TransferId, Key, GetFun, Transfer]),
             throw(replication_failed);
         _ ->
             timer:sleep(timer:seconds(1)),
-            await_replication_end(Node, TransferId, Attempts - 1)
+            await_replication_end(Node, TransferId, Attempts - 1, GetFun)
     end.

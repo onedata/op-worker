@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([mark_aborting/2, mark_completed/1, mark_failed/1, mark_cancelled/1]).
+-export([mark_aborting/3, mark_completed/2, mark_failed/2, mark_cancelled/2]).
 
 %% gen_server callbacks
 -export([
@@ -52,36 +52,36 @@
 %% Informs replica_eviction_controller process about aborting replica eviction.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_aborting(pid(), term()) -> ok.
-mark_aborting(Pid, Reason) ->
-    gen_server2:cast(Pid, {replica_eviction_aborting, Reason}).
+-spec mark_aborting(pid(), transfer:id(), term()) -> ok.
+mark_aborting(Pid, TransferId, Reason) ->
+    gen_server2:cast(Pid, {replica_eviction_aborting, TransferId, Reason}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks replica eviction as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_completed(pid()) -> ok.
-mark_completed(Pid) ->
-    gen_server2:cast(Pid, replica_eviction_completed).
+-spec mark_completed(pid(), transfer:id()) -> ok.
+mark_completed(Pid, TransferId) ->
+    gen_server2:cast(Pid, {replica_eviction_completed, TransferId}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks transfer as failed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed(pid()) -> ok.
-mark_failed(Pid) ->
-    gen_server2:cast(Pid, replica_eviction_failed).
+-spec mark_failed(pid(), transfer:id()) -> ok.
+mark_failed(Pid, TransferId) ->
+    gen_server2:cast(Pid, {replica_eviction_failed, TransferId}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks transfer as cancelled.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_cancelled(pid()) -> ok.
-mark_cancelled(Pid) ->
-    gen_server2:cast(Pid, replica_eviction_cancelled).
+-spec mark_cancelled(pid(), transfer:id()) -> ok.
+mark_cancelled(Pid, TransferId) ->
+    gen_server2:cast(Pid, {replica_eviction_cancelled, TransferId}).
 
 
 %%%===================================================================
@@ -172,7 +172,7 @@ handle_cast(start_replica_eviction, State = #state{
             {stop, normal, S}
     end;
 
-handle_cast(replica_eviction_completed, State = #state{
+handle_cast({replica_eviction_completed, TransferId}, State = #state{
     transfer_id = TransferId,
     callback = Callback,
     status = ?ACTIVE_STATUS
@@ -181,7 +181,7 @@ handle_cast(replica_eviction_completed, State = #state{
     notify_callback(Callback, TransferId),
     {stop, normal, State};
 
-handle_cast({replica_eviction_aborting, Reason}, State = #state{
+handle_cast({replica_eviction_aborting, TransferId, Reason}, State = #state{
     transfer_id = TransferId,
     file_guid = FileGuid,
     status = ?ACTIVE_STATUS
@@ -193,19 +193,20 @@ handle_cast({replica_eviction_aborting, Reason}, State = #state{
 % Due to asynchronous nature of transfer_changes, aborting msg can be
 % sent several times. In case the controller is already in aborting
 % state, it can be safely ignored.
-handle_cast({replica_eviction_aborting, _Reason}, State = #state{
+handle_cast({replica_eviction_aborting, TransferId, _Reason}, State = #state{
+    transfer_id = TransferId,
     status = ?ABORTING_STATUS
 }) ->
     {noreply, State};
 
-handle_cast(replica_eviction_cancelled, State = #state{
+handle_cast({replica_eviction_cancelled, TransferId}, State = #state{
     transfer_id = TransferId,
     status = ?ABORTING_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_cancelled(TransferId),
     {stop, normal, State};
 
-handle_cast(replica_eviction_failed, State = #state{
+handle_cast({replica_eviction_failed, TransferId}, State = #state{
     transfer_id = TransferId,
     status = ?ABORTING_STATUS
 }) ->
@@ -213,9 +214,20 @@ handle_cast(replica_eviction_failed, State = #state{
     {stop, normal, State};
 
 handle_cast(Request, State = #state{status = Status}) ->
-    ?debug("~p:~p - bad request ~p while in status ~p", [
-        ?MODULE, ?LINE, Request, Status
-    ]),
+    case Request of
+        {replica_eviction_completed, TransferId} ->
+            ?debug("Eviction completed message ignored for transfer ~p", TransferId);
+        {replica_eviction_aborting, TransferId, _Reason} ->
+            ?debug("Eviction aborting message ignored for transfer ~p", TransferId);
+        {replica_eviction_failed, TransferId} ->
+            ?debug("Eviction failed message ignored for transfer ~p", TransferId);
+        {replica_eviction_cancelled, TransferId} ->
+            ?debug("Eviction cancelled message ignored for transfer ~p", TransferId);
+        _ ->
+            ?warning("~p:~p - bad request ~p while in status ~p", [
+                ?MODULE, ?LINE, Request, Status
+            ])
+    end,
     {noreply, State}.
 
 %%--------------------------------------------------------------------
