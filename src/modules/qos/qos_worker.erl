@@ -13,11 +13,12 @@
 
 -author("Michal Cwiertnia").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_qos_cache_for_space/1]).
+-export([init_qos_cache_for_space/1, init_retry_failed_files/0]).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -25,6 +26,10 @@
 
 -define(INIT_QOS_CACHE_FOR_SPACE, init_qos_cache_for_space).
 -define(CHECK_QOS_CACHE, bounded_cache_timer).
+-define(RETRY_FAILED_FILES, retry_failed_files).
+
+-define(RETRY_FAILED_FILES_INTERVAL_SECONDS,
+    application:get_env(?APP_NAME, qos_retry_failed_files_interval_seconds, 300)). % 5 minutes
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -69,6 +74,17 @@ handle({?CHECK_QOS_CACHE, Msg}) ->
 handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
     qos_bounded_cache:init_qos_cache_for_space(SpaceId);
+handle(?RETRY_FAILED_FILES) ->
+    case provider_logic:get_spaces() of
+        {ok, Spaces} ->
+            lists:foreach(fun(SpaceId) ->
+                ok = qos_hooks:retry_failed_files(SpaceId)
+            end, Spaces);
+        Error -> 
+            ?warning("QoS failed files retry failed to fetch provider spaces due to: ~p", [Error])
+    end,
+    erlang:send_after(timer:seconds(?RETRY_FAILED_FILES_INTERVAL_SECONDS),
+        ?MODULE, {sync_timer, ?RETRY_FAILED_FILES});
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -99,4 +115,10 @@ cleanup() ->
 -spec init_qos_cache_for_space(od_space:id()) -> ok.
 init_qos_cache_for_space(SpaceId) ->
     erlang:send_after(0, ?MODULE, {sync_timer, {?INIT_QOS_CACHE_FOR_SPACE, SpaceId}}),
+    ok.
+
+-spec init_retry_failed_files() -> ok.
+init_retry_failed_files() ->
+    erlang:send_after(timer:seconds(?RETRY_FAILED_FILES_INTERVAL_SECONDS),
+        ?MODULE, {sync_timer, ?RETRY_FAILED_FILES}),
     ok.

@@ -103,12 +103,11 @@ delete(Key, Pred) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective(file_meta:doc() | file_meta:uuid()) -> 
-    {ok, effective_file_qos()} | {error, term()} | undefined.
+    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
 get_effective(FileUuid) when is_binary(FileUuid) ->
     case file_meta:get(FileUuid) of
         {ok, FileDoc} -> get_effective(FileDoc);
-        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}};
-        _ -> undefined
+        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}}
     end;
 get_effective(#document{scope = SpaceId} = FileDoc) ->
     Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
