@@ -249,7 +249,11 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
             schedule_session_activity_checkup(RemainingTime),
             {noreply, State, hibernate};
         {false, {error, Reason}} ->
-            {stop, Reason, State}
+            ?error("Checking session ~p activity error ~p", [SessionId, Reason]),
+            spawn(fun() ->
+                session_manager:stop_session(SessionId)
+            end),
+            {noreply, State, hibernate}
     end;
 
 handle_info(?CHECK_SESSION_VALIDITY, #state{
@@ -269,8 +273,11 @@ handle_info(?CHECK_SESSION_VALIDITY, #state{
             {noreply, State}
     end;
 
-handle_info({'EXIT', _, shutdown}, State) ->
-    {stop, shutdown, State};
+handle_info({'EXIT', _, shutdown}, #state{session_id = SessionId} = State) ->
+    spawn(fun() ->
+        session_manager:stop_session(SessionId)
+    end),
+    {noreply, State, hibernate};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
