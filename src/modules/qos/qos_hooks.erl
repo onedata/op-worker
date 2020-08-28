@@ -39,9 +39,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_qos_entry_change(od_space:id(), qos_entry:doc()) -> ok.
-handle_qos_entry_change(SpaceId, #document{deleted = true, key = QosEntryId} = QosEntryDoc) ->
-    {ok, FileUuid} = qos_entry:get_file_uuid(QosEntryDoc),
-    ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId)),
+handle_qos_entry_change(_SpaceId, #document{deleted = true} = QosEntryDoc) ->
     handle_entry_delete(QosEntryDoc);
 handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
@@ -62,6 +60,8 @@ handle_entry_delete(QosEntryId) when is_binary(QosEntryId) ->
     {ok, QosEntryDoc} = qos_entry:get(QosEntryId),
     handle_entry_delete(QosEntryDoc);
 handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) ->
+    {ok, FileUuid} = qos_entry:get_file_uuid(QosEntryDoc),
+    ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId)),
     ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
     ok = qos_traverse:report_entry_deleted(QosEntryDoc),
     ok = qos_status:report_entry_deleted(SpaceId, QosEntryId).
