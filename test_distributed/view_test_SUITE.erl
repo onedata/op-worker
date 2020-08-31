@@ -123,12 +123,11 @@ query_simple_empty_view_test(Config) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
-            return [id, id];
+            return null;
         }
     ">>,
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
-    ?assertMatch({ok, #{<<"total_rows">> := 0, <<"rows">> := []}},
-        query_view(Worker, SpaceId, ViewName, [])).
+    ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}]).
 
 query_view_using_file_meta(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
