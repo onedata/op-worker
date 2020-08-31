@@ -175,10 +175,7 @@ restart_dead_sessions() ->
     {ok, AllSessions} = session:list(),
 
     lists:foreach(fun(#document{key = SessId, value = #session{supervisor = Sup}}) ->
-        case is_alive(Sup) of
-            true -> ok;
-            false -> maybe_restart_session(SessId)
-        end
+        maybe_restart_session(SessId)
     end, AllSessions).
 
 
@@ -364,12 +361,15 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
         (#session{identity = ValidIdentity} = ExistingSess) ->
             case Identity of
                 ValidIdentity ->
-                    maybe_clear_session_record(ExistingSess);
+                    case maybe_clear_session_record(ExistingSess) of
+                        {error, update_not_needed} -> {ok, ExistingSess};
+                        Other -> Other
+                    end;
                 _ ->
                     {error, {invalid_identity, Identity}}
             end
     end,
-    case session:update(SessId, Diff) of
+    case session:update_doc_and_time(SessId, Diff) of   
         {ok, #document{key = SessId, value = #session{supervisor = undefined}}} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
             {ok, SessId};
@@ -419,11 +419,13 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
 -spec maybe_restart_session_internal(SessId) ->
     {ok, SessId} | {error, term()} when SessId :: session:id().
 maybe_restart_session_internal(SessId) ->
-    case session:update(SessId, fun maybe_clear_session_record/1) of
+    case session:update_doc_and_time(SessId, fun maybe_clear_session_record/1) of
         {ok, #document{key = SessId, value = #session{type = SessType, supervisor = undefined}}} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
             {ok, SessId};
         {ok, #document{key = SessId}} ->
+            {ok, SessId};
+        {error, update_not_needed} ->
             {ok, SessId};
         {error, _Reason} = Error ->
             Error
@@ -437,13 +439,13 @@ maybe_restart_session_internal(SessId) ->
 %% session doc.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_clear_session_record(session:record()) -> {ok, session:record()}.
+-spec maybe_clear_session_record(session:record()) -> {ok, session:record()} | {error, update_not_needed}.
 maybe_clear_session_record(#session{supervisor = Sup, connections = Cons} = Sess) ->
     case is_alive(Sup) of
         true ->
             case lists:partition(fun is_alive/1, Cons) of
                 {_, []} ->
-                    {ok, Sess};
+                    {error, update_not_needed};
                 {AliveCons, _DeadCons} ->
                     {ok, Sess#session{connections = AliveCons}}
             end;
