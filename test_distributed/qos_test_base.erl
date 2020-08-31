@@ -54,7 +54,10 @@
     qos_status_during_traverse_file_without_qos_test_base/2,
     qos_status_during_reconciliation_test_base/4,
     qos_status_during_reconciliation_with_file_deletion_test_base/2,
-    qos_status_during_reconciliation_with_dir_deletion_test_base/2
+    qos_status_during_reconciliation_with_dir_deletion_test_base/2,
+    qos_status_after_failed_transfer/3,
+    qos_status_after_failed_transfer_deleted_file/3,
+    qos_status_after_failed_transfer_deleted_entry/3
 ]).
 
 -define(ATTEMPTS, 60).
@@ -1145,7 +1148,7 @@ qos_status_during_traverse_with_dir_deletion_test_base(Config, SpaceId, NumberOf
 
 
 qos_status_during_traverse_file_without_qos_test_base(Config, SpaceId) ->
-    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     
     Name = generator:gen_name(),
@@ -1165,8 +1168,11 @@ qos_status_during_traverse_file_without_qos_test_base(Config, SpaceId) ->
     {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), Dir1, generator:gen_name(), 8#664),
     {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
     ok = lfm_proxy:close(Worker1, FileHandle),
+    lists:foreach(fun(W) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId(W), {guid, FileGuid}), ?ATTEMPTS)
+    end, Workers),
     
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1, FileGuid], QosList, ?FULFILLED), ?ATTEMPTS),
     
     % finish transfer to unlock waiting slave job process
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]).
@@ -1272,15 +1278,138 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(Config, SpaceId) ->
     end, Workers).
 
 
+qos_status_after_failed_transfer(Config, SpaceId, TargetWorker) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_tests_utils:mock_replica_synchronizer(Workers, {error, some_error}),
+    
+    Name = generator:gen_name(),
+    DirStructure = fun(Distribution) ->
+        {SpaceId, [
+            {Name, ?TEST_DATA, Distribution}
+        ]}
+    end,
+    % create new QoS entry and check, that it is not fulfilled
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), SpaceId, Name),
+    % check that file is on qos failed files list
+    FileGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    rpc:call(Worker1, qos_entry, apply_to_all_in_failed_files_list, [
+        file_id:guid_to_space_id(FileGuid),
+        fun(FileUuid) -> ct:print(FileUuid) end
+    ]),
+    ?assert(is_file_in_failed_files_list(TargetWorker, FileGuid)),
+    ?assert(is_failed_files_list_empty(get_workers_list_without_provider(Workers, ?GET_DOMAIN_BIN(TargetWorker)), 
+        file_id:guid_to_space_id(FileGuid))),
+    % check file distribution (file blocks should be only on source provider)
+    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), GuidsAndPaths)),
+    % initialize periodic check of failed files
+    rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
+    
+    % check that after a successful transfer QoS entry is eventually fulfilled
+    qos_tests_utils:mock_replica_synchronizer(Workers, passthrough),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    % check file distribution again (file blocks should be on both source and target provider)
+    ?assertEqual(true, qos_tests_utils:assert_distribution_in_dir_structure(
+        Config, DirStructure(lists:usort([?GET_DOMAIN_BIN(Worker1), ?GET_DOMAIN_BIN(TargetWorker)])), GuidsAndPaths)),
+    % check that failed files list is empty 
+    ?assert(is_failed_files_list_empty(Workers, file_id:guid_to_space_id(FileGuid))).
+
+
+qos_status_after_failed_transfer_deleted_file(Config, SpaceId, TargetWorker) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    qos_tests_utils:mock_replica_synchronizer(Workers, {error, some_error}),
+    
+    Name = generator:gen_name(),
+    DirStructure = fun(Distribution) ->
+        {SpaceId, [
+            {Name, [
+                {?filename(Name, 1), ?TEST_DATA, Distribution}
+            ]}
+        ]}
+    end,
+    
+    % create new QoS entry and check, that it is not fulfilled
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), SpaceId, Name),
+    % check file distribution (file blocks should be only on source provider)
+    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), GuidsAndPaths)),
+    % check that file is on qos failed files list
+    FileGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [1]), GuidsAndPaths),
+    ?assert(is_file_in_failed_files_list(TargetWorker, FileGuid)),
+    ?assert(is_failed_files_list_empty(get_workers_list_without_provider(Workers, ?GET_DOMAIN_BIN(TargetWorker)),
+        file_id:guid_to_space_id(FileGuid))),
+    % initialize periodic check of failed files
+    rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
+    
+    % delete file on random worker
+    DirGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    DeletingWorker = lists_utils:random_element(Workers),
+    ok = lfm_proxy:unlink(DeletingWorker, SessId(DeletingWorker), {guid, FileGuid}),
+    lists:foreach(fun(W) ->
+        ?assertEqual({error, enoent}, lfm_proxy:stat(W, SessId(W), {guid, FileGuid}), ?ATTEMPTS)
+    end, Workers),
+    % check that QoS entry is eventually fulfilled
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [DirGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    % no need to check distribution as file was deleted
+    % check that failed files list is empty (attempts needed to wait for failed 
+    % files retry to execute - qos status change was triggered by file deletion)
+    ?assertEqual(true, is_failed_files_list_empty(Workers, file_id:guid_to_space_id(FileGuid)), 10).
+
+
+qos_status_after_failed_transfer_deleted_entry(Config, SpaceId, TargetWorker) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    qos_tests_utils:mock_replica_synchronizer(Workers, {error, some_error}),
+    
+    Name = generator:gen_name(),
+    DirStructure = fun(Distribution) ->
+        {SpaceId, [
+            {Name, ?TEST_DATA, Distribution}
+        ]}
+    end,
+    
+    % create new QoS entry and check, that it is not fulfilled
+    {GuidsAndPaths, [QosEntryId]} = prepare_qos_status_test_env(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), SpaceId, Name),
+    % add second entry to the same file
+    {_, QosEntryList} = prepare_qos_status_test_env(Config, undefined, SpaceId, Name),
+    % check file distribution (file blocks should be only on source provider)
+    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), GuidsAndPaths)),
+    % check that file is on qos failed files list
+    FileGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    ?assert(is_file_in_failed_files_list(TargetWorker, FileGuid)),
+    ?assert(is_failed_files_list_empty(get_workers_list_without_provider(Workers, ?GET_DOMAIN_BIN(TargetWorker)),
+        file_id:guid_to_space_id(FileGuid))),
+    % initialize periodic check of failed files
+    rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
+    
+    % delete one QoS entry on random worker
+    DeletingWorker = lists_utils:random_element(Workers),
+    ok = lfm_proxy:remove_qos_entry(DeletingWorker, SessId(DeletingWorker), QosEntryId),
+    lists:foreach(fun(W) ->
+        ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(W, SessId(W), QosEntryId), ?ATTEMPTS)
+    end, Workers),
+    
+    % check that after a successful transfer QoS entry is eventually fulfilled
+    qos_tests_utils:mock_replica_synchronizer(Workers, passthrough),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosEntryList, ?FULFILLED), ?ATTEMPTS),
+    % check file distribution again (file blocks should be on both source and target provider)
+    ?assertEqual(true, qos_tests_utils:assert_distribution_in_dir_structure(
+        Config, DirStructure(lists:usort([?GET_DOMAIN_BIN(Worker1), ?GET_DOMAIN_BIN(TargetWorker)])), GuidsAndPaths)),
+    % check that failed files list is empty 
+    ?assert(is_failed_files_list_empty(Workers, file_id:guid_to_space_id(FileGuid))).
+
+
 %% @private
 prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
     [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     QosRootFilePath = filename:join([<<"/">>, SpaceId, Name]),
     
+    TestDirStructure = case DirStructure of
+        undefined -> undefined;
+        _ -> #test_dir_structure{dir_structure = DirStructure}
+    end,
+    
     QosSpec = #fulfill_qos_test_spec{
-        initial_dir_structure = #test_dir_structure{
-            dir_structure = DirStructure
-        },
+        initial_dir_structure = TestDirStructure,
         qos_to_add = [
             #qos_to_add{
                 worker = Worker1,
@@ -1306,8 +1435,8 @@ prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
     {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
     QosList = maps:values(QosNameIdMapping),
     
-    FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
-    FilesAndDirsGuids = lists:filtermap(fun({G, P}) when P >= Name -> {true, G}; (_) -> false end, FilesAndDirs),
+    FilesAndDirs = maps:get(files, GuidsAndPaths, []) ++ maps:get(dirs, GuidsAndPaths, []),
+    FilesAndDirsGuids = lists:filtermap(fun({G, P}) when P >= QosRootFilePath -> {true, G}; (_) -> false end, FilesAndDirs),
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?PENDING)),
     {GuidsAndPaths, QosList}.
 
@@ -1316,3 +1445,37 @@ prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
 resolve_path(SpaceId, Name, Files) ->
     Files1 = lists:map(fun(A) -> ?filename(Name, A) end, Files),
     fslogic_path:join([<<"/">>, SpaceId, Name | Files1]).
+
+
+%% @private
+is_failed_files_list_empty(Workers, SpaceId) ->
+    lists:all(fun(Worker) ->
+        {ok, []} == get_qos_failed_files_list(Worker, SpaceId)
+    end, Workers).
+
+
+%% @private
+is_file_in_failed_files_list(Worker, FileGuid) ->
+    Uuid = file_id:guid_to_uuid(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    {ok, List} = get_qos_failed_files_list(Worker, SpaceId),
+    lists:member(Uuid, List).
+
+
+%% @private
+get_qos_failed_files_list(Worker, SpaceId) ->
+    rpc:call(Worker, datastore_model, fold_links, [
+        #{model => qos_entry}, 
+        <<"failed_files_qos_key_", SpaceId/binary>>, 
+        ?GET_DOMAIN_BIN(Worker), 
+        fun qos_entry:accumulate_link_names/2,
+        [], 
+        #{}
+    ]).
+
+
+%% @private
+get_workers_list_without_provider(Workers, ProviderId) ->
+    lists:filter(fun(W) ->
+        ProviderId =/= ?GET_DOMAIN_BIN(W)
+    end, Workers).

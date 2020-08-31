@@ -132,6 +132,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {query_view, _}}}) -> #{
         <<"end_range">> => {binary, any},
         <<"startkey">> => {binary, any},
         <<"endkey">> => {binary, any},
+        <<"startkey_docid">> => {binary, any},
+        <<"endkey_docid">> => {binary, any},
         <<"key">> => {binary, any},
         <<"keys">> => {binary, any},
         <<"bbox">> => {binary, any}
