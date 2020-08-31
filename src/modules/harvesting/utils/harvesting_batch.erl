@@ -281,7 +281,7 @@ encode_payload(Payload) ->
         (<<"onedata_rdf">>, RDF, PayloadIn) ->
             PayloadIn#{<<"rdf">> => RDF};
         (Key, Value, PayloadIn) ->
-            case is_cdmi_xattr(Key) of
+            case is_cdmi_xattr(Key) orelse is_faas_xattr(Key) of
                 true ->
                     PayloadIn;
                 false ->
@@ -296,6 +296,10 @@ is_cdmi_xattr(XattrKey) ->
     KeyLen = byte_size(XattrKey),
     CdmiPrefixLen = byte_size(?CDMI_PREFIX),
     binary:part(XattrKey, 0, min(KeyLen, CdmiPrefixLen)) =:= ?CDMI_PREFIX.
+
+-spec is_faas_xattr(binary()) -> boolean().
+is_faas_xattr(<<?FAAS_PREFIX_STR, _/binary>>) -> true;
+is_faas_xattr(_)                              -> false.
 
 -spec get_seq(batch_entry()) -> seq().
 get_seq(#{<<"seq">> := Seq}) ->

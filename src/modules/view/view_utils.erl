@@ -108,6 +108,16 @@ sanitize_query_options([{<<"startkey">>, StartKey} | Rest], Options) ->
         throw(?ERROR_BAD_VALUE_JSON(<<"startkey">>))
     end;
 
+sanitize_query_options([{<<"startkey_docid">>, undefined} | Rest], Options) ->
+    sanitize_query_options(Rest, Options);
+sanitize_query_options([{<<"startkey_docid">>, StartKeyDocId} | Rest], Options) ->
+    sanitize_query_options(Rest, [{startkey_docid, StartKeyDocId} | Options]);
+
+sanitize_query_options([{<<"endkey_docid">>, undefined} | Rest], Options) ->
+    sanitize_query_options(Rest, Options);
+sanitize_query_options([{<<"endkey_docid">>, EndKeyDocId} | Rest], Options) ->
+    sanitize_query_options(Rest, [{endkey_docid, EndKeyDocId} | Options]);
+
 sanitize_query_options([{<<"inclusive_end">>, true} | Rest], Options) ->
     sanitize_query_options(Rest, [{inclusive_end, true} | Options]);
 sanitize_query_options([{<<"inclusive_end">>, false} | Rest], Options) ->

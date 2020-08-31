@@ -40,6 +40,7 @@
 -module(qos_entry).
 -author("Michal Cwiertnia").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -62,11 +63,15 @@
     apply_to_all_impossible_in_space/2]).
 -export([add_transfer_to_list/2, remove_transfer_from_list/2, 
     apply_to_all_transfers/2]).
+-export([add_to_failed_files_list/2, remove_from_failed_files_list/2, 
+    apply_to_all_in_failed_files_list/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2, resolve_conflict/3]).
 -export([encode_expression/1, decode_expression/1]).
 
+%% for tests
+-export([accumulate_link_names/2]).
 
 -type id() :: datastore_doc:key().
 -type record() :: #qos_entry{}.
@@ -102,8 +107,9 @@
 
 -define(IMPOSSIBLE_KEY(SpaceId), <<"impossible_qos_key_", SpaceId/binary>>).
 -define(TRANSFERS_KEY(QosEntryId), <<"transfer_qos_key_", QosEntryId/binary>>).
+-define(FAILED_FILES_KEY(SpaceId), <<"failed_files_qos_key_", SpaceId/binary>>).
 
--define(FOLD_LINKS_BATCH_SIZE, 100).
+-define(FOLD_LINKS_BATCH_SIZE, application:get_env(?APP_NAME, qos_fold_links_batch_size, 100)).
 
 %%%===================================================================
 %%% Functions operating on document using datastore_model API
@@ -300,13 +306,10 @@ add_to_impossible_list(SpaceId, QosEntryId) ->
     ?ok_if_exists(?extract_ok(
         add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId}))).
 
-
 -spec remove_from_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.
 remove_from_impossible_list(SpaceId, QosEntryId) ->
     ?extract_ok(
-        delete_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)
-    ).
-
+        delete_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)).
 
 -spec apply_to_all_impossible_in_space(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_impossible_in_space(SpaceId, Fun) ->
@@ -317,15 +320,26 @@ apply_to_all_impossible_in_space(SpaceId, Fun) ->
 add_transfer_to_list(QosEntryId, TransferId) ->
     add_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), {TransferId, TransferId}).
 
-
 -spec remove_transfer_from_list(id(), qos_transfer_id()) -> ok | {error, term()}.
 remove_transfer_from_list(QosEntryId, TransferId)  ->
     delete_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), TransferId).
 
-
 -spec apply_to_all_transfers(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_transfers(QosEntryId, Fun) ->
     apply_to_all_in_list(?TRANSFERS_KEY(QosEntryId), Fun).
+
+
+-spec add_to_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
+add_to_failed_files_list(SpaceId, FileUuid) ->
+    add_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), {FileUuid, FileUuid}).
+
+-spec remove_from_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
+remove_from_failed_files_list(SpaceId, FileUuid)  ->
+    delete_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), FileUuid).
+
+-spec apply_to_all_in_failed_files_list(od_space:id(), list_apply_fun()) -> ok.
+apply_to_all_in_failed_files_list(SpaceId, Fun) ->
+    apply_to_all_in_list(?FAILED_FILES_KEY(SpaceId), Fun).
 
 
 %% @private
@@ -354,7 +368,7 @@ list_next_batch(Key, Opts) ->
         false -> Opts#{token => #link_token{}}
     end,
     {{ok, Res}, Token} = fold_local_links(Key,
-        fun(#link{name = Name}, Acc) -> {ok, [Name | Acc]} end, [],
+        fun accumulate_link_names/2, [],
         Opts1#{size => ?FOLD_LINKS_BATCH_SIZE}),
     NextBatchOpts = case Res of
         [] -> #{token => Token};
@@ -362,6 +376,11 @@ list_next_batch(Key, Opts) ->
     end,
     {Res, NextBatchOpts}.
 
+
+%% @private
+-spec accumulate_link_names(datastore_links:link(), [datastore_links:link_name()]) -> 
+    {ok, [datastore_links:link_name()]}.
+accumulate_link_names(#link{name = Name}, Acc) -> {ok, [Name | Acc]}.
 
 %%%===================================================================
 %%% datastore_model callbacks
