@@ -1,0 +1,99 @@
+# Name of the scenario to run
+scenario: "scenario-1oz-2op"
+
+# Path or list of paths in which look for sources (can be either relative to
+# cwd or absolute path)
+sourcesRoot: ".."
+
+# Sources are expected to be found in CWD (from where the 'up' script was run) or one dir above.
+# On bamboo all required sources will be pulled automatically.
+# NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources 
+# (by default cluster_manager provided as op_worker dependency will be used).
+sources:
+  onezone:
+    node-1:
+      - oz-panel
+      - oz-worker
+      - cluster-manager
+  oneprovider-1:
+    node-1:
+      - op-panel
+      - op-worker
+      - cluster-manager
+  oneprovider-2:
+    node-1:
+      - op-panel
+      - op-worker
+      - cluster-manager
+
+
+# Onezone image to use. Note that if 'sources' option is enabled, it must
+# be based off onedata/worker image (it contains all the machinery to run the
+# application from sources - images based off onedata-worker are images with
+# -dev suffix).
+onezoneImage: "docker.onedata.org/onezone-dev:develop"
+
+# Oneprovider image to use. Note that if 'sources' option is enabled, it must
+# be based off onedata/worker image (images based off onedata-worker are
+# images with -dev suffix).
+oneproviderImage: "docker.onedata.org/oneprovider-dev:develop"
+
+# Determines if elastic search should start.
+elasticSearch: false
+
+# Determines if luma should start.
+luma: false
+
+# Determines if onedata rest client should start.
+onedataCli: false
+
+# Determines if oneclients should start.
+oneclients: false
+
+# When enabled, onezoneImage and oneproviderImage will be pulled before every
+# deployment. If disabled, they will only be pulled if not existent.
+forceImagePull: false
+
+# Determines if spaces should be created. It can be either boolean value or
+# list of spaces that should be created.
+#
+# By default spaces supported by all providers are created. For custom
+# space configuration please refer to one of MyValues.yaml file in
+# scenario directory.
+users:
+  - &user1
+    name: user1
+    password: password
+  - &user2
+    name: user2
+    password: password
+  - &user3
+    name: user3
+    password: password
+  - &user4
+    name: user4
+    password: password
+
+
+spaces:
+  - name: space1
+    user: *user1
+    users:
+      - user: *user3
+      - user: *user4
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "posix"
+        size: '1073741824'
+  - name: space2
+    user: *user2
+    users:
+      - user: *user3
+      - user: *user4
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "posix"
+        size: '1073741824'
+      - provider: "oneprovider-2"
+        storage_name: "posix"
+        size: '1073741824'

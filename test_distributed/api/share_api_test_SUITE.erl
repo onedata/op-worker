@@ -65,20 +65,20 @@ create_share_test(Config) ->
 
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    EnvRef = api_test_env:init(),
+    MemRef = api_test_memory:init(),
 
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
-            verify_fun = build_verify_file_shares_fun(EnvRef, Providers, ?USER_IN_BOTH_SPACES, FileGuid, Config),
+            verify_fun = build_verify_file_shares_fun(MemRef, Providers, ?USER_IN_BOTH_SPACES, FileGuid, Config),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Create share for ", FileType/binary, " using /shares rest endpoint">>,
                     type = rest,
                     prepare_args_fun = fun create_share_prepare_rest_args_fun/1,
                     validate_result_fun = build_create_share_validate_rest_call_result_fun(
-                        EnvRef, Providers, FileType, ?SPACE_2, Config
+                        MemRef, Providers, FileType, ?SPACE_2, Config
                     )
                 },
                 #scenario_template{
@@ -86,7 +86,7 @@ create_share_test(Config) ->
                     type = gs,
                     prepare_args_fun = fun create_share_prepare_gs_args_fun/1,
                     validate_result_fun = build_create_share_validate_gs_call_result_fun(
-                        EnvRef, Providers, FileType, Config
+                        MemRef, Providers, FileType, Config
                     )
                 }
             ],
@@ -133,7 +133,7 @@ create_share_prepare_gs_args_fun(#api_test_ctx{data = Data}) ->
 
 
 %% @private
-build_create_share_validate_rest_call_result_fun(EnvRef, Providers, FileType, SpaceId, Config) ->
+build_create_share_validate_rest_call_result_fun(MemRef, Providers, FileType, SpaceId, Config) ->
     fun(#api_test_ctx{
         node = Node,
         client = ?USER(UserId),
@@ -147,7 +147,7 @@ build_create_share_validate_rest_call_result_fun(EnvRef, Providers, FileType, Sp
         {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
         ShareId = maps:get(<<"shareId">>, Body),
 
-        api_test_env:set(EnvRef, shares, [ShareId | api_test_env:get(EnvRef, shares, [])]),
+        api_test_memory:set(MemRef, shares, [ShareId | api_test_memory:get(MemRef, shares, [])]),
 
         ExpLocation = list_to_binary(rpc:call(Node, oneprovider, get_rest_endpoint, [
             string:trim(filename:join([<<"/">>, <<"shares">>, ShareId]), leading, [$/])
@@ -162,7 +162,7 @@ build_create_share_validate_rest_call_result_fun(EnvRef, Providers, FileType, Sp
 
 
 %% @private
-build_create_share_validate_gs_call_result_fun(EnvRef, Providers, FileType, Config) ->
+build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, Config) ->
     fun(#api_test_ctx{
         client = ?USER(UserId),
         data = Data = #{<<"name">> := ShareName, <<"fileId">> := FileObjectId}
@@ -175,7 +175,7 @@ build_create_share_validate_gs_call_result_fun(EnvRef, Providers, FileType, Conf
             #gri{type = op_share, aspect = instance, scope = private},
             gri:deserialize(ShareGri)
         ),
-        api_test_env:set(EnvRef, shares, [ShareId | api_test_env:get(EnvRef, shares, [])]),
+        api_test_memory:set(MemRef, shares, [ShareId | api_test_memory:get(MemRef, shares, [])]),
 
         assert_proper_gs_share_translation(ShareId, ShareName, Description, private, FileGuid, FileType, ShareData),
 
@@ -294,9 +294,9 @@ update_share_test(Config) ->
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, OriginalShareName, OriginalDescription),
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
 
-    EnvRef = api_test_env:init(),
-    api_test_env:set(EnvRef, previous_name, OriginalShareName),
-    api_test_env:set(EnvRef, previous_description, OriginalDescription),
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, previous_name, OriginalShareName),
+    api_test_memory:set(MemRef, previous_description, OriginalDescription),
 
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
@@ -304,24 +304,24 @@ update_share_test(Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
             verify_fun = fun
                 (expected_failure, _) ->
-                    PreviousName = api_test_env:get(EnvRef, previous_name),
-                    PreviousDescription = api_test_env:get(EnvRef, previous_description),
+                    PreviousName = api_test_memory:get(MemRef, previous_name),
+                    PreviousDescription = api_test_memory:get(MemRef, previous_description),
                     verify_share_doc(
                         Providers, ShareId, PreviousName, PreviousDescription, ?SPACE_2,
                         FileGuid, FileType, ?USER_IN_BOTH_SPACES, Config
                     ),
                     true;
                 (expected_success, #api_test_ctx{client = ?USER(UserId), data = Data}) ->
-                    PreviousName = api_test_env:get(EnvRef, previous_name),
-                    PreviousDescription = api_test_env:get(EnvRef, previous_description),
+                    PreviousName = api_test_memory:get(MemRef, previous_name),
+                    PreviousDescription = api_test_memory:get(MemRef, previous_description),
                     ExpectedName = maps:get(<<"name">>, Data, PreviousName),
                     ExpectedDescription = maps:get(<<"description">>, Data, PreviousDescription),
                     verify_share_doc(
                         Providers, ShareId, ExpectedName, ExpectedDescription, ?SPACE_2,
                         FileGuid, FileType, UserId, Config
                     ),
-                    api_test_env:set(EnvRef, previous_name, ExpectedName),
-                    api_test_env:set(EnvRef, previous_description, ExpectedDescription),
+                    api_test_memory:set(MemRef, previous_name, ExpectedName),
+                    api_test_memory:set(MemRef, previous_description, ExpectedDescription),
                     true
             end,
             scenario_templates = [
@@ -402,26 +402,26 @@ delete_share_test(Config) ->
 
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
 
-    EnvRef = api_test_env:init(),
-    api_test_env:set(EnvRef, shares, ShareIds),
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, shares, ShareIds),
 
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
-            verify_fun = build_verify_file_shares_fun(EnvRef, Providers, ?USER_IN_BOTH_SPACES, FileGuid, Config),
+            verify_fun = build_verify_file_shares_fun(MemRef, Providers, ?USER_IN_BOTH_SPACES, FileGuid, Config),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Delete share for ", FileType/binary, " using /shares rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_delete_share_prepare_rest_args_fun(EnvRef),
-                    validate_result_fun = build_delete_share_validate_rest_call_result_fun(EnvRef, Providers, Config)
+                    prepare_args_fun = build_delete_share_prepare_rest_args_fun(MemRef),
+                    validate_result_fun = build_delete_share_validate_rest_call_result_fun(MemRef, Providers, Config)
                 },
                 #scenario_template{
                     name = <<"Delete share for ", FileType/binary, " using gs api">>,
                     type = gs,
-                    prepare_args_fun = build_delete_share_prepare_gs_args_fun(EnvRef),
-                    validate_result_fun = build_delete_share_validate_gs_call_result_fun(EnvRef, Providers, Config)
+                    prepare_args_fun = build_delete_share_prepare_gs_args_fun(MemRef),
+                    validate_result_fun = build_delete_share_validate_gs_call_result_fun(MemRef, Providers, Config)
                 }
             ],
             data_spec = #data_spec{
@@ -434,11 +434,11 @@ delete_share_test(Config) ->
 
 
 %% @private
-build_delete_share_prepare_rest_args_fun(EnvRef) ->
+build_delete_share_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
-        Shares = api_test_env:get(EnvRef, shares),
+        Shares = api_test_memory:get(MemRef, shares),
         ShareId = lists_utils:random_element(Shares),
-        api_test_env:set(EnvRef, share_to_remove, ShareId),
+        api_test_memory:set(MemRef, share_to_remove, ShareId),
 
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ShareId, Data),
 
@@ -450,11 +450,11 @@ build_delete_share_prepare_rest_args_fun(EnvRef) ->
 
 
 %% @private
-build_delete_share_prepare_gs_args_fun(EnvRef) ->
+build_delete_share_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
-        Shares = api_test_env:get(EnvRef, shares),
+        Shares = api_test_memory:get(MemRef, shares),
         ShareId = lists_utils:random_element(Shares),
-        api_test_env:set(EnvRef, share_to_remove, ShareId),
+        api_test_memory:set(MemRef, share_to_remove, ShareId),
 
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
 
@@ -467,24 +467,24 @@ build_delete_share_prepare_gs_args_fun(EnvRef) ->
 
 
 %% @private
-build_delete_share_validate_rest_call_result_fun(EnvRef, Providers, Config) ->
+build_delete_share_validate_rest_call_result_fun(MemRef, Providers, Config) ->
     fun(#api_test_ctx{client = ?USER(UserId)}, {ok, RespCode, _, RespBody}) ->
         ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody}),
-        build_validate_delete_share_result(EnvRef, UserId, Providers, Config)
+        build_validate_delete_share_result(MemRef, UserId, Providers, Config)
     end.
 
 
 %% @private
-build_delete_share_validate_gs_call_result_fun(EnvRef, Providers, Config) ->
+build_delete_share_validate_gs_call_result_fun(MemRef, Providers, Config) ->
     fun(#api_test_ctx{client = ?USER(UserId)}, Result) ->
         ?assertEqual({ok, undefined}, Result),
-        build_validate_delete_share_result(EnvRef, UserId, Providers, Config)
+        build_validate_delete_share_result(MemRef, UserId, Providers, Config)
     end.
 
 
 %% @private
-build_validate_delete_share_result(EnvRef, UserId, Providers, Config) ->
-    ShareId = api_test_env:get(EnvRef, share_to_remove),
+build_validate_delete_share_result(MemRef, UserId, Providers, Config) ->
+    ShareId = api_test_memory:get(MemRef, share_to_remove),
     lists:foreach(fun(Node) ->
         ?assertEqual(
             ?ERROR_NOT_FOUND,
@@ -492,7 +492,7 @@ build_validate_delete_share_result(EnvRef, UserId, Providers, Config) ->
             ?ATTEMPTS
         )
     end, Providers),
-    api_test_env:set(EnvRef, shares, lists:delete(ShareId, api_test_env:get(EnvRef, shares))),
+    api_test_memory:set(MemRef, shares, lists:delete(ShareId, api_test_memory:get(MemRef, shares))),
 
     ok.
 
@@ -575,9 +575,9 @@ assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileG
 
 
 %% @private
-build_verify_file_shares_fun(EnvRef, Providers, UserId, FileGuid, Config) ->
+build_verify_file_shares_fun(MemRef, Providers, UserId, FileGuid, Config) ->
     fun(_, _) ->
-        Shares = api_test_env:get(EnvRef, shares, []),
+        Shares = api_test_memory:get(MemRef, shares, []),
         ExpShares = lists:sort(Shares),
 
         GetFileSharesFun = fun(Node) ->

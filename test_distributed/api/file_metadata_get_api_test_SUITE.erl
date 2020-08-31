@@ -100,30 +100,54 @@ get_shared_file_rdf_metadata_without_rdf_set_test(Config) ->
 
 %% @private
 get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
-    [P2, P1] = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
+    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
 
     GetExpCallResultFun = case SetRdfPolicy of
         set_rdf ->
-            lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
+            lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
             fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end;
         do_not_set_rdf ->
             fun(_TestCtx) -> ?ERROR_POSIX(?ENODATA) end
     end,
+
     {ShareId, ClientSpec} = case TestMode of
         share_mode ->
-            {ok, Id} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
-            {Id, ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config)};
+            {ok, ShId} = lfm_proxy:create_share(
+                P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>
+            ),
+            {
+                ShId,
+                #client_spec{
+                    correct = [nobody, user1, user2, user3, user4],
+                    unauthorized = [],
+                    forbidden_not_in_space = []
+                }
+            };
         normal_mode ->
-            {undefined, ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)}
+            {
+                undefined,
+                #client_spec{
+                    correct = [
+                        user2, % space owner - doesn't need any perms
+                        user3  % files owner
+                    ],
+                    unauthorized = [nobody],
+                    forbidden_not_in_space = [user1],
+                    forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]
+                }
+            }
     end,
 
-    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
         FileGuid, ShareId, undefined
@@ -144,23 +168,31 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
 
 
 get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+
+    SessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
-    lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
+    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, SessIdP1, FilePath),
+    lfm_proxy:set_metadata(P1Node, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
 
     GetExpCallResultFun = fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end,
+
+    ClientSpec = #client_spec{
+        correct = [user1, user3, user4],
+        unauthorized = [nobody],
+        forbidden_not_in_space = [user2]
+    },
 
     get_metadata_test_base(
         <<"rdf">>,
         FileType, FilePath, FileGuid, undefined,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2),
-        Providers,
-        ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
+        [P1Node, P2Node],
+        ClientSpec,
         _DataSpec = undefined,
         _QsParams = [],
         _RandomlySelectScenario = false,
@@ -195,12 +227,30 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
     {FileLayer5Path, FileLayer5Guid, ShareId} = create_get_json_metadata_tests_env(
         FileType, SetDirectJsonPolicy, TestMode, Config
     ),
-    GetExpCallResultFun = create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy),
+
+    GetExpCallResultFun = create_get_json_call_exp_result_fun(
+        ShareId, SetDirectJsonPolicy, Config
+    ),
 
     ClientSpec = case TestMode of
-        share_mode -> ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config);
-        normal_mode -> ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)
+        share_mode ->
+            #client_spec{
+                correct = [nobody, user1, user2, user3, user4],
+                unauthorized = [],
+                forbidden_not_in_space = []
+            };
+        normal_mode ->
+            #client_spec{
+                correct = [
+                    user2, % space owner - doesn't need any perms
+                    user3, % files owner
+                    user4  % space member
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1]
+            }
     end,
+
     DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
         FileLayer5Guid, ShareId, #data_spec{
             optional = QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
@@ -258,43 +308,50 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode, Config) ->
-    [P2, P1] = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
     TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, TopDirGuid} = lfm_proxy:mkdir(P1, SessIdP1, TopDirPath, 8#777),
-    lfm_proxy:set_metadata(P1, SessIdP1, {guid, TopDirGuid}, json, ?JSON_METADATA_1, []),
+    {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath, 8#777),
+    lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, TopDirGuid}, json, ?JSON_METADATA_1, []),
 
     DirLayer2Path = filename:join([TopDirPath, <<"dir_layer_2">>]),
-    {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1, SessIdP1, DirLayer2Path, 8#717),
-    lfm_proxy:set_metadata(P1, SessIdP1, {guid, DirLayer2Guid}, json, ?JSON_METADATA_2, []),
+    {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer2Path, 8#717),
+    lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, DirLayer2Guid}, json, ?JSON_METADATA_2, []),
 
     DirLayer3Path = filename:join([DirLayer2Path, <<"dir_layer_3">>]),
-    {ok, DirLayer3Guid} = lfm_proxy:mkdir(P1, SessIdP1, DirLayer3Path, 8#777),
-    lfm_proxy:set_metadata(P1, SessIdP1, {guid, DirLayer3Guid}, json, ?JSON_METADATA_3, []),
+    {ok, DirLayer3Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer3Path, 8#777),
+    lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, DirLayer3Guid}, json, ?JSON_METADATA_3, []),
 
     DirLayer4Path = filename:join([DirLayer3Path, <<"dir_layer_4">>]),
-    {ok, DirLayer4Guid} = lfm_proxy:mkdir(P1, SessIdP1, DirLayer4Path, 8#777),
-    lfm_proxy:set_metadata(P1, SessIdP1, {guid, DirLayer4Guid}, json, ?JSON_METADATA_4, []),
+    {ok, DirLayer4Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer4Path, 8#777),
+    lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, DirLayer4Guid}, json, ?JSON_METADATA_4, []),
     ShareId = case TestMode of
         share_mode ->
-            {ok, Id} = lfm_proxy:create_share(P1, SessIdP1, {guid, DirLayer4Guid}, <<"share">>),
+            {ok, Id} = lfm_proxy:create_share(
+                P1Node, SpaceOwnerSessIdP1, {guid, DirLayer4Guid}, <<"share">>
+            ),
             Id;
         normal_mode ->
             undefined
     end,
 
     FileLayer5Path = filename:join([DirLayer4Path, ?RANDOM_FILE_NAME()]),
-    {ok, FileLayer5Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FileLayer5Path),
+    {ok, FileLayer5Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FileLayer5Path),
     case SetJsonPolicy of
         set_direct_json ->
-            lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileLayer5Guid}, json, ?JSON_METADATA_5, []);
+            lfm_proxy:set_metadata(
+                P1Node, UserSessIdP1, {guid, FileLayer5Guid}, json, ?JSON_METADATA_5, []
+            );
         do_not_set_direct_json ->
             ok
     end,
 
-    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileLayer5Guid),
+    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileLayer5Guid),
 
     {FileLayer5Path, FileLayer5Guid, ShareId}.
 
@@ -307,7 +364,9 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode, Config) ->
 %% create_get_json_metadata_tests_env/4.
 %% @end
 %%--------------------------------------------------------------------
-create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy) ->
+create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy, Config) ->
+    User4Auth = ?USER(api_test_env:get_user_id(user4, Config)),
+
     fun(#api_test_ctx{client = Client, data = Data}) ->
         try
             IncludeInherited = maps:get(<<"inherited">>, Data, false),
@@ -326,10 +385,11 @@ create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy) ->
             ExpJsonMetadata = case {SetDirectJsonPolicy, IncludeInherited} of
                 {set_direct_json, true} ->
                     case ShareId of
-                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
+                        undefined when Client == User4Auth ->
                             % User belonging to the same space as owner of files
                             % shouldn't be able to get inherited metadata due to
-                            % insufficient perms on DirLayer2
+                            % insufficient perms on DirLayer2 (exception would be
+                            % space owner)
                             throw(?ERROR_POSIX(?EACCES));
                         undefined ->
                             json_utils:merge([
@@ -349,10 +409,11 @@ create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy) ->
                     ?JSON_METADATA_5;
                 {do_not_set_direct_json, true} ->
                     case ShareId of
-                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
+                        undefined when Client == User4Auth ->
                             % User belonging to the same space as owner of files
                             % shouldn't be able to get inherited metadata due to
-                            % insufficient perms on DirLayer2
+                            % insufficient perms on DirLayer2 (exception would be
+                            % space owner)
                             throw(?ERROR_POSIX(?EACCES));
                         undefined ->
                             json_utils:merge([
@@ -381,23 +442,31 @@ create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy) ->
 
 
 get_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+
+    SessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
-    lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, json, ?JSON_METADATA_2, []),
+    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, SessIdP1, FilePath),
+    lfm_proxy:set_metadata(P1Node, SessIdP1, {guid, FileGuid}, json, ?JSON_METADATA_2, []),
 
     GetExpCallResultFun = fun(_TestCtx) -> {ok, ?JSON_METADATA_2} end,
+
+    ClientSpec = #client_spec{
+        correct = [user1, user3, user4],
+        unauthorized = [nobody],
+        forbidden_not_in_space = [user2]
+    },
 
     get_metadata_test_base(
         <<"json">>,
         FileType, FilePath, FileGuid, undefined,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2),
-        Providers,
-        ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
+        [P1Node, P2Node],
+        ClientSpec,
         _DataSpec = undefined,
         _QsParams = [],
         _RandomlySelectScenario = false,
@@ -434,11 +503,27 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
         FileType, SetDirectXattrsPolicy, TestMode, Config
     ),
     NotSetXattrKey = <<"not_set_xattr">>,
-    GetExpCallResultFun = create_get_xattrs_call_exp_result_fun(ShareId, SetDirectXattrsPolicy, NotSetXattrKey),
+    GetExpCallResultFun = create_get_xattrs_call_exp_result_fun(
+        ShareId, SetDirectXattrsPolicy, NotSetXattrKey, Config
+    ),
 
     ClientSpec = case TestMode of
-        share_mode -> ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config);
-        normal_mode -> ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)
+        share_mode ->
+            #client_spec{
+                correct = [nobody, user1, user2, user3, user4],
+                unauthorized = [],
+                forbidden_not_in_space = []
+            };
+        normal_mode ->
+            #client_spec{
+                correct = [
+                    user2, % space owner - doesn't need any perms
+                    user3, % files owner
+                    user4  % space member
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1]
+            }
     end,
     DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
         FileLayer3Guid, ShareId, #data_spec{
@@ -494,34 +579,41 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode, Config) ->
-    [P2, P1] = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
     TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, TopDirGuid} = lfm_proxy:mkdir(P1, SessIdP1, TopDirPath, 8#777),
-    set_all_metadata_types(P1, SessIdP1, TopDirGuid, set_1),
+    {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath, 8#777),
+    set_all_metadata_types(P1Node, UserSessIdP1, TopDirGuid, set_1),
 
     DirLayer2Path = filename:join([TopDirPath, <<"dir_layer_2">>]),
-    {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1, SessIdP1, DirLayer2Path, 8#717),
+    {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer2Path, 8#717),
     ShareId = case TestMode of
         share_mode ->
-            {ok, Id} = lfm_proxy:create_share(P1, SessIdP1, {guid, DirLayer2Guid}, <<"share">>),
+            {ok, Id} = lfm_proxy:create_share(
+                P1Node, SpaceOwnerSessIdP1, {guid, DirLayer2Guid}, <<"share">>
+            ),
             Id;
         normal_mode ->
             undefined
     end,
 
     FileLayer3Path = filename:join([DirLayer2Path, ?RANDOM_FILE_NAME()]),
-    {ok, FileLayer3Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FileLayer3Path),
+    {ok, FileLayer3Guid} = api_test_utils:create_file(
+        FileType, P1Node, UserSessIdP1, FileLayer3Path
+    ),
     case SetXattrsPolicy of
         set_direct_xattr ->
-            set_all_metadata_types(P1, SessIdP1, FileLayer3Guid, set_2);
+            set_all_metadata_types(P1Node, UserSessIdP1, FileLayer3Guid, set_2);
         do_not_set_direct_xattr ->
             ok
     end,
 
-    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileLayer3Guid),
+    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileLayer3Guid),
 
     {FileLayer3Path, FileLayer3Guid, ShareId}.
 
@@ -534,7 +626,9 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode, Config) ->
 %% create_get_xattrs_tests_env/4.
 %% @end
 %%--------------------------------------------------------------------
-create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXattrKey) ->
+create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXattrKey, Config) ->
+    User4Auth = ?USER(api_test_env:get_user_id(user4, Config)),
+
     fun(#api_test_ctx{client = Client, data = Data}) ->
         try
             Attribute = maps:get(<<"attribute">>, Data, undefined),
@@ -603,14 +697,14 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXa
                     AllDirectMetadata;
                 {set_direct_xattr, true} ->
                     case ShareId of
-                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
+                        undefined when Client == User4Auth ->
                             % User belonging to the same space as owner of files
                             % shouldn't be able to get inherited json metadata, not set xattr
                             % or metadata set only on ancestor directories
-                            % due to insufficient perms on Dir1. But can get all other xattrs
-                            % as the first found value is returned and ancestors aren't
-                            % traversed further (json metadata is exceptional since it
-                            % collects all ancestors jsons and merges them)
+                            % due to insufficient perms on Dir1 (exception would be space owner).
+                            % But can get all other xattrs as the first found value is returned
+                            % and ancestors aren't traversed further (json metadata is exceptional
+                            % since it collects all ancestors jsons and merges them)
                             ForbiddenKeysForUserInSpace2 = [?JSON_METADATA_KEY, ?XATTR_1_KEY, NotSetXattrKey],
                             case lists:any(fun(Key) -> lists:member(Key, XattrsToGet) end, ForbiddenKeysForUserInSpace2) of
                                 true ->
@@ -637,17 +731,17 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXa
                     #{};
                 {do_not_set_direct_xattr, true} ->
                     case ShareId of
-                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
+                        undefined when Client == User4Auth ->
                             case lists:any(fun(Xattr) -> lists:member(Xattr, ?CDMI_XATTRS_KEY) end, XattrsToGet) of
                                 true ->
                                     % Cdmi attrs cannot be inherited, so trying to get them when
                                     % they are not directly set result in ?ENODATA no matter the
-                                    % value of 'inherited' flag
+                                    % value of 'inherited' flag (exception would be space owner).
                                     throw(?ERROR_POSIX(?ENODATA));
                                 false ->
                                     % User belonging to the same space as owner of files
                                     % shouldn't be able to get any inherited metadata due to
-                                    % insufficient perms on Dir1
+                                    % insufficient perms on Dir1 (exception would be space owner).
                                     throw(?ERROR_POSIX(?EACCES))
                             end;
                         undefined ->
@@ -675,23 +769,31 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXa
 
 
 get_file_xattrs_on_provider_not_supporting_space_test(Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+
+    SessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
-    ?assertMatch(ok, lfm_proxy:set_xattr(P1, SessIdP1, {guid, FileGuid}, ?XATTR_1)),
+    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, SessIdP1, FilePath),
+    ?assertMatch(ok, lfm_proxy:set_xattr(P1Node, SessIdP1, {guid, FileGuid}, ?XATTR_1)),
 
     GetExpCallResultFun = fun(_TestCtx) -> {ok, #{?XATTR_1_KEY => ?XATTR_1_VALUE}} end,
+
+    ClientSpec = #client_spec{
+        correct = [user1, user3, user4],
+        unauthorized = [nobody],
+        forbidden_not_in_space = [user2]
+    },
 
     get_metadata_test_base(
         <<"xattrs">>,
         FileType, FilePath, FileGuid, undefined,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2),
-        Providers,
-        ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
+        [P1Node, P2Node],
+        ClientSpec,
         _DataSpec = undefined,
         _QsParams = [],
         _RandomlySelectScenario = false,
@@ -713,8 +815,8 @@ build_get_metadata_validate_rest_call_fun(GetExpResultFun) ->
 build_get_metadata_validate_rest_call_fun(GetExpResultFun, ProviderNotSupportingSpace) ->
     fun
         (#api_test_ctx{node = TestNode}, {ok, RespCode, _RespHeaders, RespBody}) when TestNode == ProviderNotSupportingSpace ->
-            ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
-            ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderDomain)),
+            ProvId = op_test_rpc:get_provider_id(TestNode),
+            ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId)),
             ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody});
         (TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
             case GetExpResultFun(TestCtx) of
@@ -736,9 +838,8 @@ build_get_metadata_validate_gs_call_fun(GetExpResultFun) ->
 build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProviderNotSupportingSpace) ->
     fun
         (#api_test_ctx{node = TestNode}, Result) when TestNode == ProviderNotSupportingSpace ->
-            ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
-            ExpError = ?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderDomain),
-            ?assertEqual(ExpError, Result);
+            ProvId = op_test_rpc:get_provider_id(TestNode),
+            ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId), Result);
         (TestCtx, Result) ->
             case GetExpResultFun(TestCtx) of
                 {ok, ExpMetadata} ->
@@ -773,7 +874,7 @@ get_metadata_test_base(
 ) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ?assert(api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
@@ -815,7 +916,7 @@ get_metadata_test_base(
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, FileShareObjectId} = file_id:guid_to_objectid(FileShareGuid),
 
-    ?assert(api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
@@ -915,46 +1016,28 @@ build_get_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
-        NewConfig3 = initializer:create_test_users_and_spaces(
-            ?TEST_FILE(NewConfig2, "env_desc.json"),
-            NewConfig2
-        ),
-        initializer:mock_auth_manager(NewConfig3, _CheckIfUserIsSupported = true),
-        lists:foreach(fun(Worker) ->
-            % TODO VFS-6251
-            test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, 20),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, 20),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, 20),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, 20),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, 20), % TODO - change to 2 seconds
-            test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
-            test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
-            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
-        end, ?config(op_worker_nodes, NewConfig3)),
         application:start(ssl),
         hackney:start(),
-        NewConfig3
+        api_test_env:init(onenv_test_utils:prepare_base_test_config(NewConfig))
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    test_config:set_many(Config, [
+        {add_envs, [op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]]},
+        {set_onenv_scenario, ["api_tests"]}, % name of yaml file in test_distributed/onenv_scenarios
+        {set_posthook, Posthook}
+    ]).
 
 
-end_per_suite(Config) ->
+end_per_suite(_Config) ->
     hackney:stop(),
-    application:stop(ssl),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:teardown_storage(Config).
+    application:stop(ssl).
 
 
 init_per_testcase(_Case, Config) ->
-    initializer:mock_share_logic(Config),
     ct:timetrap({minutes, 30}),
     lfm_proxy:init(Config).
 
 
 end_per_testcase(_Case, Config) ->
-    initializer:unmock_share_logic(Config),
     lfm_proxy:teardown(Config).
 
 
