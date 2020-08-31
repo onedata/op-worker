@@ -961,7 +961,7 @@ maybe_add_file_suffix(OriginalName, 0) ->
 maybe_add_file_suffix(OriginalName, Counter) ->
     RootName = filename:rootname(OriginalName),
     Ext = filename:extension(OriginalName),
-    str_utils:format_bin("~s(~B)~s", [RootName, Counter, Ext]).
+    str_utils:format_bin("~ts(~B)~ts", [RootName, Counter, Ext]).
 
 
 %% @private
