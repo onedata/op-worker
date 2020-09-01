@@ -953,12 +953,14 @@ create_remote_file_import_conflict_test(Config, MountSpaceInRoot) ->
     }, ?SPACE_ID),
 
     %% Check if file was imported on W2
+    ?assertMatch({ok, [_, _]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ImportedConflictingFilePath}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
         lfm_proxy:open(W2, SessId2, {path, ImportedConflictingFilePath}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
+    ?assertMatch({ok, ?TEST_DATA2},
+        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA2)), ?ATTEMPTS).
 
 create_remote_dir_import_race_test(Config, MountSpaceInRoot) ->
     % directory is created in remote provider and at the same time, file with the same name is created on storage
