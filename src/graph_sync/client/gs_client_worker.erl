@@ -78,7 +78,9 @@ start() ->
     % This gen_server is a singleton, the critical section is used to make sure
     % that there is only one instance running. This is used instead of a global
     % identifier, which is reserved for determining existence of the GS
-    % connection (it might be down despite the gen_server running).
+    % connection (only one global identifier can be registered for one pid).
+    % The gen_server running does not precisely indicate whether the connection
+    % was established (it might still be in the init phase).
     critical_section:run(start_gs_client_worker, fun() ->
         case is_connected() of
             true ->
@@ -92,7 +94,7 @@ start() ->
                     {error, normal} ->
                         error;
                     {error, _} = Error ->
-                        ?error("Failed to start gs_client_worker: ~p", [Error]),
+                        ?error("Failed to start gs_client_worker: ~w", [Error]),
                         error
                 end
         end
@@ -239,7 +241,7 @@ init([]) ->
             gs_hooks:handle_deregistered_from_oz(),
             {stop, normal};
         {error, _} = Error ->
-            ?error("Failed to establish Onezone connection: ~p", [Error]),
+            ?error("Failed to establish Onezone connection: ~w", [Error]),
             {stop, normal}
     end.
 
