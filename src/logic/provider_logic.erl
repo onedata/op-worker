@@ -791,7 +791,7 @@ assert_zone_compatibility() ->
                     ]),
                     throw({error, incompatible_oneprovider_version});
                 {error, Error} ->
-                    ?critical("Cannot check Oneprovider's compatibility due to ~w."
+                    ?critical("Cannot check Oneprovider's compatibility due to ~w. "
                     "The service will not be operational until the problem is resolved.", [
                         {error, Error}
                     ]),

@@ -126,7 +126,7 @@ wait_for_mocked_connection(Config) ->
     set_envs_for_correct_connection(Config),
     Nodes = ?NODES(Config),
     CheckConnection = fun() ->
-        case rpc:call(hd(Nodes), global, whereis_name, [?GS_CLIENT_WORKER_GLOBAL_NAME]) of
+        case rpc:call(hd(Nodes), gs_client_worker, get_connection_pid, []) of
             Pid when is_pid(Pid) -> ok;
             _ -> error
         end

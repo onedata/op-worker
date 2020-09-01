@@ -6,9 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for maintaining graph sync connection to Onezone
-%%% and handling incoming push messages Whenever the connection dies, this
-%%% gen_server is killed and new one is instantiated by gs_worker.
+%%% This module is responsible for maintaining Graph Sync connection to Onezone
+%%% and handling incoming push messages. Whenever the connection dies, this
+%%% gen_server is killed and new one is instantiated by gs_channel_service.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_client_worker).
@@ -50,9 +50,14 @@
 -type connection_ref() :: pid().
 -type doc() :: datastore:doc().
 
+% Global GS channel identifier - registered upon successful connection to
+% Onezone and used to identify the process responsible for communication with
+% Onezone. A registered pid means that the Oneprovider is connected.
+-define(GS_CHANNEL_GLOBAL_NAME, graph_sync_channel).
 
 %% API
--export([start_link/0]).
+-export([start/0]).
+-export([get_connection_pid/0]).
 -export([force_terminate/0]).
 -export([request/1, request/2, request/3]).
 -export([invalidate_cache/1, invalidate_cache/2]).
@@ -66,28 +71,37 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts gs_client_worker instance and registers it globally.
-%% @end
-%%--------------------------------------------------------------------
--spec start_link() -> {ok, pid()} | errors:error().
-start_link() ->
-    gen_server2:start_link(?MODULE, [], []).
+-spec start() -> ok | already_started | error.
+start() ->
+    % The local identifier ensures that only one instance of gs_client_worker is started.
+    % Worker start success does not indicate whether the GS connection was established
+    % (the ?GS_CHANNEL_GLOBAL_NAME global identifier is used for that).
+    case gen_server2:start({local, ?MODULE}, ?MODULE, [], []) of
+        {ok, _Pid} ->
+            ok;
+        {error, {already_started, _Pid}} ->
+            already_started;
+        {error, normal} ->
+            error;
+        {error, _} = Error ->
+            ?error("Failed to start gs_client_worker: ~p", [Error]),
+            error
+    end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Forces termination of gs_client_worker.
-%% @end
-%%--------------------------------------------------------------------
--spec force_terminate() -> ok.
+-spec get_connection_pid() -> undefined | pid().
+get_connection_pid() ->
+    global:whereis_name(?GS_CHANNEL_GLOBAL_NAME).
+
+
+-spec force_terminate() -> ok | not_started.
 force_terminate() ->
     case get_connection_pid() of
+        undefined ->
+            not_started;
         Pid when is_pid(Pid) ->
+            ?info("Terminating Onezone connection (forced)..."),
             gen_server2:call(Pid, {terminate, normal}),
-            ok;
-        _ ->
             ok
     end.
 
@@ -199,18 +213,19 @@ init([]) ->
     process_flag(trap_exit, true),
     case start_gs_connection() of
         {ok, _ClientRef, #gs_resp_handshake{identity = ?SUB(nobody)}} ->
-            {stop, normal};
+            ?warning("Cannot start Onezone connection: provider failed to authenticate"),
+            ignore;
         {ok, ClientRef, #gs_resp_handshake{identity = ?SUB(?ONEPROVIDER)}} ->
-            yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
-            ?info("Started connection to Onezone: ~p", [ClientRef]),
+            ?info("Onezone connection established: ~p", [ClientRef]),
+            yes = global:register_name(?GS_CHANNEL_GLOBAL_NAME, self()),
             {ok, #state{client_ref = ClientRef}};
         ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
-            oneprovider:on_deregister(),
-            {stop, normal};
+            gs_hooks:handle_deregistered_from_oz(),
+            ignore;
         {error, _} = Error ->
-            ?warning("Cannot start connection to Onezone: ~p", [Error]),
-            {stop, normal}
+            ?error("Failed to establish Onezone connection: ~p", [Error]),
+            ignore
     end.
 
 %%--------------------------------------------------------------------
@@ -240,10 +255,12 @@ handle_call({async_request, GsReq, Timeout}, {From, _}, #state{client_ref = Clie
     }};
 
 handle_call({terminate, Reason}, _From, State = #state{client_ref = ClientRef}) ->
-    ?warning("Connection to Onezone terminated"),
     case ClientRef of
-        undefined -> ok;
-        _ -> gs_client:kill(ClientRef)
+        undefined ->
+            ok;
+        _ ->
+            gs_client:kill(ClientRef),
+            ?warning("Onezone connection terminated")
     end,
     {stop, Reason, ok, State};
 
@@ -300,8 +317,7 @@ handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
             {noreply, State}
     end;
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
-    ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
-    oneprovider:on_disconnect_from_oz(),
+    ?warning("Onezone connection lost, reason: ~p", [Reason]),
     {stop, normal, State};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
@@ -319,6 +335,8 @@ handle_info(Info, #state{} = State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
 terminate(Reason, #state{} = State) ->
+    global:unregister_name(?GS_CHANNEL_GLOBAL_NAME),
+    gs_hooks:handle_disconnected_from_oz(),
     ?log_terminate(Reason, State).
 
 %%--------------------------------------------------------------------
@@ -378,7 +396,7 @@ process_push_message_async(#gs_push_graph{gri = GRI, change_type = deleted}) ->
     ProviderId = oneprovider:get_id_or_undefined(),
     case GRI of
         #gri{type = od_provider, id = ProviderId, aspect = instance} ->
-            oneprovider:on_deregister();
+            gs_hooks:handle_deregistered_from_oz();
         #gri{type = od_space, id = SpaceId, aspect = instance} ->
             main_harvesting_stream:space_removed(SpaceId);
         #gri{type = od_token, id = TokenId, aspect = instance} ->
@@ -535,7 +553,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
 maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{type = Type, aspect = As} = GRI, auth_hint = AuthHint}) when
     As =:= instance;
     (Type =:= temporary_token_secret andalso As =:= user)
-->
+    ->
     case get_from_cache(GRI) of
         false ->
             false;
@@ -575,7 +593,7 @@ maybe_serve_from_cache(_, _) ->
 coalesce_cache(ConnRef, GRI = #gri{type = Type, aspect = As}, Doc = #document{value = Record}, Rev) when
     As =:= instance;
     (Type =:= temporary_token_secret andalso As =:= user)
-->
+    ->
     #gri{type = Type, id = Id, scope = Scope} = GRI,
     CacheUpdateFun = fun(CachedRecord) ->
         #{scope := CachedScope} = CacheState = get_cache_state(CachedRecord),
@@ -633,12 +651,6 @@ get_from_cache(#gri{type = Type, id = Id}) ->
         {ok, Doc} -> {true, Doc};
         _ -> false
     end.
-
-
-%% @private
--spec get_connection_pid() -> undefined | pid().
-get_connection_pid() ->
-    global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
 %% @private

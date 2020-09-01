@@ -16,10 +16,6 @@
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
-% Global worker identifier
--define(GS_CLIENT_WORKER_GLOBAL_NAME, graph_sync_client_worker).
--define(GS_CLIENT_WORKER_GLOBAL_NAME_BIN, <<"graph_sync_client_worker">>).
-
 % Not configurable as it depends on current implementation in OP.
 -define(GS_PROTOCOL_VERSION, 4).
 
@@ -33,7 +29,7 @@
 -define(GS_REQUEST_TIMEOUT, application:get_env(?APP_NAME,
     graph_sync_request_timeout, timer:seconds(30))).
 
--define(GS_HEALTHCHECK_INTERVAL, application:get_env(?APP_NAME,
+-define(GS_RECONNECT_BASE_INTERVAL, application:get_env(?APP_NAME,
     graph_sync_healthcheck_interval, timer:seconds(4))).
 -define(GS_RECONNECT_BACKOFF_RATE, application:get_env(?APP_NAME,
     graph_sync_reconnect_backoff_rate, 1.5)).
