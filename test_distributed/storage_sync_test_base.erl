@@ -5698,28 +5698,11 @@ clean_space(Config) ->
     {ok, Children} = lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000),
     Attempts = 5 * ?ATTEMPTS,
     Self = self(),
-
-    % hacky way to remove file, but ignore errors from storage
-    % files will be deleted on storage in other function
-    ok = test_utils:mock_new(W, helpers),
-    test_utils:mock_expect(W, helpers, unlink, fun(HelperHandle, FileId, CurrentSize) ->
-        case meck:passthrough([HelperHandle, FileId, CurrentSize]) of
-            {error, ?EROFS} -> ok;
-            Other -> Other
-        end
-    end),
-    test_utils:mock_expect(W, helpers, rmdir, fun(HelperHandle, FileId) ->
-        case meck:passthrough([HelperHandle, FileId]) of
-            {error, ?EROFS} -> ok;
-            Other -> Other
-        end
-    end),
     Guids = lists:map(fun({Guid, _}) ->
         ok = lfm_proxy:rm_recursive(W, ?ROOT_SESS_ID, {guid, Guid}),
         ok = worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file_deleted, [W2, Guid, Self, Attempts]}),
         Guid
     end, Children),
-    test_utils:mock_unload(W, helpers),
     verify_deletions(Guids, Attempts),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS).
