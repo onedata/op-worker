@@ -6,9 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for maintaining Graph Sync connection to Onezone
-%%% and handling incoming push messages. Whenever the connection dies, this
-%%% gen_server is killed and new one is instantiated by gs_channel_service.
+%%% This module implements a singleton gen_server that is responsible for
+%%% maintaining Graph Sync connection to Onezone and handling incoming push
+%%% messages. Whenever the connection dies, this gen_server is killed and a new
+%%% one is instantiated by gs_channel_service.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_client_worker).
@@ -57,6 +58,7 @@
 
 %% API
 -export([start/0]).
+-export([is_connected/0]).
 -export([get_connection_pid/0]).
 -export([force_terminate/0]).
 -export([request/1, request/2, request/3]).
@@ -73,20 +75,33 @@
 
 -spec start() -> ok | already_started | error.
 start() ->
-    % The local identifier ensures that only one instance of gs_client_worker is started.
-    % Worker start success does not indicate whether the GS connection was established
-    % (the ?GS_CHANNEL_GLOBAL_NAME global identifier is used for that).
-    case gen_server2:start({local, ?MODULE}, ?MODULE, [], []) of
-        {ok, _Pid} ->
-            ok;
-        {error, {already_started, _Pid}} ->
-            already_started;
-        {error, normal} ->
-            error;
-        {error, _} = Error ->
-            ?error("Failed to start gs_client_worker: ~p", [Error]),
-            error
-    end.
+    % This gen_server is a singleton, the critical section is used to make sure
+    % that there is only one instance running. This is used instead of a global
+    % identifier, which is reserved for determining existence of the GS
+    % connection (it might be down despite the gen_server running).
+    critical_section:run(start_gs_client_worker, fun() ->
+        case is_connected() of
+            true ->
+                already_started;
+            false ->
+                case gen_server2:start(?MODULE, [], []) of
+                    {ok, _Pid} ->
+                        ok;
+                    {error, {already_started, _Pid}} ->
+                        already_started;
+                    {error, normal} ->
+                        error;
+                    {error, _} = Error ->
+                        ?error("Failed to start gs_client_worker: ~p", [Error]),
+                        error
+                end
+        end
+    end).
+
+
+-spec is_connected() -> boolean().
+is_connected() ->
+    is_pid(get_connection_pid()).
 
 
 -spec get_connection_pid() -> undefined | pid().
@@ -214,18 +229,18 @@ init([]) ->
     case start_gs_connection() of
         {ok, _ClientRef, #gs_resp_handshake{identity = ?SUB(nobody)}} ->
             ?warning("Cannot start Onezone connection: provider failed to authenticate"),
-            ignore;
+            {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = ?SUB(?ONEPROVIDER)}} ->
-            ?info("Onezone connection established: ~p", [ClientRef]),
+            ?notice("Onezone connection established: ~p", [ClientRef]),
             yes = global:register_name(?GS_CHANNEL_GLOBAL_NAME, self()),
             {ok, #state{client_ref = ClientRef}};
         ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
             gs_hooks:handle_deregistered_from_oz(),
-            ignore;
+            {stop, normal};
         {error, _} = Error ->
             ?error("Failed to establish Onezone connection: ~p", [Error]),
-            ignore
+            {stop, normal}
     end.
 
 %%--------------------------------------------------------------------
@@ -553,7 +568,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
 maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{type = Type, aspect = As} = GRI, auth_hint = AuthHint}) when
     As =:= instance;
     (Type =:= temporary_token_secret andalso As =:= user)
-    ->
+->
     case get_from_cache(GRI) of
         false ->
             false;

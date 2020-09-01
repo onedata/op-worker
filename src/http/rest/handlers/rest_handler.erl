@@ -245,7 +245,7 @@ handle_request(#op_req{operation = Operation, gri = GRI} = ElReq) ->
             "GRI: ~p~n"
             "Result: ~p~n"
             "---------~n"
-            "Error was: ~p:~p", [
+            "Error was: ~w:~p", [
                 Operation, GRI, Result, Type, Message
             ]),
             rest_translator:error_response(?ERROR_INTERNAL_SERVER_ERROR)

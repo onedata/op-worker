@@ -7,11 +7,13 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Internal (persistent) service that maintains an open GraphSync channel
-%%% to Onezone. It is based on simple, periodic checks if the channel should be
-%%% running and start it when required. The internal service healthchecks do
-%%% not check the connection status, but are merely used to realize the periodic
-%%% monitoring. In case of a channel crash, the connection will be down until
-%%% the next healthcheck - for that reason the intervals are short.
+%%% to Onezone. The internal service interface is used in a non-standard way -
+%%% this service does not depend on the start_function and manages GS channel
+%%% restarts by itself. Healthchecks are essentially used to periodically run
+%%% the logic that checks the connection and restarts it as needed.
+%%% In case of the channel crash, the connection will be down until the next
+%%% healthcheck. The healthchecks are done in short intervals, unless there are
+%%% persistent problems with connection - in such case, backoff is applied.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_channel_service).
@@ -21,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--define(SERVICE_NAME, <<"GS channel service">>).
+-define(SERVICE_NAME, <<"GS-channel-service">>).
 
 %% API
 -export([setup_internal_service/0]).
@@ -59,7 +61,7 @@ setup_internal_service() ->
 %%--------------------------------------------------------------------
 -spec is_connected() -> boolean().
 is_connected() ->
-    is_pid(gs_client_worker:get_connection_pid()).
+    gs_client_worker:is_connected().
 
 
 %%--------------------------------------------------------------------
