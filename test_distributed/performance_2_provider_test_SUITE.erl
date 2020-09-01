@@ -249,6 +249,7 @@ init_per_testcase(cancel_synchronizations_for_session_with_mocked_rtransfer_test
     ),
     init_per_testcase(?DEFAULT_CASE(cancel_synchronizations_for_session_with_mocked_rtransfer_test), Config);
 init_per_testcase(_Case, Config) ->
+    ct:timetrap({minutes, 10}),
     lfm_proxy:init(Config).
 
 end_per_testcase(Case, Config) when
