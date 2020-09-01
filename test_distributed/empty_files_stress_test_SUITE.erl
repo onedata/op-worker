@@ -233,5 +233,5 @@ process_traverse_info(Config, Type, ID) ->
         _ -> ok
     end,
 
-    Ans = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0),
+    Ans = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0, 0),
     {All == DirsDone + Failed, Ans}.

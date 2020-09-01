@@ -25,7 +25,7 @@
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 -export([many_files_creation_tree_test_base/2, many_files_creation_tree_test_base/3,
     many_files_creation_tree_test_base/4, many_files_creation_tree_test_base/5, single_dir_creation_test_base/2]).
--export([create_single_call/4, get_final_ans_tree/9, get_param_value/2]).
+-export([create_single_call/4, get_final_ans_tree/10, get_param_value/2]).
 
 -define(TIMEOUT, timer:minutes(30)).
 
@@ -186,20 +186,20 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
     end, [{<<"/", SpaceName/binary>>, false}], Levels),
     [_ | BaseDirs] = lists:reverse(BaseDirsReversed),
 
-    BaseCreationAns = lists:foldl(fun
-        ({D, true}, {ok, _}) ->
-            lfm_proxy:mkdir(Worker, SessId, D, 8#755);
-        ({D, true}, {error,eexist}) ->
-            lfm_proxy:mkdir(Worker, SessId, D, 8#755);
+    {BaseCreationAns, CreatedBaseDirsNum} = lists:foldl(fun
+        ({D, true}, {ok, CreatedBaseDirsAcc}) ->
+            case lfm_proxy:mkdir(Worker, SessId, D, 8#755) of
+                {ok, _} -> {ok, CreatedBaseDirsAcc + 1};
+                {error, eexist} -> {ok, CreatedBaseDirsAcc};
+                Other -> {Other, CreatedBaseDirsAcc}
+            end;
         (_, Acc) ->
             Acc
-    end, {ok, ok}, BaseDirs),
+    end, {ok, 0}, BaseDirs),
 
     % Check if dirs are ready
     Proceed = case BaseCreationAns of
-        {ok, _} ->
-            ok;
-        {error,eexist} ->
+        ok ->
             ok;
         No ->
             No
@@ -343,7 +343,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
             {OtherAns, OtherTime} = proplists:get_value(other, Ans, {0,0}),
             OtherAvgTime = get_avg(OtherAns, OtherTime),
             FinalAns = get_final_ans_tree(Worker, FilesSaved, FilesAvgTime, DirsSaved,
-                DirsAvgTime, OtherAns, OtherAvgTime, 0, Timeout),
+                DirsAvgTime, CreatedBaseDirsNum, OtherAns, OtherAvgTime, 0, Timeout),
 
             Sum = case get(ok_sum) of
                 undefined ->
@@ -369,7 +369,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
             ct:print("Dirs not ready"),
             timer:sleep(timer:seconds(60)),
             ?assertEqual(ok, Proceed),
-            get_final_ans_tree(Worker, 0, 0, 0, 0, 0,0, 1, 0)
+            get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0,0, 1, 0)
     end.
 
 %%%===================================================================
@@ -501,7 +501,9 @@ get_avg(Num, Timw) ->
         _ -> Timw/Num
     end.
 
-get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, OtherTime, InitFailed, Timeout) ->
+get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, CreatedBaseDirsNum,
+    OtherAns, OtherTime, InitFailed, Timeout
+) ->
     Mem = case rpc:call(Worker, monitoring, get_memory_stats, []) of
         [{<<"mem">>, MemUsage}] ->
             MemUsage;
@@ -516,6 +518,7 @@ get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns,
         #parameter{name = dirs_saved, value = DirsSaved, description = "Number of dirs saved"},
         #parameter{name = dirs_save_avg_time, value = DirsTime, unit = "us",
             description = "Average time of dir save operation"},
+        #parameter{name = base_dirs_created, value = CreatedBaseDirsNum, description = "Number of base dirs created"},
         #parameter{name = error_ans_count, value = OtherAns, description = "Number of errors"},
         #parameter{name = error_ans_count_avg_time, value = OtherTime, unit = "us",
             description = "Average time of operation that ended with error"},
