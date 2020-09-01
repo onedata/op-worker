@@ -209,12 +209,12 @@ verify_files_and_dirs(Worker, SessId, Attempts, Dirs, Files) ->
             rpc:call(Worker, lfm, stat, [SessId, {guid, Dir}], 1000), Attempts)
     end, Dirs),
 
+    FileDataSize = size(?FILE_DATA),
     lists:foreach(fun(File) ->
-        ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
+        ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileDataSize}},
             rpc:call(Worker, lfm, stat, [SessId, {guid, File}], 1000), Attempts)
     end, Files),
 
-    FileDataSize = size(?FILE_DATA),
     lists:foreach(fun(File) ->
         ?assertEqual(FileDataSize,
             begin
