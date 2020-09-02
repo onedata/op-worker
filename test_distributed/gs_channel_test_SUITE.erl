@@ -238,7 +238,7 @@ init_per_suite(Config) ->
 init_per_testcase(oz_connection_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     % Modify env variables to ensure frequent reconnect attempts
-    test_utils:set_env(Nodes, ?APP_NAME, graph_sync_healthcheck_interval, 1000),
+    test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_base_interval, 1000),
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_backoff_rate, 1),
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_max_backoff, 1000),
     % In oz_connection_test, start with a bad connection path to test connection

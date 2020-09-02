@@ -86,7 +86,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 },
                 "worker2": {
@@ -101,7 +101,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -135,7 +135,7 @@
                             "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 },
                 "worker2": {
@@ -150,7 +150,7 @@
                             "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }

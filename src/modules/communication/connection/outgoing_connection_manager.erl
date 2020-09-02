@@ -356,19 +356,19 @@ schedule_next_renewal(State) ->
     ok.
 log_error(State, throw, {cannot_verify_peer_op_identity, Reason}) ->
     ?warning("Discarding connections renewal to provider ~ts because "
-             "its identity cannot be verified due to ~p. ~n"
-             "Next retry not sooner than ~g s. ~n", [
+             "its identity cannot be verified due to ~w.~n"
+             "Next retry not sooner than ~B s.", [
         provider_logic:to_printable(State#state.peer_id),
         Reason,
-        State#state.renewal_interval / 1000
+        State#state.renewal_interval div 1000
     ]);
 log_error(State, throw, {cannot_check_peer_op_version, HTTPErrorCode}) ->
     ?warning("Discarding connections renewal to provider ~ts because "
-             "its version cannot be determined (HTTP ~b). ~n"
-             "Next retry not sooner than ~g s. ~n", [
+             "its version cannot be determined (HTTP ~B).~n"
+             "Next retry not sooner than ~B s.", [
         provider_logic:to_printable(State#state.peer_id),
         HTTPErrorCode,
-        State#state.renewal_interval / 1000
+        State#state.renewal_interval div 1000
     ]);
 log_error(State, throw, {incompatible_peer_op_version, PeerOpVersion, PeerCompOpVersions}) ->
     Version = oneprovider:get_version(),
@@ -376,21 +376,20 @@ log_error(State, throw, {incompatible_peer_op_version, PeerOpVersion, PeerCompOp
         ?ONEPROVIDER, Version, ?ONEPROVIDER
     ),
     ?warning("Discarding connections renewal to provider ~ts "
-             "because of incompatible version. ~n"
-             "Local version: ~s, supports providers: ~p~n"
-             "Remote version: ~s, supports providers: ~p~n"
-             "Next retry not sooner than ~g s. ~n", [
+             "because of incompatible version.~n"
+             "Local version: ~s, supports providers: ~s~n"
+             "Remote version: ~s, supports providers: ~s~n"
+             "Next retry not sooner than ~B s.", [
         provider_logic:to_printable(State#state.peer_id),
-        Version,
-        [binary_to_list(B) || B <- CompatibleOpVersions],
-        PeerOpVersion, PeerCompOpVersions,
-        State#state.renewal_interval / 1000
+        Version, str_utils:join_binary(CompatibleOpVersions, <<", ">>),
+        PeerOpVersion, str_utils:join_binary(PeerCompOpVersions, <<", ">>),
+        State#state.renewal_interval div 1000
     ]);
 log_error(State, Type, Reason) ->
-    ?warning("Failed to renew connections to provider ~ts "
-             "because of ~p:~p. ~n"
-             "Next retry not sooner than ~g s. ~n", [
+    ?warning("Failed to renew connections to provider ~ts~n"
+             "Error was: ~w:~p.~n"
+             "Next retry not sooner than ~B s.", [
         provider_logic:to_printable(State#state.peer_id),
         Type, Reason,
-        State#state.renewal_interval / 1000
+        State#state.renewal_interval div 1000
     ]).

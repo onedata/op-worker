@@ -115,7 +115,7 @@ unmock_gs_client(Config) ->
 set_envs_for_correct_connection(Config) ->
     Nodes = ?NODES(Config),
     % Modify env variables to ensure frequent reconnect attempts
-    test_utils:set_env(Nodes, ?APP_NAME, graph_sync_healthcheck_interval, 1000),
+    test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_base_interval, 1000),
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_backoff_rate, 1),
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_max_backoff, 1000),
     % Use graph sync path that allows correct mocked connection
@@ -126,7 +126,7 @@ wait_for_mocked_connection(Config) ->
     set_envs_for_correct_connection(Config),
     Nodes = ?NODES(Config),
     CheckConnection = fun() ->
-        case rpc:call(hd(Nodes), global, whereis_name, [?GS_CLIENT_WORKER_GLOBAL_NAME]) of
+        case rpc:call(hd(Nodes), gs_client_worker, get_connection_pid, []) of
             Pid when is_pid(Pid) -> ok;
             _ -> error
         end

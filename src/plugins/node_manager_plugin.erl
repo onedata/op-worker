@@ -24,7 +24,7 @@
 -export([oldest_known_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([before_init/0]).
--export([upgrade_essential_workers/0]).
+-export([before_cluster_upgrade/0]).
 -export([upgrade_cluster/1]).
 -export([custom_workers/0]).
 -export([on_db_and_workers_ready/0]).
@@ -124,15 +124,13 @@ before_init() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% List of workers modules with configs that should be started before upgrade.
+%% Callback executed before cluster upgrade so that any required preparation
+%% can be done.
 %% @end
 %%--------------------------------------------------------------------
--spec upgrade_essential_workers() -> [{module(), [any()]}].
-upgrade_essential_workers() -> filter_disabled_workers([
-    {gs_worker, [
-        {supervisor_flags, gs_worker:supervisor_flags()}
-    ]}
-]).
+-spec before_cluster_upgrade() -> ok.
+before_cluster_upgrade() ->
+    gs_channel_service:setup_internal_service().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -189,7 +187,7 @@ custom_workers() -> filter_disabled_workers([
 on_db_and_workers_ready() ->
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
-    gs_worker:on_db_and_workers_ready().
+    gs_channel_service:on_db_and_workers_ready().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -277,17 +275,17 @@ master_node_ready(_RecoveredNode) ->
 %% @private
 -spec await_zone_connection_and_run(Fun :: fun(() -> ok)) -> ok.
 await_zone_connection_and_run(Fun) ->
-    ?info("Checking connection to Onezone..."),
-    await_zone_connection_and_run(oneprovider:is_connected_to_oz(), ?ZONE_CONNECTION_RETRIES, Fun).
+    ?info("Awaiting Onezone connection..."),
+    await_zone_connection_and_run(gs_channel_service:is_connected(), ?ZONE_CONNECTION_RETRIES, Fun).
 
 -spec await_zone_connection_and_run(IsConnectedToZone :: boolean(), Retries :: integer(),
     Fun :: fun(() -> ok)) -> ok.
 await_zone_connection_and_run(false, 0, _) ->
-    ?critical("Could not establish connection to Onezone. Aborting upgrade procedure."),
+    ?critical("Could not establish Onezone connection. Aborting upgrade procedure."),
     throw(?ERROR_NO_CONNECTION_TO_ONEZONE);
 await_zone_connection_and_run(false, Retries, Fun) ->
-    ?warning("There is no connection to Onezone. Next retry in 10 seconds"),
+    ?warning("The Onezone connection is down. Next retry in 10 seconds..."),
     timer:sleep(timer:seconds(10)),
-    await_zone_connection_and_run(oneprovider:is_connected_to_oz(), Retries - 1, Fun);
+    await_zone_connection_and_run(gs_channel_service:is_connected(), Retries - 1, Fun);
 await_zone_connection_and_run(true, _, Fun) ->
     Fun().
