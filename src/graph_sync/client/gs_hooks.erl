@@ -43,7 +43,8 @@ handle_connected_to_oz() ->
         ?info("Successfully executed on-connect-to-oz procedures")
     catch
         _:{_, ?ERROR_NO_CONNECTION_TO_ONEZONE} ->
-            ?warning("Connection lost while running on-connect-to-oz procedures");
+            ?warning("Connection lost while running on-connect-to-oz procedures"),
+            error;
         Class:Reason ->
             ?error_stacktrace("Failed to execute on-connect-to-oz procedures, disconnecting - ~w:~p", [
                 Class, Reason

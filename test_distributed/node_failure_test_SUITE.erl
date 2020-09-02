@@ -66,9 +66,9 @@ failure_test(Config) ->
     ?assert(is_atom(DBsyncWorkerP1)),
     DBsyncWorkerP2 = rpc:call(Worker1P2, datastore_key, any_responsible_node, [SpaceId]),
     ?assert(is_atom(DBsyncWorkerP2)),
-    GSWorkerP1 = rpc:call(Worker1P1, datastore_key, any_responsible_node, [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN]),
+    GSWorkerP1 = rpc:call(Worker1P1, datastore_key, any_responsible_node, [?GS_CHANNEL_SERVICE_NAME]),
     ?assert(is_atom(GSWorkerP1)),
-    GSWorkerP2 = rpc:call(Worker1P2, datastore_key, any_responsible_node, [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN]),
+    GSWorkerP2 = rpc:call(Worker1P2, datastore_key, any_responsible_node, [?GS_CHANNEL_SERVICE_NAME]),
     ?assert(is_atom(GSWorkerP2)),
 
     % Execute base test that kill nodes many times to verify if multiple failures will be handled properly
@@ -101,9 +101,9 @@ failure_test(Config) ->
     ?assertEqual(DBsyncWorkerP2, node(rpc:call(Worker1P2, global, whereis_name, [{dbsync_in_stream, SpaceId}]))),
 
     ?assertEqual(GSWorkerP1, rpc:call(Worker1P1, internal_services_manager, get_processing_node,
-        [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN])),
+        [?GS_CHANNEL_SERVICE_NAME])),
     ?assertEqual(GSWorkerP2, rpc:call(Worker1P2, internal_services_manager, get_processing_node,
-        [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN])),
+        [?GS_CHANNEL_SERVICE_NAME])),
 
     ok.
 

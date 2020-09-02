@@ -20,6 +20,8 @@
 -define(GS_PROTOCOL_VERSION, 4).
 
 % Graph Sync config
+-define(GS_CHANNEL_SERVICE_NAME, <<"GS-channel-service">>).
+
 -define(GS_CHANNEL_PORT, application:get_env(?APP_NAME,
     graph_sync_port, 443)).
 

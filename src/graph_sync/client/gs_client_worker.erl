@@ -89,8 +89,6 @@ start() ->
                 case gen_server2:start(?MODULE, [], []) of
                     {ok, _Pid} ->
                         ok;
-                    {error, {already_started, _Pid}} ->
-                        already_started;
                     {error, normal} ->
                         error;
                     {error, _} = Error ->
@@ -610,7 +608,7 @@ maybe_serve_from_cache(_, _) ->
 coalesce_cache(ConnRef, GRI = #gri{type = Type, aspect = As}, Doc = #document{value = Record}, Rev) when
     As =:= instance;
     (Type =:= temporary_token_secret andalso As =:= user)
-    ->
+->
     #gri{type = Type, id = Id, scope = Scope} = GRI,
     CacheUpdateFun = fun(CachedRecord) ->
         #{scope := CachedScope} = CacheState = get_cache_state(CachedRecord),

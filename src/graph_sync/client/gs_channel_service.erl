@@ -23,8 +23,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--define(SERVICE_NAME, <<"GS-channel-service">>).
-
 %% API
 -export([setup_internal_service/0]).
 -export([is_connected/0]).
@@ -45,11 +43,12 @@
 %%--------------------------------------------------------------------
 -spec setup_internal_service() -> ok.
 setup_internal_service() ->
-    ok = internal_services_manager:start_service(?MODULE, ?SERVICE_NAME, ?SERVICE_NAME, #{
+    ok = internal_services_manager:start_service(?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME, #{
         start_function => start_service,
         stop_function => stop_service,
         takeover_function => takeover_service,
         healthcheck_fun => healthcheck,
+        healthcheck_interval => ?GS_RECONNECT_BASE_INTERVAL,
         async_start => true
     }).
 
@@ -74,6 +73,7 @@ is_connected() ->
 force_start_connection() ->
     case is_connected() of
         true ->
+            ?info("Ignoring attempt to force start Onezone connection - already started."),
             true;
         false ->
             case oneprovider:is_registered() of
@@ -84,8 +84,17 @@ force_start_connection() ->
                     ),
                     false;
                 true ->
-                    ?info("Attempting to start Onezone connection (forced)..."),
-                    ok == start_gs_client_worker()
+                    ResponsibleNode = responsible_node(),
+                    case node() of
+                        ResponsibleNode ->
+                            ?info("Attempting to start Onezone connection (forced)..."),
+                            ok == start_gs_client_worker();
+                        _OtherNode ->
+                            ?info("Attempting to start Onezone connection at node ~p (forced)...", [
+                                ResponsibleNode
+                            ]),
+                            rpc:call(ResponsibleNode, ?MODULE, force_start_connection, [])
+                    end
             end
     end.
 
@@ -105,7 +114,7 @@ force_terminate_connection() ->
 %% Terminates existing Onezone connection (if any).
 %% @end
 %%--------------------------------------------------------------------
--spec force_restart_connection() -> ok | not_started.
+-spec force_restart_connection() -> boolean().
 force_restart_connection() ->
     force_terminate_connection(),
     force_start_connection().
@@ -121,7 +130,7 @@ force_restart_connection() ->
 %%--------------------------------------------------------------------
 -spec on_db_and_workers_ready() -> ok.
 on_db_and_workers_ready() ->
-    is_connected() andalso is_this_responsible_node() andalso run_on_connect_to_oz_procedures(),
+    node() =:= responsible_node() andalso is_connected() andalso run_on_connect_to_oz_procedures(),
     ok.
 
 %%%===================================================================
@@ -130,7 +139,7 @@ on_db_and_workers_ready() ->
 
 -spec start_service() -> ok.
 start_service() ->
-    ok. % the GS channel will be started upon the first healthcheck (which is immediate)
+    ok. % the GS channel will be started upon the first healthcheck
 
 
 -spec stop_service() -> ok | no_return().
@@ -171,9 +180,9 @@ healthcheck(LastInterval) ->
 %%%===================================================================
 
 %% @private
--spec is_this_responsible_node() -> boolean().
-is_this_responsible_node() ->
-    node() == internal_services_manager:get_processing_node(?SERVICE_NAME).
+-spec responsible_node() -> node().
+responsible_node() ->
+    internal_services_manager:get_processing_node(?GS_CHANNEL_SERVICE_NAME).
 
 
 %% @private
