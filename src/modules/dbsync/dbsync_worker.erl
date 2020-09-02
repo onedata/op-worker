@@ -130,12 +130,19 @@ start_streams() ->
 
 -spec start_streams([od_space:id()]) -> ok.
 start_streams(Spaces) ->
-    lists:foreach(fun(SpaceId) ->
-        ok = internal_services_manager:start_service(?MODULE, <<"dbsync_in_stream", SpaceId/binary>>,
-            start_in_stream, stop_in_stream, [SpaceId], SpaceId),
-        ok = internal_services_manager:start_service(?MODULE, <<"dbsync_out_stream", SpaceId/binary>>,
-            start_out_stream, stop_out_stream, [SpaceId], SpaceId)
-    end, Spaces).
+    case whereis(?MODULE) of
+        undefined ->
+            ?warning("Ignoring request to start streams for spaces: ~p - ~p is not running", [
+                Spaces, ?MODULE
+            ]);
+        _ ->
+            lists:foreach(fun(SpaceId) ->
+                ok = internal_services_manager:start_service(?MODULE, <<"dbsync_in_stream", SpaceId/binary>>,
+                    start_in_stream, stop_in_stream, [SpaceId], SpaceId),
+                ok = internal_services_manager:start_service(?MODULE, <<"dbsync_out_stream", SpaceId/binary>>,
+                    start_out_stream, stop_out_stream, [SpaceId], SpaceId)
+            end, Spaces)
+    end.
 
 -spec get_on_demand_changes_stream_id(od_space:id(), od_provider:id()) -> binary().
 get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
@@ -270,7 +277,7 @@ handle_changes_request(ProviderId, #changes_request2{
                     {ok, _} = rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]),
                     ok
                 catch
-                    Error:Reason  ->
+                    Error:Reason ->
                         ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
                 end;
             _ ->

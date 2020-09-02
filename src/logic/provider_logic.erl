@@ -780,19 +780,18 @@ assert_zone_compatibility() ->
                 true ->
                     ok;
                 {false, CompOzVersions} ->
-                    ?critical("This Oneprovider is not compatible with its Onezone "
-                    "service.~n"
+                    ?critical("This Oneprovider is not compatible with its Onezone service.~n"
                     "Oneprovider version: ~s, supports zones: ~s~n"
                     "Onezone version: ~s~n"
                     "The service will not be operational until the problem is resolved "
                     "(may require Oneprovider / Onezone upgrade or compatibility registry refresh).", [
                         OpVersion,
-                        string:join(binaries_to_strings(CompOzVersions), ", "),
+                        str_utils:join_binary(CompOzVersions, <<", ">>),
                         OzVersion
                     ]),
                     throw({error, incompatible_oneprovider_version});
                 {error, Error} ->
-                    ?critical("Cannot check Oneprovider's compatibility due to ~w."
+                    ?critical("Cannot check Oneprovider's compatibility due to ~w. "
                     "The service will not be operational until the problem is resolved.", [
                         {error, Error}
                     ]),
@@ -842,7 +841,7 @@ assert_provider_compatibility(Domain) ->
                     throw({
                         incompatible_peer_op_version,
                         RemoteOpVersion,
-                        binaries_to_strings(RemoteCompOpVersions)
+                        RemoteCompOpVersions
                     });
                 {error, Error} ->
                     error(Error)
@@ -935,12 +934,6 @@ http_get_configuration(URL, SslOpts) ->
         {error, Error} ->
             {error, Error}
     end.
-
-
-%% @private
--spec binaries_to_strings([binary()]) -> [string()].
-binaries_to_strings(List) ->
-    [binary_to_list(B) || B <- List].
 
 
 %% @private
