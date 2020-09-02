@@ -197,14 +197,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
             Acc
     end, {ok, 0}, BaseDirs),
 
-    % Check if dirs are ready
-    Proceed = case BaseCreationAns of
-        ok ->
-            ok;
-        No ->
-            No
-    end,
-    case Proceed of
+    case BaseCreationAns of
         ok ->
             Dirs = create_dirs_names(BaseDir, SpawnBegLevel, DirLevel, DirsPerParent),
 
@@ -368,7 +361,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
         _ ->
             ct:print("Dirs not ready"),
             timer:sleep(timer:seconds(60)),
-            ?assertEqual(ok, Proceed),
+            ?assertEqual(ok, BaseCreationAns),
             get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0,0, 1, 0)
     end.
 
