@@ -84,7 +84,7 @@ ensure_exists_on_all_nodes(SpaceId) ->
         _ ->
             ?error(
                 "Could not ensure that QoS bounded cache for space ~p exists on
-                nodes ~p. Nodes not exist. ~n", [SpaceId, BadNodes]
+                nodes: ~w (RPC error)", [SpaceId, BadNodes]
             )
     end,
 
@@ -92,8 +92,8 @@ ensure_exists_on_all_nodes(SpaceId) ->
         (ok) -> ok;
         ({badrpc, _} = Error) ->
             ?error(
-                "Could not ensure that QoS bounded cache for space: ~p exists.
-                Reason: ~p~n", [SpaceId, Error]
+                "Could not ensure that QoS bounded cache for space: ~p exists.~n"
+                "Reason: ~p", [SpaceId, Error]
             )
     end, Res).
 
@@ -167,8 +167,8 @@ invalidate_on_all_nodes(SpaceId) ->
             ok;
         _ ->
             ?error(
-                "Invalidation of QoS bounded cache for space ~p on nodes ~p failed.
-                Nodes not exist. ~n", [BadNodes]
+                "Invalidation of QoS bounded cache for space ~p failed on nodes: ~p (RPC error)",
+                [BadNodes]
             )
     end,
 
@@ -176,8 +176,8 @@ invalidate_on_all_nodes(SpaceId) ->
         (ok) -> ok;
         ({badrpc, _} = Error) ->
             ?error(
-                "Invalidation of QoS bounded cache for space ~p failed.
-                Reason: ~p~n", [SpaceId, Error]
+                "Invalidation of QoS bounded cache for space ~p failed.~n"
+                "Reason: ~p", [SpaceId, Error]
             )
     end, Res).
 
@@ -218,7 +218,7 @@ ensure_non_neg_integer(Value, _, _) when is_integer(Value) andalso Value >= 0 ->
 
 ensure_non_neg_integer(Value, ParamName, DefaultVal) ->
     ?warning(
-        "Got ~p value for ~p parameter. ~p should be non negatvie integer."
-        "Will use default value instead (~p)", [Value, ParamName, ParamName, DefaultVal]
+        "Got ~p value for ~p parameter. ~p should be a non-negative integer. "
+        "Using default value instead (~p)", [Value, ParamName, ParamName, DefaultVal]
     ),
     DefaultVal.

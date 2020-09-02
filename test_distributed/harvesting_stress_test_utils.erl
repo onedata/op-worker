@@ -30,7 +30,8 @@ mock_harvesting(Node) ->
         fun(_SpaceId) -> {ok, [?INDEX_ID]} end),
     ok = test_utils:mock_expect(Node, space_logic, harvest_metadata,
         fun(_SpaceId, _Destination, Batch, _MaxStreamSeq, _MaxSeq) ->
-            Self ! ?HARVEST_METADATA(length(Batch)),
+            FileIds = [maps:get(<<"fileId">>, Entry) || Entry <- Batch],
+            Self ! ?HARVEST_METADATA(FileIds),
             {ok, #{}}
         end
     ).
@@ -41,16 +42,24 @@ mock_harvesting_stopped(Node) ->
     ok = test_utils:mock_expect(Node, harvester_logic, get_indices,
         fun(_SpaceId) -> {ok, []} end).
 
-harvesting_receive_loop(0) ->
-    ok;
-harvesting_receive_loop(ExpChangesNum) ->
-    receive
-        ?HARVEST_METADATA(Size) ->
-            harvesting_receive_loop(ExpChangesNum - Size)
-    after
-        ?TIMEOUT ->
-            ct:print("harvesting_receive_loop timeout with ~p changes left.", [ExpChangesNum]),
-            ct:fail("harvesting_receive_loop timeout")
+harvesting_receive_loop(ExpectedFilesToHarvestCount) ->
+    harvesting_receive_loop(sets:new(), ExpectedFilesToHarvestCount).
+
+harvesting_receive_loop(HarvestedFileIds, ExpectedFilesToHarvestCount) ->
+    case sets:size(HarvestedFileIds) =:= ExpectedFilesToHarvestCount of
+        true ->
+            ok;
+        false ->
+            receive
+                ?HARVEST_METADATA(FileIds) ->
+                    NewHarvestedFileIds = sets:union(HarvestedFileIds, sets:from_list(FileIds)),
+                    harvesting_receive_loop(NewHarvestedFileIds, ExpectedFilesToHarvestCount)
+            after
+                ?TIMEOUT ->
+                    ct:print("harvesting_receive_loop timeout with ~p changes left.",
+                        [ExpectedFilesToHarvestCount - sets:size(HarvestedFileIds)]),
+                    ct:fail("harvesting_receive_loop timeout")
+            end
     end.
 
 revise_space_harvesters(Node, SpaceId) ->

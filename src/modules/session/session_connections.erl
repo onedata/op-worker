@@ -35,7 +35,7 @@ register(SessId, Conn) ->
     Diff = fun(#session{connections = Cons} = Sess) ->
         {ok, Sess#session{connections = [Conn | Cons]}}
     end,
-    ?extract_ok(session:update(SessId, Diff)).
+    ?extract_ok(session:update_doc_and_time(SessId, Diff)).
 
 
 -spec deregister(session:id(), Conn :: pid()) -> ok | error().
@@ -44,7 +44,7 @@ deregister(SessId, Conn) ->
         NewCons = lists:filter(fun(C) -> C =/= Conn end, Cons),
         {ok, Sess#session{connections = NewCons}}
     end,
-    ?extract_ok(session:update(SessId, Diff)).
+    ?extract_ok(session:update_doc_and_time(SessId, Diff)).
 
 
 %%--------------------------------------------------------------------

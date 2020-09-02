@@ -1292,11 +1292,7 @@ qos_status_after_failed_transfer(Config, SpaceId, TargetWorker) ->
     {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), SpaceId, Name),
     % check that file is on qos failed files list
     FileGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
-    rpc:call(Worker1, qos_entry, apply_to_all_in_failed_files_list, [
-        file_id:guid_to_space_id(FileGuid),
-        fun(FileUuid) -> ct:print(FileUuid) end
-    ]),
-    ?assert(is_file_in_failed_files_list(TargetWorker, FileGuid)),
+    ?assertEqual(true, is_file_in_failed_files_list(TargetWorker, FileGuid), ?ATTEMPTS),
     ?assert(is_failed_files_list_empty(get_workers_list_without_provider(Workers, ?GET_DOMAIN_BIN(TargetWorker)), 
         file_id:guid_to_space_id(FileGuid))),
     % check file distribution (file blocks should be only on source provider)
@@ -1330,13 +1326,13 @@ qos_status_after_failed_transfer_deleted_file(Config, SpaceId, TargetWorker) ->
     
     % create new QoS entry and check, that it is not fulfilled
     {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), SpaceId, Name),
-    % check file distribution (file blocks should be only on source provider)
-    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), GuidsAndPaths)),
     % check that file is on qos failed files list
     FileGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [1]), GuidsAndPaths),
-    ?assert(is_file_in_failed_files_list(TargetWorker, FileGuid)),
+    ?assertEqual(true, is_file_in_failed_files_list(TargetWorker, FileGuid), ?ATTEMPTS),
     ?assert(is_failed_files_list_empty(get_workers_list_without_provider(Workers, ?GET_DOMAIN_BIN(TargetWorker)),
         file_id:guid_to_space_id(FileGuid))),
+    % check file distribution (file blocks should be only on source provider)
+    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), GuidsAndPaths)),
     % initialize periodic check of failed files
     rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
     
@@ -1371,13 +1367,13 @@ qos_status_after_failed_transfer_deleted_entry(Config, SpaceId, TargetWorker) ->
     {GuidsAndPaths, [QosEntryId]} = prepare_qos_status_test_env(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), SpaceId, Name),
     % add second entry to the same file
     {_, QosEntryList} = prepare_qos_status_test_env(Config, undefined, SpaceId, Name),
-    % check file distribution (file blocks should be only on source provider)
-    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), GuidsAndPaths)),
     % check that file is on qos failed files list
     FileGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
-    ?assert(is_file_in_failed_files_list(TargetWorker, FileGuid)),
+    ?assertEqual(true, is_file_in_failed_files_list(TargetWorker, FileGuid), ?ATTEMPTS),
     ?assert(is_failed_files_list_empty(get_workers_list_without_provider(Workers, ?GET_DOMAIN_BIN(TargetWorker)),
         file_id:guid_to_space_id(FileGuid))),
+    % check file distribution (file blocks should be only on source provider)
+    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), GuidsAndPaths)),
     % initialize periodic check of failed files
     rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
     

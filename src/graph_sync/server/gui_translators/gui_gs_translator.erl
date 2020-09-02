@@ -68,7 +68,7 @@ translate_value(ProtocolVersion, GRI, Data) ->
     ?error("Cannot translate graph sync create result for:~n"
            "ProtocolVersion: ~p~n"
            "GRI: ~p~n"
-           "Data: ~p~n", [
+           "Data: ~p", [
         ProtocolVersion, GRI, Data
     ]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).
@@ -108,7 +108,7 @@ translate_resource(ProtocolVersion, GRI, Data) ->
     ?error("Cannot translate graph sync get result for:~n"
            "ProtocolVersion: ~p~n"
            "GRI: ~p~n"
-           "Data: ~p~n", [
+           "Data: ~p", [
         ProtocolVersion, GRI, Data
     ]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).
