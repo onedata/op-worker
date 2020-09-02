@@ -6470,6 +6470,7 @@ end_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_de
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     remove_deletion_link(W1, ?SPACE_ID, TestDir, SpaceCtx),
+    ok = test_utils:mock_unload(W1, helpers),
     end_per_testcase(default, Config);
 
 end_per_testcase(sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage, Config) ->
@@ -6479,6 +6480,7 @@ end_per_testcase(sync_should_not_reimport_file_that_was_not_successfully_deleted
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     remove_deletion_link(W1, ?SPACE_ID, TestFile, SpaceCtx),
+    ok = test_utils:mock_unload(W1, helpers),
     end_per_testcase(default, Config);
 
 end_per_testcase(should_not_sync_file_during_replication, Config) ->
