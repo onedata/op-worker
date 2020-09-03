@@ -188,9 +188,10 @@ remove_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY) ->
 remove_xattr(_UserCtx, _FileCtx, <<?ONEDATA_PREFIX_STR, _/binary>>) ->
     throw(?EPERM);
 
-remove_xattr(UserCtx, FileCtx, XattrName) ->
-    ok = xattr:remove(UserCtx, FileCtx, XattrName),
-    fslogic_times:update_ctime(FileCtx),
+remove_xattr(UserCtx, FileCtx0, XattrName) ->
+    FileCtx1 = assert_file_exists(FileCtx0),
+    ok = xattr:remove(UserCtx, FileCtx1, XattrName),
+    fslogic_times:update_ctime(FileCtx1),
     #fuse_response{status = #status{code = ?OK}}.
 
 

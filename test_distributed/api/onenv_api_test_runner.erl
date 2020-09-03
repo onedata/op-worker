@@ -8,6 +8,27 @@
 %%% @doc
 %%% Functions running test combinations as specified in scenario for API
 %%% (REST + gs) tests.
+%%%
+%%%         /--------------------------------------------------\
+%%%         | !!! COMMON PITFALLS (when writing api tests) !!! |
+%%%         \--------------------------------------------------/
+%%%
+%%% 1) Using setup_fun() to renew the exact same data every time (e.g. json
+%%%    metadata on specific file). In multi provider environment this can lead
+%%%    to following example race condition:
+%%%        1. setup_fun() renew file metadata META on provider A. In case when META
+%%%           wasn't modified during previous test (unauthorized/forbidden clients)
+%%%           this will update custom_metadata document but content itself will
+%%%           not change. Because content wasn't modified checks on provider B will
+%%%           pass even before changes from A would be propagated.
+%%%        2. next test, for correct client this time, will start and succeed in
+%%%           e.g removing META on provider B.
+%%%        3. changes from provider A finally arrive at provider B which results
+%%%           in restoring META on file.
+%%%        4. verify_fun() checks whether META deletion is visible from providers
+%%%           A and B and it fails.
+%%%    To prevent such bugs it is recommended to checks in setup_fun() if data was
+%%%    modified is any and only then renew it.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(onenv_api_test_runner).

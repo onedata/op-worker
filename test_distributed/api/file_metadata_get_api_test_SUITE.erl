@@ -52,26 +52,25 @@
     get_file_xattrs_on_provider_not_supporting_space_test/1
 ]).
 
-all() ->
-    ?ALL([
-        get_file_rdf_metadata_with_rdf_set_test,
-        get_file_rdf_metadata_without_rdf_set_test,
-        get_shared_file_rdf_metadata_with_rdf_set_test,
-        get_shared_file_rdf_metadata_without_rdf_set_test,
-        get_file_rdf_metadata_on_provider_not_supporting_space_test,
+all() -> [
+    get_file_rdf_metadata_with_rdf_set_test,
+    get_file_rdf_metadata_without_rdf_set_test,
+    get_shared_file_rdf_metadata_with_rdf_set_test,
+    get_shared_file_rdf_metadata_without_rdf_set_test,
+    get_file_rdf_metadata_on_provider_not_supporting_space_test,
 
-        get_file_json_metadata_with_json_set_test,
-        get_file_json_metadata_without_json_set_test,
-        get_shared_file_json_metadata_with_json_set_test,
-        get_shared_file_json_metadata_without_json_set_test,
-        get_file_json_metadata_on_provider_not_supporting_space_test,
+    get_file_json_metadata_with_json_set_test,
+    get_file_json_metadata_without_json_set_test,
+    get_shared_file_json_metadata_with_json_set_test,
+    get_shared_file_json_metadata_without_json_set_test,
+    get_file_json_metadata_on_provider_not_supporting_space_test,
 
-        get_file_xattrs_with_xattrs_set_test,
-        get_file_xattrs_without_xattrs_set_test,
-        get_shared_file_xattrs_with_xattrs_set_test,
-        get_shared_file_xattrs_without_xattrs_set_test,
-        get_file_xattrs_on_provider_not_supporting_space_test
-    ]).
+    get_file_xattrs_with_xattrs_set_test,
+    get_file_xattrs_without_xattrs_set_test,
+    get_shared_file_xattrs_with_xattrs_set_test,
+    get_shared_file_xattrs_without_xattrs_set_test,
+    get_file_xattrs_on_provider_not_supporting_space_test
+].
 
 
 -define(ATTEMPTS, 30).
@@ -975,10 +974,6 @@ build_get_metadata_prepare_rest_args_fun(Endpoint, MetadataType, ValidId, QsPara
         Data1 = api_test_utils:ensure_defined(Data0, #{}),
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
-        Id = case maps:find(bad_id, Data1) of
-            {ok, BadId} -> BadId;
-            error -> ValidId
-        end,
         Path = case Endpoint of
             new_id -> ?NEW_ID_METADATA_REST_PATH(Id, MetadataType);
             deprecated_path -> ?DEPRECATED_PATH_METADATA_REST_PATH(Id, MetadataType);

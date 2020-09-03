@@ -73,11 +73,13 @@ set_metadata(UserCtx, FileCtx0, rdf, Value, _, Create, Replace) ->
 
 -spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
     fslogic_worker:provider_response().
-remove_metadata(UserCtx, FileCtx, json) ->
-    ok = json_metadata:remove(UserCtx, FileCtx),
+remove_metadata(UserCtx, FileCtx0, json) ->
+    FileCtx1 = assert_file_exists(FileCtx0),
+    ok = json_metadata:remove(UserCtx, FileCtx1),
     #provider_response{status = #status{code = ?OK}};
-remove_metadata(UserCtx, FileCtx, rdf) ->
-    ok = xattr:remove(UserCtx, FileCtx, ?RDF_METADATA_KEY),
+remove_metadata(UserCtx, FileCtx0, rdf) ->
+    FileCtx1 = assert_file_exists(FileCtx0),
+    ok = xattr:remove(UserCtx, FileCtx1, ?RDF_METADATA_KEY),
     #provider_response{status = #status{code = ?OK}}.
 
 
