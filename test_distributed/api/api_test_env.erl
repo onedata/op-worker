@@ -29,6 +29,7 @@
     to_entity_id/2,
     to_entity_placeholder/2,
 
+    get_provider_id/2,
     get_provider_nodes/2,
     get_provider_eff_users/2,
 
@@ -91,6 +92,13 @@ to_entity_placeholder(Placeholder, _Config) when is_atom(Placeholder) ->
     Placeholder;
 to_entity_placeholder(EntityId, Config) when is_binary(EntityId) ->
     kv_utils:get([api_test_env, entity_id_to_placeholder_mapping, EntityId], Config).
+
+
+-spec get_provider_id(op_provider:id() | placeholder(), api_test_runner:config()) ->
+    od_provider:id().
+get_provider_id(ProviderIdOrPlaceholder, Config) ->
+    ProviderPlaceholder = to_entity_placeholder(ProviderIdOrPlaceholder, Config),
+    kv_utils:get([api_test_env, ProviderPlaceholder, id], Config).
 
 
 -spec get_provider_nodes(op_provider:id() | placeholder(), api_test_runner:config()) ->

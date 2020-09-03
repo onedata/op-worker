@@ -19,6 +19,7 @@
 -export([load_module_from_test_distributed_dir/2]).
 
 -export([
+    create_and_sync_shared_file/3,
     randomly_choose_file_type_for_test/0,
     randomly_choose_file_type_for_test/1,
     create_file/4, create_file/5,
@@ -77,6 +78,26 @@ load_module_from_test_distributed_dir(Config, ModuleName) ->
         _ ->
             ct:fail("Couldn't load module: ~p", [ModuleName])
     end.
+
+
+-spec create_and_sync_shared_file(od_space:name(), file_meta:mode(), api_test_runner:config()) ->
+    {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
+create_and_sync_shared_file(SpaceName, Mode, Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
+
+    FileType = randomly_choose_file_type_for_test(),
+    FilePath = filename:join(["/", SpaceName, ?RANDOM_FILE_NAME()]),
+    {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
+    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
+
+    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
+
+    {FileType, FilePath, FileGuid, ShareId}.
 
 
 -spec randomly_choose_file_type_for_test() -> file_type().

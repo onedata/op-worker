@@ -15,8 +15,26 @@
 -define(FILE_METADATA_API_TEST_UTILS_HRL, 1).
 
 
+-include("api_test_runner.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
+
+
+-define(CLIENT_SPEC_FOR_SPACE_1, #client_spec{
+    correct = [user1, user3, user4],
+    unauthorized = [nobody],
+    forbidden_not_in_space = [user2]
+}).
+
+-define(CLIENT_SPEC_FOR_SPACE_2, #client_spec{
+    correct = [
+        user2, % space owner - doesn't need any perms
+        user3  % files owner (see fun create_shared_file/1)
+    ],
+    unauthorized = [nobody],
+    forbidden_not_in_space = [user1],
+    forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+}).
 
 
 -define(NEW_ID_METADATA_REST_PATH(__FILE_OBJECT_ID, __METADATA_TYPE),

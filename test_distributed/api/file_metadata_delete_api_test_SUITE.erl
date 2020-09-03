@@ -81,7 +81,9 @@ delete_file_json_metadata_without_json_set_test(Config) ->
     api_test_runner:config()) -> ok.
 delete_file_metadata_test_base(MetadataType, Metadata, SetMetadataPolicy, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    {FileType, FileGuid, ShareId} = create_shared_file(Config),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file(
+        ?SPACE_2, 8#707, Config
+    ),
 
     SetupFun = build_setup_fun(SetMetadataPolicy, FileGuid, MetadataType, Metadata, Nodes),
     VerifyFun = build_verify_fun(SetMetadataPolicy, FileGuid, MetadataType, Metadata, Nodes),
@@ -95,7 +97,9 @@ delete_file_metadata_test_base(MetadataType, Metadata, SetMetadataPolicy, Config
 
 delete_file_xattrs(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    {FileType, FileGuid, ShareId} = create_shared_file(Config),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file(
+        ?SPACE_2, 8#707, Config
+    ),
 
     FullXattrSet = #{
         ?RDF_METADATA_KEY => ?RDF_METADATA_1,
@@ -163,27 +167,6 @@ delete_file_xattrs(Config) ->
 %%%===================================================================
 %%% Get metadata generic functions
 %%%===================================================================
-
-
-%% @private
--spec create_shared_file(api_test_runner:config()) ->
-    {api_test_utils:file_type(), file_id:file_guid(), od_share:id()}.
-create_shared_file(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
-
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
-
-    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
-
-    {FileType, FileGuid, ShareId}.
 
 
 %% @private
