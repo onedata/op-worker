@@ -6,20 +6,28 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Functions to get onenv created env configuration.
+%%% This module handles initialization of environment created using onenv and
+%%% provides utility functions to get information about this environment.
+%%%
+%%%                         !!!ATTENTION !!!
+%%% To inspect the internal structure of environment description (created by
+%%% this module) it would be enough to add `ct:pal("CONFIG: ~p", [Config])`
+%%% at the beginning of any api test and run it - description will be available
+%%% under `api_test_env` key.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(api_test_env).
 -author("Bartosz Walkowicz").
 
+-include("api_test_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
--export([init/1]).
+-export([init_per_suite/2]).
 -export([
-    resolve_entity_id/2,
-    resolve_entity_name/2,
+    to_entity_id/2,
+    to_entity_placeholder/2,
 
     get_provider_nodes/2,
     get_provider_eff_users/2,
@@ -31,9 +39,10 @@
 
 
 -type entity_id() :: od_provider:id() | od_space:id() | od_user:id().
--type entity_name() :: atom().
+-type placeholder() :: atom().
+-type onenv_test_config() :: #onenv_test_config{}.
 
--export_type([entity_id/0, entity_name/0]).
+-export_type([placeholder/0, entity_id/0]).
 
 
 % Time caveat is required in temporary tokens, a default one is added if there isn't any
@@ -45,20 +54,125 @@
 %%%===================================================================
 
 
--spec init(api_test_runner:config()) -> api_test_runner:config().
-init(Config) ->
-    [OzNode] = test_config:get_custom(Config, [oz_worker_nodes]),
+-spec init_per_suite(api_test_runner:config(), onenv_test_config()) ->
+    api_test_runner:config().
+init_per_suite(Config, #onenv_test_config{
+    onenv_scenario = Scenario,
+    envs = Envs,
+    posthook = CustomPostHook
+}) ->
+    AddEnvs = lists:map(fun({Service, Application, CustomEnv}) ->
+        {add_envs, [Service, Application, CustomEnv]}
+    end, Envs),
+
+    test_config:set_many(Config, AddEnvs ++ [
+        {set_onenv_scenario, [Scenario]},
+        {set_posthook, fun(NewConfig) ->
+            CustomPostHook(
+                add_onenv_desc_to_config(
+                    onenv_test_utils:prepare_base_test_config(NewConfig)
+                )
+            )
+        end}
+    ]).
+
+
+-spec to_entity_id(entity_id() | placeholder(), api_test_runner:config()) ->
+    entity_id().
+to_entity_id(EntityPlaceholder, Config) when is_atom(EntityPlaceholder) ->
+    kv_utils:get([api_test_env, EntityPlaceholder, id], Config);
+to_entity_id(EntityId, _Config) when is_binary(EntityId) ->
+    EntityId.
+
+
+-spec to_entity_placeholder(entity_id() | placeholder(), api_test_runner:config()) ->
+    placeholder().
+to_entity_placeholder(Placeholder, _Config) when is_atom(Placeholder) ->
+    Placeholder;
+to_entity_placeholder(EntityId, Config) when is_binary(EntityId) ->
+    kv_utils:get([api_test_env, entity_id_to_placeholder_mapping, EntityId], Config).
+
+
+-spec get_provider_nodes(op_provider:id() | placeholder(), api_test_runner:config()) ->
+    [node()].
+get_provider_nodes(ProviderIdOrPlaceholder, Config) ->
+    ProviderPlaceholder = to_entity_placeholder(ProviderIdOrPlaceholder, Config),
+    kv_utils:get([api_test_env, ProviderPlaceholder, nodes], Config).
+
+
+-spec get_provider_eff_users(op_provider:id() | placeholder(), api_test_runner:config()) ->
+    [od_user:id()].
+get_provider_eff_users(ProviderIdOrPlaceholder, Config) ->
+    ProviderPlaceholder = to_entity_placeholder(ProviderIdOrPlaceholder, Config),
+    kv_utils:get([api_test_env, ProviderPlaceholder, users], Config).
+
+
+-spec get_user_id(od_user:id() | placeholder(), api_test_runner:config()) ->
+    od_user:id().
+get_user_id(UserIdOrPlaceholder, Config) ->
+    UserPlaceholder = to_entity_placeholder(UserIdOrPlaceholder, Config),
+    kv_utils:get([api_test_env, UserPlaceholder, id], Config).
+
+
+-spec get_user_access_token(od_user:id() | placeholder(), api_test_runner:config()) ->
+    auth_manager:access_token().
+get_user_access_token(UserIdOrPlaceholder, Config) ->
+    UserPlaceholder = to_entity_placeholder(UserIdOrPlaceholder, Config),
+    kv_utils:get([api_test_env, UserPlaceholder, access_token], Config).
+
+
+-spec get_user_session_id(
+    UserIdOrPlaceholder :: od_user:id() | placeholder(),
+    ProviderIdOrPlaceholder :: od_provider:id() | placeholder(),
+    api_test_runner:config()
+) ->
+    session:id().
+get_user_session_id(UserIdOrPlaceholder, ProviderIdOrPlaceholder, Config) ->
+    UserPlaceholder = to_entity_placeholder(UserIdOrPlaceholder, Config),
+    ProviderPlaceholder = to_entity_placeholder(ProviderIdOrPlaceholder, Config),
+    kv_utils:get([api_test_env, UserPlaceholder, sessions, ProviderPlaceholder], Config).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec add_onenv_desc_to_config(api_test_runner:config()) -> api_test_runner:config().
+add_onenv_desc_to_config(Config) ->
+    {ProvidersDesc, ProviderIdToPlaceholder} = get_providers_desc(Config),
+    {UsersDesc, UserIdToPlaceholder} = get_users_desc(ProvidersDesc, Config),
+    {SpacesDesc, SpaceIdToPlaceholder} = get_spaces_desc(Config),
+
+    EntityIdToPlaceholder = maps_utils:merge([
+        ProviderIdToPlaceholder,
+        UserIdToPlaceholder,
+        SpaceIdToPlaceholder
+    ]),
+
+    [{api_test_env, maps_utils:merge([
+        ProvidersDesc,
+        UsersDesc,
+        SpacesDesc,
+        #{entity_id_to_placeholder_mapping => EntityIdToPlaceholder}
+    ])} | Config].
+
+
+%% @private
+get_providers_desc(Config) ->
     [ProvA, ProvB] = test_config:get_custom(Config, [providers]),
 
+    % Differentiate providers by number of supported spaces (see api_tests.yaml).
     {P1, P2} = case test_config:get_custom(Config, [provider_spaces, ProvA]) of
         [_] -> {ProvB, ProvA};
         [_, _] -> {ProvA, ProvB}
     end,
 
-    EntityIdToName0 = #{P1 => p1, P2 => p2},
+    ProviderIdToPlaceholder = #{P1 => p1, P2 => p2},
 
-    ProvidersDesc = lists:foldl(fun({ProvCodeName, ProvId}, Acc) ->
-        Acc#{ProvCodeName => #{
+    ProvidersDesc = lists:foldl(fun({ProvPlaceholder, ProvId}, Acc) ->
+        Acc#{ProvPlaceholder => #{
             id => ProvId,
             nodes => test_config:get_custom(Config, [provider_nodes, ProvId]),
             panel_nodes => test_config:get_custom(Config, [provider_panels, ProvId]),
@@ -66,116 +180,62 @@ init(Config) ->
         }}
     end, #{}, [{p1, P1}, {p2, P2}]),
 
-    {UsersDesc, EntityIdToName1} = lists:foldl(fun(UserId, {UserDescAcc, EntityIdToNameAcc}) ->
+    {ProvidersDesc, ProviderIdToPlaceholder}.
+
+
+%% @private
+get_users_desc(ProvidersDesc, Config) ->
+    [OzNode] = test_config:get_custom(Config, [oz_worker_nodes]),
+
+    lists:foldl(fun(UserId, {UserDescAcc, UserIdToPlaceholder}) ->
         {ok, UserInfo} = oz_test_rpc:get_user_protected_data(OzNode, UserId),
-        Username = binary_to_atom(maps:get(<<"username">>, UserInfo), utf8),
+        Username = maps:get(<<"username">>, UserInfo),
+        UserPlaceholder = binary_to_atom(Username, utf8),
         AccessToken = create_oz_temp_access_token(OzNode, UserId),
 
-        Sessions = lists:foldl(fun(Prov, Acc) ->
-            case lists:member(UserId, kv_utils:get([Prov, users], ProvidersDesc)) of
+        Sessions = lists:foldl(fun({ProvPlaceholder, ProvDesc}, Acc) ->
+            case lists:member(UserId, kv_utils:get([users], ProvDesc)) of
                 true ->
-                    [Node] = kv_utils:get([Prov, nodes], ProvidersDesc),
-                    Acc#{Prov => create_session(Node, UserId, AccessToken)};
+                    [Node] = kv_utils:get([nodes], ProvDesc),
+                    Acc#{ProvPlaceholder => create_session(Node, UserId, AccessToken)};
                 false ->
                     Acc
             end
-        end, #{}, [p1, p2]),
+        end, #{}, maps:to_list(ProvidersDesc)),
 
         {
-            UserDescAcc#{Username => #{
+            UserDescAcc#{UserPlaceholder => #{
                 id => UserId,
                 access_token => AccessToken,
                 sessions => Sessions,
                 name => Username
             }},
-            EntityIdToNameAcc#{UserId => Username}
+            UserIdToPlaceholder#{UserId => UserPlaceholder}
         }
-    end, {#{}, EntityIdToName0}, lists:usort(lists:flatten(maps:values(
+    end, {#{}, #{}}, lists:usort(lists:flatten(maps:values(
         test_config:get_custom(Config, [users])
-    )))),
+    )))).
 
-    {SpacesDesc, EntityIdToName2} = lists:foldl(fun(SpaceId, {SpaceDescAcc, EntityIdToNameAcc}) ->
+
+%% @private
+get_spaces_desc(Config) ->
+    [OzNode] = test_config:get_custom(Config, [oz_worker_nodes]),
+
+    lists:foldl(fun(SpaceId, {SpaceDescAcc, SpaceIdToPlaceholder}) ->
         {ok, SpaceInfo} = oz_test_rpc:get_space_protected_data(OzNode, SpaceId),
-        SpaceName = binary_to_atom(maps:get(<<"name">>, SpaceInfo), utf8),
+        SpaceName = maps:get(<<"name">>, SpaceInfo),
+        SpacePlaceholder = binary_to_atom(SpaceName, utf8),
 
         {
-            SpaceDescAcc#{SpaceName => #{
+            SpaceDescAcc#{SpacePlaceholder => #{
                 id => SpaceId,
                 name => SpaceName
             }},
-            EntityIdToNameAcc#{SpaceId => SpaceName}
+            SpaceIdToPlaceholder#{SpaceId => SpacePlaceholder}
         }
-    end, {#{}, EntityIdToName1}, lists:usort(lists:flatten(maps:values(
+    end, {#{}, #{}}, lists:usort(lists:flatten(maps:values(
         test_config:get_custom(Config, [provider_spaces])
-    )))),
-
-    [{api_test_env, maps_utils:merge([
-        ProvidersDesc,
-        UsersDesc,
-        SpacesDesc,
-        #{entity_id_to_name_mapping => EntityIdToName2}
-    ])} | Config].
-
-
--spec resolve_entity_id(entity_id() | entity_name(), api_test_runner:config()) ->
-    entity_id().
-resolve_entity_id(EntityName, Config) when is_atom(EntityName) ->
-    kv_utils:get([api_test_env, EntityName, id], Config);
-resolve_entity_id(EntityId, _Config) when is_binary(EntityId) ->
-    EntityId.
-
-
--spec resolve_entity_name(entity_id() | entity_name(), api_test_runner:config()) ->
-    entity_name().
-resolve_entity_name(EntityName, _Config) when is_atom(EntityName) ->
-    EntityName;
-resolve_entity_name(EntityId, Config) when is_binary(EntityId) ->
-    kv_utils:get([api_test_env, entity_id_to_name_mapping, EntityId], Config).
-
-
--spec get_provider_nodes(entity_id() | entity_name(), api_test_runner:config()) ->
-    [node()].
-get_provider_nodes(ProviderIdOrName, Config) ->
-    ProviderName = resolve_entity_name(ProviderIdOrName, Config),
-    kv_utils:get([api_test_env, ProviderName, nodes], Config).
-
-
--spec get_provider_eff_users(entity_id() | entity_name(), api_test_runner:config()) ->
-    [od_user:id()].
-get_provider_eff_users(ProviderIdOrName, Config) ->
-    ProviderName = resolve_entity_name(ProviderIdOrName, Config),
-    kv_utils:get([api_test_env, ProviderName, users], Config).
-
-
--spec get_user_id(entity_id() | entity_name(), api_test_runner:config()) ->
-    od_user:id().
-get_user_id(UserIdOrName, Config) ->
-    UserName = resolve_entity_name(UserIdOrName, Config),
-    kv_utils:get([api_test_env, UserName, id], Config).
-
-
--spec get_user_access_token(entity_id() | entity_name(), api_test_runner:config()) ->
-    auth_manager:access_token().
-get_user_access_token(UserIdOrName, Config) ->
-    UserName = resolve_entity_name(UserIdOrName, Config),
-    kv_utils:get([api_test_env, UserName, access_token], Config).
-
-
--spec get_user_session_id(
-    UserIdOrName :: entity_id() | entity_name(),
-    ProviderIdOrName :: entity_id() | entity_name(),
-    api_test_runner:config()
-) ->
-    session:id().
-get_user_session_id(UserIdOrName, ProviderIdOrName, Config) ->
-    UserName = resolve_entity_name(UserIdOrName, Config),
-    ProviderName = resolve_entity_name(ProviderIdOrName, Config),
-    kv_utils:get([api_test_env, UserName, sessions, ProviderName], Config).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+    )))).
 
 
 %% @private
@@ -207,6 +267,7 @@ create_session(Node, UserId, AccessToken) ->
 
 
 %% @private
+-spec local_ip_v4() -> inet:ip_address().
 local_ip_v4() ->
     {ok, Addrs} = inet:getifaddrs(),
     hd([

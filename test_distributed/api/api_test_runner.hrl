@@ -220,5 +220,11 @@ end)()).
 -define(RANDOM_FILE_NAME(), generator:gen_name()).
 -define(RANDOM_FILE_TYPE(), lists_utils:random_element([<<"file">>, <<"dir">>])).
 
+-record(onenv_test_config, {
+    % name of yaml file in test_distributed/onenv_scenarios
+    onenv_scenario = "api_tests" :: binary(),
+    envs :: [{Service :: atom(), Application :: atom(), Env :: [term()]}],
+    posthook = fun(Config) -> Config end :: fun((api_test_runner:config()) -> api_test_runner:config())
+}).
 
 -endif.

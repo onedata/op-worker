@@ -1010,16 +1010,16 @@ build_get_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
 
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        application:start(ssl),
-        hackney:start(),
-        api_test_env:init(onenv_test_utils:prepare_base_test_config(NewConfig))
-    end,
-    test_config:set_many(Config, [
-        {add_envs, [op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]]},
-        {set_onenv_scenario, ["api_tests"]}, % name of yaml file in test_distributed/onenv_scenarios
-        {set_posthook, Posthook}
-    ]).
+    api_test_env:init_per_suite(Config, #onenv_test_config{
+        envs = [
+            {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
+        ],
+        posthook = fun(NewConfig) ->
+            application:start(ssl),
+            hackney:start(),
+            NewConfig
+        end
+    }).
 
 
 end_per_suite(_Config) ->

@@ -51,16 +51,6 @@ all() -> [
 -type metadata_type() :: rdf | json | xattrs.
 -type set_metadata_policy():: set_metadata | do_not_set_metadata.
 
--define(OWNER_ONLY_ALLOW_ACL, [#{
-    <<"acetype">> => <<"0x", (integer_to_binary(?allow_mask, 16))/binary>>,
-    <<"identifier">> => ?owner,
-    <<"aceflags">> => <<"0x", (integer_to_binary(?no_flags_mask, 16))/binary>>,
-    <<"acemask">> => <<"0x", (integer_to_binary(
-        ?read_metadata_mask bor ?read_attributes_mask bor ?read_acl_mask bor
-            ?write_metadata_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask,
-        16
-    ))/binary>>
-}]).
 
 -define(ATTEMPTS, 30).
 
@@ -88,7 +78,7 @@ delete_file_json_metadata_without_json_set_test(Config) ->
 
 %% @private
 -spec delete_file_metadata_test_base(metadata_type(), term(), set_metadata_policy(),
-    proplists:proplist()) -> ok.
+    api_test_runner:config()) -> ok.
 delete_file_metadata_test_base(MetadataType, Metadata, SetMetadataPolicy, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     {FileType, FileGuid, ShareId} = create_shared_file(Config),
@@ -176,7 +166,7 @@ delete_file_xattrs(Config) ->
 
 
 %% @private
--spec create_shared_file(proplists:proplist()) ->
+-spec create_shared_file(api_test_runner:config()) ->
     {api_test_utils:file_type(), file_id:file_guid(), od_share:id()}.
 create_shared_file(Config) ->
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
@@ -297,7 +287,7 @@ get_xattrs(Node, FileGuid) ->
     api_test_utils:file_type(), file_id:file_guid(), undefined | od_share:id(),
     [node()], setup_fun(), verify_fun(), data_spec(),
     RandomlySelectScenario :: boolean(),
-    Config :: proplists:proplist()
+    api_test_runner:config()
 ) ->
     ok.
 delete_metadata_test_base(
@@ -385,16 +375,16 @@ build_delete_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
 
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        application:start(ssl),
-        hackney:start(),
-        api_test_env:init(onenv_test_utils:prepare_base_test_config(NewConfig))
-    end,
-    test_config:set_many(Config, [
-        {add_envs, [op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]]},
-        {set_onenv_scenario, ["api_tests"]}, % name of yaml file in test_distributed/onenv_scenarios
-        {set_posthook, Posthook}
-    ]).
+    api_test_env:init_per_suite(Config, #onenv_test_config{
+        envs = [
+            {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
+        ],
+        posthook = fun(NewConfig) ->
+            application:start(ssl),
+            hackney:start(),
+            NewConfig
+        end
+    }).
 
 
 end_per_suite(_Config) ->

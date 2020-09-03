@@ -602,7 +602,7 @@ log_failure(
 client_to_atom(?NOBODY, _Config) ->
     nobody;
 client_to_atom(?USER(UserId), Config) ->
-    api_test_env:resolve_entity_name(UserId, Config).
+    api_test_env:to_entity_placeholder(UserId, Config).
 
 
 %%%===================================================================
