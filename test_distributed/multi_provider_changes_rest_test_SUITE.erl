@@ -578,7 +578,7 @@ changes_stream_closed_on_disconnection(Config) ->
 
     Json = #{<<"fileLocation">> => #{<<"fields">> => [<<"size">>]}},
 
-    spawn(fun() ->
+    Pid1 = spawn(fun() ->
         get_changes(Config, WorkerP1, SpaceId, Json, <<"infinity">>, [{recv_timeout, 40000}])
     end),
 
@@ -587,19 +587,20 @@ changes_stream_closed_on_disconnection(Config) ->
         {stream_pid, StreamPid} ->
             ?assertEqual(true, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid]))
     end,
-
+    exit(Pid1, kill),
+    
     get_changes(Config, WorkerP1, SpaceId, Json, 100, [{recv_timeout, 400}]),
     receive
         {stream_pid, StreamPid1} ->
-            ?assertEqual(false, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid1]))
+            ?assertEqual(false, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid1]), 5)
     end,
 
-    lists_utils:pforeach(fun(_) ->
-        Pid = spawn(fun() ->
+    ok = lists_utils:pforeach(fun(_) ->
+        Pid2 = spawn(fun() ->
             get_changes(Config, WorkerP1, SpaceId, Json, <<"infinity">>, [{recv_timeout, 4000}])
         end),
         timer:sleep(timer:seconds(1)),
-        exit(Pid, kill)
+        exit(Pid2, kill)
     end, lists:seq(0,10)),
 
     timer:sleep(timer:seconds(1)),
