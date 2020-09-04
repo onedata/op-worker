@@ -46,9 +46,92 @@
 
 -type config() :: proplists:proplist().
 
--export_type([config/0]).
+-type scenario_type() ::
+    % Standard rest scenario - using fileId in path so that no lookup
+    % takes place
+    rest |
+    % Rest scenario using file path in URL - causes fileId lookup in
+    % rest_handler. If path can't be resolved (this file/space is not
+    % supported by specific provider) rather then concrete error a
+    % ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>) will be returned
+    rest_with_file_path |
+    % Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
+    % of request auth and parameters.
+    rest_not_supported |
+    % Standard graph sync scenario
+    gs |
+    % Gs scenario with gri.scope == private and gri.id == SharedGuid.
+    % Such requests should be rejected at auth steps resulting in
+    % ?ERROR_UNAUTHORIZED.
+    gs_with_shared_guid_and_aspect_private |
+    % Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
+    % of test case due to for example invalid aspect.
+    gs_not_supported.
+
+% List of nodes to which api calls can be directed. However only one node
+% from this list will be chosen (randomly) for each test case.
+% It greatly shortens time needed to run tests and also allows to test e.g.
+% setting some value on one node and updating it on another node.
+% Checks whether value set on one node was synced with other nodes can be
+% performed using `verify_fun` callback.
+-type target_nodes() :: [node()].
+
+-type placeholder() :: atom().
+
+-type client_spec() :: #client_spec{}.
+-type data_spec() :: #data_spec{}.
+
+% Function called before testcase. Can be used to create test environment.
+-type setup_fun() :: fun(() -> ok).
+% Function called after testcase. Can be used to clear up environment.
+-type teardown_fun() :: fun(() -> ok).
+% Function called after testcase. Can be used to check if test had desired effect
+% on environment (e.g. check if resource deleted during test was truly deleted).
+% First argument tells whether request made during testcase should succeed
+-type verify_fun() :: fun(
+    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) -> boolean()
+).
+
+-type rest_args() :: #rest_args{}.
+-type gs_args() :: #gs_args{}.
+
+-type api_test_ctx() :: #api_test_ctx{}.
+
+% Function called during testcase to prepare call/request arguments. If test cannot
+% be run due to e.g invalid combination of client, data and provider 'skip' atom
+% should be returned instead to skip that specific testcase.
+-type prepare_args_fun() :: fun((api_test_ctx()) -> skip | rest_args() | gs_args()).
+% Function called after testcase to validate returned call/request result
+-type validate_call_result_fun() :: fun((api_test_ctx(), Result :: term()) -> ok | no_return()).
+
+-type scenario_spec() :: #scenario_spec{}.
+
+% Template used to create scenario_spec(). It contains scenario specific data
+% while args/params repeated for all scenarios of some type/group can be
+% extracted and kept in e.g. suite_spec().
+-type scenario_template() :: #scenario_template{}.
+
+% Record used to group scenarios having common parameters like target nodes, client spec
+% or check functions. List of scenario_spec() will be created from that common params as
+% well as scenario specific data contained in each scenario_template().
+-type suite_spec() :: #suite_spec{}.
+
+
+-export_type([
+    config/0,
+    scenario_type/0, target_nodes/0,
+    placeholder/0, client_spec/0, data_spec/0,
+    setup_fun/0, teardown_fun/0, verify_fun/0,
+    rest_args/0, gs_args/0, api_test_ctx/0,
+    prepare_args_fun/0, validate_call_result_fun/0,
+    scenario_spec/0, scenario_template/0, suite_spec/0
+]).
+
+
+-type invalid_client_type() :: unauthorized | forbidden_not_in_space | forbidden_in_space.
 
 -define(NO_DATA, undefined).
+
 -define(GS_RESP(Result), #gs_resp_graph{data = Result}).
 
 -define(GS_SCENARIO_TYPES, [
@@ -64,7 +147,7 @@
 
 
 -spec run_tests(config(), [scenario_spec() | suite_spec()]) ->
-    boolean().
+    HasAllTestsPassed :: boolean().
 run_tests(Config, Specs) ->
     lists:foldl(fun
         (#scenario_spec{} = ScenarioSpec, AllTestsPassed) ->
@@ -80,6 +163,7 @@ run_tests(Config, Specs) ->
 
 
 %% @private
+-spec run_suite(config(), suite_spec()) -> HasAllTestsPassed :: boolean().
 run_suite(Config, #suite_spec{
     client_spec = ClientSpecWithPlaceholders
 } = SuiteSpecWithClientPlaceholders) ->
@@ -106,6 +190,7 @@ run_suite(Config, #suite_spec{
 
 
 %% @private
+-spec prepare_client_spec(client_spec(), config()) -> client_spec().
 prepare_client_spec(#client_spec{
     correct = CorrectClientsAndPlaceholders,
     unauthorized = UnauthorizedClientsAndPlaceholders,
@@ -113,41 +198,47 @@ prepare_client_spec(#client_spec{
     forbidden_in_space = ForbiddenClientsInSpaceAndPlaceholders
 }, Config) ->
     #client_spec{
-        correct = replace_client_placeholders_with_aai_auths(
+        correct = prepare_clients(
             CorrectClientsAndPlaceholders, Config
         ),
-        unauthorized = replace_client_placeholders_with_aai_auths(
+        unauthorized = prepare_clients(
             UnauthorizedClientsAndPlaceholders, Config
         ),
-        forbidden_not_in_space = replace_client_placeholders_with_aai_auths(
+        forbidden_not_in_space = prepare_clients(
             ForbiddenClientsNotInSpaceAndPlaceholders, Config
         ),
-        forbidden_in_space = replace_client_placeholders_with_aai_auths(
+        forbidden_in_space = prepare_clients(
             ForbiddenClientsInSpaceAndPlaceholders, Config
         )
     }.
 
 
 %% @private
-replace_client_placeholders_with_aai_auths(ClientsAndPlaceholders, Config) ->
+-spec prepare_clients(
+    [aai:auth() | placeholder() | {aai:auth() | placeholder(), errors:error()}],
+    config()
+) ->
+    [aai:auth() | {aai:auth(), errors:error()}].
+prepare_clients(ClientsAndPlaceholders, Config) ->
     lists:map(fun
         ({ClientOrPlaceholder, {error, _} = Error}) ->
-            {replace_client_placeholder_with_aai_auth(ClientOrPlaceholder, Config), Error};
+            {prepare_client(ClientOrPlaceholder, Config), Error};
         (ClientOrPlaceholder) ->
-            replace_client_placeholder_with_aai_auth(ClientOrPlaceholder, Config)
+            prepare_client(ClientOrPlaceholder, Config)
     end, ClientsAndPlaceholders).
 
 
 %% @private
-replace_client_placeholder_with_aai_auth(nobody, _Config) ->
-    ?NOBODY;
-replace_client_placeholder_with_aai_auth(Username, Config) when is_atom(Username) ->
-    ?USER(api_test_env:get_user_id(Username, Config));
-replace_client_placeholder_with_aai_auth(#auth{} = ValidClient, _Config) ->
-    ValidClient.
+-spec prepare_client(aai:auth() | placeholder(), config()) -> aai:auth().
+prepare_client(#auth{} = AaiClient, _Config) ->
+    AaiClient;
+prepare_client(Placeholder, Config) ->
+    placeholder_to_client(Placeholder, Config).
 
 
 %% @private
+-spec run_invalid_clients_test_cases(config(), invalid_client_type(), suite_spec()) ->
+    HasAllTestsPassed :: boolean().
 run_invalid_clients_test_cases(Config, InvalidClientsType, #suite_spec{
     target_nodes = TargetNodes,
     client_spec = ClientSpec,
@@ -184,6 +275,8 @@ run_invalid_clients_test_cases(Config, InvalidClientsType, #suite_spec{
 
 
 %% @private
+-spec get_invalid_clients(invalid_client_type(), client_spec()) ->
+    [aai:auth() | {aai:auth(), errors:error()}].
 get_invalid_clients(unauthorized, #client_spec{unauthorized = Clients}) ->
     Clients;
 get_invalid_clients(forbidden_not_in_space, #client_spec{forbidden_not_in_space = Clients}) ->
@@ -193,6 +286,12 @@ get_invalid_clients(forbidden_in_space, #client_spec{forbidden_in_space = Client
 
 
 %% @private
+-spec get_scenario_specific_error_for_invalid_client(
+    scenario_type(),
+    invalid_client_type(),
+    aai:auth() | {aai:auth(), errors:error()}
+) ->
+    {aai:auth(), errors:error()}.
 get_scenario_specific_error_for_invalid_client(rest_not_supported, _ClientType, ClientAndError) ->
     % Error thrown by middleware when checking if operation is supported -
     % before auth checks could be performed
@@ -208,7 +307,7 @@ get_scenario_specific_error_for_invalid_client(rest_with_file_path, ClientType, 
     % Error thrown by rest_handler (before middleware auth checks could be performed)
     % as invalid clients who doesn't belong to space can't resolve file path to guid
     {get_client(ClientAndError), ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>)};
-get_scenario_specific_error_for_invalid_client(_ScenarioType, _ClientType, {_, {error, _}} = ClientAndError) ->
+get_scenario_specific_error_for_invalid_client(_ScenarioType, _, {_, {error, _}} = ClientAndError) ->
     ClientAndError;
 get_scenario_specific_error_for_invalid_client(_ScenarioType, unauthorized, Client) ->
     {Client, ?ERROR_UNAUTHORIZED};
@@ -219,11 +318,13 @@ get_scenario_specific_error_for_invalid_client(_ScenarioType, forbidden_in_space
 
 
 %% @private
+-spec get_client(aai:auth() | {aai:auth(), errors:error()}) -> aai:auth().
 get_client({Client, {error, _}}) -> Client;
 get_client(Client) -> Client.
 
 
 %% @private
+-spec run_malformed_data_test_cases(config(), suite_spec()) -> HasAllTestsPassed :: boolean().
 run_malformed_data_test_cases(Config, #suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{correct = CorrectClients},
@@ -271,6 +372,11 @@ run_malformed_data_test_cases(Config, #suite_spec{
 
 
 %% @private
+-spec is_data_error_applicable_to_scenario(
+    errors:error() | {scenario_type(), errors:error()},
+    scenario_type()
+) ->
+    boolean().
 is_data_error_applicable_to_scenario({error, _}, _)                          -> true;
 is_data_error_applicable_to_scenario({Scenario, _}, Scenario)                -> true;
 is_data_error_applicable_to_scenario({rest_handler, _}, rest)                -> true;
@@ -280,6 +386,12 @@ is_data_error_applicable_to_scenario(_, _)                                   -> 
 
 
 %% @private
+-spec get_expected_malformed_data_error(
+    errors:error() | {scenario_type(), errors:error()},
+    scenario_type(),
+    api_test_ctx()
+) ->
+    errors:error().
 get_expected_malformed_data_error({rest_handler, RestHandlerSpecificError}, _, _) ->
     % Rest handler errors takes precedence over anything else as it is
     % thrown before request is even passed to middleware
@@ -303,6 +415,8 @@ get_expected_malformed_data_error({_ScenarioType, {error_fun, ErrorFun}}, _, Tes
 
 
 %% @private
+-spec run_missing_required_data_test_cases(config(), suite_spec()) ->
+    HasAllTestsPassed :: boolean().
 run_missing_required_data_test_cases(_Config, #suite_spec{data_spec = undefined}) ->
     true;
 run_missing_required_data_test_cases(_Config, #suite_spec{data_spec = #data_spec{
@@ -365,6 +479,8 @@ run_missing_required_data_test_cases(Config, #suite_spec{
 
 
 %% @private
+-spec get_scenario_specific_error_for_missing_data(scenario_type(), errors:error()) ->
+    errors:error().
 get_scenario_specific_error_for_missing_data(rest_not_supported, _Error) ->
     % Error thrown by middleware when checking if operation is supported -
     % before sanitization could be performed
@@ -378,6 +494,7 @@ get_scenario_specific_error_for_missing_data(_ScenarioType, Error) ->
 
 
 %% @private
+-spec run_expected_success_test_cases(config(), suite_spec()) -> HasAllTestsPassed :: boolean().
 run_expected_success_test_cases(Config, #suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{correct = CorrectClients},
@@ -589,20 +706,13 @@ log_failure(
     "Stacktrace: ~p~n", [
         ScenarioName,
         TargetNode,
-        client_to_atom(Client, Config),
+        client_to_placeholder(Client, Config),
         io_lib_pretty:print(Args, fun get_record_def/2),
         Expected,
         Got,
         ErrType, ErrReason,
         erlang:get_stacktrace()
     ]).
-
-
-%% @private
-client_to_atom(?NOBODY, _Config) ->
-    nobody;
-client_to_atom(?USER(UserId), Config) ->
-    api_test_env:to_entity_placeholder(UserId, Config).
 
 
 %%%===================================================================
@@ -759,6 +869,22 @@ scenario_spec_to_suite_spec(#scenario_spec{
 
 
 %% @private
+-spec placeholder_to_client(placeholder(), config()) -> aai:auth().
+placeholder_to_client(nobody, _Config) ->
+    ?NOBODY;
+placeholder_to_client(Username, Config) when is_atom(Username) ->
+    ?USER(api_test_env:get_user_id(Username, Config)).
+
+
+%% @private
+-spec client_to_placeholder(aai:auth(), config()) -> placeholder().
+client_to_placeholder(?NOBODY, _Config) ->
+    nobody;
+client_to_placeholder(?USER(UserId), Config) ->
+    api_test_env:to_entity_placeholder(UserId, Config).
+
+
+%% @private
 -spec build_test_ctx(binary(), scenario_type(), node(), aai:auth(), map()) ->
     api_test_ctx().
 build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet) ->
@@ -783,7 +909,9 @@ is_client_supported_by_node(?USER(UserId), Node, Config) ->
 
 %% @private
 -spec make_request(config(), node(), aai:auth(), rest_args() | gs_args()) ->
-    {ok, Result :: term()} | {error, term()}.
+    {ok, GsCallResult :: map()} |
+    {ok, RespCode :: non_neg_integer(), RespHeaders :: map(), RespBody :: binary() | map()} |
+    {error, term()}.
 make_request(Config, Node, Client, #rest_args{} = Args) ->
     make_rest_request(Config, Node, Client, Args);
 make_request(Config, Node, Client, #gs_args{} = Args) ->
@@ -864,7 +992,7 @@ gs_endpoint(Node) ->
 
 %% @private
 -spec make_rest_request(config(), node(), aai:auth(), rest_args()) ->
-    {ok, RespCode :: non_neg_integer(), RespBody :: binary() | map()} |
+    {ok, RespCode :: non_neg_integer(), RespHeaders :: map(), RespBody :: binary() | map()} |
     {error, term()}.
 make_rest_request(Config, Node, Client, #rest_args{
     method = Method,

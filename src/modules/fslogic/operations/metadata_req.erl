@@ -91,5 +91,8 @@ remove_metadata(UserCtx, FileCtx0, rdf) ->
 %% @private
 -spec assert_file_exists(file_ctx:ctx()) -> file_ctx:ctx().
 assert_file_exists(FileCtx0) ->
+    % If file doesn't exists (or was deleted) fetching doc will fail,
+    % {badmatch, {error, not_found}} will propagate up and fslogic_worker will
+    % translate it to ?ENOENT
     {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0),
     FileCtx1.

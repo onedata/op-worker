@@ -171,7 +171,7 @@ delete_file_xattrs(Config) ->
 
 %% @private
 -spec build_setup_fun(set_metadata_policy(), file_id:file_guid(), metadata_type(),
-    Metadata :: term(), [node()]) -> verify_fun().
+    Metadata :: term(), [node()]) -> onenv_api_test_runner:verify_fun().
 build_setup_fun(set_metadata, FileGuid, MetadataType, Metadata, Nodes) ->
     fun() ->
         % Check to prevent race condition in tests (see onenv_api_test_runner
@@ -193,7 +193,7 @@ build_setup_fun(do_not_set_metadata, _, _, _, _) ->
 
 %% @private
 -spec build_verify_fun(set_metadata_policy(), file_id:file_guid(), metadata_type(),
-    Metadata :: term(), [node()]) -> verify_fun().
+    Metadata :: term(), [node()]) -> onenv_api_test_runner:verify_fun().
 build_verify_fun(set_metadata, FileGuid, MetadataType, ExpMetadata, Nodes) ->
     fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
@@ -267,8 +267,13 @@ get_xattrs(Node, FileGuid) ->
 %% @private
 -spec delete_metadata_test_base(
     metadata_type(),
-    api_test_utils:file_type(), file_id:file_guid(), undefined | od_share:id(),
-    [node()], setup_fun(), verify_fun(), data_spec(),
+    api_test_utils:file_type(),
+    file_id:file_guid(),
+    undefined | od_share:id(),
+    [node()],
+    onenv_api_test_runner:setup_fun(),
+    onenv_api_test_runner:verify_fun(),
+    onenv_api_test_runner:data_spec(),
     RandomlySelectScenario :: boolean(),
     api_test_runner:config()
 ) ->

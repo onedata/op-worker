@@ -18,53 +18,49 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
--type scenario_type() ::
-    % Standard rest scenario - using fileId in path so that no lookup
-    % takes place
-    rest |
-    % Rest scenario using file path in URL - causes fileId lookup in
-    % rest_handler. If path can't be resolved (this file/space is not
-    % supported by specific provider) rather then concrete error a
-    % ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>) will be returned
-    rest_with_file_path |
-    % Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
-    % of request auth and parameters.
-    rest_not_supported |
-    % Standard graph sync scenario
-    gs |
-    % Gs scenario with gri.scope == private and gri.id == SharedGuid.
-    % Such requests should be rejected at auth steps resulting in
-    % ?ERROR_UNAUTHORIZED.
-    gs_with_shared_guid_and_aspect_private |
-    % Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
-    % of test case due to for example invalid aspect.
-    gs_not_supported.
-
-% List of nodes to which api calls can be directed. However only one node
-% from this list will be chosen (randomly) for each test case.
-% It greatly shortens time needed to run tests and also allows to test e.g.
-% setting some value on one node and updating it on another node.
-% Checks whether value set on one node was synced with other nodes can be
-% performed using `verify_fun` callback.
--type target_nodes() :: [node()].
 
 -record(client_spec, {
-    correct = [] :: [aai:auth()],
-    unauthorized = [] :: [aai:auth()],
-    forbidden_not_in_space = [] :: [aai:auth()],
-    forbidden_in_space = [] :: [aai:auth()],
+    correct = [] :: [aai:auth() | onenv_api_test_runner:placeholder()],
+    % list of clients unauthorized to perform operation. By default it is assumed
+    % that ?ERROR_UNAUTHORIZED is returned when executing operation on their behalf
+    % but it is possible to specify concrete error if necessary (edge cases).
+    unauthorized = [] :: [
+        aai:auth() |
+        onenv_api_test_runner:placeholder() |
+        {aai:auth() | onenv_api_test_runner:placeholder(), errors:error()}
+    ],
+    % list of clients (members of space in context of which operation is performed)
+    % forbidden to perform operation. By default it is assumed that ?ERROR_FORBIDDEN
+    % is returned when executing operation on their behalf but it is possible to
+    % specify concrete error if necessary (edge cases).
+    forbidden_in_space = [] :: [
+        aai:auth() |
+        onenv_api_test_runner:placeholder() |
+        {aai:auth() | onenv_api_test_runner:placeholder(), errors:error()}
+    ],
+    % list of clients (not in space in context of which operation is performed)
+    % forbidden to perform operation. By default it is assumed that ?ERROR_FORBIDDEN
+    % is returned when executing operation on their behalf but it is possible to
+    % specify concrete error if necessary (edge cases).
+    forbidden_not_in_space = [] :: [
+        aai:auth() |
+        onenv_api_test_runner:placeholder() |
+        {aai:auth() | onenv_api_test_runner:placeholder(), errors:error()}
+    ],
     supported_clients_per_node :: #{node() => [aai:auth()]}
 }).
--type client_spec() :: #client_spec{}.
 
 -record(data_spec, {
     required = [] :: [Key :: binary()],
     optional = [] :: [Key :: binary()],
     at_least_one = [] :: [Key :: binary()],
     correct_values = #{} :: #{Key :: binary() => Values :: [binary()]},
-    bad_values = [] :: [{Key :: binary(), Value :: term(), errors:error()}]
+    bad_values = [] :: [{
+        Key :: binary(),
+        Value :: term(),
+        errors:error() | {onenv_api_test_runner:scenario_type(), errors:error()}
+    }]
 }).
--type data_spec() :: #data_spec{}.
 
 -record(rest_args, {
     method :: get | patch | post | put | delete,
@@ -72,7 +68,6 @@
     headers = #{} :: #{Key :: binary() => Value :: binary()},
     body = <<>> :: binary()
 }).
--type rest_args() :: #rest_args{}.
 
 -record(gs_args, {
     operation :: gs_protocol:operation(),
@@ -80,75 +75,47 @@
     auth_hint = undefined :: gs_protocol:auth_hint(),
     data = undefined :: undefined | map()
 }).
--type gs_args() :: #gs_args{}.
 
 -record(api_test_ctx, {
     scenario_name :: binary(),
-    scenario_type :: scenario_type(),
+    scenario_type :: onenv_api_test_runner:scenario_type(),
     node :: node(),
     client :: aai:auth(),
     data :: map()
 }).
--type api_test_ctx() :: #api_test_ctx{}.
-
-% Function called before testcase. Can be used to create test environment.
--type setup_fun() :: fun(() -> ok).
-% Function called after testcase. Can be used to clear up environment.
--type teardown_fun() :: fun(() -> ok).
-% Function called after testcase. Can be used to check if test had desired effect
-% on environment (e.g. check if resource deleted during test was truly deleted).
-% First argument tells whether request made during testcase should succeed
--type verify_fun() :: fun(
-    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) -> boolean()
-).
-
-% Function called during testcase to prepare call/request arguments. If test cannot
-% be run due to e.g invalid combination of client, data and provider 'skip' atom
-% should be returned instead to skip that specific testcase.
--type prepare_args_fun() :: fun((api_test_ctx()) -> skip | rest_args() | gs_args()).
-% Function called after testcase to validate returned call/request result
--type validate_call_result_fun() :: fun((api_test_ctx(), Result :: term()) -> ok | no_return()).
 
 -record(scenario_spec, {
     name :: binary(),
-    type :: scenario_type(),
-    target_nodes :: target_nodes(),
-    client_spec :: client_spec(),
+    type :: onenv_api_test_runner:scenario_type(),
+    target_nodes :: onenv_api_test_runner:target_nodes(),
+    client_spec :: onenv_api_test_runner:client_spec(),
 
-    setup_fun = fun() -> ok end :: setup_fun(),
-    teardown_fun = fun() -> ok end :: teardown_fun(),
-    verify_fun = fun(_, _) -> true end :: verify_fun(),
+    setup_fun = fun() -> ok end :: onenv_api_test_runner:setup_fun(),
+    teardown_fun = fun() -> ok end :: onenv_api_test_runner:teardown_fun(),
+    verify_fun = fun(_, _) -> true end :: onenv_api_test_runner:verify_fun(),
 
-    prepare_args_fun :: prepare_args_fun(),
-    validate_result_fun :: validate_call_result_fun(),
+    prepare_args_fun :: onenv_api_test_runner:prepare_args_fun(),
+    validate_result_fun :: onenv_api_test_runner:validate_call_result_fun(),
 
-    data_spec = undefined :: undefined | data_spec()
+    data_spec = undefined :: undefined | onenv_api_test_runner:data_spec()
 }).
--type scenario_spec() :: #scenario_spec{}.
 
-% Template used to create scenario_spec(). It contains scenario specific data
-% while args/params repeated for all scenarios of some type/group can be
-% extracted and kept in e.g. suite_spec().
 -record(scenario_template, {
     name :: binary(),
-    type :: scenario_type(),
-    prepare_args_fun :: prepare_args_fun(),
-    validate_result_fun :: validate_call_result_fun()
+    type :: onenv_api_test_runner:scenario_type(),
+    prepare_args_fun :: onenv_api_test_runner:prepare_args_fun(),
+    validate_result_fun :: onenv_api_test_runner:validate_call_result_fun()
 }).
--type scenario_template() :: #scenario_template{}.
 
-% Record used to group scenarios having common parameters like target nodes, client spec
-% or check functions. List of scenario_spec() will be created from that common params as
-% well as scenario specific data contained in each scenario_template().
 -record(suite_spec, {
-    target_nodes :: target_nodes(),
-    client_spec :: client_spec(),
+    target_nodes :: onenv_api_test_runner:target_nodes(),
+    client_spec :: onenv_api_test_runner:client_spec(),
 
-    setup_fun = fun() -> ok end :: setup_fun(),
-    teardown_fun = fun() -> ok end :: teardown_fun(),
-    verify_fun = fun(_, _) -> true end :: verify_fun(),
+    setup_fun = fun() -> ok end :: onenv_api_test_runner:setup_fun(),
+    teardown_fun = fun() -> ok end :: onenv_api_test_runner:teardown_fun(),
+    verify_fun = fun(_, _) -> true end :: onenv_api_test_runner:verify_fun(),
 
-    scenario_templates = [] :: [scenario_template()],
+    scenario_templates = [] :: [onenv_api_test_runner:scenario_template()],
     % If set then instead of running all scenarios for all clients and data sets
     % only one scenario will be drawn from 'scenario_templates' for client and
     % data set combination. For 2 clients (client1, client2), 2 data sets (data1,
@@ -160,9 +127,15 @@
     % - client2 makes call with data2 on provider1 using scenario B
     randomly_select_scenarios = false,
 
-    data_spec = undefined :: undefined | data_spec()
+    data_spec = undefined :: undefined | onenv_api_test_runner:data_spec()
 }).
--type suite_spec() :: #suite_spec{}.
+
+-record(onenv_test_config, {
+    % name of yaml file in test_distributed/onenv_scenarios
+    onenv_scenario = "api_tests" :: binary(),
+    envs :: [{Service :: atom(), Application :: atom(), Env :: [term()]}],
+    posthook = fun(Config) -> Config end :: fun((api_test_runner:config()) -> api_test_runner:config())
+}).
 
 -define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
 
@@ -220,11 +193,5 @@ end)()).
 -define(RANDOM_FILE_NAME(), generator:gen_name()).
 -define(RANDOM_FILE_TYPE(), lists_utils:random_element([<<"file">>, <<"dir">>])).
 
--record(onenv_test_config, {
-    % name of yaml file in test_distributed/onenv_scenarios
-    onenv_scenario = "api_tests" :: binary(),
-    envs :: [{Service :: atom(), Application :: atom(), Env :: [term()]}],
-    posthook = fun(Config) -> Config end :: fun((api_test_runner:config()) -> api_test_runner:config())
-}).
 
 -endif.

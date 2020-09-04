@@ -35,7 +35,7 @@
 %%%===================================================================
 
 
--spec run_tests(config(), [scenario_spec() | suite_spec()]) ->
+-spec run_tests(config(), [onenv_api_test_runner:scenario_spec() | onenv_api_test_runner:suite_spec()]) ->
     boolean().
 run_tests(Config, Specs) ->
     lists:foldl(fun
@@ -647,7 +647,7 @@ get_correct_value(Key, #data_spec{correct_values = CorrectValues}) ->
 
 
 %% @private
--spec scenario_spec_to_suite_spec(scenario_spec()) -> suite_spec().
+-spec scenario_spec_to_suite_spec(onenv_api_test_runner:scenario_spec()) -> onenv_api_test_runner:suite_spec().
 scenario_spec_to_suite_spec(#scenario_spec{
     name = ScenarioName,
     type = ScenarioType,
@@ -684,8 +684,8 @@ scenario_spec_to_suite_spec(#scenario_spec{
 
 
 %% @private
--spec build_test_ctx(binary(), scenario_type(), node(), aai:auth(), map()) ->
-    api_test_ctx().
+-spec build_test_ctx(binary(), onenv_api_test_runner:scenario_type(), node(), aai:auth(), map()) ->
+    onenv_api_test_runner:api_test_ctx().
 build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet) ->
     #api_test_ctx{
         scenario_name = ScenarioName,
@@ -706,7 +706,7 @@ is_client_supported_by_node(Client, Node, SupportedClientsPerNode) ->
 
 
 %% @private
--spec make_request(config(), node(), aai:auth(), rest_args() | gs_args()) ->
+-spec make_request(config(), node(), aai:auth(), onenv_api_test_runner:rest_args() | onenv_api_test_runner:gs_args()) ->
     {ok, Result :: term()} | {error, term()}.
 make_request(Config, Node, Client, #rest_args{} = Args) ->
     make_rest_request(Config, Node, Client, Args);
@@ -715,7 +715,7 @@ make_request(Config, Node, Client, #gs_args{} = Args) ->
 
 
 %% @private
--spec make_gs_request(config(), node(), aai:auth(), gs_args()) ->
+-spec make_gs_request(config(), node(), aai:auth(), onenv_api_test_runner:gs_args()) ->
     {ok, Result :: map()} | {error, term()}.
 make_gs_request(_Config, Node, Client, #gs_args{
     operation = Operation,
@@ -787,7 +787,7 @@ gs_endpoint(Node) ->
 
 
 %% @private
--spec make_rest_request(config(), node(), aai:auth(), rest_args()) ->
+-spec make_rest_request(config(), node(), aai:auth(), onenv_api_test_runner:rest_args()) ->
     {ok, RespCode :: non_neg_integer(), RespBody :: binary() | map()} |
     {error, term()}.
 make_rest_request(_Config, Node, Client, #rest_args{

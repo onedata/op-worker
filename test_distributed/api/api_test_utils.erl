@@ -196,8 +196,12 @@ guids_to_object_ids(Guids) ->
 %% before making test call.
 %% @end
 %%--------------------------------------------------------------------
--spec add_file_id_errors_for_operations_available_in_share_mode(file_id:file_guid(),
-    undefined | od_share:id(), undefined | data_spec()) -> data_spec().
+-spec add_file_id_errors_for_operations_available_in_share_mode(
+    file_id:file_guid(),
+    undefined | od_share:id(),
+    undefined | onenv_api_test_runner:data_spec()
+) ->
+    onenv_api_test_runner:data_spec().
 add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, DataSpec) ->
     InvalidFileIdErrors = get_invalid_file_id_errors(),
 
@@ -247,8 +251,12 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
 %% before making test call.
 %% @end
 %%--------------------------------------------------------------------
--spec add_file_id_errors_for_operations_not_available_in_share_mode(file_id:file_guid(),
-    od_share:id(), undefined | data_spec()) -> data_spec().
+-spec add_file_id_errors_for_operations_not_available_in_share_mode(
+    file_id:file_guid(),
+    od_share:id(),
+    undefined | onenv_api_test_runner:data_spec()
+) ->
+    onenv_api_test_runner:data_spec().
 add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId, DataSpec) ->
     InvalidFileIdErrors = get_invalid_file_id_errors(),
 
@@ -298,8 +306,13 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
 %% All added bad values are in cdmi form and are stored under <<"fileId">> key.
 %% @end
 %%--------------------------------------------------------------------
--spec add_cdmi_id_errors_for_operations_not_available_in_share_mode(file_id:file_guid(), od_space:id(),
-    od_share:id(), data_spec()) -> data_spec().
+-spec add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+    file_id:file_guid(),
+    od_space:id(),
+    od_share:id(),
+    onenv_api_test_runner:data_spec()
+) ->
+    onenv_api_test_runner:data_spec().
 add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId, ShareId, DataSpec) ->
     {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
 
