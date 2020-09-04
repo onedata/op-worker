@@ -13,7 +13,6 @@
 -module(file_metadata_delete_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_test_runner.hrl").
 -include("file_metadata_api_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
@@ -48,7 +47,8 @@ all() -> [
     delete_file_xattrs
 ].
 
--type metadata_type() :: rdf | json | xattrs.
+
+-type metadata_type() :: binary().  % <<"rdf">> | <<"json">> | <<"xattrs">>.
 -type set_metadata_policy():: set_metadata | do_not_set_metadata.
 
 
@@ -61,19 +61,19 @@ all() -> [
 
 
 delete_file_rdf_metadata_with_rdf_set_test(Config) ->
-    delete_file_metadata_test_base(rdf, ?RDF_METADATA_1, set_metadata, Config).
+    delete_file_metadata_test_base(<<"rdf">>, ?RDF_METADATA_1, set_metadata, Config).
 
 
 delete_file_rdf_metadata_without_rdf_set_test(Config) ->
-    delete_file_metadata_test_base(rdf, ?RDF_METADATA_2, do_not_set_metadata, Config).
+    delete_file_metadata_test_base(<<"rdf">>, ?RDF_METADATA_2, do_not_set_metadata, Config).
 
 
 delete_file_json_metadata_with_json_set_test(Config) ->
-    delete_file_metadata_test_base(json, ?JSON_METADATA_1, set_metadata, Config).
+    delete_file_metadata_test_base(<<"json">>, ?JSON_METADATA_1, set_metadata, Config).
 
 
 delete_file_json_metadata_without_json_set_test(Config) ->
-    delete_file_metadata_test_base(json, ?JSON_METADATA_2, do_not_set_metadata, Config).
+    delete_file_metadata_test_base(<<"json">>, ?JSON_METADATA_2, do_not_set_metadata, Config).
 
 
 %% @private
@@ -81,8 +81,8 @@ delete_file_json_metadata_without_json_set_test(Config) ->
     api_test_runner:config()) -> ok.
 delete_file_metadata_test_base(MetadataType, Metadata, SetMetadataPolicy, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file(
-        ?SPACE_2, 8#707, Config
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
+        8#707, Config
     ),
 
     SetupFun = build_setup_fun(SetMetadataPolicy, FileGuid, MetadataType, Metadata, Nodes),
@@ -97,8 +97,8 @@ delete_file_metadata_test_base(MetadataType, Metadata, SetMetadataPolicy, Config
 
 delete_file_xattrs(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file(
-        ?SPACE_2, 8#707, Config
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
+        8#707, Config
     ),
 
     FullXattrSet = #{
@@ -113,7 +113,7 @@ delete_file_xattrs(Config) ->
 
     SetupFun = fun() ->
         % Check to prevent race condition in tests (see onenv_api_test_runner
-        % common pitfalls 1).
+        % COMMON PITFALLS 1).
         RandNode = lists_utils:random_element(Nodes),
         case {ok, FullXattrSet} == get_xattrs(RandNode, FileGuid) of
             true ->
@@ -158,7 +158,7 @@ delete_file_xattrs(Config) ->
     end,
 
     delete_metadata_test_base(
-        xattrs, FileType, FileGuid, ShareId,
+        <<"xattrs">>, FileType, FileGuid, ShareId,
         Nodes, SetupFun, VerifyFun, DataSpec,
         _RandomlySelectScenario = true, Config
     ).
@@ -175,7 +175,7 @@ delete_file_xattrs(Config) ->
 build_setup_fun(set_metadata, FileGuid, MetadataType, Metadata, Nodes) ->
     fun() ->
         % Check to prevent race condition in tests (see onenv_api_test_runner
-        % common pitfalls 1).
+        % COMMON PITFALLS 1).
         RandNode = lists_utils:random_element(Nodes),
         case {ok, Metadata} == get_metadata(RandNode, FileGuid, MetadataType) of
             true ->
@@ -216,21 +216,21 @@ build_verify_fun(do_not_set_metadata, FileGuid, MetadataType, _ExpMetadata, Node
 
 %% @private
 -spec set_metadata(node(), file_id:file_guid(), metadata_type(), term()) -> ok.
-set_metadata(Node, FileGuid, rdf, Metadata) ->
+set_metadata(Node, FileGuid, <<"rdf">>, Metadata) ->
     lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, Metadata, []);
-set_metadata(Node, FileGuid, json, Metadata) ->
+set_metadata(Node, FileGuid, <<"json">>, Metadata) ->
     lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, Metadata, []);
-set_metadata(Node, FileGuid, xattrs, Metadata) ->
+set_metadata(Node, FileGuid, <<"xattrs">>, Metadata) ->
     set_xattrs(Node, FileGuid, Metadata).
 
 
 %% @private
 -spec get_metadata(node(), file_id:file_guid(), metadata_type()) -> {ok, term()}.
-get_metadata(Node, FileGuid, rdf) ->
+get_metadata(Node, FileGuid, <<"rdf">>) ->
     lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, [], false);
-get_metadata(Node, FileGuid, json) ->
+get_metadata(Node, FileGuid, <<"json">>) ->
     lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, [], false);
-get_metadata(Node, FileGuid, xattrs) ->
+get_metadata(Node, FileGuid, <<"xattrs">>) ->
     get_xattrs(Node, FileGuid).
 
 
@@ -285,18 +285,10 @@ delete_metadata_test_base(
             target_nodes = Nodes,
             setup_fun = SetupFun,
             verify_fun = VerifyFun,
-            client_spec = #client_spec{
-                correct = [
-                    user2, % space owner - doesn't need any perms
-                    user3  % files owner (see fun create_shared_file/1)
-                ],
-                unauthorized = [nobody],
-                forbidden_not_in_space = [user1],
-                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]
-            },
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2,
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Delete ~p metadata for ~s using gs private api", [
+                    name = str_utils:format("Delete ~s metadata for ~s using gs private api", [
                         MetadataType, FileType
                     ]),
                     type = gs,
@@ -315,14 +307,12 @@ delete_metadata_test_base(
         },
 
         #scenario_spec{
-            name = str_utils:format("Delete ~p metadata for shared ~s using gs public api", [
+            name = str_utils:format("Delete ~s metadata for shared ~s using gs public api", [
                 MetadataType, FileType
             ]),
             type = gs_not_supported,
             target_nodes = Nodes,
-            client_spec = #client_spec{
-                correct = [nobody, user1, user2, user3, user4]
-            },
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
             prepare_args_fun = build_delete_metadata_prepare_gs_args_fun(
                 MetadataType, FileShareGuid, public
             ),
@@ -340,9 +330,9 @@ build_delete_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
         {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         Aspect = case MetadataType of
-            json -> json_metadata;
-            rdf -> rdf_metadata;
-            xattrs -> xattrs
+            <<"json">> -> json_metadata;
+            <<"rdf">> -> rdf_metadata;
+            <<"xattrs">> -> xattrs
         end,
         #gs_args{
             operation = delete,

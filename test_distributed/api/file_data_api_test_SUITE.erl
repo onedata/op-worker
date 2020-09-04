@@ -438,7 +438,7 @@ build_get_children_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
 %% @private
 build_get_children_prepare_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        Data1 = api_test_utils:ensure_defined(Data0, #{}),
+        Data1 = utils:ensure_defined(Data0, #{}),
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         RestPath = case Endpoint of
@@ -785,7 +785,7 @@ build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
 %% @private
 build_get_attrs_prepare_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        Data1 = api_test_utils:ensure_defined(Data0, #{}),
+        Data1 = utils:ensure_defined(Data0, #{}),
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         RestPath = case Endpoint of

@@ -545,15 +545,15 @@ build_replica_prepare_rest_args_fun(MemRef, Type) ->
                 ProviderId = transfers_test_utils:provider_id(Node),
                 TransferDetails = api_test_memory:get(MemRef, transfer_details),
 
-                Data1 = api_test_utils:ensure_defined(Data0, #{}),
+                Data1 = utils:ensure_defined(Data0, #{}),
                 {InvalidId, Data2} = api_test_utils:maybe_substitute_bad_id(undefined, Data1),
                 RestPath = case TransferDetails of
                     #{root_file_path := FilePath} when Scenario =:= rest_with_file_path  ->
-                        <<"replicas", (api_test_utils:ensure_defined(InvalidId, FilePath))/binary>>;
+                        <<"replicas", (utils:ensure_defined(InvalidId, FilePath))/binary>>;
                     #{root_file_cdmi_id := FileObjectId} ->
-                        <<"replicas-id/", (api_test_utils:ensure_defined(InvalidId, FileObjectId))/binary>>;
+                        <<"replicas-id/", (utils:ensure_defined(InvalidId, FileObjectId))/binary>>;
                     #{view_name := ViewName} ->
-                        <<"replicas-view/", (api_test_utils:ensure_defined(InvalidId, ViewName))/binary>>
+                        <<"replicas-view/", (utils:ensure_defined(InvalidId, ViewName))/binary>>
                 end,
                 {Body, Data4} = case maps:take(<<"url">>, Data2) of
                     {Url, Data3} ->

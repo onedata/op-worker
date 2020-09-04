@@ -36,6 +36,10 @@
     forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
 }).
 
+-define(CLIENT_SPEC_FOR_SHARES, #client_spec{
+    correct = [nobody, user1, user2, user3, user4]
+}).
+
 
 -define(NEW_ID_METADATA_REST_PATH(__FILE_OBJECT_ID, __METADATA_TYPE),
     <<"data/", __FILE_OBJECT_ID/binary, "/metadata/", __METADATA_TYPE/binary>>

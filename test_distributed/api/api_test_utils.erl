@@ -19,7 +19,9 @@
 -export([load_module_from_test_distributed_dir/2]).
 
 -export([
-    create_and_sync_shared_file/3,
+    create_shared_file_in_space1/1,
+    create_and_sync_shared_file_in_space2/2,
+
     randomly_choose_file_type_for_test/0,
     randomly_choose_file_type_for_test/1,
     create_file/4, create_file/5,
@@ -29,8 +31,7 @@
     fill_file_with_dummy_data/5,
     read_file/4,
 
-    guids_to_object_ids/1,
-    ensure_defined/2
+    guids_to_object_ids/1
 ]).
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
@@ -80,9 +81,25 @@ load_module_from_test_distributed_dir(Config, ModuleName) ->
     end.
 
 
--spec create_and_sync_shared_file(od_space:name(), file_meta:mode(), api_test_runner:config()) ->
+-spec create_shared_file_in_space1(api_test_runner:config()) ->
+    {api_test_utils:file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
+create_shared_file_in_space1(Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+
+    SpaceOwnerSessId = api_test_env:get_user_session_id(user1, p1, Config),
+    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
+
+    FileType = randomly_choose_file_type_for_test(),
+    FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
+    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessId, FilePath),
+    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, {guid, FileGuid}, <<"share">>),
+
+    {FileType, FilePath, FileGuid, ShareId}.
+
+
+-spec create_and_sync_shared_file_in_space2(file_meta:mode(), api_test_runner:config()) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
-create_and_sync_shared_file(SpaceName, Mode, Config) ->
+create_and_sync_shared_file_in_space2(Mode, Config) ->
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
 
@@ -91,7 +108,7 @@ create_and_sync_shared_file(SpaceName, Mode, Config) ->
     UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
     FileType = randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", SpaceName, ?RANDOM_FILE_NAME()]),
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
@@ -164,13 +181,6 @@ guids_to_object_ids(Guids) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         ObjectId
     end, Guids).
-
-
--spec ensure_defined
-    (undefined, DefaultValue) -> DefaultValue when DefaultValue :: term();
-    (Value, DefaultValue :: term()) -> Value when Value :: term().
-ensure_defined(undefined, DefaultValue) -> DefaultValue;
-ensure_defined(Value, _DefaultValue) -> Value.
 
 
 %%--------------------------------------------------------------------

@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests concerning file custom metadata set API (REST + gs).
+%%% This file contains tests concerning file custom metadata set API
+%%% (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_metadata_set_api_test_SUITE).
@@ -61,8 +62,8 @@ all() -> [
 
 set_file_rdf_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file(
-        ?SPACE_2, 8#707, Config
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
+        8#707, Config
     ),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
@@ -118,7 +119,7 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
     P2Id = api_test_env:get_provider_id(p2, Config),
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    {FileType, FilePath, FileGuid, ShareId} = create_shared_file_in_space1(Config),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space1(Config),
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
@@ -160,8 +161,8 @@ remove_rdf(Node, FileGuid) ->
 
 set_file_json_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file(
-        ?SPACE_2, 8#707, Config
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
+        8#707, Config
     ),
 
     ExampleJson = #{<<"attr1">> => [0, 1, <<"val">>]},
@@ -313,8 +314,8 @@ set_file_json_metadata_test(Config) ->
 
 set_file_primitive_json_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file(
-        ?SPACE_2, 8#707, Config
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
+        8#707, Config
     ),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
@@ -368,7 +369,7 @@ set_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
     P2Id = api_test_env:get_provider_id(p2, Config),
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    {FileType, FilePath, FileGuid, ShareId} = create_shared_file_in_space1(Config),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space1(Config),
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
@@ -412,8 +413,8 @@ set_file_xattrs_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
     User2Id = api_test_env:get_user_id(user2, Config),
     User3Id = api_test_env:get_user_id(user3, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file(
-        ?SPACE_2, 8#707, Config
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
+        8#707, Config
     ),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
@@ -484,7 +485,7 @@ set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
     P2Id = api_test_env:get_provider_id(p2, Config),
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    {FileType, FilePath, FileGuid, ShareId} = create_shared_file_in_space1(Config),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space1(Config),
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
@@ -666,9 +667,7 @@ set_metadata_test_base(
             ]),
             type = gs_not_supported,
             target_nodes = Providers,
-            client_spec = #client_spec{
-                correct = [nobody, user1, user2, user3, user4]
-            },
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
             prepare_args_fun = build_set_metadata_prepare_gs_args_fun(
                 MetadataType, FileShareGuid, public
             ),
@@ -798,23 +797,6 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec create_shared_file_in_space1(api_test_runner:config()) ->
-    {api_test_utils:file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
-create_shared_file_in_space1(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-
-    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
-    SpaceOwnerSessId = api_test_env:get_user_session_id(user1, p1, Config),
-
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessId, FilePath),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, {guid, FileGuid}, <<"share">>),
-
-    {FileType, FilePath, FileGuid, ShareId}.
 
 
 %% @private
