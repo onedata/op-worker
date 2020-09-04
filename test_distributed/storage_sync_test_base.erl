@@ -5698,28 +5698,11 @@ clean_space(Config) ->
     {ok, Children} = lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000),
     Attempts = 5 * ?ATTEMPTS,
     Self = self(),
-
-    % hacky way to remove file, but ignore errors from storage
-    % files will be deleted on storage in other function
-    ok = test_utils:mock_new(W, helpers),
-    test_utils:mock_expect(W, helpers, unlink, fun(HelperHandle, FileId, CurrentSize) ->
-        case meck:passthrough([HelperHandle, FileId, CurrentSize]) of
-            {error, ?EROFS} -> ok;
-            Other -> Other
-        end
-    end),
-    test_utils:mock_expect(W, helpers, rmdir, fun(HelperHandle, FileId) ->
-        case meck:passthrough([HelperHandle, FileId]) of
-            {error, ?EROFS} -> ok;
-            Other -> Other
-        end
-    end),
     Guids = lists:map(fun({Guid, _}) ->
         ok = lfm_proxy:rm_recursive(W, ?ROOT_SESS_ID, {guid, Guid}),
         ok = worker_pool:cast(?VERIFY_POOL, {?MODULE, verify_file_deleted, [W2, Guid, Self, Attempts]}),
         Guid
     end, Children),
-    test_utils:mock_unload(W, helpers),
     verify_deletions(Guids, Attempts),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS).
@@ -6487,6 +6470,7 @@ end_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_de
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     remove_deletion_link(W1, ?SPACE_ID, TestDir, SpaceCtx),
+    ok = test_utils:mock_unload(W1, helpers),
     end_per_testcase(default, Config);
 
 end_per_testcase(sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage, Config) ->
@@ -6496,6 +6480,7 @@ end_per_testcase(sync_should_not_reimport_file_that_was_not_successfully_deleted
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     remove_deletion_link(W1, ?SPACE_ID, TestFile, SpaceCtx),
+    ok = test_utils:mock_unload(W1, helpers),
     end_per_testcase(default, Config);
 
 end_per_testcase(should_not_sync_file_during_replication, Config) ->

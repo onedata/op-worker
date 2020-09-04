@@ -147,7 +147,8 @@
         "storages": {
             "p2": {
                 "/mnt/synced_storage": {
-                    "imported_storage": true
+                    "imported_storage": true,
+                    "readonly": true
                 },
                 "/mnt/rdwr_storage": {
                     "imported_storage": true
