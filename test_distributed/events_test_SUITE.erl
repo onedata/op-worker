@@ -291,7 +291,7 @@ session_setup(Worker, Nonce) ->
 %%--------------------------------------------------------------------
 -spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
 session_teardown(Worker, SessId) ->
-    rpc:call(Worker, session_manager, remove_session, [SessId]).
+    rpc:call(Worker, session_manager, stop_session, [SessId]).
 
 subscription(Sub, Handler, EmRule, EmTime) ->
     Stm = subscription_type:get_stream(Sub),

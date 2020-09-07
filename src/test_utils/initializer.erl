@@ -351,7 +351,7 @@ teardown_session(Worker, Config) ->
             case rpc:call(Worker, session, get_credentials, [SessId]) of
                 {ok, Credentials} ->
                     rpc:call(Worker, auth_cache, delete_cache_entry, [Credentials]),
-                    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId]));
+                    ?assertEqual(ok, rpc:call(Worker, session_manager, stop_session, [SessId]));
                 {error, not_found} ->
                     ok
             end,

@@ -459,7 +459,7 @@ session_setup(Worker, Nonce, ?SUB(user, UserId) = Iden, Conn) ->
 %%--------------------------------------------------------------------
 -spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
 session_teardown(Worker, SessId) ->
-    rpc:call(Worker, session_manager, remove_session, [SessId]).
+    rpc:call(Worker, session_manager, stop_session, [SessId]).
 
 %%--------------------------------------------------------------------
 %% @private

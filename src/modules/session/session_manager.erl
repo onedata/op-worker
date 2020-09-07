@@ -33,7 +33,6 @@
 -export([
     restart_dead_sessions/0,
     maybe_restart_session/1,
-    remove_session/1,
     stop_session/1,
     clean_stopped_session/1
 ]).
@@ -192,34 +191,6 @@ maybe_restart_session(SessId) ->
         maybe_restart_session_internal(SessId)
     end).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes session from cache, stops session supervisor and disconnects remote
-%% client.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_session(session:id()) -> ok | error().
-remove_session(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{supervisor = undefined, connections = Cons}}} ->
-            session:delete(SessId),
-            % VFS-5155 Should connections be closed before session document is deleted?
-            close_connections(Cons);
-        {ok, #document{value = #session{supervisor = Sup, node = Node, connections = Cons}}} ->
-            try
-                supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup)
-            catch
-                exit:{noproc, _} -> ok;
-                exit:{shutdown, _} -> ok
-            end,
-            session:delete(SessId),
-            close_connections(Cons);
-        {error, not_found} ->
-            ok;
-        {error, Reason} ->
-            {error, Reason}
-    end.
 
 -spec stop_session(session:id()) -> ok | error().
 stop_session(SessId) ->
