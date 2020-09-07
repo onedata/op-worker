@@ -37,6 +37,7 @@
 
 %% tests
 -export([
+    harvest_space_doc/1,
     create_file/1,
     rename_file/1,
     delete_file/1,
@@ -67,6 +68,7 @@
 
 all() ->
     ?ALL([
+        harvest_space_doc,
         create_file,
         rename_file,
         delete_file,
@@ -246,6 +248,33 @@ all() ->
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
+harvest_space_doc(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID1),
+    {ok, FileId} = file_id:guid_to_objectid(SpaceGuid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => ?SPACE_NAME1,
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => ?SPACE_NAME1,
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2).
 
 create_file(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
@@ -591,6 +620,8 @@ delete_rdf_metadata(Config) ->
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF
@@ -845,6 +876,8 @@ delete_file_with_xattr_metadata(Config) ->
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"operation">> => <<"submit">>,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
         <<"payload">> => #{
             <<"xattrs">> => #{
                 XattrName => XattrValue
@@ -1414,11 +1447,15 @@ subtract_sorted_batches([], _B2) ->
 subtract_sorted_batches([#{
     <<"fileId">> := FileId,
     <<"operation">> := <<"submit">>,
-    <<"payload">> := Payload
-} | T], [#{
+    <<"payload">> := Payload,
+    <<"spaceId">> := SpaceId,
+    <<"fileName">> := FileName
+    } | T], [#{
     <<"fileId">> := FileId,
     <<"operation">> := <<"submit">>,
-    <<"payload">> := Payload
+    <<"payload">> := Payload,
+    <<"spaceId">> := SpaceId,
+    <<"fileName">> := FileName
 } | T2]) ->
     subtract_sorted_batches(T, T2);
 subtract_sorted_batches([#{
