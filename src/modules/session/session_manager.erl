@@ -41,7 +41,7 @@
 
 % Macros used when process is waiting for other process to init session
 -define(SESSION_INITIALISATION_CHECK_PERIOD_BASE, 100).
--define(SESSION_INITIALISATION_RETRIES, 8).
+-define(SESSION_INITIALISATION_RETRIES, application:get_env(?APP_NAME, session_initialisation_retries, 8)).
 
 %%%===================================================================
 %%% API
@@ -279,7 +279,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, ProxyVia) ->
 %% @private
 %% @doc
 %% @equiv reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia,
-%%        ?SESSION_INITIALISATION_CHECK_PERIOD_BASE, ?SESSION_INITIALISATION_RETRIES)
+%%        ?SESSION_INITIALISATION_CHECK_PERIOD_BASE, 0)
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(
@@ -293,7 +293,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, ProxyVia) ->
     {ok, SessId} | error() when SessId :: session:id().
 reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia) ->
     reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia,
-        ?SESSION_INITIALISATION_CHECK_PERIOD_BASE, ?SESSION_INITIALISATION_RETRIES).
+        ?SESSION_INITIALISATION_CHECK_PERIOD_BASE, 0).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -313,7 +313,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
     Retries :: non_neg_integer()
 ) ->
     {ok, SessId} | error() when SessId :: session:id().
-reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, Retries) ->
+reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, RetryNum) ->
     Sess = #session{
         type = SessType,
         status = initializing,
@@ -349,8 +349,9 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
         {error, not_found} ->
             case start_session(#document{key = SessId, value = Sess}) of
                 {error, already_exists} ->
-                    case Retries of
-                        0 ->
+                    MaxRetries = ?SESSION_INITIALISATION_RETRIES,
+                    case RetryNum of
+                        MaxRetries ->
                             % Process that is initializing session probably hangs - return error
                             {error, already_exists};
                         _ ->
@@ -358,15 +359,16 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
                             timer:sleep(ErrorSleep),
                             reuse_or_create_session(
                                 SessId, SessType, Identity, Credentials,
-                                DataConstraints, ProxyVia, ErrorSleep * 2, Retries - 1
+                                DataConstraints, ProxyVia, ErrorSleep * 2, RetryNum + 1
                             )
                     end;
                 Other ->
                     Other
             end;
         {error, initializing} = Error ->
-            case Retries of
-                0 ->
+            MaxRetries = ?SESSION_INITIALISATION_RETRIES,
+            case RetryNum of
+                MaxRetries ->
                     % Process that is initializing session probably hangs - return error
                     Error;
                 _ ->
@@ -374,7 +376,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
                     timer:sleep(ErrorSleep),
                     ?debug("Waiting for session ~p init", [SessId]),
                     reuse_or_create_session(SessId, SessType, Identity, Credentials,
-                        DataConstraints, ProxyVia, ErrorSleep * 2, Retries - 1)
+                        DataConstraints, ProxyVia, ErrorSleep * 2, MaxRetries + 1)
             end;
         {error, Reason} ->
             {error, Reason}

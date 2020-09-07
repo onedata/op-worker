@@ -111,24 +111,57 @@ session_create_delete_test(Config) ->
         Worker, Nonce, Iden, undefined, Self
     )),
 
+    % Mock session_manager to recreate session during clearing
+    Master = self(),
+    test_utils:mock_expect(Worker, session_manager, clean_stopped_session, fun(SessIdArg) ->
+        Ans = meck:passthrough([SessIdArg]),
+        spawn(fun() ->
+            AnsToVerify = fuse_test_utils:reuse_or_create_fuse_session(
+                Worker, Nonce, Iden, undefined, Self
+            ),
+            Master ! {reuse_ans, AnsToVerify}
+        end),
+        timer:sleep(timer:seconds(5)),
+        Ans
+    end),
+
     % Check connections have been added to session
     {ok, _EffSessId, Cons} = ?assertMatch({ok, _, _},
         rpc:call(Worker, session_connections, list, [SessId]), 10),
     ?assertEqual(1, length(Cons)),
 
     % Check supervisor
-    {ok, #document{value = #session{supervisor = Sup, node = Node}}} =
+    {ok, #document{value = #session{supervisor = Sup1, node = Node1}}} =
         ?assertMatch({ok, _}, rpc:call(Worker, session, get, [SessId])),
-    VerifySup = fun() ->
+    VerifySup = fun(Sup, Node) ->
         SupChildren = rpc:call(Worker, supervisor, which_children, [{?SESSION_MANAGER_WORKER_SUP, Node}]),
         lists:filter(fun({_, Child, _, _}) -> Child =:= Sup end, SupChildren)
     end,
-    ?assertMatch([_], VerifySup()),
+    ?assertMatch([_], VerifySup(Sup1, Node1)),
+
+    % Stop and check if it has been renewed
+    ?assertEqual(ok, rpc:call(Worker, session_manager, stop_session, [SessId])),
+    ReuseAns = receive
+        {reuse_ans, ReceivedAns} -> ReceivedAns
+    after
+        timer:seconds(10) -> timeout
+    end,
+    ?assertEqual({ok, SessId}, ReuseAns),
+    {ok, #document{value = #session{supervisor = Sup2, node = Node2}}} =
+        ?assertMatch({ok, _}, rpc:call(Worker, session, get, [SessId])),
+    ?assertEqual([], VerifySup(Sup1, Node1), 10),
+    ?assertNotEqual(Sup1, Sup2),
+    ?assertMatch([_], VerifySup(Sup2, Node2)),
+
+    % Allow session usual clearing
+    test_utils:mock_expect(Worker, session_manager, clean_stopped_session, fun(SessIdArg) ->
+        meck:passthrough([SessIdArg])
+    end),
 
     % Stop and check if session is cleared
     ?assertEqual(ok, rpc:call(Worker, session_manager, stop_session, [SessId])),
     ?assertEqual({error, not_found}, rpc:call(Worker, session, get, [SessId]), 10),
-    ?assertEqual([], VerifySup(), 10),
+    ?assertEqual([], VerifySup(Sup2, Node2), 10),
 
     ok.
 
@@ -333,6 +366,7 @@ init_per_testcase(session_manager_session_creation_and_reuse_test, Config) ->
 init_per_testcase(session_create_delete_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
+    test_utils:mock_new(Workers, session_manager),
     Config;
 
 init_per_testcase(session_getters_test, Config) ->
@@ -400,6 +434,7 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(session_create_delete_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, session_manager),
     test_utils:mock_validate_and_unload(Workers, communicator);
 
 end_per_testcase(Case, Config) when
