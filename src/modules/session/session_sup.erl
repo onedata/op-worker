@@ -31,10 +31,10 @@
 %% Starts the supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessId :: session:id(), SessType :: session:type()) ->
+-spec start_link(Sess :: session:id() | session:doc(), SessType :: session:type()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SessId, SessType) ->
-    supervisor:start_link(?MODULE, [SessId, SessType]).
+start_link(Sess, SessType) ->
+    supervisor:start_link(?MODULE, [Sess, SessType]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -51,19 +51,39 @@ start_link(SessId, SessType) ->
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
     {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
+% Creation of new session
+init([#document{key = SessId, value = Record} = Doc, SessType]) ->
+    Self = self(),
+    Node = node(),
+    case session:create(Doc#document{value = Record#session{supervisor = Self, node = Node}}) of
+        {ok, _} ->
+            SupFlags = #{
+                strategy => one_for_all,
+                intensity => 0,
+                period => 1
+            },
+            {ok, {SupFlags, child_specs(SessId, SessType)}};
+        {error, already_exists} ->
+            ignore
+    end;
+% Recreation of session which supervisor is dead
 init([SessId, SessType]) ->
     Self = self(),
     Node = node(),
-    {ok, _} = session:update(SessId, fun(Session = #session{}) ->
-        {ok, Session#session{supervisor = Self, node = Node}}
-    end),
 
-    SupFlags = #{
-        strategy => one_for_all,
-        intensity => 0,
-        period => 1
-    },
-    {ok, {SupFlags, child_specs(SessId, SessType)}}.
+    case session:update(SessId, fun(Session) ->
+        session_manager:reset_session_record(Session, Self, Node)
+    end) of
+        {ok, _} ->
+            SupFlags = #{
+                strategy => one_for_all,
+                intensity => 0,
+                period => 1
+            },
+            {ok, {SupFlags, child_specs(SessId, SessType)}};
+        {error, supervsior_is_alive} ->
+            ignore
+    end.
 
 %%%===================================================================
 %%% Internal functions
