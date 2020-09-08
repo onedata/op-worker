@@ -34,7 +34,7 @@
     restart_dead_sessions/0,
     restart_session_if_dead/1,
     terminate_session/1,
-    clean_stopped_session/1,
+    clean_terminated_session/1,
     restore_session_on_slave_node/3
 ]).
 
@@ -184,19 +184,19 @@ restart_dead_sessions() ->
 %% Checks if session processes are still alive and if not restarts them.
 %% @end
 %%--------------------------------------------------------------------
--spec restart_session_if_dead(SessId) ->
-    {ok, SessId} | error() when SessId :: session:id().
+-spec restart_session_if_dead(SessId :: session:id()) -> ok.
 restart_session_if_dead(SessId) ->
     case session:update_doc_and_time(SessId, fun try_to_clear_dead_connections/1) of
         {ok, #document{key = SessId}} ->
-            {ok, SessId};
+            ok;
         {error, update_not_needed} ->
-            {ok, SessId};
+            ok;
         {error, {supervisor_dead, SessType}} ->
             restart_session(SessId, SessType),
-            {ok, SessId};
-        {error, _Reason} = Error ->
-            Error
+            ok;
+        {error, Reason} ->
+            ?error("Unexpected error cleaning dead connections for session ~p: ~p", [SessId, Reason]),
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -243,8 +243,8 @@ terminate_session(SessId) ->
             {error, Reason}
     end.
 
--spec clean_stopped_session(session:id()) -> ok | error().
-clean_stopped_session(SessId) ->
+-spec clean_terminated_session(session:id()) -> ok | error().
+clean_terminated_session(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{connections = Cons}}} ->
             session:delete(SessId),

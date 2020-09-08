@@ -297,7 +297,7 @@ handle_info(Info, State) ->
     State :: state()) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    session_manager:clean_stopped_session(SessId).
+    session_manager:clean_terminated_session(SessId).
 
 
 %%--------------------------------------------------------------------

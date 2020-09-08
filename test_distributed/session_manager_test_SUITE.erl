@@ -110,7 +110,7 @@ session_create_terminate_test(Config) ->
     % (process that is cleaning session is sleeping for 5 seconds to ensure that
     % spawned process will be trying to initialize session during clearing)
     Master = self(),
-    test_utils:mock_expect(Worker, session_manager, clean_stopped_session, fun(SessIdArg) ->
+    test_utils:mock_expect(Worker, session_manager, clean_terminated_session, fun(SessIdArg) ->
         Ans = meck:passthrough([SessIdArg]),
         spawn(fun() ->
             AnsToVerify = fuse_test_utils:reuse_or_create_fuse_session(
@@ -142,7 +142,7 @@ session_create_terminate_test(Config) ->
     ?assert(is_supervisor_alive(Worker, Supervisor2, Node2)),
 
     % Allow session usual clearing
-    test_utils:mock_expect(Worker, session_manager, clean_stopped_session, fun(SessIdArg) ->
+    test_utils:mock_expect(Worker, session_manager, clean_terminated_session, fun(SessIdArg) ->
         meck:passthrough([SessIdArg])
     end),
 
