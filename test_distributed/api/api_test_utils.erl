@@ -38,10 +38,10 @@
     fill_file_with_dummy_data/5,
     read_file/4,
 
-    maybe_add_qos/4,
-    maybe_set_metadata/2,
-    maybe_set_acl/2,
-    maybe_create_share/3,
+    randomly_add_qos/4,
+    randomly_set_metadata/2,
+    randomly_set_acl/2,
+    randomly_create_share/3,
 
     guids_to_object_ids/1
 ]).
@@ -175,13 +175,13 @@ create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileTyp
     {ok, FileGuid} = api_test_utils:create_file(
         FileType, P1Node, UserSessIdP1, FilePath, FileMode
     ),
-    FileShares = case api_test_utils:maybe_create_share(P1Node, SpaceOwnerSessIdP1, FileGuid) of
+    FileShares = case api_test_utils:randomly_create_share(P1Node, SpaceOwnerSessIdP1, FileGuid) of
         undefined -> [];
         ShareId -> [ShareId]
     end,
-    HasDirectQos = api_test_utils:maybe_add_qos(P1Node, FileGuid, <<"key=value2">>, 2),
-    HasMetadata = api_test_utils:maybe_set_metadata(P1Node, FileGuid),
-    HasAcl = api_test_utils:maybe_set_acl(P1Node, FileGuid),
+    HasDirectQos = api_test_utils:randomly_add_qos(P1Node, FileGuid, <<"key=value2">>, 2),
+    HasMetadata = api_test_utils:randomly_set_metadata(P1Node, FileGuid),
+    HasAcl = api_test_utils:randomly_set_acl(P1Node, FileGuid),
 
     Size = case FileType of
         <<"file">> ->
@@ -271,9 +271,9 @@ read_file(Node, SessId, FileGuid, Size) ->
     Content.
 
 
--spec maybe_add_qos(node(), file_id:file_guid(), qos_expression:expression(), qos_entry:replicas_num()) ->
+-spec randomly_add_qos(node(), file_id:file_guid(), qos_expression:expression(), qos_entry:replicas_num()) ->
     Added :: boolean().
-maybe_add_qos(Node, FileGuid, Expression, ReplicasNum) ->
+randomly_add_qos(Node, FileGuid, Expression, ReplicasNum) ->
     case rand:uniform(2) of
         1 ->
             ?assertMatch({ok, _}, lfm_proxy:add_qos_entry(
@@ -285,8 +285,8 @@ maybe_add_qos(Node, FileGuid, Expression, ReplicasNum) ->
     end.
 
 
--spec maybe_set_metadata(node(), file_id:file_guid()) -> Set :: boolean().
-maybe_set_metadata(Node, FileGuid) ->
+-spec randomly_set_metadata(node(), file_id:file_guid()) -> Set :: boolean().
+randomly_set_metadata(Node, FileGuid) ->
     case rand:uniform(2) of
         1 ->
             ?assertMatch(ok, lfm_proxy:set_metadata(
@@ -298,8 +298,8 @@ maybe_set_metadata(Node, FileGuid) ->
     end.
 
 
--spec maybe_set_acl(node(), file_id:file_guid()) -> Set ::boolean().
-maybe_set_acl(Node, FileGuid) ->
+-spec randomly_set_acl(node(), file_id:file_guid()) -> Set ::boolean().
+randomly_set_acl(Node, FileGuid) ->
     case rand:uniform(2) of
         1 ->
             ?assertMatch(ok, lfm_proxy:set_acl(
@@ -311,9 +311,9 @@ maybe_set_acl(Node, FileGuid) ->
     end.
 
 
--spec maybe_create_share(node(), session:id(), file_id:file_guid()) ->
+-spec randomly_create_share(node(), session:id(), file_id:file_guid()) ->
     ShareId :: undefined | od_share:id().
-maybe_create_share(Node, SessionId, FileGuid) ->
+randomly_create_share(Node, SessionId, FileGuid) ->
     case rand:uniform(2) of
         1 ->
             {ok, ShId} = ?assertMatch({ok, _}, lfm_proxy:create_share(

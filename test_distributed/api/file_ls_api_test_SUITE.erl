@@ -203,7 +203,7 @@ create_get_children_tests_env(Config, TestMode) ->
     DirName = ?RANDOM_FILE_NAME(),
     DirPath = filename:join(["/", ?SPACE_2, DirName]),
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirPath, 8#707),
-    HasParentQos = api_test_utils:maybe_add_qos(P1Node, DirGuid, <<"key=value1">>, 2),
+    HasParentQos = api_test_utils:randomly_add_qos(P1Node, DirGuid, <<"key=value1">>, 2),
 
     ShareId = case TestMode of
         normal_mode ->
@@ -321,31 +321,20 @@ get_user_root_dir_children_test(Config) ->
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
     Providers = [P2Node, P1Node],
 
-    Space1Id = api_test_env:get_space_id(space1, Config),
-    Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(Space1Id),
-    {ok, Space1Attrs} = api_test_utils:get_file_attrs(P1Node, Space1Guid),
-    Space1Info = {Space1Guid, ?SPACE_1, <<"/", ?SPACE_1/binary>>, #file_details{
-        file_attr = Space1Attrs#file_attr{name = ?SPACE_1},
-        index_startid = Space1Id,
-        active_permissions_type = posix,
-        has_metadata = false,
-        has_direct_qos = false,
-        has_eff_qos = false
-    }},
-
-    Space2Id = api_test_env:get_space_id(space2, Config),
-    Space2Guid = fslogic_uuid:spaceid_to_space_dir_guid(Space2Id),
-    {ok, Space2Attrs} = api_test_utils:get_file_attrs(P2Node, Space2Guid),
-    Space2Info = {Space2Guid, ?SPACE_2, <<"/", ?SPACE_2/binary>>, #file_details{
-        file_attr = Space2Attrs#file_attr{name = ?SPACE_2},
-        index_startid = Space2Id,
-        active_permissions_type = posix,
-        has_metadata = false,
-        has_direct_qos = false,
-        has_eff_qos = false
-    }},
-
-    AllSpaces = lists:sort([Space1Info, Space2Info]),
+    % Space dir docs are not synchronized between providers but kept locally. Because of that
+    % file attrs differs between responses from various providers and it is necessary to get attrs
+    % corresponding to concrete provider.
+    GetSpaceInfoFun = fun(SpacePlaceholder, Node) ->
+        SpaceId = api_test_env:get_space_id(SpacePlaceholder, Config),
+        SpaceName = atom_to_binary(SpacePlaceholder, utf8),
+        SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+        {SpaceGuid, SpaceName, <<"/", SpaceName/binary>>, get_space_dir_details(
+            Node, SpaceGuid, SpaceName
+        )}
+    end,
+    GetAllSpacesInfoFun = fun(Node) ->
+        lists:sort([GetSpaceInfoFun(space1, Node), GetSpaceInfoFun(space2, Node)])
+    end,
 
     User1Id = api_test_env:get_user_id(user1, Config),
     User2Id = api_test_env:get_user_id(user2, Config),
@@ -369,32 +358,32 @@ get_user_root_dir_children_test(Config) ->
                     name = <<"List user4 root dir using deprecated /data/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(User4RootDirObjectId),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_files(Response, rest, undefined, Data, AllSpaces)
+                    validate_result_fun = fun(#api_test_ctx{node = Node, data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
+                        validate_listed_files(Response, rest, undefined, Data, GetAllSpacesInfoFun(Node))
                     end
                 },
                 #scenario_template{
                     name = <<"List user4 root dir using deprecated /files-id/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(User4RootDirObjectId),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_files(Response, deprecated_rest, undefined, Data, AllSpaces)
+                    validate_result_fun = fun(#api_test_ctx{node = Node, data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
+                        validate_listed_files(Response, deprecated_rest, undefined, Data, GetAllSpacesInfoFun(Node))
                     end
                 },
                 #scenario_template{
                     name = <<"List user4 root dir using gs api">>,
                     type = gs,
                     prepare_args_fun = build_get_children_prepare_gs_args_fun(User4RootDirGuid, private),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
-                        validate_listed_files(Result, gs, undefined, Data, AllSpaces)
+                    validate_result_fun = fun(#api_test_ctx{node = Node, data = Data}, {ok, Result}) ->
+                        validate_listed_files(Result, gs, undefined, Data, GetAllSpacesInfoFun(Node))
                     end
                 },
                 #scenario_template{
                     name = <<"List user4 root dir children details using gs api">>,
                     type = gs,
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(User4RootDirGuid, private),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
-                        validate_listed_files(Result, gs_with_details, undefined, Data, AllSpaces)
+                    validate_result_fun = fun(#api_test_ctx{node = Node, data = Data}, {ok, Result}) ->
+                        validate_listed_files(Result, gs_with_details, undefined, Data, GetAllSpacesInfoFun(Node))
                     end
                 }
             ],
@@ -412,17 +401,36 @@ get_user_root_dir_children_test(Config) ->
                 unauthorized = [nobody]
             },
             prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(<<"/">>),
-            validate_result_fun = fun(#api_test_ctx{client = Client, data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
+            validate_result_fun = fun(#api_test_ctx{
+                node = TestNode,
+                client = Client,
+                data = Data
+            }, {ok, ?HTTP_200_OK, _, Response}) ->
                 ClientSpaces = case Client of
-                    ?USER(User1Id) -> [Space1Info];
-                    ?USER(User2Id) -> [Space2Info];
-                    _ -> AllSpaces
+                    ?USER(User1Id) -> [GetSpaceInfoFun(space1, TestNode)];
+                    ?USER(User2Id) -> [GetSpaceInfoFun(space2, TestNode)];
+                    _ -> GetAllSpacesInfoFun(TestNode)
                 end,
                 validate_listed_files(Response, deprecated_rest, undefined, Data, ClientSpaces)
             end,
             data_spec = DataSpec
         }
     ])).
+
+
+%% @private
+-spec get_space_dir_details(node(), file_id:file_guid(), od_space:name()) -> #file_details{}.
+get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
+    {ok, SpaceAttrs} = api_test_utils:get_file_attrs(Node, SpaceDirGuid),
+
+    #file_details{
+        file_attr = SpaceAttrs#file_attr{name = SpaceName},
+        index_startid = file_id:guid_to_space_id(SpaceDirGuid),
+        active_permissions_type = posix,
+        has_metadata = false,
+        has_direct_qos = false,
+        has_eff_qos = false
+    }.
 
 
 get_dir_children_on_provider_not_supporting_space_test(Config) ->
