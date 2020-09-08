@@ -250,7 +250,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec stop_session(session:id(), state()) -> {noreply, state()}.
 stop_session(SessionId, State) ->
     spawn(fun() ->
-        session_manager:stop_session(SessionId)
+        session_manager:terminate_session(SessionId)
     end),
     {noreply, State#state{is_stopping = true}}.
 

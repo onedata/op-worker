@@ -61,17 +61,17 @@ init([#document{key = SessId, value = Record} = Doc, SessType]) ->
         {error, already_exists} ->
             ignore
     end;
-% Recreation of session which supervisor is dead
+% Recreation of session which supervisor is dead. It is possible after node failure.
+% In such a case session document and some connections can exist.
+% As a result session elements (supervisor and its children) are recreated on slave node.
 init([SessId, SessType]) ->
     Self = self(),
     Node = node(),
 
-    case session:update(SessId, fun(Session) ->
-        session_manager:reset_session_record(Session, Self, Node)
-    end) of
+    case session_manager:restore_session_on_slave_node(SessId, Self, Node) of
         {ok, _} ->
             get_flags_and_child_spec(SessId, SessType);
-        {error, supervsior_is_alive} ->
+        {error, supervisor_alive} ->
             ignore
     end.
 
