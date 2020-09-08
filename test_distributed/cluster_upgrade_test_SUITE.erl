@@ -134,8 +134,8 @@ init_per_testcase(upgrade_from_19_02_x_storages, Config) ->
     test_utils:mock_expect(Worker, storage_logic, delete_in_zone, fun(_) -> ok end),
     test_utils:mock_expect(Worker, storage_logic, upgrade_legacy_support, fun(_,_) -> ok end),
     test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_,_) -> ok end),
-    test_utils:mock_new(Worker, oneprovider),
-    test_utils:mock_expect(Worker, oneprovider, is_connected_to_oz, fun() -> true end),
+    test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
+    test_utils:mock_expect(Worker, gs_channel_service, is_connected, fun() -> true end),
     Config;
 
 init_per_testcase(upgrade_from_20_02_0_beta3_storages, Config) ->
@@ -143,8 +143,8 @@ init_per_testcase(upgrade_from_20_02_0_beta3_storages, Config) ->
     
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
     test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_,_) -> ok end),
-    test_utils:mock_new(Worker, oneprovider),
-    test_utils:mock_expect(Worker, oneprovider, is_connected_to_oz, fun() -> true end),
+    test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
+    test_utils:mock_expect(Worker, gs_channel_service, is_connected, fun() -> true end),
     Config.
 
 end_per_testcase(_, Config) ->

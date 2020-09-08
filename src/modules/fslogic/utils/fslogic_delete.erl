@@ -20,7 +20,7 @@
 %% API
 -export([delete_file_locally/3, handle_remotely_deleted_file/1,
     handle_release_of_deleted_file/2, handle_file_deleted_on_synced_storage/1,
-    cleanup_opened_files/0]).
+    cleanup_opened_files/0, remove_local_associated_documents/1]).
 
 %% Test API
 -export([delete_parent_link/2, get_open_file_handling_method/1]).
@@ -468,7 +468,8 @@ remove_synced_associated_documents(FileCtx) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
-    ok = transferred_file:clean_up(FileGuid).
+    ok = transferred_file:clean_up(FileGuid),
+    ok = file_qos:delete_associated_entries(FileUuid).
 
 -spec remove_local_associated_documents(file_ctx:ctx()) -> ok.
 remove_local_associated_documents(FileCtx) ->

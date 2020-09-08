@@ -22,7 +22,8 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API - basic model function
--export([create/1, save/1, get/1, exists/1, list/0, update/2, delete/1, delete_doc/1]).
+-export([create/1, save/1, get/1, exists/1, list/0,
+    update/2, update_doc_and_time/2, delete/1, delete_doc/1]).
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
@@ -126,6 +127,15 @@ list() ->
 %%--------------------------------------------------------------------
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(SessId, Diff) when is_function(Diff) ->
+    datastore_model:update(?CTX, SessId, Diff).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates session and sets new access time.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_doc_and_time(id(), diff()) -> {ok, doc()} | {error, term()}.
+update_doc_and_time(SessId, Diff) when is_function(Diff) ->
     Diff2 = fun(Sess) ->
         case Diff(Sess) of
             {ok, NewSess} ->

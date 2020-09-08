@@ -194,9 +194,6 @@ get_qos_entry_insecure(QosEntryId) ->
 -spec remove_qos_entry_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
 remove_qos_entry_insecure(UserCtx, FileCtx, QosEntryId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     
     % Only root can remove internal QoS entry
@@ -204,7 +201,6 @@ remove_qos_entry_insecure(UserCtx, FileCtx, QosEntryId) ->
         true ->
             % TODO: VFS-5567 For now QoS entry is added only for file or dir
             % for which it has been added, so starting traverse is not needed.
-            ok = file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId),
             ok = qos_hooks:handle_entry_delete(QosDoc),
             ok = qos_entry:delete(QosEntryId),
             #provider_response{status = #status{code = ?OK}};

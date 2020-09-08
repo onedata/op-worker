@@ -333,7 +333,7 @@ get_user_root_dir_children_test(Config) ->
         )}
     end,
     GetAllSpacesInfoFun = fun(Node) ->
-        lists:sort([GetSpaceInfoFun(space1, Node), GetSpaceInfoFun(space2, Node)])
+        [GetSpaceInfoFun(space1, Node), GetSpaceInfoFun(space2, Node)]
     end,
 
     User1Id = api_test_env:get_user_id(user1, Config),

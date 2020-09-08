@@ -70,7 +70,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -104,7 +104,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -147,7 +147,8 @@
         "storages": {
             "p2": {
                 "/mnt/synced_storage": {
-                    "imported_storage": true
+                    "imported_storage": true,
+                    "readonly": true
                 },
                 "/mnt/rdwr_storage": {
                     "imported_storage": true

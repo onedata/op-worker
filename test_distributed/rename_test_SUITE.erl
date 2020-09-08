@@ -584,7 +584,7 @@ times_update_test(Config) ->
         fun({{PreATime, PreMTime, PreCTime}, {PostATime, PostMTime, PostCTime}}) ->
             ?assert(PreATime =:= PostATime),
             ?assert(PreMTime =:= PostMTime),
-            ?assert(PreCTime =:= PostCTime)
+            ?assert(PreCTime < PostCTime)
         end, lists:zip(PreRenameDirTimes, PostRenameDirTimes)),
 
     lists:foreach(

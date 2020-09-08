@@ -289,7 +289,7 @@ translate(#gri{type = temporary_token_secret, id = Id, aspect = user, scope = sh
     };
 
 translate(GRI, Result) ->
-    ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p~n", [
+    ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p", [
         GRI, Result
     ]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).

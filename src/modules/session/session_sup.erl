@@ -82,27 +82,27 @@ child_specs(SessId, guest) ->
     [event_manager_sup_spec(SessId)];
 child_specs(SessId, provider_incoming) ->
     [
-        incoming_session_watcher_spec(SessId, provider_incoming),
         async_request_manager_spec(SessId),
-        event_manager_sup_spec(SessId)
+        event_manager_sup_spec(SessId),
+        incoming_session_watcher_spec(SessId, provider_incoming)
     ];
 child_specs(SessId, provider_outgoing) ->
     [
-        outgoing_connection_manager_spec(SessId),
         sequencer_manager_sup_spec(SessId),
-        event_manager_sup_spec(SessId)
+        event_manager_sup_spec(SessId),
+        outgoing_connection_manager_spec(SessId)
     ];
 child_specs(SessId, fuse) ->
     [
-        incoming_session_watcher_spec(SessId, fuse),
         async_request_manager_spec(SessId),
         sequencer_manager_sup_spec(SessId),
-        event_manager_sup_spec(SessId)
+        event_manager_sup_spec(SessId),
+        incoming_session_watcher_spec(SessId, fuse)
     ];
 child_specs(SessId, SessType) ->
     [
-        incoming_session_watcher_spec(SessId, SessType),
-        event_manager_sup_spec(SessId)
+        event_manager_sup_spec(SessId),
+        incoming_session_watcher_spec(SessId, SessType)
     ].
 
 %%--------------------------------------------------------------------

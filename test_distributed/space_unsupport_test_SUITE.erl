@@ -91,9 +91,9 @@ replicate_stage_test(Config) ->
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G1),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G2),
     
-    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
-    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
-    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}).
+    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
+    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
+    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}).
 
 
 replicate_stage_persistence_test(Config) ->
@@ -126,16 +126,17 @@ replicate_stage_persistence_test(Config) ->
 
 
 cleanup_traverse_stage_test(Config) ->
-    [Worker1, _Worker2] = Workers = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
-    {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker1, SessId),
+    Worker = select_provider_without_imported_storage(Workers),
+    StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
+    {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker, SessId),
     
     % Relative paths to space dir. Empty binary represents space dir.
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
     AllPathsWithoutSpace = [DirPath, F1Path, F2Path],
-    check_files_on_storage(Worker1, AllPaths, true, true),
+    check_files_on_storage(Worker, AllPaths, true, false),
     
     StageJob = #space_unsupport_job{
         stage = cleanup_traverse,
@@ -143,29 +144,30 @@ cleanup_traverse_stage_test(Config) ->
         storage_id = StorageId
     },
     
-    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
-    check_files_on_storage(Worker1, AllPathsWithoutSpace, false, true),
-    assert_storage_cleaned_up(Worker1, StorageId),
+    ok = rpc:call(Worker, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
+    rpc:call(Worker, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]),
+    check_files_on_storage(Worker, AllPathsWithoutSpace, false, false),
+    assert_storage_cleaned_up(Worker, StorageId),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
     
-    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
-    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
-    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}),
-    rpc:call(Worker1, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]).
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G1}),
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G2}),
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, DirGuid}).
 
 
 cleanup_traverse_stage_with_import_test(Config) ->
-    [Worker1, _Worker2] = Workers = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
+    Worker = select_provider_with_imported_storage(Workers),
+    StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     
-    {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker1, SessId),
-    ok = rpc:call(Worker1, storage_sync, configure_import, [?SPACE_ID, true, #{max_depth => 5, sync_acl => true}]),
+    {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker, SessId),
+    ok = rpc:call(Worker, storage_sync, configure_import, [?SPACE_ID, true, #{max_depth => 5, sync_acl => true}]),
     
     % Relative paths to space dir. Empty binary represents space dir.
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
-    check_files_on_storage(Worker1, AllPaths, true, true),
+    check_files_on_storage(Worker, AllPaths, true, true),
     
     StageJob = #space_unsupport_job{
         stage = cleanup_traverse,
@@ -173,26 +175,27 @@ cleanup_traverse_stage_with_import_test(Config) ->
         storage_id = StorageId
     },
     
-    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
+    ok = rpc:call(Worker, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
+    % do not delete ended unsupport_cleanup_traverse - it will be deleted in `delete_local_documents_stage_test`
     
-    check_files_on_storage(Worker1, AllPaths, true, true),
+    check_files_on_storage(Worker, AllPaths, true, true),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
     
-    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
-    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
-    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}),
-    rpc:call(Worker1, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]).
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G1}),
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G2}),
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, DirGuid}).
 
 
 cleanup_traverse_stage_persistence_test(Config) ->
-    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
-    StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
+    Workers = ?config(op_worker_nodes, Config),
+    Worker = select_provider_without_imported_storage(Workers),
+    StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     
     % Create new cleanup traverse representing traverse created before provider restart.
     % Running stage again with existing traverse should not create new one, 
     % but wait for previous one to finish.
-    {ok, TaskId} = rpc:call(Worker1, unsupport_cleanup_traverse, start, [?SPACE_ID, StorageId]),
+    {ok, TaskId} = rpc:call(Worker, unsupport_cleanup_traverse, start, [?SPACE_ID, StorageId]),
     
     StageJob = #space_unsupport_job{
         stage = cleanup_traverse,
@@ -201,13 +204,20 @@ cleanup_traverse_stage_persistence_test(Config) ->
         subtask_id = TaskId
     },
     
-    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
+    ok = rpc:call(Worker, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
+    rpc:call(Worker, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]),
     % check that no additional traverse was started
-    test_utils:mock_assert_num_calls(Worker1, unsupport_cleanup_traverse, start, 1, 0, 1).
+    test_utils:mock_assert_num_calls(Worker, unsupport_cleanup_traverse, start, 1, 0, 1).
 
 
 delete_synced_documents_stage_test(Config) ->
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    % TODO VFS-6135 before stopping dbsync during unsupport is implemented run this stage on the 
+    % same worker as the `overall_test` is ran on. Otherwise running this stage may 
+    % cause dbsync hooks to create documents for files, which were deleted long ago (e.g file_meta_posthooks), 
+    % and these documents will never be deleted resulting in a failure of the aforementioned test.
+    Worker1 = select_provider_without_imported_storage(Workers),
+    Worker2 = select_provider_with_imported_storage(Workers),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
@@ -237,41 +247,46 @@ delete_synced_documents_stage_test(Config) ->
     
 
 delete_local_documents_stage_test(Config) ->
-    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
-    StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
-    ok = rpc:call(Worker1, storage_sync, configure_import, [?SPACE_ID, true, #{max_depth => 5, sync_acl => true}]),
-    ok = rpc:call(Worker1, file_popularity_api, enable, [?SPACE_ID]),
+    Workers = ?config(op_worker_nodes, Config),
+    % select provider with imported storage because storage sync is being enabled later on
+    Worker = select_provider_with_imported_storage(Workers),
+    StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
+    ok = rpc:call(Worker, storage_sync, configure_import, [?SPACE_ID, true, #{max_depth => 5, sync_acl => true}]),
+    ok = rpc:call(Worker, storage_sync_worker, schedule_spaces_check, [0]),
+    ok = rpc:call(Worker, file_popularity_api, enable, [?SPACE_ID]),
     ACConfig =  #{
         enabled => true,
         target => 0,
         threshold => 100
     },
-    ok = rpc:call(Worker1, autocleaning_api, configure, [?SPACE_ID, ACConfig]),
-    ok = rpc:call(Worker1, storage_sync_worker, schedule_spaces_check, [0]),
+    ok = rpc:call(Worker, autocleaning_api, configure, [?SPACE_ID, ACConfig]),
     
-    ?assertMatch({ok, _}, rpc:call(Worker1, space_strategies, get, [?SPACE_ID])),
-    ?assertMatch({ok, _}, rpc:call(Worker1, storage_sync_monitoring, get, [?SPACE_ID, StorageId]), 10),
-    ?assertMatch({ok, _}, rpc:call(Worker1, autocleaning, get, [?SPACE_ID])),
-    ?assertMatch({ok, _}, rpc:call(Worker1, file_popularity_config, get, [?SPACE_ID])),
-    ?assertMatch(true, rpc:call(Worker1, file_popularity_api, is_enabled, [?SPACE_ID])),
+    ?assertMatch({ok, _}, rpc:call(Worker, space_strategies, get, [?SPACE_ID])),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_sync_monitoring, get, [?SPACE_ID, StorageId]), 10),
+    ?assertMatch({ok, _}, rpc:call(Worker, autocleaning, get, [?SPACE_ID])),
+    ?assertMatch({ok, _}, rpc:call(Worker, file_popularity_config, get, [?SPACE_ID])),
+    ?assertMatch(true, rpc:call(Worker, file_popularity_api, is_enabled, [?SPACE_ID])),
+    % wait for storage sync to finish
+    ?assertEqual(finished, rpc:call(Worker, storage_sync_monitoring, get_import_status, [?SPACE_ID, StorageId]), 30),
     
     StageJob = #space_unsupport_job{
         stage = delete_local_documents,
         space_id = ?SPACE_ID,
         storage_id = StorageId
     },
-    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
+    ok = rpc:call(Worker, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
-    assert_local_documents_cleaned_up(Worker1, ?SPACE_ID, StorageId).
+    assert_local_documents_cleaned_up(Worker, ?SPACE_ID, StorageId).
 
 
 overall_test(Config) ->
-    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
+    Worker = select_provider_without_imported_storage(Workers),
+    StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     
-    create_files_and_dirs(Worker1, SessId),
-    ok = rpc:call(Worker1, space_unsupport, run, [?SPACE_ID, StorageId]),
+    create_files_and_dirs(Worker, SessId),
+    ok = rpc:call(Worker, space_unsupport, run, [?SPACE_ID, StorageId]),
     
     % mocked in init_per_testcase
     receive task_finished -> ok end,
@@ -279,7 +294,7 @@ overall_test(Config) ->
     % check that all stages have been executed
     lists:foreach(fun(Stage) ->
         test_utils:mock_assert_num_calls(
-            Worker1, space_unsupport, do_slave_job,
+            Worker, space_unsupport, do_slave_job,
             [{space_unsupport_job, Stage, '_', ?SPACE_ID, StorageId, '_', '_'}, '_'],
             1, 1
         )
@@ -298,9 +313,9 @@ overall_test(Config) ->
     % wait for documents to expire 
     timer:sleep(timer:seconds(70)),
 
-    assert_storage_cleaned_up(Worker1, StorageId),
-    assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID),
-    assert_local_documents_cleaned_up(Worker1).
+    assert_storage_cleaned_up(Worker, StorageId),
+    assert_synced_documents_cleaned_up(Worker, ?SPACE_ID),
+    assert_local_documents_cleaned_up(Worker).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -322,24 +337,24 @@ end_per_suite(Config) ->
 
 
 init_per_testcase(cleanup_traverse_stage_persistence_test, Config) ->
-    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker1, unsupport_cleanup_traverse, [passthrough]),
-    test_utils:mock_expect(Worker1, unsupport_cleanup_traverse, start, fun(SpaceId, StorageId) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, unsupport_cleanup_traverse, [passthrough]),
+    test_utils:mock_expect(Workers, unsupport_cleanup_traverse, start, fun(SpaceId, StorageId) ->
         % delay traverse start, so it does not finish before stage is even called
         timer:sleep(timer:seconds(5)), 
         meck:passthrough([SpaceId, StorageId])
     end),
     init_per_testcase(default, Config);
 init_per_testcase(overall_test, Config) ->
-    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     Self = self(),
-    test_utils:mock_new(Worker1, space_unsupport, [passthrough]),
-    test_utils:mock_expect(Worker1, space_unsupport, do_slave_job,
+    test_utils:mock_new(Workers, space_unsupport, [passthrough]),
+    test_utils:mock_expect(Workers, space_unsupport, do_slave_job,
         fun(#space_unsupport_job{stage = Stage} = Job, TaskId) ->
             Self ! {Stage, meck:num_calls(space_unsupport, do_slave_job, 2)},
             meck:passthrough([Job, TaskId])
         end),
-    test_utils:mock_expect(Worker1, space_unsupport, task_finished, 
+    test_utils:mock_expect(Workers, space_unsupport, task_finished, 
         fun(TaskId, Pool) ->
             Self ! task_finished,
             meck:passthrough([TaskId, Pool])
@@ -351,12 +366,12 @@ init_per_testcase(_, Config) ->
 
 
 end_per_testcase(cleanup_traverse_stage_persistence_test, Config) ->
-    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker1, [unsupport_cleanup_traverse]),
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [unsupport_cleanup_traverse]),
     end_per_testcase(default, Config);
 end_per_testcase(overall_test, Config) ->
-    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker1, [space_unsupport]),
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [space_unsupport]),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config).
@@ -533,7 +548,7 @@ check_distribution(Workers, SessId, Desc, Guid) ->
 check_files_on_storage(Worker, FilesList, ShouldExist, IsImportedStorage) ->
     lists:foreach(fun(FileRelativePath) ->
         StoragePath = storage_file_path(Worker, ?SPACE_ID, FileRelativePath, IsImportedStorage),
-        ?assertEqual(ShouldExist, check_exists_on_storage(Worker, StoragePath))
+        ?assertEqual(ShouldExist, check_exists_on_storage(Worker, StoragePath), ?ATTEMPTS)
     end, FilesList).
 
 check_exists_on_storage(Worker, StorageFilePath) ->
@@ -554,3 +569,16 @@ storage_mount_point(Worker, StorageId) ->
     Helper = rpc:call(Worker, storage, get_helper, [StorageId]),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
+
+select_provider_with_imported_storage(Workers) ->
+    select_provider_by_imported_storage_value(Workers, true).
+
+select_provider_without_imported_storage(Workers) ->
+    select_provider_by_imported_storage_value(Workers, false).
+
+select_provider_by_imported_storage_value(Workers, Expected) ->
+    [Worker | _] = lists:filter(fun(W) ->
+        StorageId = initializer:get_supporting_storage_id(W, ?SPACE_ID),
+        Expected == rpc:call(W, storage, is_imported, [StorageId])
+    end, Workers),
+    Worker.
