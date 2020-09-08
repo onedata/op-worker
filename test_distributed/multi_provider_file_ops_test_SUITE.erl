@@ -1038,6 +1038,7 @@ list_children_recreated_remotely(Config0) ->
     {ok, _} = lfm_proxy:stat(Worker2, SessId(Worker2), {guid, NewG}),
 
     % Another check on worker2
+    % The bug appeared here (badmatch)
     {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, -24, 24, <<"file_name">>),
 
     {ok, H2} = lfm_proxy:open(Worker2, SessId(Worker2), {guid, NewG}, write),
