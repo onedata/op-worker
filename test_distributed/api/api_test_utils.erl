@@ -13,14 +13,21 @@
 -author("Bartosz Walkowicz").
 
 -include("api_test_runner.hrl").
+-include("file_metadata_api_test_utils.hrl").
+-include("modules/fslogic/file_details.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("test_utils/initializer.hrl").
 
 
 -export([load_module_from_test_distributed_dir/2]).
 
 -export([
+    get_file_attrs/2,
+
     create_shared_file_in_space1/1,
     create_and_sync_shared_file_in_space2/2,
+    create_file_in_space2_with_additional_metadata/4,
+    create_file_in_space2_with_additional_metadata/5,
 
     randomly_choose_file_type_for_test/0,
     randomly_choose_file_type_for_test/1,
@@ -30,6 +37,11 @@
     fill_file_with_dummy_data/4,
     fill_file_with_dummy_data/5,
     read_file/4,
+
+    maybe_add_qos/4,
+    maybe_set_metadata/2,
+    maybe_set_acl/2,
+    maybe_create_share/3,
 
     guids_to_object_ids/1
 ]).
@@ -81,13 +93,26 @@ load_module_from_test_distributed_dir(Config, ModuleName) ->
     end.
 
 
+-spec get_file_attrs(node(), file_id:file_guid()) ->
+    {ok, lfm_attrs:file_attributes()} | {error, times_not_synchronized}.
+get_file_attrs(Node, FileGuid) ->
+    case ?assertMatch({ok, _}, lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, FileGuid}), ?ATTEMPTS) of
+        % File attrs are constructed from several records so it is possible that
+        % even if 'file_meta' (the main doc) was synchronized 'times' doc wasn't
+        {ok, #file_attr{mtime = 0}} ->
+            {error, times_not_synchronized};
+        Result ->
+            Result
+    end.
+
+
 -spec create_shared_file_in_space1(api_test_runner:config()) ->
     {api_test_utils:file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
 create_shared_file_in_space1(Config) ->
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
 
-    SpaceOwnerSessId = api_test_env:get_user_session_id(user1, p1, Config),
     UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
+    SpaceOwnerSessId = api_test_env:get_user_session_id(user1, p1, Config),
 
     FileType = randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
@@ -115,6 +140,77 @@ create_and_sync_shared_file_in_space2(Mode, Config) ->
     api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
 
     {FileType, FilePath, FileGuid, ShareId}.
+
+
+-spec create_file_in_space2_with_additional_metadata(
+    file_meta:path(),
+    boolean(),
+    file_meta:name(),
+    api_test_runner:config()
+) ->
+    {file_type(), file_meta:path(), file_id:file_guid(), #file_details{}}.
+create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileName, Config) ->
+    FileType = api_test_utils:randomly_choose_file_type_for_test(false),
+    create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName, Config).
+
+
+-spec create_file_in_space2_with_additional_metadata(
+    file_meta:path(),
+    boolean(),
+    file_type(),
+    file_meta:name(),
+    api_test_runner:config()
+) ->
+    {file_type(), file_meta:path(), file_id:file_guid(), #file_details{}}.
+create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName, Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+
+    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+
+    FilePath = filename:join([ParentPath, FileName]),
+
+    FileMode = lists_utils:random_element([8#707, 8#705, 8#700]),
+    {ok, FileGuid} = api_test_utils:create_file(
+        FileType, P1Node, UserSessIdP1, FilePath, FileMode
+    ),
+    FileShares = case api_test_utils:maybe_create_share(P1Node, SpaceOwnerSessIdP1, FileGuid) of
+        undefined -> [];
+        ShareId -> [ShareId]
+    end,
+    HasDirectQos = api_test_utils:maybe_add_qos(P1Node, FileGuid, <<"key=value2">>, 2),
+    HasMetadata = api_test_utils:maybe_set_metadata(P1Node, FileGuid),
+    HasAcl = api_test_utils:maybe_set_acl(P1Node, FileGuid),
+
+    Size = case FileType of
+        <<"file">> ->
+            RandSize = rand:uniform(20),
+            api_test_utils:fill_file_with_dummy_data(P1Node, SpaceOwnerSessIdP1, FileGuid, RandSize),
+            RandSize;
+        _ ->
+            0
+    end,
+
+    {ok, FileAttrs} = ?assertMatch(
+        {ok, #file_attr{size = Size, shares = FileShares}},
+        api_test_utils:get_file_attrs(P2Node, FileGuid),
+        ?ATTEMPTS
+    ),
+
+    FileDetails = #file_details{
+        file_attr = FileAttrs,
+        index_startid = FileName,
+        active_permissions_type = case HasAcl of
+            true -> acl;
+            false -> posix
+        end,
+        has_metadata = HasMetadata,
+        has_direct_qos = HasDirectQos,
+        has_eff_qos = HasParentQos orelse HasDirectQos
+    },
+
+    {FileType, FilePath, FileGuid, FileDetails}.
 
 
 -spec randomly_choose_file_type_for_test() -> file_type().
@@ -173,6 +269,60 @@ read_file(Node, SessId, FileGuid, Size) ->
     {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, Size),
     ok = lfm_proxy:close(Node, ReadHandle),
     Content.
+
+
+-spec maybe_add_qos(node(), file_id:file_guid(), qos_expression:expression(), qos_entry:replicas_num()) ->
+    Added :: boolean().
+maybe_add_qos(Node, FileGuid, Expression, ReplicasNum) ->
+    case rand:uniform(2) of
+        1 ->
+            ?assertMatch({ok, _}, lfm_proxy:add_qos_entry(
+                Node, ?ROOT_SESS_ID, {guid, FileGuid}, Expression, ReplicasNum
+            ), ?ATTEMPTS),
+            true;
+        2 ->
+            false
+    end.
+
+
+-spec maybe_set_metadata(node(), file_id:file_guid()) -> Set :: boolean().
+maybe_set_metadata(Node, FileGuid) ->
+    case rand:uniform(2) of
+        1 ->
+            ?assertMatch(ok, lfm_proxy:set_metadata(
+                Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []
+            ), ?ATTEMPTS),
+            true;
+        2 ->
+            false
+    end.
+
+
+-spec maybe_set_acl(node(), file_id:file_guid()) -> Set ::boolean().
+maybe_set_acl(Node, FileGuid) ->
+    case rand:uniform(2) of
+        1 ->
+            ?assertMatch(ok, lfm_proxy:set_acl(
+                Node, ?ROOT_SESS_ID, {guid, FileGuid}, acl:from_json(?OWNER_ONLY_ALLOW_ACL, cdmi)
+            ), ?ATTEMPTS),
+            true;
+        2 ->
+            false
+    end.
+
+
+-spec maybe_create_share(node(), session:id(), file_id:file_guid()) ->
+    ShareId :: undefined | od_share:id().
+maybe_create_share(Node, SessionId, FileGuid) ->
+    case rand:uniform(2) of
+        1 ->
+            {ok, ShId} = ?assertMatch({ok, _}, lfm_proxy:create_share(
+                Node, SessionId, {guid, FileGuid}, <<"share">>
+            )),
+            ShId;
+        2 ->
+            undefined
+    end.
 
 
 -spec guids_to_object_ids([file_id:file_guid()]) -> [file_id:objectid()].

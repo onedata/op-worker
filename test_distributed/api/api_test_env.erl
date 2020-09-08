@@ -33,6 +33,8 @@
     get_provider_nodes/2,
     get_provider_eff_users/2,
 
+    get_space_id/2,
+
     get_user_id/2,
     get_user_access_token/2,
     get_user_session_id/3
@@ -94,25 +96,32 @@ to_entity_placeholder(EntityId, Config) when is_binary(EntityId) ->
     kv_utils:get([api_test_env, entity_id_to_placeholder_mapping, EntityId], Config).
 
 
--spec get_provider_id(op_provider:id() | placeholder(), api_test_runner:config()) ->
+-spec get_provider_id(od_provider:id() | placeholder(), api_test_runner:config()) ->
     od_provider:id().
 get_provider_id(ProviderIdOrPlaceholder, Config) ->
     ProviderPlaceholder = to_entity_placeholder(ProviderIdOrPlaceholder, Config),
     kv_utils:get([api_test_env, ProviderPlaceholder, id], Config).
 
 
--spec get_provider_nodes(op_provider:id() | placeholder(), api_test_runner:config()) ->
+-spec get_provider_nodes(od_provider:id() | placeholder(), api_test_runner:config()) ->
     [node()].
 get_provider_nodes(ProviderIdOrPlaceholder, Config) ->
     ProviderPlaceholder = to_entity_placeholder(ProviderIdOrPlaceholder, Config),
     kv_utils:get([api_test_env, ProviderPlaceholder, nodes], Config).
 
 
--spec get_provider_eff_users(op_provider:id() | placeholder(), api_test_runner:config()) ->
+-spec get_provider_eff_users(od_provider:id() | placeholder(), api_test_runner:config()) ->
     [od_user:id()].
 get_provider_eff_users(ProviderIdOrPlaceholder, Config) ->
     ProviderPlaceholder = to_entity_placeholder(ProviderIdOrPlaceholder, Config),
     kv_utils:get([api_test_env, ProviderPlaceholder, users], Config).
+
+
+-spec get_space_id(od_space:id() | placeholder(), api_test_runner:config()) ->
+    od_space:id().
+get_space_id(SpaceIdOrPlaceholder, Config) ->
+    SpacePlaceholder = to_entity_placeholder(SpaceIdOrPlaceholder, Config),
+    kv_utils:get([api_test_env, SpacePlaceholder, id], Config).
 
 
 -spec get_user_id(od_user:id() | placeholder(), api_test_runner:config()) ->

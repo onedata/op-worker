@@ -129,8 +129,7 @@
     <<"identifier">> => ?owner,
     <<"aceflags">> => <<"0x", (integer_to_binary(?no_flags_mask, 16))/binary>>,
     <<"acemask">> => <<"0x", (integer_to_binary(
-        ?read_metadata_mask bor ?read_attributes_mask bor ?read_acl_mask bor
-        ?write_metadata_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask,
+        ?read_mask bor ?write_metadata_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask,
         16
     ))/binary>>
 }]).
