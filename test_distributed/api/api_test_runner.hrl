@@ -20,14 +20,14 @@
 
 
 -record(client_spec, {
-    correct = [] :: [aai:auth() | onenv_api_test_runner:placeholder()],
+    correct = [] :: [aai:auth() | onenv_api_test_runner:client_placeholder()],
     % list of clients unauthorized to perform operation. By default it is assumed
     % that ?ERROR_UNAUTHORIZED is returned when executing operation on their behalf
     % but it is possible to specify concrete error if necessary (edge cases).
     unauthorized = [] :: [
         aai:auth() |
-        onenv_api_test_runner:placeholder() |
-        {aai:auth() | onenv_api_test_runner:placeholder(), errors:error()}
+        onenv_api_test_runner:client_placeholder() |
+        {aai:auth() | onenv_api_test_runner:client_placeholder(), errors:error()}
     ],
     % list of clients (members of space in context of which operation is performed)
     % forbidden to perform operation. By default it is assumed that ?ERROR_FORBIDDEN
@@ -35,8 +35,8 @@
     % specify concrete error if necessary (edge cases).
     forbidden_in_space = [] :: [
         aai:auth() |
-        onenv_api_test_runner:placeholder() |
-        {aai:auth() | onenv_api_test_runner:placeholder(), errors:error()}
+        onenv_api_test_runner:client_placeholder() |
+        {aai:auth() | onenv_api_test_runner:client_placeholder(), errors:error()}
     ],
     % list of clients (not in space in context of which operation is performed)
     % forbidden to perform operation. By default it is assumed that ?ERROR_FORBIDDEN
@@ -44,8 +44,8 @@
     % specify concrete error if necessary (edge cases).
     forbidden_not_in_space = [] :: [
         aai:auth() |
-        onenv_api_test_runner:placeholder() |
-        {aai:auth() | onenv_api_test_runner:placeholder(), errors:error()}
+        onenv_api_test_runner:client_placeholder() |
+        {aai:auth() | onenv_api_test_runner:client_placeholder(), errors:error()}
     ],
     supported_clients_per_node :: #{node() => [aai:auth()]}
 }).

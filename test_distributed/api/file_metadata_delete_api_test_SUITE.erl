@@ -49,7 +49,7 @@ all() -> [
 
 
 -type metadata_type() :: binary().  % <<"rdf">> | <<"json">> | <<"xattrs">>.
--type set_metadata_policy():: set_metadata | do_not_set_metadata.
+-type test_setup_variant() :: preset_initial_metadata | no_initial_metadata.
 
 
 -define(ATTEMPTS, 30).
@@ -61,46 +61,30 @@ all() -> [
 
 
 delete_file_rdf_metadata_with_rdf_set_test(Config) ->
-    delete_file_metadata_test_base(<<"rdf">>, ?RDF_METADATA_1, set_metadata, Config).
+    delete_metadata_test_base(
+        <<"rdf">>, ?RDF_METADATA_1, preset_initial_metadata, undefined, false, Config
+    ).
 
 
 delete_file_rdf_metadata_without_rdf_set_test(Config) ->
-    delete_file_metadata_test_base(<<"rdf">>, ?RDF_METADATA_2, do_not_set_metadata, Config).
+    delete_metadata_test_base(
+        <<"rdf">>, ?RDF_METADATA_2, no_initial_metadata, undefined, false, Config
+    ).
 
 
 delete_file_json_metadata_with_json_set_test(Config) ->
-    delete_file_metadata_test_base(<<"json">>, ?JSON_METADATA_1, set_metadata, Config).
+    delete_metadata_test_base(
+        <<"json">>, ?JSON_METADATA_1, preset_initial_metadata, undefined, false, Config
+    ).
 
 
 delete_file_json_metadata_without_json_set_test(Config) ->
-    delete_file_metadata_test_base(<<"json">>, ?JSON_METADATA_2, do_not_set_metadata, Config).
-
-
-%% @private
--spec delete_file_metadata_test_base(metadata_type(), term(), set_metadata_policy(),
-    api_test_runner:config()) -> ok.
-delete_file_metadata_test_base(MetadataType, Metadata, SetMetadataPolicy, Config) ->
-    Nodes = ?config(op_worker_nodes, Config),
-    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        8#707, Config
-    ),
-
-    SetupFun = build_setup_fun(SetMetadataPolicy, FileGuid, MetadataType, Metadata, Nodes),
-    VerifyFun = build_verify_fun(SetMetadataPolicy, FileGuid, MetadataType, Metadata, Nodes),
-
     delete_metadata_test_base(
-        MetadataType, FileType, FileGuid, ShareId,
-        Nodes, SetupFun, VerifyFun, undefined,
-        _RandomlySelectScenario = false, Config
+        <<"json">>, ?JSON_METADATA_2, no_initial_metadata, undefined, false, Config
     ).
 
 
 delete_file_xattrs(Config) ->
-    Nodes = ?config(op_worker_nodes, Config),
-    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        8#707, Config
-    ),
-
     FullXattrSet = #{
         ?RDF_METADATA_KEY => ?RDF_METADATA_1,
         ?JSON_METADATA_KEY => ?JSON_METADATA_4,
@@ -110,21 +94,6 @@ delete_file_xattrs(Config) ->
         ?CDMI_COMPLETION_STATUS_KEY => ?CDMI_COMPLETION_STATUS_1,
         ?XATTR_1_KEY => ?XATTR_1_VALUE
     },
-
-    SetupFun = fun() ->
-        % Check to prevent race condition in tests (see onenv_api_test_runner
-        % COMMON PITFALLS 1).
-        RandNode = lists_utils:random_element(Nodes),
-        case {ok, FullXattrSet} == get_xattrs(RandNode, FileGuid) of
-            true ->
-                ok;
-            false ->
-                set_xattrs(lists_utils:random_element(Nodes), FileGuid, FullXattrSet),
-                lists:foreach(fun(Node) ->
-                    ?assertEqual({ok, FullXattrSet}, get_xattrs(Node, FileGuid), ?ATTEMPTS)
-                end, Nodes)
-        end
-    end,
 
     DataSpec = #data_spec{
         required = [<<"keys">>],
@@ -145,22 +114,8 @@ delete_file_xattrs(Config) ->
         ]
     },
 
-    VerifyFun = fun
-        (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch({ok, FullXattrSet}, get_xattrs(TestNode, FileGuid), ?ATTEMPTS),
-            true;
-        (expected_success, #api_test_ctx{data = #{<<"keys">> := Keys}}) ->
-            ExpXattrs = maps:without(Keys, FullXattrSet),
-            lists:foreach(fun(Node) ->
-                ?assertEqual({ok, ExpXattrs}, get_xattrs(Node, FileGuid), ?ATTEMPTS)
-            end, Nodes),
-            true
-    end,
-
     delete_metadata_test_base(
-        <<"xattrs">>, FileType, FileGuid, ShareId,
-        Nodes, SetupFun, VerifyFun, DataSpec,
-        _RandomlySelectScenario = true, Config
+        <<"xattrs">>, FullXattrSet, preset_initial_metadata, DataSpec, true, Config
     ).
 
 
@@ -170,9 +125,87 @@ delete_file_xattrs(Config) ->
 
 
 %% @private
--spec build_setup_fun(set_metadata_policy(), file_id:file_guid(), metadata_type(),
+-spec delete_metadata_test_base(
+    metadata_type(),
+    Metadata :: term(),
+    test_setup_variant(),
+    onenv_api_test_runner:data_spec(),
+    RandomlySelectScenario :: boolean(),
+    api_test_runner:config()
+) ->
+    ok.
+delete_metadata_test_base(
+    MetadataType, Metadata, TestSetupVariant, DataSpec, RandomlySelectScenario, Config
+) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
+        8#707, Config
+    ),
+    FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+
+    ?assert(onenv_api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Nodes,
+            setup_fun = build_setup_fun(TestSetupVariant, FileGuid, MetadataType, Metadata, Nodes),
+            verify_fun = build_verify_fun(TestSetupVariant, FileGuid, MetadataType, Metadata, Nodes),
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2,
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Delete ~s metadata for ~s using gs private api", [
+                        MetadataType, FileType
+                    ]),
+                    type = gs,
+                    prepare_args_fun = build_delete_metadata_prepare_gs_args_fun(
+                        MetadataType, FileGuid, private
+                    ),
+                    validate_result_fun = fun(_TestCtx, Result) ->
+                        ?assertEqual({ok, undefined}, Result)
+                    end
+                }
+            ],
+            randomly_select_scenarios = RandomlySelectScenario,
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                FileGuid, ShareId, DataSpec
+            )
+        },
+
+        #scenario_spec{
+            name = str_utils:format("Delete ~s metadata for shared ~s using gs public api", [
+                MetadataType, FileType
+            ]),
+            type = gs_not_supported,
+            target_nodes = Nodes,
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
+            prepare_args_fun = build_delete_metadata_prepare_gs_args_fun(
+                MetadataType, FileShareGuid, public
+            ),
+            validate_result_fun = fun(_TestCaseCtx, Result) ->
+                ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
+            end,
+            data_spec = DataSpec
+        }
+    ])).
+
+
+%% @private
+-spec build_setup_fun(test_setup_variant(), file_id:file_guid(), metadata_type(),
     Metadata :: term(), [node()]) -> onenv_api_test_runner:verify_fun().
-build_setup_fun(set_metadata, FileGuid, MetadataType, Metadata, Nodes) ->
+build_setup_fun(preset_initial_metadata, FileGuid, <<"xattrs">>, FullXattrSet, Nodes) ->
+    fun() ->
+        % Check to prevent race condition in tests (see onenv_api_test_runner
+        % COMMON PITFALLS 1).
+        RandNode = lists_utils:random_element(Nodes),
+        case {ok, FullXattrSet} == get_xattrs(RandNode, FileGuid) of
+            true ->
+                ok;
+            false ->
+                set_xattrs(lists_utils:random_element(Nodes), FileGuid, FullXattrSet),
+                lists:foreach(fun(Node) ->
+                    ?assertEqual({ok, FullXattrSet}, get_xattrs(Node, FileGuid), ?ATTEMPTS)
+                end, Nodes)
+        end
+    end;
+build_setup_fun(preset_initial_metadata, FileGuid, MetadataType, Metadata, Nodes) ->
     fun() ->
         % Check to prevent race condition in tests (see onenv_api_test_runner
         % COMMON PITFALLS 1).
@@ -187,14 +220,26 @@ build_setup_fun(set_metadata, FileGuid, MetadataType, Metadata, Nodes) ->
                 end, Nodes)
         end
     end;
-build_setup_fun(do_not_set_metadata, _, _, _, _) ->
+build_setup_fun(no_initial_metadata, _, _, _, _) ->
     fun() -> ok end.
 
 
 %% @private
--spec build_verify_fun(set_metadata_policy(), file_id:file_guid(), metadata_type(),
+-spec build_verify_fun(test_setup_variant(), file_id:file_guid(), metadata_type(),
     Metadata :: term(), [node()]) -> onenv_api_test_runner:verify_fun().
-build_verify_fun(set_metadata, FileGuid, MetadataType, ExpMetadata, Nodes) ->
+build_verify_fun(preset_initial_metadata, FileGuid, <<"xattrs">>, FullXattrSet, Nodes) ->
+    fun
+        (expected_failure, #api_test_ctx{node = TestNode}) ->
+            ?assertMatch({ok, FullXattrSet}, get_xattrs(TestNode, FileGuid), ?ATTEMPTS),
+            true;
+        (expected_success, #api_test_ctx{data = #{<<"keys">> := Keys}}) ->
+            ExpXattrs = maps:without(Keys, FullXattrSet),
+            lists:foreach(fun(Node) ->
+                ?assertEqual({ok, ExpXattrs}, get_xattrs(Node, FileGuid), ?ATTEMPTS)
+            end, Nodes),
+            true
+    end;
+build_verify_fun(preset_initial_metadata, FileGuid, MetadataType, ExpMetadata, Nodes) ->
     fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
             ?assertMatch({ok, ExpMetadata}, get_metadata(TestNode, FileGuid, MetadataType), ?ATTEMPTS),
@@ -205,7 +250,7 @@ build_verify_fun(set_metadata, FileGuid, MetadataType, ExpMetadata, Nodes) ->
             end, Nodes),
             true
     end;
-build_verify_fun(do_not_set_metadata, FileGuid, MetadataType, _ExpMetadata, Nodes) ->
+build_verify_fun(no_initial_metadata, FileGuid, MetadataType, _ExpMetadata, Nodes) ->
     fun(_, _) ->
         lists:foreach(fun(Node) ->
             ?assertMatch({error, ?ENODATA}, get_metadata(Node, FileGuid, MetadataType), ?ATTEMPTS)
@@ -265,71 +310,6 @@ get_xattrs(Node, FileGuid) ->
 
 
 %% @private
--spec delete_metadata_test_base(
-    metadata_type(),
-    api_test_utils:file_type(),
-    file_id:file_guid(),
-    undefined | od_share:id(),
-    [node()],
-    onenv_api_test_runner:setup_fun(),
-    onenv_api_test_runner:verify_fun(),
-    onenv_api_test_runner:data_spec(),
-    RandomlySelectScenario :: boolean(),
-    api_test_runner:config()
-) ->
-    ok.
-delete_metadata_test_base(
-    MetadataType, FileType, FileGuid, ShareId,
-    Nodes, SetupFun, VerifyFun, DataSpec,
-    RandomlySelectScenario, Config
-) ->
-    FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-
-    ?assert(onenv_api_test_runner:run_tests(Config, [
-        #suite_spec{
-            target_nodes = Nodes,
-            setup_fun = SetupFun,
-            verify_fun = VerifyFun,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2,
-            scenario_templates = [
-                #scenario_template{
-                    name = str_utils:format("Delete ~s metadata for ~s using gs private api", [
-                        MetadataType, FileType
-                    ]),
-                    type = gs,
-                    prepare_args_fun = build_delete_metadata_prepare_gs_args_fun(
-                        MetadataType, FileGuid, private
-                    ),
-                    validate_result_fun = fun(_TestCtx, Result) ->
-                        ?assertEqual({ok, undefined}, Result)
-                    end
-                }
-            ],
-            randomly_select_scenarios = RandomlySelectScenario,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                FileGuid, ShareId, DataSpec
-            )
-        },
-
-        #scenario_spec{
-            name = str_utils:format("Delete ~s metadata for shared ~s using gs public api", [
-                MetadataType, FileType
-            ]),
-            type = gs_not_supported,
-            target_nodes = Nodes,
-            client_spec = ?CLIENT_SPEC_FOR_SHARES,
-            prepare_args_fun = build_delete_metadata_prepare_gs_args_fun(
-                MetadataType, FileShareGuid, public
-            ),
-            validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
-            end,
-            data_spec = DataSpec
-        }
-    ])).
-
-
-%% @private
 build_delete_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
         {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
@@ -353,16 +333,11 @@ build_delete_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
 
 
 init_per_suite(Config) ->
-    api_test_env:init_per_suite(Config, #onenv_test_config{
-        envs = [
-            {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
-        ],
-        posthook = fun(NewConfig) ->
-            application:start(ssl),
-            hackney:start(),
-            NewConfig
-        end
-    }).
+    application:start(ssl),
+    hackney:start(),
+    api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
+        {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
+    ]}).
 
 
 end_per_suite(_Config) ->

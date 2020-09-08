@@ -28,7 +28,7 @@
 %%%        4. verify_fun() checks whether META deletion is visible from providers
 %%%           A and B and it fails.
 %%%    To prevent such bugs it is recommended to checks in setup_fun() if data was
-%%%    modified is any and only then renew it.
+%%%    modified and only then renew it.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(onenv_api_test_runner).
@@ -44,7 +44,7 @@
 
 -export([run_tests/2]).
 
--type config() :: proplists:proplist().
+-type ct_config() :: proplists:proplist().
 
 -type scenario_type() ::
     % Standard rest scenario - using fileId in path so that no lookup
@@ -76,7 +76,7 @@
 % performed using `verify_fun` callback.
 -type target_nodes() :: [node()].
 
--type placeholder() :: atom().
+-type client_placeholder() :: atom().
 
 -type client_spec() :: #client_spec{}.
 -type data_spec() :: #data_spec{}.
@@ -118,9 +118,9 @@
 
 
 -export_type([
-    config/0,
+    ct_config/0,
     scenario_type/0, target_nodes/0,
-    placeholder/0, client_spec/0, data_spec/0,
+    client_placeholder/0, client_spec/0, data_spec/0,
     setup_fun/0, teardown_fun/0, verify_fun/0,
     rest_args/0, gs_args/0, api_test_ctx/0,
     prepare_args_fun/0, validate_call_result_fun/0,
@@ -146,7 +146,7 @@
 %%%===================================================================
 
 
--spec run_tests(config(), [scenario_spec() | suite_spec()]) ->
+-spec run_tests(ct_config(), [scenario_spec() | suite_spec()]) ->
     HasAllTestsPassed :: boolean().
 run_tests(Config, Specs) ->
     lists:foldl(fun
@@ -163,7 +163,7 @@ run_tests(Config, Specs) ->
 
 
 %% @private
--spec run_suite(config(), suite_spec()) -> HasAllTestsPassed :: boolean().
+-spec run_suite(ct_config(), suite_spec()) -> HasAllTestsPassed :: boolean().
 run_suite(Config, #suite_spec{
     client_spec = ClientSpecWithPlaceholders
 } = SuiteSpecWithClientPlaceholders) ->
@@ -190,7 +190,7 @@ run_suite(Config, #suite_spec{
 
 
 %% @private
--spec prepare_client_spec(client_spec(), config()) -> client_spec().
+-spec prepare_client_spec(client_spec(), ct_config()) -> client_spec().
 prepare_client_spec(#client_spec{
     correct = CorrectClientsAndPlaceholders,
     unauthorized = UnauthorizedClientsAndPlaceholders,
@@ -215,8 +215,8 @@ prepare_client_spec(#client_spec{
 
 %% @private
 -spec prepare_clients(
-    [aai:auth() | placeholder() | {aai:auth() | placeholder(), errors:error()}],
-    config()
+    [aai:auth() | client_placeholder() | {aai:auth() | client_placeholder(), errors:error()}],
+    ct_config()
 ) ->
     [aai:auth() | {aai:auth(), errors:error()}].
 prepare_clients(ClientsAndPlaceholders, Config) ->
@@ -229,7 +229,7 @@ prepare_clients(ClientsAndPlaceholders, Config) ->
 
 
 %% @private
--spec prepare_client(aai:auth() | placeholder(), config()) -> aai:auth().
+-spec prepare_client(aai:auth() | client_placeholder(), ct_config()) -> aai:auth().
 prepare_client(#auth{} = AaiClient, _Config) ->
     AaiClient;
 prepare_client(Placeholder, Config) ->
@@ -237,7 +237,7 @@ prepare_client(Placeholder, Config) ->
 
 
 %% @private
--spec run_invalid_clients_test_cases(config(), invalid_client_type(), suite_spec()) ->
+-spec run_invalid_clients_test_cases(ct_config(), invalid_client_type(), suite_spec()) ->
     HasAllTestsPassed :: boolean().
 run_invalid_clients_test_cases(Config, InvalidClientsType, #suite_spec{
     target_nodes = TargetNodes,
@@ -324,7 +324,7 @@ get_client(Client) -> Client.
 
 
 %% @private
--spec run_malformed_data_test_cases(config(), suite_spec()) -> HasAllTestsPassed :: boolean().
+-spec run_malformed_data_test_cases(ct_config(), suite_spec()) -> HasAllTestsPassed :: boolean().
 run_malformed_data_test_cases(Config, #suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{correct = CorrectClients},
@@ -415,7 +415,7 @@ get_expected_malformed_data_error({_ScenarioType, {error_fun, ErrorFun}}, _, Tes
 
 
 %% @private
--spec run_missing_required_data_test_cases(config(), suite_spec()) ->
+-spec run_missing_required_data_test_cases(ct_config(), suite_spec()) ->
     HasAllTestsPassed :: boolean().
 run_missing_required_data_test_cases(_Config, #suite_spec{data_spec = undefined}) ->
     true;
@@ -494,7 +494,7 @@ get_scenario_specific_error_for_missing_data(_ScenarioType, Error) ->
 
 
 %% @private
--spec run_expected_success_test_cases(config(), suite_spec()) -> HasAllTestsPassed :: boolean().
+-spec run_expected_success_test_cases(ct_config(), suite_spec()) -> HasAllTestsPassed :: boolean().
 run_expected_success_test_cases(Config, #suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{correct = CorrectClients},
@@ -869,7 +869,7 @@ scenario_spec_to_suite_spec(#scenario_spec{
 
 
 %% @private
--spec placeholder_to_client(placeholder(), config()) -> aai:auth().
+-spec placeholder_to_client(client_placeholder(), ct_config()) -> aai:auth().
 placeholder_to_client(nobody, _Config) ->
     ?NOBODY;
 placeholder_to_client(Username, Config) when is_atom(Username) ->
@@ -877,7 +877,7 @@ placeholder_to_client(Username, Config) when is_atom(Username) ->
 
 
 %% @private
--spec client_to_placeholder(aai:auth(), config()) -> placeholder().
+-spec client_to_placeholder(aai:auth(), ct_config()) -> client_placeholder().
 client_to_placeholder(?NOBODY, _Config) ->
     nobody;
 client_to_placeholder(?USER(UserId), Config) ->
@@ -898,7 +898,7 @@ build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet) ->
 
 
 %% @private
--spec is_client_supported_by_node(aai:auth(), node(), config()) ->
+-spec is_client_supported_by_node(aai:auth(), node(), ct_config()) ->
     boolean().
 is_client_supported_by_node(?NOBODY, _Node, _Config) ->
     true;
@@ -908,7 +908,7 @@ is_client_supported_by_node(?USER(UserId), Node, Config) ->
 
 
 %% @private
--spec make_request(config(), node(), aai:auth(), rest_args() | gs_args()) ->
+-spec make_request(ct_config(), node(), aai:auth(), rest_args() | gs_args()) ->
     {ok, GsCallResult :: map()} |
     {ok, RespCode :: non_neg_integer(), RespHeaders :: map(), RespBody :: binary() | map()} |
     {error, term()}.
@@ -919,7 +919,7 @@ make_request(Config, Node, Client, #gs_args{} = Args) ->
 
 
 %% @private
--spec make_gs_request(config(), node(), aai:auth(), gs_args()) ->
+-spec make_gs_request(ct_config(), node(), aai:auth(), gs_args()) ->
     {ok, Result :: map()} | {error, term()}.
 make_gs_request(Config, Node, Client, #gs_args{
     operation = Operation,
@@ -941,7 +941,7 @@ make_gs_request(Config, Node, Client, #gs_args{
 
 
 %% @private
--spec connect_via_gs(node(), aai:auth(), config()) ->
+-spec connect_via_gs(node(), aai:auth(), ct_config()) ->
     {ok, GsClient :: pid()} | errors:error().
 connect_via_gs(_Node, ?NOBODY, _Config) ->
     % TODO VFS-6201 fix when connecting as nobody via gs becomes possible
@@ -991,7 +991,7 @@ gs_endpoint(Node) ->
 
 
 %% @private
--spec make_rest_request(config(), node(), aai:auth(), rest_args()) ->
+-spec make_rest_request(ct_config(), node(), aai:auth(), rest_args()) ->
     {ok, RespCode :: non_neg_integer(), RespHeaders :: map(), RespBody :: binary() | map()} |
     {error, term()}.
 make_rest_request(Config, Node, Client, #rest_args{
@@ -1019,7 +1019,7 @@ make_rest_request(Config, Node, Client, #rest_args{
 
 
 %% @private
--spec get_rest_auth_headers(aai:auth(), config()) -> AuthHeaders :: map().
+-spec get_rest_auth_headers(aai:auth(), ct_config()) -> AuthHeaders :: map().
 get_rest_auth_headers(?NOBODY, _Config) ->
     #{};
 get_rest_auth_headers(?USER(UserId), Config) ->

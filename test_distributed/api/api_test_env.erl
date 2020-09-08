@@ -42,10 +42,10 @@
 
 
 -type entity_id() :: od_provider:id() | od_space:id() | od_user:id().
--type placeholder() :: atom().
+-type entity_placeholder() :: atom().
 -type onenv_test_config() :: #onenv_test_config{}.
 
--export_type([placeholder/0, entity_id/0]).
+-export_type([entity_placeholder/0, entity_id/0]).
 
 
 % Time caveat is required in temporary tokens, a default one is added if there isn't any
@@ -80,7 +80,7 @@ init_per_suite(Config, #onenv_test_config{
     ]).
 
 
--spec to_entity_id(entity_id() | placeholder(), api_test_runner:config()) ->
+-spec to_entity_id(entity_id() | entity_placeholder(), api_test_runner:config()) ->
     entity_id().
 to_entity_id(EntityPlaceholder, Config) when is_atom(EntityPlaceholder) ->
     kv_utils:get([api_test_env, EntityPlaceholder, id], Config);
@@ -88,50 +88,50 @@ to_entity_id(EntityId, _Config) when is_binary(EntityId) ->
     EntityId.
 
 
--spec to_entity_placeholder(entity_id() | placeholder(), api_test_runner:config()) ->
-    placeholder().
+-spec to_entity_placeholder(entity_id() | entity_placeholder(), api_test_runner:config()) ->
+    entity_placeholder().
 to_entity_placeholder(Placeholder, _Config) when is_atom(Placeholder) ->
     Placeholder;
 to_entity_placeholder(EntityId, Config) when is_binary(EntityId) ->
     kv_utils:get([api_test_env, entity_id_to_placeholder_mapping, EntityId], Config).
 
 
--spec get_provider_id(od_provider:id() | placeholder(), api_test_runner:config()) ->
+-spec get_provider_id(od_provider:id() | entity_placeholder(), api_test_runner:config()) ->
     od_provider:id().
 get_provider_id(ProviderIdOrPlaceholder, Config) ->
     ProviderPlaceholder = to_entity_placeholder(ProviderIdOrPlaceholder, Config),
     kv_utils:get([api_test_env, ProviderPlaceholder, id], Config).
 
 
--spec get_provider_nodes(od_provider:id() | placeholder(), api_test_runner:config()) ->
+-spec get_provider_nodes(od_provider:id() | entity_placeholder(), api_test_runner:config()) ->
     [node()].
 get_provider_nodes(ProviderIdOrPlaceholder, Config) ->
     ProviderPlaceholder = to_entity_placeholder(ProviderIdOrPlaceholder, Config),
     kv_utils:get([api_test_env, ProviderPlaceholder, nodes], Config).
 
 
--spec get_provider_eff_users(od_provider:id() | placeholder(), api_test_runner:config()) ->
+-spec get_provider_eff_users(od_provider:id() | entity_placeholder(), api_test_runner:config()) ->
     [od_user:id()].
 get_provider_eff_users(ProviderIdOrPlaceholder, Config) ->
     ProviderPlaceholder = to_entity_placeholder(ProviderIdOrPlaceholder, Config),
     kv_utils:get([api_test_env, ProviderPlaceholder, users], Config).
 
 
--spec get_space_id(od_space:id() | placeholder(), api_test_runner:config()) ->
+-spec get_space_id(od_space:id() | entity_placeholder(), api_test_runner:config()) ->
     od_space:id().
 get_space_id(SpaceIdOrPlaceholder, Config) ->
     SpacePlaceholder = to_entity_placeholder(SpaceIdOrPlaceholder, Config),
     kv_utils:get([api_test_env, SpacePlaceholder, id], Config).
 
 
--spec get_user_id(od_user:id() | placeholder(), api_test_runner:config()) ->
+-spec get_user_id(od_user:id() | entity_placeholder(), api_test_runner:config()) ->
     od_user:id().
 get_user_id(UserIdOrPlaceholder, Config) ->
     UserPlaceholder = to_entity_placeholder(UserIdOrPlaceholder, Config),
     kv_utils:get([api_test_env, UserPlaceholder, id], Config).
 
 
--spec get_user_access_token(od_user:id() | placeholder(), api_test_runner:config()) ->
+-spec get_user_access_token(od_user:id() | entity_placeholder(), api_test_runner:config()) ->
     auth_manager:access_token().
 get_user_access_token(UserIdOrPlaceholder, Config) ->
     UserPlaceholder = to_entity_placeholder(UserIdOrPlaceholder, Config),
@@ -139,8 +139,8 @@ get_user_access_token(UserIdOrPlaceholder, Config) ->
 
 
 -spec get_user_session_id(
-    UserIdOrPlaceholder :: od_user:id() | placeholder(),
-    ProviderIdOrPlaceholder :: od_provider:id() | placeholder(),
+    UserIdOrPlaceholder :: od_user:id() | entity_placeholder(),
+    ProviderIdOrPlaceholder :: od_provider:id() | entity_placeholder(),
     api_test_runner:config()
 ) ->
     session:id().
