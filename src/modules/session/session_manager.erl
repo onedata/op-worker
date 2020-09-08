@@ -278,7 +278,8 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates session or if session exists reuses it.
+%% @equiv reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia)
+%% where additional argument DataConstraints is constructed using caveats obtained using Credentials
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(
@@ -313,8 +314,8 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, ProxyVia) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia,
-%%        ?SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 0)
+%% @equiv reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints,
+%%        ProxyVia, ?SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 0)
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(
@@ -333,7 +334,11 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates session or if session exists reuses it.
+%% Creates session or reuses it if session exists. Session creation results in
+%% starting of session's supervisor together with its children and saving session document to datastore
+%% (document is created during initialization of supervisor).
+%% If session is corrupted after failure of node that hosted session's supervisor,
+%% this function recreates supervisor together with its children.
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(
