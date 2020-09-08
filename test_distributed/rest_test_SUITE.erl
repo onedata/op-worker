@@ -19,6 +19,7 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -251,7 +252,8 @@ mock_space_logic(Config) ->
                     StorageId -> [StorageId | Acc]
                 end
             end, [], Workers)}
-        end).
+        end),
+    test_utils:mock_expect(Workers, space_logic, has_eff_privilege, fun(_, _, ?SPACE_VIEW) -> true end).
 
 unmock_space_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
