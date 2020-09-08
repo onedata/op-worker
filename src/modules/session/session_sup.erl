@@ -57,12 +57,7 @@ init([#document{key = SessId, value = Record} = Doc, SessType]) ->
     Node = node(),
     case session:create(Doc#document{value = Record#session{supervisor = Self, node = Node}}) of
         {ok, _} ->
-            SupFlags = #{
-                strategy => one_for_all,
-                intensity => 0,
-                period => 1
-            },
-            {ok, {SupFlags, child_specs(SessId, SessType)}};
+            get_flags_and_child_spec(SessId, SessType);
         {error, already_exists} ->
             ignore
     end;
@@ -75,12 +70,7 @@ init([SessId, SessType]) ->
         session_manager:reset_session_record(Session, Self, Node)
     end) of
         {ok, _} ->
-            SupFlags = #{
-                strategy => one_for_all,
-                intensity => 0,
-                period => 1
-            },
-            {ok, {SupFlags, child_specs(SessId, SessType)}};
+            get_flags_and_child_spec(SessId, SessType);
         {error, supervsior_is_alive} ->
             ignore
     end.
@@ -88,6 +78,17 @@ init([SessId, SessType]) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec get_flags_and_child_spec(session:id(), session:type()) ->
+    {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
+get_flags_and_child_spec(SessId, SessType) ->
+    SupFlags = #{
+        strategy => one_for_all,
+        intensity => 0,
+        period => 1
+    },
+    {ok, {SupFlags, child_specs(SessId, SessType)}}.
 
 %%--------------------------------------------------------------------
 %% @private

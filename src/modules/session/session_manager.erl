@@ -187,7 +187,7 @@ restart_dead_sessions() ->
 -spec maybe_restart_session(SessId) ->
     {ok, SessId} | error() when SessId :: session:id().
 maybe_restart_session(SessId) ->
-    case session:update_doc_and_time(SessId, fun maybe_clear_session_record/1) of
+    case session:update_doc_and_time(SessId, fun maybe_clear_dead_connections/1) of
         {ok, #document{key = SessId}} ->
             {ok, SessId};
         {error, update_not_needed} ->
@@ -207,7 +207,7 @@ maybe_restart_session(SessId) ->
 %%--------------------------------------------------------------------
 -spec reset_session_record(session:record(), pid(), node()) ->
     {ok, session:record()} | {error, update_not_needed}.
-reset_session_record(#session{connections = Cons} = Sess, Sup, SupNode) ->
+reset_session_record(#session{supervisor = Sup, connections = Cons} = Sess, NewSup, NewSupNode) ->
     case is_alive(Sup) of
         true ->
             {error, supervsior_is_alive};
@@ -215,8 +215,8 @@ reset_session_record(#session{connections = Cons} = Sess, Sup, SupNode) ->
             % All session processes but connection ones are on the same
             % node as supervisor. If supervisor is dead so they are.
             {ok, Sess#session{
-                node = SupNode,
-                supervisor = Sup,
+                node = NewSup,
+                supervisor = NewSupNode,
                 event_manager = undefined,
                 watcher = undefined,
                 sequencer_manager = undefined,
@@ -365,7 +365,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
         (#session{identity = ValidIdentity} = ExistingSess) ->
             case Identity of
                 ValidIdentity ->
-                    case maybe_clear_session_record(ExistingSess) of
+                    case maybe_clear_dead_connections(ExistingSess) of
                         {error, update_not_needed} -> {ok, ExistingSess};
                         Other -> Other
                     end;
@@ -428,12 +428,12 @@ maybe_retry_session_init(SessId, SessType, Identity, Credentials, DataConstraint
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks if session processes are still alive and if not clears entries in
+%% Checks if session connections are still alive and if not clears entries in
 %% session doc.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_clear_session_record(session:record()) -> {ok, session:record()} | {error, update_not_needed}.
-maybe_clear_session_record(#session{supervisor = Sup, connections = Cons, type = SessType} = Sess) ->
+-spec maybe_clear_dead_connections(session:record()) -> {ok, session:record()} | {error, update_not_needed}.
+maybe_clear_dead_connections(#session{supervisor = Sup, connections = Cons, type = SessType} = Sess) ->
     case is_alive(Sup) of
         true ->
             case lists:partition(fun is_alive/1, Cons) of
@@ -454,12 +454,6 @@ start_session(#document{key = SessId, value = #session{type = SessType}} = Doc) 
             {error, already_exists};
         {ok, _} ->
             {ok, SessId};
-        {error, already_present} ->
-            ?warning("Session ~p supervisor already exists", [SessId]),
-            {ok, SessId};
-        {error, {already_started, _}} ->
-            ?warning("Session ~p supervisor already exists", [SessId]),
-            {ok, SessId};
         Error ->
             ?error("Session ~p start error: ~p", [SessId, Error]),
             session:delete_doc(SessId),
@@ -473,12 +467,6 @@ restart_session(SessId, SessType) ->
         {ok, undefined} ->
             {error, already_exists};
         {ok, _} ->
-            {ok, SessId};
-        {error, already_present} ->
-            ?warning("Session ~p restart: supervisor already exists", [SessId]),
-            {ok, SessId};
-        {error, {already_started, _}} ->
-            ?warning("Session ~p restart: supervisor already exists", [SessId]),
             {ok, SessId};
         Error ->
             ?error("Session ~p restart error: ~p", [SessId, Error]),
