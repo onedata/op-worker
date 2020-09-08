@@ -178,11 +178,11 @@ handle_info(?RENEW_CONNECTIONS_REQ, #state{session_id = SessionId} = State) ->
         {ok, NewState} ->
             {noreply, NewState};
         {error, peer_offline} ->
-            stop_session(SessionId, State)
+            terminate_session(SessionId, State)
     end;
 
 handle_info({'EXIT', _ConnPid, timeout}, #state{session_id = SessionId} = State) ->
-    stop_session(SessionId, State);
+    terminate_session(SessionId, State);
 
 handle_info({'EXIT', ConnPid, handshake_failed}, #state{
     connections = AllConnections,
@@ -194,7 +194,7 @@ handle_info({'EXIT', ConnPid, handshake_failed}, #state{
 
     case {map_size(WorkingConnections), AfterLastConnectionRetry} of
         {0, true} ->
-            stop_session(SessionId, State);
+            terminate_session(SessionId, State);
         _ ->
             NewState = State#state{connections = WorkingConnections},
             {noreply, schedule_next_renewal(NewState)}
@@ -206,7 +206,7 @@ handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons, session_id = 
         {ok, State2} ->
             {noreply, State2};
         {error, peer_offline} ->
-            stop_session(SessionId, State1)
+            terminate_session(SessionId, State1)
     end;
 
 handle_info(Info, State) ->
@@ -227,7 +227,7 @@ handle_info(Info, State) ->
     state()) -> term().
 terminate(Reason, #state{session_id = SessionId} = State) ->
     ?log_terminate(Reason, State),
-    session_manager:clean_stopped_session(SessionId).
+    session_manager:clean_terminated_session(SessionId).
 
 
 %%--------------------------------------------------------------------
@@ -247,10 +247,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %% @private
--spec stop_session(session:id(), state()) -> {noreply, state()}.
-stop_session(SessionId, State) ->
+-spec terminate_session(session:id(), state()) -> {noreply, state()}.
+terminate_session(SessionId, State) ->
     spawn(fun() ->
-        session_manager:stop_session(SessionId)
+        session_manager:terminate_session(SessionId)
     end),
     {noreply, State#state{is_stopping = true}}.
 

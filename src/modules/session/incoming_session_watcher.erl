@@ -221,7 +221,7 @@ handle_cast(Request, State) ->
     {stop, Reason :: term(), NewState :: state()}.
 handle_info(?REMOVE_SESSION, #state{session_id = SessionId} = State) ->
     spawn(fun() ->
-        session_manager:stop_session(SessionId)
+        session_manager:terminate_session(SessionId)
     end),
     schedule_session_removal(?SESSION_REMOVAL_RETRY_DELAY),
     {noreply, State, hibernate};
@@ -251,7 +251,7 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
         {false, {error, Reason}} ->
             ?error("Checking session ~p activity error ~p", [SessionId, Reason]),
             spawn(fun() ->
-                session_manager:stop_session(SessionId)
+                session_manager:terminate_session(SessionId)
             end),
             {noreply, State, hibernate}
     end;
@@ -275,7 +275,7 @@ handle_info(?CHECK_SESSION_VALIDITY, #state{
 
 handle_info({'EXIT', _, shutdown}, #state{session_id = SessionId} = State) ->
     spawn(fun() ->
-        session_manager:stop_session(SessionId)
+        session_manager:terminate_session(SessionId)
     end),
     {noreply, State, hibernate};
 
@@ -297,7 +297,7 @@ handle_info(Info, State) ->
     State :: state()) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    session_manager:clean_stopped_session(SessId).
+    session_manager:clean_terminated_session(SessId).
 
 
 %%--------------------------------------------------------------------
