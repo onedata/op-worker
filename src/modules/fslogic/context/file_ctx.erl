@@ -45,7 +45,6 @@
     storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
-    is_space_synced :: undefined | boolean(),
     is_imported_storage :: undefined | boolean()
 }).
 
@@ -86,8 +85,8 @@
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
-    get_file_size_from_remote_locations/1, get_owner/1, get_local_storage_file_size/1,
-    is_space_synced/1, get_and_cache_file_doc_including_deleted/1]).
+    get_file_size_from_remote_locations/1, get_owner/1, get_local_storage_file_size/1
+    , get_and_cache_file_doc_including_deleted/1]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
 -export([assert_not_readonly_storage/1]).
 
@@ -527,14 +526,6 @@ get_new_storage_file_id(FileCtx) ->
             {StorageFileId, FileCtx3} = storage_file_id:canonical(FileCtx2),
             {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}}
     end.
-
--spec is_space_synced(ctx()) -> {boolean(), ctx()}.
-is_space_synced(FileCtx = #file_ctx{is_space_synced = undefined}) ->
-    SpaceId = get_space_id_const(FileCtx),
-    IsSynced = space_strategies:is_any_storage_imported(SpaceId),
-    {IsSynced, FileCtx#file_ctx{is_space_synced = IsSynced}};
-is_space_synced(FileCtx = #file_ctx{is_space_synced = IsSynced}) ->
-    {IsSynced, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc

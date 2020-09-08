@@ -6,11 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Worker responsible for starting scans of storage_sync mechanism.
-%%% Every ?STORAGE_SYNC_CHECK_INTERVAL seconds it lists all locally
-%%% supported spaces, checks whether storage_sync mechanism is configured
+%%% Worker responsible for starting scans of storage_import mechanism.
+%%% Every ?storage_import_check_interval seconds it lists all locally
+%%% supported spaces, checks whether storage_import mechanism is configured
 %%% for this spaces and decides whether scans should be started.
-%%% For more info on storage_sync please see storage_sync_traverse.erl.
+%%% For more info on storage_import please see storage_sync_traverse.erl.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_worker).
@@ -19,11 +19,12 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/storage/import/storage_import.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-%% Interval between successive checks of spaces' storage_sync configuration.
--define(STORAGE_SYNC_CHECK_INTERVAL, application:get_env(?APP_NAME, storage_sync_check_interval, 10)).
+%% Interval between successive checks of spaces' storage_import configuration.
+-define(STORAGE_IMPORT_CHECK_INTERVAL, application:get_env(?APP_NAME, storage_import_check_interval, 10)).
 -define(PROVIDER_CONNECTED_TO_OZ, provider_connected_to_oz).
 -define(SPACES_CHECK, spaces_check).
 
@@ -42,6 +43,12 @@
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
+
+% TODO dodać budowanie wiedzy o spejsach imported
+% TODO przy starcie i on supported
+% TODO czy ogarniac tez cykliczne/nie cykliczne?
+% TODO próba wystartowania co 1 sek
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -106,7 +113,7 @@ notify_connection_to_oz() ->
 %% @private
 %% @doc
 %% This function is responsible for checking and optionally starting
-%% storage_sync scans in synced spaces supported by this provider.
+%% storage_import scans in synced spaces supported by this provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_spaces() -> ok.
@@ -132,81 +139,77 @@ check_spaces() ->
 
 -spec check_space(od_space:id()) -> ok.
 check_space(SpaceId) ->
-    {ok, SyncConfigs} = space_strategies:get_sync_configs(SpaceId),
-    maps:fold(fun(StorageId, SyncConfig, undefined) ->
-        check_storage(SpaceId, StorageId, SyncConfig)
-    end, undefined, SyncConfigs).
+    case storage_import_config:get(SpaceId) of
+        {error, not_found} ->
+            ok;
+        {ok, ImportConfig} ->
+            {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+            check_storage(SpaceId, StorageId, ImportConfig)
+    end.
 
--spec check_storage(od_space:id(), storage:id(), space_strategies:sync_config()) -> ok.
-check_storage(SpaceId, StorageId, SyncConfig) ->
-    case is_sync_supported_on(StorageId) of
-        true -> maybe_start_scan(SpaceId, StorageId, SyncConfig);
+-spec check_storage(od_space:id(), storage:id(), storage_import:config()) -> ok.
+check_storage(SpaceId, StorageId, ImportConfig) ->
+    case is_import_supported(StorageId) of
+        true -> maybe_start_scan(SpaceId, StorageId, ImportConfig);
         false -> ok
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is responsible for starting suitable storage_sync scans.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_start_scan(od_space:id(), storage:id(), space_strategies:sync_config()) -> ok.
-maybe_start_scan(SpaceId, StorageId, SyncConfig) ->
-    {ImportEnabled, ImportConfig} = space_strategies:get_import_details(SyncConfig),
-    case ImportEnabled of
-        false ->
-            ok;
-        true ->
-            storage_sync_monitoring:ensure_created(SpaceId, StorageId),
-            case storage_sync_monitoring:get_import_status(SpaceId, StorageId) of
-                not_started -> storage_sync_traverse:run_import(SpaceId, StorageId, ImportConfig);
-                in_progress -> ok;
-                finished -> maybe_start_update_scan(SpaceId, StorageId, SyncConfig)
-            end
+
+-spec maybe_start_scan(od_space:id(), storage:id(), storage_import:config()) -> ok.
+maybe_start_scan(SpaceId, StorageId, ImportConfig) ->
+    {ok, Mode} = storage_import_config:get_mode(ImportConfig),
+    case Mode of
+        ?AUTO_IMPORT ->
+            {ok, ScanConfig} = storage_import_config:get_scan_config(ImportConfig),
+            {ok, SIMDoc} = storage_import_monitoring:get_or_create(SpaceId),
+            case storage_import_monitoring:is_initial_scan_not_started_yet(SIMDoc) of
+                true ->
+                    storage_sync_traverse:run_scan(SpaceId, StorageId, ScanConfig);
+                false ->
+                    case storage_import_monitoring:is_initial_scan_finished(SIMDoc) of
+                        false -> ok;
+                        true -> maybe_start_consecutive_scan(SpaceId, StorageId, SIMDoc, ScanConfig)
+                    end
+            end;
+        ?MANUAL_IMPORT ->
+            ok
     end.
 
--spec maybe_start_update_scan(od_space:id(), storage:id(), space_strategies:sync_config()) -> ok.
-maybe_start_update_scan(SpaceId, StorageId, SyncConfig) ->
-    {UpdateEnabled, UpdateConfig} = space_strategies:get_update_details(SyncConfig),
-    case UpdateEnabled of
+-spec maybe_start_consecutive_scan(od_space:id(), storage:id(), storage_import_monitoring:doc(),
+    storage_import:scan_config()) -> ok.
+maybe_start_consecutive_scan(SpaceId, StorageId, SIMDoc, ScanConfig) ->
+    case auto_scan_config:is_continuous_enabled(ScanConfig) of
         false ->
             ok;
         true ->
-            {ScanInterval, UpdateConfig2} = maps:take(scan_interval, UpdateConfig),
-            {ok, SSMDoc} = storage_sync_monitoring:get(SpaceId, StorageId),
-            case storage_sync_monitoring:get_update_status(SSMDoc) of
-                in_progress ->
+            ScanInterval = auto_scan_config:get_scan_interval(ScanConfig),
+            case storage_import_monitoring:is_scan_in_progress(SIMDoc) of
+                true ->
                     ok;
-                not_started ->
-                    ImportFinishTime = storage_sync_monitoring:get_import_finish_time(SSMDoc),
-                    case ImportFinishTime + ScanInterval =< time_utils:cluster_time_seconds() of
-                        true -> storage_sync_traverse:run_update(SpaceId, StorageId, UpdateConfig2);
-                        false -> ok
-                    end;
-                finished ->
-                    LastUpdateFinishTime = storage_sync_monitoring:get_last_update_finish_time(SSMDoc),
-                    case LastUpdateFinishTime + ScanInterval =< time_utils:cluster_time_seconds() of
-                        true -> storage_sync_traverse:run_update(SpaceId, StorageId, UpdateConfig2);
+                false ->
+                    {ok, ScanStopTime} = storage_import_monitoring:get_scan_stop_time(SIMDoc),
+                    case ScanStopTime + (ScanInterval * 1000) =< time_utils:cluster_time_millis() of
+                        true -> storage_sync_traverse:run_scan(SpaceId, StorageId, ScanConfig);
                         false -> ok
                     end
             end
     end.
 
 
--spec is_sync_supported_on(storage:data() | storage:id()) -> boolean().
-is_sync_supported_on(StorageId) when is_binary(StorageId) ->
+-spec is_import_supported(storage:data() | storage:id()) -> boolean().
+is_import_supported(StorageId) when is_binary(StorageId) ->
     case storage:get(StorageId) of
-        {ok, Storage} -> is_sync_supported_on(Storage);
+        {ok, Storage} -> is_import_supported(Storage);
         _ -> false
     end;
-is_sync_supported_on(Storage) ->
+is_import_supported(Storage) ->
     Helper = storage:get_helper(Storage),
-    helper:is_sync_supported(Helper).
+    helper:is_import_supported(Helper).
 
 
 -spec schedule_spaces_check() -> ok.
 schedule_spaces_check() ->
-    schedule(?STORAGE_SYNC_CHECK_INTERVAL, ?SPACES_CHECK).
+    schedule(?STORAGE_IMPORT_CHECK_INTERVAL, ?SPACES_CHECK).
 
 -spec schedule_spaces_check(non_neg_integer()) -> ok.
 schedule_spaces_check(IntervalSeconds) ->

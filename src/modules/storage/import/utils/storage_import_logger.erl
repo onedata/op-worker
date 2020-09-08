@@ -9,7 +9,7 @@
 %%% file.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_sync_logger).
+-module(storage_import_logger).
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
@@ -55,7 +55,7 @@ log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec log_update(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id(),
-    [storage_sync_engine:file_attr_name()]) -> ok.
+    [storage_import_engine:file_attr_name()]) -> ok.
 log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs) ->
     log("Update of storage file ~s has been detected. Updated attrs: ~w.~n"
     "Corresponding file ~s with uuid ~s has been updated.",
@@ -86,7 +86,7 @@ log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
 log(Format, Args, SpaceId) ->
     LogFile = audit_log_file_name(SpaceId),
     MaxSize = application:get_env(?APP_NAME,
-        storage_sync_audit_log_file_format_max_size, 524288000), % 500 MB
+        storage_import_audit_log_file_max_size, 524288000), % 500 MB
     logger:log_with_rotation(LogFile, Format, Args, MaxSize).
 
 %%-------------------------------------------------------------------
@@ -97,8 +97,8 @@ log(Format, Args, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec audit_log_file_name(od_space:id()) -> string().
 audit_log_file_name(SpaceId) ->
-    LogFilePrefix = application:get_env(?APP_NAME, storage_sync_audit_log_file_prefix,
-        "/tmp/storage_sync_"),
-    LogFileExtension = application:get_env(?APP_NAME, storage_sync_audit_log_file_extension,
+    LogFilePrefix = application:get_env(?APP_NAME, storage_import_audit_log_file_prefix,
+        "/tmp/storage_import_"),
+    LogFileExtension = application:get_env(?APP_NAME, storage_import_audit_log_file_extension,
         ".log"),
     LogFilePrefix ++ str_utils:to_list(SpaceId) ++ LogFileExtension.

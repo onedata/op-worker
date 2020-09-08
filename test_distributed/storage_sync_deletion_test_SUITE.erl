@@ -389,7 +389,7 @@ init_per_suite(Config) ->
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
         [W | _] = ?config(op_worker_nodes, NewConfig2),
-        mock_storage_sync_monitoring_update(W),
+        mock_storage_import_monitoring_update(W),
         rpc:call(W, storage_sync_worker, notify_connection_to_oz, []),
         NewConfig2
     end,
@@ -403,7 +403,7 @@ end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     initializer:unmock_provider_ids(Config),
-    unmock_storage_sync_monitoring(W),
+    unmock_storage_import_monitoring(W),
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->
@@ -508,7 +508,7 @@ run_test(TestFun, StorageConfig = {StorageType, IsImportedStorage}, [Config | Ot
             error
     after
         [W | _] = ?config(op_worker_nodes, Config),
-        storage_sync_test_base:clean_traverse_tasks(W)
+        storage_import_test_base:clean_traverse_tasks(W)
     end.
 
 get_sd_handle(Worker, Guid) ->
@@ -525,9 +525,9 @@ delete_dir_on_storage(Worker, Guid) ->
     SDHandle = get_sd_handle(Worker, Guid),
     sd_test_utils:recursive_rm(Worker, SDHandle).
 
-mock_storage_sync_monitoring_update(Worker) ->
-    ok = test_utils:mock_new(Worker, storage_sync_monitoring),
-    ok = test_utils:mock_expect(Worker, storage_sync_monitoring, update, fun(_, _, _) -> {ok, undefined} end).
+mock_storage_import_monitoring_update(Worker) ->
+    ok = test_utils:mock_new(Worker, storage_import_monitoring),
+    ok = test_utils:mock_expect(Worker, storage_import_monitoring, update, fun(_, _) -> {ok, undefined} end).
 
-unmock_storage_sync_monitoring(Worker) ->
-    ok = test_utils:mock_unload(Worker, storage_sync_monitoring).
+unmock_storage_import_monitoring(Worker) ->
+    ok = test_utils:mock_unload(Worker, storage_import_monitoring).

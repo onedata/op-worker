@@ -94,7 +94,7 @@
 %%%-------------------------------------------------------------------
 %%% Reverse LUMA API
 %%%-------------------------------------------------------------------
-%%% This API is used only by storage_sync mechanism.
+%%% This API is used only by storage_import mechanism.
 %%% It is used to map storage users/groups to users/groups in onedata.
 %%%
 %%% If LOCAL_FEED mode is set for given storage, mappings should

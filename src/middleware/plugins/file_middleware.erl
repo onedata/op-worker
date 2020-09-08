@@ -274,7 +274,7 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     middleware_utils:assert_space_supported_with_storage(SpaceId, StorageId),
     middleware_utils:assert_imported_storage(StorageId),
     middleware_utils:assert_file_registration_supported(StorageId),
-    middleware_utils:assert_sync_not_enabled(SpaceId, StorageId).
+    middleware_utils:assert_manual_storage_import(SpaceId).
 
 
 %%--------------------------------------------------------------------

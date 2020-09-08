@@ -64,7 +64,7 @@ start(SpaceId, StorageId) ->
         batch_size => ?TRAVERSE_BATCH_SIZE,
         traverse_info => #{
             % do not remove storage files if storage sync was enabled
-            remove_storage_files => not storage_sync:is_import_enabled(SpaceId, StorageId)
+            remove_storage_files => not storage:is_imported(StorageId)
         },
         additional_data => #{
             <<"space_id">> => SpaceId,

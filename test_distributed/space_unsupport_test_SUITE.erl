@@ -161,7 +161,8 @@ cleanup_traverse_stage_with_import_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
     {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker1, SessId),
-    ok = rpc:call(Worker1, storage_sync, configure_import, [?SPACE_ID, true, #{max_depth => 5, sync_acl => true}]),
+    ok = rpc:call(Worker1, storage_import, configure_auto_mode, [?SPACE_ID,
+        #{enabled => true, max_depth => 5, sync_acl => true}]),
     
     % Relative paths to space dir. Empty binary represents space dir.
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
@@ -239,7 +240,8 @@ delete_synced_documents_stage_test(Config) ->
 delete_local_documents_stage_test(Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
-    ok = rpc:call(Worker1, storage_sync, configure_import, [?SPACE_ID, true, #{max_depth => 5, sync_acl => true}]),
+    ok = rpc:call(Worker1, storage_import, configure_auto_mode, [?SPACE_ID,
+        #{enabled => true, max_depth => 5, sync_acl => true}]),
     ok = rpc:call(Worker1, file_popularity_api, enable, [?SPACE_ID]),
     ACConfig =  #{
         enabled => true,
@@ -249,8 +251,8 @@ delete_local_documents_stage_test(Config) ->
     ok = rpc:call(Worker1, autocleaning_api, configure, [?SPACE_ID, ACConfig]),
     ok = rpc:call(Worker1, storage_sync_worker, schedule_spaces_check, [0]),
     
-    ?assertMatch({ok, _}, rpc:call(Worker1, space_strategies, get, [?SPACE_ID])),
-    ?assertMatch({ok, _}, rpc:call(Worker1, storage_sync_monitoring, get, [?SPACE_ID, StorageId]), 10),
+    ?assertMatch({ok, _}, rpc:call(Worker1, storage_import_config, get, [?SPACE_ID])),
+    ?assertMatch({ok, _}, rpc:call(Worker1, storage_import_monitoring, get, [?SPACE_ID]), 10),
     ?assertMatch({ok, _}, rpc:call(Worker1, autocleaning, get, [?SPACE_ID])),
     ?assertMatch({ok, _}, rpc:call(Worker1, file_popularity_config, get, [?SPACE_ID])),
     ?assertMatch(true, rpc:call(Worker1, file_popularity_api, is_enabled, [?SPACE_ID])),
@@ -373,8 +375,8 @@ assert_storage_cleaned_up(Worker, StorageId) ->
 
 
 assert_local_documents_cleaned_up(Worker, SpaceId, StorageId) ->
-    ?assertEqual({error, not_found}, rpc:call(Worker, space_strategies, get, [SpaceId])),
-    ?assertEqual({error, not_found}, rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId])),
+    ?assertEqual({error, not_found}, rpc:call(Worker, storage_import_config, get, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId])),
     ?assertEqual(undefined, rpc:call(Worker, autocleaning, get_config, [SpaceId])),
     ?assertEqual({error, not_found}, rpc:call(Worker, autocleaning, get, [SpaceId])),
     ?assertEqual(false, rpc:call(Worker, file_popularity_api, is_enabled, [SpaceId])),

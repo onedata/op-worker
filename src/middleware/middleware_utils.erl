@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("modules/storage/import/storage_import.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -export([
@@ -22,7 +23,7 @@
     assert_file_exists/2,
     assert_imported_storage/1,
     assert_file_registration_supported/1,
-    assert_sync_not_enabled/2,
+    assert_manual_storage_import/1,
     decode_object_id/2,
 
     is_shared_file_request/3
@@ -96,13 +97,13 @@ assert_file_registration_supported(StorageId) ->
             throw(?ERROR_FILE_REGISTRATION_NOT_SUPPORTED(StorageId, ?OBJECT_HELPERS))
     end.
 
--spec assert_sync_not_enabled(od_space:id(), storage:id()) -> ok | no_return().
-assert_sync_not_enabled(SpaceId, StorageId) ->
-    case storage_sync:is_import_enabled(SpaceId, StorageId) of
-        false ->
+-spec assert_manual_storage_import(od_space:id()) -> ok | no_return().
+assert_manual_storage_import(SpaceId) ->
+    case storage_import:get_mode(SpaceId) of
+        {ok, ?MANUAL_IMPORT} ->
             ok;
-        true ->
-            throw(?ERROR_STORAGE_IMPORT_ENABLED)
+        {ok, ?AUTO_IMPORT} ->
+            throw(?ERROR_REQUIRES_MANUAL_STORAGE_IMPORT_MODE)
     end.
 
 -spec decode_object_id(file_id:objectid(), binary() | atom()) -> 

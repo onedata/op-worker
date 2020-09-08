@@ -19,7 +19,7 @@
 
 %% API
 -export([delete_file_locally/3, handle_remotely_deleted_file/1,
-    handle_release_of_deleted_file/2, handle_file_deleted_on_synced_storage/1,
+    handle_release_of_deleted_file/2, handle_file_deleted_on_imported_storage/1,
     cleanup_opened_files/0]).
 
 %% Test API
@@ -64,8 +64,8 @@ handle_release_of_deleted_file(FileCtx, RemovalStatus) ->
     DocsDeletionScope = removal_status_to_docs_deletion_scope(RemovalStatus),
     ok = remove_file(FileCtx, UserCtx, true, ?TWO_STEP_DEL_FIN(DocsDeletionScope)).
 
-    -spec handle_file_deleted_on_synced_storage(file_ctx:ctx()) -> ok.
-handle_file_deleted_on_synced_storage(FileCtx) ->
+    -spec handle_file_deleted_on_imported_storage(file_ctx:ctx()) -> ok.
+handle_file_deleted_on_imported_storage(FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     ok = remove_file(FileCtx, UserCtx, false, ?SINGLE_STEP_DEL(?ALL_DOCS)),
     fslogic_event_emitter:emit_file_removed(FileCtx, []),

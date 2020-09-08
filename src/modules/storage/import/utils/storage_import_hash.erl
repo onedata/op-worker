@@ -11,7 +11,7 @@
 %%% when detecting changes on storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_sync_hash).
+-module(storage_import_hash).
 -author("Jakub Kudzia").
 
 

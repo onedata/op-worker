@@ -219,7 +219,7 @@ execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
 
 
 %%%===================================================================
-%%% Stage internals
+%%% Stage internalsstorage_sync_test.hr
 %%%===================================================================
 
 %% @private
@@ -304,6 +304,6 @@ cleanup_local_documents(SpaceId, StorageId) ->
     file_popularity_api:delete_config(SpaceId),
     autocleaning_api:disable(SpaceId),
     autocleaning_api:delete_config(SpaceId),
-    storage_sync:clean_up(SpaceId, StorageId),
+    storage_import:clean_up(SpaceId),
     space_quota:delete(SpaceId),
     luma:clear_db(StorageId, SpaceId).

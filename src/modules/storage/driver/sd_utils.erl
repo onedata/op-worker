@@ -206,7 +206,7 @@ generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
             {Storage, FileCtx5} = file_ctx:get_storage(FileCtx4),
             Helper = storage:get_helper(Storage),
             HelperName = helper:get_name(Helper),
-            case HelperName =:= ?S3_HELPER_NAME andalso helper:is_sync_supported(Helper) of
+            case HelperName =:= ?S3_HELPER_NAME andalso helper:is_import_supported(Helper) of
                 true ->
                     % pretend that parent directories has been created
                     % this should only happen on synced S3 storage
@@ -510,7 +510,7 @@ should_chown(UserCtx, FileCtx) ->
 %% @private
 %% @doc
 %% This function is used to pretend that directory has been created
-%% on S3 storage with storage_sync enabled. It is necessary, as S3 does
+%% on S3 storage with storage_import enabled. It is necessary, as S3 does
 %% not create directories on storage and sync must be able to distinguish
 %% remote directory that has never been synchronized with local directory.
 %% @end

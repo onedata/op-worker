@@ -533,7 +533,7 @@
     last_rename :: undefined | replica_changes:last_rename(),
     storage_file_created = false :: boolean(),
     last_replication_timestamp :: non_neg_integer() | undefined,
-    % synced_gid field is set by storage_sync, only on POSIX-compatible storages.
+    % synced_gid field is set by storage_import, only on POSIX-compatible storages.
     % It is used to override display gid, only in
     % the syncing provider, with the gid that file
     % belongs to on synced storage.
@@ -549,14 +549,21 @@
 %% Model for storing dir's location data
 -record(dir_location, {
     storage_file_created = false :: boolean(),
-    % synced_gid field is set by storage_sync, only on POSIX-compatible storages.
+    % synced_gid field is set by storage_import, only on POSIX-compatible storages.
     % It is used to override display gid, only in
     % the syncing provider, with the gid that file
     % belongs to on synced storage.
     synced_gid :: undefined | luma:gid()
 }).
 
-%% Model that stores configuration of storage_sync mechanism
+%% Model that stores configuration of storage-import
+-record(storage_import_config, {
+    mode :: storage_import_config:mode(),
+    scan_config :: undefined | auto_scan_config:config()
+}).
+
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release.
+%% Model that stores configuration of storage_import mechanism
 -record(storage_sync_config, {
     import_enabled = false :: boolean(),
     update_enabled = false :: boolean(),
@@ -564,12 +571,13 @@
     update_config = #{} :: space_strategies:update_config()
 }).
 
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release.
 %% Model that maps space to storage strategies
 -record(space_strategies, {
-    % todo VFS-5717 rename model to storage_sync_configs?
     sync_configs = #{} :: space_strategies:sync_configs()
 }).
 
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release.
 -record(storage_sync_monitoring, {
     scans = 0 :: non_neg_integer(), % overall number of finished scans,
     import_start_time :: undefined | non_neg_integer(),
@@ -612,6 +620,53 @@
     queue_length_hour_hist :: time_slot_histogram:histogram(),
     queue_length_day_hist :: time_slot_histogram:histogram()
 }).
+
+%% Model that storage monitoring data of auto-storage import.
+%% The doc is stored per space.
+-record(storage_import_monitoring, {
+    finished_scans = 0 :: non_neg_integer(), % overall number of finished scans,
+    status :: storage_import_monitoring:status(),
+
+    % start/stop timestamps of last scan in millis
+    scan_start_time :: undefined | non_neg_integer(),
+    scan_stop_time :: undefined | non_neg_integer(),
+
+    % counters used for scan management, they're reset on the beginning of each scan
+    to_process = 0 :: non_neg_integer(),
+    imported = 0 :: non_neg_integer(),
+    updated = 0 :: non_neg_integer(),
+    deleted = 0 :: non_neg_integer(),
+    failed = 0 :: non_neg_integer(),
+    % counter for tasks which don't match to any one of the above categories
+    % i.e.
+    %   * remote files that were processed by sync algorithm but not deleted
+    %   * directories are processed many times (for each batch) but we increase
+    %     `updated` counter only for 1 batch, for other batches we increase
+    %     `other_processed_tasks` to keep track of algorithm and check whether
+    %     it performs as intended
+    other_processed = 0 :: non_neg_integer(),
+
+    imported_sum = 0 :: non_neg_integer(),
+    updated_sum = 0 :: non_neg_integer(),
+    deleted_sum = 0 :: non_neg_integer(),
+
+    imported_min_hist :: time_slot_histogram:histogram(),
+    imported_hour_hist :: time_slot_histogram:histogram(),
+    imported_day_hist :: time_slot_histogram:histogram(),
+
+    updated_min_hist :: time_slot_histogram:histogram(),
+    updated_hour_hist :: time_slot_histogram:histogram(),
+    updated_day_hist :: time_slot_histogram:histogram(),
+
+    deleted_min_hist :: time_slot_histogram:histogram(),
+    deleted_hour_hist :: time_slot_histogram:histogram(),
+    deleted_day_hist :: time_slot_histogram:histogram(),
+
+    queue_length_min_hist :: time_slot_histogram:histogram(),
+    queue_length_hour_hist :: time_slot_histogram:histogram(),
+    queue_length_day_hist :: time_slot_histogram:histogram()
+}).
+
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {

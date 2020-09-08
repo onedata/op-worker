@@ -40,7 +40,7 @@
 % This can be used to e.g. move models between services.
 % Oldest known generation is the lowest one that can be directly upgraded to newest.
 % Human readable version is included to for logging purposes.
--define(INSTALLED_CLUSTER_GENERATION, 3).
+-define(INSTALLED_CLUSTER_GENERATION, 4).
 -define(OLDEST_KNOWN_CLUSTER_GENERATION, {1, <<"19.02.*">>}).
 
 %%%===================================================================
@@ -147,7 +147,11 @@ upgrade_cluster(1) ->
     {ok, 2};
 upgrade_cluster(2) ->
     await_zone_connection_and_run(fun storage:migrate_imported_storages_to_zone/0),
-    {ok, 3}.
+    {ok, 3};
+upgrade_cluster(3) ->
+    await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
+    await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
+    {ok, 4}.
 
 %%--------------------------------------------------------------------
 %% @doc

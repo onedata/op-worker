@@ -67,7 +67,7 @@ register(SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
         FilePartialCtx = file_partial_ctx:new_by_canonical_path(UserCtx, CanonicalPath),
         DirectParentCtx = ensure_all_parents_exist_and_are_dirs(FilePartialCtx, UserCtx),
         % TODO VFS-6508 do not use TraverseInfo as its associated with storage_traverse
-        {_, FileCtx, _} = storage_sync_engine:sync_file(StorageFileCtx3, #{
+        {_, FileCtx, _} = storage_import_engine:sync_file(StorageFileCtx3, #{
                 parent_ctx => DirectParentCtx,
                 space_storage_file_id => storage_file_id:space_dir_id(SpaceId, StorageId),
                 iterator_type => storage_traverse:get_iterator(StorageId),
