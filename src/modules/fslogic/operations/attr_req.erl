@@ -390,10 +390,15 @@ get_private_attrs(UserCtx, FileCtx0, #document{
     }
 }) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx0),
-    UserId = user_ctx:get_user_id(UserCtx),
-    VisibleShares = case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW) of
-        true -> Shares;
-        false -> []
+    VisibleShares = case user_ctx:is_root(UserCtx) of
+        true ->
+            Shares;
+        false ->
+            UserId = user_ctx:get_user_id(UserCtx),
+            case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW) of
+                true -> Shares;
+                false -> []
+            end
     end,
     {{Uid, Gid}, FileCtx1} = file_ctx:get_display_credentials(FileCtx0),
     {Mode, Uid, Gid, OwnerId, ProviderId, VisibleShares, FileCtx1}.
