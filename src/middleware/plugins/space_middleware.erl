@@ -248,8 +248,11 @@ authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     id = SpaceId,
-    aspect = instance
-}}, _) ->
+    aspect = As
+}}, _) when
+    As =:= instance;
+    As =:= providers
+->
     middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
@@ -276,8 +279,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 }}, _) when
     As =:= eff_users;
     As =:= eff_groups;
-    As =:= shares;
-    As =:= providers
+    As =:= shares
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
 

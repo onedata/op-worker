@@ -879,8 +879,8 @@ is_user_authorized_to_get(UserId, _, _, #gri{type = od_space, scope = private}, 
 is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_space, scope = protected}, CachedDoc) ->
     user_logic:has_eff_space(SessionId, UserId, CachedDoc#document.key);
 
-is_user_authorized_to_get(UserId, Client, _, #gri{type = od_share, scope = private}, CachedDoc) ->
-    space_logic:has_eff_user(Client, CachedDoc#document.value#od_share.space, UserId);
+is_user_authorized_to_get(UserId, _, _, #gri{type = od_share, scope = private}, CachedDoc) ->
+    space_logic:has_eff_privilege(CachedDoc#document.value#od_share.space, UserId, ?SPACE_VIEW);
 
 is_user_authorized_to_get(_UserId, _, _, #gri{type = od_provider, scope = private}, _) ->
     false;
