@@ -15,8 +15,30 @@
 -define(FILE_METADATA_API_TEST_UTILS_HRL, 1).
 
 
+-include("api_test_runner.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
+
+
+-define(CLIENT_SPEC_FOR_SPACE_1, #client_spec{
+    correct = [user1, user3, user4],
+    unauthorized = [nobody],
+    forbidden_not_in_space = [user2]
+}).
+
+-define(CLIENT_SPEC_FOR_SPACE_2, #client_spec{
+    correct = [
+        user2, % space owner - doesn't need any perms
+        user3  % files owner (see fun create_shared_file/1)
+    ],
+    unauthorized = [nobody],
+    forbidden_not_in_space = [user1],
+    forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+}).
+
+-define(CLIENT_SPEC_FOR_SHARES, #client_spec{
+    correct = [nobody, user1, user2, user3, user4]
+}).
 
 
 -define(NEW_ID_METADATA_REST_PATH(__FILE_OBJECT_ID, __METADATA_TYPE),
@@ -98,7 +120,16 @@
     <<"aceflags">> => <<"0x", (integer_to_binary(?no_flags_mask, 16))/binary>>,
     <<"acemask">> => <<"0x", (integer_to_binary(
         ?read_metadata_mask bor ?read_attributes_mask bor ?read_acl_mask bor
-            ?write_metadata_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask,
+        ?write_metadata_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask,
+        16
+    ))/binary>>
+}]).
+-define(OWNER_ONLY_ALLOW_ACL, [#{
+    <<"acetype">> => <<"0x", (integer_to_binary(?allow_mask, 16))/binary>>,
+    <<"identifier">> => ?owner,
+    <<"aceflags">> => <<"0x", (integer_to_binary(?no_flags_mask, 16))/binary>>,
+    <<"acemask">> => <<"0x", (integer_to_binary(
+        ?read_mask bor ?write_metadata_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask,
         16
     ))/binary>>
 }]).

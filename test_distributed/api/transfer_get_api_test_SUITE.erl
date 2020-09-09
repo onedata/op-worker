@@ -102,12 +102,12 @@ get_transfer_status_test_base(Config, TransferType, DataSourceType) ->
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
     % Start transfer and check returned stats for ongoing transfer (transfer is prolonged via mock)
-    EnvRef = api_test_env:init(),
+    MemRef = api_test_memory:init(),
     SetupFun = transfer_api_test_utils:build_env_with_started_transfer_setup_fun(
-        TransferType, EnvRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
+        TransferType, MemRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
     ),
     SetupFun(),
-    #{transfer_id := TransferId} = TransferDetails = api_test_env:get(EnvRef, transfer_details),
+    #{transfer_id := TransferId} = TransferDetails = api_test_memory:get(MemRef, transfer_details),
 
     get_transfer_status_test_base(Config, TransferType, DataSourceType, TransferDetails, ongoing),
     transfer_api_test_utils:await_transfer_end(Providers, TransferId, TransferType),
@@ -453,13 +453,13 @@ get_rerun_transfer_status(Config) ->
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
-    EnvRef = api_test_env:init(),
+    MemRef = api_test_memory:init(),
     SetupFun = transfer_api_test_utils:build_env_with_started_transfer_setup_fun(
-        TransferType, EnvRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
+        TransferType, MemRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
     ),
     SetupFun(),
 
-    #{transfer_id := TransferId} = TransferDetails = api_test_env:get(EnvRef, transfer_details),
+    #{transfer_id := TransferId} = TransferDetails = api_test_memory:get(MemRef, transfer_details),
     transfer_api_test_utils:await_transfer_end(Providers, TransferId, TransferType),
     get_rerun_transfer_status(Config, TransferType, TransferDetails, null, TransferId, <<"completed">>),
 

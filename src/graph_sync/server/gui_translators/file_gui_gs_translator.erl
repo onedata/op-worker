@@ -194,14 +194,9 @@ translate_file_details(#file_details{
         _ ->
             {<<"file">>, SizeAttr}
     end,
-    {IsRootDir, Index} = case file_id:guid_to_share_id(FileGuid) of
-        undefined ->
-            case fslogic_uuid:is_space_dir_guid(FileGuid) of
-                true -> {true, FileName};
-                false -> {false, StartId}
-            end;
-        ShareId ->
-            {lists:member(ShareId, Shares), StartId}
+    IsRootDir = case file_id:guid_to_share_id(FileGuid) of
+        undefined -> fslogic_uuid:is_space_dir_guid(FileGuid);
+        ShareId -> lists:member(ShareId, Shares)
     end,
     ParentId = case IsRootDir of
         true -> null;
@@ -211,7 +206,7 @@ translate_file_details(#file_details{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
-        <<"index">> => Index,
+        <<"index">> => StartId,
         <<"posixPermissions">> => PosixPerms,
         <<"parentId">> => ParentId,
         <<"mtime">> => MTime,

@@ -1399,25 +1399,30 @@ get_file_size_from_remote_locations(FileCtx) ->
     SpaceWhiteList :: undefined | [od_space:id()]) -> Children :: [ctx()].
 list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    #document{value = #od_user{eff_spaces = AllSpaces}} = user_ctx:get_user(UserCtx),
+    #document{value = #od_user{eff_spaces = UserEffSpaces}} = user_ctx:get_user(UserCtx),
 
     FilteredSpaces = case SpaceWhiteList of
         undefined ->
-            AllSpaces;
+            UserEffSpaces;
         _ ->
             lists:filter(fun(Space) ->
                 lists:member(Space, SpaceWhiteList)
-            end, AllSpaces)
+            end, UserEffSpaces)
     end,
     case Offset < length(FilteredSpaces) of
         true ->
-            SpacesChunk = lists:sublist(FilteredSpaces, Offset + 1, Limit),
-            Children = lists:map(fun(SpaceId) ->
-                {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
+            SpacesChunk = lists:sublist(
+                lists:sort(lists:map(fun(SpaceId) ->
+                    {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
+                    {SpaceName, SpaceId}
+                end, FilteredSpaces)),
+                Offset + 1,
+                Limit
+            ),
+            lists:map(fun({SpaceName, SpaceId}) ->
                 SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                 new_child_by_uuid(SpaceDirUuid, SpaceName, SpaceId, undefined)
-            end, SpacesChunk),
-            Children;
+            end, SpacesChunk);
         false ->
             []
     end.
