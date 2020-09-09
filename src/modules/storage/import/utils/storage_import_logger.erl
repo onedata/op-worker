@@ -25,18 +25,18 @@
 
 -spec log_scan_started(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
 log_scan_started(SpaceId, ScanNum, TaskId) ->
-    ?debug("Storage sync scan ~p started", [TaskId]),
-    log("Storage sync scan no. ~p started.", [ScanNum], SpaceId).
+    ?debug("Storage import scan ~p started", [TaskId]),
+    log("Storage import scan no. ~p started.", [ScanNum], SpaceId).
 
 -spec log_scan_finished(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
 log_scan_finished(SpaceId, ScanNum, TaskId) ->
-    ?debug("Storage sync scan ~p finished", [TaskId]),
-    log("Storage sync scan no. ~p finished.", [ScanNum], SpaceId).
+    ?debug("Storage import scan ~p finished", [TaskId]),
+    log("Storage import scan no. ~p finished.", [ScanNum], SpaceId).
 
 -spec log_scan_cancelled(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
 log_scan_cancelled(SpaceId, ScanNum, TaskId) ->
-    ?debug("Storage sync scan ~p canceled", [TaskId]),
-    log("Storage sync scan no. ~p cancelled.", [ScanNum], SpaceId).
+    ?debug("Storage import scan ~p canceled", [TaskId]),
+    log("Storage import scan no. ~p cancelled.", [ScanNum], SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc

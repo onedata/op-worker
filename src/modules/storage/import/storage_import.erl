@@ -40,11 +40,8 @@
 %%% API functions
 %%%===================================================================
 
-% TODO * przerobis startowanie przez sync_worker
-% TODO * get rid of all storage_import, storage sync etc occurrences
-% TODO * usuniecie suit readonly?
-% TODO * rename suit testowych
-% TODO * czy gui ogarnie pusty wykres jak jeszcze nie bedzie dokumentu monitoringu?
+% TODO * testy manual runów
+% TODO * rename suit testowych sync, sync_s3, sync_deletion
 
 -spec set_manual_mode(od_space:id()) -> ok | {error, term()}.
 set_manual_mode(SpaceId) ->
@@ -55,22 +52,30 @@ set_manual_mode(SpaceId) ->
 -spec configure_auto_mode(od_space:id(), scan_config_map()) -> ok | {error, term()}.
 configure_auto_mode(SpaceId, ScanConfigMap) ->
     assert_space_supported_with_imported_storage(SpaceId),
+    assert_auto_storage_import_supported(SpaceId),
+
     file_meta:make_space_exist(SpaceId),
     case storage_import_config:configure_auto_mode(SpaceId, ScanConfigMap) of
-        ok -> ok;
+        ok ->
+            storage_import_worker:notify_space_with_auto_import_configured(SpaceId),
+            ok;
         {error, _} = Error -> Error
     end.
 
 
--spec start_auto_scan(od_space:id()) -> ok.
+-spec start_auto_scan(od_space:id()) -> ok | {error, term()}.
 start_auto_scan(SpaceId) ->
     assert_space_supported_with_imported_storage(SpaceId),
+    assert_auto_import_mode(SpaceId),
+
     storage_sync_traverse:run_scan(SpaceId).
 
 
 -spec stop_auto_scan(od_space:id()) -> ok.
 stop_auto_scan(SpaceId) ->
     assert_space_supported_with_imported_storage(SpaceId),
+    assert_auto_import_mode(SpaceId),
+
     storage_sync_traverse:cancel(SpaceId).
 
 
@@ -91,6 +96,7 @@ get_configuration(SpaceId) ->
     end.
 
 
+-spec get_mode(od_space:id()) -> {ok, mode()} | {error, term()}.
 get_mode(SpaceId) ->
     storage_import_config:get_mode(SpaceId).
 
@@ -191,4 +197,25 @@ assert_space_supported_with_imported_storage(SpaceId) ->
             end;
         Error ->
             throw(Error)
+    end.
+
+-spec assert_auto_storage_import_supported(od_space:id()) -> ok.
+assert_auto_storage_import_supported(SpaceId) ->
+    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+    Helper = storage:get_helper(StorageId),
+    case helper:is_auto_import_supported(Helper) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_AUTO_STORAGE_IMPORT_NOT_SUPPORTED(StorageId, ?AUTO_IMPORT_HELPERS, ?AUTO_IMPORT_OBJECT_HELPERS))
+    end.
+
+
+-spec assert_auto_import_mode(od_space:id()) -> ok.
+assert_auto_import_mode(SpaceId) ->
+    case storage_import:get_mode(SpaceId) of
+        {ok, ?AUTO_IMPORT} ->
+            ok;
+        {ok, ?MANUAL_IMPORT} ->
+            throw(?ERROR_REQUIRES_AUTO_STORAGE_IMPORT_MODE)
     end.

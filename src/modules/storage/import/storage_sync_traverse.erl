@@ -61,7 +61,7 @@
 -export_type([info/0, master_job/0, slave_job/0]).
 
 %% API
--export([init_pool/0, stop_pool/0, run_scan/1, run_scan/3, cancel/1]).
+-export([init_pool/0, stop_pool/0, run_scan/1, run_scan/2, cancel/1]).
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, get_job/1, update_job_progress/5, to_string/1,
@@ -101,22 +101,21 @@ stop_pool() ->
     storage_traverse:stop(?POOL).
 
 
--spec run_scan(od_space:id()) -> ok.
+-spec run_scan(od_space:id()) -> ok | {error, already_started}.
 run_scan(SpaceId) ->
-    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
-    run_scan(SpaceId, StorageId, undefined).
+    run_scan(SpaceId, undefined).
 
--spec run_scan(od_space:id(), storage:id(), storage_import:scan_config() | undefined) -> ok.
-run_scan(SpaceId, StorageId, ScanConfig) ->
-    assert_auto_import_mode(SpaceId),
+-spec run_scan(od_space:id(), storage_import:scan_config() | undefined) -> ok | {error, already_started}.
+run_scan(SpaceId, ScanConfig) ->
+    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
     case storage_import_monitoring:prepare_new_scan(SpaceId) of
         {ok, SSM} ->
             {ok, ScansNum} = storage_import_monitoring:get_finished_scans_num(SSM),
             ?debug("Starting auto storage import scan no. ~p for space: ~p and storage: ~p", [ScansNum + 1, SpaceId, StorageId]),
             ScanConfigMap = ensure_scan_config_is_map(SpaceId, ScanConfig),
             run(SpaceId, StorageId, ScansNum + 1, ScanConfigMap);
-        {error, already_started} ->
-            ok
+        {error, already_started} = Error ->
+            Error
     end.
 
 -spec cancel(od_space:id()) -> ok.
@@ -187,7 +186,8 @@ get_job(DocOrID) ->
 -spec task_started(traverse:id(), traverse:pool()) -> ok.
 task_started(TaskId, _PoolName) ->
     {SpaceId, _StorageId, ScanNum} = decode_task_id(TaskId),
-    storage_import_logger:log_scan_started(SpaceId, ScanNum, TaskId).
+    storage_import_logger:log_scan_started(SpaceId, ScanNum, TaskId),
+    storage_import_worker:notify_started_scan(SpaceId).
 
 -spec task_finished(traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
@@ -214,7 +214,7 @@ to_string(#storage_traverse_slave{
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     str_utils:format_bin(
-        " ~nStorage sync slave job:~n"
+        " ~nStorage import slave job:~n"
         "    file: ~p~n"
         "    storage: ~p~n"
         "    space: ~p~n"
@@ -230,7 +230,7 @@ to_string(#storage_traverse_master{
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     str_utils:format_bin(
-        " ~nStorage sync master job:~n"
+        " ~nStorage import master job:~n"
         "    file: ~p~n"
         "    storage: ~p~n"
         "    space: ~p~n"
@@ -753,16 +753,8 @@ scan_finished(SpaceId, StorageId, Aborted) ->
     SpaceStorageFileId = storage_file_id:space_dir_id(SpaceId, StorageId),
     ok = storage_sync_links:delete_recursive(SpaceStorageFileId, StorageId),
     storage_import_monitoring:mark_finished_scan(SpaceId, Aborted),
+    storage_import_worker:notify_finished_scan(SpaceId),
     ok.
-
-
-assert_auto_import_mode(SpaceId) ->
-    case storage_import:get_mode(SpaceId) of
-        {ok, ?AUTO_IMPORT} ->
-            ok;
-        {ok, ?MANUAL_IMPORT} ->
-            throw(?ERROR_REQUIRES_MANUAL_STORAGE_IMPORT_MODE)
-    end.
 
 
 -spec ensure_scan_config_is_map(od_space:id(), storage_import:scan_config() | undefined) ->

@@ -20,49 +20,49 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("kernel/include/file.hrl").
 
-% TODO VFS-6161 divide to smaller test suites, maybe get rid of readonly test SUITES as all imported storages are mounted in root
+% TODO VFS-6161 divide to smaller test suites
 
 %% export for ct
 -export([init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
-    create_file_in_dir_import_test/2,
-    create_subfiles_import_many_test/2,
-    create_subfiles_import_many2_test/2,
-    cancel_scan/2,
+    create_file_in_dir_import_test/1,
+    create_subfiles_import_many_test/1,
+    create_subfiles_import_many2_test/1,
+    cancel_scan/1,
 
-    update_syncs_files_after_import_failed_test/2,
-    update_syncs_files_after_previous_update_failed_test/2,
+    update_syncs_files_after_import_failed_test/1,
+    update_syncs_files_after_previous_update_failed_test/1,
     sync_should_not_reimport_deleted_but_still_opened_file/2,
-    sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed/2,
-    create_subfiles_and_delete_before_import_is_finished_test/2,
+    sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed/1,
+    create_subfiles_and_delete_before_import_is_finished_test/1,
     changing_max_depth_test/1,
-    create_file_in_dir_update_test/2,
-    create_file_in_dir_exceed_batch_update_test/2,
+    create_file_in_dir_update_test/1,
+    create_file_in_dir_exceed_batch_update_test/1,
 
-    delete_non_empty_directory_update_test/2,
-    sync_works_properly_after_delete_test/2,
-    delete_and_update_files_simultaneously_update_test/2,
-    delete_file_in_dir_update_test/2,
-    delete_many_subfiles_test/2,
-    create_list_race_test/2,
+    delete_non_empty_directory_update_test/1,
+    sync_works_properly_after_delete_test/1,
+    delete_and_update_files_simultaneously_update_test/1,
+    delete_file_in_dir_update_test/1,
+    delete_many_subfiles_test/1,
+    create_list_race_test/1,
 
-    change_file_type_test/2,
-    change_file_type3_test/2
+    change_file_type_test/1,
+    change_file_type3_test/1
 ]).
 
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
 
-create_file_in_dir_import_test(Config, MountSpaceInRoot) ->
+create_file_in_dir_import_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
-    StorageTestDirPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestFilePath = storage_import_test_base:storage_path(?SPACE_ID, filename:join(?TEST_DIR, ?TEST_FILE2), MountSpaceInRoot),
+    StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
+    StorageTestFilePath = storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join(?TEST_DIR, ?TEST_FILE2)),
     timer:sleep(timer:seconds(1)),
 
     %% Create dir on storage
@@ -115,7 +115,7 @@ create_file_in_dir_import_test(Config, MountSpaceInRoot) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
-create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
+create_subfiles_import_many_test(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
@@ -124,7 +124,7 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     DirsNumber = 200,
     lists_utils:pforeach(fun(N) ->
         NBin = integer_to_binary(N),
-        DirPath = storage_import_test_base:storage_path(?SPACE_ID, NBin, MountSpaceInRoot),
+        DirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, NBin),
         FilePath = filename:join([DirPath, integer_to_binary(N)]),
         SFMDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, DirPath, RDWRStorage),
         ok = sd_test_utils:mkdir(W1, SFMDirHandle, 8#775),
@@ -161,12 +161,12 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
-create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
+create_subfiles_import_many2_test(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
-    RootPath = storage_import_test_base:storage_path(?SPACE_ID, <<"">>, MountSpaceInRoot),
+    RootPath = storage_import_test_base:provider_storage_path(?SPACE_ID, <<"">>),
     DirStructure = [10, 10, 10],
     RootSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
     storage_import_test_base:create_nested_directory_tree(W1, DirStructure, RootSDHandle),
@@ -200,13 +200,13 @@ create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
-cancel_scan(Config, MountSpaceInRoot) ->
+cancel_scan(Config) ->
     % storage_import_dir_batch_size is set to 1 in init_per_testcase
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
-    RootPath = storage_import_test_base:storage_path(?SPACE_ID, <<"">>, MountSpaceInRoot),
+    RootPath = storage_import_test_base:provider_storage_path(?SPACE_ID, <<"">>),
     DirStructure = [10, 10, 10],
     RootSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
     Timeout = 600,
@@ -224,7 +224,7 @@ cancel_scan(Config, MountSpaceInRoot) ->
 
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     receive start -> ok end,
-    storage_import_test_base:cancel(W1, ?SPACE_ID),
+    storage_import_test_base:stop_scan(W1, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID, Timeout),
 
     SSM = ?assertMonitoring(W1, #{
@@ -262,14 +262,14 @@ cancel_scan(Config, MountSpaceInRoot) ->
     storage_import_test_base:parallel_assert(storage_import_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout).
 
 
-create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
+create_file_in_dir_update_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestDirPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestDirPath2 = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR2, MountSpaceInRoot),
-    StorageTestFileinDirPath1 = storage_import_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+    StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
+    StorageTestDirPath2 = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR2),
+    StorageTestFileinDirPath1 = storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
 
     %% Create dirs on storage
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
@@ -354,17 +354,17 @@ changing_max_depth_test(Config) ->
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
-    StorageTestDirPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, true),
+    StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
 
     Dir2Path = filename:join([?TEST_DIR, ?TEST_DIR2]),
-    StorageTestDirPath2 = storage_import_test_base:storage_path(?SPACE_ID, Dir2Path, true),
+    StorageTestDirPath2 = storage_import_test_base:provider_storage_path(?SPACE_ID, Dir2Path),
     SpaceTestDirPath2 = ?SPACE_TEST_DIR_PATH(Dir2Path),
 
-    StorageTestFilePath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, true),
-    StorageTestFileinDirPath = storage_import_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), true),
+    StorageTestFilePath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE1),
+    StorageTestFileinDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
 
     File2Path = filename:join([?TEST_DIR, ?TEST_DIR2, ?TEST_FILE1]),
-    StorageTestFileinDirPath2 = storage_import_test_base:storage_path(?SPACE_ID, File2Path, true),
+    StorageTestFileinDirPath2 = storage_import_test_base:provider_storage_path(?SPACE_ID, File2Path),
     SpaceTestFilePath2 = ?SPACE_TEST_DIR_PATH(File2Path),
 
     %% Create directories and files on storage
@@ -451,7 +451,6 @@ changing_max_depth_test(Config) ->
         <<"importedSum">> => 2,
         <<"updatedSum">> => 2,
         <<"deletedSum">> => 0,
-        <<"importedMinHist">> => 1,
         <<"importedHourHist">> => 2,
         <<"importedDayHist">> => 2,
         <<"updatedMinHist">> => 1,
@@ -504,20 +503,20 @@ changing_max_depth_test(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
-create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
+create_file_in_dir_exceed_batch_update_test(Config) ->
     % in this test storage_import_dir_batch_size is set in init_per_testcase to 2
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
 
-    StorageTestDirPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestDirPath2 = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR2, MountSpaceInRoot),
-    StorageTestFilePath1 = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
-    StorageTestFilePath2 = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_FILE2, MountSpaceInRoot),
-    StorageTestFilePath3 = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_FILE3, MountSpaceInRoot),
-    StorageTestFilePath4 = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_FILE4, MountSpaceInRoot),
-    StorageTestFileinDirPath1 = storage_import_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+    StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
+    StorageTestDirPath2 = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR2),
+    StorageTestFilePath1 = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE1),
+    StorageTestFilePath2 = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE2),
+    StorageTestFilePath3 = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE3),
+    StorageTestFilePath4 = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE4),
+    StorageTestFileinDirPath1 = storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
 
     DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
     DirSDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath2, RDWRStorage),
@@ -622,11 +621,11 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
 
-update_syncs_files_after_import_failed_test(Config, MountSpaceInRoot) ->
+update_syncs_files_after_import_failed_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestFilePath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
 
     %% Create file on storage
@@ -696,11 +695,11 @@ update_syncs_files_after_import_failed_test(Config, MountSpaceInRoot) ->
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS).
 
 
-update_syncs_files_after_previous_update_failed_test(Config, MountSpaceInRoot) ->
+update_syncs_files_after_previous_update_failed_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestFilePath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID),
@@ -790,7 +789,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
-    StorageSpacePath = storage_import_test_base:storage_path(?SPACE_ID, <<"">>, true),
+    StorageSpacePath = storage_import_test_base:provider_storage_path(?SPACE_ID, <<"">>),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
 
@@ -839,10 +838,10 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     }, ?SPACE_ID).
 
 
-sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config, MountSpaceInRoot) ->
+sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
-    StorageTestFilePath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     %% Create file on storage
     timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
@@ -899,10 +898,10 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config, MountS
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
-create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRoot) ->
+create_subfiles_and_delete_before_import_is_finished_test(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestDirPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dir on storage
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
@@ -923,11 +922,11 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
 
 
-delete_non_empty_directory_update_test(Config, MountSpaceInRoot) ->
+delete_non_empty_directory_update_test(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestDirPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestFileinDirPath1 = storage_import_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+    StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
+    StorageTestFileinDirPath1 = storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dir on storage
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
@@ -979,16 +978,16 @@ delete_non_empty_directory_update_test(Config, MountSpaceInRoot) ->
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
-sync_works_properly_after_delete_test(Config, MountSpaceInRoot) ->
+sync_works_properly_after_delete_test(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
-    StorageTestDirPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestDirPath2 = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR2, MountSpaceInRoot),
+    StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
+    StorageTestDirPath2 = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR2),
     StorageTestFileinDirPath1 =
-        storage_import_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+        storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
     StorageTestFileinDirPath2 =
-        storage_import_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR2, ?TEST_FILE2]), MountSpaceInRoot),
+        storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR2, ?TEST_FILE2])),
 
     %% Create dir on storage
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
@@ -1113,12 +1112,12 @@ sync_works_properly_after_delete_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle6, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle6).
 
-delete_and_update_files_simultaneously_update_test(Config, MountSpaceInRoot) ->
+delete_and_update_files_simultaneously_update_test(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestDirPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestFileinDirPath1 = storage_import_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
-    StorageTestFileinDirPath2 = storage_import_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE2]), MountSpaceInRoot),
+    StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
+    StorageTestFileinDirPath1 = storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
+    StorageTestFileinDirPath2 = storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE2])),
     NewMode = 8#600,
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
 
@@ -1204,15 +1203,15 @@ delete_and_update_files_simultaneously_update_test(Config, MountSpaceInRoot) ->
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS).
 
-delete_file_in_dir_update_test(Config, MountSpaceInRoot) ->
+delete_file_in_dir_update_test(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
-    StorageTestDirPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestFilePath = storage_import_test_base:storage_path(
-        ?SPACE_ID, filename:join(?TEST_DIR, ?TEST_FILE1), MountSpaceInRoot),
-    StorageTestFilePath2 = storage_import_test_base:storage_path(
-        ?SPACE_ID, filename:join(?TEST_DIR, ?TEST_FILE2), MountSpaceInRoot),
+    StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
+    StorageTestFilePath = storage_import_test_base:provider_storage_path(
+        ?SPACE_ID, filename:join(?TEST_DIR, ?TEST_FILE1)),
+    StorageTestFilePath2 = storage_import_test_base:provider_storage_path(
+        ?SPACE_ID, filename:join(?TEST_DIR, ?TEST_FILE2)),
     timer:sleep(timer:seconds(1)),
 
     %% Create dir on storage
@@ -1324,12 +1323,12 @@ delete_file_in_dir_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS).
 
 
-delete_many_subfiles_test(Config, MountSpaceInRoot) ->
+delete_many_subfiles_test(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
-    RootPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    RootPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
     ok = sd_test_utils:mkdir(W1, SDHandle, 8#777),
     DirStructure = [10, 10, 10],
@@ -1387,7 +1386,7 @@ delete_many_subfiles_test(Config, MountSpaceInRoot) ->
         <<"deletedDayHist">> => 1111
     }, ?SPACE_ID).
 
-create_list_race_test(Config, MountSpaceInRoot) ->
+create_list_race_test(Config) ->
     % this tests checks whether sync works properly in case of create-list race
     % description:
     % sync builds storage_sync_links tree for detecting deleted files by listing the storage using offset and limit
@@ -1438,7 +1437,7 @@ create_list_race_test(Config, MountSpaceInRoot) ->
     end,
 
     FileToDeleteByLFMPath = ?SPACE_TEST_FILE_PATH(FileToDeleteByLFM),
-    FileToDeleteOnStoragePath = storage_import_test_base:storage_path(?SPACE_ID, FileToDeleteOnStorage, MountSpaceInRoot),
+    FileToDeleteOnStoragePath = storage_import_test_base:provider_storage_path(?SPACE_ID, FileToDeleteOnStorage),
 
 
     receive
@@ -1517,14 +1516,14 @@ create_list_race_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, Handle4, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W2, Handle4).
 
-change_file_type_test(Config, MountSpaceInRoot) ->
+change_file_type_test(Config) ->
     % this test checks whether sync properly handles
     % deleting file and creating directory with the same name on storage
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
-    StorageTestFilePath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE1),
 
     %% Create file on storage
     timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
@@ -1622,7 +1621,7 @@ change_file_type_test(Config, MountSpaceInRoot) ->
 
     ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {guid, DirGuid2}), ?ATTEMPTS).
 
-change_file_type3_test(Config, MountSpaceInRoot) ->
+change_file_type3_test(Config) ->
     % this test checks whether sync properly handles
     % deleting non-empty directory and creating file with the same name on storage
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -1630,8 +1629,8 @@ change_file_type3_test(Config, MountSpaceInRoot) ->
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
 
-    StorageTestDirPath = storage_import_test_base:storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    StorageTestFileInDirPath = storage_import_test_base:storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), MountSpaceInRoot),
+    StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
+    StorageTestFileInDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
 
     %% Create dir on storage and file inside it
     timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
@@ -1734,7 +1733,7 @@ init_per_suite(Config) ->
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
         [W1 | _] = ?config(op_worker_nodes, NewConfig2),
-        rpc:call(W1, storage_sync_worker, notify_connection_to_oz, []),
+        rpc:call(W1, storage_import_worker, notify_connection_to_oz, []),
         NewConfig2
     end,
     {ok, _} = application:ensure_all_started(worker_pool),

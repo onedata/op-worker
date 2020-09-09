@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module is responsible for traversing files tree in order to 
 %%% perform necessary clean up after space was unsupported, i.e foreach file: 
-%%%     * deletes it on storage (when storage sync is not enabled), 
+%%%     * deletes it on storage (if storage is not imported),
 %%%     * deletes file_qos document
 %%%     * deletes local file_location or dir_location document
 %%% 
@@ -63,7 +63,7 @@ start(SpaceId, StorageId) ->
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
         traverse_info => #{
-            % do not remove storage files if storage sync was enabled
+            % do not remove storage files if storage was imported
             remove_storage_files => not storage:is_imported(StorageId)
         },
         additional_data => #{

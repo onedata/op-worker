@@ -59,6 +59,7 @@
     create_file_in_dir_update_test/1,
     changing_max_depth_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
+    create_file_manual_scan_test/1,
 
     delete_non_empty_directory_update_test/1,
     sync_works_properly_after_delete_test/1,
@@ -118,6 +119,7 @@
     create_file_in_dir_update_test,
     changing_max_depth_test,
     create_file_in_dir_exceed_batch_update_test,
+    create_file_manual_scan_test,
 
     delete_non_empty_directory_update_test,
     sync_works_properly_after_delete_test,
@@ -154,34 +156,34 @@ empty_import_test(Config) ->
     storage_import_test_base:empty_import_test(Config).
 
 create_empty_file_import_test(Config) ->
-    storage_import_test_base:create_empty_file_import_test(Config, true).
+    storage_import_test_base:create_empty_file_import_test(Config).
 
 create_file_import_test(Config) ->
-    storage_import_test_base:create_file_import_test(Config, true).
+    storage_import_test_base:create_file_import_test(Config).
 
 create_delete_import_test_read_both(Config) ->
-    storage_import_test_base:create_delete_import_test_read_both(Config, true).
+    storage_import_test_base:create_delete_import_test_read_both(Config).
 
 create_delete_import_test_read_remote_only(Config) ->
-    storage_import_test_base:create_delete_import_test_read_remote_only(Config, true).
+    storage_import_test_base:create_delete_import_test_read_remote_only(Config).
 
 create_file_in_dir_import_test(Config) ->
-    storage_import_s3_test_base:create_file_in_dir_import_test(Config, true).
+    storage_import_s3_test_base:create_file_in_dir_import_test(Config).
 
 create_subfiles_import_many_test(Config) ->
-    storage_import_s3_test_base:create_subfiles_import_many_test(Config, true).
+    storage_import_s3_test_base:create_subfiles_import_many_test(Config).
 
 create_subfiles_import_many2_test(Config) ->
-    storage_import_s3_test_base:create_subfiles_import_many2_test(Config, true).
+    storage_import_s3_test_base:create_subfiles_import_many2_test(Config).
 
 create_remote_file_import_conflict_test(Config) ->
-    storage_import_test_base:create_remote_file_import_conflict_test(Config, true).
+    storage_import_test_base:create_remote_file_import_conflict_test(Config).
 
 create_remote_file_import_race_test(Config) ->
-    storage_import_test_base:create_remote_file_import_race_test(Config, true).
+    storage_import_test_base:create_remote_file_import_race_test(Config).
 
 cancel_scan(Config) ->
-    storage_import_s3_test_base:cancel_scan(Config, true).
+    storage_import_s3_test_base:cancel_scan(Config).
 
 create_file_import_race_test(Config) ->
     storage_import_test_base:create_file_import_race_test(Config).
@@ -197,10 +199,10 @@ delete_opened_file_reimport_race_test(Config) ->
 
 
 update_syncs_files_after_import_failed_test(Config) ->
-    storage_import_s3_test_base:update_syncs_files_after_import_failed_test(Config, true).
+    storage_import_s3_test_base:update_syncs_files_after_import_failed_test(Config).
 
 update_syncs_files_after_previous_update_failed_test(Config) ->
-    storage_import_s3_test_base:update_syncs_files_after_previous_update_failed_test(Config, true).
+    storage_import_s3_test_base:update_syncs_files_after_previous_update_failed_test(Config).
 
 sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
     storage_import_s3_test_base:sync_should_not_reimport_deleted_but_still_opened_file(Config, ?S3_HELPER_NAME).
@@ -221,84 +223,86 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
     storage_import_test_base:sync_should_update_replicated_file_with_suffix_on_storage(Config, ?S3_HELPER_NAME).
 
 sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
-    storage_import_s3_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config, true).
+    storage_import_s3_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config).
 
 create_delete_import2_test(Config) ->
-    storage_import_test_base:create_delete_import2_test(Config, true, true).
+    storage_import_test_base:create_delete_import2_test(Config, true).
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->
-    storage_import_s3_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config, true).
+    storage_import_s3_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config).
 
 create_file_in_dir_update_test(Config) ->
-    storage_import_s3_test_base:create_file_in_dir_update_test(Config, true).
+    storage_import_s3_test_base:create_file_in_dir_update_test(Config).
 
 changing_max_depth_test(Config) ->
     storage_import_s3_test_base:changing_max_depth_test(Config).
 
 create_file_in_dir_exceed_batch_update_test(Config) ->
-    storage_import_s3_test_base:create_file_in_dir_exceed_batch_update_test(Config, true).
+    storage_import_s3_test_base:create_file_in_dir_exceed_batch_update_test(Config).
 
+create_file_manual_scan_test(Config) ->
+    storage_import_test_base:create_file_manual_scan_test(Config).
 
 delete_non_empty_directory_update_test(Config) ->
-    storage_import_s3_test_base:delete_non_empty_directory_update_test(Config, true).
+    storage_import_s3_test_base:delete_non_empty_directory_update_test(Config).
 
 sync_works_properly_after_delete_test(Config) ->
-    storage_import_s3_test_base:sync_works_properly_after_delete_test(Config, true).
+    storage_import_s3_test_base:sync_works_properly_after_delete_test(Config).
 
 delete_and_update_files_simultaneously_update_test(Config) ->
-    storage_import_s3_test_base:delete_and_update_files_simultaneously_update_test(Config, true).
+    storage_import_s3_test_base:delete_and_update_files_simultaneously_update_test(Config).
 
 delete_file_update_test(Config) ->
-    storage_import_test_base:delete_file_update_test(Config, true).
+    storage_import_test_base:delete_file_update_test(Config).
 
 delete_file_in_dir_update_test(Config) ->
-    storage_import_s3_test_base:delete_file_in_dir_update_test(Config, true).
+    storage_import_s3_test_base:delete_file_in_dir_update_test(Config).
 
 delete_many_subfiles_test(Config) ->
-    storage_import_s3_test_base:delete_many_subfiles_test(Config, true).
+    storage_import_s3_test_base:delete_many_subfiles_test(Config).
 
 create_delete_race_test(Config) ->
-    storage_import_test_base:create_delete_race_test(Config, true, ?S3_HELPER_NAME).
+    storage_import_test_base:create_delete_race_test(Config, ?S3_HELPER_NAME).
 
 create_list_race_test(Config) ->
-    storage_import_s3_test_base:create_list_race_test(Config, true).
+    storage_import_s3_test_base:create_list_race_test(Config).
 
 
 append_file_update_test(Config) ->
-    storage_import_test_base:append_file_update_test(Config, true).
+    storage_import_test_base:append_file_update_test(Config).
 
 append_empty_file_update_test(Config) ->
-    storage_import_test_base:append_empty_file_update_test(Config, true).
+    storage_import_test_base:append_empty_file_update_test(Config).
 
 truncate_file_update_test(Config) ->
-    storage_import_test_base:truncate_file_update_test(Config, true).
+    storage_import_test_base:truncate_file_update_test(Config).
 
 change_file_content_constant_size_test(Config) ->
-    storage_import_test_base:change_file_content_constant_size_test(Config, true).
+    storage_import_test_base:change_file_content_constant_size_test(Config).
 
 change_file_content_update_test(Config) ->
-    storage_import_test_base:change_file_content_update_test(Config, true).
+    storage_import_test_base:change_file_content_update_test(Config).
 
 change_file_type_test(Config) ->
-    storage_import_s3_test_base:change_file_type_test(Config, true).
+    storage_import_s3_test_base:change_file_type_test(Config).
 
 change_file_type3_test(Config) ->
-    storage_import_s3_test_base:change_file_type3_test(Config, true).
+    storage_import_s3_test_base:change_file_type3_test(Config).
 
 change_file_type4_test(Config) ->
-    storage_import_test_base:change_file_type4_test(Config, true).
+    storage_import_test_base:change_file_type4_test(Config).
 
 recreate_file_deleted_by_sync_test(Config) ->
-    storage_import_test_base:recreate_file_deleted_by_sync_test(Config, true).
+    storage_import_test_base:recreate_file_deleted_by_sync_test(Config).
 
 sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config) ->
-    storage_import_test_base:sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config, true).
+    storage_import_test_base:sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config).
 
 sync_should_not_delete_dir_created_in_remote_provider(Config) ->
-    storage_import_test_base:sync_should_not_delete_dir_created_in_remote_provider(Config, true).
+    storage_import_test_base:sync_should_not_delete_dir_created_in_remote_provider(Config).
 
 sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) ->
-    storage_import_test_base:sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config, true).
+    storage_import_test_base:sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config).
 
 should_not_sync_file_during_replication(Config) ->
     % file size limit that can be created via lfm on s3

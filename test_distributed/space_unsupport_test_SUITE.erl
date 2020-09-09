@@ -249,7 +249,7 @@ delete_local_documents_stage_test(Config) ->
         threshold => 100
     },
     ok = rpc:call(Worker1, autocleaning_api, configure, [?SPACE_ID, ACConfig]),
-    ok = rpc:call(Worker1, storage_sync_worker, schedule_spaces_check, [0]),
+    ok = rpc:call(Worker1, storage_import_worker, schedule_spaces_check, [0]),
     
     ?assertMatch({ok, _}, rpc:call(Worker1, storage_import_config, get, [?SPACE_ID])),
     ?assertMatch({ok, _}, rpc:call(Worker1, storage_import_monitoring, get, [?SPACE_ID]), 10),

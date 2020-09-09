@@ -344,10 +344,10 @@ get_stats(SpaceId, Types, Window) ->
         {ok, #document{value = SIM}} ->
             get_stats(SIM, Types, Window);
         {error, not_found} ->
-            ?debug("Failed to fetch storage sync metrics for space ~p SpaceId due to not_found", [SpaceId]),
+            ?debug("Failed to fetch storage import metrics for space ~p SpaceId due to not_found", [SpaceId]),
             {ok, #{}};
         Error ->
-            ?error("Failed to fetch storage sync metrics for space ~p SpaceId due to ~p", [SpaceId, Error]),
+            ?error("Failed to fetch storage import metrics for space ~p SpaceId due to ~p", [SpaceId, Error]),
             {ok, #{}}
     end.
 

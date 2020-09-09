@@ -438,7 +438,7 @@ init_per_suite(Config) ->
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
         [W1 | _] = ?config(op_worker_nodes, NewConfig2),
-        rpc:call(W1, storage_sync_worker, notify_connection_to_oz, []),
+        rpc:call(W1, storage_import_worker, notify_connection_to_oz, []),
         sort_workers(NewConfig2)
     end,
     {ok, _} = application:ensure_all_started(worker_pool),

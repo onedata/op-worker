@@ -68,6 +68,7 @@
     create_file_in_dir_update_test/1,
     changing_max_depth_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
+    create_file_manual_scan_test/1,
 
     delete_empty_directory_update_test/1,
     delete_non_empty_directory_update_test/1,
@@ -151,6 +152,7 @@
     create_file_in_dir_update_test,
     changing_max_depth_test,
     create_file_in_dir_exceed_batch_update_test,
+    create_file_manual_scan_test,
 
     delete_empty_directory_update_test,
     delete_non_empty_directory_update_test,
@@ -198,67 +200,67 @@ empty_import_test(Config) ->
     storage_import_test_base:empty_import_test(Config).
 
 create_directory_import_test(Config) ->
-    storage_import_test_base:create_directory_import_test(Config, true).
+    storage_import_test_base:create_directory_import_test(Config).
 
 create_directory_import_error_test(Config) ->
-    storage_import_test_base:create_directory_import_error_test(Config, true).
+    storage_import_test_base:create_directory_import_error_test(Config).
 
 create_directory_import_check_user_id_test(Config) ->
-    storage_import_test_base:create_directory_import_check_user_id_test(Config, true).
+    storage_import_test_base:create_directory_import_check_user_id_test(Config).
 
 create_directory_import_check_user_id_error_test(Config) ->
-    storage_import_test_base:create_directory_import_check_user_id_error_test(Config, true).
+    storage_import_test_base:create_directory_import_check_user_id_error_test(Config).
 
 create_directory_import_without_read_permission_test(Config) ->
-    storage_import_test_base:create_directory_import_without_read_permission_test(Config, true).
+    storage_import_test_base:create_directory_import_without_read_permission_test(Config).
 
 create_directory_import_many_test(Config) ->
-    storage_import_test_base:create_directory_import_many_test(Config, true).
+    storage_import_test_base:create_directory_import_many_test(Config).
 
 create_empty_file_import_test(Config) ->
-    storage_import_test_base:create_empty_file_import_test(Config, true).
+    storage_import_test_base:create_empty_file_import_test(Config).
 
 create_file_import_test(Config) ->
-    storage_import_test_base:create_file_import_test(Config, true).
+    storage_import_test_base:create_file_import_test(Config).
 
 create_delete_import_test_read_both(Config) ->
-    storage_import_test_base:create_delete_import_test_read_both(Config, true).
+    storage_import_test_base:create_delete_import_test_read_both(Config).
 
 create_delete_import_test_read_remote_only(Config) ->
-    storage_import_test_base:create_delete_import_test_read_remote_only(Config, true).
+    storage_import_test_base:create_delete_import_test_read_remote_only(Config).
 
 create_file_import_check_user_id_test(Config) ->
-    storage_import_test_base:create_file_import_check_user_id_test(Config, true).
+    storage_import_test_base:create_file_import_check_user_id_test(Config).
 
 create_file_import_check_user_id_error_test(Config) ->
-    storage_import_test_base:create_file_import_check_user_id_error_test(Config, true).
+    storage_import_test_base:create_file_import_check_user_id_error_test(Config).
 
 create_file_in_dir_import_test(Config) ->
-    storage_import_test_base:create_file_in_dir_import_test(Config, true).
+    storage_import_test_base:create_file_in_dir_import_test(Config).
 
 create_subfiles_import_many_test(Config) ->
-    storage_import_test_base:create_subfiles_import_many_test(Config, true).
+    storage_import_test_base:create_subfiles_import_many_test(Config).
 
 create_subfiles_import_many2_test(Config) ->
-    storage_import_test_base:create_subfiles_import_many2_test(Config, true).
+    storage_import_test_base:create_subfiles_import_many2_test(Config).
 
 create_remote_file_import_conflict_test(Config) ->
-    storage_import_test_base:create_remote_file_import_conflict_test(Config, true).
+    storage_import_test_base:create_remote_file_import_conflict_test(Config).
 
 create_remote_dir_import_race_test(Config) ->
-    storage_import_test_base:create_remote_dir_import_race_test(Config, true).
+    storage_import_test_base:create_remote_dir_import_race_test(Config).
 
 create_remote_file_import_race_test(Config) ->
-    storage_import_test_base:create_remote_file_import_race_test(Config, true).
+    storage_import_test_base:create_remote_file_import_race_test(Config).
 
 cancel_scan(Config) ->
-    storage_import_test_base:cancel_scan(Config, true).
+    storage_import_test_base:cancel_scan(Config).
 
 import_nfs_acl_test(Config) ->
-    storage_import_test_base:import_nfs_acl_test(Config, true).
+    storage_import_test_base:import_nfs_acl_test(Config).
 
 import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
-    storage_import_test_base:import_nfs_acl_with_disabled_luma_should_fail_test(Config, true).
+    storage_import_test_base:import_nfs_acl_with_disabled_luma_should_fail_test(Config).
 
 create_file_import_race_test(Config) ->
     storage_import_test_base:create_file_import_race_test(Config).
@@ -273,10 +275,10 @@ delete_opened_file_reimport_race_test(Config) ->
     storage_import_test_base:delete_opened_file_reimport_race_test(Config, ?POSIX_HELPER_NAME).
 
 update_syncs_files_after_import_failed_test(Config) ->
-    storage_import_test_base:update_syncs_files_after_import_failed_test(Config, true).
+    storage_import_test_base:update_syncs_files_after_import_failed_test(Config).
 
 update_syncs_files_after_previous_update_failed_test(Config) ->
-    storage_import_test_base:update_syncs_files_after_previous_update_failed_test(Config, true).
+    storage_import_test_base:update_syncs_files_after_previous_update_failed_test(Config).
 
 sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
     storage_import_test_base:sync_should_not_reimport_deleted_but_still_opened_file(Config, ?POSIX_HELPER_NAME).
@@ -300,115 +302,118 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
     storage_import_test_base:sync_should_update_replicated_file_with_suffix_on_storage(Config, ?POSIX_HELPER_NAME).
 
 sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
-    storage_import_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config, true).
+    storage_import_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config).
 
 create_delete_import2_test(Config) ->
-    storage_import_test_base:create_delete_import2_test(Config, true, true).
+    storage_import_test_base:create_delete_import2_test(Config, true).
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->
-    storage_import_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config, true).
+    storage_import_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config).
 
 create_file_in_dir_update_test(Config) ->
-    storage_import_test_base:create_file_in_dir_update_test(Config, true).
+    storage_import_test_base:create_file_in_dir_update_test(Config).
 
 changing_max_depth_test(Config) ->
     storage_import_test_base:changing_max_depth_test(Config).
 
 create_file_in_dir_exceed_batch_update_test(Config) ->
-    storage_import_test_base:create_file_in_dir_exceed_batch_update_test(Config, true).
+    storage_import_test_base:create_file_in_dir_exceed_batch_update_test(Config).
+
+create_file_manual_scan_test(Config) ->
+    storage_import_test_base:create_file_manual_scan_test(Config).
 
 delete_empty_directory_update_test(Config) ->
-    storage_import_test_base:delete_empty_directory_update_test(Config, true).
+    storage_import_test_base:delete_empty_directory_update_test(Config).
 
 delete_non_empty_directory_update_test(Config) ->
-    storage_import_test_base:delete_non_empty_directory_update_test(Config, true).
+    storage_import_test_base:delete_non_empty_directory_update_test(Config).
 
 sync_works_properly_after_delete_test(Config) ->
-    storage_import_test_base:sync_works_properly_after_delete_test(Config, true).
+    storage_import_test_base:sync_works_properly_after_delete_test(Config).
 
 delete_and_update_files_simultaneously_update_test(Config) ->
-    storage_import_test_base:delete_and_update_files_simultaneously_update_test(Config, true).
+    storage_import_test_base:delete_and_update_files_simultaneously_update_test(Config).
 
 delete_file_update_test(Config) ->
-    storage_import_test_base:delete_file_update_test(Config, true).
+    storage_import_test_base:delete_file_update_test(Config).
 
 delete_file_in_dir_update_test(Config) ->
-    storage_import_test_base:delete_file_in_dir_update_test(Config, true).
+    storage_import_test_base:delete_file_in_dir_update_test(Config).
 
 delete_many_subfiles_test(Config) ->
-    storage_import_test_base:delete_many_subfiles_test(Config, true).
+    storage_import_test_base:delete_many_subfiles_test(Config).
 
 create_delete_race_test(Config) ->
-    storage_import_test_base:create_delete_race_test(Config, true, ?POSIX_HELPER_NAME).
+    storage_import_test_base:create_delete_race_test(Config, ?POSIX_HELPER_NAME).
 
 create_list_race_test(Config) ->
-    storage_import_test_base:create_list_race_test(Config, true).
+    storage_import_test_base:create_list_race_test(Config).
 
 append_file_update_test(Config) ->
-    storage_import_test_base:append_file_update_test(Config, true).
+    storage_import_test_base:append_file_update_test(Config).
 
 append_file_not_changing_mtime_update_test(Config) ->
-    storage_import_test_base:append_file_not_changing_mtime_update_test(Config, true).
+    storage_import_test_base:append_file_not_changing_mtime_update_test(Config).
 
 append_empty_file_update_test(Config) ->
-    storage_import_test_base:append_empty_file_update_test(Config, true).
+    storage_import_test_base:append_empty_file_update_test(Config).
 
 copy_file_update_test(Config) ->
-    storage_import_test_base:copy_file_update_test(Config, true).
+    storage_import_test_base:copy_file_update_test(Config).
 
 move_file_update_test(Config) ->
-    storage_import_test_base:move_file_update_test(Config, true).
+    storage_import_test_base:move_file_update_test(Config).
 
 truncate_file_update_test(Config) ->
-    storage_import_test_base:truncate_file_update_test(Config, true).
+    storage_import_test_base:truncate_file_update_test(Config).
 
 change_file_content_constant_size_test(Config) ->
-    storage_import_test_base:change_file_content_constant_size_test(Config, true).
+    storage_import_test_base:change_file_content_constant_size_test(Config).
 
 change_file_content_update_test(Config) ->
-    storage_import_test_base:change_file_content_update_test(Config, true).
+    storage_import_test_base:change_file_content_update_test(Config).
 
 change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config) ->
-    storage_import_test_base:change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config, true).
+    storage_import_test_base:change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config).
 
 chmod_file_update_test(Config) ->
-    storage_import_test_base:chmod_file_update_test(Config, true).
+    storage_import_test_base:chmod_file_update_test(Config).
 
 chmod_file_update2_test(Config) ->
-    storage_import_test_base:chmod_file_update2_test(Config, true).
+    storage_import_test_base:chmod_file_update2_test(Config).
 
 change_file_type_test(Config) ->
-    storage_import_test_base:change_file_type_test(Config, true).
+    storage_import_test_base:change_file_type_test(Config).
 
 change_file_type2_test(Config) ->
-    storage_import_test_base:change_file_type2_test(Config, true).
+    storage_import_test_base:change_file_type2_test(Config).
 
 change_file_type3_test(Config) ->
-    storage_import_test_base:change_file_type3_test(Config, true).
+    storage_import_test_base:change_file_type3_test(Config).
 
 change_file_type4_test(Config) ->
-    storage_import_test_base:change_file_type4_test(Config, true).
+    storage_import_test_base:change_file_type4_test(Config).
 
 update_timestamps_file_import_test(Config) ->
-    storage_import_test_base:update_timestamps_file_import_test(Config, true).
+    storage_import_test_base:update_timestamps_file_import_test(Config).
 
 should_not_detect_timestamp_update_test(Config) ->
-    storage_import_test_base:should_not_detect_timestamp_update_test(Config, true).
+    storage_import_test_base:should_not_detect_timestamp_update_test(Config).
 
 update_nfs_acl_test(Config) ->
-    storage_import_test_base:update_nfs_acl_test(Config, true).
+    storage_import_test_base:update_nfs_acl_test(Config).
 
 recreate_file_deleted_by_sync_test(Config) ->
-    storage_import_test_base:recreate_file_deleted_by_sync_test(Config, true).
+    storage_import_test_base:recreate_file_deleted_by_sync_test(Config).
 
 sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config) ->
-    storage_import_test_base:sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config, true).
+    storage_import_test_base:sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config).
 
 sync_should_not_delete_dir_created_in_remote_provider(Config) ->
-    storage_import_test_base:sync_should_not_delete_dir_created_in_remote_provider(Config, true).
+    storage_import_test_base:sync_should_not_delete_dir_created_in_remote_provider(Config).
 
 sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) ->
-    storage_import_test_base:sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config, true).
+    storage_import_test_base:sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config).
 
 should_not_sync_file_during_replication(Config) ->
     storage_import_test_base:should_not_sync_file_during_replication(Config).

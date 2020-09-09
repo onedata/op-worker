@@ -1,0 +1,232 @@
+%%%-------------------------------------------------------------------
+%%% @author Jakub Kudzia
+%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Helper module for storage_import_worker.
+%%% It implements a simple registry for tracking spaces with
+%%% enabled auto-import.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(auto_imported_spaces_registry).
+-author("Jakub Kudzia").
+
+-include("modules/storage/import/storage_import.hrl").
+-include("modules/storage/import/utils/auto_imported_spaces_registry.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
+
+%% API
+-export([ensure_initialised/0, revise/0]).
+-export([register/1, deregister/1]).
+-export([mark_inactive/1, mark_scanning/1]).
+-export([fold/2]).
+
+-define(REGISTRY, ?MODULE).
+
+-type registry_status() :: ?INITIALISED | ?NOT_INITIALISED.
+-type key() :: od_space:id().
+-type value() :: ?SCANNING | ?INACTIVE.
+-type fold_fun() :: fun((key(), value(), AccIn :: term()) -> term()).
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+-spec ensure_initialised() -> registry_status().
+ensure_initialised() ->
+    case is_created() of
+        false ->
+            init();
+        true ->
+            ?INITIALISED
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% This function is used to revise spaces stored in ets.
+%% It ensure whether all supported spaces are in the ets end removes
+%% stalled (no longer supported) spaces from it.
+%%
+%% In normal operation this function should do nothing as adding/removing
+%% spaces to/from the registry should be performed by storage_import_worker.
+%% This function is meant to revise the registry in case of unexpected
+%% problems.
+%% @end
+%%--------------------------------------------------------------------
+-spec revise() -> ok.
+revise() ->
+    case is_created() of
+        false ->
+            init();
+        true ->
+            case provider_logic:get_spaces() of
+                {ok, Spaces} ->
+                    RegisteredSpaces = list(),
+                    revise(lists:sort(Spaces), lists:sort(RegisteredSpaces));
+                _ ->
+                    ok
+            end
+    end.
+
+
+-spec register(key()) -> ok.
+register(SpaceId) ->
+    case is_created() of
+        true ->
+            check_if_auto_imported_and_register(SpaceId);
+        false ->
+            init(),
+            ok
+    end.
+
+
+-spec deregister(key()) -> ok.
+deregister(SpaceId) ->
+    case is_created() of
+        true ->
+            deregister_internal(SpaceId);
+        false ->
+            ok
+    end.
+
+
+-spec mark_inactive(key()) -> ok.
+mark_inactive(SpaceId) ->
+    mark_status(SpaceId, ?INACTIVE).
+
+
+-spec mark_scanning(key()) -> ok.
+mark_scanning(SpaceId) ->
+    mark_status(SpaceId, ?SCANNING).
+
+
+-spec fold(fold_fun(), term()) -> {ok, term()}.
+fold(Fun, AccIn) ->
+    fold(ets:first(?REGISTRY), Fun, AccIn).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+-spec init() -> registry_status().
+init() ->
+    try
+        case provider_logic:get_spaces() of
+            {ok, Spaces} ->
+                create_empty(),
+                register_auto_imported_spaces(Spaces),
+                ?INITIALISED;
+            ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                ?warning("storage_import_worker was unable to collect auto imported spaces due to no connection to oz"),
+                ?NOT_INITIALISED;
+            ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                ?warning("storage_import_worker was unable to collect auto imported spaces due to unregistered provider"),
+                ?NOT_INITIALISED;
+            {error, _} = Error ->
+                ?error("storage_import_worker was unable to collect auto imported spaces due to unexpected ~p", [Error]),
+                ?NOT_INITIALISED
+        end
+    catch
+        Error2:Reason ->
+            ?error_stacktrace("storage_import_worker was unable to collect auto imported spaces due to unexpected ~p:~p", [Error2, Reason]),
+            catch ets:delete(?REGISTRY),
+            ?NOT_INITIALISED
+    end.
+
+
+-spec create_empty() -> ok.
+create_empty() ->
+    ?REGISTRY = ets:new(?REGISTRY, [named_table, public]),
+    ok.
+
+
+-spec register_internal(key()) -> ok.
+register_internal(SpaceId) ->
+    true = ets:insert(?REGISTRY, {SpaceId, ?INACTIVE}),
+    ok.
+
+
+-spec deregister_internal(key()) -> ok.
+deregister_internal(SpaceId) ->
+    true = ets:delete(?REGISTRY, SpaceId),
+    ok.
+
+
+-spec is_created() -> boolean().
+is_created() ->
+    ets:info(?REGISTRY) =/= undefined.
+
+
+-spec mark_status(key(), value()) -> ok.
+mark_status(SpaceId, Status) ->
+    case is_created() of
+        true ->
+            ets:update_element(?REGISTRY, SpaceId, {2, Status}),
+            ok;
+        false ->
+            case init() of
+                ?INITIALISED -> mark_status(SpaceId, Status);
+                ?NOT_INITIALISED -> ok
+            end
+    end.
+
+
+-spec register_auto_imported_spaces([od_space:id()]) -> ok.
+register_auto_imported_spaces(Spaces) ->
+    lists:foreach(fun(SpaceId) ->
+        check_if_auto_imported_and_register(SpaceId)
+    end, Spaces).
+
+
+-spec check_if_auto_imported_and_register(od_space:id()) -> ok.
+check_if_auto_imported_and_register(SpaceId) ->
+    try
+        case storage_import:get_mode(SpaceId) of
+            {ok, ?AUTO_IMPORT} ->
+                register_internal(SpaceId);
+            {ok, _} ->
+                ok;
+            {error, not_found} ->
+                ok;
+            {error, _} = Error ->
+                ?error("Could not check if space ~s is auto imported due to ~p", [SpaceId, Error])
+        end
+    catch
+        E:R ->
+            ?error("Could not check if space ~s is auto imported due to unexpected ~p:~p", [SpaceId, E, R])
+    end.
+
+
+-spec revise([od_space:id()], [od_space:id()]) -> ok.
+revise([], []) ->
+    ok;
+revise([SpaceId | OzSpaces], [SpaceId | RegisteredSpaces]) ->
+    revise(OzSpaces, RegisteredSpaces);
+revise([SpaceId | OzSpaces], RegisteredSpaces) ->
+    register(SpaceId),
+    revise(OzSpaces, RegisteredSpaces);
+revise(OzSpaces, [SpaceId | RegisteredSpaces]) ->
+    deregister(SpaceId),
+    revise(OzSpaces, RegisteredSpaces).
+
+
+-spec list() -> [od_space:id()].
+list() ->
+    {ok, Spaces} = fold(fun(SpaceId, _, AccIn) ->
+        [SpaceId | AccIn]
+    end, []),
+    Spaces.
+
+
+-spec fold(key() | '$end_of_table', fold_fun(), AccIn :: term()) -> {ok, term()}.
+fold('$end_of_table', _Fun, AccIn) ->
+    {ok, AccIn};
+fold(SpaceId, Fun, AccIn) ->
+    [{SpaceId, Status}] = ets:lookup(?REGISTRY, SpaceId),
+    Acc = Fun(SpaceId, Status, AccIn),
+    fold(ets:next(?REGISTRY, SpaceId), Fun, Acc).

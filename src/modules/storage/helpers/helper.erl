@@ -30,7 +30,7 @@
     get_storage_path_type/1, get_block_size/1
 ]).
 -export([
-    is_posix_compatible/1, is_rename_supported/1, is_import_supported/1,
+    is_posix_compatible/1, is_rename_supported/1, is_auto_import_supported/1,
     is_file_registration_supported/1, is_nfs4_acl_supported/1, should_skip_storage_detection/1
 ]).
 -export([get_args_with_user_ctx/2]).
@@ -236,8 +236,8 @@ is_posix_compatible(#helper{name = HelperName}) -> is_posix_compatible(HelperNam
 is_posix_compatible(_) -> false.
 
 
--spec is_import_supported(helpers:helper()) -> boolean().
-is_import_supported(Helper = #helper{name = HelperName})
+-spec is_auto_import_supported(helpers:helper()) -> boolean().
+is_auto_import_supported(Helper = #helper{name = HelperName})
     when HelperName =:= ?POSIX_HELPER_NAME
     orelse HelperName =:= ?GLUSTERFS_HELPER_NAME
     orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
@@ -245,9 +245,9 @@ is_import_supported(Helper = #helper{name = HelperName})
     orelse HelperName =:= ?XROOTD_HELPER_NAME
 ->
     is_canonical_helper(Helper);
-is_import_supported(Helper = #helper{name = ?S3_HELPER_NAME}) ->
+is_auto_import_supported(Helper = #helper{name = ?S3_HELPER_NAME}) ->
     is_canonical_helper(Helper) andalso block_size_equals_0(Helper);
-is_import_supported(_) -> false.
+is_auto_import_supported(_) -> false.
 
 
 -spec is_file_registration_supported(helpers:helper()) -> boolean().

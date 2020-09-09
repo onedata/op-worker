@@ -670,7 +670,7 @@ get_attr_including_deleted(FileCtx) ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             ?debug_stacktrace(
-                "Error {error, ~p} occured when getting attr of file: ~p during storage sync procedure in space: ~p.",
+                "Error {error, ~p} occured when getting attr of file: ~p during auto storage import procedure in space: ~p.",
                 [Error, FileUuid, SpaceId]
             ),
             {error, Error}
