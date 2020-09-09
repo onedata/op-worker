@@ -38,6 +38,14 @@
     fill_file_with_dummy_data/5,
     read_file/4,
 
+    share_file_and_sync_file_attrs/4,
+
+    set_and_sync_metadata/4,
+    set_metadata/4,
+    get_metadata/3,
+    set_xattrs/3,
+    get_xattrs/2,
+
     randomly_add_qos/4,
     randomly_set_metadata/2,
     randomly_set_acl/2,
@@ -53,8 +61,9 @@
 ]).
 
 -type file_type() :: binary(). % <<"file">> | <<"dir">>
+-type metadata_type() :: binary().  % <<"rdf">> | <<"json">> | <<"xattrs">>.
 
--export_type([file_type/0]).
+-export_type([file_type/0, metadata_type/0]).
 
 
 -define(ATTEMPTS, 30).
@@ -107,7 +116,7 @@ get_file_attrs(Node, FileGuid) ->
 
 
 -spec create_shared_file_in_space1(api_test_runner:config()) ->
-    {api_test_utils:file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
+    {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
 create_shared_file_in_space1(Config) ->
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
 
@@ -116,7 +125,7 @@ create_shared_file_in_space1(Config) ->
 
     FileType = randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessId, FilePath),
+    {ok, FileGuid} = create_file(FileType, P1Node, UserSessId, FilePath),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, {guid, FileGuid}, <<"share">>),
 
     {FileType, FilePath, FileGuid, ShareId}.
@@ -137,7 +146,7 @@ create_and_sync_shared_file_in_space2(Mode, Config) ->
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
-    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
+    wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
 
     {FileType, FilePath, FileGuid, ShareId}.
 
@@ -150,7 +159,7 @@ create_and_sync_shared_file_in_space2(Mode, Config) ->
 ) ->
     {file_type(), file_meta:path(), file_id:file_guid(), #file_details{}}.
 create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileName, Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(false),
+    FileType = randomly_choose_file_type_for_test(false),
     create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName, Config).
 
 
@@ -172,29 +181,28 @@ create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileTyp
     FilePath = filename:join([ParentPath, FileName]),
 
     FileMode = lists_utils:random_element([8#707, 8#705, 8#700]),
-    {ok, FileGuid} = api_test_utils:create_file(
+    {ok, FileGuid} = create_file(
         FileType, P1Node, UserSessIdP1, FilePath, FileMode
     ),
-    FileShares = case api_test_utils:randomly_create_share(P1Node, SpaceOwnerSessIdP1, FileGuid) of
+    FileShares = case randomly_create_share(P1Node, SpaceOwnerSessIdP1, FileGuid) of
         undefined -> [];
         ShareId -> [ShareId]
     end,
-    HasDirectQos = api_test_utils:randomly_add_qos(P1Node, FileGuid, <<"key=value2">>, 2),
-    HasMetadata = api_test_utils:randomly_set_metadata(P1Node, FileGuid),
-    HasAcl = api_test_utils:randomly_set_acl(P1Node, FileGuid),
-
     Size = case FileType of
         <<"file">> ->
             RandSize = rand:uniform(20),
-            api_test_utils:fill_file_with_dummy_data(P1Node, SpaceOwnerSessIdP1, FileGuid, RandSize),
+            fill_file_with_dummy_data(P1Node, SpaceOwnerSessIdP1, FileGuid, RandSize),
             RandSize;
         _ ->
             0
     end,
+    HasDirectQos = randomly_add_qos(P1Node, FileGuid, <<"key=value2">>, 2),
+    HasMetadata = randomly_set_metadata(P1Node, FileGuid),
+    HasAcl = randomly_set_acl(P1Node, FileGuid),
 
     {ok, FileAttrs} = ?assertMatch(
         {ok, #file_attr{size = Size, shares = FileShares}},
-        api_test_utils:get_file_attrs(P2Node, FileGuid),
+        get_file_attrs(P2Node, FileGuid),
         ?ATTEMPTS
     ),
 
@@ -269,6 +277,79 @@ read_file(Node, SessId, FileGuid, Size) ->
     {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, Size),
     ok = lfm_proxy:close(Node, ReadHandle),
     Content.
+
+
+-spec share_file_and_sync_file_attrs(node(), session:id(), [node()], file_id:file_guid()) ->
+    od_share:id().
+share_file_and_sync_file_attrs(CreationNode, SessionId, SyncNodes, FileGuid) ->
+    {ok, ShareId} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:create_share(CreationNode, SessionId, {guid, FileGuid}, <<"share">>),
+        ?ATTEMPTS
+    ),
+    lists:foreach(fun(Node) ->
+        ?assertMatch({ok, #file_attr{shares = [ShareId]}}, get_file_attrs(Node, FileGuid), ?ATTEMPTS)
+    end, SyncNodes),
+
+    ShareId.
+
+
+-spec set_and_sync_metadata([node()], file_id:file_guid(), metadata_type(), term()) -> ok.
+set_and_sync_metadata(Nodes, FileGuid, MetadataType, Metadata) ->
+    RandNode = lists_utils:random_element(Nodes),
+    ?assertMatch(ok, set_metadata(RandNode, FileGuid, MetadataType, Metadata), ?ATTEMPTS),
+
+    lists:foreach(fun(Node) ->
+        ?assertMatch({ok, Metadata}, get_metadata(Node, FileGuid, MetadataType), ?ATTEMPTS)
+    end, Nodes).
+
+
+-spec set_metadata(node(), file_id:file_guid(), metadata_type(), term()) -> ok.
+set_metadata(Node, FileGuid, <<"rdf">>, Metadata) ->
+    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, Metadata, []);
+set_metadata(Node, FileGuid, <<"json">>, Metadata) ->
+    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, Metadata, []);
+set_metadata(Node, FileGuid, <<"xattrs">>, Metadata) ->
+    set_xattrs(Node, FileGuid, Metadata).
+
+
+-spec get_metadata(node(), file_id:file_guid(), metadata_type()) -> {ok, term()}.
+get_metadata(Node, FileGuid, <<"rdf">>) ->
+    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, [], false);
+get_metadata(Node, FileGuid, <<"json">>) ->
+    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, [], false);
+get_metadata(Node, FileGuid, <<"xattrs">>) ->
+    get_xattrs(Node, FileGuid).
+
+
+-spec set_xattrs(node(), file_id:file_guid(), map()) -> ok.
+set_xattrs(Node, FileGuid, Xattrs) ->
+    lists:foreach(fun({Key, Val}) ->
+        ?assertMatch(ok, lfm_proxy:set_xattr(
+            Node, ?ROOT_SESS_ID, {guid, FileGuid}, #xattr{
+                name = Key,
+                value = Val
+            }
+        ), ?ATTEMPTS)
+    end, maps:to_list(Xattrs)).
+
+
+-spec get_xattrs(node(), file_id:file_guid()) -> {ok, map()}.
+get_xattrs(Node, FileGuid) ->
+    FileKey = {guid, FileGuid},
+
+    {ok, Keys} = ?assertMatch(
+        {ok, _}, lfm_proxy:list_xattr(Node, ?ROOT_SESS_ID, FileKey, false, true), ?ATTEMPTS
+    ),
+    {ok, lists:foldl(fun(Key, Acc) ->
+        % Check in case of race between listing xattrs and fetching xattr value
+        case lfm_proxy:get_xattr(Node, ?ROOT_SESS_ID, FileKey, Key) of
+            {ok, #xattr{name = Name, value = Value}} ->
+                Acc#{Name => Value};
+            {error, _} ->
+                Acc
+        end
+    end, #{}, Keys)}.
 
 
 -spec randomly_add_qos(node(), file_id:file_guid(), qos_expression:expression(), qos_entry:replicas_num()) ->

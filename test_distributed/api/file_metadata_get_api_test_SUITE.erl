@@ -93,8 +93,10 @@ get_shared_file_rdf_metadata_without_rdf_set_test(Config) ->
 
 %% @private
 get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
+    MetadataType = <<"rdf">>,
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P1Node, P2Node],
 
     SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
@@ -106,7 +108,7 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
 
     GetExpCallResultFun = case SetRdfPolicy of
         set_rdf ->
-            lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
+            api_test_utils:set_and_sync_metadata(Providers, FileGuid, MetadataType, ?RDF_METADATA_1),
             fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end;
         do_not_set_rdf ->
             fun(_TestCtx) -> ?ERROR_POSIX(?ENODATA) end
@@ -114,8 +116,8 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
 
     {ShareId, ClientSpec} = case TestMode of
         share_mode ->
-            {ok, ShId} = lfm_proxy:create_share(
-                P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>
+            ShId = api_test_utils:share_file_and_sync_file_attrs(
+                P1Node, SpaceOwnerSessIdP1, Providers, FileGuid
             ),
             {ShId, ?CLIENT_SPEC_FOR_SHARES};
         normal_mode ->
@@ -129,11 +131,10 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
     ),
 
     get_metadata_test_base(
-        <<"rdf">>,
-        FileType, FilePath, FileGuid, ShareId,
+        MetadataType, FileType, FilePath, FileGuid, ShareId,
         build_get_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_get_metadata_validate_gs_call_fun(GetExpCallResultFun),
-        [P1Node, P2Node], ClientSpec, DataSpec, _QsParams = [],
+        Providers, ClientSpec, DataSpec, _QsParams = [],
         _RandomlySelectScenario = false,
         Config
     ).
@@ -268,8 +269,10 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode, Config) ->
+    MetadataType = <<"json">>,
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Nodes = [P1Node, P2Node],
 
     SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
@@ -277,25 +280,22 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode, Config) ->
 
     TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath, 8#777),
-    lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, TopDirGuid}, json, ?JSON_METADATA_1, []),
+    api_test_utils:set_and_sync_metadata(Nodes, TopDirGuid, MetadataType, ?JSON_METADATA_1),
 
     DirLayer2Path = filename:join([TopDirPath, <<"dir_layer_2">>]),
     {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer2Path, 8#717),
-    lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, DirLayer2Guid}, json, ?JSON_METADATA_2, []),
+    api_test_utils:set_and_sync_metadata(Nodes, DirLayer2Guid, MetadataType, ?JSON_METADATA_2),
 
     DirLayer3Path = filename:join([DirLayer2Path, <<"dir_layer_3">>]),
     {ok, DirLayer3Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer3Path, 8#777),
-    lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, DirLayer3Guid}, json, ?JSON_METADATA_3, []),
+    api_test_utils:set_and_sync_metadata(Nodes, DirLayer3Guid, MetadataType, ?JSON_METADATA_3),
 
     DirLayer4Path = filename:join([DirLayer3Path, <<"dir_layer_4">>]),
     {ok, DirLayer4Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer4Path, 8#777),
-    lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, DirLayer4Guid}, json, ?JSON_METADATA_4, []),
+    api_test_utils:set_and_sync_metadata(Nodes, DirLayer4Guid, MetadataType, ?JSON_METADATA_4),
     ShareId = case TestMode of
         share_mode ->
-            {ok, Id} = lfm_proxy:create_share(
-                P1Node, SpaceOwnerSessIdP1, {guid, DirLayer4Guid}, <<"share">>
-            ),
-            Id;
+            api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessIdP1, Nodes, DirLayer4Guid);
         normal_mode ->
             undefined
     end,
@@ -304,9 +304,7 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode, Config) ->
     {ok, FileLayer5Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FileLayer5Path),
     case SetJsonPolicy of
         set_direct_json ->
-            lfm_proxy:set_metadata(
-                P1Node, UserSessIdP1, {guid, FileLayer5Guid}, json, ?JSON_METADATA_5, []
-            );
+            api_test_utils:set_and_sync_metadata(Nodes, FileLayer5Guid, MetadataType, ?JSON_METADATA_5);
         do_not_set_direct_json ->
             ok
     end,
@@ -524,8 +522,10 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode, Config) ->
+    MetadataType = <<"xattrs">>,
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Nodes = [P1Node, P2Node],
 
     SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
@@ -533,16 +533,13 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode, Config) ->
 
     TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath, 8#777),
-    set_all_metadata_types(P1Node, UserSessIdP1, TopDirGuid, set_1),
+    api_test_utils:set_and_sync_metadata(Nodes, TopDirGuid, MetadataType, ?ALL_METADATA_SET_1),
 
     DirLayer2Path = filename:join([TopDirPath, <<"dir_layer_2">>]),
     {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer2Path, 8#717),
     ShareId = case TestMode of
         share_mode ->
-            {ok, Id} = lfm_proxy:create_share(
-                P1Node, SpaceOwnerSessIdP1, {guid, DirLayer2Guid}, <<"share">>
-            ),
-            Id;
+            api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessIdP1, Nodes, DirLayer2Guid);
         normal_mode ->
             undefined
     end,
@@ -553,7 +550,7 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode, Config) ->
     ),
     case SetXattrsPolicy of
         set_direct_xattr ->
-            set_all_metadata_types(P1Node, UserSessIdP1, FileLayer3Guid, set_2);
+            api_test_utils:set_and_sync_metadata(Nodes, FileLayer3Guid, MetadataType, ?ALL_METADATA_SET_2);
         do_not_set_direct_xattr ->
             ok
     end,
@@ -792,7 +789,7 @@ build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
 
 %% @private
 -spec get_metadata_test_base(
-    MetadataType :: binary(),  %% <<"json">> | <<"rdf">> | <<"xattrs">>
+    api_test_utils:metadata_type(),
     api_test_utils:file_type(),
     file_meta:path(),
     file_id:file_guid(),
@@ -1002,31 +999,3 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
-set_all_metadata_types(Node, SessionId, Guid, set_1) ->
-    ?assertMatch(ok, lfm_proxy:set_metadata(Node, SessionId, {guid, Guid}, json, ?JSON_METADATA_4, [])),
-    ?assertMatch(ok, lfm_proxy:set_metadata(Node, SessionId, {guid, Guid}, rdf, ?RDF_METADATA_1, [])),
-    ?assertMatch(ok, lfm_proxy:set_mimetype(Node, SessionId, {guid, Guid}, ?MIMETYPE_1)),
-    ?assertMatch(ok, lfm_proxy:set_transfer_encoding(Node, SessionId, {guid, Guid}, ?TRANSFER_ENCODING_1)),
-    ?assertMatch(ok, lfm_proxy:set_cdmi_completion_status(
-        Node, SessionId, {guid, Guid}, ?CDMI_COMPLETION_STATUS_1
-    )),
-    ?assertMatch(ok, lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR_1)),
-    ?assertMatch(ok, lfm_proxy:set_acl(Node, SessionId, {guid, Guid}, acl:from_json(?ACL_1, cdmi)));
-set_all_metadata_types(Node, SessionId, Guid, set_2) ->
-    ?assertMatch(ok, lfm_proxy:set_metadata(Node, SessionId, {guid, Guid}, json, ?JSON_METADATA_5, [])),
-    ?assertMatch(ok, lfm_proxy:set_metadata(Node, SessionId, {guid, Guid}, rdf, ?RDF_METADATA_2, [])),
-    ?assertMatch(ok, lfm_proxy:set_mimetype(Node, SessionId, {guid, Guid}, ?MIMETYPE_2)),
-    ?assertMatch(ok, lfm_proxy:set_transfer_encoding(Node, SessionId, {guid, Guid}, ?TRANSFER_ENCODING_2)),
-    ?assertMatch(ok, lfm_proxy:set_cdmi_completion_status(
-        Node, SessionId, {guid, Guid}, ?CDMI_COMPLETION_STATUS_2
-    )),
-    ?assertMatch(ok, lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR_2)),
-    ?assertMatch(ok, lfm_proxy:set_acl(Node, SessionId, {guid, Guid}, acl:from_json(?ACL_2, cdmi))).

@@ -48,7 +48,6 @@ all() -> [
 ].
 
 
--type metadata_type() :: binary().  % <<"rdf">> | <<"json">> | <<"xattrs">>.
 -type test_setup_variant() :: preset_initial_metadata | no_initial_metadata.
 
 
@@ -126,7 +125,7 @@ delete_file_xattrs(Config) ->
 
 %% @private
 -spec delete_metadata_test_base(
-    metadata_type(),
+    api_test_utils:metadata_type(),
     Metadata :: term(),
     test_setup_variant(),
     onenv_api_test_runner:data_spec(),
@@ -188,36 +187,16 @@ delete_metadata_test_base(
 
 
 %% @private
--spec build_setup_fun(test_setup_variant(), file_id:file_guid(), metadata_type(),
+-spec build_setup_fun(test_setup_variant(), file_id:file_guid(), api_test_utils:metadata_type(),
     Metadata :: term(), [node()]) -> onenv_api_test_runner:verify_fun().
-build_setup_fun(preset_initial_metadata, FileGuid, <<"xattrs">>, FullXattrSet, Nodes) ->
-    fun() ->
-        % Check to prevent race condition in tests (see onenv_api_test_runner
-        % COMMON PITFALLS 1).
-        RandNode = lists_utils:random_element(Nodes),
-        case {ok, FullXattrSet} == get_xattrs(RandNode, FileGuid) of
-            true ->
-                ok;
-            false ->
-                set_xattrs(lists_utils:random_element(Nodes), FileGuid, FullXattrSet),
-                lists:foreach(fun(Node) ->
-                    ?assertEqual({ok, FullXattrSet}, get_xattrs(Node, FileGuid), ?ATTEMPTS)
-                end, Nodes)
-        end
-    end;
 build_setup_fun(preset_initial_metadata, FileGuid, MetadataType, Metadata, Nodes) ->
     fun() ->
         % Check to prevent race condition in tests (see onenv_api_test_runner
         % COMMON PITFALLS 1).
         RandNode = lists_utils:random_element(Nodes),
-        case {ok, Metadata} == get_metadata(RandNode, FileGuid, MetadataType) of
-            true ->
-                ok;
-            false ->
-                set_metadata(RandNode, FileGuid, MetadataType, Metadata),
-                lists:foreach(fun(Node) ->
-                    ?assertMatch({ok, Metadata}, get_metadata(Node, FileGuid, MetadataType), ?ATTEMPTS)
-                end, Nodes)
+        case {ok, Metadata} == api_test_utils:get_metadata(RandNode, FileGuid, MetadataType) of
+            true -> ok;
+            false -> api_test_utils:set_and_sync_metadata(Nodes, FileGuid, MetadataType, Metadata)
         end
     end;
 build_setup_fun(no_initial_metadata, _, _, _, _) ->
@@ -225,88 +204,50 @@ build_setup_fun(no_initial_metadata, _, _, _, _) ->
 
 
 %% @private
--spec build_verify_fun(test_setup_variant(), file_id:file_guid(), metadata_type(),
+-spec build_verify_fun(test_setup_variant(), file_id:file_guid(), api_test_utils:metadata_type(),
     Metadata :: term(), [node()]) -> onenv_api_test_runner:verify_fun().
 build_verify_fun(preset_initial_metadata, FileGuid, <<"xattrs">>, FullXattrSet, Nodes) ->
     fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch({ok, FullXattrSet}, get_xattrs(TestNode, FileGuid), ?ATTEMPTS),
+            ?assertMatch({ok, FullXattrSet}, api_test_utils:get_xattrs(TestNode, FileGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{data = #{<<"keys">> := Keys}}) ->
             ExpXattrs = maps:without(Keys, FullXattrSet),
             lists:foreach(fun(Node) ->
-                ?assertEqual({ok, ExpXattrs}, get_xattrs(Node, FileGuid), ?ATTEMPTS)
+                ?assertEqual({ok, ExpXattrs}, api_test_utils:get_xattrs(Node, FileGuid), ?ATTEMPTS)
             end, Nodes),
             true
     end;
 build_verify_fun(preset_initial_metadata, FileGuid, MetadataType, ExpMetadata, Nodes) ->
     fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch({ok, ExpMetadata}, get_metadata(TestNode, FileGuid, MetadataType), ?ATTEMPTS),
+            ?assertMatch(
+                {ok, ExpMetadata},
+                api_test_utils:get_metadata(TestNode, FileGuid, MetadataType),
+                ?ATTEMPTS
+            ),
             true;
         (expected_success, _) ->
             lists:foreach(fun(Node) ->
-                ?assertMatch({error, ?ENODATA}, get_metadata(Node, FileGuid, MetadataType), ?ATTEMPTS)
+                ?assertMatch(
+                    {error, ?ENODATA},
+                    api_test_utils:get_metadata(Node, FileGuid, MetadataType),
+                    ?ATTEMPTS
+                )
             end, Nodes),
             true
     end;
 build_verify_fun(no_initial_metadata, FileGuid, MetadataType, _ExpMetadata, Nodes) ->
     fun(_, _) ->
         lists:foreach(fun(Node) ->
-            ?assertMatch({error, ?ENODATA}, get_metadata(Node, FileGuid, MetadataType), ?ATTEMPTS)
+            ?assertMatch(
+                {error, ?ENODATA},
+                api_test_utils:get_metadata(Node, FileGuid, MetadataType),
+                ?ATTEMPTS
+            )
         end, Nodes),
         true
     end.
-
-
-%% @private
--spec set_metadata(node(), file_id:file_guid(), metadata_type(), term()) -> ok.
-set_metadata(Node, FileGuid, <<"rdf">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, Metadata, []);
-set_metadata(Node, FileGuid, <<"json">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, Metadata, []);
-set_metadata(Node, FileGuid, <<"xattrs">>, Metadata) ->
-    set_xattrs(Node, FileGuid, Metadata).
-
-
-%% @private
--spec get_metadata(node(), file_id:file_guid(), metadata_type()) -> {ok, term()}.
-get_metadata(Node, FileGuid, <<"rdf">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, [], false);
-get_metadata(Node, FileGuid, <<"json">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, [], false);
-get_metadata(Node, FileGuid, <<"xattrs">>) ->
-    get_xattrs(Node, FileGuid).
-
-
-%% @private
--spec set_xattrs(node(), file_id:file_guid(), map()) -> ok.
-set_xattrs(Node, FileGuid, Xattrs) ->
-    lists:foreach(fun({Key, Val}) ->
-        lfm_proxy:set_xattr(
-            Node, ?ROOT_SESS_ID, {guid, FileGuid}, #xattr{
-                name = Key,
-                value = Val
-            }
-        )
-    end, maps:to_list(Xattrs)).
-
-
-%% @private
--spec get_xattrs(node(), file_id:file_guid()) -> {ok, map()}.
-get_xattrs(Node, FileGuid) ->
-    FileKey = {guid, FileGuid},
-    {ok, Keys} = lfm_proxy:list_xattr(Node, ?ROOT_SESS_ID, FileKey, true, true),
-
-    {ok, lists:foldl(fun(Key, Acc) ->
-        % Check in case of race between listing xattrs and fetching xattr value
-        case lfm_proxy:get_xattr(Node, ?ROOT_SESS_ID, FileKey, Key) of
-            {ok, #xattr{name = Name, value = Value}} ->
-                Acc#{Name => Value};
-            {error, _} ->
-                Acc
-        end
-    end, #{}, Keys)}.
 
 
 %% @private
