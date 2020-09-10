@@ -337,7 +337,7 @@ get_info(SpaceId) ->
 -spec get_stats(key() | record(), [plot_counter_type()], window()) -> {ok, import_stats()}.
 get_stats(SIM = #storage_import_monitoring{}, Types, Window) ->
     {ok, lists:foldl(fun(Type, AccIn) ->
-        AccIn#{Type => return_histogram_and_timestamp(SIM, Types, Window)}
+        AccIn#{Type => return_histogram_and_timestamp(SIM, Type, Window)}
     end, #{}, Types)};
 get_stats(SpaceId, Types, Window) ->
     case storage_import_monitoring:get(SpaceId) of

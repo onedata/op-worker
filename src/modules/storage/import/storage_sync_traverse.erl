@@ -118,7 +118,7 @@ run_scan(SpaceId, ScanConfig) ->
             Error
     end.
 
--spec cancel(od_space:id()) -> ok.
+-spec cancel(od_space:id()) -> ok | {error, term()}.
 cancel(SpaceId) ->
     {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
     case storage_import_monitoring:get(SpaceId) of
@@ -129,12 +129,12 @@ cancel(SpaceId) ->
                     {ok, ScansNum} = storage_import_monitoring:get_finished_scans_num(SSMDoc),
                     traverse:cancel(?POOL_BIN, encode_task_id(SpaceId, StorageId, ScansNum + 1));
                 false ->
-                    ok
+                    {error, not_found}
             end;
         {error, not_found} ->
             ?debug("Cannot cancel auto storage import scan for space ~p and storage ~p as it is not configured",
                 [SpaceId, StorageId]),
-            ok
+            {error, not_found}
     end.
     
 
