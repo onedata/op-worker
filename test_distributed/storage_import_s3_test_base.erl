@@ -453,7 +453,6 @@ changing_max_depth_test(Config) ->
         <<"deletedSum">> => 0,
         <<"importedHourHist">> => 2,
         <<"importedDayHist">> => 2,
-        <<"updatedMinHist">> => 1,
         <<"updatedHourHist">> => 2,
         <<"updatedDayHist">> => 2,
         <<"deletedMinHist">> => 0,

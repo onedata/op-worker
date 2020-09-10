@@ -2787,6 +2787,7 @@ create_file_manual_scan_test(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
 
+    timer:sleep(timer:seconds(1)),
     % create file on storage
     FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
     ok = sd_test_utils:create_file(W1, FileInDirSDHandle, 8#664),

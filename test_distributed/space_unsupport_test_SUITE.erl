@@ -13,6 +13,7 @@
 -author("Michal Stanisz").
 
 -include("global_definitions.hrl").
+-include("modules/storage/import/storage_import.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -269,7 +270,8 @@ delete_local_documents_stage_test(Config) ->
     ?assertMatch({ok, _}, rpc:call(Worker, file_popularity_config, get, [?SPACE_ID])),
     ?assertMatch(true, rpc:call(Worker, file_popularity_api, is_enabled, [?SPACE_ID])),
     % wait for storage sync to finish
-    ?assertEqual(finished, rpc:call(Worker, storage_sync_monitoring, get_import_status, [?SPACE_ID, StorageId]), 30),
+    ?assertMatch({ok, #{status := ?COMPLETED}},
+        rpc:call(Worker, storage_import_monitoring, get_info, [?SPACE_ID]), 30),
     
     StageJob = #space_unsupport_job{
         stage = delete_local_documents,

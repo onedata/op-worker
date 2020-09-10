@@ -282,6 +282,7 @@ init_per_testcase(resupport_cleanup_test, Config) ->
         test_utils:mock_expect(Node, space_logic, get_local_storage_id, fun(_) -> {ok, StorageId} end)
     end, Nodes),
     test_utils:mock_expect(Nodes, storage_logic, support_space, fun(_, _, _) ->  {ok, <<"space1">>} end),
+    test_utils:mock_expect(Nodes, storage_logic, is_imported, fun(_) ->  {ok, true} end),
     Config1;
 init_per_testcase(_, Config) ->
     logic_tests_common:init_per_testcase(Config).

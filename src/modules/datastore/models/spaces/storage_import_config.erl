@@ -158,7 +158,7 @@ default_auto_import_record(ScanConfigMap) ->
 %% `storage_import_config` in version 1.
 %% @end
 %%--------------------------------------------------------------------
--spec migrate_to_v1(space_strategies:record()) -> undefined | tuple().
+-spec migrate_to_v1(space_strategies:record()) -> undefined | record().
 migrate_to_v1(#space_strategies{sync_configs = SyncConfigs}) ->
     % multi-support hasn't been implemented so the map SyncConfigs
     % has just one key
