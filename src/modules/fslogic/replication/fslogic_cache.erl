@@ -131,7 +131,7 @@ flush(Type) ->
             ok ->
                 [Key | Acc];
             FlushError ->
-                ?warning("Fslogic cache flush error: ~p for key", [FlushError, Key]),
+                ?warning("Fslogic cache flush error: ~p for key ~p", [FlushError, Key]),
                 Acc
         end
     end, [], KeysToFlush),

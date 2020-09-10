@@ -98,16 +98,23 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
 translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private}, Result) ->
     Storages = maps:get(<<"storages">>, Result),
 
-    StoragesByProvider = lists:foldl(fun(StorageId, Acc) ->
-        {ok, ProviderId} = storage_logic:get_provider(StorageId, SpaceId),
-        AccessType = case storage:is_storage_readonly(StorageId, SpaceId) of
-            true -> ?READONLY_STORAGE;
-            false -> ?READWRITE_STORAGE
-        end,
-        maps:update_with(ProviderId, fun(ProviderStorages) ->
-            ProviderStorages#{StorageId => AccessType}
-        end, #{StorageId => AccessType}, Acc)
-    end, #{}, maps:keys(Storages)),
+    % the space might be fetched with user's session, in such case it is not
+    % guaranteed that the provider supports the space and can fetch storages
+    StoragesByProvider = case provider_logic:supports_space(SpaceId) of
+        false ->
+            #{};
+        true ->
+            lists:foldl(fun(StorageId, Acc) ->
+                {ok, ProviderId} = storage_logic:get_provider(StorageId, SpaceId),
+                AccessType = case storage:is_storage_readonly(StorageId, SpaceId) of
+                    true -> ?READONLY_STORAGE;
+                    false -> ?READWRITE_STORAGE
+                end,
+                maps:update_with(ProviderId, fun(ProviderStorages) ->
+                    ProviderStorages#{StorageId => AccessType}
+                end, #{StorageId => AccessType}, Acc)
+            end, #{}, maps:keys(Storages))
+    end,
 
     #document{
         key = SpaceId,
@@ -282,7 +289,7 @@ translate(#gri{type = temporary_token_secret, id = Id, aspect = user, scope = sh
     };
 
 translate(GRI, Result) ->
-    ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p~n", [
+    ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p", [
         GRI, Result
     ]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).

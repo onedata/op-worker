@@ -599,7 +599,7 @@ end_per_testcase(Case, Config) when
     Case =:= external_multiple_traverse_test ; Case =:= mixed_multiple_traverse_test ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
-        ?assertEqual(ok, rpc:call(Worker, traverse, stop_pool, [atom_to_binary(?MODULE, utf8)]))
+        ?assertEqual(ok, rpc:call(Worker, tree_traverse, stop, [?MODULE]))
     end, Workers),
     lfm_proxy:teardown(Config);
 end_per_testcase(rtransfer_blocking_test, Config) ->

@@ -49,13 +49,13 @@ create_file(Node, SessId, DirPath) ->
     FileGuid.
 
 
-build_env_with_started_transfer_setup_fun(TransferType, EnvRef, DataSourceType, P1, P2, UserId, Config) ->
+build_env_with_started_transfer_setup_fun(TransferType, MemRef, DataSourceType, P1, P2, UserId, Config) ->
     SetupEnvFun = build_create_transfer_setup_fun(
-        TransferType, EnvRef, DataSourceType, P1, P2, UserId, Config
+        TransferType, MemRef, DataSourceType, P1, P2, UserId, Config
     ),
     fun() ->
         SetupEnvFun(),
-        TransferDetails = api_test_env:get(EnvRef, transfer_details),
+        TransferDetails = api_test_memory:get(MemRef, transfer_details),
 
         CreationTime = time_utils:system_time_millis() div 1000,
         QueryViewParams = #{<<"descending">> => true},
@@ -65,7 +65,7 @@ build_env_with_started_transfer_setup_fun(TransferType, EnvRef, DataSourceType, 
             TransferType, DataSourceType, P1, P2, UserId,
             QueryViewParams, Callback, TransferDetails, Config
         ),
-        api_test_env:set(EnvRef, transfer_details, TransferDetails#{
+        api_test_memory:set(MemRef, transfer_details, TransferDetails#{
             transfer_id => TransferId,
             user_id => UserId,
             creation_time => CreationTime,
@@ -83,7 +83,7 @@ build_env_with_started_transfer_setup_fun(TransferType, EnvRef, DataSourceType, 
 %% FileGuid to transfer and expected transfer stats are saved in env.
 %% @end
 %%--------------------------------------------------------------------
-build_create_file_transfer_setup_fun(TransferType, EnvRef, SrcNode, DstNode, UserId, Config) ->
+build_create_file_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, UserId, Config) ->
     fun() ->
         SessId1 = ?SESS_ID(UserId, SrcNode, Config),
 
@@ -111,7 +111,7 @@ build_create_file_transfer_setup_fun(TransferType, EnvRef, SrcNode, DstNode, Use
             TransferType, RootFileType, SrcNode, DstNode, length(FilesToTransfer)
         ),
 
-        api_test_env:set(EnvRef, transfer_details, #{
+        api_test_memory:set(MemRef, transfer_details, #{
             src_node => SrcNode,
             dst_node => DstNode,
             root_file_guid => RootFileGuid,
@@ -129,7 +129,7 @@ build_create_file_transfer_setup_fun(TransferType, EnvRef, SrcNode, DstNode, Use
     end.
 
 
-build_create_view_transfer_setup_fun(TransferType, EnvRef, SrcNode, DstNode, UserId, Config) ->
+build_create_view_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, UserId, Config) ->
     fun() ->
         SessId1 = ?SESS_ID(UserId, SrcNode, Config),
 
@@ -174,7 +174,7 @@ build_create_view_transfer_setup_fun(TransferType, EnvRef, SrcNode, DstNode, Use
             TransferType, <<"dir">>, SrcNode, DstNode, FilesToTransferNum
         ),
 
-        api_test_env:set(EnvRef, transfer_details, #{
+        api_test_memory:set(MemRef, transfer_details, #{
             src_node => SrcNode,
             dst_node => DstNode,
             view_name => ViewName,
@@ -226,12 +226,12 @@ rerun_transfer(Node, TransferId) ->
     RerunId.
 
 
-build_create_transfer_verify_fun(replication, EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
-    build_crate_replication_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config);
-build_create_transfer_verify_fun(eviction, EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
-    build_crate_eviction_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config);
-build_create_transfer_verify_fun(migration, EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
-    build_crate_migration_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config).
+build_create_transfer_verify_fun(replication, MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
+    build_crate_replication_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config);
+build_create_transfer_verify_fun(eviction, MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
+    build_crate_eviction_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config);
+build_create_transfer_verify_fun(migration, MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
+    build_crate_migration_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config).
 
 
 %%%===================================================================
@@ -371,7 +371,7 @@ get_exp_transfer_stats(migration, <<"dir">>, SrcNode, DstNode, FilesToTransferNu
 
 
 %% @private
-build_crate_replication_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
+build_crate_replication_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
     SessId = ?SESS_ID(UserId, Node, Config),
 
     fun
@@ -379,7 +379,7 @@ build_crate_replication_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvide
             #{
                 files_to_transfer := FilesToTransfer,
                 other_files := OtherFiles
-            } = api_test_env:get(EnvRef, transfer_details),
+            } = api_test_memory:get(MemRef, transfer_details),
 
             assert_distribution(
                 Node, SessId, _AllFiles = OtherFiles ++ FilesToTransfer,
@@ -390,7 +390,7 @@ build_crate_replication_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvide
             #{
                 files_to_transfer := FilesToTransfer,
                 other_files := OtherFiles
-            } = api_test_env:get(EnvRef, transfer_details),
+            } = api_test_memory:get(MemRef, transfer_details),
 
             assert_distribution(
                 Node, SessId, OtherFiles,
@@ -405,7 +405,7 @@ build_crate_replication_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvide
 
 
 %% @private
-build_crate_eviction_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
+build_crate_eviction_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
     SessId = ?SESS_ID(UserId, Node, Config),
 
     fun
@@ -413,7 +413,7 @@ build_crate_eviction_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, 
             #{
                 files_to_transfer := FilesToTransfer,
                 other_files := OtherFiles
-            } = api_test_env:get(EnvRef, transfer_details),
+            } = api_test_memory:get(MemRef, transfer_details),
 
             assert_distribution(
                 Node, SessId, _AllFiles = OtherFiles ++ FilesToTransfer,
@@ -424,7 +424,7 @@ build_crate_eviction_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, 
             #{
                 files_to_transfer := FilesToTransfer,
                 other_files := OtherFiles
-            } = api_test_env:get(EnvRef, transfer_details),
+            } = api_test_memory:get(MemRef, transfer_details),
 
             assert_distribution(
                 Node, SessId, OtherFiles,
@@ -439,7 +439,7 @@ build_crate_eviction_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, 
 
 
 %% @private
-build_crate_migration_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
+build_crate_migration_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
     SessId = ?SESS_ID(UserId, Node, Config),
 
     fun
@@ -447,7 +447,7 @@ build_crate_migration_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider,
             #{
                 files_to_transfer := FilesToTransfer,
                 other_files := OtherFiles
-            } = api_test_env:get(EnvRef, transfer_details),
+            } = api_test_memory:get(MemRef, transfer_details),
 
             assert_distribution(
                 Node, SessId, _AllFiles = FilesToTransfer ++ OtherFiles,
@@ -458,7 +458,7 @@ build_crate_migration_verify_fun(EnvRef, Node, UserId, SrcProvider, DstProvider,
             #{
                 files_to_transfer := FilesToTransfer,
                 other_files := OtherFiles
-            } = api_test_env:get(EnvRef, transfer_details),
+            } = api_test_memory:get(MemRef, transfer_details),
 
             assert_distribution(
                 Node, SessId, OtherFiles,
@@ -496,13 +496,13 @@ assert_distribution(Node, SessId, Files, ExpSizePerProvider) ->
 
 
 %% @private
-build_create_transfer_setup_fun(TransferType, EnvRef, file, P1, P2, UserId, Config) ->
+build_create_transfer_setup_fun(TransferType, MemRef, file, P1, P2, UserId, Config) ->
     build_create_file_transfer_setup_fun(
-        TransferType, EnvRef, P1, P2, UserId, Config
+        TransferType, MemRef, P1, P2, UserId, Config
     );
-build_create_transfer_setup_fun(TransferType, EnvRef, view, P1, P2, UserId, Config) ->
+build_create_transfer_setup_fun(TransferType, MemRef, view, P1, P2, UserId, Config) ->
     build_create_view_transfer_setup_fun(
-        TransferType, EnvRef, P1, P2, UserId, Config
+        TransferType, MemRef, P1, P2, UserId, Config
     ).
 
 

@@ -236,7 +236,7 @@ upgrade_from_20_02_1_space_strategies(Config) ->
     ?assertEqual({error, not_found}, get_doc(Worker, SpaceStrategiesCtx, SpaceId1)),
     ?assertEqual({error, not_found}, get_doc(Worker, SpaceStrategiesCtx, SpaceId2)),
     ?assertEqual({error, not_found}, get_doc(Worker, SpaceStrategiesCtx, SpaceId3)),
-    
+
     % storage_import_config docs should be created for spaces in which auto import is enabled
     ?assertEqual({error, not_found}, get_storage_import_scan_config(Worker, SpaceId1)),
     ?assertEqual({ok, ExpectedConfig2}, get_storage_import_scan_config(Worker, SpaceId2)),
@@ -467,7 +467,7 @@ init_per_testcase(upgrade_from_20_02_1_space_strategies, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
-    test_utils:mock_expect(Worker, storage_logic, is_imported, fun(StorageId) -> 
+    test_utils:mock_expect(Worker, storage_logic, is_imported, fun(StorageId) ->
         {ok, lists:member(StorageId, [<<"storage2">>, <<"storage3">>, <<"storage4">>])}
     end),
 
@@ -475,13 +475,13 @@ init_per_testcase(upgrade_from_20_02_1_space_strategies, Config) ->
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, oneprovider),
-    test_utils:mock_expect(Worker, oneprovider, is_connected_to_oz, fun() -> true end),
+    test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
+    test_utils:mock_expect(Worker, gs_channel_service, is_connected, fun() -> true end),
     Config.
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker, [storage_logic, oneprovider]),
+    test_utils:mock_unload(Worker, [storage_logic, gs_channel_service]),
     ok.
 
 

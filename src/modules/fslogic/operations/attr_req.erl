@@ -17,6 +17,7 @@
 -include("modules/fslogic/metadata.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([
@@ -346,7 +347,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
     {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
 
     {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx5} = case ShareId of
-        undefined -> get_private_attrs(FileCtx4, FileDoc);
+        undefined -> get_private_attrs(UserCtx, FileCtx4, FileDoc);
         _ -> get_masked_private_attrs(ShareId, FileCtx4, FileDoc)
     end,
     {Size, FileCtx6} = case maps:get(include_size, Opts, true) of
@@ -378,9 +379,9 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
 
 
 %% @private
--spec get_private_attrs(file_ctx:ctx(), file_meta:doc()) ->
+-spec get_private_attrs(user_ctx:ctx(), file_ctx:ctx(), file_meta:doc()) ->
     file_private_attrs_and_ctx().
-get_private_attrs(FileCtx0, #document{
+get_private_attrs(UserCtx, FileCtx0, #document{
     value = #file_meta{
         mode = Mode,
         provider_id = ProviderId,
@@ -388,8 +389,19 @@ get_private_attrs(FileCtx0, #document{
         shares = Shares
     }
 }) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx0),
+    VisibleShares = case user_ctx:is_root(UserCtx) of
+        true ->
+            Shares;
+        false ->
+            UserId = user_ctx:get_user_id(UserCtx),
+            case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW) of
+                true -> Shares;
+                false -> []
+            end
+    end,
     {{Uid, Gid}, FileCtx1} = file_ctx:get_display_credentials(FileCtx0),
-    {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx1}.
+    {Mode, Uid, Gid, OwnerId, ProviderId, VisibleShares, FileCtx1}.
 
 
 %%--------------------------------------------------------------------

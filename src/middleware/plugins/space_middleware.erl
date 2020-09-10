@@ -132,6 +132,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {query_view, _}}}) -> #{
         <<"end_range">> => {binary, any},
         <<"startkey">> => {binary, any},
         <<"endkey">> => {binary, any},
+        <<"startkey_docid">> => {binary, any},
+        <<"endkey_docid">> => {binary, any},
         <<"key">> => {binary, any},
         <<"keys">> => {binary, any},
         <<"bbox">> => {binary, any}
@@ -246,8 +248,11 @@ authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     id = SpaceId,
-    aspect = instance
-}}, _) ->
+    aspect = As
+}}, _) when
+    As =:= instance;
+    As =:= providers
+->
     middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
@@ -274,8 +279,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 }}, _) when
     As =:= eff_users;
     As =:= eff_groups;
-    As =:= shares;
-    As =:= providers
+    As =:= shares
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
 
@@ -440,12 +444,15 @@ get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
         {ok, EffSpaces} ->
             {ok ,lists:map(fun(SpaceId) ->
                 {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
-                #{<<"spaceId">> => SpaceId, <<"name">> => SpaceName}
+                #{
+                    <<"spaceId">> => SpaceId,
+                    <<"fileId">> => fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                    <<"name">> => SpaceName
+                }
             end, EffSpaces)};
         {error, _} = Error ->
             Error
     end;
-
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     case space_logic:get(Auth#auth.session_id, SpaceId) of
         {ok, #document{value = Space}} ->

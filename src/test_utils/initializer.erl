@@ -35,12 +35,12 @@
     setup_session/3, teardown_session/2,
     setup_storage/1, setup_storage/2, teardown_storage/1,
     clean_test_users_and_spaces/1,
-    remove_pending_messages/0, create_test_users_and_spaces/2,
+    remove_pending_messages/0, create_test_users_and_spaces/2, create_test_users_and_spaces/3,
     remove_pending_messages/1, clear_subscriptions/1,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1
 ]).
--export([mock_auth_manager/1, mock_auth_manager/2, unmock_auth_manager/1]).
+-export([mock_auth_manager/1, mock_auth_manager/2, mock_auth_manager/3, unmock_auth_manager/1]).
 -export([mock_provider_ids/1, mock_provider_id/4, unmock_provider_ids/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
@@ -48,6 +48,7 @@
 -export([put_into_cache/1]).
 -export([get_storage_id/1, get_supporting_storage_id/2, setup_luma_local_feed/3]).
 -export([local_ip_v4/0]).
+-export([normalize_storage_name/1]).
 
 
 -record(user_config, {
@@ -147,13 +148,22 @@ set_default_onezone_domain(Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Setup and mocking related with users and spaces, done on each provider
+%% @equiv create_test_users_and_spaces(ConfigPath, Config, false)
 %% @end
 %%--------------------------------------------------------------------
 -spec create_test_users_and_spaces(ConfigPath :: string(), JsonConfig :: list()) -> list().
 create_test_users_and_spaces(ConfigPath, Config) ->
+    create_test_users_and_spaces(ConfigPath, Config, false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Setup and mocking related with users and spaces, done on each provider
+%% @end
+%%--------------------------------------------------------------------
+-spec create_test_users_and_spaces(ConfigPath :: string(), JsonConfig :: list(), boolean()) -> list().
+create_test_users_and_spaces(ConfigPath, Config, NoHistory) ->
     Workers = ?config(op_worker_nodes, Config),
-    create_test_users_and_spaces(Workers, ConfigPath, Config).
+    create_test_users_and_spaces(Workers, ConfigPath, Config, NoHistory).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -341,7 +351,7 @@ teardown_session(Worker, Config) ->
             case rpc:call(Worker, session, get_credentials, [SessId]) of
                 {ok, Credentials} ->
                     rpc:call(Worker, auth_cache, delete_cache_entry, [Credentials]),
-                    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId]));
+                    ?assertEqual(ok, rpc:call(Worker, session_manager, terminate_session, [SessId]));
                 {error, not_found} ->
                     ok
             end,
@@ -498,7 +508,7 @@ unmock_test_file_context(Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Mocks auth_manager functions for all providers in given environment.
+%% @equiv mock_auth_manager(Config, false)
 %% @end
 %%--------------------------------------------------------------------
 -spec mock_auth_manager(proplists:proplist()) -> ok.
@@ -507,13 +517,27 @@ mock_auth_manager(Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Mocks auth_manager functions for all providers in given environment.
+%% @equiv mock_auth_manager(Config, CheckIfUserIsSupported, false)
 %% @end
 %%--------------------------------------------------------------------
 -spec mock_auth_manager(proplists:proplist(), CheckIfUserIsSupported :: boolean()) -> ok.
 mock_auth_manager(Config, CheckIfUserIsSupported) ->
+    mock_auth_manager(Config, CheckIfUserIsSupported, false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks auth_manager functions for all providers in given environment.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_auth_manager(proplists:proplist(), CheckIfUserIsSupported :: boolean(), NoHistory :: boolean()) -> ok.
+mock_auth_manager(Config, CheckIfUserIsSupported, NoHistory) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, auth_manager, [passthrough]),
+    case NoHistory of
+        true ->
+            test_utils:mock_new(Workers, auth_manager);
+        false ->
+            test_utils:mock_new(Workers, auth_manager, [passthrough])
+    end,
     test_utils:mock_expect(Workers, auth_manager, verify_credentials,
         fun(TokenCredentials) ->
             case tokens:deserialize(auth_manager:get_access_token(TokenCredentials)) of
@@ -701,6 +725,11 @@ get_supporting_storage_id(Worker, SpaceId) ->
     {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
 
+
+-spec normalize_storage_name(binary()) -> binary().
+normalize_storage_name(Suggestion) -> 
+    re:replace(Suggestion, <<"[^\\w_]">>, <<"">>, [{return, binary}, global]).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -711,11 +740,12 @@ get_supporting_storage_id(Worker, SpaceId) ->
 %% Setup and mocking related with users and spaces on all given providers.
 %% @end
 %%--------------------------------------------------------------------
--spec create_test_users_and_spaces([Worker :: node()], ConfigPath :: string(), Config :: list()) -> list().
-create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
+-spec create_test_users_and_spaces([Worker :: node()], ConfigPath :: string(),
+    Config :: list(), boolean()) -> list().
+create_test_users_and_spaces(AllWorkers, ConfigPath, Config, NoHistory) ->
     try
         set_default_onezone_domain(Config),
-        create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config)
+        create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory)
     catch Type:Message ->
         ct:print("initializer:create_test_users_and_spaces crashed: ~p:~p~n~p", [
             Type, Message, erlang:get_stacktrace()
@@ -724,8 +754,9 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     end.
 
 
--spec create_test_users_and_spaces_unsafe([Worker :: node()], ConfigPath :: string(), Config :: list()) -> list().
-create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
+-spec create_test_users_and_spaces_unsafe([Worker :: node()], ConfigPath :: string(),
+    Config :: list(), boolean()) -> list().
+create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) ->
     timer:sleep(2000), % Sometimes the posthook starts too fast
 
     {ok, ConfigJSONBin} = file:read_file(ConfigPath),
@@ -765,13 +796,14 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
 
     StoragesSetupMap = lists:foldl(fun({P, Storages}, Acc) ->
         StoragesMap = json_utils:list_to_map(Storages),
-        StoragesMap2 = maps:map(fun(_StorageId, Desc) ->
-            case Desc =:= [] of
+        StoragesMapNormalized = maps:fold(fun(StorageId, Desc, Acc) -> 
+            NewDesc = case Desc =:= [] of
                 true -> #{};
                 false -> Desc
-            end
-        end, StoragesMap),
-        Acc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => StoragesMap2}
+            end,
+            Acc#{normalize_storage_name(StorageId) => NewDesc} 
+        end, #{}, StoragesMap),
+        Acc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => StoragesMapNormalized}
     end, #{}, StoragesSetup),
 
     MasterWorkers = lists:map(fun(Domain) ->
@@ -827,7 +859,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         StorageSupp = maps:from_list(lists:filtermap(fun({PID, Info}) ->
             case proplists:get_value(<<"storage">>, Info) of
                 undefined -> false;
-                StorageName -> {true, {{StorageName, PID}, proplists:get_value(<<"supported_size">>, Info, 0)}}
+                StorageName -> {true, {{normalize_storage_name(StorageName), PID}, proplists:get_value(<<"supported_size">>, Info, 0)}}
             end
         end, Providers1)),
         case maps:size(StorageSupp) == 0 of
@@ -860,7 +892,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         end, #{}, HarvestersSetup
     )),
 
-    user_logic_mock_setup(AllWorkers, Users),
+    user_logic_mock_setup(AllWorkers, Users, NoHistory),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
 
     SpacesOwners = ?config(spaces_owners, Config, []),
@@ -945,11 +977,17 @@ teardown_storage(Worker, Config) ->
 %% Mocks user_logic module, so that it returns user details, spaces and groups.
 %% @end
 %%--------------------------------------------------------------------
--spec user_logic_mock_setup(Workers :: node() | [node()], [{od_user:id(), #user_config{}}]) ->
+-spec user_logic_mock_setup(Workers :: node() | [node()], [{od_user:id(), #user_config{}}], boolean()) ->
     ok.
-user_logic_mock_setup(Workers, Users) ->
-    test_utils:mock_new(Workers, user_logic, [passthrough]),
-    test_utils:mock_new(Workers, auth_manager, [passthrough]),
+user_logic_mock_setup(Workers, Users, NoHistory) ->
+    case NoHistory of
+        true ->
+            test_utils:mock_new(Workers, user_logic),
+            test_utils:mock_new(Workers, auth_manager);
+        false ->
+            test_utils:mock_new(Workers, user_logic, [passthrough]),
+            test_utils:mock_new(Workers, auth_manager, [passthrough])
+    end,
 
     UserConfigToUserDoc = fun(UserConfig) ->
         #user_config{
@@ -1765,7 +1803,8 @@ setup_luma_local_feed(Worker, Config, LumaConfigFile) ->
     LumaConfigPath = filename:join([proplists:get_value(data_dir, Config), LumaConfigFile]),
     {ok, ConfigJSONBin} = file:read_file(LumaConfigPath),
     LumaConfig = json_utils:decode(ConfigJSONBin),
-    maps:fold(fun(StorageId, StorageLumaConfig, _) ->
+    maps:fold(fun(StorageName, StorageLumaConfig, _) ->
+        StorageId = normalize_storage_name(StorageName),
         StorageUsersLumaConfig = maps:get(<<"storageUsers">>, StorageLumaConfig, #{}),
         SpacesDefaultsLumaConfig = maps:get(<<"spacesDefaults">>, StorageLumaConfig, #{}),
         OnedataUsersLumaConfig = maps:get(<<"onedataUsers">>, StorageLumaConfig, #{}),

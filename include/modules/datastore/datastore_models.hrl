@@ -109,6 +109,7 @@
     storages = #{} :: #{storage:id() => Size :: integer()},
 
     % This value is calculated after fetch from zone for performance reasons.
+    % Contains an empty map if the provider does not support the space.
     storages_by_provider = #{} :: #{od_provider:id() => #{storage:id() => storage:access_type()}},
 
     providers = #{} :: #{od_provider:id() => Size :: integer()},
@@ -333,7 +334,7 @@
 -record(qos_entry, {
     type = user_defined :: qos_entry:type(),
     file_uuid :: file_meta:uuid(),
-    expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
+    expression = [] :: qos_expression:expression(),
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
     % These are requests to providers to start QoS traverse.
     traverse_reqs = #{} :: qos_traverse_req:traverse_reqs(),

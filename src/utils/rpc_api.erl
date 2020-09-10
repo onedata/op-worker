@@ -399,7 +399,7 @@ get_identity_token() ->
 
 -spec is_connected_to_oz() -> boolean().
 is_connected_to_oz() ->
-    oneprovider:is_connected_to_oz().
+    gs_channel_service:is_connected().
 
 
 -spec is_registered() -> boolean().
@@ -409,7 +409,7 @@ is_registered() ->
 
 -spec on_deregister() -> ok.
 on_deregister() ->
-    oneprovider:on_deregister().
+    gs_hooks:handle_deregistered_from_oz().
 
 
 -spec get_op_worker_version() -> binary().
@@ -570,7 +570,7 @@ autocleaning_cancel_run(SpaceId) ->
 
 -spec force_oz_connection_start() -> boolean().
 force_oz_connection_start() ->
-    oneprovider:force_oz_connection_start().
+    gs_channel_service:force_start_connection().
 
 
 -spec provider_auth_save(od_provider:id(), tokens:serialized()) -> ok.

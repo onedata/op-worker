@@ -18,9 +18,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete_file_locally/3, handle_remotely_deleted_file/1,
-    handle_release_of_deleted_file/2, handle_file_deleted_on_imported_storage/1,
-    cleanup_opened_files/0]).
+-export([
+    delete_file_locally/3,
+    handle_remotely_deleted_file/1,
+    handle_release_of_deleted_file/2,
+    handle_file_deleted_on_imported_storage/1]).
+-export([cleanup_opened_files/0]).
+-export([remove_local_associated_documents/1]).
 
 %% Test API
 -export([delete_parent_link/2, get_open_file_handling_method/1]).
@@ -101,6 +105,14 @@ cleanup_opened_files() ->
         Error ->
             ?error("Cannot clean open files descriptors - ~p", [Error])
     end.
+
+-spec remove_local_associated_documents(file_ctx:ctx()) -> ok.
+remove_local_associated_documents(FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    % TODO VFS-6114 delete storage_sync_info here?
+    ok = file_qos:clean_up(FileCtx),
+    ok = file_meta_posthooks:delete(FileUuid),
+    ok = file_popularity:delete(FileUuid).
 
 %%%===================================================================
 %%% Internal functions
@@ -462,21 +474,16 @@ remove_associated_documents(FileCtx) ->
     remove_synced_associated_documents(FileCtx),
     remove_local_associated_documents(FileCtx).
 
+
 -spec remove_synced_associated_documents(file_ctx:ctx()) -> ok.
 remove_synced_associated_documents(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
-    ok = transferred_file:clean_up(FileGuid).
+    ok = transferred_file:clean_up(FileGuid),
+    ok = file_qos:delete_associated_entries(FileUuid).
 
--spec remove_local_associated_documents(file_ctx:ctx()) -> ok.
-remove_local_associated_documents(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    % TODO VFS-6114 delete storage_sync_info here?
-    ok = file_qos:clean_up(FileCtx),
-    ok = file_meta_posthooks:delete(FileUuid),
-    ok = file_popularity:delete(FileUuid).
 
 %%--------------------------------------------------------------------
 %% @private

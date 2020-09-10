@@ -234,8 +234,13 @@ rerun_not_ended_transfers(SpaceId) ->
 
 -spec rerun_ended(undefined | od_user:id(), doc() | id()) ->
     {ok, id()} | {error, term()}.
-rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
-    case is_ended(Transfer) of
+rerun_ended(UserId, TransferDoc) ->
+    rerun_ended(UserId, TransferDoc, false).
+
+-spec rerun_ended(undefined | od_user:id(), doc() | id(), boolean()) ->
+    {ok, id()} | {error, term()}.
+rerun_ended(UserId, #document{key = TransferId, value = Transfer}, MarkTransferFailed) ->
+    case is_ended(Transfer) orelse MarkTransferFailed of
         false ->
             {error, not_ended};
         true ->
@@ -258,14 +263,12 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 EvictingProviderId, ReplicatingProviderId, Callback, IndexName,
                 QueryViewParams
             ),
-            update(TransferId, fun(OldTransfer) ->
-                {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
-            end),
+            replication_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed),
             {ok, NewTransferId}
     end;
-rerun_ended(UserId, TransferId) ->
+rerun_ended(UserId, TransferId, MarkTransferFailed) ->
     case ?MODULE:get(TransferId) of
-        {ok, Doc} -> rerun_ended(UserId, Doc);
+        {ok, Doc} -> rerun_ended(UserId, Doc, MarkTransferFailed);
         {error, Error} -> {error, Error}
     end.
 
@@ -743,7 +746,6 @@ create(Doc) ->
     datastore_model:create(?CTX, Doc).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Updates transfer.
 %% @end
@@ -794,14 +796,12 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
         IsEvictionOngoing, IsEvictionAborting, SelfId
     } of
         {true, _, _, _, TargetProviderId} ->
-            replication_status:handle_failed(TransferId, true),
-            rerun_ended(undefined, TransferId);
+            rerun_ended(undefined, TransferId, true);
         {_, true, _, _, TargetProviderId} ->
             replication_status:handle_failed(TransferId, true),
             {ok, marked_failed};
         {_, _, true, _, SourceProviderId} ->
-            replica_eviction_status:handle_failed(TransferId, true),
-            rerun_ended(undefined, TransferId);
+            rerun_ended(undefined, TransferId, true);
         {_, _, _, true, SourceProviderId} ->
             replica_eviction_status:handle_failed(TransferId, true),
             {ok, marked_failed};

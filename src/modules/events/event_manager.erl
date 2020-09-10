@@ -703,6 +703,7 @@ init_memory(SessionID) ->
 %%--------------------------------------------------------------------
 -spec delete_memory() -> ok.
 delete_memory() ->
+    ets_state:delete(?STATE_ID, self(), ?INITIALIZATION_STATUS_KEY),
     ets_state:delete_collection(?STATE_ID, streams),
     ets_state:delete_collection(?STATE_ID, subscriptions),
     ets_state:delete_collection(?STATE_ID, guid_to_provider),

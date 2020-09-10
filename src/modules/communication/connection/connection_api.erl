@@ -77,12 +77,12 @@ send(SessionId, Msg, ExcludedCons, LogErrors) ->
 -spec send_via_any(communicator:message(), EffSessId :: session:id(), [pid()]) ->
     ok | {error, term()}.
 send_via_any(_Msg, EffSessId, []) ->
-    session_manager:maybe_restart_session(EffSessId),
+    session_manager:restart_session_if_dead(EffSessId),
     {error, no_connections};
 send_via_any(Msg, EffSessId, [Conn]) ->
     case connection:send_msg(Conn, Msg) of
         {error, no_connection} = Error ->
-            session_manager:maybe_restart_session(EffSessId),
+            session_manager:restart_session_if_dead(EffSessId),
             Error;
         Result ->
             Result
@@ -96,7 +96,7 @@ send_via_any(Msg, EffSessId, [Conn | Cons]) ->
         {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
             WrongConnError;
         {error, no_connection} ->
-            session_manager:maybe_restart_session(EffSessId),
+            session_manager:restart_session_if_dead(EffSessId),
             send_via_any(Msg, EffSessId, Cons);
         _Error ->
             send_via_any(Msg, EffSessId, Cons)

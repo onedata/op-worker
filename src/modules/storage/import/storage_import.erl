@@ -40,7 +40,6 @@
 %%% API functions
 %%%===================================================================
 
-% TODO * testy manual runów
 % TODO * rename suit testowych sync, sync_s3, sync_deletion
 
 -spec set_manual_mode(od_space:id()) -> ok | {error, term()}.
