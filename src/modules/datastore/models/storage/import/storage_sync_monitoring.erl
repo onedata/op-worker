@@ -31,6 +31,7 @@
 -type doc() :: datastore_doc:doc(record()).
 -type error() :: {error, term()}.
 
+-export_type([record/0]).
 
 %%%===================================================================
 %%% API

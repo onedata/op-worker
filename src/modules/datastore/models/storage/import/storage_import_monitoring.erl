@@ -319,8 +319,8 @@ get_info(#storage_import_monitoring{
     {ok, #{
         totalScans => Scans,
         status => Status,
-        start => StartTime,
-        stop => StopTime,
+        start => StartTime div 1000,
+        stop => StopTime div 1000,
         importedFiles => ImportCount,
         updatedFiles => UpdatedCount,
         deletedFiles => DeletedCount

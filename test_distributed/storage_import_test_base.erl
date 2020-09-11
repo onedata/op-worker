@@ -5584,7 +5584,10 @@ start_scan(Worker, SpaceId) ->
     ?assertMatch(ok, rpc:call(Worker, storage_import, start_auto_scan, [SpaceId])).
 
 stop_scan(Worker, SpaceId) ->
-    ?assertMatch(ok, rpc:call(Worker, storage_import, stop_auto_scan, [SpaceId])).
+    case rpc:call(Worker, storage_import, stop_auto_scan, [SpaceId]) of
+        ok -> ok;
+        {error, not_found} -> ok
+    end.
 
 enable_initial_scan(Config, SpaceId) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
