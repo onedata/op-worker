@@ -41,6 +41,7 @@
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
+-export([report_provider_sync_progress/2]).
 -export([on_space_supported/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
@@ -395,6 +396,15 @@ get_harvesters(SpaceId) ->
             ?error("space_logic:get_harvesters(~p) failed due to ~p", [SpaceId, Error]),
             Error
     end.
+
+
+-spec report_provider_sync_progress(od_space:id(), provider_sync_progress:stats()) -> ok | errors:error().
+report_provider_sync_progress(SpaceId, ProviderSyncProgress) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = space_stats, id = SpaceId, aspect = {provider_sync_progress, oneprovider:get_id()}},
+        data = #{<<"providerSyncProgress">> => provider_sync_progress:to_json(ProviderSyncProgress)}
+    }).
 
 
 -spec on_space_supported(od_space:id()) -> ok.

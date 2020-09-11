@@ -97,6 +97,12 @@ mock_gs_client(Config) ->
         true
     end),
 
+    % dbsync reports its state regularly - mock the function so as not to generate
+    % requests to gs_client which would interfere with request counting in tests
+    ok = test_utils:mock_expect(Nodes, space_logic, report_provider_sync_progress, fun(_, _) ->
+        ok
+    end),
+
     % adding dummy storages to rtransfer would fail
     ok = test_utils:mock_expect(Nodes, rtransfer_config, add_storages, fun() -> ok end),
 
@@ -377,7 +383,7 @@ mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, #auth
             none;
         {ok, Description} ->
             case is_binary(Description) of
-                true -> ok; 
+                true -> ok;
                 false -> bad
             end
     end,
