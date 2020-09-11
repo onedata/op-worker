@@ -14,9 +14,8 @@
 -behaviour(listener_behaviour).
 
 -include("global_definitions.hrl").
--include("http/gui_paths.hrl").
--include("http/op_gui.hrl").
 -include("http/cdmi.hrl").
+-include("http/gui_paths.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("gui/include/gui.hrl").
 
@@ -68,26 +67,21 @@ start() ->
         {?NAGIOS_PATH, nagios_handler, []},
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?PANEL_REST_PROXY_PATH ++ "[...]", http_port_forwarder, [9443, ?ONEPANEL_CONNECT_OPTS]},
-        {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
         {?GUI_GRAPH_SYNC_WS_PATH, gs_ws_handler, [gui_gs_translator]},
         {?CDMI_ID_PATH, cdmi_handler, by_id},
         {?CDMI_PATH, cdmi_handler, by_path},
-        rest_handler:rest_routes()
+        rest_routes:routes()
     ]),
 
     DynamicPageRoutes = [
         {?NAGIOS_OZ_CONNECTIVITY_PATH, [<<"GET">>], page_oz_connectivity},
-        {?IDENTITY_MACAROON_PATH, [<<"GET">>], page_identity_macaroon},
-        {?NONCE_VERIFY_PATH, [<<"GET">>], page_nonce_verify},
+        {?IDENTITY_TOKEN_PATH, [<<"GET">>], page_identity_token},
         {?DEPRECATED_PROVIDER_CONFIGURATION_PATH, [<<"GET">>], page_provider_configuration},
         {?FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload},
         {?FILE_DOWNLOAD_PATH ++ "/:code", [<<"GET">>], page_file_download},
         {?PUBLIC_SHARE_COWBOY_ROUTE, [<<"GET">>], page_public_share},
         {"/", [<<"GET">>], page_redirect_to_onezone}
     ],
-
-    % Call gui init, which will call init on all modules that might need state.
-    op_gui:init(),
 
     gui:start(#gui_config{
         port = port(),
@@ -109,9 +103,6 @@ start() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
-    % Call gui cleanup, which will call cleanup on all modules that
-    % were previously set up with op_gui:init/0.
-    op_gui:cleanup(),
     gui:stop().
 
 

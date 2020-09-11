@@ -1,12 +1,13 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for handing requests operating on file's metadata.
+%%% This module is responsible for handing requests operating on file's
+%%% metadata.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(metadata_req).
@@ -18,107 +19,80 @@
 %% API
 -export([get_metadata/5, set_metadata/7, remove_metadata/3]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @equiv get_metadata_insecure/5 with permission checks
-%% @end
-%%--------------------------------------------------------------------
--spec get_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
-    custom_metadata:filter(), Inherited :: boolean()) ->
+
+-spec get_metadata(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    custom_metadata:type(),
+    custom_metadata:query(),
+    Inherited :: boolean()
+) ->
     fslogic_worker:provider_response().
-get_metadata(_UserCtx, FileCtx, MetadataType, Names, Inherited) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_metadata],
-        [_UserCtx, FileCtx, MetadataType, Names, Inherited],
-        fun get_metadata_insecure/5).
+get_metadata(UserCtx, FileCtx0, Type, Query, Inherited) ->
+    FileCtx1 = assert_file_exists(FileCtx0),
 
-%%--------------------------------------------------------------------
-%% @equiv set_metadata_insecure/5 with permission checks
-%% @end
-%%--------------------------------------------------------------------
--spec set_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
-    custom_metadata:value(), custom_metadata:filter(), Create :: boolean(),
-    Replace :: boolean()) -> fslogic_worker:provider_response().
-set_metadata(_UserCtx, FileCtx, MetadataType, Value, Names, Create, Replace) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_metadata],
-        [_UserCtx, FileCtx, MetadataType, Value, Names, Create, Replace],
-        fun set_metadata_insecure/7).
+    Result = case Type of
+        json -> json_metadata:get(UserCtx, FileCtx1, Query, Inherited);
+        rdf -> xattr:get(UserCtx, FileCtx1, ?RDF_METADATA_KEY, Inherited)
+    end,
+    case Result of
+        {ok, Value} ->
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #metadata{type = Type, value = Value}
+            };
+        ?ERROR_NOT_FOUND ->
+            #provider_response{status = #status{code = ?ENOATTR}}
+    end.
 
-%%--------------------------------------------------------------------
-%% @equiv remove_metadata_insecure/4 with permission checks
-%% @end
-%%--------------------------------------------------------------------
+
+-spec set_metadata(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    custom_metadata:type(),
+    custom_metadata:value(),
+    custom_metadata:query(),
+    Create :: boolean(),
+    Replace :: boolean()
+) ->
+    fslogic_worker:provider_response().
+set_metadata(UserCtx, FileCtx0, json, Value, Query, Create, Replace) ->
+    FileCtx1 = assert_file_exists(FileCtx0),
+    {ok, _} = json_metadata:set(UserCtx, FileCtx1, Value, Query, Create, Replace),
+    #provider_response{status = #status{code = ?OK}};
+set_metadata(UserCtx, FileCtx0, rdf, Value, _, Create, Replace) ->
+    FileCtx1 = assert_file_exists(FileCtx0),
+    {ok, _} = xattr:set(UserCtx, FileCtx1, ?RDF_METADATA_KEY, Value, Create, Replace),
+    #provider_response{status = #status{code = ?OK}}.
+
+
 -spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
     fslogic_worker:provider_response().
-remove_metadata(_UserCtx, FileCtx, MetadataType) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_metadata],
-        [_UserCtx, FileCtx, MetadataType],
-        fun remove_metadata_insecure/3).
+remove_metadata(UserCtx, FileCtx0, json) ->
+    FileCtx1 = assert_file_exists(FileCtx0),
+    ok = json_metadata:remove(UserCtx, FileCtx1),
+    #provider_response{status = #status{code = ?OK}};
+remove_metadata(UserCtx, FileCtx0, rdf) ->
+    FileCtx1 = assert_file_exists(FileCtx0),
+    ok = xattr:remove(UserCtx, FileCtx1, ?RDF_METADATA_KEY),
+    #provider_response{status = #status{code = ?OK}}.
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets metadata linked with file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_metadata_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    custom_metadata:type(), custom_metadata:filter(), Inherited :: boolean()) ->
-    fslogic_worker:provider_response().
-get_metadata_insecure(_UserCtx, FileCtx, json, Names, Inherited) ->
-    case json_metadata:get(FileCtx, Names, Inherited) of
-        {ok, Meta} ->
-            #provider_response{
-                status = #status{code = ?OK},
-                provider_response = #metadata{type = json, value = Meta}
-            };
-        {error, not_found} ->
-            #provider_response{status = #status{code = ?ENOATTR}}
-    end;
-get_metadata_insecure(_UserCtx, FileCtx, rdf, _, Inherited) ->
-    case rdf_metadata:get(FileCtx, Inherited) of
-        {ok, Meta} ->
-            #provider_response{
-                status = #status{code = ?OK},
-                provider_response = #metadata{type = rdf, value = Meta}
-            };
-        {error, not_found} ->
-            #provider_response{status = #status{code = ?ENOATTR}}
-    end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets metadata linked with file.
-%% @end
-%%--------------------------------------------------------------------
--spec set_metadata_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    custom_metadata:type(), custom_metadata:value(), custom_metadata:filter(),
-    Create :: boolean(), Replace :: boolean()) ->
-    fslogic_worker:provider_response().
-set_metadata_insecure(_UserCtx, FileCtx, json, Value, Names, Create, Replace) ->
-    {ok, _} = json_metadata:set(FileCtx, Value, Names, Create, Replace),
-    #provider_response{status = #status{code = ?OK}};
-set_metadata_insecure(_UserCtx, FileCtx, rdf, Value, _, Create, Replace) ->
-    {ok, _} = rdf_metadata:set(FileCtx, Value, Create, Replace),
-    #provider_response{status = #status{code = ?OK}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes metadata linked with file.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_metadata_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    custom_metadata:type()) -> fslogic_worker:provider_response().
-remove_metadata_insecure(_UserCtx, FileCtx, json) ->
-    ok = json_metadata:remove(FileCtx),
-    #provider_response{status = #status{code = ?OK}};
-remove_metadata_insecure(_UserCtx, FileCtx, rdf) ->
-    ok = rdf_metadata:remove(FileCtx),
-    #provider_response{status = #status{code = ?OK}}.
+%% @private
+-spec assert_file_exists(file_ctx:ctx()) -> file_ctx:ctx().
+assert_file_exists(FileCtx0) ->
+    % If file doesn't exists (or was deleted) fetching doc will fail,
+    % {badmatch, {error, not_found}} will propagate up and fslogic_worker will
+    % translate it to ?ENOENT
+    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0),
+    FileCtx1.

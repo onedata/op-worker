@@ -14,7 +14,7 @@
 -ifdef(TEST).
 
 -include("global_definitions.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 %%%===================================================================
@@ -119,6 +119,7 @@ prepare_environment() ->
     application:set_env(?APP_NAME, swift_helper_threads_number, 1),
     application:set_env(?APP_NAME, glusterfs_helper_threads_number, 1),
     application:set_env(?APP_NAME, webdav_helper_threads_number, 25),
+    application:set_env(?APP_NAME, xrootd_helper_threads_number, 25),
     application:set_env(?APP_NAME, buffer_helpers, false),
     application:set_env(?APP_NAME, buffer_scheduler_threads_number, 1),
     application:set_env(?APP_NAME, read_buffer_min_size, 1024),

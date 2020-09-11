@@ -11,6 +11,17 @@
 
 -include("global_definitions.hrl").
 
+-define(SCHEDULED_STATUS, scheduled).
+-define(ENQUEUED_STATUS, enqueued).
+-define(ACTIVE_STATUS, active).
+-define(COMPLETED_STATUS, completed).
+-define(ABORTING_STATUS, aborting).
+-define(FAILED_STATUS, failed).
+-define(CANCELLED_STATUS, cancelled).
+-define(SKIPPED_STATUS, skipped).
+-define(EVICTING_STATUS, evicting).
+-define(REPLICATING_STATUS, replicating).
+
 -define(WAITING_TRANSFERS_STATE, <<"waiting">>).
 -define(ONGOING_TRANSFERS_STATE, <<"ongoing">>).
 -define(ENDED_TRANSFERS_STATE, <<"ended">>).
@@ -45,10 +56,10 @@
 -define(MONTH_HIST_LENGTH, 32).
 -define(MONTH_SPEED_HIST_LENGTH, 31).
 
--define(MINUTE_STAT_TYPE, <<"minute">>).
--define(HOUR_STAT_TYPE, <<"hour">>).
--define(DAY_STAT_TYPE, <<"day">>).
--define(MONTH_STAT_TYPE, <<"month">>).
+-define(MINUTE_PERIOD, <<"minute">>).
+-define(HOUR_PERIOD, <<"hour">>).
+-define(DAY_PERIOD, <<"day">>).
+-define(MONTH_PERIOD, <<"month">>).
 
 
 -define(REPLICATION_WORKER, replication_worker).
@@ -68,12 +79,6 @@
 -define(REPLICA_EVICTION_WORKERS_NUM, application:get_env(
     ?APP_NAME, replica_eviction_workers_num, 10)
 ).
-
--define(REPLICA_DELETION_WORKER, replica_deletion_worker).
--define(REPLICA_DELETION_WORKERS_POOL, replica_deletion_workers_pool).
--define(REPLICA_DELETION_WORKERS_NUM,
-    application:get_env(?APP_NAME, replica_deletion_workers_num, 10)).
-
 
 -define(TRANSFER_DATA_REQ(__FileCtx, __Params, __Retries, __NextRetryTimestamp), {
     transfer_data, __FileCtx, __Params, __Retries, __NextRetryTimestamp

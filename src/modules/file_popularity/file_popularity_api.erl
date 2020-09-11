@@ -12,10 +12,10 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/file_popularity_config.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
--export([enable/1, disable/1, is_enabled/1, get_configuration/1, query/2,
-    query/3, delete_config/1, configure/2]).
+-export([enable/1, disable/1, is_enabled/1, get_configuration/1, delete_config/1, configure/2]).
 
 %%%===================================================================
 %%% API
@@ -30,7 +30,7 @@ enable(SpaceId) ->
         max_avg_open_count_per_day => ?DEFAULT_MAX_AVG_OPEN_COUNT_PER_DAY
     }).
 
--spec configure(file_popularity_config:id(), map()) -> ok | {error, term()}.
+-spec configure(file_popularity_config:id(), map()) -> ok | errors:error() | {error, term()}.
 configure(SpaceId, #{enabled := false}) ->
     disable(SpaceId);
 configure(SpaceId, NewConfiguration) ->
@@ -75,22 +75,10 @@ get_configuration(SpaceId) ->
                 example_query => file_popularity_view:example_query(SpaceId)
             }};
         {error, not_found} ->
-            {ok, #{
-                enabled => false
-            }};
+            {ok, #{enabled => false}};
         Error ->
             Error
     end.
-
--spec query(od_space:id(), non_neg_integer()) ->
-    {[file_id:objectid()], file_popularity_view:index_token() | undefined} | {error, term()}.
-query(SpaceId, Limit) ->
-    file_popularity_view:query(SpaceId, undefined, Limit).
-
--spec query(od_space:id(), file_popularity_view:index_token() | undefined, non_neg_integer()) ->
-    {[file_id:objectid()], file_popularity_view:index_token()} | {error, term()}.
-query(SpaceId, IndexToken, Limit) ->
-    file_popularity_view:query(SpaceId, IndexToken, Limit).
 
 -spec assert_types_and_values(map()) -> ok | {error, term()}.
 assert_types_and_values(Configuration) ->
@@ -105,7 +93,7 @@ assert_types_and_values(Configuration) ->
 assert_type_and_value(enabled, Value) when is_boolean(Value) ->
     ok;
 assert_type_and_value(enabled, _Value) ->
-    {error, {illegal_type, enabled}};
+    ?ERROR_BAD_VALUE_BOOLEAN(<<"enabled">>);
 assert_type_and_value(last_open_hour_weight, Value) ->
     assert_non_negative_number(last_open_hour_weight, Value);
 assert_type_and_value(avg_open_count_per_day_weight, Value) ->
@@ -113,13 +101,13 @@ assert_type_and_value(avg_open_count_per_day_weight, Value) ->
 assert_type_and_value(max_avg_open_count_per_day, Value) ->
     assert_non_negative_number(max_avg_open_count_per_day, Value);
 assert_type_and_value(Other, _Value) ->
-    {error, {illegal_key, Other}}.
+    ?ERROR_BAD_DATA(str_utils:to_binary(Other)).
 
 
--spec assert_non_negative_number(atom(), term()) -> ok | {error, term()}.
+-spec assert_non_negative_number(atom(), term()) -> ok | errors:error().
 assert_non_negative_number(Key, Value) when not is_number(Value) ->
-    {error, {illegal_type, Key}};
+    ?ERROR_BAD_VALUE_INTEGER(atom_to_binary(Key, utf8));
 assert_non_negative_number(Key, Value) when Value < 0 ->
-    {error, {negative_value, Key}};
+    ?ERROR_BAD_VALUE_TOO_LOW(atom_to_binary(Key, utf8), 0);
 assert_non_negative_number(_Key, _Value) ->
     ok.

@@ -1,0 +1,12 @@
+{
+    "webdav_external_luma_feed": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "credentialsType": "oauth2",
+                    "credentials": "USER"
+                }
+            }
+        }
+    }
+}

@@ -39,7 +39,6 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    routing => global,
     disc_driver => undefined
 }).
 

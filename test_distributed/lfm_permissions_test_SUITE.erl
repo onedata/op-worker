@@ -1,1059 +1,1996 @@
 %%%-------------------------------------------------------------------
-%%% @author Mateusz Paciorek
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This test suite verifies correct behaviour of posix and acl 
+%%% This test suite verifies correct behaviour of posix and acl
 %%% permissions with corresponding lfm (logical_file_manager) functions
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_permissions_test_SUITE).
--author("Mateusz Paciorek").
+-author("Bartosz Walkowicz").
 
-%%%-------------------------------------------------------------------
-%%% Macros used in acl tests
-%%%-------------------------------------------------------------------
--define(acl_all(UserId),
-    #access_control_entity{
-        acetype = ?allow_mask,
-        aceflags = ?no_flags_mask,
-        identifier = UserId,
-        acemask = (?read_mask bor ?write_mask bor ?execute_mask)
-    }).
-
--define(allow_user(UserId, Mask),
-    #access_control_entity{
-        acetype = ?allow_mask,
-        aceflags = ?no_flags_mask,
-        identifier = UserId,
-        acemask = Mask
-    }).
-
--define(deny_user(UserId, Mask),
-    #access_control_entity{
-        acetype = ?deny_mask,
-        aceflags = ?no_flags_mask,
-        identifier = UserId,
-        acemask = Mask
-    }).
-
--define(allow_group(GroupId, Mask),
-    #access_control_entity{
-        acetype = ?allow_mask,
-        aceflags = ?identifier_group_mask,
-        identifier = GroupId,
-        acemask = Mask
-    }).
-
--define(deny_group(GroupId, Mask),
-    #access_control_entity{
-        acetype = ?deny_mask,
-        aceflags = ?identifier_group_mask,
-        identifier = GroupId,
-        acemask = Mask
-    }).
-
--define(rpc(W, Module, Function, Args), rpc:call(W, Module, Function, Args)).
--define(rpcCache(W, Function, Args), rpc:call(W, permissions_cache, Function, Args)).
-
--include("global_definitions.hrl").
+-include("lfm_permissions_test.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/handshake_messages.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/aai/caveats.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/test/performance.hrl").
-
-%%%-------------------------------------------------------------------
-%%% API
-%%%-------------------------------------------------------------------
-
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
 
 -export([
-    posix_read_file_user_test/1,
-    posix_read_file_group_test/1,
-    posix_write_file_user_test/1,
-    posix_write_file_group_test/1,
-    posix_read_dir_user_test/1,
-    posix_read_dir_group_test/1,
-    posix_write_dir_user_test/1,
-    posix_write_dir_group_test/1,
-    posix_execute_dir_user_test/1,
-    posix_execute_dir_group_test/1,
-    acl_read_object_user_test/1,
-    acl_read_object_group_test/1,
-    acl_list_container_user_test/1,
-    acl_list_container_group_test/1,
-    acl_write_object_user_test/1,
-    acl_write_object_group_test/1,
-    acl_add_object_user_test/1,
-    acl_add_object_group_test/1,
-    acl_add_subcontainer_user_test/1,
-    acl_add_subcontainer_group_test/1,
-    acl_read_metadata_user_test/1,
-    acl_read_metadata_group_test/1,
-    acl_write_metadata_user_test/1,
-    acl_write_metadata_group_test/1,
-    acl_traverse_container_user_test/1,
-    acl_traverse_container_group_test/1,
-    acl_delete_object_user_test/1,
-    acl_delete_object_group_test/1,
-    acl_delete_subcontainer_user_test/1,
-    acl_delete_subcontainer_group_test/1,
-    acl_read_attributes_user_test/1,
-    acl_read_attributes_group_test/1,
-    acl_write_attributes_user_test/1,
-    acl_write_attributes_group_test/1,
-    acl_delete_user_test/1,
-    acl_delete_group_test/1,
-    acl_read_acl_user_test/1,
-    acl_read_acl_group_test/1,
-    acl_write_acl_user_test/1,
-    acl_write_acl_group_test/1,
-    permission_cache_test/1,
-    check_perms_test/1,
-    expired_session_test/1
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
 ]).
 
+-export([
+    data_access_caveats_test/1,
+    data_access_caveats_ancestors_test/1,
+    data_access_caveats_ancestors_test2/1,
+    data_access_caveats_cache_test/1,
+
+    mkdir_test/1,
+    get_children_test/1,
+    get_children_attrs_test/1,
+    get_children_details_test/1,
+    get_child_attr_test/1,
+    mv_dir_test/1,
+    rm_dir_test/1,
+
+    create_file_test/1,
+    open_for_read_test/1,
+    open_for_write_test/1,
+    open_for_rdwr_test/1,
+    create_and_open_test/1,
+    truncate_test/1,
+    mv_file_test/1,
+    rm_file_test/1,
+
+    get_parent_test/1,
+    get_file_path_test/1,
+    get_file_guid_test/1,
+    get_file_attr_test/1,
+    get_file_details_test/1,
+    get_file_distribution_test/1,
+
+    set_perms_test/1,
+    check_read_perms_test/1,
+    check_write_perms_test/1,
+    check_rdwr_perms_test/1,
+
+    create_share_test/1,
+    remove_share_test/1,
+    share_perms_test/1,
+
+    get_acl_test/1,
+    set_acl_test/1,
+    remove_acl_test/1,
+
+    get_transfer_encoding_test/1,
+    set_transfer_encoding_test/1,
+    get_cdmi_completion_status_test/1,
+    set_cdmi_completion_status_test/1,
+    get_mimetype_test/1,
+    set_mimetype_test/1,
+
+    get_metadata_test/1,
+    set_metadata_test/1,
+    remove_metadata_test/1,
+    get_xattr_test/1,
+    list_xattr_test/1,
+    set_xattr_test/1,
+    remove_xattr_test/1,
+
+    add_qos_entry_test/1,
+    get_qos_entry_test/1,
+    remove_qos_entry_test/1,
+    get_effective_file_qos_test/1,
+    check_qos_fulfillment_test/1,
+
+    permission_cache_test/1,
+    multi_provider_permission_cache_test/1,
+    expired_session_test/1
+]).
+% Export for use in rpc
+-export([check_perms/3]).
+
 all() ->
-    ?ALL(
-    [
-        posix_read_file_user_test,
-        posix_read_file_group_test,
-        posix_write_file_user_test,
-        posix_write_file_group_test,
-        posix_read_dir_user_test,
-        posix_read_dir_group_test,
-        posix_write_dir_user_test,
-        posix_write_dir_group_test,
-        posix_execute_dir_user_test,
-        posix_execute_dir_group_test,
-        acl_read_object_user_test,
-        acl_read_object_group_test,
-        acl_list_container_user_test,
-        acl_list_container_group_test,
-        acl_write_object_user_test,
-        acl_write_object_group_test,
-        acl_add_object_user_test,
-        acl_add_object_group_test,
-        acl_add_subcontainer_user_test,
-        acl_add_subcontainer_group_test,
-        acl_read_metadata_user_test,
-        acl_read_metadata_group_test,
-        acl_write_metadata_user_test,
-        acl_write_metadata_group_test,
-        acl_traverse_container_user_test,
-        acl_traverse_container_group_test,
-        acl_delete_object_user_test,
-        acl_delete_object_group_test,
-        acl_delete_subcontainer_user_test,
-        acl_delete_subcontainer_group_test,
-        acl_read_attributes_user_test,
-        acl_read_attributes_group_test,
-        acl_write_attributes_user_test,
-        acl_write_attributes_group_test,
-        acl_delete_user_test,
-        acl_delete_group_test,
-        acl_read_acl_user_test,
-        acl_read_acl_group_test,
-        acl_write_acl_user_test,
-        acl_write_acl_group_test,
+    ?ALL([
+        data_access_caveats_test,
+        data_access_caveats_ancestors_test,
+        data_access_caveats_ancestors_test2,
+        data_access_caveats_cache_test,
+
+        mkdir_test,
+        get_children_test,
+        get_children_attrs_test,
+        get_children_details_test,
+        get_child_attr_test,
+        mv_dir_test,
+        rm_dir_test,
+
+        create_file_test,
+        open_for_read_test,
+        open_for_write_test,
+        open_for_rdwr_test,
+        create_and_open_test,
+        truncate_test,
+        mv_file_test,
+        rm_file_test,
+
+        get_parent_test,
+        get_file_path_test,
+        get_file_guid_test,
+        get_file_attr_test,
+        get_file_details_test,
+        get_file_distribution_test,
+
+        set_perms_test,
+        check_read_perms_test,
+        check_write_perms_test,
+        check_rdwr_perms_test,
+
+        create_share_test,
+        remove_share_test,
+        share_perms_test,
+
+        get_acl_test,
+        set_acl_test,
+        remove_acl_test,
+
+        get_transfer_encoding_test,
+        set_transfer_encoding_test,
+        get_cdmi_completion_status_test,
+        set_cdmi_completion_status_test,
+        get_mimetype_test,
+        set_mimetype_test,
+
+        get_metadata_test,
+        set_metadata_test,
+        remove_metadata_test,
+        get_xattr_test,
+        list_xattr_test,
+        set_xattr_test,
+        remove_xattr_test,
+
+        add_qos_entry_test,
+        get_qos_entry_test,
+        remove_qos_entry_test,
+        get_effective_file_qos_test,
+        check_qos_fulfillment_test,
+
         permission_cache_test,
-        check_perms_test,
+        multi_provider_permission_cache_test,
         expired_session_test
     ]).
+
+
+-define(rpcCache(W, Function, Args), rpc:call(W, permissions_cache, Function, Args)).
+
+-define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
+
+-define(ATTEMPTS, 35).
+
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-%%%-------------------------------------------------------------------
-%%% Posix tests
-%%%-------------------------------------------------------------------
 
-posix_read_file_user_test(Config) ->
-    % Setup
+data_access_caveats_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/t1_file">>, 8#770)),
-    {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
-    ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
-    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
-    % Verification
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#370)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
+    FileOwner = <<"user1">>,
+    FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(W)}}, Config),
 
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#470)),
-    {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H2)).
+    UserId = <<"user2">>,
+    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
+    Space1RootDir = fslogic_uuid:spaceid_to_space_dir_guid(<<"space1">>),
+    Space3RootDir = fslogic_uuid:spaceid_to_space_dir_guid(<<"space3">>),
 
-posix_read_file_group_test(Config) ->
-    % Setup
+    ScenarioName = ?SCENARIO_NAME,
+    DirName = <<ScenarioName/binary, "1">>,
+    DirPath = <<"/space1/", DirName/binary>>,
+    {ok, DirGuid} = lfm_proxy:mkdir(W, FileOwnerUserSessId, DirPath),
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+
+    {ok, ShareId} = lfm_proxy:create_share(W, FileOwnerUserSessId, {guid, DirGuid}, <<"share">>),
+    ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
+
+    DirName2 = <<ScenarioName/binary, "2">>,
+    DirPath2 = <<"/space1/", DirName2/binary>>,
+    {ok, _DirGuid2} = lfm_proxy:mkdir(W, FileOwnerUserSessId, DirPath2),
+
+    [
+        {Path1, ObjectId1, F1, ShareF1},
+        {Path2, ObjectId2, F2, ShareF2},
+        {Path3, ObjectId3, F3, ShareF3},
+        {Path4, ObjectId4, F4, ShareF4},
+        {Path5, ObjectId5, F5, ShareF5}
+    ] = lists:map(fun(Num) ->
+        FileName = <<"file", ($0 + Num)>>,
+        FilePath = <<DirPath/binary, "/", FileName/binary>>,
+        {ok, FileGuid} = lfm_proxy:create(W, FileOwnerUserSessId, FilePath, 8#777),
+        {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+        ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+        {FilePath, FileObjectId, {FileGuid, FileName}, {ShareFileGuid, FileName}}
+    end, lists:seq(1, 5)),
+
+    MainToken = initializer:create_access_token(UserId),
+
+    LsWithConfinedToken = fun(Guid, Caveats) ->
+        LsToken = tokens:confine(MainToken, Caveats),
+        LsSessId = lfm_permissions_test_utils:create_session(W, UserId, LsToken),
+        lfm_proxy:get_children(W, LsSessId, {guid, Guid}, 0, 100)
+    end,
+
+
+    % Whitelisting Dir should result in listing all it's files
+    ?assertMatch(
+        {ok, [F1, F2, F3, F4, F5]},
+        LsWithConfinedToken(DirGuid, #cv_data_path{whitelist = [DirPath]})
+    ),
+    ?assertMatch(
+        {ok, [F1, F2, F3, F4, F5]},
+        LsWithConfinedToken(DirGuid, #cv_data_objectid{whitelist = [DirObjectId]})
+    ),
+
+    % Nevertheless token confinements have no effects on accessing files via shared guid -
+    % all operations are automatically performed with ?GUEST perms
+    ?assertMatch(
+        {ok, [ShareF1, ShareF2, ShareF3, ShareF4, ShareF5]},
+        LsWithConfinedToken(ShareDirGuid, #cv_data_path{whitelist = [DirPath]})
+    ),
+
+    % Whitelisting concrete files should result in listing only them
+    ?assertMatch(
+        {ok, [F1, F3, F5]},
+        LsWithConfinedToken(DirGuid, #cv_data_path{whitelist = [Path1, Path3, Path5]})
+    ),
+    ?assertMatch(
+        {ok, [F1, F3, F5]},
+        LsWithConfinedToken(DirGuid, #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId5]})
+    ),
+
+    % Nevertheless token confinements have no effects on accessing files via shared guid -
+    % all operations are automatically performed with ?GUEST perms
+    ?assertMatch(
+        {ok, [ShareF1, ShareF2, ShareF3, ShareF4, ShareF5]},
+        LsWithConfinedToken(ShareDirGuid, #cv_data_path{whitelist = [Path1, Path3, Path5]})
+    ),
+
+    % Using several caveats should result in listing only their intersection
+    ?assertMatch(
+        {ok, [F1, F5]},
+        LsWithConfinedToken(DirGuid, [
+            #cv_data_path{whitelist = [Path1, Path3, Path4, Path5]},
+            #cv_data_path{whitelist = [Path1, Path2, Path5]},
+            #cv_data_path{whitelist = [Path1, Path5]}
+        ])
+    ),
+    ?assertMatch(
+        {ok, [F1, F5]},
+        LsWithConfinedToken(DirGuid, [
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId4, ObjectId5]},
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId5]}
+        ])
+    ),
+    ?assertMatch(
+        {ok, [F1, F5]},
+        LsWithConfinedToken(DirGuid, [
+            #cv_data_path{whitelist = [Path1, Path3, Path4, Path5]},
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
+            #cv_data_path{whitelist = [Path1, Path5]}
+        ])
+    ),
+    ?assertMatch(
+        {ok, []},
+        LsWithConfinedToken(DirGuid, [
+            #cv_data_objectid{whitelist = [ObjectId3, ObjectId4]},
+            #cv_data_path{whitelist = [Path1, Path5]}
+        ])
+    ),
+
+    % Nevertheless token confinements have no effects on accessing files via shared guid -
+    % all operations are automatically performed with ?GUEST perms
+    ?assertMatch(
+        {ok, [ShareF1, ShareF2, ShareF3, ShareF4, ShareF5]},
+        LsWithConfinedToken(ShareDirGuid, [
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId4, ObjectId5]},
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId5]}
+        ])
+    ),
+
+    % Children of dir being listed that don't exist should be omitted from results
+    ?assertMatch(
+        {ok, [F1, F5]},
+        LsWithConfinedToken(DirGuid, [
+            #cv_data_path{whitelist = [Path1, <<DirPath/binary, "/i_do_not_exist">>, Path5]}
+        ])
+    ),
+
+    % Using caveat for different directory should result in {error, eacces}
+    ?assertMatch(
+        {error, ?EACCES},
+        LsWithConfinedToken(DirGuid, #cv_data_path{whitelist = [<<"/space1/qwe">>]})
+    ),
+
+    % Nevertheless token confinements have no effects on accessing files via shared guid -
+    % all operations are automatically performed with ?GUEST perms
+    ?assertMatch(
+        {ok, [ShareF1, ShareF2, ShareF3, ShareF4, ShareF5]},
+        LsWithConfinedToken(ShareDirGuid, #cv_data_path{whitelist = [<<"/space1/qwe">>]})
+    ),
+
+    % With no caveats listing user root dir should list all user spaces
+    ?assertMatch(
+        {ok, [{Space1RootDir, <<"space1">>}, {Space3RootDir, <<"space3">>}]},
+        LsWithConfinedToken(UserRootDir, [])
+    ),
+    % But with caveats user root dir ls should show only spaces leading to allowed files
+    ?assertMatch(
+        {ok, [{Space1RootDir, <<"space1">>}]},
+        LsWithConfinedToken(UserRootDir, #cv_data_path{whitelist = [DirPath]})
+    ),
+
+    % With no caveats listing space dir should list all space directories
+    SessId12 = lfm_permissions_test_utils:create_session(W, UserId, MainToken),
+    ?assertMatch(
+        {ok, [_ | _]},
+        lfm_proxy:get_children(W, SessId12, {guid, Space1RootDir}, 0, 100)
+    ),
+    % And all operations on it and it's children should be allowed
+    ?assertMatch(
+        {ok, _},
+        lfm_proxy:get_acl(W, SessId12, {guid, Space1RootDir})
+    ),
+    ?assertMatch(
+        {ok, _},
+        lfm_proxy:get_acl(W, SessId12, {guid, DirGuid})
+    ),
+    % But with caveats space ls should show only dirs leading to allowed files.
+    Token13 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1]}),
+    SessId13 = lfm_permissions_test_utils:create_session(W, UserId, Token13),
+    ?assertMatch(
+        {ok, [{DirGuid, DirName}]},
+        lfm_proxy:get_children(W, SessId13, {guid, Space1RootDir}, 0, 100)
+    ),
+    % On such dirs (ancestor) it should be possible to perform only certain
+    % operations like ls, stat, resolve_guid, get_parent and resolve_path.
+    ?assertMatch(
+        {ok, [F1]},
+        lfm_proxy:get_children(W, SessId13, {guid, DirGuid}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, #file_attr{name = DirName, type = ?DIRECTORY_TYPE}},
+        lfm_proxy:stat(W, SessId13, {guid, DirGuid})
+    ),
+    ?assertMatch(
+        {ok, DirGuid},
+        lfm_proxy:resolve_guid(W, SessId13, DirPath)
+    ),
+    ?assertMatch(
+        {ok, Space1RootDir},
+        lfm_proxy:get_parent(W, SessId13, {guid, DirGuid})
+    ),
+    ?assertMatch(
+        {ok, DirPath},
+        lfm_proxy:get_file_path(W, SessId13, DirGuid)
+    ),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:get_acl(W, SessId13, {guid, DirGuid})
+    ),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:create(W, SessId13, DirGuid, <<"file1">>, 8#777)
+    ),
+
+    % Test listing with caveats and options (offset, limit)
+    Token14 = tokens:confine(MainToken, #cv_data_path{whitelist = [
+        Path1, Path2, <<DirPath/binary, "/i_do_not_exist">>, Path4, Path5
+    ]}),
+    SessId14 = lfm_permissions_test_utils:create_session(W, UserId, Token14),
+    ?assertMatch(
+        {ok, [F1, F2, F4]},
+        lfm_proxy:get_children(W, SessId14, {guid, DirGuid}, 0, 3)
+    ),
+    ?assertMatch(
+        {ok, [F4, F5]},
+        lfm_proxy:get_children(W, SessId14, {guid, DirGuid}, 2, 3)
+    ),
+    ?assertMatch(
+        {ok, [F4]},
+        lfm_proxy:get_children(W, SessId14, {guid, DirGuid}, 2, 1)
+    ).
+
+
+data_access_caveats_ancestors_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t2_file">>, 8#770)),
-    {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, GUID}, write)),
-    ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
-    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
-    % Verification
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, GUID}, 8#730)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
+    UserId = <<"user3">>,
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
 
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, GUID}, 8#740)),
-    {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H2)).
+    SpaceName = <<"space2">>,
+    SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
 
-posix_write_file_user_test(Config) ->
-    % Setup
+    Dirs0 = [{LastDirGuid, _} | _] = lists:foldl(fun(Num, [{DirGuid, _} | _] = Acc) ->
+        SubDirName = <<"dir", (integer_to_binary(Num))/binary>>,
+        {ok, SubDirGuid} = lfm_proxy:mkdir(W, UserSessId, DirGuid, SubDirName, 8#777),
+        {ok, _} = lfm_proxy:create(W, UserSessId, DirGuid, <<"file", ($0 + Num)>>, 8#777),
+        [{SubDirGuid, SubDirName} | Acc]
+    end, [{SpaceRootDirGuid, SpaceName}], lists:seq(1, 20)),
+    Dirs1 = lists:reverse(Dirs0),
+
+    FileInDeepestDirName = <<"file">>,
+    {ok, FileInDeepestDirGuid} = lfm_proxy:create(W, UserSessId, LastDirGuid, FileInDeepestDirName, 8#777),
+    {ok, FileInDeepestDirObjectId} = file_id:guid_to_objectid(FileInDeepestDirGuid),
+
+    Token = initializer:create_access_token(UserId, [
+        #cv_data_objectid{whitelist = [FileInDeepestDirObjectId]}
+    ]),
+    SessId = lfm_permissions_test_utils:create_session(W, UserId, Token),
+
+    lists:foldl(
+        fun({{DirGuid, DirName}, Child}, {ParentPath, ParentGuid}) ->
+            DirPath = case ParentPath of
+                <<>> ->
+                    <<"/">>;
+                <<"/">> ->
+                    <<"/", DirName/binary>>;
+                _ ->
+                    <<ParentPath/binary, "/", DirName/binary>>
+            end,
+
+            % Most operations should be forbidden to perform on dirs/ancestors
+            % leading to files allowed by caveats
+            ?assertMatch(
+                {error, ?EACCES},
+                lfm_proxy:get_acl(W, SessId, {guid, DirGuid})
+            ),
+
+            % Below operations should succeed for every dir/ancestor leading
+            % to file allowed by caveats
+            ?assertMatch(
+                {ok, [Child]},
+                lfm_proxy:get_children(W, SessId, {guid, DirGuid}, 0, 100)
+            ),
+            ?assertMatch(
+                {ok, #file_attr{name = DirName, type = ?DIRECTORY_TYPE}},
+                lfm_proxy:stat(W, SessId, {guid, DirGuid})
+            ),
+            ?assertMatch(
+                {ok, DirGuid},
+                lfm_proxy:resolve_guid(W, SessId, DirPath)
+            ),
+            ?assertMatch(
+                {ok, ParentGuid},
+                lfm_proxy:get_parent(W, SessId, {guid, DirGuid})
+            ),
+            ?assertMatch(
+                {ok, DirPath},
+                lfm_proxy:get_file_path(W, SessId, DirGuid)
+            ),
+
+            {DirPath, DirGuid}
+        end,
+        {<<>>, undefined},
+        lists:zip([{UserRootDir, UserId} | Dirs1], Dirs1 ++ [{FileInDeepestDirGuid, FileInDeepestDirName}])
+    ),
+
+    % Get acl should finally succeed for file which is allowed by caveats
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:get_acl(W, SessId, {guid, FileInDeepestDirGuid})
+    ).
+
+
+data_access_caveats_ancestors_test2(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/t3_file">>, 8#770)),
 
-    % Verification
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#570)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
+    UserId = <<"user3">>,
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
 
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#270)),
-    {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
-    ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
-    ?assertEqual(ok, lfm_proxy:close(W, H1)),
+    SpaceName = <<"space2">>,
+    SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
 
-    % Check if written data is present
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#770)),
-    {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H2)).
+    RootDirName = ?SCENARIO_NAME,
+    {ok, RootDirGuid} = lfm_proxy:mkdir(W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777),
 
-posix_write_file_group_test(Config) ->
-    % Setup
+    CentralDirName = <<"central">>,
+    {ok, _} = lfm_proxy:mkdir(W, UserSessId, RootDirGuid, CentralDirName, 8#777),
+
+    [
+        {RightDirGuid, RightDirName, RightFileObjectId, RightFile},
+        {LeftDirGuid, LeftDirName, LeftFileObjectId, LeftFile}
+    ] = lists:map(fun(DirName) ->
+        {ok, DirGuid} = lfm_proxy:mkdir(W, UserSessId, RootDirGuid, DirName, 8#777),
+        [{FileObjectId, File} | _] = lists:map(fun(Num) ->
+            FileName = <<"file", ($0 + Num)>>,
+            {ok, FileGuid} = lfm_proxy:create(W, UserSessId, DirGuid, FileName, 8#777),
+            {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+            {FileObjectId, {FileGuid, FileName}}
+        end, lists:seq(1, 5)),
+        {DirGuid, DirName, FileObjectId, File}
+    end, [<<"right">>, <<"left">>]),
+
+    MainToken = initializer:create_access_token(UserId),
+
+    % All dirs leading to files allowed by caveat should be listed in ls
+    Token1 = tokens:confine(MainToken, #cv_data_objectid{
+        whitelist = [LeftFileObjectId, RightFileObjectId]
+    }),
+    SessId1 = lfm_permissions_test_utils:create_session(W, UserId, Token1),
+    ?assertMatch(
+        {ok, [{SpaceRootDirGuid, SpaceName}]},
+        lfm_proxy:get_children(W, SessId1, {guid, UserRootDir}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, [{RootDirGuid, RootDirName}]},
+        lfm_proxy:get_children(W, SessId1, {guid, SpaceRootDirGuid}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, [{LeftDirGuid, LeftDirName}, {RightDirGuid, RightDirName}]},
+        lfm_proxy:get_children(W, SessId1, {guid, RootDirGuid}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, [LeftFile]},
+        lfm_proxy:get_children(W, SessId1, {guid, LeftDirGuid}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, [RightFile]},
+        lfm_proxy:get_children(W, SessId1, {guid, RightDirGuid}, 0, 100)
+    ),
+
+    % When caveats have empty intersection then ls should return []
+    Token2 = tokens:confine(MainToken, [
+        #cv_data_objectid{whitelist = [LeftFileObjectId]},
+        #cv_data_objectid{whitelist = [RightFileObjectId]}
+    ]),
+    SessId2 = lfm_permissions_test_utils:create_session(W, UserId, Token2),
+    ?assertMatch(
+        {ok, [{SpaceRootDirGuid, SpaceName}]},
+        lfm_proxy:get_children(W, SessId2, {guid, UserRootDir}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, [{RootDirGuid, RootDirName}]},
+        lfm_proxy:get_children(W, SessId2, {guid, SpaceRootDirGuid}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:get_children(W, SessId2, {guid, RootDirGuid}, 0, 100)
+    ).
+
+
+data_access_caveats_cache_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    SessId4 = ?config({session_id, {<<"user4">>, ?GET_DOMAIN(W)}}, Config),
-    {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name4/t4_file">>, 8#770)),
 
-    % Verification
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#750)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId4, {guid, GUID}, write)),
+    UserId = <<"user3">>,
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
 
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#720)),
-    {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId4, {guid, GUID}, write)),
-    ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
-    ?assertEqual(ok, lfm_proxy:close(W, H1)),
+    SpaceName = <<"space2">>,
+    SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
 
-    % Check if written data is present
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#770)),
-    {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H2)).
+    RootDirName = ?SCENARIO_NAME,
+    {ok, RootDirGuid} = lfm_proxy:mkdir(W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777),
 
-posix_read_dir_user_test(Config) ->
-    % Setup
+    {ok, DirGuid} = lfm_proxy:mkdir(W, UserSessId, RootDirGuid, <<"dir">>, 8#777),
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+
+    {ok, FileGuid} = lfm_proxy:create(W, UserSessId, DirGuid, <<"file">>, 8#777),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    Token = initializer:create_access_token(UserId, [
+        #cv_data_objectid{whitelist = [DirObjectId]},
+        #cv_data_objectid{whitelist = [FileObjectId]}
+    ]),
+    SessId = lfm_permissions_test_utils:create_session(W, UserId, Token),
+
+
+    %% CHECK guid_constraint CACHE
+
+    % before any call cache should be empty
+    lists:foreach(fun(Guid) ->
+        ?assertEqual(
+            calculate,
+            ?rpcCache(W, check_permission, [{guid_constraint, Token, Guid}])
+        )
+    end, [UserRootDir, SpaceRootDirGuid, RootDirGuid, DirGuid, FileGuid]),
+
+    % call on file should fill cache up to root dir with remaining guid constraints
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:get_acl(W, SessId, {guid, FileGuid})
+    ),
+    lists:foreach(fun(Guid) ->
+        ?assertEqual(
+            {ok, {false, [[FileGuid], [DirGuid]]}},
+            ?rpcCache(W, check_permission, [{guid_constraint, Token, Guid}])
+        )
+    end, [UserRootDir, SpaceRootDirGuid, RootDirGuid]),
+    ?assertEqual(
+        {ok, {false, [[FileGuid]]}},
+        ?rpcCache(W, check_permission, [{guid_constraint, Token, DirGuid}])
+    ),
+    ?assertEqual(
+        {ok, true},
+        ?rpcCache(W, check_permission, [{guid_constraint, Token, FileGuid}])
+    ),
+
+
+    %% CHECK data_constraint CACHE
+
+    % data_constraint cache is not filed recursively as guid_constraint one is
+    % so only for file should it be filled
+    lists:foreach(fun(Guid) ->
+        ?assertEqual(
+            calculate,
+            ?rpcCache(W, check_permission, [{data_constraint, Token, Guid}])
+        )
+    end, [UserRootDir, SpaceRootDirGuid, RootDirGuid, DirGuid]),
+
+    ?assertEqual(
+        {ok, subpath},
+        ?rpcCache(W, check_permission, [{data_constraint, Token, FileGuid}])
+    ),
+
+    % calling on dir any function reserved only for subpath should cache
+    % {subpath, ?EACCES} meaning that no such operation can be performed
+    % but since ancestor checks were not performed it is not known whether
+    % ancestor operations can be performed
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:get_acl(W, SessId, {guid, DirGuid})
+    ),
+    ?assertEqual(
+        {ok, {subpath, ?EACCES}},
+        ?rpcCache(W, check_permission, [{data_constraint, Token, DirGuid}])
+    ),
+
+    % after calling operation possible to perform on ancestor cached value should
+    % be changed to signal that file is ancestor and such operations can be performed
+    ?assertMatch(
+        {ok, [_]},
+        lfm_proxy:get_children(W, SessId, {guid, DirGuid}, 0, 100)
+    ),
+    ?assertEqual(
+        {ok, {ancestor, [<<"file">>]}},
+        ?rpcCache(W, check_permission, [{data_constraint, Token, DirGuid}])
+    ),
+
+    % Calling ancestor operation on unrelated to file in caveats dir all checks
+    % will be performed and just ?EACESS will be cached meaning that no operation
+    % on this dir can be performed
+    {ok, OtherDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
+        W, UserSessId, RootDirGuid, <<"other_dir">>, 8#777
+    )),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:get_children(W, SessId, {guid, OtherDirGuid}, 0, 100)
+    ),
+    ?assertEqual(
+        {ok, ?EACCES},
+        ?rpcCache(W, check_permission, [{data_constraint, Token, OtherDirGuid}])
+    ).
+
+
+mkdir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name2/t5_dir">>, 8#770)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t5_dir/file">>, 8#770)),
 
-    % Verification
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, DirGUID}, 8#370)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId2, {guid, DirGUID}, 0, 5)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container, ?add_subcontainer]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
+            extract_ok(lfm_proxy:mkdir(W, SessId, ParentDirGuid, <<"dir2">>, 8#777))
+        end
+    }, Config).
 
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, DirGUID}, 8#470)),
-    ?assertMatch({ok, [{FileGUID, _}]}, lfm_proxy:ls(W, SessId2, {guid, DirGUID}, 0, 5)).
 
-posix_read_dir_group_test(Config) ->
-    % Setup
+get_children_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name2/t6_dir">>, 8#770)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t6_dir/file">>, 8#770)),
 
-    % Verification
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, DirGUID}, 8#730)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId1, {guid, DirGUID}, 0, 5)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?list_container]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            DirKey = maps:get(DirPath, ExtraData),
+            extract_ok(lfm_proxy:get_children(W, SessId, DirKey, 0, 100))
+        end
+    }, Config).
 
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, DirGUID}, 8#740)),
-    ?assertMatch({ok, [{FileGUID, _}]}, lfm_proxy:ls(W, SessId1, {guid, DirGUID}, 0, 5)).
 
-posix_write_dir_user_test(Config) ->
-    % Setup
+get_children_attrs_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/space_name3/t7_dir">>, 8#770)),
-    {_, File1GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/space_name3/t7_dir/file1">>, 8#770)),
-    {_, File2GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/space_name3/t7_dir/file_to_rename">>, 8#770)),
 
-    % Verification
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {guid, DirGUID}, 8#570)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId3, <<"/space_name3/t7_dir/file2">>, 8#770)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:mv(W, SessId3, {guid, File2GUID}, <<"/space_name3/t7_dir/renamed_file">>)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId3, {guid, File1GUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container, ?list_container]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            DirKey = maps:get(DirPath, ExtraData),
+            extract_ok(lfm_proxy:get_children_attrs(W, SessId, DirKey, 0, 100))
+        end
+    }, Config).
 
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {guid, DirGUID}, 8#370)),
-    ?assertMatch({ok, _GUID}, lfm_proxy:create(W, SessId3, <<"/space_name3/t7_dir/file2">>, 8#770)),
-    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId3, {guid, File2GUID}, <<"/space_name3/t7_dir/renamed_file">>)),
-    ?assertEqual(ok, lfm_proxy:unlink(W, SessId3, {guid, File1GUID})).
 
-posix_write_dir_group_test(Config) ->
-    % Setup
+get_children_details_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/space_name3/t8_dir">>, 8#770)),
-    {_, File1GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/space_name3/t8_dir/file1">>, 8#770)),
-    {_, File2GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/space_name3/t8_dir/file_to_rename">>, 8#770)),
 
-    % Verification
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {guid, DirGUID}, 8#750)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId1, <<"/space_name3/t8_dir/file2">>, 8#770)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:mv(W, SessId1, {guid, File2GUID}, <<"/space_name3/t8_dir/renamed_file">>)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId1, {guid, File1GUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container, ?list_container]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            DirKey = maps:get(DirPath, ExtraData),
+            extract_ok(lfm_proxy:get_children_details(W, SessId, DirKey, 0, 100, undefined))
+        end
+    }, Config).
 
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {guid, DirGUID}, 8#730)),
-    ?assertMatch({ok, _GUID}, lfm_proxy:create(W, SessId1, <<"/space_name3/t8_dir/file2">>, 8#770)),
-    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId1, {guid, File2GUID}, <<"/space_name3/t8_dir/renamed_file">>)),
-    ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, {guid, File1GUID})).
 
-posix_execute_dir_user_test(Config) ->
-    % Setup
+get_child_attr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    {_, Dir1GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name3/t9_dir1">>, 8#770)),
-    {_, Dir2GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name3/t9_dir1/dir2">>, 8#770)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name3/t9_dir1/dir2/file">>, 8#770)),
 
-    % Verification
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, Dir1GUID}, 8#670)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId2, {guid, Dir2GUID}, 0, 5)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId2, {guid, FileGUID}, rdwr)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container],
+            children = [#file{name = <<"file1">>}]
+        }],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
+            extract_ok(lfm_proxy:get_child_attr(W, SessId, ParentDirGuid, <<"file1">>))
+        end
+    }, Config).
 
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, Dir1GUID}, 8#170)),
-    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId2, {guid, Dir2GUID}, 0, 5)),
-    {_, H} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, FileGUID}, rdwr)),
-    ?assertEqual({ok, 1}, lfm_proxy:write(W, H, 0, <<255:8>>)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H)).
 
-posix_execute_dir_group_test(Config) ->
-    % Setup
+mv_dir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    {_, Dir1GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name3/t10_dir1">>, 8#770)),
-    {_, Dir2GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name3/t10_dir1/dir2">>, 8#770)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name3/t10_dir1/dir2/file">>, 8#770)),
 
-    % Verification
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, Dir1GUID}, 8#760)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId3, {guid, Dir2GUID}, 0, 5)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId3, {guid, FileGUID}, rdwr)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [
+            #dir{
+                name = <<"dir1">>,
+                perms = [?traverse_container, ?delete_subcontainer],
+                children = [
+                    #dir{
+                        name = <<"dir11">>,
+                        perms = [?delete]
+                    }
+                ]
+            },
+            #dir{
+                name = <<"dir2">>,
+                perms = [?traverse_container, ?add_subcontainer]
+            }
+        ],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
+            SrcDirKey = maps:get(SrcDirPath, ExtraData),
+            DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
+            DstDirKey = maps:get(DstDirPath, ExtraData),
+            extract_ok(lfm_proxy:mv(W, SessId, SrcDirKey, DstDirKey, <<"dir21">>))
+        end
+    }, Config).
 
-    ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, Dir1GUID}, 8#710)),
-    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {guid, Dir2GUID}, 0, 5)),
-    {_, H} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId3, {guid, FileGUID}, rdwr)),
-    ?assertEqual({ok, 1}, lfm_proxy:write(W, H, 0, <<255:8>>)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H)).
 
-
-%%%-------------------------------------------------------------------
-%%% Acl tests
-%%%-------------------------------------------------------------------
-
-acl_read_object_user_test(Config) ->
-    % Setup
+rm_dir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t11_file">>, 8#777)),
-    {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, GUID}, write)),
-    {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
-    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId1, ?read_object_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [
+            #dir{
+                name = <<"dir1">>,
+                perms = [?traverse_container, ?delete_subcontainer],
+                children = [
+                    #dir{
+                        name = <<"dir2">>,
+                        perms = [?delete, ?list_container]
+                    }
+                ]
+            }
+        ],
+        posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
+            DirKey = maps:get(DirPath, ExtraData),
+            extract_ok(lfm_proxy:unlink(W, SessId, DirKey))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId1, ?read_object_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace2])),
-    {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
-acl_read_object_group_test(Config) ->
-    % Setup
+create_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    [{GroupId1, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t12_file">>, 8#777)),
-    {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, GUID}, write)),
-    {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
-    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId1, ?read_object_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container, ?add_object]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
+            extract_ok(lfm_proxy:create(W, SessId, ParentDirGuid, <<"file1">>, 8#777))
+        end
+    }, Config).
 
-    Ace2 = ?allow_group(GroupId1, ?read_object_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace2])),
-    {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
-acl_list_container_user_test(Config) ->
-    % Setup
+open_for_read_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name2/t13_dir">>, 8#777)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t13_dir/file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId1, ?list_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId1, {guid, DirGUID}, 0, 5)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_object],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                % write to file to force its creation on storage. Otherwise it
+                % may be not possible during tests without necessary perms.
+                fill_file_with_dummy_data(W, FileOwnerSessId, Guid),
+                {guid, Guid}
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:open(W, SessId, FileKey, read))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId1, ?list_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertMatch({ok, [{FileGUID, _}]}, lfm_proxy:ls(W, SessId1, {guid, DirGUID}, 0, 5)).
 
-acl_list_container_group_test(Config) ->
-    % Setup
+open_for_write_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    [{GroupId1, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name2/t14_dir">>, 8#777)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t14_dir/file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId1, ?list_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId1, {guid, DirGUID}, 0, 5)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_object],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                % write to file to force its creation on storage. Otherwise it
+                % may be not possible during tests without necessary perms.
+                fill_file_with_dummy_data(W, FileOwnerSessId, Guid),
+                {guid, Guid}
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:open(W, SessId, FileKey, write))
+        end
+    }, Config).
 
-    Ace2 = ?allow_group(GroupId1, ?list_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertMatch({ok, [{FileGUID, _}]}, lfm_proxy:ls(W, SessId1, {guid, DirGUID}, 0, 5)).
 
-acl_write_object_user_test(Config) ->
-    % Setup
+open_for_rdwr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name4/t15_file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId1, ?write_object_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_object, ?write_object],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                % write to file to force its creation on storage. Otherwise it
+                % may be not possible during tests without necessary perms.
+                fill_file_with_dummy_data(W, FileOwnerSessId, Guid),
+                {guid, Guid}
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:open(W, SessId, FileKey, rdwr))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId1, ?write_object_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace2])),
-    {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
-    ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
-    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
-    % Check if written data is present
-    {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H2)).
-
-acl_write_object_group_test(Config) ->
-    % Setup
+create_and_open_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    [{GroupId1, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name4/t16_file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId1, ?write_object_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container, ?add_object],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                % Create dummy file to ensure that directory is created on storage.
+                % Otherwise it may be not possible during tests without necessary perms.
+                create_dummy_file(W, FileOwnerSessId, Guid),
+                {guid, Guid}
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        applicable_to_space_owner = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
+            extract_ok(lfm_proxy:create_and_open(W, SessId, ParentDirGuid, <<"file1">>, 8#777))
+        end
+    }, Config).
 
-    Ace2 = ?allow_group(GroupId1, ?write_object_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace2])),
-    {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
-    ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
-    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
-    % Check if written data is present
-    {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H2)).
-
-acl_add_object_user_test(Config) ->
-    % Setup
+truncate_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    UserId3 = ?config({user_id, <<"user3">>}, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/space_name3/t17_dir">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId2, ?add_object_mask),
-    Ace2 = ?allow_user(UserId2, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, DirGUID}, [?acl_all(UserId3), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId2, <<"/space_name3/t17_dir/file">>, 8#777)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_object]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:truncate(W, SessId, FileKey, 0))
+        end
+    }, Config).
 
-    Ace3 = ?allow_user(UserId2, ?add_object_mask bor ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, DirGUID}, [?acl_all(UserId3), Ace3])),
-    ?assertMatch({ok, _FileGUID}, lfm_proxy:create(W, SessId2, <<"/space_name3/t17_dir/file">>, 8#777)).
 
-acl_add_object_group_test(Config) ->
-    % Setup
+mv_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    UserId3 = ?config({user_id, <<"user3">>}, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    [_, {GroupId2, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/space_name3/t18_dir">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId2, ?add_object_mask),
-    Ace2 = ?allow_group(GroupId2, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, DirGUID}, [?acl_all(UserId3), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId2, <<"/space_name3/t18_dir/file">>, 8#777)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [
+            #dir{
+                name = <<"dir1">>,
+                perms = [?traverse_container, ?delete_object],
+                children = [
+                    #file{
+                        name = <<"file11">>,
+                        perms = [?delete]
+                    }
+                ]
+            },
+            #dir{
+                name = <<"dir2">>,
+                perms = [?traverse_container, ?add_object]
+            }
+        ],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
+            SrcFileKey = maps:get(SrcFilePath, ExtraData),
+            DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
+            DstDirKey = maps:get(DstDirPath, ExtraData),
+            extract_ok(lfm_proxy:mv(W, SessId, SrcFileKey, DstDirKey, <<"file21">>))
+        end
+    }, Config).
 
-    Ace3 = ?allow_group(GroupId2, ?add_object_mask bor ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, DirGUID}, [?acl_all(UserId3), Ace3])),
-    ?assertMatch({ok, _FileGUID}, lfm_proxy:create(W, SessId2, <<"/space_name3/t18_dir/file">>, 8#777)).
 
-acl_add_subcontainer_user_test(Config) ->
-    % Setup
+rm_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    UserId3 = ?config({user_id, <<"user3">>}, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    {_, Dir1GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/space_name4/t19_dir1">>, 8#777)),
 
-    % Verification
-    Ace1 = ?allow_user(UserId2, ?add_subcontainer_mask),
-    Ace2 = ?deny_user(UserId2, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, Dir1GUID}, [?acl_all(UserId3), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:mkdir(W, SessId2, <<"/space_name4/t19_dir1/dir2">>, 8#777)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [
+            #dir{
+                name = <<"dir1">>,
+                perms = [?traverse_container, ?delete_object],
+                children = [
+                    #file{
+                        name = <<"file1">>,
+                        perms = [?delete]
+                    }
+                ]
+            }
+        ],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:unlink(W, SessId, FileKey))
+        end
+    }, Config).
 
-    Ace3 = ?allow_user(UserId2, ?add_subcontainer_mask bor ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, Dir1GUID}, [?acl_all(UserId3), Ace3])),
-    ?assertMatch({ok, _Dir2GUID}, lfm_proxy:mkdir(W, SessId2, <<"/space_name4/t19_dir1/dir2">>, 8#777)).
 
-acl_add_subcontainer_group_test(Config) ->
-    % Setup
+get_parent_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    UserId3 = ?config({user_id, <<"user3">>}, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    [_, {GroupId2, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, Dir1GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/space_name4/t20_dir1">>, 8#777)),
 
-    % Verification
-    Ace1 = ?allow_group(GroupId2, ?add_subcontainer_mask),
-    Ace2 = ?deny_group(GroupId2, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, Dir1GUID}, [?acl_all(UserId3), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:mkdir(W, SessId2, <<"/space_name4/t20_dir1/dir2">>, 8#777)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{name = <<"file1">>}],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_parent(W, SessId, FileKey))
+        end
+    }, Config).
 
-    Ace3 = ?allow_group(GroupId2, ?add_subcontainer_mask bor ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, Dir1GUID}, [?acl_all(UserId3), Ace3])),
-    ?assertMatch({ok, _Dir2GUID}, lfm_proxy:mkdir(W, SessId2, <<"/space_name4/t20_dir1/dir2">>, 8#777)).
 
-acl_read_metadata_user_test(Config) ->
-    % Setup
+get_file_path_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId4 = ?config({session_id, {<<"user4">>, ?GET_DOMAIN(W)}}, Config),
-    UserId4 = ?config({user_id, <<"user4">>}, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    UserId3 = ?config({user_id, <<"user3">>}, Config),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/space_name4/t21_file">>, 8#777)),
-    Xattr = #xattr{name = <<"XATTR_NAME">>, value = <<42/integer>>},
-    ?assertEqual(ok, lfm_proxy:set_xattr(W, SessId4, {guid, FileGUID}, Xattr)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId3, ?read_metadata_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId4, {guid, FileGUID}, [?acl_all(UserId4), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_xattr(W, SessId3, {guid, FileGUID}, <<"XATTR_NAME">>)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{name = <<"file1">>}],
+        available_in_readonly_mode = true,
+        available_in_share_mode = false, % TODO VFS-6057
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            {guid, FileGuid} = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_file_path(W, SessId, FileGuid))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId3, ?read_metadata_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId4, {guid, FileGUID}, [?acl_all(UserId4), Ace2])),
-    ?assertEqual({ok, Xattr}, lfm_proxy:get_xattr(W, SessId3, {guid, FileGUID}, <<"XATTR_NAME">>)).
 
-acl_read_metadata_group_test(Config) ->
-    % Setup
+get_file_guid_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId4 = ?config({session_id, {<<"user4">>, ?GET_DOMAIN(W)}}, Config),
-    UserId4 = ?config({user_id, <<"user4">>}, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    [_, _, _, {GroupId4, _}] = ?config({groups, <<"user1">>}, Config),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/space_name4/t22_file">>, 8#777)),
-    Xattr = #xattr{name = <<"XATTR_NAME">>, value = <<42/integer>>},
-    ?assertEqual(ok, lfm_proxy:set_xattr(W, SessId4, {guid, FileGUID}, Xattr)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId4, ?read_metadata_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId4, {guid, FileGUID}, [?acl_all(UserId4), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_xattr(W, SessId3, {guid, FileGUID}, <<"XATTR_NAME">>)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{name = <<"file1">>}],
+        available_in_readonly_mode = true,
+        available_in_share_mode = inapplicable,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            extract_ok(lfm_proxy:resolve_guid(W, SessId, FilePath))
+        end
+    }, Config).
 
-    Ace2 = ?allow_group(GroupId4, ?read_metadata_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId4, {guid, FileGUID}, [?acl_all(UserId4), Ace2])),
-    ?assertEqual({ok, Xattr}, lfm_proxy:get_xattr(W, SessId3, {guid, FileGUID}, <<"XATTR_NAME">>)).
 
-acl_write_metadata_user_test(Config) ->
-    % Setup
+get_file_attr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId4 = ?config({session_id, {<<"user4">>, ?GET_DOMAIN(W)}}, Config),
-    UserId4 = ?config({user_id, <<"user4">>}, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    UserId3 = ?config({user_id, <<"user3">>}, Config),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/space_name4/t23_file">>, 8#777)),
-    Xattr = #xattr{name = <<"XATTR_NAME">>, value = <<42/integer>>},
-    ?assertEqual(ok, lfm_proxy:set_xattr(W, SessId4, {guid, FileGUID}, Xattr)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId3, ?write_metadata_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId4, {guid, FileGUID}, [?acl_all(UserId4), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_xattr(W, SessId3, {guid, FileGUID}, Xattr)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{name = <<"file1">>}],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:stat(W, SessId, FileKey))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId3, ?write_metadata_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId4, {guid, FileGUID}, [?acl_all(UserId4), Ace2])),
-    ?assertEqual(ok, lfm_proxy:set_xattr(W, SessId3, {guid, FileGUID}, Xattr)),
 
-    % Check if written metadata is present
-    ?assertEqual({ok, Xattr}, lfm_proxy:get_xattr(W, SessId4, {guid, FileGUID}, <<"XATTR_NAME">>)).
-
-acl_write_metadata_group_test(Config) ->
-    % Setup
+get_file_details_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId4 = ?config({session_id, {<<"user4">>, ?GET_DOMAIN(W)}}, Config),
-    UserId4 = ?config({user_id, <<"user4">>}, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    [_, _, {GroupId3, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/space_name4/t24_file">>, 8#777)),
-    Xattr = #xattr{name = <<"XATTR_NAME">>, value = <<42/integer>>},
-    ?assertEqual(ok, lfm_proxy:set_xattr(W, SessId4, {guid, FileGUID}, Xattr)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId3, ?write_metadata_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId4, {guid, FileGUID}, [?acl_all(UserId4), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_xattr(W, SessId3, {guid, FileGUID}, Xattr)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{name = <<"file1">>}],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_details(W, SessId, FileKey))
+        end
+    }, Config).
 
-    Ace2 = ?allow_group(GroupId3, ?write_metadata_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId4, {guid, FileGUID}, [?acl_all(UserId4), Ace2])),
-    ?assertEqual(ok, lfm_proxy:set_xattr(W, SessId3, {guid, FileGUID}, Xattr)),
 
-    % Check if written metadata is present
-    ?assertEqual({ok, Xattr}, lfm_proxy:get_xattr(W, SessId4, {guid, FileGUID}, <<"XATTR_NAME">>)).
-
-acl_traverse_container_user_test(Config) ->
-    % Setup
+get_file_distribution_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    UserId3 = ?config({user_id, <<"user3">>}, Config),
-    {_, Dir1GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/space_name3/t25_dir1">>, 8#777)),
-    {_, Dir2GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/space_name3/t25_dir1/dir2">>, 8#777)),
-    {ok, FileGUID} =
-        lfm_proxy:create(W, SessId1, <<"/space_name3/t25_dir1/dir2/file">>, 8#777),
-    {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, FileGUID}, write)),
-    {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
-    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId3, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, Dir1GUID}, [?acl_all(UserId1), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId3, {guid, Dir2GUID}, 0, 5)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId3, {guid, FileGUID}, read)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_file_distribution(W, SessId, FileKey))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId3, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, Dir1GUID}, [?acl_all(UserId1), Ace2])),
-    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {guid, Dir2GUID}, 0, 5)),
-    {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId3, {guid, FileGUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
-acl_traverse_container_group_test(Config) ->
-    % Setup
+set_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    [_, _, {GroupId3, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, Dir1GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/space_name3/t26_dir1">>, 8#777)),
-    {_, Dir2GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/space_name3/t26_dir1/dir2">>, 8#777)),
-    {ok, FileGUID} =
-        lfm_proxy:create(W, SessId1, <<"/space_name3/t26_dir1/dir2/file">>, 8#777),
-    {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, FileGUID}, write)),
-    {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
-    ?assertEqual(ok, lfm_proxy:close(W, H1)),
+    FileOwner = <<"user1">>,
 
-    % Verification
-    Ace1 = ?deny_group(GroupId3, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, Dir1GUID}, [?acl_all(UserId1), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId3, {guid, Dir2GUID}, 0, 5)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId3, {guid, FileGUID}, read)),
+    FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(W)}}, Config),
+    GroupUserSessId = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
+    OtherUserSessId = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
+    SpaceOwnerSessId = ?config({session_id, {<<"owner">>, ?GET_DOMAIN(W)}}, Config),
 
-    Ace2 = ?allow_group(GroupId3, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, Dir1GUID}, [?acl_all(UserId1), Ace2])),
-    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {guid, Dir2GUID}, 0, 5)),
-    {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId3, {guid, FileGUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
-    ?assertEqual(ok, lfm_proxy:close(W, H2)).
+    DirPath = <<"/space1/dir1">>,
+    {ok, DirGuid} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:mkdir(W, FileOwnerUserSessId, DirPath)
+    ),
 
-acl_delete_object_user_test(Config) ->
-    % Setup
+    FilePath = <<"/space1/dir1/file1">>,
+    {ok, FileGuid} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:create(W, FileOwnerUserSessId, FilePath, 8#777)
+    ),
+    {ok, ShareId} = ?assertMatch({ok, _}, lfm_proxy:create_share(W, FileOwnerUserSessId, {guid, FileGuid}, <<"share">>)),
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+
+    %% POSIX
+
+    % file owner can always change file perms if he has access to it
+    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#677, FileGuid => 8#777}),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, FileGuid}, 8#000)
+    ),
+    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#100, FileGuid => 8#000}),
+    ?assertMatch(ok, lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, FileGuid}, 8#000)),
+
+    % but not if that access is via shared guid
+    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, ShareFileGuid}, 8#000)
+    ),
+
+    % other users from space can't change perms no matter what
+    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:set_perms(W, GroupUserSessId, {guid, FileGuid}, 8#000)
+    ),
+
+    % users outside of space shouldn't even see the file
+    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
+    ?assertMatch(
+        {error, ?ENOENT},
+        lfm_proxy:set_perms(W, OtherUserSessId, {guid, FileGuid}, 8#000)
+    ),
+
+    %% ACL
+
+    % file owner can always change file perms if he has access to it
+    lfm_permissions_test_utils:set_acls(W, #{
+        DirGuid => ?ALL_DIR_PERMS -- [?traverse_container],
+        FileGuid => ?ALL_FILE_PERMS
+    }, #{}, ?everyone, ?no_flags_mask),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, FileGuid}, 8#000)
+    ),
+
+    lfm_permissions_test_utils:set_acls(W, #{
+        DirGuid => [?traverse_container],
+        FileGuid => []
+    }, #{}, ?everyone, ?no_flags_mask),
+    ?assertMatch(ok, lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, FileGuid}, 8#000)),
+
+    % but not if that access is via shared guid
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, ShareFileGuid}, 8#000)
+    ),
+
+    % file owner cannot change acl after his access was denied by said acl
+    lfm_permissions_test_utils:set_acls(W, #{}, #{
+        FileGuid => ?ALL_FILE_PERMS
+    }, ?everyone, ?no_flags_mask),
+
+    PermsBitmask = lfm_permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS),
+
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:set_acl(W, FileOwnerUserSessId, {guid, FileGuid}, [
+            ?ALLOW_ACE(?owner, ?no_flags_mask, PermsBitmask)
+        ])
+    ),
+
+    % but space owner always can change acl for any file
+    ?assertMatch(
+        ok,
+        lfm_proxy:set_acl(W, SpaceOwnerSessId, {guid, FileGuid}, [
+            ?ALLOW_ACE(?owner, ?no_flags_mask, PermsBitmask)
+        ])
+    ),
+
+    % other users from space can't change perms no matter what
+    lfm_permissions_test_utils:set_acls(W, #{
+        DirGuid => ?ALL_DIR_PERMS,
+        FileGuid => ?ALL_FILE_PERMS
+    }, #{}, ?everyone, ?no_flags_mask),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:set_perms(W, GroupUserSessId, {guid, FileGuid}, 8#000)
+    ),
+
+    % users outside of space shouldn't even see the file
+    lfm_permissions_test_utils:set_acls(W, #{
+        DirGuid => ?ALL_DIR_PERMS,
+        FileGuid => ?ALL_FILE_PERMS
+    }, #{}, ?everyone, ?no_flags_mask),
+    ?assertMatch(
+        {error, ?ENOENT},
+        lfm_proxy:set_perms(W, OtherUserSessId, {guid, FileGuid}, 8#000)
+    ).
+
+
+check_read_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    UserId3 = ?config({user_id, <<"user3">>}, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/space_name3/t27_dir">>, 8#777)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/space_name3/t27_dir/file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId2, ?delete_object_mask),
-    Ace2 = ?allow_user(UserId2, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, DirGUID}, [?acl_all(UserId3), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId2, {guid, FileGUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_object]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, read))
+        end
+    }, Config).
 
-    Ace3 = ?allow_user(UserId2, ?delete_object_mask bor ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, DirGUID}, [?acl_all(UserId3), Ace3])),
-    ?assertEqual(ok, lfm_proxy:unlink(W, SessId2, {guid, FileGUID})).
 
-acl_delete_object_group_test(Config) ->
-    % Setup
+check_write_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId3 = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-    UserId3 = ?config({user_id, <<"user3">>}, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    [_, _, _, {GroupId4, _}] = ?config({groups, <<"user1">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/space_name3/t28_dir">>, 8#777)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/space_name3/t28_dir/file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?allow_group(GroupId4, ?traverse_container_mask),
-    Ace2 = ?deny_group(GroupId4, ?delete_object_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, DirGUID}, [?acl_all(UserId3), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId2, {guid, FileGUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_object]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, write))
+        end
+    }, Config).
 
-    Ace3 = ?allow_group(GroupId4, ?traverse_container_mask bor ?delete_object_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {guid, DirGUID}, [?acl_all(UserId3), Ace3])),
-    ?assertEqual(ok, lfm_proxy:unlink(W, SessId2, {guid, FileGUID})).
 
-acl_delete_subcontainer_user_test(Config) ->
-    % Setup
+check_rdwr_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    SessId4 = ?config({session_id, {<<"user4">>, ?GET_DOMAIN(W)}}, Config),
-    UserId4 = ?config({user_id, <<"user4">>}, Config),
-    {_, Dir1GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/space_name4/t29_dir1">>, 8#777)),
-    {_, Dir2GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/space_name4/t29_dir1/dir2">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId4, ?delete_subcontainer_mask),
-    Ace2 = ?allow_user(UserId4, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, Dir1GUID}, [?acl_all(UserId1), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId4, {guid, Dir2GUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_object, ?write_object]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, rdwr))
+        end
+    }, Config).
 
-    Ace3 = ?allow_user(UserId4, ?delete_subcontainer_mask bor ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, Dir1GUID}, [?acl_all(UserId1), Ace3])),
-    ?assertEqual(ok, lfm_proxy:unlink(W, SessId4, {guid, Dir2GUID})).
 
-acl_delete_subcontainer_group_test(Config) ->
-    % Setup
+create_share_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    SessId4 = ?config({session_id, {<<"user4">>, ?GET_DOMAIN(W)}}, Config),
-    [_, _, _, {GroupId4, _}] = ?config({groups, <<"user1">>}, Config),
-    {_, Dir1GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/space_name4/t30_dir1">>, 8#777)),
-    {_, Dir2GUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/space_name4/t30_dir1/dir2">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId4, ?delete_subcontainer_mask),
-    Ace2 = ?allow_group(GroupId4, ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, Dir1GUID}, [?acl_all(UserId1), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId4, {guid, Dir2GUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#dir{name = <<"dir1">>}],
+        posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
+        acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            DirKey = maps:get(DirPath, ExtraData),
+            extract_ok(lfm_proxy:create_share(W, SessId, DirKey, <<"create_share">>))
+        end
+    }, Config).
 
-    Ace3 = ?allow_group(GroupId4, ?delete_subcontainer_mask bor ?traverse_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, Dir1GUID}, [?acl_all(UserId1), Ace3])),
-    ?assertEqual(ok, lfm_proxy:unlink(W, SessId4, {guid, Dir2GUID})).
 
-acl_read_attributes_user_test(Config) ->
-    % Setup
+remove_share_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t31_file">>, 8#777)),
-    ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W, SessId2, {guid, FileGUID}, <<"base64">>)),
-    ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W, SessId2, {guid, FileGUID}, <<"Completed">>)),
-    ?assertEqual(ok, lfm_proxy:set_mimetype(W, SessId2, {guid, FileGUID}, <<"text/html">>)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId1, ?read_attributes_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_transfer_encoding(W, SessId1, {guid, FileGUID})),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_cdmi_completion_status(W, SessId1, {guid, FileGUID})),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_mimetype(W, SessId1, {guid, FileGUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#dir{
+            name = <<"dir1">>,
+            on_create = fun(FileOwnerSessId, Guid) ->
+                {ok, ShareId} = ?assertMatch({ok, _}, lfm_proxy:create_share(
+                    W, FileOwnerSessId, {guid, Guid}, <<"share_to_remove">>
+                )),
+                ShareId
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
+        acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
+        available_in_readonly_mode = false,
+        available_in_share_mode = inapplicable,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            ShareId = maps:get(DirPath, ExtraData),
+            extract_ok(lfm_proxy:remove_share(W, SessId, ShareId))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId1, ?read_attributes_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual({ok, <<"base64">>}, lfm_proxy:get_transfer_encoding(W, SessId1, {guid, FileGUID})),
-    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_cdmi_completion_status(W, SessId1, {guid, FileGUID})),
-    ?assertEqual({ok, <<"text/html">>}, lfm_proxy:get_mimetype(W, SessId1, {guid, FileGUID})).
 
-acl_read_attributes_group_test(Config) ->
-    % Setup
+share_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    [{GroupId1, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t32_file">>, 8#777)),
-    ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W, SessId2, {guid, FileGUID}, <<"base64">>)),
-    ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W, SessId2, {guid, FileGUID}, <<"Completed">>)),
-    ?assertEqual(ok, lfm_proxy:set_mimetype(W, SessId2, {guid, FileGUID}, <<"text/html">>)),
+    FileOwner = <<"user1">>,
 
-    % Verification
-    Ace1 = ?deny_group(GroupId1, ?read_attributes_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_transfer_encoding(W, SessId1, {guid, FileGUID})),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_cdmi_completion_status(W, SessId1, {guid, FileGUID})),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_mimetype(W, SessId1, {guid, FileGUID})),
+    FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(W)}}, Config),
+    GroupUserSessId = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
 
-    Ace2 = ?allow_group(GroupId1, ?read_attributes_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual({ok, <<"base64">>}, lfm_proxy:get_transfer_encoding(W, SessId1, {guid, FileGUID})),
-    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_cdmi_completion_status(W, SessId1, {guid, FileGUID})),
-    ?assertEqual({ok, <<"text/html">>}, lfm_proxy:get_mimetype(W, SessId1, {guid, FileGUID})).
+    ScenarioDirName = ?SCENARIO_NAME,
+    ScenarioDirPath = <<"/space1/", ScenarioDirName/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, FileOwnerUserSessId, ScenarioDirPath, 8#700)),
 
-acl_write_attributes_user_test(Config) ->
-    % Setup
+    MiddleDirPath = <<ScenarioDirPath/binary, "/dir2">>,
+    {ok, MiddleDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, FileOwnerUserSessId, MiddleDirPath, 8#777)),
+
+    BottomDirPath = <<MiddleDirPath/binary, "/dir3">>,
+    {ok, BottomDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, FileOwnerUserSessId, BottomDirPath), 8#777),
+
+    FilePath = <<BottomDirPath/binary, "/file1">>,
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, FileOwnerUserSessId, FilePath, 8#777)),
+
+    {ok, ShareId} = ?assertMatch({ok, _}, lfm_proxy:create_share(W, FileOwnerUserSessId, {guid, MiddleDirGuid}, <<"share">>)),
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+
+    % Accessing file in normal mode by space user should result in eacces (dir1 perms -> 8#700)
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:stat(W, GroupUserSessId, {guid, FileGuid})
+    ),
+    % But accessing it in share mode should succeed as perms should be checked only up to
+    % share root (dir1/dir2 -> 8#777) and not space root
+    ?assertMatch(
+        {ok, #file_attr{guid = ShareFileGuid}},
+        lfm_proxy:stat(W, GroupUserSessId, {guid, ShareFileGuid})
+    ),
+
+    % Changing BottomDir mode to 8#770 should forbid access to file in share mode
+    ?assertEqual(ok, lfm_proxy:set_perms(W, ?ROOT_SESS_ID, {guid, BottomDirGuid}, 8#770)),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:stat(W, GroupUserSessId, {guid, ShareFileGuid})
+    ).
+
+
+get_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name4/t33_file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId1, ?write_attributes_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_transfer_encoding(W, SessId1, {guid, FileGUID}, <<"base64">>)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_cdmi_completion_status(W, SessId1, {guid, FileGUID}, <<"Completed">>)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_mimetype(W, SessId1, {guid, FileGUID}, <<"text/html">>)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_acl]
+        }],
+        available_in_readonly_mode = true,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_acl(W, SessId, FileKey))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId1, ?write_attributes_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W, SessId1, {guid, FileGUID}, <<"base64">>)),
-    ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W, SessId1, {guid, FileGUID}, <<"Completed">>)),
-    ?assertEqual(ok, lfm_proxy:set_mimetype(W, SessId1, {guid, FileGUID}, <<"text/html">>)),
 
-    % Check if written attributes are present
-    ?assertEqual({ok, <<"base64">>}, lfm_proxy:get_transfer_encoding(W, SessId2, {guid, FileGUID})),
-    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_cdmi_completion_status(W, SessId2, {guid, FileGUID})),
-    ?assertEqual({ok, <<"text/html">>}, lfm_proxy:get_mimetype(W, SessId2, {guid, FileGUID})).
-
-acl_write_attributes_group_test(Config) ->
-    % Setup
+set_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    [_, _, _, {GroupId4, _}] = ?config({groups, <<"user1">>}, Config),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name4/t34_file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId4, ?write_attributes_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_transfer_encoding(W, SessId1, {guid, FileGUID}, <<"base64">>)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_cdmi_completion_status(W, SessId1, {guid, FileGUID}, <<"Completed">>)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_mimetype(W, SessId1, {guid, FileGUID}, <<"text/html">>)),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_acl]
+        }],
+        posix_requires_space_privs = owner,
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:set_acl(W, SessId, FileKey, [
+                ?ALLOW_ACE(
+                    ?group,
+                    ?no_flags_mask,
+                    lfm_permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
+                )
+            ]))
+        end
+    }, Config).
 
-    Ace2 = ?allow_group(GroupId4, ?write_attributes_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W, SessId1, {guid, FileGUID}, <<"base64">>)),
-    ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W, SessId1, {guid, FileGUID}, <<"Completed">>)),
-    ?assertEqual(ok, lfm_proxy:set_mimetype(W, SessId1, {guid, FileGUID}, <<"text/html">>)),
 
-    % Check if written attributes are present
-    ?assertEqual({ok, <<"base64">>}, lfm_proxy:get_transfer_encoding(W, SessId2, {guid, FileGUID})),
-    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_cdmi_completion_status(W, SessId2, {guid, FileGUID})),
-    ?assertEqual({ok, <<"text/html">>}, lfm_proxy:get_mimetype(W, SessId2, {guid, FileGUID})).
-
-acl_delete_user_test(Config) ->
-    % Setup
+remove_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name2/t35_dir">>, 8#777)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t35_file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId1, ?delete_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId1, {guid, DirGUID})),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId1, {guid, FileGUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_acl]
+        }],
+        posix_requires_space_privs = owner,
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:remove_acl(W, SessId, FileKey))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId1, ?delete_mask bor ?list_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, {guid, DirGUID})),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, {guid, FileGUID})).
 
-acl_delete_group_test(Config) ->
-    % Setup
+get_transfer_encoding_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    [{GroupId1, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name2/t36_dir">>, 8#777)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t36_file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId1, ?delete_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId1, {guid, DirGUID})),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId1, {guid, FileGUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_attributes],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                lfm_proxy:set_transfer_encoding(W, FileOwnerSessId, {guid, Guid}, <<"base64">>),
+                {guid, Guid}
+            end
+        }],
+        available_in_readonly_mode = true,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_transfer_encoding(W, SessId, FileKey))
+        end
+    }, Config).
 
-    Ace2 = ?allow_group(GroupId1, ?delete_mask  bor ?list_container_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, {guid, DirGUID})),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, {guid, FileGUID})).
 
-acl_read_acl_user_test(Config) ->
-    % Setup
+set_transfer_encoding_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name2/t37_dir">>, 8#777)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t37_file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId1, ?read_acl_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_acl(W, SessId1, {guid, DirGUID})),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_acl(W, SessId1, {guid, FileGUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_attributes]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:set_transfer_encoding(W, SessId, FileKey, <<"base64">>))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId1, ?read_acl_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertMatch({ok, _List}, lfm_proxy:get_acl(W, SessId1, {guid, DirGUID})),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertMatch({ok, _List}, lfm_proxy:get_acl(W, SessId1, {guid, FileGUID})).
 
-acl_read_acl_group_test(Config) ->
-    % Setup
+get_cdmi_completion_status_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    [_, _, {GroupId3, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name2/t38_dir">>, 8#777)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t38_file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId3, ?read_acl_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_acl(W, SessId1, {guid, DirGUID})),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_acl(W, SessId1, {guid, FileGUID})),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_attributes],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                lfm_proxy:set_cdmi_completion_status(W, FileOwnerSessId, {guid, Guid}, <<"Completed">>),
+                {guid, Guid}
+            end
+        }],
+        available_in_readonly_mode = true,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_cdmi_completion_status(W, SessId, FileKey))
+        end
+    }, Config).
 
-    Ace2 = ?allow_group(GroupId3, ?read_acl_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertMatch({ok, _List}, lfm_proxy:get_acl(W, SessId1, {guid, DirGUID})),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertMatch({ok, _List}, lfm_proxy:get_acl(W, SessId1, {guid, FileGUID})).
 
-acl_write_acl_user_test(Config) ->
-    % Setup
+set_cdmi_completion_status_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name3/t39_dir">>, 8#777)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name3/t39_file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_user(UserId1, ?write_acl_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_acl(W, SessId1, {guid, DirGUID}, [])),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, [])),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_attributes]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:set_cdmi_completion_status(W, SessId, FileKey, <<"Completed">>))
+        end
+    }, Config).
 
-    Ace2 = ?allow_user(UserId1, ?write_acl_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, DirGUID}, [])),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, [])).
 
-acl_write_acl_group_test(Config) ->
-    % Setup
+get_mimetype_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    UserId2 = ?config({user_id, <<"user2">>}, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    [_, _, {GroupId3, _} | _] = ?config({groups, <<"user1">>}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/space_name3/t40_dir">>, 8#777)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name3/t40_file">>, 8#777)),
 
-    % Verification
-    Ace1 = ?deny_group(GroupId3, ?write_acl_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_acl(W, SessId1, {guid, DirGUID}, [])),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, [])),
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_attributes],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                lfm_proxy:set_mimetype(W, FileOwnerSessId, {guid, Guid}, <<"mimetype">>),
+                {guid, Guid}
+            end
+        }],
+        available_in_readonly_mode = true,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_mimetype(W, SessId, FileKey))
+        end
+    }, Config).
 
-    Ace2 = ?allow_group(GroupId3, ?write_acl_mask),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, DirGUID}, [])),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, [])).
 
--define(PERMISSION_CACHE_STATUS_UUID, <<"status">>).
+set_mimetype_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_attributes]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:set_mimetype(W, SessId, FileKey, <<"mimetype">>))
+        end
+    }, Config).
+
+
+get_metadata_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                lfm_proxy:set_metadata(W, FileOwnerSessId, {guid, Guid}, json, <<"VAL">>, []),
+                {guid, Guid}
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_metadata(W, SessId, FileKey, json, [], false))
+        end
+    }, Config).
+
+
+set_metadata_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:set_metadata(W, SessId, FileKey, json, <<"VAL">>, []))
+        end
+    }, Config).
+
+
+remove_metadata_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_metadata],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                lfm_proxy:set_metadata(W, FileOwnerSessId, {guid, Guid}, json, <<"VAL">>, []),
+                {guid, Guid}
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:remove_metadata(W, SessId, FileKey, json))
+        end
+    }, Config).
+
+
+get_xattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
+                lfm_proxy:set_xattr(W, FileOwnerSessId, {guid, Guid}, Xattr),
+                {guid, Guid}
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_xattr(W, SessId, FileKey, <<"myxattr">>))
+        end
+    }, Config).
+
+
+list_xattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            on_create = fun(FileOwnerSessId, Guid) ->
+                Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
+                lfm_proxy:set_xattr(W, FileOwnerSessId, {guid, Guid}, Xattr),
+                {guid, Guid}
+            end
+        }],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:list_xattr(W, SessId, FileKey, false, false))
+        end
+    }, Config).
+
+
+set_xattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:set_xattr(W, SessId, FileKey, #xattr{name = <<"myxattr">>, value = <<"VAL">>}))
+        end
+    }, Config).
+
+
+remove_xattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_metadata],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
+                lfm_proxy:set_xattr(W, FileOwnerSessId, {guid, Guid}, Xattr),
+                {guid, Guid}
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:remove_xattr(W, SessId, FileKey, <<"myxattr">>))
+        end
+    }, Config).
+
+
+add_qos_entry_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = false,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:add_qos_entry(W, SessId, FileKey, <<"country=FR">>, 1))
+        end
+    }, Config).
+
+
+get_qos_entry_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                {ok, QosEntryId} = lfm_proxy:add_qos_entry(
+                    W, FileOwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                ),
+                QosEntryId
+            end 
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = inapplicable,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            QosEntryId = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_qos_entry(W, SessId, QosEntryId))
+        end
+    }, Config).
+
+
+remove_qos_entry_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_metadata],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                {ok, QosEntryId} = lfm_proxy:add_qos_entry(
+                    W, FileOwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                ),
+                QosEntryId
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
+        available_in_share_mode = inapplicable,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            QosEntryId = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:remove_qos_entry(W, SessId, QosEntryId))
+        end
+    }, Config).
+
+
+get_effective_file_qos_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                {ok, _QosEntryId} = lfm_proxy:add_qos_entry(
+                    W, FileOwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                ),
+                {guid, Guid}
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = inapplicable,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:get_effective_file_qos(W, SessId, FileKey))
+        end
+    }, Config).
+
+
+check_qos_fulfillment_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata],
+            on_create = fun(FileOwnerSessId, Guid) ->
+                {ok, QosEntryId} = lfm_proxy:add_qos_entry(
+                    W, FileOwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                ),
+                QosEntryId
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = inapplicable,
+        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            QosEntryId = maps:get(FilePath, ExtraData),
+            extract_ok(lfm_proxy:check_qos_status(W, SessId, QosEntryId))
+        end
+    }, Config).
+
+
 permission_cache_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
+    PermissionCacheStatusUuid = <<"status">>,
 
-    case ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]) of
+    case ?rpcCache(W, get, [PermissionCacheStatusUuid]) of
         {ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, _}}}} ->
             ?assertEqual(ok, ?rpcCache(W, invalidate, [])),
             ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper, permissions_cache_helper2}}}},
-                ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]), 3);
+                ?rpcCache(W, get, [PermissionCacheStatusUuid]), 3);
         _ ->
             ok
     end,
@@ -1069,24 +2006,24 @@ permission_cache_test(Config) ->
 
     ?assertEqual(ok, ?rpcCache(W, invalidate, [])),
     ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, _}}}},
-        ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID])),
+        ?rpcCache(W, get, [PermissionCacheStatusUuid])),
     ?assertMatch({ok, _}, ?rpcCache(W, cache_permission, [p2, ok])),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
     ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p2])),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
 
     ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, permissions_cache_helper}}}},
-        ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]), 2),
+        ?rpcCache(W, get, [PermissionCacheStatusUuid]), 2),
     ?assertEqual(ok, ?rpcCache(W, invalidate, [])),
     ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper, _}}}},
-        ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]), 2),
+        ?rpcCache(W, get, [PermissionCacheStatusUuid]), 2),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
 
     for(50, fun() -> ?assertEqual(ok, ?rpcCache(W, invalidate, [])) end),
     CheckFun = fun() ->
-        case ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]) of
+        case ?rpcCache(W, get, [PermissionCacheStatusUuid]) of
             {ok, #document{value = #permissions_cache{value = {permissions_cache_helper, permissions_cache_helper2}}}} ->
                 ok;
             {ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, permissions_cache_helper}}}} ->
@@ -1102,72 +2039,204 @@ permission_cache_test(Config) ->
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
     ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p3])).
 
-check_perms_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/space_name3/t41_dir">>, 8#740)),
-    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name3/t41_file">>, 8#720)),
 
-    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, DirGUID}, read)),
-    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, DirGUID}, write)),
-    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, DirGUID}, rdwr)),
-    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId2, {guid, DirGUID}, read)),
-    ?assertEqual({ok, false}, lfm_proxy:check_perms(W, SessId2, {guid, DirGUID}, write)),
-    ?assertEqual({ok, false}, lfm_proxy:check_perms(W, SessId2, {guid, DirGUID}, rdwr)),
-    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, FileGUID}, read)),
-    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, FileGUID}, write)),
-    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, FileGUID}, rdwr)),
-    ?assertEqual({ok, false}, lfm_proxy:check_perms(W, SessId2, {guid, FileGUID}, read)),
-    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId2, {guid, FileGUID}, write)),
-    ?assertEqual({ok, false}, lfm_proxy:check_perms(W, SessId2, {guid, FileGUID}, rdwr)).
+multi_provider_permission_cache_test(Config) ->
+    [P2, P1W2, P1W1] = ?config(op_worker_nodes, Config),
+    Nodes = [P1W2, P1W1, P2],
+
+    User = <<"user1">>,
+
+    Path = <<"/space1/multi_provider_permission_cache_test">>,
+    P1W2SessId = ?config({session_id, {User, ?GET_DOMAIN(P1W2)}}, Config),
+
+    {Guid, AllPerms} = case rand:uniform(2) of
+        1 ->
+            {_, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(P1W2, P1W2SessId, Path, 8#777)),
+            {FileGuid, ?ALL_FILE_PERMS};
+        2 ->
+            {_, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(P1W2, P1W2SessId, Path, 8#777)),
+            {DirGuid, ?ALL_DIR_PERMS}
+    end,
+
+    % Set random posix permissions for file/dir and assert they are properly propagated to other
+    % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
+    lists:foreach(fun(_IterationNum) ->
+        PosixPerms = lists_utils:random_sublist(?ALL_POSIX_PERMS),
+        Mode = lists:foldl(fun(Perm, Acc) ->
+            Acc bor lfm_permissions_test_utils:posix_perm_to_mode(Perm, owner)
+        end, 0, PosixPerms),
+        lfm_permissions_test_utils:set_modes(P1W2, #{Guid => Mode}),
+
+        {AllowedPerms, DeniedPerms} = lists:foldl(fun(Perm, {AllowedPermsAcc, DeniedPermsAcc}) ->
+            case lfm_permissions_test_utils:perm_to_posix_perms(Perm) -- [owner, owner_if_parent_sticky | PosixPerms] of
+                [] -> {[Perm | AllowedPermsAcc], DeniedPermsAcc};
+                _ -> {AllowedPermsAcc, [Perm | DeniedPermsAcc]}
+            end
+        end, {[], []}, AllPerms),
+
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, PosixPerms, DeniedPerms,
+            {error, ?EACCES}, <<"denied posix perm">>, Config
+        ),
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, PosixPerms, AllowedPerms,
+            ok, <<"allowed posix perm">>, Config
+        )
+    end, lists:seq(1, 5)),
+
+    % Set random acl permissions for file/dir and assert they are properly propagated to other
+    % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
+    lists:foreach(fun(_IterationNum) ->
+        SetPerms = lists_utils:random_sublist(AllPerms),
+        lfm_permissions_test_utils:set_acls(P1W2, #{Guid => SetPerms}, #{}, ?everyone, ?no_flags_mask),
+
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, SetPerms, lfm_permissions_test_utils:complementary_perms(P1W2, Guid, SetPerms),
+            {error, ?EACCES}, <<"denied acl perm">>, Config
+        ),
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, SetPerms, SetPerms,
+            ok, <<"allowed acl perm">>, Config
+        )
+    end, lists:seq(1, 10)).
+
+
+run_multi_provider_perm_test(Nodes, User, Guid, PermsSet, TestedPerms, ExpResult, Scenario, Config) ->
+    lists:foreach(fun(TestedPerm) ->
+        lists:foreach(fun(Node) ->
+            try
+                ?assertMatch(
+                    ExpResult,
+                    check_perms(Node, User, Guid, [TestedPerm], Config),
+                    ?ATTEMPTS
+                )
+            catch _:Reason ->
+                ct:pal(
+                    "PERMISSIONS TESTS FAILURE~n"
+                    "   Scenario: multi_provider_permission_cache_test ~p~n"
+                    "   Node: ~p~n"
+                    "   Perms set: ~p~n"
+                    "   Tested perm: ~p~n"
+                    "   Reason: ~p~n",
+                    [
+                        Scenario, Node, PermsSet, TestedPerm, Reason
+                    ]
+                ),
+                erlang:error(perms_test_failed)
+            end
+        end, Nodes)
+    end, TestedPerms).
+
 
 expired_session_test(Config) ->
     % Setup
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/es_file">>, 8#770)),
+    {_, GUID} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:create(W, SessId1, <<"/space1/es_file">>, 8#770)
+    ),
 
     ok = rpc:call(W, session, delete, [SessId1]),
 
     % Verification
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)).
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:open(W, SessId1, {guid, GUID}, write)
+    ).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
+
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    Posthook = fun(NewConfig) ->
+        NewConfig1 = [{space_storage_mock, false} | NewConfig],
+        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig3 = initializer:create_test_users_and_spaces(
+            ?TEST_FILE(NewConfig2, "env_desc.json"),
+            [{spaces_owners, [<<"owner">>]} | NewConfig2]
+        ),
+        initializer:mock_auth_manager(NewConfig3),
+        NewConfig3
+    end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
+
 end_per_suite(Config) ->
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:teardown_storage(Config).
 
+
+init_per_testcase(multi_provider_permission_cache_test, Config) ->
+    ct:timetrap({minutes, 15}),
+    init_per_testcase(default, Config);
+
 init_per_testcase(_Case, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    invalidate_luma_cache(W, <<"space_id3">>),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    initializer:mock_share_logic(Config),
+    lfm_proxy:init(Config).
+
 
 end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces_no_validate(Config).
+    initializer:unmock_share_logic(Config),
+    lfm_proxy:teardown(Config).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
+check_perms(Node, User, Guid, Perms, Config) ->
+    SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+    UserCtx = rpc:call(Node, user_ctx, new, [SessId]),
+
+    rpc:call(Node, ?MODULE, check_perms, [
+        UserCtx, file_ctx:new_by_guid(Guid), Perms
+    ]).
+
+
+check_perms(UserCtx, FileCtx, Perms) ->
+    try
+        fslogic_authz:ensure_authorized(UserCtx, FileCtx, Perms),
+        ok
+    catch _Type:Reason ->
+        {error, Reason}
+    end.
+
+
+-spec for(pos_integer(), term()) -> term().
 for(1, F) ->
     F();
 for(N, F) ->
     F(),
     for(N - 1, F).
 
-invalidate_luma_cache(Worker, SpaceId) ->
-    {ok, #document{value = #space_storage{
-        storage_ids = StorageIds
-    }}} = rpc:call(Worker, space_storage, get, [SpaceId]),
-    lists:foreach(fun(StorageId) ->
-        ok = rpc:call(Worker, luma_cache, invalidate, [StorageId])
-    end, StorageIds).
+
+-spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid()) -> ok.
+fill_file_with_dummy_data(Node, SessId, Guid) ->
+    {ok, FileHandle} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:open(Node, SessId, {guid, Guid}, write)
+    ),
+    ?assertMatch({ok, 4}, lfm_proxy:write(Node, FileHandle, 0, <<"DATA">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(Node, FileHandle)),
+    ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
+
+-spec create_dummy_file(node(), session:id(), file_id:file_guid()) -> ok.
+create_dummy_file(Node, SessId, DirGuid) ->
+    RandomFileName = <<"DUMMY_FILE_", (integer_to_binary(rand:uniform(1024)))/binary>>,
+    {ok, {_Guid, FileHandle}} =
+        lfm_proxy:create_and_open(Node, SessId, DirGuid, RandomFileName, 8#664),
+    ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
+
+-spec extract_ok
+    (ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}) -> ok;
+    ({error, term()}) -> {error, term()}.
+extract_ok(ok) -> ok;
+extract_ok({ok, _}) -> ok;
+extract_ok({ok, _, _}) -> ok;
+extract_ok({ok, _, _, _}) -> ok;
+extract_ok({error, _} = Error) -> Error.

@@ -16,7 +16,8 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Context definition
@@ -29,7 +30,11 @@
 
 %% API
 -export([new/1]).
--export([get_user/1, get_user_id/1, get_eff_spaces/1, get_session_id/1, get_auth/1]).
+-export([
+    get_user/1, get_user_id/1,
+    get_eff_spaces/1, get_session_id/1,
+    get_credentials/1, get_data_constraints/1
+]).
 -export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/2]).
 
 %%%===================================================================
@@ -46,7 +51,7 @@ new(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{type = rest, accessed = LastAccess}} = Session} ->
             Now = time_utils:cluster_time_seconds(),
-            {ok, TTL} = application:get_env(?APP_NAME, rest_session_ttl_seconds),
+            {ok, TTL} = application:get_env(?APP_NAME, rest_session_grace_period_seconds),
             % TODO VFS-6586 - refactor rest session expiration
             {ok, UpdatedSession} = case Now > LastAccess + 0.6 * TTL of
                 true ->
@@ -57,7 +62,7 @@ new(SessId) ->
             #user_ctx{session = UpdatedSession};
         {ok, #document{value = #session{type = gui, accessed = LastAccess}} = Session} ->
             Now = time_utils:cluster_time_seconds(),
-            {ok, TTL} = application:get_env(?APP_NAME, gui_session_ttl_seconds),
+            {ok, TTL} = application:get_env(?APP_NAME, gui_session_grace_period_seconds),
             % TODO VFS-6586 - refactor gui session expiration
             {ok, UpdatedSession} = case Now > LastAccess + 0.6 * TTL of
                 true ->
@@ -79,8 +84,12 @@ new(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
 get_user(#user_ctx{session = #document{key = SessId, value = #session{
-    identity = #user_identity{user_id = UserId}
-}}}) ->
+    identity = ?SUB(Type, UserId)
+}}}) when
+    (Type =:= root andalso UserId =:= ?ROOT_USER_ID);
+    (Type =:= nobody andalso UserId =:= ?GUEST_USER_ID);
+    Type =:= user
+->
     case get(user_ctx_cache) of
         undefined ->
             {ok, User} = user_logic:get(SessId, UserId),
@@ -121,12 +130,21 @@ get_session_id(#user_ctx{session = #document{key = SessId}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets session's auth from user context.
+%% Gets session's credentials from user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth(ctx()) -> session:auth().
-get_auth(#user_ctx{session = Session}) ->
-    session:get_auth(Session).
+-spec get_credentials(ctx()) -> auth_manager:credentials().
+get_credentials(#user_ctx{session = Session}) ->
+    session:get_credentials(Session).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets session's data constraints from user context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_data_constraints(ctx()) -> data_constraints:constraints().
+get_data_constraints(#user_ctx{session = Session}) ->
+    session:get_data_constraints(Session).
 
 %%--------------------------------------------------------------------
 %% @doc

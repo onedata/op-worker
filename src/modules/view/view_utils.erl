@@ -12,7 +12,7 @@
 -module(view_utils).
 -author("Bartosz Walkowicz").
 
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([sanitize_query_options/1, escape_js_function/1]).
@@ -64,6 +64,7 @@ escape_js_function(Function, [{Pattern, Replacement} | Rest]) ->
     escape_js_function(EscapedFunction, Rest).
 
 
+%% TODO VFS-6382
 -spec sanitize_query_options(list(), list()) -> list().
 sanitize_query_options([], Options) ->
     Options;
@@ -77,25 +78,25 @@ sanitize_query_options([{<<"bbox">>, Val} | Rest], Options) ->
         true = is_float(catch binary_to_float(S)) orelse is_integer(catch binary_to_integer(S)),
         true = is_float(catch binary_to_float(E)) orelse is_integer(catch binary_to_integer(E)),
         true = is_float(catch binary_to_float(N)) orelse is_integer(catch binary_to_integer(N))
-    catch
-        _:_ ->
-            throw(?ERROR_BAD_DATA(<<"bbox">>))
+    catch _:_ ->
+        throw(?ERROR_BAD_DATA(<<"bbox">>))
     end,
     sanitize_query_options(Rest, [{bbox, Bbox} | Options]);
 
 sanitize_query_options([{<<"descending">>, true} | Rest], Options) ->
-    sanitize_query_options(Rest, [descending | Options]);
+    sanitize_query_options(Rest, [{descending, true} | Options]);
 sanitize_query_options([{<<"descending">>, false} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
+sanitize_query_options([{<<"descending">>, _} | _], _Options) ->
+    throw(?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>));
 
 sanitize_query_options([{<<"endkey">>, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"endkey">>, Endkey} | Rest], Options) ->
     try
         sanitize_query_options(Rest, [{endkey, jiffy:decode(Endkey)} | Options])
-    catch
-        _:_ ->
-            throw(?ERROR_BAD_VALUE_JSON(<<"endkey">>))
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_JSON(<<"endkey">>))
     end;
 
 sanitize_query_options([{<<"startkey">>, undefined} | Rest], Options) ->
@@ -103,24 +104,34 @@ sanitize_query_options([{<<"startkey">>, undefined} | Rest], Options) ->
 sanitize_query_options([{<<"startkey">>, StartKey} | Rest], Options) ->
     try
         sanitize_query_options(Rest, [{startkey, jiffy:decode(StartKey)} | Options])
-    catch
-        _:_ ->
-            throw(?ERROR_BAD_VALUE_JSON(<<"startkey">>))
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_JSON(<<"startkey">>))
     end;
 
+sanitize_query_options([{<<"startkey_docid">>, undefined} | Rest], Options) ->
+    sanitize_query_options(Rest, Options);
+sanitize_query_options([{<<"startkey_docid">>, StartKeyDocId} | Rest], Options) ->
+    sanitize_query_options(Rest, [{startkey_docid, StartKeyDocId} | Options]);
+
+sanitize_query_options([{<<"endkey_docid">>, undefined} | Rest], Options) ->
+    sanitize_query_options(Rest, Options);
+sanitize_query_options([{<<"endkey_docid">>, EndKeyDocId} | Rest], Options) ->
+    sanitize_query_options(Rest, [{endkey_docid, EndKeyDocId} | Options]);
+
 sanitize_query_options([{<<"inclusive_end">>, true} | Rest], Options) ->
-    sanitize_query_options(Rest, [inclusive_end | Options]);
+    sanitize_query_options(Rest, [{inclusive_end, true} | Options]);
 sanitize_query_options([{<<"inclusive_end">>, false} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
+sanitize_query_options([{<<"inclusive_end">>, _} | _], _Options) ->
+    throw(?ERROR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>));
 
 sanitize_query_options([{<<"key">>, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"key">>, Key} | Rest], Options) ->
     try
         sanitize_query_options(Rest, [{key, jiffy:decode(Key)} | Options])
-    catch
-        _:_ ->
-            throw(?ERROR_BAD_VALUE_JSON(<<"key">>))
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_JSON(<<"key">>))
     end;
 
 sanitize_query_options([{<<"keys">>, undefined} | Rest], Options) ->
@@ -130,16 +141,21 @@ sanitize_query_options([{<<"keys">>, Keys} | Rest], Options) ->
         DecodedKeys = jiffy:decode(Keys),
         true = is_list(DecodedKeys),
         sanitize_query_options(Rest, [{keys, DecodedKeys} | Options])
-    catch
-        _:_ ->
-            throw(?ERROR_BAD_VALUE_JSON(<<"keys">>))
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_JSON(<<"keys">>))
     end;
 
 sanitize_query_options([{<<"limit">>, Limit} | Rest], Options) ->
-    sanitize_query_options(Rest, [{limit, Limit} | Options]);
+    sanitize_query_options(
+        Rest,
+        [{limit, sanitize_pos_integer(<<"limit">>, Limit, 1)} | Options]
+    );
 
 sanitize_query_options([{<<"skip">>, Skip} | Rest], Options) ->
-    sanitize_query_options(Rest, [{skip, Skip} | Options]);
+    sanitize_query_options(
+        Rest,
+        [{skip, sanitize_pos_integer(<<"skip">>, Skip, 1)} | Options]
+    );
 
 sanitize_query_options([{<<"stale">>, <<"ok">>} | Rest], Options) ->
     sanitize_query_options(Rest, [{stale, ok} | Options]);
@@ -147,20 +163,23 @@ sanitize_query_options([{<<"stale">>, <<"update_after">>} | Rest], Options) ->
     sanitize_query_options(Rest, [{stale, update_after} | Options]);
 sanitize_query_options([{<<"stale">>, <<"false">>} | Rest], Options) ->
     sanitize_query_options(Rest, [{stale, false} | Options]);
+sanitize_query_options([{<<"stale">>, _} | _], _Options) ->
+    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>]));
 
 sanitize_query_options([{<<"spatial">>, true} | Rest], Options) ->
     sanitize_query_options(Rest, [{spatial, true} | Options]);
 sanitize_query_options([{<<"spatial">>, false} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
+sanitize_query_options([{<<"spatial">>, _} | _], _Options) ->
+    throw(?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>));
 
 sanitize_query_options([{<<"start_range">>, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"start_range">>, Endkey} | Rest], Options) ->
     StartRange = try
         {start_range, jiffy:decode(Endkey)}
-    catch
-        _:_ ->
-            throw(?ERROR_BAD_VALUE_JSON(<<"start_range">>))
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_JSON(<<"start_range">>))
     end,
     sanitize_query_options(Rest, [StartRange | Options]);
 
@@ -169,11 +188,30 @@ sanitize_query_options([{<<"end_range">>, undefined} | Rest], Options) ->
 sanitize_query_options([{<<"end_range">>, Endkey} | Rest], Options) ->
     EndRange = try
         {end_range, jiffy:decode(Endkey)}
-    catch
-        _:_ ->
-            throw(?ERROR_BAD_VALUE_JSON(<<"end_range">>))
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_JSON(<<"end_range">>))
     end,
     sanitize_query_options(Rest, [EndRange | Options]);
 
 sanitize_query_options([_ | Rest], Options) ->
     sanitize_query_options(Rest, Options).
+
+
+
+%% @private
+-spec sanitize_pos_integer(Key :: binary(), Value :: term(), Threshold :: pos_integer()) ->
+    pos_integer() | no_return().
+sanitize_pos_integer(Key, Value, Threshold) when is_integer(Value) ->
+    case Value >= Threshold of
+        true ->
+            Value;
+        false ->
+            throw(?ERROR_BAD_VALUE_TOO_LOW(Key, Threshold))
+    end;
+sanitize_pos_integer(Key, Value, Threshold) ->
+    try
+        IntValue = binary_to_integer(Value),
+        sanitize_pos_integer(Key, IntValue, Threshold)
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_INTEGER(Key))
+    end.

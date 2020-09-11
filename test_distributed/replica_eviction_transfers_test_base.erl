@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains base test of replication.
+%%% This module contains base test of eviction.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_eviction_transfers_test_base).
@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
@@ -54,7 +54,7 @@
 ]).
 
 -define(SPACE_ID, <<"space1">>).
--define(assertQuota(Worker, SpaceId, ExpectedSize), {
+-define(assertQuota(Worker, SpaceId, ExpectedSize),
     ?assertEqual(ExpectedSize, case rpc:call(Worker, space_quota, get, [SpaceId]) of
         {ok, #document{
             value = #space_quota{
@@ -63,7 +63,7 @@
         }} -> CurrentSize;
         Error -> Error
     end
-    )}).
+    )).
 
 %%%===================================================================
 %%% API
@@ -766,15 +766,13 @@ cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, Type) ->
                 expected_transfer = #{
                     eviction_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 111,
-                    files_processed => 111,
+                    files_to_process => fun(X) -> X =< 111 end,
+                    files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_evicted => fun(X) -> X < 111 end
+                    files_evicted => fun(X) -> X  < 100 end
                 },
                 distribution = undefined,
-                assertion_nodes = [WorkerP1, WorkerP2],
-                timeout = timer:minutes(6),
-                attempts = 600
+                assertion_nodes = [WorkerP1, WorkerP2]
             }
         }
     ).
@@ -813,15 +811,13 @@ cancel_replica_eviction_on_target_nodes_by_other_user(Config, Type) ->
                 expected_transfer = #{
                     eviction_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 111,
-                    files_processed => 111,
+                    files_to_process => fun(X) -> X =< 111 end,
+                    files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_evicted => fun(X) -> X < 111 end
+                    files_evicted => fun(X) -> X < 100 end
                 },
                 distribution = undefined,
-                assertion_nodes = [WorkerP1, WorkerP2],
-                timeout = timer:minutes(6),
-                attempts = 600
+                assertion_nodes = [WorkerP1, WorkerP2]
             }
         }
     ).
@@ -1658,7 +1654,8 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?APP_NAME, prefetching, off)
+            test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
+            test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
         end, ?config(op_worker_nodes, NewConfig2)),
 
         application:start(ssl),
@@ -1672,20 +1669,13 @@ init_per_suite(Config) ->
         | Config
     ].
 
-init_per_testcase(cancel_replica_eviction_on_target_nodes, Config) ->
-    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    OldMaxActiveReplicaEvictionTasks = rpc:call(WorkerP2, application, get_env, [
-        ?APP_NAME, max_active_deletion_tasks, 2000
-    ]),
-    ok = rpc:call(WorkerP2, application, set_env, [
-        ?APP_NAME, max_active_deletion_tasks, 10
-    ]),
-    transfers_test_utils:mock_prolonged_replica_eviction(WorkerP2, 0.5, 15),
-
-    init_per_testcase(all, [
-        {max_active_replica_eviction_tasks, OldMaxActiveReplicaEvictionTasks}
-        | Config
-    ]);
+init_per_testcase(Case, Config)
+    when Case =:= cancel_replica_eviction_on_target_nodes_by_other_user
+    orelse Case =:= cancel_replica_eviction_on_target_nodes_by_scheduling_user
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:mock_prolonged_replica_eviction(Workers, 1, 10),
+    init_per_testcase(all, Config);
 
 init_per_testcase(quota_decreased_after_eviction, Config) ->
     init_per_testcase(all, [{?SPACE_ID_KEY, <<"space3">>} | Config]);
@@ -1712,13 +1702,12 @@ init_per_testcase(_Case, Config) ->
             Config
     end.
 
-end_per_testcase(cancel_replica_eviction_on_target_nodes, Config) ->
-    [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    OldMaxActiveReplicaEvictionTasks = ?config(max_active_replica_eviction_tasks, Config),
-    ok = rpc:call(WorkerP2, application, set_env, [
-        ?APP_NAME, max_active_deletion_tasks, OldMaxActiveReplicaEvictionTasks
-    ]),
-    transfers_test_utils:unmock_prolonged_replica_eviction(WorkerP2),
+end_per_testcase(Case, Config)
+    when Case =:= cancel_replica_eviction_on_target_nodes_by_other_user
+    orelse Case =:= cancel_replica_eviction_on_target_nodes_by_scheduling_user
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:unmock_prolonged_replica_eviction(Workers),
     end_per_testcase(all, Config);
 
 end_per_testcase(eviction_should_fail_when_evicting_provider_modified_file_replica, Config) ->

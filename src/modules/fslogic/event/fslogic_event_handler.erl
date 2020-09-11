@@ -14,6 +14,7 @@
 
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API Handling
 -export([handle_file_written_events/2, handle_file_read_events/2]).
@@ -145,7 +146,11 @@ handle_file_written_event(#file_written_event{
             fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks);
         {ok, size_not_changed} ->
             fslogic_times:update_mtime_ctime(FileCtx),
-            fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks)
+            fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks);
+        {error, not_found} ->
+            ?debug("Handling file_written_event for file ~p failed because file_location was not found.",
+                [FileGuid]),
+            ok
     end.
 
 %%--------------------------------------------------------------------

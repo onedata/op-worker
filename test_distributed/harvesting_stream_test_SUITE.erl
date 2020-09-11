@@ -194,7 +194,7 @@ stream_supervisor_should_be_restarted(Config) ->
 
 main_harvesting_stream_should_not_be_started_if_space_is_not_supported(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     {HarvestersConfig, SpacesConfig} = harvesters_and_spaces_config(#{
         ?HARVESTER_ID(1) => #{indices => 1, spaces => 1}
     }),
@@ -314,14 +314,14 @@ start_stop_streams_mixed_test(Config) ->
     DeletedSpaces = maps:keys(SpacesConfig2) -- maps:keys(SpacesConfig3),
 
     lists:foreach(fun(SpaceId) ->
-        pretend_space_deletion(utils:random_element(Nodes), SpaceId)
+        pretend_space_deletion(lists_utils:random_element(Nodes), SpaceId)
     end, DeletedSpaces),
 
     ?assertMatch(5, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     update_harvesters_structure(Config, #{}, #{}),
     lists:foreach(fun(SpaceId) ->
-        pretend_space_deletion(utils:random_element(Nodes), SpaceId)
+        pretend_space_deletion(lists_utils:random_element(Nodes), SpaceId)
     end, maps:keys(SpacesConfig3)),
     ?assertMatch(0, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS).
 
@@ -338,7 +338,7 @@ main_stream_should_persist_last_successfully_processed_seq(Config) ->
     MainStreamPid = get_main_stream_pid(N, SpaceId),
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 100, 64, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 100, 64, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
     RelevantSeqs = relevant_seqs(Changes, true),
     Max = get_max_seq(Changes),
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
@@ -357,8 +357,8 @@ adding_index_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
     mock_harvest_metadata_success(Nodes),
     update_harvesters_structure(Config, HarvestersConfig, SpacesConfig),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 61, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 79, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 61, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 79, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
     RelevantSeqs = relevant_seqs(Changes, true),
     RelevantSeqs2 = relevant_seqs(Changes2, false),
 
@@ -400,7 +400,7 @@ adding_index_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
 
 aux_stream_should_be_started_test(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     ok = rpc:call(Node, harvesting_state, ensure_created, [?SPACE_ID(1)]),
     Dest = harvesting_destination:init(?HARVESTER_ID(1), ?INDEX_ID(1)),
     ok = rpc:call(Node, harvesting_state, set_seen_seq, [?SPACE_ID(1), Dest, 1000000]),
@@ -414,7 +414,7 @@ aux_stream_should_be_started_test(Config) ->
 
 aux_stream_should_not_be_started_test(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     ok = rpc:call(Node, harvesting_state, ensure_created, [?SPACE_ID(1)]),
     Dest = harvesting_destination:init(?HARVESTER_ID(1), [?INDEX_ID(1), ?INDEX_ID(2)]),
     ok = rpc:call(Node, harvesting_state, set_seen_seq, [?SPACE_ID(1), Dest, 1000000]),
@@ -440,9 +440,9 @@ aux_stream_should_eventually_catch_up_with_main_stream(Config) ->
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
     % generate changes
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 67, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 67, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
     RelevantSeqs = relevant_seqs(Changes, true),
     RelevantSeqs2 = relevant_seqs(Changes2, false),
     RelevantSeqs3 = relevant_seqs(Changes3, false),
@@ -506,8 +506,8 @@ adding_harvester_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
     MainStreamPid = get_main_stream_pid(N, SpaceId),
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
     RelevantSeqs = relevant_seqs(Changes, true),
     RelevantSeqs2 = relevant_seqs(Changes2, false),
 
@@ -559,9 +559,9 @@ aux_stream_should_be_started_on_index_level_error(Config) ->
     }),
 
     % generate changes
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
     RelevantChanges1 = relevant_changes(Changes, true),
     RelevantSeqs1 = get_seqs(RelevantChanges1),
     RelevantSeqs2 = relevant_seqs(Changes2, false),
@@ -647,9 +647,9 @@ aux_stream_should_be_started_on_harvester_level_error(Config) ->
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
     % generate changes
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 67, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 67, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
     RelevantSeqs = relevant_seqs(Changes, true),
     RelevantSeqs2 = relevant_seqs(Changes2, false),
     RelevantSeqs3 = relevant_seqs(Changes3, false),
@@ -712,9 +712,9 @@ backoff_should_be_used_on_space_level_error(Config) ->
     }),
 
     % generate changes
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 68, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 68, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
 
     RelevantSeqs1 = relevant_seqs(Changes, true),
     RelevantSeqs2 = relevant_seqs(Changes2, false),
@@ -778,9 +778,9 @@ error_mix_test(Config) ->
         ?HARVESTER_ID(2) => #{indices => 1, spaces => 1}
     }),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
     RelevantChanges1 = relevant_changes(Changes, true),
     RelevantSeqs1 = get_seqs(RelevantChanges1),
     RelevantSeqs2 = relevant_seqs(Changes2, false),
@@ -888,9 +888,9 @@ error_mix_test2(Config) ->
         ?HARVESTER_ID(2) => #{indices => 1, spaces => 1}
     }),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
     RelevantChanges1 = relevant_changes(Changes, true),
     RelevantSeqs1 = get_seqs(RelevantChanges1),
     RelevantSeqs2 = relevant_seqs(Changes2, false),
@@ -980,9 +980,9 @@ error_mix_test3(Config) ->
         ?HARVESTER_ID(2) => #{indices => 1, spaces => 1}
     }),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
     RelevantSeqs1 = relevant_seqs(Changes, true),
     RelevantSeqs2 = relevant_seqs(Changes2, false),
     RelevantSeqs3 = relevant_seqs(Changes3, false),
@@ -1043,9 +1043,9 @@ error_mix_test4(Config) ->
         ?HARVESTER_ID(2) => #{indices => 1, spaces => 1}
     }),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
-    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.5, 0.3, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 101, 73, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(101, 201, 59, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
+    Changes3 = couchbase_changes_stream_mock:generate_changes(201, 301, 85, 0.3, 0.3, 0.5, 0.3, ?PROVIDER_ID(N), SpaceId),
     RelevantChanges1 = relevant_changes(Changes, true),
     RelevantSeqs1 = get_seqs(RelevantChanges1),
     RelevantSeqs2 = relevant_seqs(Changes2, false),
@@ -1152,7 +1152,7 @@ harvesting_stream_flush_test(Config) ->
     MainStreamPid = get_main_stream_pid(N, SpaceId),
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 2, 1, 1, 0, 0, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 2, 1, 1, 0, 0, 0, ?PROVIDER_ID(N), SpaceId),
     RelevantSeqs = relevant_seqs(Changes, true),
 
     FlushTimeout = 10,
@@ -1176,14 +1176,14 @@ harvesting_stream_batch_test(Config) ->
 
     BatchSize = 1000,
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, BatchSize, BatchSize - 1, 1, 0, 0, ?PROVIDER_ID(N)),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, BatchSize, BatchSize - 1, 1, 0, 0, 0, ?PROVIDER_ID(N), SpaceId),
     RelevantSeqs = relevant_seqs(Changes, true),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
     ?assertHarvestMetadataNotCalled(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
         RelevantSeqs, MainStreamPid),
 
-    Changes2 = couchbase_changes_stream_mock:generate_changes(BatchSize, BatchSize + 1, 1, 1, 0, 0, ?PROVIDER_ID(N)),
+    Changes2 = couchbase_changes_stream_mock:generate_changes(BatchSize, BatchSize + 1, 1, 1, 0, 0, 0, ?PROVIDER_ID(N), SpaceId),
     RelevantSeqs2 = relevant_seqs(Changes ++ Changes2, true),
 
     ?assertHarvestMetadataNotCalled(SpaceId, #{?HARVESTER_ID(1) => [?INDEX_ID(1)]},
@@ -1202,7 +1202,7 @@ only_one_change_per_fileid_should_be_harvested_in_one_batch_test(Config) ->
     MainStreamPid = get_main_stream_pid(N, SpaceId),
     MainChangesStreamPid = couchbase_changes_stream_mock_registry_get(N, MainStreamPid),
 
-    Changes = couchbase_changes_stream_mock:generate_changes(1, 1001, 1000, 1, 0, 0, ?PROVIDER_ID(N), <<"fileid">>),
+    Changes = couchbase_changes_stream_mock:generate_changes(1, 1001, 1000, 1, 0, 0, 0, ?PROVIDER_ID(N), SpaceId, <<"docId">>),
     RelevantSeqs = [lists:last(get_seqs(Changes))],
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes),
@@ -1276,7 +1276,11 @@ end_per_testcase(_, Config) ->
     ok = test_utils:mock_unload(Nodes, harvester_logic),
     ok = test_utils:mock_unload(Nodes, space_logic),
     lists:foreach(fun(Node) ->
-
+        Children = rpc:call(Node, supervisor, which_children, [harvesting_stream_sup]),
+        lists:foreach(fun({_Id, Child, _Type, _Modules}) ->
+            catch gen_server2:call(Child, ?TERMINATE, timer:seconds(30))
+        end, Children),
+        % TODO VFS-6389 - check why terminate_child does not close streams
         ok = rpc:call(Node, supervisor, terminate_child, [harvesting_worker_sup, harvesting_stream_sup]),
         {ok, _} = rpc:call(Node, supervisor, restart_child, [harvesting_worker_sup, harvesting_stream_sup])
     end, Nodes),
@@ -1298,7 +1302,7 @@ end_per_suite(_Config) ->
 
 update_harvesters_structure(Config, HarvestersConfig, SpacesConfig) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     Spaces = maps:keys(SpacesConfig),
     mock_harvester_logic_get(Nodes, HarvestersConfig),
     mock_space_logic_get_harvesters(Nodes, SpacesConfig),
@@ -1487,7 +1491,7 @@ random_custom_metadata_seqs(Changes, Count) when Count =< length(Changes) ->
 random_custom_metadata_seqs(_RelevantChanges, 0, RandomSeqs) ->
     RandomSeqs;
 random_custom_metadata_seqs(RelevantChanges, Count, RandomSeqs) ->
-    Doc = #document{seq = Seq} = utils:random_element(RelevantChanges),
+    Doc = #document{seq = Seq} = lists_utils:random_element(RelevantChanges),
     random_custom_metadata_seqs(RelevantChanges -- [Doc], Count - 1, [Seq | RandomSeqs]).
 
 
@@ -1527,10 +1531,10 @@ relevant_seqs(Changes, IgnoreDeleted) ->
     get_seqs(relevant_changes(Changes, IgnoreDeleted)).
 
 relevant_changes(Changes, __IgnoreDeleted = false) ->
-    filter_custom_metadata_changes(Changes);
+    filter_harvested_models(Changes);
 relevant_changes(Changes, __IgnoreDeleted = true) ->
-    CustomMetadataChanges = filter_custom_metadata_changes(Changes),
-    filter_deleted_changes_before_first_not_deleted(CustomMetadataChanges).
+    FilteredChanges2 = filter_harvested_models(Changes),
+    filter_deleted_changes_before_first_not_deleted(FilteredChanges2).
 
 get_seq(#document{seq = Seq}) ->
     Seq.
@@ -1538,9 +1542,10 @@ get_seq(#document{seq = Seq}) ->
 get_seqs(Changes) ->
     [get_seq(Change) || Change <- Changes].
 
-filter_custom_metadata_changes(Changes) ->
+filter_harvested_models(Changes) ->
     lists:filter(fun
-        (#document{value = #custom_metadata{}}) -> true;
+        (#document{value = #custom_metadata{}, deleted = false}) -> true;
+        (#document{value = #file_meta{}}) -> true;
         (_) -> false
     end, Changes).
 

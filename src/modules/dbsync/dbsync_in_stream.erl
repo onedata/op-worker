@@ -97,9 +97,9 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({changes_batch, MsgId, ProviderId, Since, Until, Docs}, State) ->
+handle_cast({changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}, State) ->
     {noreply, handle_changes_batch(
-        MsgId, ProviderId, Since, Until, Docs, State
+        MsgId, ProviderId, Since, Until, Timestamp, Docs, State
     )};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
@@ -163,17 +163,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec handle_changes_batch(undefined | dbsync_communicator:msg_id(),
     od_provider:id(), couchbase_changes:since(), couchbase_changes:until(),
-    [datastore:doc()], state()) -> state().
-handle_changes_batch(undefined, ProviderId, Since, Until, Docs, State) ->
-    forward_changes_batch(ProviderId, Since, Until, Docs, State);
-handle_changes_batch(MsgId, ProviderId, Since, Until, Docs, State = #state{
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
+handle_changes_batch(undefined, ProviderId, Since, Until, Timestamp, Docs, State) ->
+    forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State);
+handle_changes_batch(MsgId, ProviderId, Since, Until, Timestamp, Docs, State = #state{
     msg_id_history = History
 }) ->
     case queue:member(MsgId, History) of
         true ->
             State;
         false ->
-            forward_changes_batch(ProviderId, Since, Until, Docs, State#state{
+            forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State#state{
                 msg_id_history = save_msg_id(MsgId, History)
             })
     end.
@@ -185,21 +185,21 @@ handle_changes_batch(MsgId, ProviderId, Since, Until, Docs, State = #state{
 %% it is started.
 %% @end
 %%--------------------------------------------------------------------
--spec forward_changes_batch(od_provider:id(), couchbase_changes:since(),
-    couchbase_changes:until(), [datastore:doc()], state()) -> state().
-forward_changes_batch(ProviderId, Since, Until, Docs, State = #state{
+-spec forward_changes_batch(od_provider:id(), couchbase_changes:since(), couchbase_changes:until(),
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
+forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
     space_id = SpaceId,
     workers = Workers
 }) ->
     State2 = case maps:find(ProviderId, Workers) of
         {ok, Worker} ->
-            gen_server:cast(Worker, {changes_batch, Since, Until, Docs}),
+            gen_server:cast(Worker, {changes_batch, Since, Until, Timestamp, Docs}),
             State;
         error ->
             {ok, Worker} = dbsync_in_stream_worker:start_link(
                 SpaceId, ProviderId
             ),
-            gen_server:cast(Worker, {changes_batch, Since, Until, Docs}),
+            gen_server:cast(Worker, {changes_batch, Since, Until, Timestamp, Docs}),
             State#state{
                 workers = maps:put(ProviderId, Worker, Workers)
             }

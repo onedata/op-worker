@@ -67,6 +67,8 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/transfer.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 
 -export([
     handle_enqueued/1, handle_active/1,
@@ -93,9 +95,9 @@ handle_active(TransferId) ->
     EncodedPid = transfer_utils:encode_pid(self()),
     UpdateFun = fun(Transfer) ->
         case Transfer#transfer.eviction_status of
-            enqueued ->
+            ?ENQUEUED_STATUS ->
                 {ok, Transfer#transfer{
-                    eviction_status = active,
+                    eviction_status = ?ACTIVE_STATUS,
                     files_to_process = Transfer#transfer.files_to_process + 1,
                     pid = EncodedPid
                 }};
@@ -120,7 +122,7 @@ handle_active(TransferId) ->
 -spec handle_aborting(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_aborting(TransferId) ->
     OnSuccessfulUpdate = fun(#document{value = #transfer{space_id = SpaceId}}) ->
-        replica_deletion_master:cancel(TransferId, SpaceId)
+        replica_deletion_master:cancel_request(SpaceId, TransferId, ?EVICTION_JOB)
     end,
 
     transfer:update_and_run(
@@ -169,9 +171,9 @@ handle_cancelled(TransferId) ->
 
 %% @private
 -spec mark_enqueued(transfer()) -> {ok, transfer()} | error().
-mark_enqueued(T = #transfer{eviction_status = scheduled}) ->
+mark_enqueued(T = #transfer{eviction_status = ?SCHEDULED_STATUS}) ->
     {ok, T#transfer{
-        eviction_status = enqueued,
+        eviction_status = ?ENQUEUED_STATUS,
         start_time = case transfer:is_migration(T) of
             true -> T#transfer.start_time;
             false -> provider_logic:zone_time_seconds()
@@ -183,17 +185,17 @@ mark_enqueued(#transfer{eviction_status = Status}) ->
 
 %% @private
 -spec mark_aborting(transfer()) -> {ok, transfer()} | error().
-mark_aborting(T = #transfer{eviction_status = active}) ->
-    {ok, T#transfer{eviction_status = aborting}};
+mark_aborting(T = #transfer{eviction_status = ?ACTIVE_STATUS}) ->
+    {ok, T#transfer{eviction_status = ?ABORTING_STATUS}};
 mark_aborting(#transfer{eviction_status = Status}) ->
     {error, Status}.
 
 
 %% @private
 -spec mark_completed(transfer()) -> {ok, transfer()} | error().
-mark_completed(T = #transfer{eviction_status = active}) ->
+mark_completed(T = #transfer{eviction_status = ?ACTIVE_STATUS}) ->
     {ok, T#transfer{
-        eviction_status = completed,
+        eviction_status = ?COMPLETED_STATUS,
         finish_time = provider_logic:zone_time_seconds()
     }};
 mark_completed(#transfer{eviction_status = Status}) ->
@@ -202,7 +204,7 @@ mark_completed(#transfer{eviction_status = Status}) ->
 
 %% @private
 -spec mark_failed(transfer:transfer()) -> {ok, transfer()} | error().
-mark_failed(T = #transfer{eviction_status = aborting}) ->
+mark_failed(T = #transfer{eviction_status = ?ABORTING_STATUS}) ->
     mark_failed_forced(T);
 mark_failed(#transfer{eviction_status = Status}) ->
     {error, Status}.
@@ -216,7 +218,7 @@ mark_failed_forced(Transfer) ->
             {error, already_ended};
         false ->
             {ok, Transfer#transfer{
-                eviction_status = failed,
+                eviction_status = ?FAILED_STATUS,
                 finish_time = provider_logic:zone_time_seconds()
             }}
     end.
@@ -226,13 +228,13 @@ mark_failed_forced(Transfer) ->
 -spec mark_cancelled(transfer()) -> {ok, transfer()} | error().
 mark_cancelled(Transfer) ->
     case Transfer#transfer.eviction_status of
-        scheduled ->
+        ?SCHEDULED_STATUS ->
             {ok, Transfer#transfer{
-                eviction_status = cancelled
+                eviction_status = ?CANCELLED_STATUS
             }};
-        Status when Status == enqueued orelse Status == aborting ->
+        Status when Status == ?ENQUEUED_STATUS orelse Status == ?ABORTING_STATUS ->
             {ok, Transfer#transfer{
-                eviction_status = cancelled,
+                eviction_status = ?CANCELLED_STATUS,
                 finish_time = provider_logic:zone_time_seconds()
             }};
         Status ->

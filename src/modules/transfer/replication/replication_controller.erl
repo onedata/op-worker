@@ -22,8 +22,8 @@
 
 %% API
 -export([
-    mark_active/1, mark_aborting/2,
-    mark_completed/1, mark_failed/1, mark_cancelled/1
+    mark_active/2, mark_aborting/3,
+    mark_completed/2, mark_failed/2, mark_cancelled/2
 ]).
 %% gen_server callbacks
 -export([
@@ -37,7 +37,7 @@
 -type state() :: #state{}.
 
 -define(log_bad_replication_msg(__Req, __Status, __TransferId),
-    ?warning("~p:~p - bad request ~p while in status ~p, transfer: ~p", [
+    ?debug("~p:~p - bad request ~p while in status ~p, transfer: ~p", [
         ?MODULE, ?LINE, __Req, __Status, __TransferId
     ])
 ).
@@ -53,9 +53,9 @@
 %% Informs replication_controller about transition to active state.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_active(pid()) -> ok.
-mark_active(Pid) ->
-    Pid ! replication_active,
+-spec mark_active(pid(), transfer:id()) -> ok.
+mark_active(Pid, TransferId) ->
+    Pid ! {replication_active, TransferId},
     ok.
 
 
@@ -64,9 +64,9 @@ mark_active(Pid) ->
 %% Informs replication_controller about aborting transfer.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_aborting(pid(), term()) -> ok.
-mark_aborting(Pid, Reason) ->
-    Pid ! {replication_aborting, Reason},
+-spec mark_aborting(pid(), transfer:id(), term()) -> ok.
+mark_aborting(Pid, TransferId, Reason) ->
+    Pid ! {replication_aborting, TransferId, Reason},
     ok.
 
 %%-------------------------------------------------------------------
@@ -74,9 +74,9 @@ mark_aborting(Pid, Reason) ->
 %% Stops replication_controller process and marks transfer as failed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed(pid()) -> ok.
-mark_failed(Pid) ->
-    Pid ! replication_failed,
+-spec mark_failed(pid(), transfer:id()) -> ok.
+mark_failed(Pid, TransferId) ->
+    Pid ! {replication_failed, TransferId},
     ok.
 
 
@@ -85,9 +85,9 @@ mark_failed(Pid) ->
 %% Stops replication_controller process and marks transfer as cancelled.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_cancelled(pid()) -> ok.
-mark_cancelled(Pid) ->
-    Pid ! replication_cancelled,
+-spec mark_cancelled(pid(), transfer:id()) -> ok.
+mark_cancelled(Pid, TransferId) ->
+    Pid ! {replication_cancelled, TransferId},
     ok.
 
 
@@ -96,9 +96,9 @@ mark_cancelled(Pid) ->
 %% Stops replication_controller process and marks transfer as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_completed(pid()) -> ok.
-mark_completed(Pid) ->
-    Pid ! replication_completed,
+-spec mark_completed(pid(), transfer:id()) -> ok.
+mark_completed(Pid, TransferId) ->
+    Pid ! {replication_completed, TransferId},
     ok.
 
 
@@ -152,7 +152,6 @@ handle_call(_Request, _From, State) ->
 handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
     EvictSourceReplica, ViewName, QueryViewParams}, State
 ) ->
-    flush(),
     case replication_status:handle_enqueued(TransferId) of
         {ok, _} ->
             FileCtx = file_ctx:new_by_guid(FileGuid),
@@ -164,16 +163,16 @@ handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
             },
             replication_worker:enqueue_data_transfer(FileCtx, TransferParams),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);
-        {error, enqueued} ->
+        {error, ?ENQUEUED_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);
-        {error, active} ->
+        {error, ?ACTIVE_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
             handle_active(TransferId, Callback, EvictSourceReplica);
-        {error, aborting} ->
+        {error, ?ABORTING_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
             handle_aborting(TransferId);
-        {error, S} when S == completed orelse S == cancelled orelse S == failed ->
+        {error, S} when S == ?COMPLETED_STATUS orelse S == ?CANCELLED_STATUS orelse S == ?FAILED_STATUS ->
             ok
     end,
     {noreply, State, hibernate};
@@ -192,8 +191,21 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(_Info, State) ->
-    ?log_bad_request(_Info),
+handle_info(Info, State) ->
+    case Info of
+        {replication_completed, TransferId} ->
+            ?debug("Replication completed message ignored for transfer ~p", TransferId);
+        {replication_active, TransferId} ->
+            ?debug("Replication active message ignored for transfer ~p", TransferId);
+        {replication_aborting, TransferId, _Reason} ->
+            ?debug("Replication aborting message ignored for transfer ~p", TransferId);
+        {replication_failed, TransferId} ->
+            ?debug("Replication failed message ignored for transfer ~p", TransferId);
+        {replication_cancelled, TransferId} ->
+            ?debug("Replication cancelled message ignored for transfer ~p", TransferId);
+        _ ->
+            ?log_bad_request(Info)
+    end,
     {noreply, State}.
 
 
@@ -232,15 +244,15 @@ code_change(_OldVsn, State, _Extra) ->
 -spec handle_enqueued(transfer:id(), transfer:callback(), boolean()) -> ok.
 handle_enqueued(TransferId, Callback, EvictSourceReplica) ->
     receive
-        replication_active ->
+        {replication_active, TransferId} ->
             {ok, _} = replication_status:handle_active(TransferId),
             handle_active(TransferId, Callback, EvictSourceReplica);
-        {replication_aborting, Reason} ->
+        {replication_aborting, TransferId, Reason} ->
             {ok, _} = replication_status:handle_aborting(TransferId),
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
-            ?log_bad_replication_msg(Msg, enqueued, TransferId),
+            ?log_bad_replication_msg(Msg, ?ENQUEUED_STATUS, TransferId),
             handle_enqueued(TransferId, Callback, EvictSourceReplica)
     end,
     ok.
@@ -252,17 +264,17 @@ handle_active(TransferId, Callback, EvictSourceReplica) ->
         % Due to asynchronous nature of transfer_changes, active msg can be
         % sent several times. In case the controller is already in active state,
         % it can be safely ignored.
-        replication_active ->
+        {replication_active, TransferId} ->
             handle_active(TransferId, Callback, EvictSourceReplica);
-        replication_completed ->
+        {replication_completed, TransferId} ->
             {ok, _} = replication_status:handle_completed(TransferId),
-            notify_callback(Callback, EvictSourceReplica);
-        {replication_aborting, Reason} ->
+            notify_callback(Callback, EvictSourceReplica, TransferId);
+        {replication_aborting, TransferId, Reason} ->
             {ok, _} = replication_status:handle_aborting(TransferId),
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
-            ?log_bad_replication_msg(Msg, active, TransferId),
+            ?log_bad_replication_msg(Msg, ?ACTIVE_STATUS, TransferId),
             handle_active(TransferId, Callback, EvictSourceReplica)
     end,
     ok.
@@ -274,14 +286,14 @@ handle_aborting(TransferId) ->
         % Due to asynchronous nature of transfer_changes, aborting msg can be
         % sent several times. In case the controller is already in aborting
         % state, it can be safely ignored.
-        {replication_aborting, _Reason} ->
+        {replication_aborting, TransferId, _Reason} ->
             handle_aborting(TransferId);
-        replication_cancelled ->
+        {replication_cancelled, TransferId} ->
             {ok, _} = replication_status:handle_cancelled(TransferId);
-        replication_failed ->
+        {replication_failed, TransferId} ->
             {ok, _} = replication_status:handle_failed(TransferId, false);
         Msg ->
-            ?log_bad_replication_msg(Msg, aborting, TransferId),
+            ?log_bad_replication_msg(Msg, ?ABORTING_STATUS, TransferId),
             handle_aborting(TransferId)
     end,
     ok.
@@ -293,37 +305,12 @@ handle_aborting(TransferId) ->
 %% Notifies callback about successful replication
 %% @end
 %%--------------------------------------------------------------------
--spec notify_callback(transfer:callback(),
-    EvictSourceReplica :: boolean()) -> ok.
-notify_callback(_Callback, true) -> ok;
-notify_callback(undefined, false) -> ok;
-notify_callback(<<>>, false) -> ok;
-notify_callback(Callback, false) ->
-    {ok, _, _, _} = http_client:get(Callback).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Flushes message queue. It is necessary because this module is executed
-%% by some pool worker, which could have taken care of other replication
-%% previously. As such some messages for previous replication may be still
-%% in queue.
-%% @end
-%%--------------------------------------------------------------------
--spec flush() -> ok.
-flush() ->
-    receive
-        replication_completed ->
-            flush();
-        replication_active ->
-            flush();
-        {replication_aborting, _Reason} ->
-            flush();
-        replication_failed ->
-            flush();
-        replication_cancelled ->
-            flush()
-    after 0 ->
-        ok
-    end.
+-spec notify_callback(transfer:callback(), EvictSourceReplica :: boolean(),
+    transfer:id()) -> ok.
+notify_callback(_Callback, true, _TransferId) -> ok;
+notify_callback(undefined, false, _TransferId) -> ok;
+notify_callback(<<>>, false, _TransferId) -> ok;
+notify_callback(Callback, false, TransferId) ->
+    {ok, _, _, _} = http_client:post(Callback, #{}, json_utils:encode(#{
+        <<"transferId">> => TransferId
+    })).

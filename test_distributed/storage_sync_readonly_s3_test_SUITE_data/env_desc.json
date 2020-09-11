@@ -67,7 +67,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -101,7 +101,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -136,9 +136,18 @@
                         "storage": "/mnt/st1"
                     },
                     "p2": {
-                        "storage": "synced_storage",
-                        "mounted_in_root": "true"
+                        "storage": "synced_storage"
                     }
+                }
+            }
+        },
+        "storages": {
+            "p1": {
+                "/mnt/st1": {}
+            },
+            "p2": {
+                "synced_storage": {
+                    "imported_storage": true
                 }
             }
         }

@@ -46,7 +46,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                 FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
                 case file_ctx:get_local_file_location_doc(FileCtx3) of
                     {undefined, FileCtx4} ->
-                        fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []);
+                        fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []),
+                        qos_hooks:reconcile_qos(FileCtx4);
                     {LocalLocation, FileCtx4} ->
                         update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
                 end;
@@ -78,8 +79,12 @@ update_local_location_replica(FileCtx,
     case version_vector:compare(LocalVV, RemoteVV) of
         identical -> ok;
         greater -> ok;
-        lesser -> update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc);
-        concurrent -> reconcile_replicas(FileCtx, LocalDoc, RemoteDoc)
+        lesser ->
+            update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc),
+            qos_hooks:reconcile_qos(FileCtx);
+        concurrent ->
+            reconcile_replicas(FileCtx, LocalDoc, RemoteDoc),
+            qos_hooks:reconcile_qos(FileCtx)
     end.
 
 %%--------------------------------------------------------------------
@@ -239,9 +244,8 @@ reconcile_replicas(FileCtx,
             notify_size_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2);
         {{renamed, RenamedDoc, Uuid, TargetSpaceId}, _} ->
             {ok, _} = fslogic_location_cache:save_location(RenamedDoc),
-            RenamedFileCtx =
-                file_ctx:new_by_guid(file_id:pack_guid(Uuid, TargetSpaceId)),
-            files_to_chown:chown_file(RenamedFileCtx),
+            RenamedFileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, TargetSpaceId)),
+            files_to_chown:chown_or_defer(RenamedFileCtx),
             notify_block_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc),
             notify_size_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc)
     end.
@@ -289,19 +293,24 @@ notify_size_change_if_necessary(FileCtx, _, _) ->
 -spec maybe_truncate_file_on_storage(file_ctx:ctx(), non_neg_integer(),
     non_neg_integer()) -> {ok, file_ctx:ctx()}.
 maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize > NewSize ->
-    {IsImportOn, FileCtx2} = file_ctx:is_import_on(FileCtx),
+    {IsImportOn, FileCtx2} = file_ctx:is_space_synced(FileCtx),
     case IsImportOn of
         true ->
             {ok, FileCtx2};
         false ->
-            {SFMHandle, FileCtx3} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx2),
-            case storage_file_manager:open(SFMHandle, write) of
-                {ok, Handle} ->
-                    ok = storage_file_manager:truncate(Handle, NewSize, OldSize);
-                {error, ?ENOENT} ->
-                    ok
-            end,
-            {ok, FileCtx3}
+            case file_ctx:is_readonly_storage(FileCtx2) of
+                {true, FileCtx3} ->
+                    {ok, FileCtx3};
+                {false, FileCtx3} ->
+                    {SDHandle, FileCtx4} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx3),
+                    case storage_driver:open(SDHandle, write) of
+                        {ok, Handle} ->
+                            ok = storage_driver:truncate(Handle, NewSize, OldSize);
+                        {error, ?ENOENT} ->
+                            ok
+                    end,
+                    {ok, FileCtx4}
+            end
     end;
 maybe_truncate_file_on_storage(FileCtx, _OldSize, _NewSize) ->
     {ok, FileCtx}.

@@ -32,6 +32,7 @@
 -type filter() :: fun((datastore:doc()) -> boolean()).
 -type handler() :: fun((couchbase_changes:since(),
                         couchbase_changes:until() | end_of_stream,
+                        dbsync_changes:timestamp(),
                         [datastore:doc()]) -> any()).
 -type option() :: {main_stream, boolean()} |
                   {filter, filter()} |
@@ -153,14 +154,14 @@ handle_cast({change, {ok, end_of_stream}}, State = #state{
     changes = Docs,
     handler = Handler
 }) ->
-    Handler(Since, end_of_stream, lists:reverse(Docs)),
+    Handler(Since, end_of_stream, get_batch_timestamp(Docs), lists:reverse(Docs)),
     {stop, normal, State#state{since = Until, changes = []}};
 handle_cast({change, {error, Seq, Reason}}, State = #state{
     since = Since,
     changes = Docs,
     handler = Handler
 }) ->
-    Handler(Since, Seq, lists:reverse(Docs)),
+    Handler(Since, Seq, get_batch_timestamp(Docs), lists:reverse(Docs)),
     {stop, Reason, State#state{since = Seq, changes = []}};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
@@ -246,11 +247,11 @@ handle_changes(State = #state{
     case length(Docs) >= MinSize of
         true ->
             spawn(fun() ->
-                Handler(Since, Until, lists:reverse(Docs))
+                Handler(Since, Until, get_batch_timestamp(Docs), lists:reverse(Docs))
             end);
         _ ->
             try
-                Handler(Since, Until, lists:reverse(Docs))
+                Handler(Since, Until, get_batch_timestamp(Docs), lists:reverse(Docs))
             catch
                 _:_ ->
                     % Handle should catch own errors
@@ -304,3 +305,12 @@ handle_doc_change(#document{seq = Seq} = Doc, _Filter,
     ?error("Received change with old sequence ~p. Expected sequences"
     " greater than or equal to ~p~n~p", [Seq, Until, Doc]),
     State.
+
+%% @private
+-spec get_batch_timestamp([datastore:doc()]) -> dbsync_changes:timestamp().
+get_batch_timestamp([]) ->
+    undefined;
+get_batch_timestamp([#document{timestamp = null} | _]) ->
+    undefined;
+get_batch_timestamp([#document{timestamp = Timestamp} | _]) ->
+    Timestamp.

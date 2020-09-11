@@ -12,12 +12,14 @@
 -module(massive_multi_provider_file_ops_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-behaviour(traverse_behaviour).
+
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
@@ -30,19 +32,21 @@
     rtransfer_multisource_test/1, rtransfer_blocking_test/1, traverse_test/1, external_traverse_test/1,
     traverse_cancel_test/1, external_traverse_cancel_test/1, traverse_external_cancel_test/1,
     queued_traverse_cancel_test/1, queued_traverse_external_cancel_test/1, traverse_restart_test/1,
+    multiple_traverse_test/1, external_multiple_traverse_test/1, mixed_multiple_traverse_test/1,
     db_sync_basic_opts_with_errors_test/1
 ]).
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, get_sync_info/1,
-    on_cancel_init/1, task_canceled/1, task_finished/1]).
+    on_cancel_init/2, task_canceled/2, task_finished/2]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
     multi_space_test, rtransfer_test, rtransfer_multisource_test, rtransfer_blocking_test,
     traverse_test, external_traverse_test, traverse_cancel_test, external_traverse_cancel_test,
     traverse_external_cancel_test, queued_traverse_cancel_test, queued_traverse_external_cancel_test,
-    traverse_restart_test, db_sync_basic_opts_with_errors_test
+    traverse_restart_test, multiple_traverse_test, external_multiple_traverse_test, mixed_multiple_traverse_test,
+    db_sync_basic_opts_with_errors_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -203,7 +207,7 @@ db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60).
 
 db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60, false).
 
 rtransfer_test(Config) ->
     ?PERFORMANCE(Config, ?rtransfer_performance_description("Tests rtransfer")).
@@ -270,10 +274,12 @@ traverse_test_base(Config, StartTaskWorker, DirName) ->
     ?assertMatch({ok, _}, lfm_proxy:resolve_guid(StartTaskWorker, SessId2, Dir1), 30),
 
     ExecutorID = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
+    TestMap = #{<<"key">> => <<"value">>},
     RunOptions = #{
         target_provider_id => ExecutorID,
         batch_size => 1,
-        traverse_info => self()
+        traverse_info => self(),
+        additional_data => TestMap
     },
     {ok, TaskID} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
@@ -287,14 +293,7 @@ traverse_test_base(Config, StartTaskWorker, DirName) ->
                 rpc:call(StartTaskWorker, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]))
     end,
 
-    Expected = [2,3,4,
-        11,12,13,16,17,18,
-        101,102,103,106,107,108,
-        151,152,153,156,157,158,
-        1001,1002,1003,1006,1007,1008,
-        1051,1052,1053,1056,1057,1058,
-        1501,1502, 1503,1506,1507,1508,
-        1551,1552,1553,1556,1557, 1558],
+    Expected = get_expected_jobs(),
     Ans = get_slave_ans(),
 
     SJobsNum = length(Expected),
@@ -311,7 +310,8 @@ traverse_test_base(Config, StartTaskWorker, DirName) ->
 
     lists:foreach(fun(W) ->
         ?assertMatch({ok, #document{value = #traverse_task{description = Description, enqueued = false,
-            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30),
+            canceled = false, status = finished, additional_data = TestMap}}},
+            rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
         check_ended(Worker, [TaskID]),
@@ -358,7 +358,7 @@ traverse_cancel_test_base(Config, StartTaskWorker, CancelWorker, DirName) ->
         {cancel, Check} when Check =:= DirName ->
             ?assertEqual(ok, rpc:call(CancelWorker, tree_traverse, cancel, [?MODULE, TaskID]), 15)
     after
-        5000 ->
+        30000 ->
             timeout
     end,
     ?assertEqual(ok, RecAns),
@@ -412,7 +412,7 @@ queued_traverse_cancel_test_base(Config, CancelWorker, DirName) ->
         {cancel, Check} when Check =:= DirName ->
             ?assertEqual(ok, rpc:call(CancelWorker, tree_traverse, cancel, [?MODULE, TaskID]), 15)
     after
-        5000 ->
+        30000 ->
             timeout
     end,
     ?assertEqual(ok, RecAns),
@@ -457,6 +457,7 @@ traverse_restart_test(Config) ->
     {ok, TaskID2} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions2])),
 
+    % Stop pools
     RecAns = receive
         {cancel, Check} when Check =:= DirName ->
             ?assertEqual(ok, rpc:call(Worker, worker_pool, stop_sup_pool, [?MASTER_POOL_NAME])),
@@ -466,7 +467,14 @@ traverse_restart_test(Config) ->
             timeout
     end,
     ?assertEqual(ok, RecAns),
-    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10])),
+
+    % Restart pools
+    PoolName = atom_to_binary(?MODULE, utf8),
+    ?assertMatch({ok, _}, rpc:call(Worker, worker_pool, start_sup_pool, [?MASTER_POOL_NAME,
+        [{workers, 3}, {queue_type, lifo}]])),
+    ?assertMatch({ok, _}, rpc:call(Worker, worker_pool, start_sup_pool, [?SLAVE_POOL_NAME,
+        [{workers, 3}, {queue_type, lifo}]])),
+    ?assertEqual(ok, rpc:call(Worker, traverse, restart_tasks, [PoolName, #{executor => ExecutorID}, Worker])),
 
     get_slave_ans(),
 
@@ -475,9 +483,82 @@ traverse_restart_test(Config) ->
             canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30),
         ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
             canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID2]), 30),
+        ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, ongoing]), 30),
+        ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, scheduled]), 30),
+        check_ended(Worker, [TaskID, TaskID2])
+    end, Workers).
+
+multiple_traverse_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    multiple_traverse_test_base(Config, lists:duplicate(10, Worker), <<"multiple_traverse_test">>).
+
+external_multiple_traverse_test(Config) ->
+    [_, _, Worker] = ?config(op_worker_nodes, Config),
+    multiple_traverse_test_base(Config, lists:duplicate(10, Worker), <<"external_multiple_traverse_test">>).
+
+mixed_multiple_traverse_test(Config) ->
+    [Worker, _, Worker2] = ?config(op_worker_nodes, Config),
+    Workers = lists:flatten(lists:duplicate(5, [Worker, Worker2])),
+    multiple_traverse_test_base(Config, Workers, <<"mixed_multiple_traverse_test">>).
+
+multiple_traverse_test_base(Config, StartTaskWorkers, DirName) ->
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    {SessId, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+        ?config({user_id, <<"user1">>}, Config)},
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    Dir1 = <<"/", SpaceName/binary, "/", DirName/binary>>,
+    {ok, Guid1} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir1)),
+    build_traverse_tree(Worker, SessId, Dir1, 1),
+
+    lists:foreach(fun(StartTaskWorker) ->
+
+        {SessId2, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(StartTaskWorker)}}, Config),
+            ?config({user_id, <<"user1">>}, Config)},
+        ?assertMatch({ok, _}, lfm_proxy:resolve_guid(StartTaskWorker, SessId2, Dir1), 30)
+    end, StartTaskWorkers),
+
+    ExecutorID = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
+    RunOptions = #{
+        target_provider_id => ExecutorID,
+        batch_size => 1,
+        traverse_info => self()
+    },
+    TaskIDs = lists:map(fun(StartTaskWorker) ->
+        {ok, TaskID} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
+            [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
+        TaskID
+    end, StartTaskWorkers),
+
+    Expected = get_expected_jobs(),
+    Ans = get_slave_ans(),
+
+    SJobsNum = length(Expected),
+    MJobsNum = SJobsNum * 4 div 3 - 1,
+    Description = #{
+        slave_jobs_delegated => SJobsNum,
+        slave_jobs_done => SJobsNum,
+        slave_jobs_failed => 0,
+        master_jobs_delegated => MJobsNum,
+        master_jobs_done => MJobsNum
+    },
+
+    Check = lists:flatten(lists:duplicate(length(StartTaskWorkers), Expected)),
+    ?assertEqual(lists:sort(Check), lists:sort(Ans)),
+
+    lists:foreach(fun(W) ->
+        lists:foreach(fun(TaskID) ->
+            ?assertMatch({ok, #document{value = #traverse_task{description = Description, enqueued = false,
+                canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30)
+        end, TaskIDs),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
-        check_ended(Worker, [TaskID, TaskID2])
+        check_ended(Worker, TaskIDs),
+
+        case W of
+            Worker -> check_callbacks(W, 0, 0, 10);
+            _ -> check_callbacks(W, 0, 0, 0)
+        end
     end, Workers).
 
 %%%===================================================================
@@ -495,7 +576,8 @@ init_per_testcase(Case, Config) when
     Case =:= traverse_test ; Case =:= external_traverse_test ; Case =:= traverse_cancel_test ;
     Case =:= external_traverse_cancel_test ; Case =:= traverse_external_cancel_test ;
     Case =:= queued_traverse_cancel_test ; Case =:= queued_traverse_external_cancel_test ;
-    Case =:= traverse_restart_test ->
+    Case =:= traverse_restart_test ; Case =:= multiple_traverse_test ;
+    Case =:= external_multiple_traverse_test ; Case =:= mixed_multiple_traverse_test ->
     Workers = ?config(op_worker_nodes, Config),
     clear_callbacks(Workers),
     lists:foreach(fun(Worker) ->
@@ -513,10 +595,11 @@ end_per_testcase(Case, Config) when
     Case =:= traverse_test ; Case =:= external_traverse_test ; Case =:= traverse_cancel_test ;
     Case =:= external_traverse_cancel_test ; Case =:= traverse_external_cancel_test ;
     Case =:= queued_traverse_cancel_test ; Case =:= queued_traverse_external_cancel_test ;
-    Case =:= traverse_restart_test ->
+    Case =:= traverse_restart_test ; Case =:= multiple_traverse_test ;
+    Case =:= external_multiple_traverse_test ; Case =:= mixed_multiple_traverse_test ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
-        ?assertEqual(ok, rpc:call(Worker, traverse, stop_pool, [atom_to_binary(?MODULE, utf8)]))
+        ?assertEqual(ok, rpc:call(Worker, tree_traverse, stop, [?MODULE]))
     end, Workers),
     lfm_proxy:teardown(Config);
 end_per_testcase(rtransfer_blocking_test, Config) ->
@@ -596,15 +679,15 @@ get_job(DocOrID) ->
 get_sync_info(Job) ->
     tree_traverse:get_sync_info(Job).
 
-on_cancel_init(TaskID) ->
+on_cancel_init(TaskID, _PoolName) ->
     save_callback(on_cancel_init, TaskID).
 
-task_canceled(TaskID) ->
+task_canceled(TaskID, _PoolName) ->
     save_callback(task_canceled, TaskID),
     timer:sleep(2000),
     ok.
 
-task_finished(TaskID) ->
+task_finished(TaskID, _PoolName) ->
     save_callback(task_finished, TaskID).
 
 %%%===================================================================
@@ -617,8 +700,10 @@ check_ended(Worker, Tasks) ->
     ?assertEqual([], Tasks -- Ans).
 
 save_callback(Callback, TaskID) ->
-    List = application:get_env(?APP_NAME, Callback, []),
-    application:set_env(?APP_NAME, Callback, [{TaskID, os:timestamp()} | List]),
+    critical_section:run(save_callback, fun() ->
+        List = application:get_env(?APP_NAME, Callback, []),
+        application:set_env(?APP_NAME, Callback, [{TaskID, os:timestamp()} | List])
+    end),
     ok.
 
 clear_callbacks(Workers) ->
@@ -643,4 +728,12 @@ check_callbacks(Worker, OnCancelNum, CancelNum, FinishNum) ->
         ?assert(timer:now_diff(Time2, Time) >= 2000000)
     end, Init).
 
-
+get_expected_jobs() ->
+    [2,3,4,
+        11,12,13,16,17,18,
+        101,102,103,106,107,108,
+        151,152,153,156,157,158,
+        1001,1002,1003,1006,1007,1008,
+        1051,1052,1053,1056,1057,1058,
+        1501,1502, 1503,1506,1507,1508,
+        1551,1552,1553,1556,1557, 1558].
