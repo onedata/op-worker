@@ -40,8 +40,9 @@ all() -> ?ALL([
 
 get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_storage),
+    
+    StorageGriMatcher = #gri{type = od_storage, id = ?STORAGE_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, StorageGriMatcher),
 
     Storage1Provider = ?STORAGE_PROVIDER(?STORAGE_1),
 
@@ -50,14 +51,14 @@ get_test(Config) ->
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
 
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
 
     % Storage private data should now be cached
     ?assertMatch(
         {ok, ?STORAGE_PRIVATE_DATA_MATCHER(?STORAGE_1, Storage1Provider)},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
 
     % Make sure that provider can access non-cached data
     logic_tests_common:invalidate_cache(Config, od_storage, ?STORAGE_1),
@@ -65,7 +66,7 @@ get_test(Config) ->
         {ok, ?STORAGE_PRIVATE_DATA_MATCHER(?STORAGE_1, Storage1Provider)},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_storage)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
     ok.
 
 
@@ -78,7 +79,8 @@ get_shared_data_test(Config) ->
     rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_2]),
 
     logic_tests_common:invalidate_cache(Config, od_storage, ?STORAGE_2),
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_storage),
+    StorageGriMatcher = #gri{type = od_storage, id = ?STORAGE_2, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, StorageGriMatcher),
 
     Storage2Provider = ?STORAGE_PROVIDER(?STORAGE_2),
 
@@ -87,14 +89,14 @@ get_shared_data_test(Config) ->
         rpc:call(Node, storage_logic, get_shared_data, [?STORAGE_2, ?SPACE_1])
     ),
 
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
 
     % Storage private data should now be cached
     ?assertMatch(
         {ok, ?STORAGE_SHARED_DATA_MATCHER(?STORAGE_2, Storage2Provider)},
         rpc:call(Node, storage_logic, get_shared_data, [?STORAGE_2, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
 
     % Make sure that provider can access non-cached data
     logic_tests_common:invalidate_cache(Config, od_storage, ?STORAGE_2),
@@ -102,7 +104,7 @@ get_shared_data_test(Config) ->
         {ok, ?STORAGE_SHARED_DATA_MATCHER(?STORAGE_2, Storage2Provider)},
         rpc:call(Node, storage_logic, get_shared_data, [?STORAGE_2, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_storage)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
     ok.
 
 
@@ -115,8 +117,9 @@ mixed_get_test(Config) ->
     rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_2]),
 
     logic_tests_common:invalidate_cache(Config, od_storage, ?STORAGE_1),
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_storage),
-    UnsubCalls = logic_tests_common:count_reqs(Config, unsub, od_storage),
+    StorageGriMatcher = #gri{type = od_storage, id = ?STORAGE_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, StorageGriMatcher),
+    UnsubCalls = logic_tests_common:count_reqs(Config, unsub, StorageGriMatcher),
 
     Storage1Provider = ?STORAGE_PROVIDER(?STORAGE_1),
 
@@ -125,15 +128,15 @@ mixed_get_test(Config) ->
         {ok, ?STORAGE_SHARED_DATA_MATCHER(?STORAGE_1, Storage1Provider)},
         rpc:call(Node, storage_logic, get_shared_data, [?STORAGE_1, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
-    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, od_storage)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
+    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, StorageGriMatcher)),
 
     ?assertMatch(
         {ok, ?STORAGE_PRIVATE_DATA_MATCHER(?STORAGE_1, Storage1Provider)},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_storage)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_storage)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, StorageGriMatcher)),
 
     % When private data is cached, any scope should always be fetched from cache
 
@@ -141,15 +144,15 @@ mixed_get_test(Config) ->
         {ok, ?STORAGE_PRIVATE_DATA_MATCHER(?STORAGE_1, Storage1Provider)},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_storage)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_storage)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, StorageGriMatcher)),
 
     ?assertMatch(
         {ok, ?STORAGE_SHARED_DATA_MATCHER(?STORAGE_1, Storage1Provider)},
         rpc:call(Node, storage_logic, get_shared_data, [?STORAGE_1, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_storage)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_storage)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, StorageGriMatcher)),
 
     ok.
 
@@ -161,8 +164,9 @@ subscribe_test(Config) ->
     % Simulate received updates
     Storage1PrivateGRI = #gri{type = od_storage, id = ?STORAGE_1, aspect = instance, scope = private},
     Storage1PrivateData = ?STORAGE_PRIVATE_DATA_VALUE(?STORAGE_1),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_storage),
+    
+    StorageGriMatcher = #gri{type = od_storage, id = ?STORAGE_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, StorageGriMatcher),
 
     Storage1Provider = ?STORAGE_PROVIDER(?STORAGE_1),
 
@@ -171,7 +175,7 @@ subscribe_test(Config) ->
         {ok, ?STORAGE_PRIVATE_DATA_MATCHER(?STORAGE_1, Storage1Provider)},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
 
     NewQosParams = #{<<"key">> => <<"value">>},
     ChangedData1 = Storage1PrivateData#{
@@ -189,7 +193,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, StorageGriMatcher)),
 
 
     % Simulate a 'deleted' push and see if cache was invalidated

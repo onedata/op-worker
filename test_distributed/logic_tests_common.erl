@@ -26,7 +26,6 @@
     wait_for_mocked_connection/1,
     simulate_push/2,
     create_user_session/2,
-    count_reqs/2,
     count_reqs/3,
     invalidate_cache/3,
     invalidate_all_test_records/1,
@@ -169,26 +168,16 @@ create_user_session(Config, UserId) ->
     SessionId.
 
 
-count_reqs(Config, Type) ->
+count_reqs(Config, Type, GriMatcher) ->
     Nodes = ?NODES(Config),
     RequestMatcher = case Type of
-        rpc -> #gs_req{request = #gs_req_rpc{_ = '_'}, _ = '_'};
-        graph -> #gs_req{request = #gs_req_graph{_ = '_'}, _ = '_'};
-        unsub -> #gs_req{request = #gs_req_unsub{_ = '_'}, _ = '_'}
+        graph -> #gs_req{request = #gs_req_graph{gri = GriMatcher, _ = '_'}, _ = '_'};
+        unsub -> #gs_req{request = #gs_req_unsub{gri = GriMatcher}, _ = '_'}
     end,
     lists:sum(
         [rpc:call(N, meck, num_calls, [gs_client, async_request, ['_', RequestMatcher]]) || N <- Nodes]
     ).
 
-count_reqs(Config, Type, EntityType) ->
-    Nodes = ?NODES(Config),
-    RequestMatcher = case Type of
-        graph -> #gs_req{request = #gs_req_graph{gri = #gri{type = EntityType, _ = '_'}, _ = '_'}, _ = '_'};
-        unsub -> #gs_req{request = #gs_req_unsub{gri = #gri{type = EntityType, _ = '_'}}, _ = '_'}
-    end,
-    lists:sum(
-        [rpc:call(N, meck, num_calls, [gs_client, async_request, ['_', RequestMatcher]]) || N <- Nodes]
-    ).
 
 invalidate_cache(Config, Type, Id) ->
     [Node | _] = ?NODES(Config),
