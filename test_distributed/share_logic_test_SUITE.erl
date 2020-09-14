@@ -50,14 +50,15 @@ get_test(Config) ->
     % access to share in cache
     rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1]),
     rpc:call(Node, provider_logic, get, [?ROOT_SESS_ID, ?PROVIDER_1]),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_share),
+    
+    ShareGriMatcher = #gri{type = od_share, id = ?SHARE_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, ShareGriMatcher),
 
     ?assertMatch(
         {ok, ?SHARE_PRIVATE_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     % Share private data should now be cached
 
@@ -65,7 +66,7 @@ get_test(Config) ->
         {ok, ?SHARE_PRIVATE_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     % Make sure that provider can access cached share data
     % Provider must be aware of its ID to check access to cached share - this is
@@ -74,7 +75,7 @@ get_test(Config) ->
         {ok, ?SHARE_PRIVATE_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get, [?ROOT_SESS_ID, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     % Make sure that provider can access non-cached share data
     logic_tests_common:invalidate_cache(Config, od_share, ?SHARE_1),
@@ -82,7 +83,7 @@ get_test(Config) ->
         {ok, ?SHARE_PRIVATE_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get, [?ROOT_SESS_ID, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     % Make sure that other users cannot access cached data
 
@@ -90,7 +91,7 @@ get_test(Config) ->
         ?ERROR_FORBIDDEN,
         rpc:call(Node, share_logic, get, [User3Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ok.
 
 
@@ -104,8 +105,9 @@ get_public_data_test(Config) ->
     % Cache space 1 private data, as it is required to verify access to
     % share in cache
     rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1]),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_share),
+    
+    ShareGriMatcher = #gri{type = od_share, id = ?SHARE_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, ShareGriMatcher),
 
     % All users and providers should be able to fetch public share data
     % when it is cached
@@ -113,25 +115,25 @@ get_public_data_test(Config) ->
         {ok, ?SHARE_PUBLIC_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get_public_data, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     ?assertMatch(
         {ok, ?SHARE_PUBLIC_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get_public_data, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     ?assertMatch(
         {ok, ?SHARE_PUBLIC_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get_public_data, [User3Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     ?assertMatch(
         {ok, ?SHARE_PUBLIC_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get_public_data, [?ROOT_SESS_ID, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     % All users and providers should be able to fetch public share data
     % when is is NOT cached
@@ -140,14 +142,14 @@ get_public_data_test(Config) ->
         {ok, ?SHARE_PUBLIC_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get_public_data, [User3Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     logic_tests_common:invalidate_cache(Config, od_share, ?SHARE_1),
     ?assertMatch(
         {ok, ?SHARE_PUBLIC_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get_public_data, [?ROOT_SESS_ID, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ok.
 
 
@@ -159,39 +161,40 @@ mixed_get_test(Config) ->
     % Cache space 1 private data, as it is required to verify access to
     % share in cache
     rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1]),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_share),
-    UnsubCalls = logic_tests_common:count_reqs(Config, unsub, od_share),
+    
+    ShareGriMatcher = #gri{type = od_share, id = ?SHARE_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, ShareGriMatcher),
+    UnsubCalls = logic_tests_common:count_reqs(Config, unsub, ShareGriMatcher),
 
     % Fetching rising scopes should cause an unsub and new fetch every time
     ?assertMatch(
         {ok, ?SHARE_PUBLIC_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get_public_data, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
-    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
+    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, ShareGriMatcher)),
 
     ?assertMatch(
         {ok, ?SHARE_PRIVATE_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_share)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_share)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, ShareGriMatcher)),
 
     % When private data is cached, any scope should always be fetched from cache
     ?assertMatch(
         {ok, ?SHARE_PRIVATE_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_share)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_share)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, ShareGriMatcher)),
 
     ?assertMatch(
         {ok, ?SHARE_PUBLIC_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get_public_data, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_share)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_share)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, ShareGriMatcher)),
 
     ok.
 
@@ -204,8 +207,9 @@ subscribe_test(Config) ->
     % Cache space 1 private data, as it is required to verify access to
     % share in cache
     rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1]),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_share),
+    
+    ShareGriMatcher = #gri{type = od_share, id = ?SHARE_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, ShareGriMatcher),
 
     % Simulate received updates on different scopes (in rising order)
     Share1PublicGRI = #gri{type = od_share, id = ?SHARE_1, aspect = instance, scope = public},
@@ -218,7 +222,7 @@ subscribe_test(Config) ->
         {ok, ?SHARE_PUBLIC_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get_public_data, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     ChangedData1 = Share1PublicData#{
         <<"revision">> => 2,
@@ -234,7 +238,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, share_logic, get_public_data, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     % private scope
     logic_tests_common:invalidate_cache(Config, od_share, ?SHARE_1),
@@ -242,7 +246,7 @@ subscribe_test(Config) ->
         {ok, ?SHARE_PRIVATE_DATA_MATCHER(?SHARE_1)},
         rpc:call(Node, share_logic, get, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     ChangedData2 = Share1PrivateData#{
         <<"revision">> => 3,
@@ -257,7 +261,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, share_logic, get, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage4 = #gs_push_graph{gri = Share1PrivateGRI, change_type = deleted},
@@ -288,8 +292,9 @@ create_update_delete_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_share),
+    
+    ShareGriMatcher = #gri{type = od_share, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, ShareGriMatcher),
 
     % Create
     ?assertMatch(
@@ -304,7 +309,7 @@ create_update_delete_test(Config) ->
             dir
         ])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
         ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"spaceId">>),
         rpc:call(Node, share_logic, create, [
@@ -317,7 +322,7 @@ create_update_delete_test(Config) ->
             dir
         ])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     % Update
     ?assertMatch(
@@ -327,34 +332,34 @@ create_update_delete_test(Config) ->
             <<"description">> => <<"New share description">>
         }])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
         ?ERROR_BAD_VALUE_BINARY(<<"name">>),
         rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{<<"name">> => 1234}])
     ),
-    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
         ?ERROR_BAD_VALUE_BINARY(<<"description">>),
         rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{<<"description">> => 87.9}])
     ),
-    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
         ?ERROR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]),
         rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{}])
     ),
-    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     % Delete
     ?assertMatch(
         ok,
         rpc:call(Node, share_logic, delete, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 7, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 7, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
         ?ERROR_NOT_FOUND,
         rpc:call(Node, share_logic, delete, [User1Sess, <<"wrongId">>])
     ),
-    ?assertEqual(GraphCalls + 8, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 8, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     ok.
 
@@ -368,7 +373,12 @@ confined_access_token_test(Config) ->
         AccessToken, undefined,
         initializer:local_ip_v4(), rest, allow_data_access_caveats
     ),
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    UserGriMatcher = #gri{type = od_user, id = ?USER_1, aspect = instance, _ = '_'},
+    OdTokenGriMatcher = #gri{type = od_token, aspect = verify_access_token, scope = public},
+    TokenSecretGriMatcher = #gri{type = temporary_token_secret, id = ?USER_1, aspect = user, scope = shared},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, UserGriMatcher),
+    OdTokenGraphCalls = logic_tests_common:count_reqs(Config, graph, OdTokenGriMatcher),
+    TokenSecretGraphCalls = logic_tests_common:count_reqs(Config, graph, TokenSecretGriMatcher),
 
     % Request should be denied before contacting Onezone because of the
     % oneclient interface caveat
@@ -376,11 +386,13 @@ confined_access_token_test(Config) ->
         ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, share_logic, get, [TokenCredentials, ?SHARE_1])
     ),
-    % Nevertheless, GraphCalls should be increased by 3 as following requests should be made:
+    % Nevertheless, following requests should be made:
     % - first to verify token credentials,
     % - second to subscribe for token revocation notifications in oz,
     % - third to fetch user data to initialize userRootDir, etc.
-    ?assertEqual(GraphCalls+3, logic_tests_common:count_reqs(Config, graph)).
+    ?assertEqual(OdTokenGraphCalls + 1, logic_tests_common:count_reqs(Config, graph, OdTokenGriMatcher)),
+    ?assertEqual(TokenSecretGraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenSecretGriMatcher)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)).
 
 
 %%%===================================================================

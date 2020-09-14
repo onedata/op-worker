@@ -45,21 +45,22 @@ all() -> ?ALL([
 
 get_shared_data_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_token),
+    
+    TokenGriMatcher = #gri{type = od_token, id = ?TOKEN_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, TokenGriMatcher),
 
     ?assertMatch(
         {ok, ?TOKEN_SHARED_DATA_MATCHER(?TOKEN_1)},
         rpc:call(Node, token_logic, get_shared_data, [?TOKEN_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_token)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     % Token shared data should now be cached
     ?assertMatch(
         {ok, ?TOKEN_SHARED_DATA_MATCHER(?TOKEN_1)},
         rpc:call(Node, token_logic, get_shared_data, [?TOKEN_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_token)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     % After cache invalidation token data should be fetched anew
     logic_tests_common:invalidate_cache(Config, od_token, ?TOKEN_1),
@@ -67,15 +68,16 @@ get_shared_data_test(Config) ->
         {ok, ?TOKEN_SHARED_DATA_MATCHER(?TOKEN_1)},
         rpc:call(Node, token_logic, get_shared_data, [?TOKEN_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_token)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     ok.
 
 
 subscribe_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_token),
+    
+    TokenGriMatcher = #gri{type = od_token, id = ?TOKEN_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, TokenGriMatcher),
 
     Token1SharedGRI = #gri{type = od_token, id = ?TOKEN_1, aspect = instance, scope = shared},
     Token1SharedData = ?TOKEN_SHARED_DATA_VALUE(?TOKEN_1),
@@ -85,7 +87,7 @@ subscribe_test(Config) ->
         {ok, ?TOKEN_SHARED_DATA_MATCHER(?TOKEN_1)},
         rpc:call(Node, token_logic, get_shared_data, [?TOKEN_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_token)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     ChangedData1 = Token1SharedData#{
         <<"revision">> => 2,
@@ -101,7 +103,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, token_logic, get_shared_data, [?TOKEN_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_token)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage3 = #gs_push_graph{gri = Token1SharedGRI, change_type = deleted},
@@ -131,8 +133,9 @@ subscribe_test(Config) ->
 
 convenience_functions_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_token),
+    
+    TokenGriMatcher = #gri{type = od_token, id = ?TOKEN_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, TokenGriMatcher),
 
     % Test convenience functions and if they fetch correct scopes
 
@@ -140,28 +143,29 @@ convenience_functions_test(Config) ->
         {ok, false},
         rpc:call(Node, token_logic, is_token_revoked, [?TOKEN_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_token)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     ok.
 
 
 get_temporary_tokens_generation_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    
+    TokenGriMatcher = #gri{type = temporary_token_secret, aspect = user, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, TokenGriMatcher),
 
     ?assertMatch(
         {ok, ?TEMPORARY_TOKENS_SECRET_GENERATION(?USER_1)},
         rpc:call(Node, token_logic, get_temporary_tokens_generation, [?USER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     % Temporary token generation should now be cached
     ?assertMatch(
         {ok, ?TEMPORARY_TOKENS_SECRET_GENERATION(?USER_1)},
         rpc:call(Node, token_logic, get_temporary_tokens_generation, [?USER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     % After cache invalidation temporary tokens generation should be fetched anew
     logic_tests_common:invalidate_cache(Config, temporary_token_secret, ?USER_1),
@@ -169,13 +173,14 @@ get_temporary_tokens_generation_test(Config) ->
         {ok, ?TEMPORARY_TOKENS_SECRET_GENERATION(?USER_1)},
         rpc:call(Node, token_logic, get_temporary_tokens_generation, [?USER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)).
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)).
 
 
 subscribe_for_temporary_tokens_generation_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    
+    TokenGriMatcher = #gri{type = temporary_token_secret, aspect = user, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, TokenGriMatcher),
 
     TemporaryTokenSecretSharedGRI = #gri{
         type = temporary_token_secret,
@@ -189,7 +194,7 @@ subscribe_for_temporary_tokens_generation_test(Config) ->
         {ok, ?TEMPORARY_TOKENS_SECRET_GENERATION(?USER_1)},
         rpc:call(Node, token_logic, get_temporary_tokens_generation, [?USER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     ChangedData1 = TemporaryTokenSecretSharedData#{
         <<"revision">> => 2,
@@ -206,7 +211,7 @@ subscribe_for_temporary_tokens_generation_test(Config) ->
         {ok, 2},
         rpc:call(Node, token_logic, get_temporary_tokens_generation, [?USER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage3 = #gs_push_graph{gri = TemporaryTokenSecretSharedGRI, change_type = deleted},
@@ -223,7 +228,7 @@ subscribe_for_temporary_tokens_generation_test(Config) ->
         {ok, ?TEMPORARY_TOKENS_SECRET_GENERATION(?USER_1)},
         rpc:call(Node, token_logic, get_temporary_tokens_generation, [?USER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, TokenGriMatcher)),
 
     PushMessage4 = #gs_push_nosub{gri = TemporaryTokenSecretSharedGRI, reason = forbidden},
     logic_tests_common:simulate_push(Config, PushMessage4),
