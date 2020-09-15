@@ -23,8 +23,8 @@
 -export([prepare_new_scan/1]).
 -export([
     increase_to_process_counter/2,
-    mark_imported_file/1,
-    mark_updated_file/1,
+    mark_created_file/1,
+    mark_modified_file/1,
     mark_deleted_file/1,
     mark_processed_file/1,
     mark_failed_file/1,
@@ -59,19 +59,19 @@
 
 % metric types
 -define(QUEUE_LENGTH, <<"queueLength">>).
--define(IMPORT_COUNT, <<"importCount">>).
--define(UPDATE_COUNT, <<"updateCount">>).
--define(DELETE_COUNT, <<"deleteCount">>).
+-define(CREATED_FILES, <<"createdFiles">>).
+-define(MODIFIED_FILES, <<"modifiedFiles">>).
+-define(DELETED_FILES, <<"deletedFiles">>).
 
 -type key() :: od_space:id().
 -type record() :: #storage_import_monitoring{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type timestamp() :: non_neg_integer().
--type status() :: ?ENQUEUED | ?RUNNING | ?ABORTING | ?FAILED | ?COMPLETED.
+-type status() :: undefined | ?ENQUEUED | ?RUNNING | ?ABORTING | ?FAILED | ?COMPLETED | ?ABORTED.
 
 -type window() :: day | hour | minute.
--type plot_counter_type() :: binary(). % ?QUEUE_LENGTH | ?IMPORT_COUNT | ?UPDATE_COUNT | ?DELETE_COUNT.
+-type plot_counter_type() :: binary(). % ?QUEUE_LENGTH | ?CREATED_FILES | ?MODIFIED_FILES | ?DELETED_FILES.
 -type error() :: {error, term()}.
 
 %% @formatter:off
@@ -153,28 +153,29 @@ increase_to_process_counter(SpaceId, Value) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% This function marks in document that file has been imported.
+%% This function marks in document that creation of file has been
+%% detected.
 %% It increases suitable counters and histograms and decreases
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_imported_file(key()) -> ok.
-mark_imported_file(SpaceId) ->
+-spec mark_created_file(key()) -> ok.
+mark_created_file(SpaceId) ->
     ok = ?extract_ok(storage_import_monitoring:update(SpaceId, fun(SIM = #storage_import_monitoring{
-        imported = ImportedFiles,
-        imported_sum = ImportedFilesSum,
-        imported_min_hist = MinHist,
-        imported_hour_hist = HourHist,
-        imported_day_hist = DayHist
+        created = CreatedFiles,
+        created_sum = CreatedFilesSum,
+        created_min_hist = MinHist,
+        created_hour_hist = HourHist,
+        created_day_hist = DayHist
     }) ->
         Timestamp = time_utils:cluster_time_seconds(),
         SIM2 = SIM#storage_import_monitoring{
             status = ?RUNNING,
-            imported = ImportedFiles + 1,
-            imported_sum = ImportedFilesSum + 1,
-            imported_min_hist = time_slot_histogram:increment(MinHist, Timestamp),
-            imported_hour_hist = time_slot_histogram:increment(HourHist, Timestamp),
-            imported_day_hist = time_slot_histogram:increment(DayHist, Timestamp)
+            created = CreatedFiles + 1,
+            created_sum = CreatedFilesSum + 1,
+            created_min_hist = time_slot_histogram:increment(MinHist, Timestamp),
+            created_hour_hist = time_slot_histogram:increment(HourHist, Timestamp),
+            created_day_hist = time_slot_histogram:increment(DayHist, Timestamp)
         },
         SIM3 = decrement_queue_length_histograms(SIM2, Timestamp),
         {ok, SIM3}
@@ -183,28 +184,29 @@ mark_imported_file(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% This function marks in document that file has been updated.
+%% This function marks in document that modification of file has been
+%% detected.
 %% It increases suitable counters and histograms and decreases
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_updated_file(key()) -> ok.
-mark_updated_file(SpaceId) ->
+-spec mark_modified_file(key()) -> ok.
+mark_modified_file(SpaceId) ->
     ok = ?extract_ok(storage_import_monitoring:update(SpaceId, fun(SIM = #storage_import_monitoring{
-        updated = UpdatedFiles,
-        updated_sum = UpdatedFilesSum,
-        updated_min_hist = MinHist,
-        updated_hour_hist = HourHist,
-        updated_day_hist = DayHist
+        modified = ModifiedFiles,
+        modified_sum = ModifiedFilesSum,
+        modified_min_hist = MinHist,
+        modified_hour_hist = HourHist,
+        modified_day_hist = DayHist
     }) ->
         Timestamp = time_utils:cluster_time_seconds(),
         SIM2 = SIM#storage_import_monitoring{
             status = ?RUNNING,
-            updated = UpdatedFiles + 1,
-            updated_sum = UpdatedFilesSum + 1,
-            updated_min_hist = time_slot_histogram:increment(MinHist, Timestamp),
-            updated_hour_hist = time_slot_histogram:increment(HourHist, Timestamp),
-            updated_day_hist = time_slot_histogram:increment(DayHist, Timestamp)
+            modified = ModifiedFiles + 1,
+            modified_sum = ModifiedFilesSum + 1,
+            modified_min_hist = time_slot_histogram:increment(MinHist, Timestamp),
+            modified_hour_hist = time_slot_histogram:increment(HourHist, Timestamp),
+            modified_day_hist = time_slot_histogram:increment(DayHist, Timestamp)
         },
         SIM3 = decrement_queue_length_histograms(SIM2, Timestamp),
         {ok, SIM3}
@@ -245,7 +247,7 @@ mark_deleted_file(SpaceId) ->
 %% @doc
 %% This function marks in document that file has been processed.
 %% This function is used for marking processed files that does not match
-%% to any of categories: imported, updated, deleted, failed.
+%% to any of categories: created, modified, deleted, failed.
 %% It increases suitable counters and histograms and decreases
 %% queue_length histograms.
 %% @end
@@ -307,24 +309,28 @@ set_aborting_status(SpaceId) ->
 -spec get_info(key() | record() | doc()) -> {ok, json_utils:json_term()} | error().
 get_info(#document{value = SIM}) ->
     get_info(SIM);
-get_info(#storage_import_monitoring{
+get_info(SIM = #storage_import_monitoring{
     finished_scans = Scans,
     status = Status,
     scan_start_time = StartTime,
     scan_stop_time = StopTime,
-    imported = ImportCount,
-    updated = UpdatedCount,
-    deleted = DeletedCount
+    created = CreatedFiles,
+    modified = ModifiedFiles,
+    deleted = DeletedFiles
 }) ->
-    {ok, #{
+    Info = #{
         totalScans => Scans,
-        status => Status,
+        status => utils:undefined_to_null(Status),
         start => StartTime div 1000,
-        stop => StopTime div 1000,
-        importedFiles => ImportCount,
-        updatedFiles => UpdatedCount,
-        deletedFiles => DeletedCount
-    }};
+        createdFiles => CreatedFiles,
+        modifiedFiles => ModifiedFiles,
+        deletedFiles => DeletedFiles
+    },
+    Info2 = case is_scan_in_progress(SIM) of
+        true -> Info;
+        false -> Info#{stop => StopTime div 1000}
+    end,
+    {ok, Info2};
 get_info(SpaceId) ->
     case storage_import_monitoring:get(SpaceId) of
         {ok, Doc} ->
@@ -336,25 +342,25 @@ get_info(SpaceId) ->
 
 -spec get_stats(key() | record(), [plot_counter_type()], window()) -> {ok, import_stats()}.
 get_stats(SIM = #storage_import_monitoring{}, Types, Window) ->
-    {ok, lists:foldl(fun(Type, AccIn) ->
-        AccIn#{Type => return_histogram_and_timestamp(SIM, Type, Window)}
-    end, #{}, Types)};
+    {ok, return_histograms_and_timestamps(SIM, Types, Window)};
 get_stats(SpaceId, Types, Window) ->
     case storage_import_monitoring:get(SpaceId) of
         {ok, #document{value = SIM}} ->
             get_stats(SIM, Types, Window);
         {error, not_found} ->
             ?debug("Failed to fetch storage import metrics for space ~p SpaceId due to not_found", [SpaceId]),
-            {ok, #{}};
+            {ok, return_empty_histograms_and_timestamps(Types)};
         Error ->
             ?error("Failed to fetch storage import metrics for space ~p SpaceId due to ~p", [SpaceId, Error]),
-            {ok, #{}}
+            {ok, return_empty_histograms_and_timestamps(Types)}
     end.
 
 
 -spec is_scan_in_progress(key() | doc() | record()) -> boolean().
 is_scan_in_progress(#document{value = SIM = #storage_import_monitoring{}}) ->
     is_scan_in_progress(SIM);
+is_scan_in_progress(#storage_import_monitoring{status = ?ENQUEUED}) ->
+    true;
 is_scan_in_progress(#storage_import_monitoring{status = ?RUNNING}) ->
     true;
 is_scan_in_progress(#storage_import_monitoring{status = ?ABORTING}) ->
@@ -442,20 +448,20 @@ describe(SpaceId) ->
             scan_start_time = ScanStartTime,
             scan_stop_time = ScanStopTime,
             to_process = ToProcess,
-            imported = Imported,
-            updated = Updated,
+            created = Created,
+            modified = Modified,
             deleted = Deleted,
             failed = Failed,
             other_processed = OtherProcessed,
-            imported_sum = ImportedSum,
-            updated_sum = UpdatedSum,
+            created_sum = CreatedSum,
+            modified_sum = ModifiedSum,
             deleted_sum = DeletedSum,
-            imported_min_hist = ImportedMinHist,
-            imported_hour_hist = ImportedHourHist,
-            imported_day_hist = ImportedDayHist,
-            updated_min_hist = UpdatedMinHist,
-            updated_hour_hist = UpdatedHourHist,
-            updated_day_hist = UpdatedDayHist,
+            created_min_hist = CreatedMinHist,
+            created_hour_hist = CreatedHourHist,
+            created_day_hist = CreatedDayHist,
+            modified_min_hist = ModifiedMinHist,
+            modified_hour_hist = ModifiedHourHist,
+            modified_day_hist = ModifiedDayHist,
             deleted_min_hist = DeletedMinHist,
             deleted_hour_hist = DeletedHourHist,
             deleted_day_hist = DeletedDayHist,
@@ -464,8 +470,8 @@ describe(SpaceId) ->
             queue_length_day_hist = QueueLengthDayHist
         }
     }} = storage_import_monitoring:get(SpaceId),
-    ImportedHistsTimestamp = get_histogram_timestamp(ImportedMinHist),
-    UpdatedHistsTimestamp = get_histogram_timestamp(UpdatedMinHist),
+    CreatedHistsTimestamp = get_histogram_timestamp(CreatedMinHist),
+    ModifiedHistsTimestamp = get_histogram_timestamp(ModifiedMinHist),
     DeletedHistsTimestamp = get_histogram_timestamp(DeletedMinHist),
     QueueLengthHistsTimestamp = get_histogram_timestamp(QueueLengthMinHist),
     #{
@@ -474,22 +480,22 @@ describe(SpaceId) ->
         <<"scanStartTime">> => ScanStartTime,
         <<"scanStopTime">> => ScanStopTime,
         <<"toProcess">> => ToProcess,
-        <<"imported">> => Imported,
-        <<"updated">> => Updated,
+        <<"created">> => Created,
+        <<"modified">> => Modified,
         <<"deleted">> => Deleted,
         <<"failed">> => Failed,
         <<"otherProcessed">> => OtherProcessed,
-        <<"importedSum">> => ImportedSum,
-        <<"updatedSum">> => UpdatedSum,
+        <<"createdSum">> => CreatedSum,
+        <<"modifiedSum">> => ModifiedSum,
         <<"deletedSum">> => DeletedSum,
-        <<"importedMinHist">> => get_histogram_values(ImportedMinHist),
-        <<"importedHourHist">> => get_histogram_values(ImportedHourHist),
-        <<"importedDayHist">> => get_histogram_values(ImportedDayHist),
-        <<"importedHistsTimestamp">> => ImportedHistsTimestamp,
-        <<"updatedMinHist">> => get_histogram_values(UpdatedMinHist),
-        <<"updatedHourHist">> => get_histogram_values(UpdatedHourHist),
-        <<"updatedDayHist">> => get_histogram_values(UpdatedDayHist),
-        <<"updatedHistsTimestamp">> => UpdatedHistsTimestamp,
+        <<"createdMinHist">> => get_histogram_values(CreatedMinHist),
+        <<"createdHourHist">> => get_histogram_values(CreatedHourHist),
+        <<"createdDayHist">> => get_histogram_values(CreatedDayHist),
+        <<"createdHistsTimestamp">> => CreatedHistsTimestamp,
+        <<"modifiedMinHist">> => get_histogram_values(ModifiedMinHist),
+        <<"modifiedHourHist">> => get_histogram_values(ModifiedHourHist),
+        <<"modifiedDayHist">> => get_histogram_values(ModifiedDayHist),
+        <<"modifiedHistsTimestamp">> => ModifiedHistsTimestamp,
         <<"deletedMinHist">> => get_histogram_values(DeletedMinHist),
         <<"deletedHourHist">> => get_histogram_values(DeletedHourHist),
         <<"deletedDayHist">> => get_histogram_values(DeletedDayHist),
@@ -564,15 +570,15 @@ new_record() ->
     EmptyDayHist = time_slot_histogram:new(Timestamp, ?DAY_HIST_SLOT, ?HISTOGRAM_LENGTH),
 
     #storage_import_monitoring{
-        status = ?ENQUEUED,
+        status = undefined,
 
-        imported_min_hist = EmptyMinHist,
-        imported_hour_hist = EmptyHourHist,
-        imported_day_hist = EmptyDayHist,
+        created_min_hist = EmptyMinHist,
+        created_hour_hist = EmptyHourHist,
+        created_day_hist = EmptyDayHist,
 
-        updated_min_hist = EmptyMinHist,
-        updated_hour_hist = EmptyHourHist,
-        updated_day_hist = EmptyDayHist,
+        modified_min_hist = EmptyMinHist,
+        modified_hour_hist = EmptyHourHist,
+        modified_day_hist = EmptyDayHist,
 
         deleted_min_hist = EmptyMinHist,
         deleted_hour_hist = EmptyHourHist,
@@ -594,8 +600,8 @@ new_record() ->
 reset_control_counters(SIM) ->
     SIM#storage_import_monitoring{
         to_process = 0,
-        imported = 0,
-        updated = 0,
+        created = 0,
+        modified = 0,
         deleted = 0,
         other_processed = 0,
         failed = 0
@@ -639,29 +645,30 @@ decrement_queue_length_histograms(SIM = #storage_import_monitoring{
         queue_length_day_hist = time_slot_histogram:decrement(DayHist, Timestamp)
     }.
 
+
 -spec mark_finished_scan_internal(record(), boolean()) -> record().
 mark_finished_scan_internal(SIM = #storage_import_monitoring{
-    scan_start_time = ScanStartTime,
-    scan_stop_time = ScanStopTime,
     finished_scans = Scans,
     failed = Failed
-}, Aborted)
-    when (ScanStartTime =/= undefined andalso ScanStopTime =:= undefined)
-    orelse (ScanStartTime > ScanStopTime)
-->
-    Timestamp = time_utils:cluster_time_millis(),
-    SIM2 = SIM#storage_import_monitoring{
-        finished_scans = Scans + 1,
-        scan_stop_time = Timestamp,
-        status = case {Aborted, Failed > 0} of
-            {true, _} -> ?ABORTED;
-            {false, true} -> ?FAILED;
-            {false, false} -> ?COMPLETED
-        end
-    },
-    reset_queue_length_histograms(SIM2, Timestamp div 1000);
-mark_finished_scan_internal(SIM, _Aborted) ->
-    SIM.
+}, Aborted) ->
+    case is_scan_in_progress(SIM) of
+        true ->
+            Timestamp = time_utils:cluster_time_millis(),
+            SIM2 = SIM#storage_import_monitoring{
+                finished_scans = Scans + 1,
+                scan_stop_time = Timestamp,
+                status = case {Aborted, Failed > 0} of
+                    {true, _} -> ?ABORTED;
+                    {false, true} -> ?FAILED;
+                    {false, false} -> ?COMPLETED
+                end
+            },
+            reset_queue_length_histograms(SIM2, Timestamp div 1000);
+        false ->
+            % this should never happen
+            ?error("Unexpected attempt to mark scan as finished while it is not in progress."),
+            SIM
+    end.
 
 
 %%-------------------------------------------------------------------
@@ -711,6 +718,33 @@ reset_queue_length_histograms(SIM = #storage_import_monitoring{
     }.
 
 
+-spec return_empty_histograms_and_timestamps([plot_counter_type()]) -> [json_utils:json_term()].
+return_empty_histograms_and_timestamps(Types) ->
+    lists:foldl(fun(Type, AccIn) ->
+        AccIn#{Type => return_empty_histogram_and_timestamp()}
+    end, #{}, Types).
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function returns empty histogram with given timestamp in the
+%% format acceptable by onepanel.
+%% @end
+%%-------------------------------------------------------------------
+-spec return_empty_histogram_and_timestamp() -> json_utils:json_term().
+return_empty_histogram_and_timestamp() ->
+    prepare(time_utils:cluster_time_seconds(), histogram:new(?HISTOGRAM_LENGTH)).
+
+
+-spec return_histograms_and_timestamps(record, [plot_counter_type()], window()) ->
+    [json_utils:json_term()].
+return_histograms_and_timestamps(SIM, Types, Window) ->
+    lists:foldl(fun(Type, AccIn) ->
+        AccIn#{Type => return_histogram_and_timestamp(SIM, Type, Window)}
+    end, #{}, Types).
+
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -720,23 +754,23 @@ reset_queue_length_histograms(SIM = #storage_import_monitoring{
 %%-------------------------------------------------------------------
 -spec return_histogram_and_timestamp(record(),
     plot_counter_type(), window()) -> json_utils:json_term().
-return_histogram_and_timestamp(SIM, ?IMPORT_COUNT, minute) ->
-    prepare(SIM#storage_import_monitoring.imported_min_hist);
-return_histogram_and_timestamp(SIM, ?IMPORT_COUNT, hour) ->
-    prepare(SIM#storage_import_monitoring.imported_hour_hist);
-return_histogram_and_timestamp(SIM, ?IMPORT_COUNT, day) ->
-    prepare(SIM#storage_import_monitoring.imported_day_hist);
-return_histogram_and_timestamp(SIM, ?UPDATE_COUNT, minute) ->
-    prepare(SIM#storage_import_monitoring.updated_min_hist);
-return_histogram_and_timestamp(SIM, ?UPDATE_COUNT, hour) ->
-    prepare(SIM#storage_import_monitoring.updated_hour_hist);
-return_histogram_and_timestamp(SIM, ?UPDATE_COUNT, day) ->
-    prepare(SIM#storage_import_monitoring.updated_day_hist);
-return_histogram_and_timestamp(SIM, ?DELETE_COUNT, minute) ->
+return_histogram_and_timestamp(SIM, ?CREATED_FILES, minute) ->
+    prepare(SIM#storage_import_monitoring.created_min_hist);
+return_histogram_and_timestamp(SIM, ?CREATED_FILES, hour) ->
+    prepare(SIM#storage_import_monitoring.created_hour_hist);
+return_histogram_and_timestamp(SIM, ?CREATED_FILES, day) ->
+    prepare(SIM#storage_import_monitoring.created_day_hist);
+return_histogram_and_timestamp(SIM, ?MODIFIED_FILES, minute) ->
+    prepare(SIM#storage_import_monitoring.modified_min_hist);
+return_histogram_and_timestamp(SIM, ?MODIFIED_FILES, hour) ->
+    prepare(SIM#storage_import_monitoring.modified_hour_hist);
+return_histogram_and_timestamp(SIM, ?MODIFIED_FILES, day) ->
+    prepare(SIM#storage_import_monitoring.modified_day_hist);
+return_histogram_and_timestamp(SIM, ?DELETED_FILES, minute) ->
     prepare(SIM#storage_import_monitoring.deleted_min_hist);
-return_histogram_and_timestamp(SIM, ?DELETE_COUNT, hour) ->
+return_histogram_and_timestamp(SIM, ?DELETED_FILES, hour) ->
     prepare(SIM#storage_import_monitoring.deleted_hour_hist);
-return_histogram_and_timestamp(SIM, ?DELETE_COUNT, day) ->
+return_histogram_and_timestamp(SIM, ?DELETED_FILES, day) ->
     prepare(SIM#storage_import_monitoring.deleted_day_hist);
 return_histogram_and_timestamp(SIM, ?QUEUE_LENGTH, minute) ->
     prepare(SIM#storage_import_monitoring.queue_length_min_hist);
@@ -744,6 +778,8 @@ return_histogram_and_timestamp(SIM, ?QUEUE_LENGTH, hour) ->
     prepare(SIM#storage_import_monitoring.queue_length_hour_hist);
 return_histogram_and_timestamp(SIM, ?QUEUE_LENGTH, day) ->
     prepare(SIM#storage_import_monitoring.queue_length_day_hist).
+
+
 
 %%-------------------------------------------------------------------
 %% @private
@@ -863,23 +899,23 @@ migrate_to_v1({storage_sync_monitoring,
         scan_stop_time = StopTime,
 
         to_process = ToProcess,
-        imported = Imported,
-        updated = Updated,
+        created = Imported,
+        modified = Updated,
         deleted = Deleted,
         failed = Failed,
         other_processed = OtherProcessed,
 
-        imported_sum = ImportedSum,
-        updated_sum = UpdatedSum,
+        created_sum = ImportedSum,
+        modified_sum = UpdatedSum,
         deleted_sum = DeletedSum,
 
-        imported_min_hist = ImportedMinHist,
-        imported_hour_hist = ImportedHourHist,
-        imported_day_hist = ImportedDayHist,
+        created_min_hist = ImportedMinHist,
+        created_hour_hist = ImportedHourHist,
+        created_day_hist = ImportedDayHist,
 
-        updated_min_hist = UpdatedMinHist,
-        updated_hour_hist = UpdatedHourHist,
-        updated_day_hist = UpdatedDayHist,
+        modified_min_hist = UpdatedMinHist,
+        modified_hour_hist = UpdatedHourHist,
+        modified_day_hist = UpdatedDayHist,
 
         deleted_min_hist = DeletedMinHist,
         deleted_hour_hist = DeletedHourHist,
@@ -943,17 +979,22 @@ get_record_struct(1) ->
         {scan_stop_time, integer},
 
         {to_process, integer},
-        {imported, integer},
-        {updated, integer},
+        % field imported was renamed to created in this version
+        {created, integer},
+        % field updated was renamed to modified in this version
+        {modified, integer},
         {deleted, integer},
         {failed, integer},
         {other_processed, integer},
 
-        {imported_sum, integer},
-        {updated_sum, integer},
+        % field imported_sum was renamed to created_sum in this version
+        {created_sum, integer},
+        % field updated_sum was renamed to modified_sum in this version
+        {modified_sum, integer},
         {deleted_sum, integer},
 
-        {imported_min_hist, {record, [
+        % field imported_min_hist was renamed to created_min_hist in this version
+        {created_min_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
@@ -961,7 +1002,8 @@ get_record_struct(1) ->
             {size, integer},
             {type, atom}
         ]}},
-        {imported_hour_hist, {record, [
+        % field imported_hour_hist was renamed to created_hour_hist in this version
+        {created_hour_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
@@ -969,7 +1011,8 @@ get_record_struct(1) ->
             {size, integer},
             {type, atom}
         ]}},
-        {imported_day_hist, {record, [
+        % field imported_day_hist was renamed to created_day_hist in this version
+        {created_day_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
@@ -978,7 +1021,8 @@ get_record_struct(1) ->
             {type, atom}
         ]}},
 
-        {updated_min_hist, {record, [
+        % field updated_min_hist was renamed to modified_min_hist in this version
+        {modified_min_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
@@ -986,7 +1030,8 @@ get_record_struct(1) ->
             {size, integer},
             {type, atom}
         ]}},
-        {updated_hour_hist, {record, [
+        % field updated_hour_hist was renamed to modified_hour_hist in this version
+        {modified_hour_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},
@@ -994,7 +1039,8 @@ get_record_struct(1) ->
             {size, integer},
             {type, atom}
         ]}},
-        {updated_day_hist, {record, [
+        % field updated_day_hist was renamed to modified_day_hist in this version
+        {modified_day_hist, {record, [
             {start_time, integer},
             {last_update_time, integer},
             {time_window, integer},

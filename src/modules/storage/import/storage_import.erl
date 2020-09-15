@@ -22,6 +22,7 @@
 -export([start_auto_scan/1, stop_auto_scan/1]).
 -export([get_mode/1, get_configuration/1]).
 -export([get_info/1, get_stats/3]).
+-export([get_manual_example/1]).
 -export([clean_up/1]).
 
 %% migration API
@@ -124,6 +125,20 @@ get_info(SpaceId) ->
 get_stats(SpaceId, Type, Window) ->
     storage_import_monitoring:get_stats(SpaceId, Type, Window).
 
+
+-spec get_manual_example(od_space:id()) -> {ok, binary()}.
+get_manual_example(SpaceId) ->
+    assert_space_supported_with_imported_storage(SpaceId),
+
+    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+    Domain = oneprovider:get_domain(),
+
+    {ok, str_utils:format_bin(
+        "curl -X POST -H \"X-Auth-Token:$TOKEN\" -H \"content-type:application/json\" \ "
+        "-d '{\"storageId\":\"~s\", \"spaceId\":\"~s\", \"storageFileId\":\"$STORAGE_FILE_ID\", \"destinationPath\":\"'$DESTINATION_PATH'\"}' \ "
+        "https://~s/api/v3/oneprovider/data/register",
+        [StorageId, SpaceId, Domain]
+    )}.
 
 %%%===================================================================
 %%% Migrate from space_strategies

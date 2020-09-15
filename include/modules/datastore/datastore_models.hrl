@@ -634,8 +634,8 @@
 
     % counters used for scan management, they're reset on the beginning of each scan
     to_process = 0 :: non_neg_integer(),
-    imported = 0 :: non_neg_integer(),
-    updated = 0 :: non_neg_integer(),
+    created = 0 :: non_neg_integer(),
+    modified = 0 :: non_neg_integer(),
     deleted = 0 :: non_neg_integer(),
     failed = 0 :: non_neg_integer(),
     % counter for tasks which don't match to any one of the above categories
@@ -647,17 +647,17 @@
     %     it performs as intended
     other_processed = 0 :: non_neg_integer(),
 
-    imported_sum = 0 :: non_neg_integer(),
-    updated_sum = 0 :: non_neg_integer(),
+    created_sum = 0 :: non_neg_integer(),
+    modified_sum = 0 :: non_neg_integer(),
     deleted_sum = 0 :: non_neg_integer(),
 
-    imported_min_hist :: time_slot_histogram:histogram(),
-    imported_hour_hist :: time_slot_histogram:histogram(),
-    imported_day_hist :: time_slot_histogram:histogram(),
+    created_min_hist :: time_slot_histogram:histogram(),
+    created_hour_hist :: time_slot_histogram:histogram(),
+    created_day_hist :: time_slot_histogram:histogram(),
 
-    updated_min_hist :: time_slot_histogram:histogram(),
-    updated_hour_hist :: time_slot_histogram:histogram(),
-    updated_day_hist :: time_slot_histogram:histogram(),
+    modified_min_hist :: time_slot_histogram:histogram(),
+    modified_hour_hist :: time_slot_histogram:histogram(),
+    modified_day_hist :: time_slot_histogram:histogram(),
 
     deleted_min_hist :: time_slot_histogram:histogram(),
     deleted_hour_hist :: time_slot_histogram:histogram(),

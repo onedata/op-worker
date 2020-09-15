@@ -78,7 +78,7 @@ to_map(#storage_import_config{
 }) ->
     #{
         mode => ?AUTO_IMPORT,
-        scan_config => auto_scan_config:to_map(ScanConfig)
+        auto_storage_import_config => auto_scan_config:to_map(ScanConfig)
     }.
 
 

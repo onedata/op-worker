@@ -406,7 +406,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
             case storage_file_id:space_dir_id(SpaceId, StorageId) of
                 StorageFileId ->
                     % space dir may have not been created on storage yet
-                    storage_import_monitoring:mark_updated_file(SpaceId),
+                    storage_import_monitoring:mark_modified_file(SpaceId),
                     {ok, #{}};
                 _OtherStorageFileId ->
                     storage_import_monitoring:mark_failed_file(SpaceId),
@@ -464,7 +464,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
         {error, ?ENOENT} ->
             % directory might have been deleted
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
-            storage_import_monitoring:mark_updated_file(SpaceId),
+            storage_import_monitoring:mark_modified_file(SpaceId),
             {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
             FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, _SlavesDescription) ->
                 storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
@@ -672,8 +672,8 @@ process_storage_file(StorageFileCtx, Info) ->
     try
         case storage_import_engine:find_direct_parent_and_sync_file(StorageFileCtx, Info) of
             Result = {SyncResult, _, _}
-                when SyncResult =:= ?FILE_IMPORTED
-                orelse SyncResult =:= ?FILE_UPDATED
+                when SyncResult =:= ?FILE_CREATED
+                orelse SyncResult =:= ?FILE_MODIFIED
                 orelse SyncResult =:= ?FILE_PROCESSED
             ->
                 {ok, Result};
@@ -696,10 +696,10 @@ process_storage_file(StorageFileCtx, Info) ->
     end.
 
 -spec increase_counter(storage_import_engine:result(), od_space:id()) -> ok.
-increase_counter(?FILE_IMPORTED, SpaceId) ->
-    storage_import_monitoring:mark_imported_file(SpaceId);
-increase_counter(?FILE_UPDATED, SpaceId) ->
-    storage_import_monitoring:mark_updated_file(SpaceId);
+increase_counter(?FILE_CREATED, SpaceId) ->
+    storage_import_monitoring:mark_created_file(SpaceId);
+increase_counter(?FILE_MODIFIED, SpaceId) ->
+    storage_import_monitoring:mark_modified_file(SpaceId);
 increase_counter(?FILE_PROCESSED, SpaceId) ->
     storage_import_monitoring:mark_processed_file(SpaceId).
 

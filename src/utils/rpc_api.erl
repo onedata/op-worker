@@ -100,6 +100,7 @@
     storage_import_stop_scan/1,
     storage_import_get_stats/3,
     storage_import_get_info/1,
+    storage_import_get_manual_example/1,
     restart_rtransfer_link/0,
     set_txt_record/3,
     remove_txt_record/1
@@ -620,6 +621,12 @@ storage_import_get_stats(SpaceId, Type, Window) ->
 -spec storage_import_get_info(od_space:id()) -> {ok, json_utils:json_term()} | {error, term()}.
 storage_import_get_info(SpaceId) ->
     storage_import:get_info(SpaceId).
+
+
+-spec storage_import_get_manual_example(od:space_id()) ->
+    {ok, binary()}.
+storage_import_get_manual_example(SpaceId) ->
+    storage_import:get_manual_example(SpaceId).
 
 
 -spec restart_rtransfer_link() -> ok | {error, not_running}.

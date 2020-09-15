@@ -173,7 +173,7 @@ upgrade_from_20_02_1_space_strategies(Config) ->
     },
     ExpectedConfig3 = #{
         mode => ?AUTO_IMPORT,
-        scan_config => #{
+        auto_storage_import_config => #{
             continuous_scan => false,
             max_depth => MaxDepth3,
             sync_acl => SyncAcl3,
@@ -215,7 +215,7 @@ upgrade_from_20_02_1_space_strategies(Config) ->
     },
     ExpectedConfig4 = #{
         mode => ?AUTO_IMPORT,
-        scan_config => #{
+        auto_storage_import_config => #{
             continuous_scan => true,
             max_depth => MaxDepth4,
             sync_acl => SyncAcl4,
@@ -311,20 +311,20 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     SIMBase = #storage_import_monitoring{
         finished_scans = Scans,
         to_process = ToProcess,
-        imported = Imported,
-        updated = Updated,
+        created = Imported,
+        modified = Updated,
         deleted = Deleted,
         failed = Failed,
         other_processed = OtherProcessed,
-        imported_sum = ImportedSum,
-        updated_sum = UpdatedSum,
+        created_sum = ImportedSum,
+        modified_sum = UpdatedSum,
         deleted_sum = DeletedSum,
-        imported_min_hist = EmptyMinHist,
-        imported_hour_hist = EmptyHourHist,
-        imported_day_hist = EmptyDayHist,
-        updated_min_hist = EmptyMinHist,
-        updated_hour_hist = EmptyHourHist,
-        updated_day_hist = EmptyDayHist,
+        created_min_hist = EmptyMinHist,
+        created_hour_hist = EmptyHourHist,
+        created_day_hist = EmptyDayHist,
+        modified_min_hist = EmptyMinHist,
+        modified_hour_hist = EmptyHourHist,
+        modified_day_hist = EmptyDayHist,
         deleted_min_hist = EmptyMinHist,
         deleted_hour_hist = EmptyHourHist,
         deleted_day_hist = EmptyDayHist,

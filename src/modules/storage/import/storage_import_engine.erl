@@ -36,7 +36,7 @@
 -define(OWNER_ATTR_NAME, owner).
 -define(NFS4_ACL_ATTR_NAME, nfs4_acl).
 
--type result() :: ?FILE_IMPORTED | ?FILE_UPDATED | ?FILE_PROCESSED | ?FILE_PROCESSING_FAILED.
+-type result() :: ?FILE_CREATED | ?FILE_MODIFIED | ?FILE_PROCESSED | ?FILE_PROCESSING_FAILED.
 %% @formatter:off
 -type file_attr_name() :: ?FILE_LOCATION_ATTR_NAME | ?MODE_ATTR_NAME | ?TIMESTAMPS_ATTR_NAME |
                           ?OWNER_ATTR_NAME | ?NFS4_ACL_ATTR_NAME.
@@ -244,7 +244,7 @@ ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info 
                         MissingParentCtx3;
                     {false, _} ->
                         % if it's not a directory first delete stalled file, and create missing parent
-                        {?FILE_IMPORTED, MissingParentCtx4} =
+                        {?FILE_CREATED, MissingParentCtx4} =
                             delete_stalled_file_and_create_missing_parent(MissingParentStorageCtx,
                                 MissingParentCtx2, Info),
                             MissingParentCtx4
@@ -270,7 +270,7 @@ ensure_missing_parent_exist(MissingParentName, MissingParentStorageCtx, Info = #
                 {ok, MissingParentCtx} -> MissingParentCtx;
                 {error, ?ENOENT} ->
                     case create_missing_parent(MissingParentStorageCtx, Info) of
-                        {?FILE_IMPORTED, MissingParentCtx} -> MissingParentCtx;
+                        {?FILE_CREATED, MissingParentCtx} -> MissingParentCtx;
                         {error, ?ENOENT} -> undefined
                     end
             end
@@ -576,7 +576,7 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     storage_import_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
-    {?FILE_IMPORTED, FileCtx2, StorageFileCtx6}.
+    {?FILE_CREATED, FileCtx2, StorageFileCtx6}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -596,7 +596,7 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     storage_import_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
-    {?FILE_IMPORTED, FileCtx2}.
+    {?FILE_CREATED, FileCtx2}.
 
 
 -spec create_location(file_meta:uuid(), storage_file_ctx:ctx(), od_user:id()) -> {ok, storage_file_ctx:ctx()}.
@@ -844,7 +844,7 @@ maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
             FileUuid = file_ctx:get_uuid_const(FileCtx3),
             storage_import_logger:log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
             fslogic_event_emitter:emit_file_attr_changed(FileCtx3, []),
-            {?FILE_UPDATED, FileCtx3, StorageFileCtx2}
+            {?FILE_MODIFIED, FileCtx3, StorageFileCtx2}
     end.
 
 -spec maybe_update_file_location(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->

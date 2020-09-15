@@ -19,8 +19,8 @@
 -define(MANUAL_IMPORT, manual).
 
 % storage_import_engine results
--define(FILE_IMPORTED, imported).
--define(FILE_UPDATED, updated).
+-define(FILE_CREATED, created).
+-define(FILE_MODIFIED, modified).
 -define(FILE_PROCESSED, processed).
 -define(FILE_PROCESSING_FAILED, failed).
 
