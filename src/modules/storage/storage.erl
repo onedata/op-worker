@@ -652,7 +652,7 @@ migrate_imported_storages_to_zone() ->
     ?notice("Imported storages migration procedure finished succesfully").
 
 
-%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
+%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 %%%===================================================================
 %% Deprecated API and datastore_model callbacks
 %%

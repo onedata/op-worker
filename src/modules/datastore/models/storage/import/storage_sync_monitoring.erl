@@ -5,9 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Model responsible for saving information about storage_import scans.
+%%% Model responsible for saving information about storage import scans.
 %%%
-%%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release.
+%%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_monitoring).

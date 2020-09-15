@@ -20,7 +20,7 @@
 %% API
 -export([set_manual_mode/1, configure_auto_mode/2]).
 -export([to_map/1]).
--export([get_mode/1, get_scan_config/1]).
+-export([get_mode/1, get_auto_config/1]).
 
 %% datastore API
 -export([create/2, delete/1, get/1]).
@@ -38,11 +38,11 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type config() :: doc() | record().
--type scan_config() :: auto_scan_config:config().
--type scan_config_map() :: auto_scan_config:config_map().
+-type auto_config() :: auto_storage_import_config:config().
+-type auto_config_map() :: auto_storage_import_config:config_map().
 -type mode() :: ?AUTO_IMPORT | ?MANUAL_IMPORT.
 
--export_type([record/0, doc/0, config/0, mode/0, scan_config/0, scan_config_map/0]).
+-export_type([record/0, doc/0, config/0, mode/0, auto_config/0, auto_config_map/0]).
 
 %%%===================================================================
 %%% API functions
@@ -53,17 +53,17 @@ set_manual_mode(SpaceId) ->
     create(SpaceId, #storage_import_config{mode = ?MANUAL_IMPORT}).
 
 
--spec configure_auto_mode(key(), scan_config_map()) -> ok | {error, term()}.
-configure_auto_mode(SpaceId, ScanConfigMap) ->
+-spec configure_auto_mode(key(), auto_config_map()) -> ok | {error, term()}.
+configure_auto_mode(SpaceId, NewAutoConfigMap) ->
     UpdateFun = fun(SIC = #storage_import_config{
         mode = ?AUTO_IMPORT, % only auto mode can be updated
-        scan_config = ScanConfig
+        auto_storage_import_config = AutoConfig
     }) ->
         {ok, SIC#storage_import_config{
-            scan_config = auto_scan_config:configure(ScanConfig, ScanConfigMap)
+            auto_storage_import_config = auto_storage_import_config:configure(AutoConfig, NewAutoConfigMap)
         }}
     end,
-    {ok, Default} = UpdateFun(default_auto_import_record(ScanConfigMap)),
+    {ok, Default} = UpdateFun(default_auto_import_record(NewAutoConfigMap)),
     update(SpaceId, UpdateFun, Default).
 
 
@@ -74,11 +74,11 @@ to_map(#storage_import_config{mode = ?MANUAL_IMPORT}) ->
     #{mode => ?MANUAL_IMPORT};
 to_map(#storage_import_config{
     mode = ?AUTO_IMPORT,
-    scan_config = ScanConfig
+    auto_storage_import_config = AutoConfig
 }) ->
     #{
         mode => ?AUTO_IMPORT,
-        auto_storage_import_config => auto_scan_config:to_map(ScanConfig)
+        auto_storage_import_config => auto_storage_import_config:to_map(AutoConfig)
     }.
 
 
@@ -96,15 +96,15 @@ get_mode(SpaceId) ->
     end.
 
 
--spec get_scan_config(doc() | record() | key()) -> {ok, scan_config()} | {error, term()}.
-get_scan_config(#document{value = StorageImportConfig}) ->
-    get_scan_config(StorageImportConfig);
-get_scan_config(#storage_import_config{scan_config = ScanConfig}) ->
-    {ok, ScanConfig};
-get_scan_config(SpaceId) ->
+-spec get_auto_config(doc() | record() | key()) -> {ok, auto_config()} | {error, term()}.
+get_auto_config(#document{value = StorageImportConfig}) ->
+    get_auto_config(StorageImportConfig);
+get_auto_config(#storage_import_config{auto_storage_import_config = AutoConfig}) ->
+    {ok, AutoConfig};
+get_auto_config(SpaceId) ->
     case storage_import_config:get(SpaceId) of
         {ok, Doc} ->
-            get_scan_config(Doc);
+            get_auto_config(Doc);
         Error ->
             Error
     end.
@@ -132,20 +132,19 @@ delete(SpaceId) ->
     datastore_model:delete(?CTX, SpaceId).
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 -spec update(key(), diff(), record()) -> ok | {error, term()}.
 update(Key, Diff, Default) ->
     ?extract_ok(datastore_model:update(?CTX, Key, Diff, Default)).
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
--spec default_auto_import_record(scan_config_map()) -> record().
-default_auto_import_record(ScanConfigMap) ->
+-spec default_auto_import_record(auto_config_map()) -> record().
+default_auto_import_record(AutoConfigMap) ->
     #storage_import_config{
         mode = ?AUTO_IMPORT,
-        scan_config = auto_scan_config:configure(ScanConfigMap)
+        auto_storage_import_config = auto_storage_import_config:configure(AutoConfigMap)
     }.
 
 %%%===================================================================
@@ -196,7 +195,7 @@ migrate_to_v1(#space_strategies{sync_configs = SyncConfigs}) ->
                 (_, undefined) -> false;
                 (_, _) -> true
             end, Diff),
-            {?MODULE, ?AUTO_IMPORT, auto_scan_config:configure(Diff2)};
+            {?MODULE, ?AUTO_IMPORT, auto_storage_import_config:configure(Diff2)};
         {false, true} ->
             {?MODULE, ?MANUAL_IMPORT, undefined};
         {_, false} ->

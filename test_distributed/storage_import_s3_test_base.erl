@@ -30,7 +30,6 @@
     create_file_in_dir_import_test/1,
     create_subfiles_import_many_test/1,
     create_subfiles_import_many2_test/1,
-    cancel_scan/1,
 
     update_syncs_files_after_import_failed_test/1,
     update_syncs_files_after_previous_update_failed_test/1,
@@ -40,6 +39,7 @@
     changing_max_depth_test/1,
     create_file_in_dir_update_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
+    force_stop_test/1,
 
     delete_non_empty_directory_update_test/1,
     sync_works_properly_after_delete_test/1,
@@ -199,67 +199,6 @@ create_subfiles_import_many2_test(Config) ->
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
-
-cancel_scan(Config) ->
-    % storage_import_dir_batch_size is set to 1 in init_per_testcase
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
-    %% Create dirs and files on storage
-    RootPath = storage_import_test_base:provider_storage_path(?SPACE_ID, <<"">>),
-    DirStructure = [10, 10, 10],
-    RootSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
-    Timeout = 600,
-
-    storage_import_test_base:create_nested_directory_tree(W1, DirStructure, RootSDHandle),
-    Files = storage_import_test_base:generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
-
-    TestProc = self(),
-    ok = test_utils:mock_new(W1, storage_import_engine, [passthrough]),
-    ok = test_utils:mock_expect(W1, storage_import_engine, import_file_unsafe,
-        fun(StorageFileCtx, Info) ->
-            TestProc ! start,
-            meck:passthrough([StorageFileCtx, Info])
-        end),
-
-    storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
-    receive start -> ok end,
-    storage_import_test_base:stop_scan(W1, ?SPACE_ID),
-    storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID, Timeout),
-
-    SSM = ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0
-    }, ?SPACE_ID),
-
-    #{
-        <<"toProcess">> := ToProcess,
-        <<"otherProcessed">> := OtherProcessed,
-        <<"modified">> := Modified,
-        <<"created">> := Created
-    } = SSM,
-
-    ?assert(ToProcess < 1000),
-    ?assert((OtherProcessed + Modified + Created) < 1000),
-
-    % check whether next scan will import missing files
-    storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
-    storage_import_test_base:assertScanFinished(W1, ?SPACE_ID, 2, Timeout),
-    storage_import_test_base:disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdSum">> => 1000,
-        <<"deletedSum">> => 0,
-        <<"createdDayHist">> => 1000,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
-    }, ?SPACE_ID),
-    storage_import_test_base:parallel_assert(storage_import_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout).
 
 
 create_file_in_dir_update_test(Config) ->
@@ -917,6 +856,68 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
     ?assertMatch({ok, []}, sd_test_utils:listobjects(W1, SDHandle,  ?DEFAULT_MARKER, 0, 100)),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId,  {path, ?SPACE_TEST_DIR_PATH}), 2 * ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
+
+
+force_stop_test(Config) ->
+    % storage_import_dir_batch_size is set to 1 in init_per_testcase
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
+    %% Create dirs and files on storage
+    RootPath = storage_import_test_base:provider_storage_path(?SPACE_ID, <<"">>),
+    DirStructure = [10, 10, 10],
+    RootSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
+    Timeout = 600,
+
+    storage_import_test_base:create_nested_directory_tree(W1, DirStructure, RootSDHandle),
+    Files = storage_import_test_base:generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
+
+    TestProc = self(),
+    ok = test_utils:mock_new(W1, storage_import_engine, [passthrough]),
+    ok = test_utils:mock_expect(W1, storage_import_engine, import_file_unsafe,
+        fun(StorageFileCtx, Info) ->
+            TestProc ! start,
+            meck:passthrough([StorageFileCtx, Info])
+        end),
+
+    storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
+    receive start -> ok end,
+    storage_import_test_base:stop_scan(W1, ?SPACE_ID),
+    storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID, Timeout),
+
+    SSM = ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0
+    }, ?SPACE_ID),
+
+    #{
+        <<"toProcess">> := ToProcess,
+        <<"otherProcessed">> := OtherProcessed,
+        <<"modified">> := Modified,
+        <<"created">> := Created
+    } = SSM,
+
+    ?assert(ToProcess < 1000),
+    ?assert((OtherProcessed + Modified + Created) < 1000),
+
+    % check whether next scan will import missing files
+    storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
+    storage_import_test_base:assertScanFinished(W1, ?SPACE_ID, 2, Timeout),
+    storage_import_test_base:disable_continuous_scan(Config),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 2,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"createdSum">> => 1000,
+        <<"deletedSum">> => 0,
+        <<"createdDayHist">> => 1000,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+    storage_import_test_base:parallel_assert(storage_import_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout).
 
 
 delete_non_empty_directory_update_test(Config) ->

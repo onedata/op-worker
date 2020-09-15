@@ -71,7 +71,6 @@
     create_remote_file_import_conflict_test/1,
     create_remote_dir_import_race_test/1,
     create_remote_file_import_race_test/1,
-    cancel_scan/1,
     import_nfs_acl_test/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
     create_file_import_race_test/1,
@@ -95,7 +94,8 @@
     create_file_in_dir_update_test/1,
     changing_max_depth_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
-    create_file_manual_scan_test/1,
+    force_start_test/1,
+    force_stop_test/1,
 
     delete_empty_directory_update_test/1,
     delete_non_empty_directory_update_test/1,
@@ -1074,65 +1074,6 @@ create_remote_file_import_race_test(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
-cancel_scan(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    %% Create dirs and files on storage
-    RootPath = provider_storage_path(?SPACE_ID, <<"">>),
-    DirStructure = [10, 10, 10],
-    RootSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
-
-    create_nested_directory_tree(W1, DirStructure, RootSDHandle),
-    Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
-    Timeout = 600,
-    TestProc = self(),
-    test_utils:mock_new(W1, storage_import_engine, [passthrough]),
-    test_utils:mock_expect(W1, storage_import_engine, import_file_unsafe,
-        fun(StorageFileCtx, Info) ->
-            TestProc ! start,
-            meck:passthrough([StorageFileCtx, Info])
-        end),
-
-    enable_initial_scan(Config, ?SPACE_ID),
-    receive start -> ok end,
-
-    stop_scan(W1, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID, Timeout),
-
-    SSM = ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0
-    }, ?SPACE_ID),
-
-    #{
-        <<"toProcess">> := ToProcess,
-        <<"otherProcessed">> := OtherProcessed,
-        <<"modified">> := Modified,
-        <<"created">> := Created
-    } = SSM,
-
-    ?assert(ToProcess =< 1111),
-    ?assert((OtherProcessed + Modified + Created) =< 1111),
-
-    % check whether next scan will import missing files
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertScanFinished(W1, ?SPACE_ID, 2, Timeout),
-    disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdSum">> => 1110,
-        <<"deletedSum">> => 0,
-        <<"createdDayHist">> => 1110,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
-    }, ?SPACE_ID),
-    parallel_assert(?MODULE, verify_file, [W1, SessId, Timeout], Files, Timeout).
 
 import_nfs_acl_test(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -2761,7 +2702,7 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
 
-create_file_manual_scan_test(Config) ->
+force_start_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -2831,6 +2772,67 @@ create_file_manual_scan_test(Config) ->
         lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
+
+
+force_stop_test(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    RDWRStorage = get_rdwr_storage(Config, W1),
+    %% Create dirs and files on storage
+    RootPath = provider_storage_path(?SPACE_ID, <<"">>),
+    DirStructure = [10, 10, 10],
+    RootSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
+
+    create_nested_directory_tree(W1, DirStructure, RootSDHandle),
+    Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
+    Timeout = 600,
+    TestProc = self(),
+    test_utils:mock_new(W1, storage_import_engine, [passthrough]),
+    test_utils:mock_expect(W1, storage_import_engine, import_file_unsafe,
+        fun(StorageFileCtx, Info) ->
+            TestProc ! start,
+            meck:passthrough([StorageFileCtx, Info])
+        end),
+
+    enable_initial_scan(Config, ?SPACE_ID),
+    receive start -> ok end,
+
+    stop_scan(W1, ?SPACE_ID),
+    assertInitialScanFinished(W1, ?SPACE_ID, Timeout),
+
+    SSM = ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0
+    }, ?SPACE_ID),
+
+    #{
+        <<"toProcess">> := ToProcess,
+        <<"otherProcessed">> := OtherProcessed,
+        <<"modified">> := Modified,
+        <<"created">> := Created
+    } = SSM,
+
+    ?assert(ToProcess =< 1111),
+    ?assert((OtherProcessed + Modified + Created) =< 1111),
+
+    % check whether next scan will import missing files
+    enable_continuous_scans(Config, ?SPACE_ID),
+    assertScanFinished(W1, ?SPACE_ID, 2, Timeout),
+    disable_continuous_scan(Config),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 2,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"createdSum">> => 1110,
+        <<"deletedSum">> => 0,
+        <<"createdDayHist">> => 1110,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+    parallel_assert(?MODULE, verify_file, [W1, SessId, Timeout], Files, Timeout).
 
 
 delete_empty_directory_update_test(Config) ->
@@ -6109,7 +6111,7 @@ init_per_testcase(Case, Config)
     end),
     init_per_testcase(default, Config);
 
-init_per_testcase(cancel_scan, Config) ->
+init_per_testcase(force_stop_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_import_dir_batch_size),
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, 1),
@@ -6315,7 +6317,7 @@ end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
     ok = test_utils:mock_unload(Workers, [storage_driver]),
     end_per_testcase(default, Config);
 
-end_per_testcase(cancel_scan, Config) ->
+end_per_testcase(force_stop_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, OldDirBatchSize),

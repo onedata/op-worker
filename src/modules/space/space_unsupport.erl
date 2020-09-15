@@ -223,7 +223,7 @@ execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
 
 
 %%%===================================================================
-%%% Stage internalsstorage_sync_test.hr
+%%% Stage internals
 %%%===================================================================
 
 %% @private

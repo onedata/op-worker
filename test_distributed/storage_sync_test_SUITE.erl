@@ -6,7 +6,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module tests storage_import
+%%% @doc This module tests storage import
 %%% @end
 %%%--------------------------------------------------------------------
 -module(storage_sync_test_SUITE).
@@ -44,7 +44,6 @@
     create_remote_file_import_conflict_test/1,
     create_remote_dir_import_race_test/1,
     create_remote_file_import_race_test/1,
-    cancel_scan/1,
     import_nfs_acl_test/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
     create_file_import_race_test/1,
@@ -68,7 +67,8 @@
     create_file_in_dir_update_test/1,
     changing_max_depth_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
-    create_file_manual_scan_test/1,
+    force_start_test/1,
+    force_stop_test/1,
 
     delete_empty_directory_update_test/1,
     delete_non_empty_directory_update_test/1,
@@ -127,7 +127,6 @@
     create_remote_file_import_conflict_test,
     create_remote_dir_import_race_test,
     create_remote_file_import_race_test,
-    cancel_scan,
     import_nfs_acl_test,
     import_nfs_acl_with_disabled_luma_should_fail_test,
     create_file_import_race_test,
@@ -152,7 +151,8 @@
     create_file_in_dir_update_test,
     changing_max_depth_test,
     create_file_in_dir_exceed_batch_update_test,
-    create_file_manual_scan_test,
+    force_start_test,
+    force_stop_test,
 
     delete_empty_directory_update_test,
     delete_non_empty_directory_update_test,
@@ -253,8 +253,8 @@ create_remote_dir_import_race_test(Config) ->
 create_remote_file_import_race_test(Config) ->
     storage_import_test_base:create_remote_file_import_race_test(Config).
 
-cancel_scan(Config) ->
-    storage_import_test_base:cancel_scan(Config).
+force_stop_test(Config) ->
+    storage_import_test_base:force_stop_test(Config).
 
 import_nfs_acl_test(Config) ->
     storage_import_test_base:import_nfs_acl_test(Config).
@@ -319,8 +319,8 @@ changing_max_depth_test(Config) ->
 create_file_in_dir_exceed_batch_update_test(Config) ->
     storage_import_test_base:create_file_in_dir_exceed_batch_update_test(Config).
 
-create_file_manual_scan_test(Config) ->
-    storage_import_test_base:create_file_manual_scan_test(Config).
+force_start_test(Config) ->
+    storage_import_test_base:force_start_test(Config).
 
 delete_empty_directory_update_test(Config) ->
     storage_import_test_base:delete_empty_directory_update_test(Config).

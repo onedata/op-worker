@@ -5,8 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Model responsible for storing monitoring data from storage import
-%%% auto scans.
+%%% Model responsible for storing monitoring data from auto storage
+%%% import scans.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_monitoring).
@@ -92,8 +92,8 @@
 -define(HISTOGRAM_LENGTH,
     application:get_env(?APP_NAME, storage_import_histogram_length, 12)).
 -define(MIN_HIST_SLOT, 60 div ?HISTOGRAM_LENGTH).
--define(HOUR_HIST_SLOT, 3600 div ?HISTOGRAM_LENGTH). % 3600s = 60 * 60s
--define(DAY_HIST_SLOT, 86400 div ?HISTOGRAM_LENGTH). % 86400s = 24 * 3600s
+-define(HOUR_HIST_SLOT, 3600 div ?HISTOGRAM_LENGTH).
+-define(DAY_HIST_SLOT, 86400 div ?HISTOGRAM_LENGTH).
 
 
 %%%===================================================================
@@ -424,7 +424,7 @@ get_finished_scans_num(SpaceId) ->
             Error
     end.
 
--spec get_scan_stop_time(doc() | record()) -> {ok, non_neg_integer()} | undefined.
+-spec get_scan_stop_time(doc() | record()) -> {ok, time_utils:millis()} | undefined.
 get_scan_stop_time(#storage_import_monitoring{scan_stop_time = ScanStopTime}) ->
     {ok, ScanStopTime};
 get_scan_stop_time(#document{value = SIM}) ->
@@ -718,7 +718,7 @@ reset_queue_length_histograms(SIM = #storage_import_monitoring{
     }.
 
 
--spec return_empty_histograms_and_timestamps([plot_counter_type()]) -> [json_utils:json_term()].
+-spec return_empty_histograms_and_timestamps([plot_counter_type()]) -> import_stats().
 return_empty_histograms_and_timestamps(Types) ->
     lists:foldl(fun(Type, AccIn) ->
         AccIn#{Type => return_empty_histogram_and_timestamp()}
@@ -732,13 +732,13 @@ return_empty_histograms_and_timestamps(Types) ->
 %% format acceptable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec return_empty_histogram_and_timestamp() -> json_utils:json_term().
+-spec return_empty_histogram_and_timestamp() -> time_stats().
 return_empty_histogram_and_timestamp() ->
     prepare(time_utils:cluster_time_seconds(), histogram:new(?HISTOGRAM_LENGTH)).
 
 
 -spec return_histograms_and_timestamps(record, [plot_counter_type()], window()) ->
-    [json_utils:json_term()].
+    import_stats().
 return_histograms_and_timestamps(SIM, Types, Window) ->
     lists:foldl(fun(Type, AccIn) ->
         AccIn#{Type => return_histogram_and_timestamp(SIM, Type, Window)}

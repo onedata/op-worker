@@ -11,7 +11,7 @@
 %%% the configuration of auto storage import scans.
 %%% @end
 %%%-------------------------------------------------------------------
--module(auto_scan_config).
+-module(auto_storage_import_config).
 -author("Jakub Kudzia").
 
 -include("modules/storage/import/storage_import.hrl").
@@ -19,9 +19,9 @@
 %% API
 -export([configure/1, configure/2]).
 -export([to_map/1]).
--export([is_continuous_enabled/1, get_scan_interval/1]).
+-export([is_continuous_scan_enabled/1, get_scan_interval/1]).
 
--record(auto_scan_config, {
+-record(auto_storage_import_config, {
     max_depth :: non_neg_integer(),
     sync_acl :: boolean(),
     continuous_scan :: boolean(),
@@ -30,7 +30,7 @@
     detect_deletions :: boolean()
 }).
 
--type config() :: #auto_scan_config{}.
+-type config() :: #auto_storage_import_config{}.
 
 %% @formatter:off
 -type config_map() :: #{
@@ -60,7 +60,7 @@ configure(Diff) ->
     configure(default(), Diff).
 
 -spec configure(config(), config_map()) -> config().
-configure(#auto_scan_config{
+configure(#auto_storage_import_config{
     max_depth = MaxDepth,
     sync_acl = SyncAcl,
     continuous_scan = ContinuousScan,
@@ -68,7 +68,7 @@ configure(#auto_scan_config{
     detect_modifications = DetectModification,
     detect_deletions = DetectDeletions
 }, Diff) ->
-    #auto_scan_config{
+    #auto_storage_import_config{
         max_depth = maps:get(max_depth, Diff, MaxDepth),
         sync_acl = maps:get(sync_acl, Diff, SyncAcl),
         continuous_scan = maps:get(continuous_scan, Diff, ContinuousScan),
@@ -79,7 +79,7 @@ configure(#auto_scan_config{
 
 
 -spec to_map(config()) -> json_utils:json_term().
-to_map(#auto_scan_config{
+to_map(#auto_storage_import_config{
     max_depth = MaxDepth,
     sync_acl = SyncAcl,
     continuous_scan = ContinuousScan,
@@ -96,12 +96,12 @@ to_map(#auto_scan_config{
         detect_deletions => DetectDeletions
     }.
 
--spec is_continuous_enabled(config()) -> boolean().
-is_continuous_enabled(#auto_scan_config{continuous_scan = ContinuousScan}) ->
+-spec is_continuous_scan_enabled(config()) -> boolean().
+is_continuous_scan_enabled(#auto_storage_import_config{continuous_scan = ContinuousScan}) ->
     ContinuousScan.
 
 -spec get_scan_interval(config()) -> non_neg_integer().
-get_scan_interval(#auto_scan_config{scan_interval = ScanInterval}) ->
+get_scan_interval(#auto_storage_import_config{scan_interval = ScanInterval}) ->
     ScanInterval.
 
 
@@ -111,7 +111,7 @@ get_scan_interval(#auto_scan_config{scan_interval = ScanInterval}) ->
 
 -spec default() -> config().
 default() ->
-    #auto_scan_config{
+    #auto_storage_import_config{
         max_depth = ?DEFAULT_MAX_DEPTH,
         sync_acl = ?DEFAULT_SYNC_ACL,
         continuous_scan = false,

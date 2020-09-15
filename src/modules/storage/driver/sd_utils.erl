@@ -510,7 +510,7 @@ should_chown(UserCtx, FileCtx) ->
 %% @private
 %% @doc
 %% This function is used to pretend that directory has been created
-%% on S3 storage with storage_import enabled. It is necessary, as S3 does
+%% on S3 storage with storage import enabled. It is necessary, as S3 does
 %% not create directories on storage and sync must be able to distinguish
 %% remote directory that has never been synchronized with local directory.
 %% @end

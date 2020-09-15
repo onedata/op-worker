@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module implements LUMA DB table that associates storage group
 %%% with Onedata group, represented by #luma_onedata_group record.
-%%% Tha mappings are used by storage_import to associate synchronized ACLs,
+%%% Tha mappings are used by storage import to associate synchronized ACLs,
 %%% set for specific, named group, with corresponding Onedata group.
 %%%
 %%% A separate table is created for each storage

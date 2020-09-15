@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Macros associated with used in auto_imported_spaces_registry.
+%%% Macros associated with auto_imported_spaces_registry.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -14,8 +14,8 @@
 -define(AUTO_IMPORTED_SPACES_REGISTRY_HRL, 1).
 
 % status of registry
--define(INITIALISED, initialised).
--define(NOT_INITIALISED, not_initialised).
+-define(INITIALIZED, initialized).
+-define(NOT_INITIALIZED, not_initialized).
 
 % status of storage import in the registered space
 -define(SCANNING, scanning).

@@ -623,7 +623,7 @@ storage_import_get_info(SpaceId) ->
     storage_import:get_info(SpaceId).
 
 
--spec storage_import_get_manual_example(od:space_id()) ->
+-spec storage_import_get_manual_example(od_space:id()) ->
     {ok, binary()}.
 storage_import_get_manual_example(SpaceId) ->
     storage_import:get_manual_example(SpaceId).

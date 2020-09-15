@@ -719,7 +719,7 @@ create_times_from_stat_timestamps(FileUuid, StorageFileCtx) ->
 
 -spec create_times_from_current_time(file_meta:uuid(), od_space:id()) -> ok.
 create_times_from_current_time(FileUuid, SpaceId) ->
-    CurrentTime = time_utils:system_time_seconds(),
+    CurrentTime = time_utils:cluster_time_seconds(),
     times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime).
 
 %%-------------------------------------------------------------------

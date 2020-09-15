@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module tests storage_import on s3 storage.
+%%% @doc This module tests storage import on s3 storage.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(storage_sync_s3_test_SUITE).
@@ -38,7 +38,6 @@
     create_subfiles_import_many2_test/1,
     create_remote_file_import_conflict_test/1,
     create_remote_file_import_race_test/1,
-    cancel_scan/1,
     create_file_import_race_test/1,
     close_file_import_race_test/1,
     delete_file_reimport_race_test/1,
@@ -59,7 +58,8 @@
     create_file_in_dir_update_test/1,
     changing_max_depth_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
-    create_file_manual_scan_test/1,
+    force_start_test/1,
+    force_stop_test/1,
 
     delete_non_empty_directory_update_test/1,
     sync_works_properly_after_delete_test/1,
@@ -98,7 +98,6 @@
     create_subfiles_import_many2_test,
     create_remote_file_import_conflict_test,
     create_remote_file_import_race_test,
-    cancel_scan,
     create_file_import_race_test,
     close_file_import_race_test,
     delete_file_reimport_race_test,
@@ -119,7 +118,8 @@
     create_file_in_dir_update_test,
     changing_max_depth_test,
     create_file_in_dir_exceed_batch_update_test,
-    create_file_manual_scan_test,
+    force_start_test,
+    force_stop_test,
 
     delete_non_empty_directory_update_test,
     sync_works_properly_after_delete_test,
@@ -182,9 +182,6 @@ create_remote_file_import_conflict_test(Config) ->
 create_remote_file_import_race_test(Config) ->
     storage_import_test_base:create_remote_file_import_race_test(Config).
 
-cancel_scan(Config) ->
-    storage_import_s3_test_base:cancel_scan(Config).
-
 create_file_import_race_test(Config) ->
     storage_import_test_base:create_file_import_race_test(Config).
 
@@ -240,8 +237,11 @@ changing_max_depth_test(Config) ->
 create_file_in_dir_exceed_batch_update_test(Config) ->
     storage_import_s3_test_base:create_file_in_dir_exceed_batch_update_test(Config).
 
-create_file_manual_scan_test(Config) ->
-    storage_import_test_base:create_file_manual_scan_test(Config).
+force_start_test(Config) ->
+    storage_import_test_base:force_start_test(Config).
+
+force_stop_test(Config) ->
+    storage_import_s3_test_base:force_stop_test(Config).
 
 delete_non_empty_directory_update_test(Config) ->
     storage_import_s3_test_base:delete_non_empty_directory_update_test(Config).

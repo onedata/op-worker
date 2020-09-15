@@ -5,7 +5,39 @@
 %%% cited in 'LICENSE.txt'.
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Main API for storage_import.
+%%% Storage import API module.
+%%%
+%%% Storage import allows to register (import) files, located on the
+%%% storage, in the space supported by the storage.
+%%% Registering files does not copy the data. It only creates necessary
+%%% metadata so that the files are visible in the space.
+%%%
+%%% Storage import can be enabled if and only if the space is supported
+%%% with an `imported` storage.
+%%%
+%%% There are 2 possible modes of storage import:
+%%% * ?MANUAL - in case of `manual` mode, the files must be registered manually
+%%%             by the space users with REST API. Registration of directories
+%%%             is not supported.
+%%%             For more info go to file_registration module.
+%%% * ?AUTO - in case of `auto` mode, the storage will be automatically
+%%%           scanned and data will be imported from storage into the
+%%%           assigned space without need for copying the data.
+%%%           For more info go to storage_sync_traverse and
+%%%           storage_import_engine modules.
+%%%
+%%% Configuration of the storage import is stored in the
+%%% storage_import_config model.
+%%% Mode of the storage import, once set, cannot be modified.
+%%% In case of ?AUTO mode, configuration of scans can be modified.
+%%% For more info on configuration of storage_import go to
+%%% storage_import_config module.
+%%%
+%%%
+%%% storage_import_worker is the process which is responsible for
+%%% scheduling auto scans of storages that support spaces with ?AUTO mode.
+%%% For more info go to storage_import_worker module.
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import).
@@ -30,8 +62,8 @@
 
 -type mode() :: storage_import_config:mode().
 -type config() :: storage_import_config:config().
--type scan_config() :: storage_import_config:scan_config().
--type scan_config_map() :: storage_import_config:scan_config_map().
+-type scan_config() :: storage_import_config:auto_config().
+-type scan_config_map() :: storage_import_config:auto_config_map().
 -type status() :: storage_import_monitoring:status().
 -type stats() :: storage_import_monitoring:import_stats().
 
@@ -109,8 +141,8 @@ get_info(SpaceId) ->
                 true ->
                     storage_import_monitoring:get_info(SIMDoc);
                 false ->
-                    {ok, ScanConfig} = storage_import_config:get_scan_config(SpaceId),
-                    ScanInterval = auto_scan_config:get_scan_interval(ScanConfig),
+                    {ok, AutoConfig} = storage_import_config:get_auto_config(SpaceId),
+                    ScanInterval = auto_storage_import_config:get_scan_interval(AutoConfig),
                     {ok, Info} = storage_import_monitoring:get_info(SIMDoc),
                     {ok, ScanStopTime} = storage_import_monitoring:get_scan_stop_time(SIMDoc),
                     {ok, Info#{nextScan => ScanStopTime + (ScanInterval div 1000)}}
@@ -157,9 +189,19 @@ migrate_space_strategies() ->
                         ok;
                     StorageImportConfigV1 ->
                         case storage_import_config:create(SpaceId, StorageImportConfigV1) of
-                            ok -> ok;
-                            {error, already_exists} -> ok;
-                            Error -> throw(Error)
+                            ok ->
+                                ?info("space_strategies migration procedure for space ~s finished succesfully.", [SpaceId]),
+                                ok;
+                            {error, already_exists} ->
+                                ?warning(
+                                    "space_strategies migration procedure failed for space ~s because storage_import_config documenr already exists.",
+                                    [SpaceId]),
+                                ok;
+                            Error ->
+                                ?error(
+                                    "space_strategies migration procedure unexpectedly failed for space ~s due to ~p.",
+                                    [SpaceId, Error]),
+                                throw(Error)
                         end
                 end,
                 % delete deprecated space_strategies doc
@@ -168,7 +210,7 @@ migrate_space_strategies() ->
                 ok
         end
     end, SpaceIds),
-    ?notice("space_strategies migration procedure finished succesfully").
+    ?info("space_strategies migration procedure finished succesfully.").
 
 
 -spec migrate_storage_sync_monitoring() -> ok.
@@ -182,9 +224,19 @@ migrate_storage_sync_monitoring() ->
                     {ok, #document{value = SSM}} ->
                         SIMV1 = storage_import_monitoring:migrate_to_v1(SSM),
                         case storage_import_monitoring:create(SpaceId, SIMV1) of
-                            {ok, _} -> ok;
-                            {error, already_exists} -> ok;
-                            Error -> throw(Error)
+                            {ok, _} ->
+                                ?info("storage_sync_monitoring migration procedure for space ~s finished succesfully.", [SpaceId]),
+                                ok;
+                            {error, already_exists} ->
+                                ?warning(
+                                    "storage_sync_monitoring migration procedure failed for space ~s because storage_import_monitoring document already exists.",
+                                    [SpaceId]),
+                                ok;
+                            Error ->
+                                ?error(
+                                    "storage_sync_monitoring migration procedure unexpectedly failed for space ~s due to ~p.",
+                                    [SpaceId, Error]),
+                                throw(Error)
                         end,
                         % delete deprecated storage_sync_monitoring doc
                         ok = storage_sync_monitoring:delete(SpaceId, StorageId);
@@ -195,7 +247,7 @@ migrate_storage_sync_monitoring() ->
                 ok
         end
     end, SpaceIds),
-    ?notice("storage_sync_monitoring migration procedure finished succesfully").
+    ?info("storage_sync_monitoring migration procedure finished succesfully.").
 
 %%%===================================================================
 %%% Internal functions

@@ -7,11 +7,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model for storing storage_import configurations.
-%%% Each document stores map of configurations of storage_import on each
+%%% Model for storing storage import configurations.
+%%% Each document stores map of configurations of storage import on each
 %%% storage supporting given space.
 %%%
-%%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release.
+%%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_strategies).

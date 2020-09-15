@@ -6,11 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Worker responsible for starting scans of storage_import mechanism.
-%%% Every ?storage_import_check_interval seconds it lists all locally
-%%% supported spaces, checks whether storage_import mechanism is configured
-%%% for this spaces and decides whether scans should be started.
-%%% For more info on storage_import please see storage_sync_traverse.erl.
+%%% Worker responsible for starting auto scans of storage import.
+%%% The scans are started in spaces with enabled ?AUTO mode of storage import.
+%%%
+%%% Every ?STORAGE_IMPORT_CHECK_INTERVAL seconds it lists all locally
+%%% supported spaces, checks whether storage import mechanism is configured
+%%% for these spaces and decides whether scans should be started.
+%%% For more info on auto storage import please see storage_sync_traverse.erl.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_worker).
@@ -24,9 +26,9 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-%% Interval between successive checks of spaces' storage_import configuration.
+%% Interval between successive checks of spaces' storage import configuration.
 -define(STORAGE_IMPORT_CHECK_INTERVAL, application:get_env(?APP_NAME, storage_import_check_interval, 1)).
--define(STORAGE_IMPORT_REVISION_INTERVAL, application:get_env(?APP_NAME, storage_import_check_interval, 60)).
+-define(STORAGE_IMPORT_REVISION_INTERVAL, application:get_env(?APP_NAME, storage_import_revision_interval, 60)).
 
 -define(SPACES_CHECK, spaces_check).
 -define(REVISE_REGISTRY, revise_registry).
@@ -163,16 +165,16 @@ notify_finished_scan(SpaceId) ->
 %% @private
 %% @doc
 %% This function is responsible for checking and optionally starting
-%% storage_import scans in synced spaces supported by this provider.
+%% storage import scans in synced spaces supported by this provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_spaces() -> ok.
 check_spaces() ->
     try
-        case auto_imported_spaces_registry:ensure_initialised() of
-            ?INITIALISED ->
+        case auto_imported_spaces_registry:ensure_initialized() of
+            ?INITIALIZED ->
                 iterate_spaces_and_maybe_schedule_scans();
-            ?NOT_INITIALISED ->
+            ?NOT_INITIALIZED ->
                 ok
         end
     catch
@@ -199,16 +201,16 @@ iterate_spaces_and_maybe_schedule_scans() ->
 
 -spec maybe_start_scan(od_space:id()) -> schedule_status().
 maybe_start_scan(SpaceId) ->
-    case storage_import_config:get_scan_config(SpaceId) of
-        {ok, ScanConfig} ->
+    case storage_import_config:get_auto_config(SpaceId) of
+        {ok, AutoConfig} ->
             {ok, SIMDoc} = storage_import_monitoring:get_or_create(SpaceId),
             case storage_import_monitoring:is_initial_scan_not_started_yet(SIMDoc) of
                 true ->
-                    schedule_scan(SpaceId, ScanConfig);
+                    schedule_scan(SpaceId, AutoConfig);
                 false ->
                     case storage_import_monitoring:is_initial_scan_finished(SIMDoc) of
                         false -> ?NOT_SCHEDULED_SCAN;
-                        true -> maybe_start_consecutive_scan(SpaceId, SIMDoc, ScanConfig)
+                        true -> maybe_start_consecutive_scan(SpaceId, SIMDoc, AutoConfig)
                     end
             end;
         _ ->
@@ -219,11 +221,11 @@ maybe_start_scan(SpaceId) ->
 -spec maybe_start_consecutive_scan(od_space:id(), storage_import_monitoring:doc(),
     storage_import:scan_config()) -> schedule_status().
 maybe_start_consecutive_scan(SpaceId, SIMDoc, ScanConfig) ->
-    case auto_scan_config:is_continuous_enabled(ScanConfig) of
+    case auto_storage_import_config:is_continuous_scan_enabled(ScanConfig) of
         false ->
             ?NOT_SCHEDULED_SCAN;
         true ->
-            ScanInterval = auto_scan_config:get_scan_interval(ScanConfig),
+            ScanInterval = auto_storage_import_config:get_scan_interval(ScanConfig),
             case storage_import_monitoring:is_scan_in_progress(SIMDoc) of
                 true ->
                     ?NOT_SCHEDULED_SCAN;

@@ -20,14 +20,14 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([ensure_initialised/0, revise/0]).
+-export([ensure_initialized/0, revise/0]).
 -export([register/1, deregister/1]).
 -export([mark_inactive/1, mark_scanning/1]).
 -export([fold/2]).
 
 -define(REGISTRY, ?MODULE).
 
--type registry_status() :: ?INITIALISED | ?NOT_INITIALISED.
+-type registry_status() :: ?INITIALIZED | ?NOT_INITIALIZED.
 -type key() :: od_space:id().
 -type value() :: ?SCANNING | ?INACTIVE.
 -type fold_fun() :: fun((key(), value(), AccIn :: term()) -> term()).
@@ -36,19 +36,19 @@
 %%% API functions
 %%%===================================================================
 
--spec ensure_initialised() -> registry_status().
-ensure_initialised() ->
+-spec ensure_initialized() -> registry_status().
+ensure_initialized() ->
     case is_created() of
         false ->
             init();
         true ->
-            ?INITIALISED
+            ?INITIALIZED
     end.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% This function is used to revise spaces stored in ets.
-%% It ensure whether all supported spaces are in the ets end removes
+%% It ensures whether all supported spaces are in the ets and removes
 %% stalled (no longer supported) spaces from it.
 %%
 %% In normal operation this function should do nothing as adding/removing
@@ -65,10 +65,14 @@ revise() ->
         true ->
             case provider_logic:get_spaces() of
                 {ok, Spaces} ->
-                    RegisteredSpaces = list(),
-                    revise(lists:sort(Spaces), lists:sort(RegisteredSpaces));
-                _ ->
-                    ok
+                    CurrentlyRegisteredSpaces = list(),
+                    revise(lists:sort(Spaces), lists:sort(CurrentlyRegisteredSpaces));
+                ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                    ?debug("storage_import_worker was unable to revise its registry due to no connection to oz.");
+                ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                    ?debug("storage_import_worker was unable to revise its registry due to unregistered provider.");
+                {error, _} = Error ->
+                    ?error("storage_import_worker was unable to revise its registry due to unexpected ~p", [Error])
             end
     end.
 
@@ -120,22 +124,22 @@ init() ->
             {ok, Spaces} ->
                 create_empty(),
                 register_auto_imported_spaces(Spaces),
-                ?INITIALISED;
+                ?INITIALIZED;
             ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-                ?warning("storage_import_worker was unable to collect auto imported spaces due to no connection to oz"),
-                ?NOT_INITIALISED;
+                ?debug("storage_import_worker was unable to collect auto imported spaces due to no connection to oz"),
+                ?NOT_INITIALIZED;
             ?ERROR_UNREGISTERED_ONEPROVIDER ->
-                ?warning("storage_import_worker was unable to collect auto imported spaces due to unregistered provider"),
-                ?NOT_INITIALISED;
+                ?debug("storage_import_worker was unable to collect auto imported spaces due to unregistered provider"),
+                ?NOT_INITIALIZED;
             {error, _} = Error ->
                 ?error("storage_import_worker was unable to collect auto imported spaces due to unexpected ~p", [Error]),
-                ?NOT_INITIALISED
+                ?NOT_INITIALIZED
         end
     catch
         Error2:Reason ->
             ?error_stacktrace("storage_import_worker was unable to collect auto imported spaces due to unexpected ~p:~p", [Error2, Reason]),
             catch ets:delete(?REGISTRY),
-            ?NOT_INITIALISED
+            ?NOT_INITIALIZED
     end.
 
 
@@ -170,8 +174,8 @@ mark_status(SpaceId, Status) ->
             ok;
         false ->
             case init() of
-                ?INITIALISED -> mark_status(SpaceId, Status);
-                ?NOT_INITIALISED -> ok
+                ?INITIALIZED -> mark_status(SpaceId, Status);
+                ?NOT_INITIALIZED -> ok
             end
     end.
 
@@ -198,21 +202,21 @@ check_if_auto_imported_and_register(SpaceId) ->
         end
     catch
         E:R ->
-            ?error("Could not check if space ~s is auto imported due to unexpected ~p:~p", [SpaceId, E, R])
+            ?error_stacktrace("Could not check if space ~s is auto imported due to unexpected ~p:~p", [SpaceId, E, R])
     end.
 
 
--spec revise([od_space:id()], [od_space:id()]) -> ok.
+-spec revise(NewSpaces :: [od_space:id()], PreviousSpaces :: [od_space:id()]) -> ok.
 revise([], []) ->
     ok;
-revise([SpaceId | OzSpaces], [SpaceId | RegisteredSpaces]) ->
-    revise(OzSpaces, RegisteredSpaces);
-revise([SpaceId | OzSpaces], RegisteredSpaces) ->
+revise([SpaceId | NewSpaces], [SpaceId | PreviousSpaces]) ->
+    revise(NewSpaces, PreviousSpaces);
+revise([SpaceId | NewSpaces], PreviousSpaces) ->
     register(SpaceId),
-    revise(OzSpaces, RegisteredSpaces);
-revise(OzSpaces, [SpaceId | RegisteredSpaces]) ->
+    revise(NewSpaces, PreviousSpaces);
+revise(NewSpaces, [SpaceId | PreviousSpaces]) ->
     deregister(SpaceId),
-    revise(OzSpaces, RegisteredSpaces).
+    revise(NewSpaces, PreviousSpaces).
 
 
 -spec list() -> [od_space:id()].

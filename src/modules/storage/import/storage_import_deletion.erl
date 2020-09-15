@@ -274,7 +274,7 @@ generate_deletion_jobs(Job, AllSLChildren = [{SLName, _} | _], SLToken,
 generate_deletion_jobs(Job, [{SLName, _} | RestSLChildren], SLToken,
     AllFMChildren = [#child_link_uuid{name = FMName} | _], FMToken, MasterJobs, SlaveJobs)
     when SLName < FMName ->
-    % SLName is missing on the file_meta list, we can ignore it, storage_import will synchronise this file
+    % SLName is missing on the file_meta list, we can ignore it, storage import will synchronise this file
     generate_deletion_jobs(Job, RestSLChildren, SLToken, AllFMChildren, FMToken, MasterJobs, SlaveJobs).
 
 

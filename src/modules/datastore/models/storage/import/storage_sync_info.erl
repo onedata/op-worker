@@ -6,7 +6,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module contains implementation of helper model used by
-%%% storage_import. It is used to store information required
+%%% storage import. It is used to store information required
 %%% to determine whether there were changes introduced to file
 %%% or children files on storage since last scan.
 %%% It stores last synchronized mtime and timestamp

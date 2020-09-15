@@ -6,19 +6,23 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module responsible for traversing scanned storages.
+%%% Module responsible for auto traversing imported storages which
+%%% support spaces with ?AUTO mode of storage import.
+%%% For more info on storage import go to storage_import module.
+%%%
 %%% It uses storage_traverse framework to traverse all files visible on storage
 %%% and to schedule jobs for synchronizing them.
+%%%
 %%% The mechanism uses the following helper modules:
 %%%   * storage_import_engine - each storage file is synchronized by call
 %%%                         to storage_import_engine:process_file/2 function
-%%%   * storage_sync_links - helper module which implements links used by storage_import to compare
+%%%   * storage_sync_links - helper module which implements links used by storage import to compare
 %%%                         lists of files on storage with lists of files in the Onedata system
 %%%   * storage_import_deletion - module responsible for detecting which files in the
 %%%                         synchronized space were deleted on storage and therefore should be
 %%%                         deleted from the Onedata file system
 %%%   * storage_import_monitoring - this module is used to store data for monitoring
-%%%                         performance of storage_import
+%%%                         performance of storage import
 %%%   * storage_sync_info - a helper module that implements a model that is
 %%%                         used store information (timestamp of last stat operation, last synced mtime,
 %%%                         last computed hash of children attrs) required by sync to determine
@@ -731,7 +735,7 @@ maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_storage_file_id
             ParentStorageFileId = storage_file_ctx:get_storage_file_id_const(ParentStorageFileCtx),
             {ParentStorageFileId2, MarkLeaves} = case maps:get(iterator_type, Info) of
                 ?FLAT_ITERATOR ->
-                    %% When storage_import is run on object storages we set MarkLeaves parameter to true
+                    %% When storage import is run on object storages we set MarkLeaves parameter to true
                     %% in the below call which allows to determine when link is associated with
                     %% a regular file which is necessary for storage_import_deletion on object storages
                     {SpaceStorageFileId, true};
@@ -760,7 +764,7 @@ scan_finished(SpaceId, StorageId, Aborted) ->
 -spec ensure_scan_config_is_map(od_space:id(), storage_import:scan_config() | undefined) ->
     storage_import:scan_config_map().
 ensure_scan_config_is_map(SpaceId, undefined) ->
-    {ok, ScanConfig} = storage_import_config:get_scan_config(SpaceId),
-    auto_scan_config:to_map(ScanConfig);
-ensure_scan_config_is_map(_SpaceId, ScanConfig) ->
-    auto_scan_config:to_map(ScanConfig).
+    {ok, AutoConfig} = storage_import_config:get_auto_config(SpaceId),
+    auto_storage_import_config:to_map(AutoConfig);
+ensure_scan_config_is_map(_SpaceId, AutoConfig) ->
+    auto_storage_import_config:to_map(AutoConfig).
