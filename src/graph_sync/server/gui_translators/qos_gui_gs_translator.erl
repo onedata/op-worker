@@ -49,4 +49,8 @@ translate_resource(#gri{aspect = instance, scope = private}, QosDetails) ->
             scope = private
         }),
         <<"status">> => Status
+    };
+translate_resource(#gri{aspect = {parameters, _}}, AllParametersKeys) ->
+    #{
+        <<"qosParameters">> => AllParametersKeys
     }.

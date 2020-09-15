@@ -75,5 +75,16 @@ routes() -> [
             aspect = file_qos_summary, 
             scope = private
         }
+    }},
+    %% Get QoS parameters keys
+    {<<"/qos_requirements/parameters/:sid">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_qos, 
+            id = undefined, 
+            aspect = {parameters, ?BINDING(sid)}, 
+            scope = private
+        }
     }}
 ].

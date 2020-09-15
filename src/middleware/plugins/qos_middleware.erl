@@ -45,6 +45,7 @@
 operation_supported(create, instance, private) -> true;
 
 operation_supported(get, instance, private) -> true;
+operation_supported(get, {parameters, _}, private) -> true;
 
 operation_supported(delete, instance, private) -> true;
 
@@ -69,6 +70,8 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
+data_spec(#op_req{operation = get, gri = #gri{aspect = {parameters, _}}}) ->
+    undefined;
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
     undefined.
@@ -89,6 +92,8 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     aspect = instance
 }}) ->
     fetch_qos_entry(Auth, QosEntryId);
+fetch_entity(#op_req{operation = get, gri = #gri{aspect = {parameters, _}}}) ->
+    {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
     id = QosEntryId,
@@ -120,6 +125,11 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 }}, _QosEntry) ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
+authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
+    aspect = {parameters, SpaceId}
+}}, _) ->
+    SessionId = Auth#auth.session_id,
+    space_logic:has_eff_user(SessionId, SpaceId, UserId);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     id = QosEntryId,
@@ -146,6 +156,10 @@ validate(#op_req{operation = get, gri = #gri{
     aspect = instance
 }}, _QosEntry) ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
+    middleware_utils:assert_space_supported_locally(SpaceId);
+validate(#op_req{operation = get, gri = #gri{
+    aspect = {parameters, SpaceId}
+}}, _QosEntry) ->
     middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{
@@ -192,8 +206,29 @@ get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEnt
     SessionId = Auth#auth.session_id,
     {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
     {ok, Status} = ?check(lfm_qos:check_qos_status(SessionId, QosEntryId)),
-    {ok, entry_to_details(QosEntry, Status, SpaceId)}.
+    {ok, entry_to_details(QosEntry, Status, SpaceId)};
 
+get(#op_req{gri = #gri{aspect = {parameters, SpaceId}}}, _) ->
+    {ok, Storages} = space_logic:get_all_storage_ids(SpaceId),
+    Res = lists:foldl(fun(StorageId, OuterAcc) ->
+        QosParameters = storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId),
+        maps:fold(fun(ParameterKey, Value, InnerAcc) ->
+            Key = case is_integer(Value) of
+                true -> <<"numberValues">>;
+                false -> <<"stringValues">>
+            end,
+            InnerAcc#{ParameterKey => maps:update_with(
+                Key, 
+                fun(Values) -> lists:usort([Value | Values]) end, 
+                [Value], 
+                maps:get(ParameterKey, InnerAcc, #{})
+            )}
+        end, OuterAcc, QosParameters)
+    end, #{}, Storages),
+    {ok, maps:fold(fun(Key, Value, Acc) ->
+        [Value#{<<"key">> => Key} | Acc]
+    end, [], Res)}.
+        
 
 %%--------------------------------------------------------------------
 %% @doc
