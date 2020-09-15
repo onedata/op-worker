@@ -132,10 +132,10 @@ validate(#op_req{operation = delete} = Req, Entity) ->
     boolean().
 create_operation_supported(instance, private) -> true;
 create_operation_supported(object_id, private) -> true;
-create_operation_supported(attrs, private) -> true;
-create_operation_supported(xattrs, private) -> true;
-create_operation_supported(json_metadata, private) -> true;
-create_operation_supported(rdf_metadata, private) -> true;
+create_operation_supported(attrs, private) -> true;                 % REST/gs
+create_operation_supported(xattrs, private) -> true;                % REST/gs
+create_operation_supported(json_metadata, private) -> true;         % REST/gs
+create_operation_supported(rdf_metadata, private) -> true;          % REST/gs
 create_operation_supported(register_file, private) -> true;
 create_operation_supported(_, _) -> false.
 
@@ -362,24 +362,24 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     boolean().
 get_operation_supported(instance, private) -> true;
 get_operation_supported(instance, public) -> true;
-get_operation_supported(list, private) -> true;
-get_operation_supported(children, private) -> true;
-get_operation_supported(children, public) -> true;
+get_operation_supported(list, private) -> true;                 % REST only (deprecated)
+get_operation_supported(children, private) -> true;             % REST/gs
+get_operation_supported(children, public) -> true;              % REST/gs
 get_operation_supported(children_details, private) -> true;
 get_operation_supported(children_details, public) -> true;
-get_operation_supported(attrs, private) -> true;
-get_operation_supported(attrs, public) -> true;
-get_operation_supported(xattrs, private) -> true;
-get_operation_supported(xattrs, public) -> true;
-get_operation_supported(json_metadata, private) -> true;
-get_operation_supported(json_metadata, public) -> true;
-get_operation_supported(rdf_metadata, private) -> true;
-get_operation_supported(rdf_metadata, public) -> true;
-get_operation_supported(distribution, private) -> true;
+get_operation_supported(attrs, private) -> true;                % REST/gs
+get_operation_supported(attrs, public) -> true;                 % REST/gs
+get_operation_supported(xattrs, private) -> true;               % REST/gs
+get_operation_supported(xattrs, public) -> true;                % REST/gs
+get_operation_supported(json_metadata, private) -> true;        % REST/gs
+get_operation_supported(json_metadata, public) -> true;         % REST/gs
+get_operation_supported(rdf_metadata, private) -> true;         % REST/gs
+get_operation_supported(rdf_metadata, public) -> true;          % REST/gs
+get_operation_supported(distribution, private) -> true;         % REST/gs
 get_operation_supported(acl, private) -> true;
 get_operation_supported(shares, private) -> true;
 get_operation_supported(transfers, private) -> true;
-get_operation_supported(file_qos_summary, private) -> true;
+get_operation_supported(file_qos_summary, private) -> true;     % REST/gs
 get_operation_supported(download_url, private) -> true;
 get_operation_supported(download_url, public) -> true;
 get_operation_supported(_, _) -> false.
@@ -806,9 +806,9 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 -spec delete_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
 delete_operation_supported(instance, private) -> true;
-delete_operation_supported(xattrs, private) -> true;
-delete_operation_supported(json_metadata, private) -> true;
-delete_operation_supported(rdf_metadata, private) -> true;
+delete_operation_supported(xattrs, private) -> true;                % REST/gs
+delete_operation_supported(json_metadata, private) -> true;         % REST/gs
+delete_operation_supported(rdf_metadata, private) -> true;          % REST/gs
 delete_operation_supported(_, _) -> false.
 
 
