@@ -145,7 +145,7 @@ get_info(SpaceId) ->
                     ScanInterval = auto_storage_import_config:get_scan_interval(AutoConfig),
                     {ok, Info} = storage_import_monitoring:get_info(SIMDoc),
                     {ok, ScanStopTime} = storage_import_monitoring:get_scan_stop_time(SIMDoc),
-                    {ok, Info#{nextScan => ScanStopTime + (ScanInterval div 1000)}}
+                    {ok, Info#{nextScan => (ScanStopTime div 1000) + ScanInterval}}
             end;
         Error ->
             Error
