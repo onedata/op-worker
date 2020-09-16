@@ -791,6 +791,8 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
 %%--------------------------------------------------------------------
 -spec maybe_update_file(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(),
     info()) -> {result(), file_ctx:ctx(), storage_file_ctx:ctx()} | {error, term()}.
+maybe_update_file(StorageFileCtx, _FileAttr, FileCtx, #{detect_modifications := false}) ->
+    {?FILE_PROCESSED, FileCtx, StorageFileCtx};
 maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
     try
         maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info)

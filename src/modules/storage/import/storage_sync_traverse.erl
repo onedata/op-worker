@@ -201,8 +201,6 @@ task_finished(TaskId, _PoolName) ->
 
 -spec task_canceled(traverse:id(), traverse:pool()) -> ok.
 task_canceled(TaskId, _PoolName) ->
-    % TODO sprawdzic czy na pewno wykona się task_cancelled zeby dobrze zmienic status !!! bo jak nie bylo in progress
-    % to w ogole nie powinno byc aborting i aborted !!!
     {SpaceId, StorageId, ScanNum} = decode_task_id(TaskId),
     scan_finished(SpaceId, StorageId, true),
     storage_import_logger:log_scan_cancelled(SpaceId, ScanNum, TaskId).
