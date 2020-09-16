@@ -20,7 +20,7 @@
 
 
 %% API
--export([prepare_new_scan/1]).
+-export([prepare_new_scan/1, ensure_created/1]).
 -export([
     increase_to_process_counter/2,
     mark_created_file/1,
@@ -129,6 +129,27 @@ prepare_new_scan(SpaceId) ->
                 }}
         end
     end).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Ensures that document for given SpaceId exists.
+%% @end
+%%-------------------------------------------------------------------
+-spec ensure_created(od_space:id()) -> ok | {error, term()}.
+ensure_created(SpaceId) ->
+    case datastore_model:exists(?CTX, SpaceId) of
+        {ok, true} ->
+            ok;
+        {ok, false} ->
+            case create(new_doc(SpaceId)) of
+                {ok, _} -> ok;
+                {error, already_exists} -> ok
+            end;
+        Error ->
+            ?error("Failed to check whether storage_import_monitoring document for space ~s exists due to ~p.",
+                [SpaceId, Error])
+    end.
 
 
 %%-------------------------------------------------------------------

@@ -89,6 +89,7 @@ configure_auto_mode(SpaceId, ScanConfigMap) ->
     file_meta:make_space_exist(SpaceId),
     case storage_import_config:configure_auto_mode(SpaceId, ScanConfigMap) of
         ok ->
+            storage_import_monitoring:ensure_created(SpaceId),
             storage_import_worker:notify_space_with_auto_import_configured(SpaceId),
             ok;
         {error, _} = Error -> Error
