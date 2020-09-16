@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This is a helper module for storage_import_config module.
-%%% It encapsulates #auto_scan_config{} record which stores
+%%% It encapsulates #auto_storage_import_config{} record which stores
 %%% the configuration of auto storage import scans.
 %%% @end
 %%%-------------------------------------------------------------------

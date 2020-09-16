@@ -973,7 +973,7 @@ create_remote_dir_import_race_test(Config) ->
     {ok, _} = rpc:call(W1, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),
 
-    % sync should import directory with conflicting name
+    % storage import should import directory with conflicting name
     ProviderId1 = provider_id(W1),
     ImportedConflictingDirName = ?IMPORTED_CONFLICTING_FILE_NAME(?TEST_DIR, ProviderId1),
     ImportedConflictingDirPath = ?SPACE_TEST_FILE_PATH(ImportedConflictingDirName),
@@ -1034,7 +1034,7 @@ create_remote_file_import_race_test(Config) ->
     {ok, _} = rpc:call(W1, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_FILE1, FileUuid}]),
 
-    % sync should import file with conflicting name
+    % storage import should import file with conflicting name
     ProviderId1 = provider_id(W1),
     ImportedConflictingFileName = ?IMPORTED_CONFLICTING_FILE_NAME(?TEST_FILE1, ProviderId1),
     ImportedConflictingFilePath = ?SPACE_TEST_FILE_PATH(ImportedConflictingFileName),
@@ -1322,7 +1322,7 @@ close_file_import_race_test(Config, StorageType) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})).
 
 delete_file_reimport_race_test(Config, StorageType) ->
-    % in this test, we check whether sync does not reimport file that is deleted between checking links and file_location
+    % in this test, we check whether storage import does not reimport file that is deleted between checking links and file_location
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -1344,9 +1344,9 @@ delete_file_reimport_race_test(Config, StorageType) ->
         meck:passthrough([StorageFileCtx, FileCtx, Info])
     end),
 
+    timer:sleep(timer:seconds(1)),
     ?EXEC_ON_POSIX_ONLY(fun() ->
         % touch space dir to ensure that it will be scanned
-        timer:sleep(timer:seconds(1)),
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
         touch(W1, ContainerStorageSpacePath)
@@ -1392,7 +1392,7 @@ delete_file_reimport_race_test(Config, StorageType) ->
     ?assertMatch({ok, []}, lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 1)).
 
 delete_opened_file_reimport_race_test(Config, StorageType) ->
-    % in this test, we check whether sync does not reimport file that is deleted while still opened,
+    % in this test, we check whether storage import does not reimport file that is deleted while still opened,
     % between checking links and file_location
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -1414,9 +1414,9 @@ delete_opened_file_reimport_race_test(Config, StorageType) ->
         meck:passthrough([StorageFileCtx, FileCtx, Info])
     end),
 
+    timer:sleep(timer:seconds(1)),
     ?EXEC_ON_POSIX_ONLY(fun() ->
         % touch space dir to ensure that it will be scanned
-        timer:sleep(timer:seconds(1)),
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
         touch(W1, ContainerStorageSpacePath)
@@ -1819,9 +1819,9 @@ sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Con
 
     lfm_proxy:rm_recursive(W1, SessId, {path, SpaceTestFilePath}),
 
+    timer:sleep(timer:seconds(1)),
     ?EXEC_ON_POSIX_ONLY(fun() ->
         % touch space dir to make sure that it will be updated
-        timer:sleep(timer:seconds(1)),
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
         touch(W1, ContainerStorageSpacePath)
@@ -2659,19 +2659,19 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
         <<"scans">> => 2,
         <<"toProcess">> => 7,
         <<"created">> => 1,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 5,
+        <<"otherProcessed">> => 6,
         <<"createdSum">> => 7,
-        <<"modifiedSum">> => 2,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 7,
         <<"createdDayHist">> => 7,
         <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -2857,19 +2857,19 @@ delete_empty_directory_update_test(Config) ->
         <<"scans">> => 2,
         <<"toProcess">> => 3,
         <<"created">> => 0,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 1,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 2,
         <<"createdSum">> => 1,
-        <<"modifiedSum">> => 2,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 1,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
         <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
         <<"deletedDayHist">> => 1
@@ -2913,19 +2913,19 @@ delete_non_empty_directory_update_test(Config) ->
         <<"scans">> => 2,
         <<"toProcess">> => 4,
         <<"created">> => 0,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 2,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 2,
         <<"createdSum">> => 2,
-        <<"modifiedSum">> => 2,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 2,
         <<"createdMinHist">> => 2,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
         <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 2,
         <<"deletedHourHist">> => 2,
         <<"deletedDayHist">> => 2
@@ -3199,19 +3199,19 @@ delete_file_update_test(Config) ->
         <<"scans">> => 2,
         <<"toProcess">> => 3,
         <<"created">> => 0,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 1,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 2,
         <<"createdSum">> => 1,
-        <<"modifiedSum">> => 2,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 1,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
         <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
         <<"deletedDayHist">> => 1
@@ -3383,26 +3383,26 @@ delete_many_subfiles_test(Config) ->
         <<"scans">> => 2,
         <<"toProcess">> => 1113,
         <<"created">> => 0,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 1111,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 2,
         <<"createdSum">> => 1111,
-        <<"modifiedSum">> => 2,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 1111,
         <<"createdDayHist">> => 1111,
         <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedHourHist">> => 1111,
         <<"deletedDayHist">> => 1111
     }, ?SPACE_ID).
 
 create_delete_race_test(Config, StorageType) ->
-    % this tests checks whether sync works properly in case of create-delete race
+    % this tests checks whether storage import works properly in case of create-delete race
     % description:
     % if the file is created after storage_sync_links tree is built
-    % it is necessary to ensure that sync does not delete the file
+    % it is necessary to ensure that storage import does not delete the file
     % because it's missing in the file_meta links
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -3420,9 +3420,9 @@ create_delete_race_test(Config, StorageType) ->
         meck:passthrough([Job, Args])
     end),
 
+    timer:sleep(timer:seconds(1)),
     ?EXEC_ON_POSIX_ONLY(fun() ->
-        % touch space dir to ensure that sync will try to detect deletions
-        timer:sleep(timer:seconds(1)),
+        % touch space dir to ensure that storage import will try to detect deletions
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
         touch(W1, ContainerStorageSpacePath)
@@ -3470,12 +3470,12 @@ create_delete_race_test(Config, StorageType) ->
     ok = lfm_proxy:close(W2, Handle4).
 
 create_list_race_test(Config) ->
-    % this tests checks whether sync works properly in case of create-list race
+    % this tests checks whether storage import works properly in case of create-list race
     % description:
-    % sync builds storage_sync_links tree for detecting deleted files by listing the storage using offset and limit
+    % storage import builds storage_sync_links tree for detecting deleted files by listing the storage using offset and limit
     % it is possible that if other files are deleted in the meantime, file may be omitted and therefore missing
     % in the storage_sync_links
-    % sync must not delete such file
+    % storage import must not delete such file
     % storage_import_dir_batch_size is set in this test to 2
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -3510,7 +3510,7 @@ create_list_race_test(Config) ->
         Result
     end),
 
-    % touch space dir to ensure that sync will try to detect deletions
+    % touch space dir to ensure that storage import will try to detect deletions
     timer:sleep(timer:seconds(1)),
     RDWRStorageMountPoint = get_mount_point(RDWRStorage),
     ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
@@ -4014,19 +4014,19 @@ move_file_update_test(Config) ->
         <<"scans">> => 2,
         <<"toProcess">> => 4,
         <<"created">> => 1,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 1,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 2,
         <<"createdSum">> => 2,
-        <<"modifiedSum">> => 2,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 1,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
         <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
         <<"deletedDayHist">> => 1
@@ -4387,7 +4387,7 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config)
     StorageFileId = to_storage_file_id(StorageTestFilePath, W1MountPoint),
     StatTime = get_last_stat_timestamp(W1, StorageFileId, ?SPACE_ID),
     %pretend that there were 2 modifications at the same time and that the second
-    %was after sync performed stat on the file
+    %was after storage import performed stat on the file
     {ok, _} = rpc:call(W1, storage_sync_info, create_or_update,
         [StorageTestFilePath, ?SPACE_ID, fun(SSI) -> {ok, SSI#storage_sync_info{last_stat = StatTime}} end]),
     {ok, _} = sd_test_utils:write_file(W1, SDHandle, ?CHANGED_BYTE_OFFSET, ?CHANGED_BYTE),
@@ -4626,7 +4626,7 @@ chmod_file_update2_test(Config) ->
     }, ?SPACE_ID).
 
 change_file_type_test(Config) ->
-    % this test checks whether sync properly handles
+    % this test checks whether storage import properly handles
     % deleting file and creating directory with the same name on storage
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -4731,7 +4731,7 @@ change_file_type_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {guid, DirGuid2}), ?ATTEMPTS).
 
 change_file_type2_test(Config) ->
-    % this test checks whether sync properly handles
+    % this test checks whether storage import properly handles
     % deleting empty directory and creating file with the same name on storage
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -4822,7 +4822,7 @@ change_file_type2_test(Config) ->
     ok = lfm_proxy:close(W2, Handle2).
 
 change_file_type3_test(Config) ->
-    % this test checks whether sync properly handles
+    % this test checks whether storage import properly handles
     % deleting non-empty directory and creating file with the same name on storage
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -4921,7 +4921,7 @@ change_file_type3_test(Config) ->
     ok = lfm_proxy:close(W2, Handle2).
 
 change_file_type4_test(Config) ->
-    % this test checks whether sync properly handles
+    % this test checks whether storage import properly handles
     % deleting non-empty directory, created in remote provider and creating file with the same name on storage
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -5368,7 +5368,7 @@ sync_should_not_delete_dir_created_in_remote_provider(Config) ->
     %% file shouldn't appear on W1's storage
     ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, SDHandle)),
 
-    % Ensure that sync didn't delete remotely create directory
+    % Ensure that storage import didn't delete remotely create directory
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
@@ -5468,7 +5468,7 @@ should_not_sync_file_during_replication(Config) ->
     ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
         rpc:call(W1, transfer, get, [TransferId]), 600),
 
-    % ensure that sync did not invalidate file blocks
+    % ensure that storage import did not invalidate file blocks
     ?assertBlocks(W1, SessId, [
         #{
             <<"blocks">> => [[0, ?TEST_DATA_SIZE]],
@@ -6124,10 +6124,7 @@ init_per_testcase(force_stop_test, Config) ->
     ],
     init_per_testcase(default, Config2);
 
-init_per_testcase(Case, Config)
-    when Case =:= create_file_in_dir_update_test
-    orelse Case =:= should_not_detect_timestamp_update_test ->
-
+init_per_testcase(should_not_detect_timestamp_update_test, Config) ->
     Config2 = [
         {update_config, #{
             detect_deletions => false,

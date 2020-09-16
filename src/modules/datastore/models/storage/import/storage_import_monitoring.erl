@@ -761,7 +761,7 @@ return_empty_histogram_and_timestamp() ->
     prepare(time_utils:cluster_time_seconds(), histogram:new(?HISTOGRAM_LENGTH)).
 
 
--spec return_histograms_and_timestamps(record, [plot_counter_type()], window()) ->
+-spec return_histograms_and_timestamps(record(), [plot_counter_type()], window()) ->
     import_stats().
 return_histograms_and_timestamps(SIM, Types, Window) ->
     lists:foldl(fun(Type, AccIn) ->

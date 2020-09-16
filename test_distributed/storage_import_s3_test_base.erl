@@ -383,17 +383,18 @@ changing_max_depth_test(Config) ->
         <<"scans">> => 2,
         <<"toProcess">> => 3,
         <<"created">> => 1,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 2,
         <<"createdSum">> => 2,
-        <<"modifiedSum">> => 2,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 0,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -423,17 +424,17 @@ changing_max_depth_test(Config) ->
         <<"scans">> => 3,
         <<"toProcess">> => 4,
         <<"created">> => 1,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 2,
+        <<"otherProcessed">> => 3,
         <<"createdSum">> => 3,
-        <<"modifiedSum">> => 3,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 0,
         <<"createdHourHist">> => 3,
         <<"createdDayHist">> => 3,
-        <<"modifiedHourHist">> => 3,
-        <<"modifiedDayHist">> => 3,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -521,19 +522,19 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
         <<"scans">> => 2,
         <<"toProcess">> => 8,
         <<"created">> => 1,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 6,
+        <<"otherProcessed">> => 7,
         <<"createdSum">> => 5,
-        <<"modifiedSum">> => 2,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 5,
         <<"createdDayHist">> => 5,
         <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -954,19 +955,19 @@ delete_non_empty_directory_update_test(Config) ->
         <<"scans">> => 2,
         <<"toProcess">> => 4,
         <<"created">> => 0,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 2,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 2,
         <<"createdSum">> => 1,
-        <<"modifiedSum">> => 2,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 2,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
         <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 2,
         <<"deletedHourHist">> => 2,
         <<"deletedDayHist">> => 2
@@ -1369,28 +1370,28 @@ delete_many_subfiles_test(Config) ->
         <<"scans">> => 2,
         <<"toProcess">> => 1113,
         <<"created">> => 0,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 1111,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 2,
         <<"createdSum">> => 1000,
-        <<"modifiedSum">> => 2,
+        <<"modifiedSum">> => 1,
         <<"deletedSum">> => 1111,
         <<"createdDayHist">> => 1000,
         <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedHourHist">> => 1111,
         <<"deletedDayHist">> => 1111
     }, ?SPACE_ID).
 
 create_list_race_test(Config) ->
-    % this tests checks whether sync works properly in case of create-list race
+    % this tests checks whether storage import works properly in case of create-list race
     % description:
-    % sync builds storage_sync_links tree for detecting deleted files by listing the storage using offset and limit
+    % storage import builds storage_sync_links tree for detecting deleted files by listing the storage using offset and limit
     % it is possible that if other files are deleted in the meantime, file may be omitted and therefore missing
     % in the storage_sync_links
-    % sync must not delete such file
+    % storage import must not delete such file
     % storage_import_dir_batch_size is set in this test to 2
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -1416,7 +1417,7 @@ create_list_race_test(Config) ->
         Result = meck:passthrough([SDHandle, Marker, Offset, BatchSize]),
         case SDHandle#sd_handle.file =:= <<"/">> of
             true ->
-                % hold on sync
+                % hold on storage import
                 TestPid ! {waiting, self(), Offset, Result},
                 receive continue -> ok end;
             false ->
@@ -1429,7 +1430,7 @@ create_list_race_test(Config) ->
 
     ListedFiles = [FileToDeleteOnStorage, FileToDeleteByLFM] = receive
         {waiting, Pid, 0, {ok, FilesAndStats}} ->
-            % continue sync
+            % continue storage import
             Pid ! continue,
             [filename:basename(F) || {F, _} <- FilesAndStats]
     end,
@@ -1444,7 +1445,7 @@ create_list_race_test(Config) ->
             ok = lfm_proxy:unlink(W1, SessId, {path, FileToDeleteByLFMPath}),
             SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, FileToDeleteOnStoragePath, RDWRStorage),
             ok = sd_test_utils:unlink(W1, SDHandle, ?TEST_DATA_SIZE),
-            % continue sync
+            % continue storage import
             Pid2 ! continue
     end,
 
@@ -1515,7 +1516,7 @@ create_list_race_test(Config) ->
     lfm_proxy:close(W2, Handle4).
 
 change_file_type_test(Config) ->
-    % this test checks whether sync properly handles
+    % this test checks whether storage import properly handles
     % deleting file and creating directory with the same name on storage
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -1620,7 +1621,7 @@ change_file_type_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {guid, DirGuid2}), ?ATTEMPTS).
 
 change_file_type3_test(Config) ->
-    % this test checks whether sync properly handles
+    % this test checks whether storage import properly handles
     % deleting non-empty directory and creating file with the same name on storage
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
