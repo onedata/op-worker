@@ -51,6 +51,7 @@
     create_raw_dir_with_cdmi_version_header_should_succeed_test/1,
     create_cdmi_file_without_cdmi_version_header_should_fail_test/1,
     create_cdmi_dir_without_cdmi_version_header_should_fail_test/1,
+    download_empty_file/1,
     download_file_in_blocks/1
 ]).
 
@@ -83,6 +84,7 @@ all() ->
         create_raw_dir_with_cdmi_version_header_should_succeed_test,
         create_cdmi_file_without_cdmi_version_header_should_fail_test,
         create_cdmi_dir_without_cdmi_version_header_should_fail_test,
+        download_empty_file,
         download_file_in_blocks
     ]).
 
@@ -93,6 +95,8 @@ all() ->
 }).
 
 -define(DEFAULT_STORAGE_BLOCK_SIZE, 100).
+
+-define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 
 
 %%%===================================================================
@@ -206,6 +210,43 @@ create_cdmi_file_without_cdmi_version_header_should_fail_test(Config) ->
 
 create_cdmi_dir_without_cdmi_version_header_should_fail_test(Config) ->
     cdmi_test_base:create_cdmi_dir_without_cdmi_version_header_should_fail(Config).
+
+
+download_empty_file(Config) ->
+    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    AuthHeaders = [rest_test_utils:user_token_header(Config, <<"user1">>)],
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    % Create file
+    FileName = <<"download_empty_file">>,
+    FilePath = filename:join([SpaceName, FileName]),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionId, FilePath, 8#777),
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    ?assertMatch(ok, lfm_proxy:truncate(WorkerP2, SessionId, {guid, FileGuid}, 0)),
+
+    {ok, _, _, Response} = ?assertMatch(
+        {ok, 200, _Headers, _Response},
+        cdmi_test_utils:do_request(WorkerP2, FilePath, get, [?CDMI_VERSION_HEADER | AuthHeaders], <<>>)
+    ),
+    ?assertMatch(
+        #{
+            <<"completionStatus">> := <<"Complete">>,
+            <<"metadata">> := #{
+                <<"cdmi_owner">> := <<"user1">>,
+                <<"cdmi_size">> := <<"0">>
+            },
+            <<"objectID">> := ObjectId,
+            <<"objectName">> := FileName,
+            <<"objectType">> := <<"application/cdmi-object">>,
+            <<"value">> := <<>>,
+            <<"valuerange">> := <<"0--1">>,
+            <<"valuetransferencoding">> := <<"base64">>
+        },
+        json_utils:decode(Response)
+    ).
 
 
 download_file_in_blocks(Config) ->

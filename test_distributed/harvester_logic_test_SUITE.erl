@@ -39,22 +39,23 @@ all() -> ?ALL([
 
 get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_harvester),
+    
+    HarvesterGriMatcher = #gri{type = od_harvester, id = ?HARVESTER_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, HarvesterGriMatcher),
 
     ?assertMatch(
         {ok, ?HARVESTER_PRIVATE_DATA_MATCHER(?HARVESTER_1)},
         rpc:call(Node, harvester_logic, get, [?HARVESTER_1])
     ),
 
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_harvester)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HarvesterGriMatcher)),
 
     % Harvester protected data should now be cached
     ?assertMatch(
         {ok, ?HARVESTER_PRIVATE_DATA_MATCHER(?HARVESTER_1)},
         rpc:call(Node, harvester_logic, get, [?HARVESTER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_harvester)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HarvesterGriMatcher)),
 
     % Make sure that provider can access non-cached data
     logic_tests_common:invalidate_cache(Config, od_harvester, ?HARVESTER_1),
@@ -62,7 +63,7 @@ get_test(Config) ->
         {ok, ?HARVESTER_PRIVATE_DATA_MATCHER(?HARVESTER_1)},
         rpc:call(Node, harvester_logic, get, [?HARVESTER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_harvester)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, HarvesterGriMatcher)),
     ok.
 
 
@@ -72,15 +73,16 @@ subscribe_test(Config) ->
     % Simulate received updates
     Harvester1PrivateGRI = #gri{type = od_harvester, id = ?HARVESTER_1, aspect = instance, scope = private},
     Harvester1PrivateData = ?HARVESTER_PRIVATE_DATA_VALUE(?HARVESTER_1),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_harvester),
+    
+    HarvesterGriMatcher = #gri{type = od_harvester, id = ?HARVESTER_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, HarvesterGriMatcher),
 
     % private scope
     ?assertMatch(
         {ok, ?HARVESTER_PRIVATE_DATA_MATCHER(?HARVESTER_1)},
         rpc:call(Node, harvester_logic, get, [?HARVESTER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_harvester)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HarvesterGriMatcher)),
 
     ChangedData1 = Harvester1PrivateData#{
         <<"revision">> => 6,
@@ -98,7 +100,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, harvester_logic, get, [?HARVESTER_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_harvester)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HarvesterGriMatcher)),
 
 
     % Simulate a 'deleted' push and see if cache was invalidated

@@ -437,6 +437,9 @@ init_per_testcase(_Case, Config) ->
 
     [{spaces, [<<"s1">>, <<"s2">>, <<"s3">>]} | Config].
 
+end_per_testcase(stream_should_be_started_for_new_space, Config) ->
+    UpdatedConfig = [{spaces, [<<"s1">>, <<"s2">>, <<"s3">>, <<"s4">>]} | proplists:delete(spaces, Config)],
+    end_per_testcase(?DEFAULT_CASE(stream_should_be_started_for_new_space), UpdatedConfig);
 end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(SpaceId) ->
