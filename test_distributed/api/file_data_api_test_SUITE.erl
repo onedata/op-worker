@@ -701,7 +701,10 @@ set_mode_data_spec() ->
         correct_values = #{<<"mode">> => [<<"0000">>, <<"0111">>, <<"0544">>, <<"0707">>]},
         bad_values = [
             {<<"mode">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-            {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)}
+            {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+            {<<"mode">>, <<"0888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+            {<<"mode">>, <<"888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+            {<<"mode">>, <<"77777">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)}
         ]
     }.
 
@@ -997,7 +1000,7 @@ build_get_replicas_prepare_gs_args_fun(FileGuid, Scope) ->
 
 
 init_per_suite(Config) ->
-    application:start(ssl),
+    ssl:start(),
     hackney:start(),
     api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
         {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
@@ -1006,7 +1009,7 @@ init_per_suite(Config) ->
 
 end_per_suite(_Config) ->
     hackney:stop(),
-    application:stop(ssl).
+    ssl:stop().
 
 
 init_per_testcase(_Case, Config) ->

@@ -163,18 +163,24 @@ data_spec_create(#gri{aspect = instance}) -> #{
 data_spec_create(#gri{aspect = object_id}) ->
     undefined;
 
-data_spec_create(#gri{aspect = attrs}) -> #{
-    required => #{
-        id => {binary, guid},
-        <<"mode">> => {binary, fun(Mode) ->
-            try
-                {true, binary_to_integer(Mode, 8)}
-            catch _:_ ->
-                throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
-            end
-        end}
-    }
-};
+data_spec_create(#gri{aspect = attrs}) ->
+    ModeParam = <<"mode">>,
+
+    #{
+        required => #{
+            id => {binary, guid},
+            ModeParam => {binary, fun(Mode) ->
+                try binary_to_integer(Mode, 8) of
+                    ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
+                        {true, ValidMode};
+                    _ ->
+                        throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(ModeParam, 0, 8#1777))
+                catch _:_ ->
+                    throw(?ERROR_BAD_VALUE_INTEGER(ModeParam))
+                end
+            end}
+        }
+    };
 
 data_spec_create(#gri{aspect = xattrs}) -> #{
     required => #{
