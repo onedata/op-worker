@@ -342,16 +342,19 @@ get_info(SIM = #storage_import_monitoring{
     Info = #{
         totalScans => Scans,
         status => utils:undefined_to_null(Status),
-        start => StartTime div 1000,
         createdFiles => CreatedFiles,
         modifiedFiles => ModifiedFiles,
         deletedFiles => DeletedFiles
     },
-    Info2 = case is_scan_in_progress(SIM) of
+    Info2 = case StartTime =:= undefined of
         true -> Info;
-        false -> Info#{stop => StopTime div 1000}
+        false -> Info#{start => StartTime div 1000}
     end,
-    {ok, Info2};
+    Info3 = case StopTime =:= undefined orelse is_scan_in_progress(SIM) of
+        true -> Info2;
+        false -> Info2#{stop => StopTime div 1000}
+    end,
+    {ok, Info3};
 get_info(SpaceId) ->
     case storage_import_monitoring:get(SpaceId) of
         {ok, Doc} ->
