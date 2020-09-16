@@ -164,7 +164,7 @@ delete_metadata_test_base(
                     end
                 },
                 #scenario_template{
-                    name = str_utils:format("Delete ~s metadata for ~s using gs rest endpoint", [
+                    name = str_utils:format("Delete ~s metadata for ~s using rest endpoint", [
                         MetadataType, FileType
                     ]),
                     type = rest,

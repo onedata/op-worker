@@ -377,7 +377,7 @@ get_operation_supported(rdf_metadata, private) -> true;         % REST/gs
 get_operation_supported(rdf_metadata, public) -> true;          % REST/gs
 get_operation_supported(distribution, private) -> true;         % REST/gs
 get_operation_supported(acl, private) -> true;
-get_operation_supported(shares, private) -> true;
+get_operation_supported(shares, private) -> true;               % gs only
 get_operation_supported(transfers, private) -> true;
 get_operation_supported(file_qos_summary, private) -> true;     % REST/gs
 get_operation_supported(download_url, private) -> true;

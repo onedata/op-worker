@@ -35,6 +35,8 @@
     get_shared_file_attrs_test/1,
     get_attrs_on_provider_not_supporting_space_test/1,
 
+    get_file_shares_test/1,
+
     set_file_mode_test/1,
     set_mode_on_provider_not_supporting_space_test/1,
 
@@ -46,6 +48,8 @@ all() -> [
     get_file_attrs_test,
     get_shared_file_attrs_test,
     get_attrs_on_provider_not_supporting_space_test,
+
+    get_file_shares_test/1,
 
     set_file_mode_test,
     set_mode_on_provider_not_supporting_space_test,
@@ -83,6 +87,7 @@ get_file_attrs_test(Config) ->
                     user2,  % space owner - doesn't need any perms
                     user3,  % files owner
                     user4   % space member - should succeed as getting attrs doesn't require any perms
+                            % TODO VFS-6766 revoke ?SPACE_VIEW priv and see that list of shares is empty
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1]
@@ -437,6 +442,87 @@ get_attrs_exp_result(#api_test_ctx{data = Data}, JsonAttrs, ShareId) ->
             [Attr]
     end,
     {ok, maps:with(RequestedAttributes, JsonAttrs)}.
+
+
+%%%===================================================================
+%%% Get shares test functions
+%%%===================================================================
+
+
+get_file_shares_test(Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P1Node, P2Node],
+
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+
+    {FileType, _FilePath, FileGuid, ShareId1} = api_test_utils:create_and_sync_shared_file_in_space2(
+        8#707, Config
+    ),
+    ShareGuid1 = file_id:guid_to_share_guid(FileGuid, ShareId1),
+
+    ShareId2 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessIdP1, [P2Node], FileGuid),
+
+    ExpGsResponse = #{
+        <<"revision">> => 1,
+        <<"gri">> => gri:serialize(#gri{
+            type = op_file, id = FileGuid, aspect = shares, scope = private
+        }),
+        <<"list">> => lists:map(fun(ShareId) -> gri:serialize(#gri{
+            type = op_share, id = ShareId, aspect = instance, scope = private
+        }) end, [ShareId2, ShareId1])
+    },
+
+    ?assert(onenv_api_test_runner:run_tests(Config, [
+        #scenario_spec{
+            name = <<"Get ", FileType/binary, " shares using gs private api">>,
+            type = gs,
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3,  % files owner
+                    user4   % space member - should succeed as getting attrs doesn't require any perms
+                            % TODO VFS-6766 revoke ?SPACE_VIEW priv and see that list of shares is empty
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1]
+            },
+            prepare_args_fun = build_get_shares_prepare_gs_args_fun(FileGuid, private),
+            validate_result_fun = fun(_, Result) ->
+                ?assertEqual({ok, ExpGsResponse}, Result)
+            end,
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                FileGuid, ShareId1, undefined
+            )
+        },
+        #scenario_spec{
+            name = <<"Get ", FileType/binary, " shares using gs public api">>,
+            type = gs_not_supported,
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
+            prepare_args_fun = build_set_mode_prepare_gs_args_fun(ShareGuid1, public),
+            validate_result_fun = fun(_TestCaseCtx, Result) ->
+                ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
+            end,
+            data_spec = undefined
+        }
+    ])).
+
+
+%% @private
+-spec build_get_shares_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_shares_prepare_gs_args_fun(FileGuid, Scope) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = GriId, aspect = shares, scope = Scope},
+            data = Data1
+        }
+    end.
 
 
 %%%===================================================================
