@@ -49,5 +49,5 @@ get_response(#gri{id = QosEntryId, aspect = instance}, QosData) ->
         <<"expression">> => qos_expression:to_infix(Expression),
         <<"qosRequirementId">> => QosEntryId
     });
-get_response(#gri{aspect = {parameters, _}}, AllParametersKeys) ->
-    ?OK_REPLY(AllParametersKeys).
+get_response(#gri{aspect = {parameters, _}}, QosParameters) ->
+    ?OK_REPLY(QosParameters).
