@@ -2319,8 +2319,8 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
     ?assertMatch({error, ?ENOENT}, sd_test_utils:ls(W1, SDHandle, 0, 100)),
+    assertScanFinished(W1, ?SPACE_ID, 3, 5 * ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), ?ATTEMPTS),
-    assertScanFinished(W1, ?SPACE_ID, 3),
     disable_continuous_scan(Config).
 
 create_file_in_dir_update_test(Config) ->
