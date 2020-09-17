@@ -30,6 +30,16 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
+    %% Remove file json metadata
+    {<<"/data/:id/metadata/json">>, rest_handler, #rest_req{
+        method = 'DELETE',
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = json_metadata, 
+            scope = private
+        }
+    }},
     %% Get file json metadata
     {<<"/data/:id/metadata/json">>, rest_handler, #rest_req{
         method = 'GET',
@@ -53,6 +63,16 @@ routes() -> [
             scope = private
         }
     }},
+    %% Remove file rdf metadata
+    {<<"/data/:id/metadata/rdf">>, rest_handler, #rest_req{
+        method = 'DELETE',
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = rdf_metadata, 
+            scope = private
+        }
+    }},
     %% Get file rdf metadata
     {<<"/data/:id/metadata/rdf">>, rest_handler, #rest_req{
         method = 'GET',
@@ -73,6 +93,17 @@ routes() -> [
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
             aspect = rdf_metadata, 
+            scope = private
+        }
+    }},
+    %% Remove file xattrs
+    {<<"/data/:id/metadata/xattrs">>, rest_handler, #rest_req{
+        method = 'DELETE',
+        parse_body = as_json_params,
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = xattrs, 
             scope = private
         }
     }},

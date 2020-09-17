@@ -46,12 +46,17 @@
 get_file_download_url(SessionId, FileGuid) ->
     case lfm:check_perms(SessionId, {guid, FileGuid}, read) of
         ok ->
-            Hostname = oneprovider:get_domain(),
-            {ok, Code} = file_download_code:create(SessionId, FileGuid),
-            URL = str_utils:format_bin("https://~s~s/~s", [
-                Hostname, ?FILE_DOWNLOAD_PATH, Code
-            ]),
-            {ok, URL};
+            try
+                maybe_sync_first_file_block(SessionId, FileGuid),
+                Hostname = oneprovider:get_domain(),
+                {ok, Code} = file_download_code:create(SessionId, FileGuid),
+                URL = str_utils:format_bin("https://~s~s/~s", [
+                    Hostname, ?FILE_DOWNLOAD_PATH, Code
+                ]),
+                {ok, URL}
+            catch throw:Error ->
+                Error
+            end;
         {error, ?EACCES} ->
             ?ERROR_FORBIDDEN;
         {error, ?EPERM} ->
@@ -59,6 +64,16 @@ get_file_download_url(SessionId, FileGuid) ->
         Error ->
             Error
     end.
+
+
+%% @private
+-spec maybe_sync_first_file_block(session:id(), file_id:file_guid()) -> ok.
+maybe_sync_first_file_block(SessionId, FileGuid) ->
+    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, FileGuid}, read)),
+    ReadBlockSize = file_download_utils:get_read_block_size(FileHandle),
+    ?check(lfm:read(FileHandle, 0, ReadBlockSize)),
+    lfm:release(FileHandle),
+    ok.
 
 
 %%--------------------------------------------------------------------

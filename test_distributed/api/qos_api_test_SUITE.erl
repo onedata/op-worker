@@ -471,7 +471,7 @@ init_per_suite(Config) ->
             NewConfig2
         ),
         initializer:mock_auth_manager(NewConfig3, _CheckIfUserIsSupported = true),
-        application:start(ssl),
+        ssl:start(),
         hackney:start(),
         NewConfig3
     end,
@@ -480,7 +480,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     hackney:stop(),
-    application:stop(ssl),
+    ssl:stop(),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:teardown_storage(Config).
 

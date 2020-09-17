@@ -89,7 +89,7 @@
     get_file_size_from_remote_locations/1, get_owner/1, get_local_storage_file_size/1,
     is_space_synced/1, get_and_cache_file_doc_including_deleted/1]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
--export([assert_not_readonly_storage/1]).
+-export([assert_not_readonly_storage/1, assert_file_exists/1]).
 
 %%%===================================================================
 %%% API
@@ -1265,6 +1265,14 @@ assert_not_readonly_target_storage_const(FileCtx, TargetProviderId) ->
         true -> throw(?EROFS);
         false -> ok
     end.
+
+-spec assert_file_exists(ctx()) -> ctx().
+assert_file_exists(FileCtx0) ->
+    % If file doesn't exists (or was deleted) fetching doc will fail,
+    % {badmatch, {error, not_found}} will propagate up and fslogic_worker will
+    % translate it to ?ENOENT
+    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0),
+    FileCtx1.
 
 %%%===================================================================
 %%% Internal functions
