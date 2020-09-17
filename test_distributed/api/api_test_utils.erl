@@ -36,6 +36,7 @@
 
     fill_file_with_dummy_data/4,
     fill_file_with_dummy_data/5,
+    write_file/5,
     read_file/4,
 
     share_file_and_sync_file_attrs/4,
@@ -263,11 +264,17 @@ fill_file_with_dummy_data(Node, SessId, FileGuid, Size) ->
     Offset :: non_neg_integer(), Size :: non_neg_integer()) -> WrittenContent :: binary().
 fill_file_with_dummy_data(Node, SessId, FileGuid, Offset, Size) ->
     Content = crypto:strong_rand_bytes(Size),
+    write_file(Node, SessId, FileGuid, Offset, Content),
+    Content.
+
+
+-spec write_file(node(), session:id(), file_id:file_guid(), Offset :: non_neg_integer(),
+    Size :: non_neg_integer()) -> ok.
+write_file(Node, SessId, FileGuid, Offset, Content) ->
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {guid, FileGuid}, write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, Offset, Content)),
     ?assertMatch(ok, lfm_proxy:fsync(Node, Handle)),
-    ?assertMatch(ok, lfm_proxy:close(Node, Handle)),
-    Content.
+    ?assertMatch(ok, lfm_proxy:close(Node, Handle)).
 
 
 -spec read_file(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
@@ -468,7 +475,7 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
         {bad_id, NonExistentFileObjectId, {rest, ?ERROR_POSIX(?ENOENT)}},
         {bad_id, NonExistentFileGuid, {gs, ?ERROR_POSIX(?ENOENT)}}
     ],
-    
+
     add_bad_values_to_data_spec(BadFileIdErrors, DataSpec).
 
 
