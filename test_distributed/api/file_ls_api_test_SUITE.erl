@@ -741,7 +741,7 @@ file_details_to_gs_json(ShareId, #file_details{
 
 
 init_per_suite(Config) ->
-    application:start(ssl),
+    ssl:start(),
     hackney:start(),
     api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
         {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
@@ -750,7 +750,7 @@ init_per_suite(Config) ->
 
 end_per_suite(_Config) ->
     hackney:stop(),
-    application:stop(ssl).
+    ssl:stop().
 
 
 init_per_testcase(_Case, Config) ->

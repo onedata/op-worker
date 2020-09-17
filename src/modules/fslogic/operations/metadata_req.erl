@@ -34,7 +34,7 @@
 ) ->
     fslogic_worker:provider_response().
 get_metadata(UserCtx, FileCtx0, Type, Query, Inherited) ->
-    FileCtx1 = assert_file_exists(FileCtx0),
+    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
 
     Result = case Type of
         json -> json_metadata:get(UserCtx, FileCtx1, Query, Inherited);
@@ -62,11 +62,11 @@ get_metadata(UserCtx, FileCtx0, Type, Query, Inherited) ->
 ) ->
     fslogic_worker:provider_response().
 set_metadata(UserCtx, FileCtx0, json, Value, Query, Create, Replace) ->
-    FileCtx1 = assert_file_exists(FileCtx0),
+    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     {ok, _} = json_metadata:set(UserCtx, FileCtx1, Value, Query, Create, Replace),
     #provider_response{status = #status{code = ?OK}};
 set_metadata(UserCtx, FileCtx0, rdf, Value, _, Create, Replace) ->
-    FileCtx1 = assert_file_exists(FileCtx0),
+    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     {ok, _} = xattr:set(UserCtx, FileCtx1, ?RDF_METADATA_KEY, Value, Create, Replace),
     #provider_response{status = #status{code = ?OK}}.
 
@@ -74,25 +74,10 @@ set_metadata(UserCtx, FileCtx0, rdf, Value, _, Create, Replace) ->
 -spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
     fslogic_worker:provider_response().
 remove_metadata(UserCtx, FileCtx0, json) ->
-    FileCtx1 = assert_file_exists(FileCtx0),
+    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     ok = json_metadata:remove(UserCtx, FileCtx1),
     #provider_response{status = #status{code = ?OK}};
 remove_metadata(UserCtx, FileCtx0, rdf) ->
-    FileCtx1 = assert_file_exists(FileCtx0),
+    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     ok = xattr:remove(UserCtx, FileCtx1, ?RDF_METADATA_KEY),
     #provider_response{status = #status{code = ?OK}}.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec assert_file_exists(file_ctx:ctx()) -> file_ctx:ctx().
-assert_file_exists(FileCtx0) ->
-    % If file doesn't exists (or was deleted) fetching doc will fail,
-    % {badmatch, {error, not_found}} will propagate up and fslogic_worker will
-    % translate it to ?ENOENT
-    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0),
-    FileCtx1.
