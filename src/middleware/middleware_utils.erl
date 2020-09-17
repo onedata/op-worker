@@ -18,12 +18,10 @@
 
 -export([
     is_eff_space_member/2,
-    assert_space_supported_locally/1, assert_space_supported_by/2,
+    assert_space_supported_locally/1,
+    assert_space_supported_by/2,
     assert_space_supported_with_storage/2,
     assert_file_exists/2,
-    assert_imported_storage/1,
-    assert_file_registration_supported/1,
-    assert_manual_storage_import/1,
     decode_object_id/2,
 
     is_shared_file_request/3
@@ -78,35 +76,8 @@ assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
             throw(?ERROR_POSIX(Errno))
     end.
 
--spec assert_imported_storage(storage:id()) -> ok | no_return().
-assert_imported_storage(StorageId) ->
-    case storage:is_imported(StorageId) of
-        true ->
-            ok;
-        false ->
-            throw(?ERROR_REQUIRES_IMPORTED_STORAGE(StorageId))
-    end.
 
--spec assert_file_registration_supported(storage:id()) -> ok | no_return().
-assert_file_registration_supported(StorageId) ->
-    Helper = storage:get_helper(StorageId),
-    case helper:is_file_registration_supported(Helper) of
-        true ->
-            ok;
-        false ->
-            throw(?ERROR_FILE_REGISTRATION_NOT_SUPPORTED(StorageId, ?OBJECT_HELPERS))
-    end.
-
--spec assert_manual_storage_import(od_space:id()) -> ok | no_return().
-assert_manual_storage_import(SpaceId) ->
-    case storage_import:get_mode(SpaceId) of
-        {ok, ?MANUAL_IMPORT} ->
-            ok;
-        {ok, ?AUTO_IMPORT} ->
-            throw(?ERROR_REQUIRES_MANUAL_STORAGE_IMPORT_MODE)
-    end.
-
--spec decode_object_id(file_id:objectid(), binary() | atom()) -> 
+-spec decode_object_id(file_id:objectid(), binary() | atom()) ->
     file_id:file_guid() | no_return().
 decode_object_id(ObjectId, Key) ->
     try

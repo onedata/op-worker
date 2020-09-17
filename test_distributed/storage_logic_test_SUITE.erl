@@ -227,7 +227,7 @@ resupport_cleanup_test(Config) ->
     
     {ok, StorageId} = rpc:call(Node, space_logic, get_local_storage_id, [SpaceId]),
     
-    ok = rpc:call(Node, storage_import, configure_auto_mode, [SpaceId,
+    ok = rpc:call(Node, storage_import, set_or_configure_auto_mode, [SpaceId,
         #{enabled => true, max_depth => 5, sync_acl => true}]),
     ok = rpc:call(Node, file_popularity_api, enable, [SpaceId]),
     ACConfig =  #{

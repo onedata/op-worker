@@ -272,9 +272,7 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     StorageId = maps:get(<<"storageId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId),
     middleware_utils:assert_space_supported_with_storage(SpaceId, StorageId),
-    middleware_utils:assert_imported_storage(StorageId),
-    middleware_utils:assert_file_registration_supported(StorageId),
-    middleware_utils:assert_manual_storage_import(SpaceId).
+    storage_import:assert_manual_import_mode(SpaceId).
 
 
 %%--------------------------------------------------------------------

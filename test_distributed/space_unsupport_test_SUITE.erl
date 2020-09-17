@@ -164,7 +164,7 @@ cleanup_traverse_stage_with_import_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     
     {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker, SessId),
-    ok = rpc:call(Worker, storage_import, configure_auto_mode, [?SPACE_ID,
+    ok = rpc:call(Worker, storage_import, set_or_configure_auto_mode, [?SPACE_ID,
         #{enabled => true, max_depth => 5, sync_acl => true}]),
     
     % Relative paths to space dir. Empty binary represents space dir.
@@ -253,7 +253,7 @@ delete_local_documents_stage_test(Config) ->
     % select provider with imported storage because storage sync is being enabled later on
     Worker = select_provider_with_imported_storage(Workers),
     StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
-    ok = rpc:call(Worker, storage_import, configure_auto_mode, [?SPACE_ID,
+    ok = rpc:call(Worker, storage_import, set_or_configure_auto_mode, [?SPACE_ID,
         #{continuous_scan => true, max_depth => 5, sync_acl => true}]),
     ok = rpc:call(Worker, storage_import_worker, schedule_spaces_check, [0]),
     ok = rpc:call(Worker, file_popularity_api, enable, [?SPACE_ID]),

@@ -560,6 +560,7 @@
 %% Model that stores configuration of storage import
 -record(storage_import_config, {
     mode :: storage_import_config:mode(),
+    % below field is undefined for manual mode
     auto_storage_import_config :: undefined | auto_storage_import_config:config()
 }).
 

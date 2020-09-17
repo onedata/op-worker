@@ -9,6 +9,10 @@
 %%% Helper module for storage_import_worker.
 %%% It implements a simple registry for tracking spaces with
 %%% enabled auto-import.
+%%%
+%%% WARNING!!!
+%%% This module should only be used by just one process to avoid
+%%% race conditions.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(auto_imported_spaces_registry).

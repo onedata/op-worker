@@ -102,9 +102,7 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Prepares existing document for new scan.
-%% This function assumes that document has already been created by
-%% ?MODULE:ensure_created/2 function.
+%% Prepares existing document for a new scan.
 %% It resets control counters, and increases to_process counter and
 %% queue_length histograms by 1.
 %% This function also sets scan start_time.
@@ -560,6 +558,11 @@ get_or_create(SpaceId) ->
     end.
 
 
+-spec create(doc()) -> {ok, doc()} | error().
+create(Doc) ->
+    datastore_model:create(?CTX, Doc).
+
+
 -spec create(key(), record()) -> {ok, doc()} | error().
 create(SpaceId, SIM = #storage_import_monitoring{}) ->
     create(#document{key = SpaceId, value = SIM}).
@@ -572,11 +575,6 @@ delete(SpaceId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec create(doc()) -> {ok, doc()} | error().
-create(Doc) ->
-    datastore_model:create(?CTX, Doc).
-
 
 -spec new_doc(key()) -> doc().
 new_doc(SpaceId) ->

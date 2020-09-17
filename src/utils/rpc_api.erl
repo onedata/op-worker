@@ -598,7 +598,7 @@ storage_import_set_manual_import(SpaceId) ->
 -spec storage_import_configure_auto_import(od_space:id(), storage_import:scan_config_map()) ->
     ok | {error, term()}.
 storage_import_configure_auto_import(SpaceId, ScanConfig) ->
-    storage_import:configure_auto_mode(SpaceId, ScanConfig).
+    storage_import:set_or_configure_auto_mode(SpaceId, ScanConfig).
 
 
 -spec storage_import_start_scan(od_space:id()) -> ok.

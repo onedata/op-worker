@@ -50,12 +50,13 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([set_manual_mode/1, configure_auto_mode/2]).
+-export([set_manual_mode/1, set_or_configure_auto_mode/2]).
 -export([start_auto_scan/1, stop_auto_scan/1]).
 -export([get_mode/1, get_configuration/1]).
 -export([get_info/1, get_stats/3]).
 -export([get_manual_example/1]).
 -export([clean_up/1]).
+-export([assert_manual_import_mode/1]).
 
 %% migration API
 -export([migrate_space_strategies/0, migrate_storage_sync_monitoring/0]).
@@ -77,13 +78,12 @@
 
 -spec set_manual_mode(od_space:id()) -> ok | {error, term()}.
 set_manual_mode(SpaceId) ->
-    assert_space_supported_with_imported_storage(SpaceId),
+    assert_manual_storage_import_supported(SpaceId),
     storage_import_config:set_manual_mode(SpaceId).
 
 
--spec configure_auto_mode(od_space:id(), scan_config_map()) -> ok | {error, term()}.
-configure_auto_mode(SpaceId, ScanConfigMap) ->
-    assert_space_supported_with_imported_storage(SpaceId),
+-spec set_or_configure_auto_mode(od_space:id(), scan_config_map()) -> ok | {error, term()}.
+set_or_configure_auto_mode(SpaceId, ScanConfigMap) ->
     assert_auto_storage_import_supported(SpaceId),
 
     file_meta:make_space_exist(SpaceId),
@@ -98,17 +98,13 @@ configure_auto_mode(SpaceId, ScanConfigMap) ->
 
 -spec start_auto_scan(od_space:id()) -> ok | {error, term()}.
 start_auto_scan(SpaceId) ->
-    assert_space_supported_with_imported_storage(SpaceId),
     assert_auto_import_mode(SpaceId),
-
     storage_sync_traverse:run_scan(SpaceId).
 
 
 -spec stop_auto_scan(od_space:id()) -> ok.
 stop_auto_scan(SpaceId) ->
-    assert_space_supported_with_imported_storage(SpaceId),
     assert_auto_import_mode(SpaceId),
-
     storage_sync_traverse:cancel(SpaceId).
 
 
@@ -166,7 +162,7 @@ get_stats(SpaceId, Type, Window) ->
 
 -spec get_manual_example(od_space:id()) -> {ok, binary()}.
 get_manual_example(SpaceId) ->
-    assert_space_supported_with_imported_storage(SpaceId),
+    assert_manual_import_mode(SpaceId),
 
     {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
     Domain = oneprovider:get_domain(),
@@ -259,35 +255,75 @@ migrate_storage_sync_monitoring() ->
 %%% Internal functions
 %%%===================================================================
 
--spec assert_space_supported_with_imported_storage(od_space:id()) -> ok.
-assert_space_supported_with_imported_storage(SpaceId) ->
+-spec assert_auto_storage_import_supported(od_space:id()) -> ok.
+assert_auto_storage_import_supported(SpaceId) ->
     case space_logic:get_local_storage_id(SpaceId) of
         {ok, StorageId} ->
-            case storage:is_imported(StorageId) of
-                true -> ok;
-                false -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(StorageId))
+            assert_imported_storage(StorageId),
+            Helper = storage:get_helper(StorageId),
+            case helper:is_auto_import_supported(Helper) of
+                true ->
+                    ok;
+                false ->
+                    throw(?ERROR_AUTO_STORAGE_IMPORT_NOT_SUPPORTED(
+                        StorageId, ?AUTO_IMPORT_HELPERS, ?AUTO_IMPORT_OBJECT_HELPERS)
+                    )
+            end;
+        Error ->
+            throw(Error)
+end.
+
+
+-spec assert_manual_storage_import_supported(od_space:id()) -> ok.
+assert_manual_storage_import_supported(SpaceId) ->
+    case space_logic:get_local_storage_id(SpaceId) of
+        {ok, StorageId} ->
+            assert_imported_storage(StorageId),
+            Helper = storage:get_helper(StorageId),
+            case helper:is_file_registration_supported(Helper) of
+                true ->
+                    ok;
+                false ->
+                    throw(?ERROR_FILE_REGISTRATION_NOT_SUPPORTED(StorageId, ?OBJECT_HELPERS))
             end;
         Error ->
             throw(Error)
     end.
 
--spec assert_auto_storage_import_supported(od_space:id()) -> ok.
-assert_auto_storage_import_supported(SpaceId) ->
-    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
-    Helper = storage:get_helper(StorageId),
-    case helper:is_auto_import_supported(Helper) of
-        true ->
-            ok;
-        false ->
-            throw(?ERROR_AUTO_STORAGE_IMPORT_NOT_SUPPORTED(StorageId, ?AUTO_IMPORT_HELPERS, ?AUTO_IMPORT_OBJECT_HELPERS))
-    end.
-
 
 -spec assert_auto_import_mode(od_space:id()) -> ok.
 assert_auto_import_mode(SpaceId) ->
+    assert_space_supported_with_imported_storage(SpaceId),
     case storage_import:get_mode(SpaceId) of
         {ok, ?AUTO_IMPORT} ->
             ok;
         {ok, ?MANUAL_IMPORT} ->
             throw(?ERROR_REQUIRES_AUTO_STORAGE_IMPORT_MODE)
+    end.
+
+
+-spec assert_manual_import_mode(od_space:id()) -> ok.
+assert_manual_import_mode(SpaceId) ->
+    assert_space_supported_with_imported_storage(SpaceId),
+    case storage_import:get_mode(SpaceId) of
+        {ok, ?MANUAL_IMPORT} ->
+            ok;
+        {ok, ?AUTO_IMPORT} ->
+            throw(?ERROR_REQUIRES_MANUAL_STORAGE_IMPORT_MODE)
+    end.
+
+
+-spec assert_space_supported_with_imported_storage(od_space:id()) -> ok.
+assert_space_supported_with_imported_storage(SpaceId) ->
+    case space_logic:get_local_storage_id(SpaceId) of
+        {ok, StorageId} -> assert_imported_storage(StorageId);
+        Error -> throw(Error)
+    end.
+
+
+-spec assert_imported_storage(storage:id()) -> ok.
+assert_imported_storage(StorageId) ->
+    case storage:is_imported(StorageId) of
+        true -> ok;
+        false -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(StorageId))
     end.

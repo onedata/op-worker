@@ -5596,7 +5596,7 @@ enable_initial_scan(Config, SpaceId) ->
     ImportConfig = ?config(import_config, Config, #{}),
     MaxDepth = maps:get(max_depth, ImportConfig, ?MAX_DEPTH),
     SyncAcl = maps:get(sync_acl, ImportConfig, ?SYNC_ACL),
-    ?assertMatch(ok, rpc:call(W1, storage_import, configure_auto_mode,
+    ?assertMatch(ok, rpc:call(W1, storage_import, set_or_configure_auto_mode,
         [SpaceId, #{max_depth => MaxDepth, sync_acl => SyncAcl}])).
 
 enable_continuous_scans(Config, SpaceId) ->
@@ -5618,7 +5618,7 @@ enable_continuous_scans(Config, SpaceId, Opts) ->
         detect_deletions => DetectDeletions,
         sync_acl => SyncAcl
     },
-    ok = rpc:call(W1, storage_import, configure_auto_mode, [SpaceId, maps:merge(DefaultOpts, Opts)]).
+    ok = rpc:call(W1, storage_import, set_or_configure_auto_mode, [SpaceId, maps:merge(DefaultOpts, Opts)]).
 
 cleanup_storage_import_monitoring_model(Worker, SpaceId) ->
     rpc:call(Worker, storage_import_monitoring, delete, [SpaceId]).
@@ -5629,7 +5629,7 @@ get_scan_config(Worker, SpaceId) ->
 
 disable_continuous_scan(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
-    rpc:call(W1, storage_import, configure_auto_mode, [?SPACE_ID, #{continuous_scan => false}]),
+    rpc:call(W1, storage_import, set_or_configure_auto_mode, [?SPACE_ID, #{continuous_scan => false}]),
     ?assertMatch({ok, #{continuous_scan := false}}, get_scan_config(W1, ?SPACE_ID), ?ATTEMPTS),
     ok.
 
