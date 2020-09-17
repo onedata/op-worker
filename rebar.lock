@@ -40,7 +40,7 @@
   2},
  {<<"ctool">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/ctool.git",
-       {ref,"13f2a17d605a9e733a4d206435f00aeb0f2661f4"}},
+       {ref,"af1b4f31806004951e413588cbfd25c0a2025aa1"}},
   0},
  {<<"edown">>,
   {git,"git://github.com/uwiger/edown.git",
