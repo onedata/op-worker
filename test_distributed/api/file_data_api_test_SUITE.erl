@@ -501,7 +501,7 @@ get_file_shares_test(Config) ->
             type = gs_not_supported,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
-            prepare_args_fun = build_set_mode_prepare_gs_args_fun(ShareGuid1, public),
+            prepare_args_fun = build_get_shares_prepare_gs_args_fun(ShareGuid1, public),
             validate_result_fun = fun(_TestCaseCtx, Result) ->
                 ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
             end,
