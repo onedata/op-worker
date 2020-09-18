@@ -209,10 +209,10 @@ data_spec_create(#gri{aspect = rdf_metadata}) -> #{
 
 data_spec_create(#gri{aspect = register_file}) -> #{
     required => #{
-        <<"spaceId">> => {binary, any},
-        <<"storageId">> => {binary, any},
-        <<"storageFileId">> => {binary, any},
-        <<"destinationPath">> => {binary, any}
+        <<"spaceId">> => {binary, non_empty},
+        <<"storageId">> => {binary, non_empty},
+        <<"storageFileId">> => {binary, non_empty},
+        <<"destinationPath">> => {binary, non_empty}
     },
     optional => #{
         <<"size">> => {integer, {not_lower_than, 0}},
