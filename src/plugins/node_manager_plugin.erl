@@ -20,7 +20,7 @@
 -include_lib("ctool/include/global_definitions.hrl").
 
 %% node_manager_plugin_behaviour callbacks
--export([installed_cluster_generation/0]).
+-export([cluster_generations/0]).
 -export([oldest_upgradable_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([before_init/0]).
@@ -43,7 +43,7 @@
 % Human readable version is included to for logging purposes.
 -define(CLUSTER_GENERATIONS, [
     {1, <<"19.02.*">>},
-    {2, <<"20.02.beta3">>},
+    {2, <<"20.02.0-beta3">>},
     {3, <<"20.02.1">>},
     {4, oneprovider:get_version()}
 ]).
@@ -56,13 +56,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:installed_cluster_generation/0}.
+%% Overrides {@link node_manager_plugin_default:cluster_generations/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec installed_cluster_generation() -> node_manager:cluster_generation().
-installed_cluster_generation() ->
-    {ClusterGeneration, _} = lists:last(?CLUSTER_GENERATIONS),
-    ClusterGeneration.
+-spec cluster_generations() -> node_manager:cluster_generation().
+cluster_generations() ->
+    ?CLUSTER_GENERATIONS.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -72,8 +71,7 @@ installed_cluster_generation() ->
 -spec oldest_upgradable_cluster_generation() ->
     {node_manager:cluster_generation(), HumanReadableVersion :: binary()}.
 oldest_upgradable_cluster_generation() ->
-    Version = kv_utils:get(?OLDEST_UPGRADABLE_CLUSTER_GENERATION, ?CLUSTER_GENERATIONS),
-    {?OLDEST_UPGRADABLE_CLUSTER_GENERATION, Version}.
+    ?OLDEST_UPGRADABLE_CLUSTER_GENERATION.
 
 %%--------------------------------------------------------------------
 %% @doc
