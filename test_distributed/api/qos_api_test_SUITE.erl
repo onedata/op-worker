@@ -413,8 +413,7 @@ validate_result_fun_rest(MemRef, qos_parameters) ->
     fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
     
         ?assertEqual(?HTTP_200_OK, RespCode),
-        check_received_qos_parameters(MemRef, RespBody),
-        ok
+        check_received_qos_parameters(MemRef, RespBody)
     end.
 
 
@@ -454,8 +453,7 @@ validate_result_fun_gs(MemRef, qos_summary) ->
 
 validate_result_fun_gs(MemRef, qos_parameters) ->
     fun(_, {ok, Result}) ->
-        check_received_qos_parameters(MemRef, maps:get(<<"qosParameters">>, Result)),
-        ok
+        check_received_qos_parameters(MemRef, maps:get(<<"qosParameters">>, Result))
     end.
 
 
@@ -541,7 +539,8 @@ check_received_qos_parameters(MemRef, Response) ->
             <<"stringValues">> := [<<"FR">>, <<"PL">>],
             <<"numberValues">> := []
         }
-    }, Response).
+    }, Response),
+    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
