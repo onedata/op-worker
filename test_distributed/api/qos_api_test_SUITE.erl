@@ -520,28 +520,28 @@ maybe_inject_object_id(Data, Guid) ->
 check_received_qos_parameters(MemRef, Response) ->
     Providers = api_test_memory:get(MemRef, providers),
     % parameters are set in env_desc.json
-    ?assertMatch([
-        #{
-            <<"key">> := <<"storageId">>,
-            <<"stringValues">> := [<<"mntst1">>, <<"mntst2">>]
+    ?assertMatch(#{
+        <<"storageId">> := #{
+            <<"stringValues">> := [<<"mntst1">>, <<"mntst2">>],
+            <<"numberValues">> := []
         },
-        #{
-            <<"key">> := <<"some_number">>,
+        <<"some_number">> := #{
+            <<"stringValues">> := [],
             <<"numberValues">> := [8]
         },
-        #{
-            <<"key">> := <<"providerId">>,
-            <<"stringValues">> := Providers
+        <<"providerId">> := #{
+            <<"stringValues">> := Providers,
+            <<"numberValues">> := []
         },
-        #{
-            <<"key">> := <<"other_number">>,
+        <<"other_number">> := #{
+            <<"stringValues">> := [],
             <<"numberValues">> := [64]
         },
-        #{
-            <<"key">> := <<"geo">>,
-            <<"stringValues">> := [<<"FR">>, <<"PL">>]
+        <<"geo">> := #{
+            <<"stringValues">> := [<<"FR">>, <<"PL">>],
+            <<"numberValues">> := []
         }
-    ], Response).
+    }, Response).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

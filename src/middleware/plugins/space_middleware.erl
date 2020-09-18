@@ -642,13 +642,14 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = available_qos_parameters}}, _) ->
                 Key,
                 fun(Values) -> lists:usort([Value | Values]) end,
                 [Value],
-                maps:get(ParameterKey, InnerAcc, #{})
+                maps:get(ParameterKey, InnerAcc, #{
+                    <<"stringValues">> => [],
+                    <<"numberValues">> => []
+                })
             )}
         end, OuterAcc, QosParameters)
     end, #{}, Storages),
-    {ok, maps:fold(fun(Key, Value, Acc) ->
-        [Value#{<<"key">> => Key} | Acc]
-    end, [], Res)}.
+    {ok, Res}.
 
 
 %%--------------------------------------------------------------------
