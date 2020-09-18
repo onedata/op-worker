@@ -713,10 +713,8 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) -
     case page_file_download:get_file_download_url(SessionId, FileGuid) of
         {ok, URL} ->
             {ok, value, URL};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
+        {error, _} = Error ->
+            Error
     end.
 
 

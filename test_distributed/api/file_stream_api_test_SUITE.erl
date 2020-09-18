@@ -13,7 +13,7 @@
 -module(file_stream_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("file_metadata_api_test_utils.hrl").
+-include("file_api_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -33,7 +33,7 @@ all() -> [
 ].
 
 
--define(DEFAULT_READ_BLOCK_SIZE, 10485760).  % 10 MB.
+-define(DEFAULT_READ_BLOCK_SIZE, 1024).
 
 -define(ATTEMPTS, 30).
 
@@ -48,29 +48,27 @@ gui_download_file_test(Config) ->
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
     Providers = [P2Node, P1Node],
 
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
 
     DirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, DirGuid} = api_test_utils:create_file(<<"dir">>, P1Node, UserSessIdP1, DirPath, 8#707),
-    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, DirGuid),
+    {ok, DirGuid} = api_test_utils:create_file(<<"dir">>, P1Node, UserSessIdP1, DirPath, 8#704),
+    {ok, DirShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, DirGuid}, <<"share">>),
+    DirShareGuid = file_id:guid_to_share_guid(DirGuid, DirShareId),
+    ?assertMatch(
+        {ok, #file_attr{shares = [DirShareId]}},
+        api_test_utils:get_file_attrs(P2Node, DirGuid),
+        ?ATTEMPTS
+    ),
 
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#707),
-    {ok, FileShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
-    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, FileShareId),
-    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
-
-    FileSize = 20 * 1024 * 1024,  % 20 MB
+    FileSize = 4 * 1024,
     Content = crypto:strong_rand_bytes(FileSize),
 
-    SetupFun = fun() ->
-        % Overwrite file content to invalidate block on other providers
-        api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
-        assert_distribution(P2Node, FileGuid, [{P1Node, FileSize}])
-    end,
-    ValidateCallResultFun = build_get_attrs_validate_gs_call_fun(P1Node, FileGuid, Content),
+    MemRef = api_test_memory:init(),
+
+    SetupFun = build_download_file_setup_fun(MemRef, Content, Config),
+    ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef, Content, Config),
+    VerifyFun = build_download_file_verify_fun(MemRef, Content, Config),
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #scenario_spec{
@@ -87,22 +85,28 @@ gui_download_file_test(Config) ->
                 forbidden_in_space = [user4]
             },
             setup_fun = SetupFun,
-            prepare_args_fun = build_get_download_url_prepare_gs_args_fun(FileGuid, private),
+            prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, normal_mode, private),
             validate_result_fun = ValidateCallResultFun,
+            verify_fun = VerifyFun,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                FileGuid, undefined, undefined
+                DirGuid, undefined, #data_spec{
+                    bad_values = [{bad_id, DirGuid, ?ERROR_POSIX(?EISDIR)}]
+                }
             )
         },
         #scenario_spec{
             name = <<"Download shared file using gui endpoint and gs public api">>,
             type = gs,
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SHARES,
+            client_spec = #client_spec{correct = [user2]},
             setup_fun = SetupFun,
-            prepare_args_fun = build_get_download_url_prepare_gs_args_fun(ShareFileGuid, public),
+            prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, public),
             validate_result_fun = ValidateCallResultFun,
+            verify_fun = VerifyFun,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                FileGuid, FileShareId, undefined
+                DirGuid, DirShareId, #data_spec{
+                    bad_values = [{bad_id, DirShareGuid, ?ERROR_POSIX(?EISDIR)}]
+                }
             )
         },
         #scenario_spec{
@@ -110,7 +114,8 @@ gui_download_file_test(Config) ->
             type = gs_with_shared_guid_and_aspect_private,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
-            prepare_args_fun = build_get_download_url_prepare_gs_args_fun(ShareFileGuid, private),
+            setup_fun = SetupFun,
+            prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, private),
             validate_result_fun = fun(_TestCaseCtx, Result) ->
                 ?assertEqual(?ERROR_UNAUTHORIZED, Result)
             end
@@ -119,10 +124,22 @@ gui_download_file_test(Config) ->
 
 
 %% @private
--spec build_get_download_url_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
+-spec build_get_download_url_prepare_gs_args_fun(
+    api_test_memory:mem_ref(),
+    TestMode :: normal_mode | share_mode,
+    gri:scope()
+) ->
     onenv_api_test_runner:prepare_args_fun().
-build_get_download_url_prepare_gs_args_fun(FileGuid, Scope) ->
+build_get_download_url_prepare_gs_args_fun(MemRef, TestMode, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
+        BareGuid = api_test_memory:get(MemRef, file_guid),
+        FileGuid = case TestMode of
+            normal_mode ->
+                BareGuid;
+            share_mode ->
+                ShareId = api_test_memory:get(MemRef, share_id),
+                file_id:guid_to_share_guid(BareGuid, ShareId)
+        end,
         {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
@@ -134,28 +151,35 @@ build_get_download_url_prepare_gs_args_fun(FileGuid, Scope) ->
 
 
 %% @private
-build_get_attrs_validate_gs_call_fun(FileCreationNode, FileGuid, ExpContent) ->
+-spec build_get_download_url_validate_gs_call_fun(
+    api_test_memory:mem_ref(),
+    FileContent :: binary(),
+    onenv_api_test_runner:ct_config()
+) ->
+    onenv_api_test_runner:setup_fun().
+build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, Config) ->
     FileSize = size(ExpContent),
     FirstBlockFetchedSize = min(FileSize, ?DEFAULT_READ_BLOCK_SIZE),
 
-    fun(#api_test_ctx{node = TargetNode}, Result) ->
-        % Getting file download url should cause first file block to be synced on target provider.
-        ExpDist = case FileCreationNode == TargetNode of
-            true -> [{FileCreationNode, FileSize}];
-            false -> [{FileCreationNode, FileSize}, {TargetNode, FirstBlockFetchedSize}]
-        end,
-        assert_distribution(TargetNode, FileGuid, ExpDist),
+    [FileCreationNode] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
 
-        % Downloading file using received url should succeed (and fully sync file content)
-        % without any auth with the first use.
+    fun(#api_test_ctx{node = DownloadNode}, Result) ->
+        FileGuid = api_test_memory:get(MemRef, file_guid),
+
+        % Getting file download url should cause first file block to be synced on target provider.
+        ExpDist = case FileCreationNode == DownloadNode of
+            true -> [{FileCreationNode, FileSize}];
+            false -> [{FileCreationNode, FileSize}, {DownloadNode, FirstBlockFetchedSize}]
+        end,
+        assert_distribution([FileCreationNode, P2Node], FileGuid, ExpDist),
+
+        % Downloading file using received url should succeed without any auth with the first use.
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
-        ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(TargetNode, FileDownloadUrl)),
-        assert_distribution(
-            TargetNode, FileGuid, lists:usort([{FileCreationNode, FileSize}, {TargetNode, FileSize}])
-        ),
+        ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
 
         % But second try should fail as file download url is only one time use thing
-        ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file_with_gui_endpoint(TargetNode, FileDownloadUrl))
+        ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl))
     end.
 
 
@@ -182,8 +206,75 @@ download_file_with_gui_endpoint(Node, FileDownloadUrl) ->
 
 
 %% @private
--spec assert_distribution(node(), file_id:file_guid(), [{node(), non_neg_integer()}]) -> ok.
-assert_distribution(Node, FileGuid, ExpSizePerProvider) ->
+-spec build_download_file_setup_fun(
+    api_test_memory:mem_ref(),
+    FileContent :: binary(),
+    onenv_api_test_runner:ct_config()
+) ->
+    onenv_api_test_runner:setup_fun().
+build_download_file_setup_fun(MemRef, Content, Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P1Node, P2Node],
+
+    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+
+    FileSize = size(Content),
+
+    fun() ->
+        FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+        {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
+        {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
+        api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
+
+        ?assertMatch(
+            {ok, #file_attr{size = FileSize, shares = [ShareId]}},
+            api_test_utils:get_file_attrs(P2Node, FileGuid),
+            ?ATTEMPTS
+        ),
+        assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]),
+
+        api_test_memory:set(MemRef, file_guid, FileGuid),
+        api_test_memory:set(MemRef, share_id, ShareId)
+    end.
+
+
+%% @private
+-spec build_download_file_verify_fun(
+    api_test_memory:mem_ref(),
+    FileContent :: binary(),
+    onenv_api_test_runner:ct_config()
+) ->
+    onenv_api_test_runner:verify_fun().
+build_download_file_verify_fun(MemRef, Content, Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P1Node, P2Node],
+
+    FileSize = size(Content),
+
+    fun
+        (expected_failure, _) ->
+            FileGuid = api_test_memory:get(MemRef, file_guid),
+            assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
+        (expected_success, #api_test_ctx{node = DownloadNode}) ->
+            FileGuid = api_test_memory:get(MemRef, file_guid),
+            case P1Node == DownloadNode of
+                true ->
+                    assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
+                false ->
+                    assert_distribution(Providers, FileGuid, [
+                        {P1Node, FileSize}, {DownloadNode, FileSize}
+                    ])
+            end
+    end.
+
+
+%% @private
+-spec assert_distribution([node()], file_id:file_guid(), [{node(), non_neg_integer()}]) ->
+    true | no_return().
+assert_distribution(Nodes, FileGuid, ExpSizePerProvider) ->
     ExpDistribution = lists:sort(lists:map(fun({Node, ExpSize}) ->
         #{
             <<"blocks">> => [[0, ExpSize]],
@@ -192,13 +283,16 @@ assert_distribution(Node, FileGuid, ExpSizePerProvider) ->
         }
     end, ExpSizePerProvider)),
 
-    FetchDistributionFun = fun(Guid) ->
+    FetchDistributionFun = fun(Node, Guid) ->
         {ok, Distribution} = lfm_proxy:get_file_distribution(Node, ?ROOT_SESS_ID, {guid, Guid}),
         lists:sort(lists:filter(fun(#{<<"totalBlocksSize">> := Size}) -> Size /= 0 end, Distribution))
     end,
 
-    ?assertEqual(ExpDistribution, FetchDistributionFun(FileGuid), ?ATTEMPTS),
-    ok.
+    lists:foreach(fun(Node) ->
+        ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), ?ATTEMPTS)
+    end, Nodes),
+
+    true.
 
 
 %%%===================================================================
@@ -223,7 +317,7 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({minutes, 20}),
     lfm_proxy:init(Config).
 
 
