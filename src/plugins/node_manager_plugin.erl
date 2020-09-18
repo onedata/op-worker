@@ -18,6 +18,7 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% node_manager_plugin_behaviour callbacks
 -export([cluster_generations/0]).
@@ -42,9 +43,9 @@
 % Oldest upgradable generation is the lowest one that can be directly upgraded to newest.
 % Human readable version is included to for logging purposes.
 -define(CLUSTER_GENERATIONS, [
-    {1, <<"19.02.*">>},
-    {2, <<"20.02.0-beta3">>},
-    {3, <<"20.02.1">>},
+    {1, ?LINE_19_02},
+    {2, ?LINE_20_02(<<"0-beta3">>)},
+    {3, ?LINE_20_02(<<"1">>)},
     {4, oneprovider:get_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 1).
