@@ -70,7 +70,7 @@ cluster_generations() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oldest_upgradable_cluster_generation() ->
-    {node_manager:cluster_generation(), HumanReadableVersion :: binary()}.
+    {node_manager:cluster_generation(), onedata:release_version()}.
 oldest_upgradable_cluster_generation() ->
     ?OLDEST_UPGRADABLE_CLUSTER_GENERATION.
 
