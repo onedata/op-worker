@@ -139,13 +139,14 @@ get_info(SpaceId) ->
                     storage_import_monitoring:get_info(SIMDoc);
                 false ->
                     {ok, AutoConfig} = storage_import_config:get_auto_config(SpaceId),
-                    case auto_storage_import_config:is_continuous_scan_enabled(AutoConfig) of
-                        true ->
+                    case {auto_storage_import_config:is_continuous_scan_enabled(AutoConfig),
+                        storage_import_monitoring:is_initial_scan_finished(SIMDoc)} of
+                        {true, true} ->
                             ScanInterval = auto_storage_import_config:get_scan_interval(AutoConfig),
                             {ok, Info} = storage_import_monitoring:get_info(SIMDoc),
                             {ok, ScanStopTime} = storage_import_monitoring:get_scan_stop_time(SIMDoc),
                             {ok, Info#{nextScan => (ScanStopTime div 1000) + ScanInterval}};
-                        false ->
+                        _ ->
                             storage_import_monitoring:get_info(SIMDoc)
                     end
             end;
