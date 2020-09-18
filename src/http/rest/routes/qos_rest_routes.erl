@@ -81,9 +81,9 @@ routes() -> [
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_qos, 
-            id = undefined, 
-            aspect = {available_parameters, ?BINDING(sid)}, 
+            type = op_space, 
+            id = ?BINDING(sid), 
+            aspect = available_qos_parameters, 
             scope = private
         }
     }}

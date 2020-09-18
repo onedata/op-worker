@@ -47,5 +47,7 @@ get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
         <<"spaceId">> => SpaceId,
         <<"fileId">> => fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)
     });
+get_response(#gri{aspect = available_qos_parameters}, QosParameters) ->
+    ?OK_REPLY(QosParameters);
 get_response(_, SpaceData) ->
     ?OK_REPLY(SpaceData).

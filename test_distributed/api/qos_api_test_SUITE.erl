@@ -350,7 +350,7 @@ prepare_args_fun_gs(_MemRef, qos_parameters) ->
     fun(_) ->
         #gs_args{
             operation = get,
-            gri = #gri{type = op_qos, aspect = {available_parameters, ?SPACE_2}, scope = private}
+            gri = #gri{type = op_space, id = ?SPACE_2, aspect = available_qos_parameters, scope = private}
         }
     end;
 
