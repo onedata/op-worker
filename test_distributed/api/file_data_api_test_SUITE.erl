@@ -12,17 +12,11 @@
 -module(file_data_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_test_runner.hrl").
--include("global_definitions.hrl").
--include("file_metadata_api_test_utils.hrl").
+-include("file_api_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
--include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
     all/0,
