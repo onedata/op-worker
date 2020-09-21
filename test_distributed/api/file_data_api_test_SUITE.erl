@@ -851,22 +851,27 @@ get_dir_distribution_test(Config) ->
 
 %% @private
 wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
-    ?assertMatch(
-        {ok, ExpDistribution},
-        lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}),
-        ?ATTEMPTS
-    ).
+    SortedExpDistribution = lists:usort(ExpDistribution),
+
+    GetDistFun = fun() ->
+        case lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}) of
+            {ok, Dist} -> {ok, lists:usort(Dist)};
+            {error, _} = Error -> Error
+        end
+    end,
+    ?assertMatch({ok, SortedExpDistribution}, GetDistFun(), ?ATTEMPTS).
 
 
 %% @private
 get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistribution, Config) ->
+    SortedExpDistribution = lists:usort(ExpDistribution),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ValidateRestSuccessfulCallFun =  fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ?assertEqual({?HTTP_200_OK, ExpDistribution}, {RespCode, RespBody})
+        ?assertEqual({?HTTP_200_OK, SortedExpDistribution}, {RespCode, lists:usort(RespBody)})
     end,
 
-    ExpGsDistribution = file_gui_gs_translator:translate_distribution(ExpDistribution),
+    ExpGsDistribution = file_gui_gs_translator:translate_distribution(SortedExpDistribution),
 
     CreateValidateGsSuccessfulCallFun = fun(Type) ->
         ExpGsResponse = ExpGsDistribution#{
