@@ -98,7 +98,7 @@ gui_download_file_test(Config) ->
             name = <<"Download shared file using gui endpoint and gs public api">>,
             type = gs,
             target_nodes = Providers,
-            client_spec = #client_spec{correct = [user2]},
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
             setup_fun = SetupFun,
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, public),
             validate_result_fun = ValidateCallResultFun,
@@ -306,7 +306,10 @@ init_per_suite(Config) ->
     api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
         {op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {default_download_read_block_size, ?DEFAULT_READ_BLOCK_SIZE}
+            {default_download_read_block_size, ?DEFAULT_READ_BLOCK_SIZE},
+            % Ensure replica_synchronizer will not fetch more data than requested
+            {minimal_sync_request, ?DEFAULT_READ_BLOCK_SIZE},
+            {synchronizer_prefetch, false}
         ]}
     ]}).
 
