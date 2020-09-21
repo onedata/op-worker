@@ -18,10 +18,11 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% node_manager_plugin_behaviour callbacks
--export([installed_cluster_generation/0]).
--export([oldest_known_cluster_generation/0]).
+-export([cluster_generations/0]).
+-export([oldest_upgradable_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([before_init/0]).
 -export([before_cluster_upgrade/0]).
@@ -36,12 +37,19 @@
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
 
+% List of all known cluster generations.
 % When cluster is not in newest generation it will be upgraded during initialization.
 % This can be used to e.g. move models between services.
-% Oldest known generation is the lowest one that can be directly upgraded to newest.
+% Oldest upgradable generation is the lowest one that can be directly upgraded to newest.
 % Human readable version is included to for logging purposes.
--define(INSTALLED_CLUSTER_GENERATION, 4).
--define(OLDEST_KNOWN_CLUSTER_GENERATION, {1, <<"19.02.*">>}).
+-define(CLUSTER_GENERATIONS, [
+    {1, ?LINE_19_02},
+    {2, ?LINE_20_02(<<"0-beta3">>)},
+    {3, ?LINE_20_02(<<"1">>)},
+    {4, oneprovider:get_version()}
+]).
+-define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 1).
+
 
 %%%===================================================================
 %%% node_manager_plugin_default callbacks
@@ -49,22 +57,23 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:installed_cluster_generation/0}.
+%% Overrides {@link node_manager_plugin_default:cluster_generations/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec installed_cluster_generation() -> node_manager:cluster_generation().
-installed_cluster_generation() ->
-    ?INSTALLED_CLUSTER_GENERATION.
+-spec cluster_generations() ->
+    [{node_manager:cluster_generation(), onedata:release_version()}].
+cluster_generations() ->
+    ?CLUSTER_GENERATIONS.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:oldest_known_cluster_generation/0}.
+%% Overrides {@link node_manager_plugin_default:oldest_upgradable_cluster_generation/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec oldest_known_cluster_generation() ->
-    {node_manager:cluster_generation(), HumanReadableVersion :: binary()}.
-oldest_known_cluster_generation() ->
-    ?OLDEST_KNOWN_CLUSTER_GENERATION.
+-spec oldest_upgradable_cluster_generation() ->
+    node_manager:cluster_generation().
+oldest_upgradable_cluster_generation() ->
+    ?OLDEST_UPGRADABLE_CLUSTER_GENERATION.
 
 %%--------------------------------------------------------------------
 %% @doc
