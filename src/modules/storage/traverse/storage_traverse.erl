@@ -87,6 +87,7 @@
 %%%===================================================================
 %%% Definitions of optional storage_traverse behaviour callbacks
 %%%===================================================================
+
 -callback reset_info(master_job()) -> info().
 
 -callback get_next_batch_job_prehook(info()) -> next_batch_job_prehook().
@@ -94,6 +95,11 @@
 -callback get_children_master_job_prehook(info()) -> children_master_job_prehook().
 
 -callback get_fold_children_fun(info()) -> fold_children_result().
+
+-callback on_cancel(MasterJobsDelegated :: non_neg_integer(), SlaveJobsDelegated :: non_neg_integer(),
+    storage_file_ctx:ctx()) -> ok.
+
+-optional_callbacks([on_cancel/3]).
 
 %%%===================================================================
 %%% API functions
@@ -187,7 +193,7 @@ do_master_job(MasterJob = #storage_traverse_master{
         {ok, ChildrenBatch, NextBatchMasterJob} ->
             generate_master_and_slave_jobs(MasterJob, NextBatchMasterJob, ChildrenBatch, Args);
         Error = {error, ?ENOENT} ->
-            ?warning("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
+            ?debug("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
             Error;
         Error = {error, _} ->
             ?error("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
@@ -226,6 +232,7 @@ reset_info(MasterJob = #storage_traverse_master{callback_module = CallbackModule
     {ok, traverse:master_job_map()} |
     {ok, traverse:master_job_map(), fold_children_result()}.
 generate_master_and_slave_jobs(#storage_traverse_master{
+    callback_module = CallbackModule,
     storage_file_ctx = StorageFileCtx,
     max_depth = MaxDepth,
     depth = MaxDepth,
@@ -236,11 +243,14 @@ generate_master_and_slave_jobs(#storage_traverse_master{
     info = Info
 }, _NextBatchMaterJob, _ChildrenIds, _Args) ->
     MasterJobsMap = #{sequential_slave_jobs => [get_slave_job(StorageFileCtx, Info)]},
+    MasterJobsMap2 = add_cancel_callback(CallbackModule, MasterJobsMap, StorageFileCtx),
     case FoldChildrenFun =:= undefined orelse FoldChildrenEnabled =:= false of
-        true -> {ok, MasterJobsMap};
-        false -> {ok, MasterJobsMap, FoldInit}
+        true -> {ok, MasterJobsMap2};
+        false -> {ok, MasterJobsMap2, FoldInit}
     end;
 generate_master_and_slave_jobs(#storage_traverse_master{
+    callback_module = CallbackModule,
+    storage_file_ctx = StorageFileCtx,
     depth = MaxDepth,
     max_depth = MaxDepth,
     execute_slave_on_dir = false,
@@ -248,11 +258,13 @@ generate_master_and_slave_jobs(#storage_traverse_master{
     fold_enabled = FoldChildrenEnabled,
     fold_init = FoldInit
 }, _NextBatchMaterJob, _ChildrenIds, _Args) ->
+    MasterJobsMap = add_cancel_callback(CallbackModule, #{}, StorageFileCtx),
     case FoldChildrenFun =:= undefined orelse FoldChildrenEnabled =:= false of
-        true -> {ok, #{}};
-        false -> {ok, #{}, FoldInit}
+        true -> {ok, MasterJobsMap};
+        false -> {ok, MasterJobsMap, FoldInit}
     end;
 generate_master_and_slave_jobs(CurrentMasterJob = #storage_traverse_master{
+    callback_module = CallbackModule,
     storage_file_ctx = StorageFileCtx,
     execute_slave_on_dir = OnDir,
     async_children_master_jobs = AsyncChildrenMasterJobs,
@@ -272,14 +284,15 @@ generate_master_and_slave_jobs(CurrentMasterJob = #storage_traverse_master{
         true -> async_master_jobs;
         false -> master_jobs
     end,
-    MasterJobsMap =  #{
+    MasterJobsMap =  add_cancel_callback(CallbackModule, #{
         MasterJobsKey => MasterJobs ++ MasterJobs2,
         sequential_slave_jobs => SeqSlaveJobs,
         slave_jobs => SlaveJobs
-    },
+    }, Info),
+    MasterJobsMap2 = add_cancel_callback(CallbackModule, MasterJobsMap, StorageFileCtx),
     case FoldChildrenFun =:= undefined orelse FoldChildrenEnabled =:= false of
-        true -> {ok, MasterJobsMap};
-        false -> {ok, MasterJobsMap, ComputeResult}
+        true -> {ok, MasterJobsMap2};
+        false -> {ok, MasterJobsMap2, ComputeResult}
     end.
 
 -spec maybe_schedule_next_batch_job(master_job(), master_job() | undefined, traverse:master_job_extended_args()) ->
@@ -287,15 +300,22 @@ generate_master_and_slave_jobs(CurrentMasterJob = #storage_traverse_master{
 maybe_schedule_next_batch_job(_CurrentMasterJob, undefined, _Args) ->
     [];
 maybe_schedule_next_batch_job(#storage_traverse_master{
+    callback_module = CallbackModule,
     async_next_batch_job = AsyncNextBatchJob,
-    next_batch_job_prehook = NextBatchJobPrehook
+    next_batch_job_prehook = NextBatchJobPrehook,
+    info = Info
 }, NextBatchMasterJob = #storage_traverse_master{}, #{master_job_starter_callback := MasterJobStarterCallback}) ->
     % it is not the last batch
     NextBatchJobPrehook(NextBatchMasterJob),
     case AsyncNextBatchJob of
         true ->
             % schedule job for next batch in this directory asynchronously
-            MasterJobStarterCallback([NextBatchMasterJob]),
+            MasterJobStarterCallback(#{
+                jobs => [NextBatchMasterJob],
+                cancel_callback => fun(_CancelDescription) ->
+                    call_on_cancel_callback(CallbackModule, 1, 0, Info)
+                end
+            }),
             [];
         false ->
             % job for next batch in this directory will be scheduled with children master jobs
@@ -369,3 +389,26 @@ get_slave_job(StorageFileCtx, Info) ->
         storage_file_ctx = StorageFileCtx,
         info = Info
     }.
+
+
+-spec add_cancel_callback(callback_module(), traverse:master_job_map(), storage_file_ctx:ctx()) ->
+    traverse:master_job_map().
+add_cancel_callback(CallbackModule, MasterJobsMap, StorageFileCtx) ->
+    MasterJobsMap#{
+        cancel_callback => fun(_Args, Description) ->
+            MasterJobsDelegated = -1 * ((maps:get(master_jobs_delegated, Description)) + 1),
+            SlaveJobsDelegated = -1 * maps:get(slave_jobs_delegated, Description),
+            call_on_cancel_callback(CallbackModule, MasterJobsDelegated, SlaveJobsDelegated, StorageFileCtx)
+        end
+    }.
+
+
+-spec call_on_cancel_callback(callback_module(), non_neg_integer(), non_neg_integer(), info()) ->
+    traverse:master_job_map().
+call_on_cancel_callback(CallbackModule, MasterJobsDelegated, SlaveJobsDelegated, Info) ->
+    case erlang:function_exported(CallbackModule, on_cancel, 3) of
+        true ->
+            CallbackModule:on_cancel(MasterJobsDelegated, SlaveJobsDelegated, Info);
+        false ->
+            ok
+    end.

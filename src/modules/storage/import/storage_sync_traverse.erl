@@ -72,7 +72,8 @@
     task_started/2, task_finished/2, task_canceled/2]).
 
 %% storage_traverse callbacks
--export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1, get_fold_children_fun/1]).
+-export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1, get_fold_children_fun/1,
+    on_cancel/3]).
 
 %% exported for tests
 -export([has_mtime_changed/2, run/4, run_deletion_scan/4]).
@@ -190,6 +191,7 @@ get_job(DocOrID) ->
 -spec task_started(traverse:id(), traverse:pool()) -> ok.
 task_started(TaskId, _PoolName) ->
     {SpaceId, _StorageId, ScanNum} = decode_task_id(TaskId),
+    storage_import_monitoring:mark_started_scan(SpaceId),
     storage_import_logger:log_scan_started(SpaceId, ScanNum, TaskId),
     storage_import_worker:notify_started_scan(SpaceId).
 
@@ -274,6 +276,12 @@ get_fold_children_fun(TraverseInfo) ->
         maybe_add_deletion_detection_link(StorageFileCtx, Info),
         {[Hash | HashAcc], StorageFileCtx2}
     end.
+
+
+-spec on_cancel(non_neg_integer(), non_neg_integer(), storage_file_ctx:ctx()) -> ok.
+on_cancel(MasterJobsDelegated, SlaveJobsDelegated, StorageFileCtx) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    storage_import_monitoring:mark_processed_files(SpaceId, MasterJobsDelegated + SlaveJobsDelegated).
 
 %%%===================================================================
 %%% Functions exported for tests
@@ -400,6 +408,8 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
                         end
                     end),
                     {ok, MasterJobMap#{finish_callback => FinishCallback}};
+                Error = {error, ?ENOENT} ->
+                    {ok, #{}};
                 Error = {error, _} ->
                     Error
             end;
@@ -470,11 +480,19 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
             {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
             FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, _SlavesDescription) ->
                 storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
-                MasterJobCallback([storage_import_deletion:get_master_job(TraverseJob#storage_traverse_master{
-                    info = Info#{
-                        file_ctx => FileCtx,
-                        parent_ctx => ParentCtx2
-                    }})])
+                MasterJobCallback(#{
+                    jobs => [
+                        storage_import_deletion:get_master_job(
+                            TraverseJob#storage_traverse_master{
+                                info = Info#{
+                                    file_ctx => FileCtx,
+                                    parent_ctx => ParentCtx2
+                        }})
+                    ],
+                    cancel_callback => fun(_CancelDescription) ->
+                        storage_import_monitoring:mark_processed_file(SpaceId)
+                    end
+                })
             end,
             {ok, #{finish_callback => FinishCallback}};
         Error = {error, _} ->
@@ -488,6 +506,8 @@ traverse_only_directories(TraverseJob, Args) ->
     case storage_traverse:do_master_job(TraverseJob, Args) of
         {ok, MasterJobMap} ->
             schedule_jobs_for_directories_only(TraverseJob, MasterJobMap, false);
+        Error = {error, ?ENOENT} ->
+            {ok, #{}};
         Error = {error, _} ->
             Error
     end.
@@ -509,6 +529,8 @@ traverse(TraverseJob = #storage_traverse_master{
                     % Hash hasn't changed, therefore we can schedule jobs only for directories
                     schedule_jobs_for_directories_only(TraverseJob, MasterJobMap, DetectDeletions)
             end;
+        Error = {error, ?ENOENT} ->
+            {ok, #{}};
         Error = {error, _} ->
             Error
     end.
@@ -563,7 +585,12 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
                     true ->
                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId),
                         storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
-                        MasterJobCallback([storage_import_deletion:get_master_job(TraverseJob)]);
+                        MasterJobCallback(#{
+                            jobs => [storage_import_deletion:get_master_job(TraverseJob)],
+                            cancel_callback => fun(_CancelDescription) ->
+                                storage_import_monitoring:mark_processed_file(SpaceId)
+                            end
+                        });
                     false ->
                         ok
                 end;
@@ -630,7 +657,12 @@ schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
                     true ->
                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId),
                         storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
-                        MasterJobCallback([storage_import_deletion:get_master_job(TraverseJob)]);
+                        MasterJobCallback(#{
+                            jobs => [storage_import_deletion:get_master_job(TraverseJob)],
+                            cancel_callback => fun(_CancelDescription) ->
+                                storage_import_monitoring:mark_processed_file(SpaceId)
+                            end
+                        });
                     false ->
                         ok
                 end;
