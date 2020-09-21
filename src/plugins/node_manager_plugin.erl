@@ -60,7 +60,8 @@
 %% Overrides {@link node_manager_plugin_default:cluster_generations/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec cluster_generations() -> node_manager:cluster_generation().
+-spec cluster_generations() ->
+    [{node_manager:cluster_generation(), onedata:release_version()}].
 cluster_generations() ->
     ?CLUSTER_GENERATIONS.
 
@@ -70,7 +71,7 @@ cluster_generations() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oldest_upgradable_cluster_generation() ->
-    {node_manager:cluster_generation(), onedata:release_version()}.
+    node_manager:cluster_generation().
 oldest_upgradable_cluster_generation() ->
     ?OLDEST_UPGRADABLE_CLUSTER_GENERATION.
 
