@@ -30,7 +30,7 @@
     get_qos_test/1,
     delete_qos_test/1,
     get_qos_summary_test/1,
-    get_qos_parameters_test/1
+    get_available_qos_parameters_test/1
 ]).
 
 
@@ -39,7 +39,7 @@ all() -> [
     get_qos_test,
     delete_qos_test,
     get_qos_summary_test,
-    get_qos_parameters_test
+    get_available_qos_parameters_test
 ].
 
 create_qos_test(Config) ->
@@ -229,7 +229,7 @@ get_qos_summary_test(Config) ->
     ok.
 
 
-get_qos_parameters_test(Config) ->
+get_available_qos_parameters_test(Config) ->
     [P2, P1] = Workers = ?config(op_worker_nodes, Config),
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, providers, lists:usort(lists:map(fun(Worker) -> ?GET_DOMAIN_BIN(Worker) end, Workers))),
@@ -242,14 +242,14 @@ get_qos_parameters_test(Config) ->
                 #scenario_template{
                     name = <<"Get QoS parameters using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_args_fun_rest(MemRef, qos_parameters),
-                    validate_result_fun = validate_result_fun_rest(MemRef, qos_parameters)
+                    prepare_args_fun = prepare_args_fun_rest(MemRef, available_qos_parameters),
+                    validate_result_fun = validate_result_fun_rest(MemRef, available_qos_parameters)
                 },
                 #scenario_template{
                     name = <<"Get QoS parameters using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_args_fun_gs(MemRef, qos_parameters),
-                    validate_result_fun = validate_result_fun_gs(MemRef, qos_parameters)
+                    prepare_args_fun = prepare_args_fun_gs(MemRef, available_qos_parameters),
+                    validate_result_fun = validate_result_fun_gs(MemRef, available_qos_parameters)
                 }
             ]
         }
@@ -306,7 +306,7 @@ prepare_args_fun_rest(MemRef, qos_summary) ->
             path = <<"data/", Id/binary, "/qos_summary">>
         } 
     end;
-prepare_args_fun_rest(_MemRef, qos_parameters) ->
+prepare_args_fun_rest(_MemRef, available_qos_parameters) ->
     fun(_) ->
         #rest_args{
             method = get,
@@ -346,7 +346,7 @@ prepare_args_fun_gs(MemRef, qos_summary) ->
             gri = #gri{type = op_file, id = Id, aspect = file_qos_summary, scope = private}
         } 
     end;
-prepare_args_fun_gs(_MemRef, qos_parameters) ->
+prepare_args_fun_gs(_MemRef, available_qos_parameters) ->
     fun(_) ->
         #gs_args{
             operation = get,
@@ -409,11 +409,9 @@ validate_result_fun_rest(MemRef, qos_summary) ->
         ok
     end;
 
-validate_result_fun_rest(MemRef, qos_parameters) ->
-    fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-    
-        ?assertEqual(?HTTP_200_OK, RespCode),
-        check_received_qos_parameters(MemRef, RespBody)
+validate_result_fun_rest(MemRef, available_qos_parameters) ->
+    fun(_, {ok, ?HTTP_200_OK, _RespHeaders, RespBody}) ->
+        verify_available_qos_parameters(MemRef, RespBody)
     end.
 
 
@@ -451,9 +449,9 @@ validate_result_fun_gs(MemRef, qos_summary) ->
         ok
     end;
 
-validate_result_fun_gs(MemRef, qos_parameters) ->
+validate_result_fun_gs(MemRef, available_qos_parameters) ->
     fun(_, {ok, Result}) ->
-        check_received_qos_parameters(MemRef, maps:get(<<"qosParameters">>, Result))
+        verify_available_qos_parameters(MemRef, maps:get(<<"qosParameters">>, Result))
     end.
 
 
@@ -515,7 +513,7 @@ maybe_inject_object_id(Data, Guid) ->
     end.
 
 
-check_received_qos_parameters(MemRef, Response) ->
+verify_available_qos_parameters(MemRef, Response) ->
     Providers = api_test_memory:get(MemRef, providers),
     % parameters are set in env_desc.json
     ?assertMatch(#{
