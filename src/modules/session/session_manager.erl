@@ -199,6 +199,7 @@ restart_session_if_dead(SessId) ->
             ok
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if session supervisor is alive and if not clears entries in
@@ -227,6 +228,7 @@ restore_session_on_slave_node(SessId, NewSup, NewSupNode) ->
         end
     end).
 
+
 -spec terminate_session(session:id()) -> ok | error().
 terminate_session(SessId) ->
     case session:get(SessId) of
@@ -242,6 +244,7 @@ terminate_session(SessId) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
 
 -spec clean_terminated_session(session:id()) -> ok | error().
 clean_terminated_session(SessId) ->
@@ -331,6 +334,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
     reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia,
         ?SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 0).
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -380,6 +384,9 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
             end
     end,
     case session:update_doc_and_time(SessId, Diff) of
+        {ok, #document{key = SessId, value = ProxySession}} when is_binary(ProxyVia) ->
+            maybe_request_credentials_update(Credentials, ProxySession),
+            {ok, SessId};
         {ok, #document{key = SessId}} ->
             {ok, SessId};
         {error, not_found} = Error ->
@@ -405,6 +412,20 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
             {error, Reason}
     end.
 
+
+%% @private
+-spec maybe_request_credentials_update(auth_manager:token_credentials(), session:record()) -> ok.
+maybe_request_credentials_update(Credentials, #session{credentials = Credentials}) ->
+    ok;
+maybe_request_credentials_update(NewCredentials, #session{watcher = SessionWatcher}) ->
+    incoming_session_watcher:request_credentials_update(
+        SessionWatcher,
+        auth_manager:get_access_token(NewCredentials),
+        auth_manager:get_consumer_token(NewCredentials)
+    ).
+
+
+%% @private
 -spec maybe_retry_session_init(
     SessId,
     SessType :: session:type(),
@@ -431,6 +452,7 @@ maybe_retry_session_init(SessId, SessType, Identity, Credentials, DataConstraint
                 DataConstraints, ProxyVia, ErrorSleep * 2, RetryNum + 1)
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -452,6 +474,7 @@ try_to_clear_dead_connections(#session{supervisor = Sup, connections = Cons, typ
             {error, {supervisor_dead, SessType}}
     end.
 
+
 %% @private
 -spec start_session(session:doc()) -> {ok, session:id()} | error().
 start_session(#document{key = SessId, value = #session{type = SessType}} = Doc) ->
@@ -466,6 +489,7 @@ start_session(#document{key = SessId, value = #session{type = SessType}} = Doc) 
             Error
     end.
 
+
 %% @private
 -spec restart_session(session:id(), session:type()) -> {ok, session:id()} | error().
 restart_session(SessId, SessType) ->
@@ -478,6 +502,7 @@ restart_session(SessId, SessType) ->
             ?error("Session ~p restart error: ~p", [SessId, Error]),
             Error
     end.
+
 
 %% @private
 -spec is_pid_alive(pid()) -> boolean().

@@ -76,15 +76,17 @@ start_link(SessId, SessType) ->
     gen_server2:start_link(?MODULE, [SessId, SessType], []).
 
 
--spec request_credentials_update(session:id(), auth_manager:access_token(),
+-spec request_credentials_update(pid() | session:id(), auth_manager:access_token(),
     auth_manager:consumer_token()) -> ok.
+request_credentials_update(SessionWatcher, AccessToken, ConsumerToken) when is_pid(SessionWatcher) ->
+    gen_server2:cast(
+        SessionWatcher,
+        ?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken)
+    );
 request_credentials_update(SessionId, AccessToken, ConsumerToken) ->
     case session:get(SessionId) of
         {ok, #document{value = #session{watcher = SessionWatcher}}} ->
-            gen_server2:cast(
-                SessionWatcher,
-                ?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken)
-            );
+            request_credentials_update(SessionWatcher, AccessToken, ConsumerToken);
         _ ->
             ok
     end.
