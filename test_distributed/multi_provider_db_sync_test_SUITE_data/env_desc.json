@@ -1,0 +1,300 @@
+{
+    "dirs_config": {
+        "cluster_manager": {
+            "input_dir": "_build/default/rel/cluster_manager",
+            "target_dir": "_build/default/rel/test_cluster"
+        },
+        "op_worker": {
+            "input_dir": "_build/default/rel/op_worker",
+            "target_dir": "_build/default/rel/test_cluster"
+        }
+    },
+    "os_configs": {
+        "cfg1": {
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st"
+                },
+                {
+                    "type": "cephrados",
+                    "name": "cephrados",
+                    "pool": "onedata:8"
+                },
+                {
+                    "type": "nulldevice",
+                    "name": "nulldevice",
+                    "latencyMin": "10",
+                    "latencyMax": "20",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
+                }
+            ],
+            "users": [],
+            "groups": {}
+        },
+        "cfg2": {
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st2"
+                },
+                {
+                    "type": "nulldevice",
+                    "name": "nulldevice",
+                    "latencyMin": "10",
+                    "latencyMax": "20",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
+                }
+            ],
+            "users": [],
+            "groups": {}
+        }
+    },
+    "provider_domains": {
+        "p1": {
+            "db_driver": "couchdb",
+            "os_config": "cfg1",
+            "cluster_manager": {
+                "cm": {
+                    "vm.args": {
+                        "setcookie": "test_cookie1"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 2
+                    }
+                }
+            },
+            "op_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie1"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "oz_domain": "oz",
+                        "graph_sync_reconnect_base_interval": 999999999
+                    }
+                },
+                "worker2": {
+                    "vm.args": {
+                        "setcookie": "test_cookie1"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "oz_domain": "oz",
+                        "graph_sync_reconnect_base_interval": 999999999
+                    }
+                }
+            }
+        },
+        "p2": {
+            "db_driver": "couchdb",
+            "os_config": "cfg2",
+            "cluster_manager": {
+                "cm": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 2
+                    }
+                }
+            },
+            "op_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49162"
+                        ],
+                        "oz_domain": "oz",
+                        "graph_sync_reconnect_base_interval": 999999999
+                    }
+                },
+                "worker2": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49162"
+                        ],
+                        "oz_domain": "oz",
+                        "graph_sync_reconnect_base_interval": 999999999
+                    }
+                }
+            }
+        }
+    },
+    "test_global_setup": {
+        "groups": {
+        },
+        "spaces": {
+            "space1": {
+                "displayed_name": "space1",
+                "users": [
+                    "user1",
+                    "user4"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st"
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2"
+                    }
+                }
+            },
+            "space2": {
+                "displayed_name": "space2",
+                "users": [
+                    "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st"
+                    }
+                }
+            },
+            "space3": {
+                "displayed_name": "space3",
+                "users": [
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p2": {
+                        "storage": "/mnt/st2"
+                    }
+                }
+            },
+            "space4": {
+                "displayed_name": "space4",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st"
+                    }
+                }
+            },
+            "space5": {
+                "displayed_name": "space5",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p2": {
+                        "storage": "/mnt/st2"
+                    }
+                }
+            },
+            "space6": {
+                "displayed_name": "space6",
+                "users": [
+                    "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "nulldevice"
+                    },
+                    "p2": {
+                        "storage": "nulldevice"
+                    }
+                }
+            },
+            "space7": {
+                "displayed_name": "space7",
+                "users": [
+                    "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados"
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2"
+                    }
+                }
+            },
+            "space8": {
+                "displayed_name": "space8",
+                "users": [
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados"
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2"
+                    }
+                }
+            },
+            "space9": {
+                "displayed_name": "space9",
+                "users": [
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados",
+                        "supported_size": 10000
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 50000
+                    }
+                }
+            }
+        }
+    }
+}

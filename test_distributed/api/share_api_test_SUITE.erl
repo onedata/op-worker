@@ -617,14 +617,14 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
         end, ?config(op_worker_nodes, NewConfig2)),
-        application:start(ssl),
+        ssl:start(),
         hackney:start(),
         NewConfig3 = initializer:create_test_users_and_spaces(
             ?TEST_FILE(NewConfig2, "env_desc.json"),
             NewConfig2
         ),
         initializer:mock_auth_manager(NewConfig3, _CheckIfUserIsSupported = true),
-        application:start(ssl),
+        ssl:start(),
         hackney:start(),
         NewConfig3
     end,
@@ -633,7 +633,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     hackney:stop(),
-    application:stop(ssl),
+    ssl:stop(),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:teardown_storage(Config).
 

@@ -288,7 +288,11 @@ share_file_and_sync_file_attrs(CreationNode, SessionId, SyncNodes, FileGuid) ->
         ?ATTEMPTS
     ),
     lists:foreach(fun(Node) ->
-        ?assertMatch({ok, #file_attr{shares = [ShareId]}}, get_file_attrs(Node, FileGuid), ?ATTEMPTS)
+        ?assertMatch(
+            {ok, #file_attr{shares = [ShareId | _]}},
+            get_file_attrs(Node, FileGuid),
+            ?ATTEMPTS
+        )
     end, SyncNodes),
 
     ShareId.

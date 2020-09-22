@@ -16,6 +16,7 @@
 -include("file_metadata_api_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 
 %% API
 -export([
@@ -140,6 +141,7 @@ delete_metadata_test_base(
     {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
         8#707, Config
     ),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
@@ -159,6 +161,18 @@ delete_metadata_test_base(
                     ),
                     validate_result_fun = fun(_TestCtx, Result) ->
                         ?assertEqual({ok, undefined}, Result)
+                    end
+                },
+                #scenario_template{
+                    name = str_utils:format("Delete ~s metadata for ~s using rest endpoint", [
+                        MetadataType, FileType
+                    ]),
+                    type = rest,
+                    prepare_args_fun = build_delete_metadata_prepare_rest_args_fun(
+                        MetadataType, FileObjectId
+                    ),
+                    validate_result_fun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+                        ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody})
                     end
                 }
             ],
@@ -251,6 +265,12 @@ build_verify_fun(no_initial_metadata, FileGuid, MetadataType, _ExpMetadata, Node
 
 
 %% @private
+-spec build_delete_metadata_prepare_gs_args_fun(
+    api_test_utils:metadata_type(),
+    file_id:file_guid(),
+    gri:scope()
+) ->
+    onenv_api_test_runner:prepare_args_fun().
 build_delete_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
         {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
@@ -268,13 +288,39 @@ build_delete_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
     end.
 
 
+%% @private
+-spec build_delete_metadata_prepare_rest_args_fun(
+    api_test_utils:metadata_type(),
+    file_id:file_guid()
+) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_delete_metadata_prepare_rest_args_fun(MetadataType, FileGuid) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {FileId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+
+        #rest_args{
+            method = delete,
+            path = ?NEW_ID_METADATA_REST_PATH(FileId, MetadataType),
+            headers = case MetadataType of
+                <<"xattrs">> -> #{<<"content-type">> => <<"application/json">>};
+                _ -> #{}
+            end,
+            body = case Data1 of
+                undefined -> <<>>;
+                Map when size(Map) == 0 -> <<>>;
+                Map -> json_utils:encode(Map)
+            end
+        }
+    end.
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 
 init_per_suite(Config) ->
-    application:start(ssl),
+    ssl:start(),
     hackney:start(),
     api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
         {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
@@ -283,7 +329,7 @@ init_per_suite(Config) ->
 
 end_per_suite(_Config) ->
     hackney:stop(),
-    application:stop(ssl).
+    ssl:stop().
 
 
 init_per_testcase(_Case, Config) ->
