@@ -408,7 +408,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
                         end
                     end),
                     {ok, MasterJobMap#{finish_callback => FinishCallback}};
-                Error = {error, ?ENOENT} ->
+                {error, ?ENOENT} ->
                     {ok, #{}};
                 Error = {error, _} ->
                     Error
@@ -506,7 +506,7 @@ traverse_only_directories(TraverseJob, Args) ->
     case storage_traverse:do_master_job(TraverseJob, Args) of
         {ok, MasterJobMap} ->
             schedule_jobs_for_directories_only(TraverseJob, MasterJobMap, false);
-        Error = {error, ?ENOENT} ->
+        {error, ?ENOENT} ->
             {ok, #{}};
         Error = {error, _} ->
             Error
@@ -529,7 +529,7 @@ traverse(TraverseJob = #storage_traverse_master{
                     % Hash hasn't changed, therefore we can schedule jobs only for directories
                     schedule_jobs_for_directories_only(TraverseJob, MasterJobMap, DetectDeletions)
             end;
-        Error = {error, ?ENOENT} ->
+        {error, ?ENOENT} ->
             {ok, #{}};
         Error = {error, _} ->
             Error

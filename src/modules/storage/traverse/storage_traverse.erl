@@ -300,10 +300,10 @@ generate_master_and_slave_jobs(CurrentMasterJob = #storage_traverse_master{
 maybe_schedule_next_batch_job(_CurrentMasterJob, undefined, _Args) ->
     [];
 maybe_schedule_next_batch_job(#storage_traverse_master{
+    storage_file_ctx = StorageFileCtx,
     callback_module = CallbackModule,
     async_next_batch_job = AsyncNextBatchJob,
-    next_batch_job_prehook = NextBatchJobPrehook,
-    info = Info
+    next_batch_job_prehook = NextBatchJobPrehook
 }, NextBatchMasterJob = #storage_traverse_master{}, #{master_job_starter_callback := MasterJobStarterCallback}) ->
     % it is not the last batch
     NextBatchJobPrehook(NextBatchMasterJob),
@@ -313,7 +313,7 @@ maybe_schedule_next_batch_job(#storage_traverse_master{
             MasterJobStarterCallback(#{
                 jobs => [NextBatchMasterJob],
                 cancel_callback => fun(_CancelDescription) ->
-                    call_on_cancel_callback(CallbackModule, 1, 0, Info)
+                    call_on_cancel_callback(CallbackModule, 1, 0, StorageFileCtx)
                 end
             }),
             [];
@@ -403,12 +403,12 @@ add_cancel_callback(CallbackModule, MasterJobsMap, StorageFileCtx) ->
     }.
 
 
--spec call_on_cancel_callback(callback_module(), non_neg_integer(), non_neg_integer(), info()) ->
+-spec call_on_cancel_callback(callback_module(), non_neg_integer(), non_neg_integer(), storage_file_ctx:ctx()) ->
     traverse:master_job_map().
-call_on_cancel_callback(CallbackModule, MasterJobsDelegated, SlaveJobsDelegated, Info) ->
+call_on_cancel_callback(CallbackModule, MasterJobsDelegated, SlaveJobsDelegated, StorageFileCtx) ->
     case erlang:function_exported(CallbackModule, on_cancel, 3) of
         true ->
-            CallbackModule:on_cancel(MasterJobsDelegated, SlaveJobsDelegated, Info);
+            CallbackModule:on_cancel(MasterJobsDelegated, SlaveJobsDelegated, StorageFileCtx);
         false ->
             ok
     end.
