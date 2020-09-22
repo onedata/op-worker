@@ -386,8 +386,8 @@ get_operation_supported(acl, private) -> true;
 get_operation_supported(shares, private) -> true;               % gs only
 get_operation_supported(transfers, private) -> true;
 get_operation_supported(file_qos_summary, private) -> true;     % REST/gs
-get_operation_supported(download_url, private) -> true;
-get_operation_supported(download_url, public) -> true;
+get_operation_supported(download_url, private) -> true;         % gs only
+get_operation_supported(download_url, public) -> true;          % gs only
 get_operation_supported(_, _) -> false.
 
 
