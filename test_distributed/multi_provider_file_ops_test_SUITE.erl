@@ -46,7 +46,8 @@
     read_dir_collisions_test/1,
     check_fs_stats_on_different_providers/1,
     remote_driver_internal_call_test/1,
-    list_children_recreated_remotely/1
+    list_children_recreated_remotely/1,
+    nobody_opens_file_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -68,7 +69,8 @@
     read_dir_collisions_test,
     check_fs_stats_on_different_providers,
     remote_driver_internal_call_test,
-    list_children_recreated_remotely
+    list_children_recreated_remotely,
+    nobody_opens_file_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -958,6 +960,24 @@ list_children_recreated_remotely(Config0) ->
     ok = lfm_proxy:close(Worker2, H2),
     {ok, _} = lfm_proxy:get_details(Worker2, SessId(Worker2), {guid, NewG}).
 
+
+nobody_opens_file_test(Config0) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
+    User = <<"user2">>,
+    SessionId = fun(Node) -> ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config) end, [Worker1 | _] = ?config(workers1, Config),
+    [Worker2 | _] = ?config(workers_not1, Config), % Provider A:
+    SpaceName = <<"space7">>,
+    FilePath = <<"/", SpaceName/binary, "/nobody_opens_file_test">>,
+    {ok, FileGuid} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), FilePath, 8#704)),
+    {ok, ShareId} = lfm_proxy:create_share(Worker1, SessionId(Worker1), {guid, FileGuid}, <<"share">>),
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId), % Provider B:
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, ?ROOT_SESS_ID, {guid, ShareFileGuid}), ?ATTEMPTS), % passes
+     ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionId(Worker2), {guid, FileGuid}, read), ?ATTEMPTS), % fails
+     ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionId(Worker2), {guid, ShareFileGuid}, read), ?ATTEMPTS), % fails
+     ?assertMatch({ok, _}, lfm_proxy:open(Worker2, ?GUEST_SESS_ID, {guid, ShareFileGuid}, read), ?ATTEMPTS), % passes
+    ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionId(Worker2), {guid, FileGuid}, read), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:open(Worker2, ?GUEST_SESS_ID, {guid, ShareFileGuid}, read), ?ATTEMPTS), ok.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1098,6 +1118,9 @@ init_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [datastore_doc, datastore_remote_driver], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
+init_per_testcase(nobody_opens_file_test, Config) ->
+    initializer:mock_share_logic(Config),
+    init_per_testcase(?DEFAULT_CASE(nobody_opens_file_test), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1121,5 +1144,8 @@ end_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [datastore_doc, datastore_remote_driver]),
     end_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
+end_per_testcase(nobody_opens_file_test, Config) ->
+    initializer:unmock_share_logic(Config),
+    end_per_testcase(?DEFAULT_CASE(nobody_opens_file_test), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
