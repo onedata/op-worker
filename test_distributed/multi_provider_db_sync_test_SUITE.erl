@@ -12,17 +12,10 @@
 -module(multi_provider_db_sync_test_SUITE).
 -author("Michal Wrzeszcz").
 
--include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/errors.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include_lib("cluster_worker/include/global_definitions.hrl").
 
--include("transfers_test_mechanism.hrl").
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 

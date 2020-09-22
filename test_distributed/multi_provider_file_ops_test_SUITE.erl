@@ -6,39 +6,26 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of db_sync and proxy
+%%% Tests of file operations in multi provider environment.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(multi_provider_file_ops_test_SUITE).
 -author("Michal Wrzeszcz").
 
--include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
+-include("transfers_test_mechanism.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/errors.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include_lib("cluster_worker/include/global_definitions.hrl").
 
--include("transfers_test_mechanism.hrl").
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([replicate_block/3]).
 
 -export([
-    create_on_different_providers_test/1
-    ,
-    proxy_basic_opts_test1/1,
-    proxy_many_ops_test1/1,
-    proxy_distributed_modification_test1/1,
-    proxy_basic_opts_test2/1,
-    proxy_many_ops_test2/1,
-    proxy_distributed_modification_test2/1,
-    proxy_many_ops_test1_base/1,
-    proxy_many_ops_test2_base/1,
+    create_on_different_providers_test/1,
     file_consistency_test/1,
     file_consistency_test_base/1,
     concurrent_create_test/1,
@@ -50,8 +37,7 @@
     echo_and_delete_file_loop_test/1,
     echo_and_delete_file_loop_test_base/1,
     distributed_delete_test/1,
-    remote_driver_test/1
-    ,
+    remote_driver_test/1,
     rtransfer_fetch_test/1,
     rtransfer_cancel_for_session_test/1,
     remove_file_during_transfers_test/1,
@@ -65,12 +51,6 @@
 
 -define(TEST_CASES, [
     create_on_different_providers_test,
-    proxy_basic_opts_test1,
-    proxy_many_ops_test1,
-    proxy_distributed_modification_test1,
-    proxy_basic_opts_test2,
-    proxy_many_ops_test2,
-    proxy_distributed_modification_test2,
     file_consistency_test,
     concurrent_create_test,
     multi_space_test,
@@ -92,8 +72,6 @@
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
-    proxy_many_ops_test1,
-    proxy_many_ops_test2,
     mkdir_and_rmdir_loop_test,
     file_consistency_test,
     create_and_delete_file_loop_test,
@@ -102,8 +80,6 @@
 
 all() ->
     ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
-% TODO dodac suity nowe do testów performance !!!
-
 
 %%%===================================================================
 %%% Test functions
@@ -132,32 +108,6 @@ create_on_different_providers_test(Config) ->
 
 distributed_delete_test(Config) ->
     multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-proxy_basic_opts_test1(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user2">>, {0,4,1,2}, 0).
-
-proxy_many_ops_test1(Config) ->
-    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
-proxy_many_ops_test1_base(Config) ->
-    DirsNum = ?config(dirs_num, Config),
-    FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user2">>, {0,4,1,2}, 0, DirsNum, FilesNum).
-
-proxy_distributed_modification_test1(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user2">>, {0,4,1,2}, 0).
-
-proxy_basic_opts_test2(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
-
-proxy_many_ops_test2(Config) ->
-    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
-proxy_many_ops_test2_base(Config) ->
-    DirsNum = ?config(dirs_num, Config),
-    FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user3">>, {0,4,1,2}, 0, DirsNum, FilesNum).
-
-proxy_distributed_modification_test2(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
 
 remote_driver_internal_call_test(Config0) ->
     User = <<"user1">>,
