@@ -74,8 +74,6 @@
 %%% API functions
 %%%===================================================================
 
-% TODO * rename suit testowych sync, sync_s3, sync_deletion
-
 -spec set_manual_mode(od_space:id()) -> ok | {error, term()}.
 set_manual_mode(SpaceId) ->
     assert_manual_storage_import_supported(SpaceId),
