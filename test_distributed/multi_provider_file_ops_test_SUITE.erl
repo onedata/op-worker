@@ -29,11 +29,8 @@
 -export([replicate_block/3]).
 
 -export([
-    create_on_different_providers_test/1,
-    db_sync_basic_opts_test/1,
-    db_sync_many_ops_test/1,
-    db_sync_many_ops_test_base/1,
-    db_sync_distributed_modification_test/1,
+    create_on_different_providers_test/1
+    ,
     proxy_basic_opts_test1/1,
     proxy_many_ops_test1/1,
     proxy_distributed_modification_test1/1,
@@ -53,10 +50,8 @@
     echo_and_delete_file_loop_test/1,
     echo_and_delete_file_loop_test_base/1,
     distributed_delete_test/1,
-    remote_driver_test/1,
-    db_sync_with_delays_test/1,
-    db_sync_create_after_del_test/1,
-    db_sync_create_after_deletion_links_test/1,
+    remote_driver_test/1
+    ,
     rtransfer_fetch_test/1,
     rtransfer_cancel_for_session_test/1,
     remove_file_during_transfers_test/1,
@@ -65,15 +60,11 @@
     read_dir_collisions_test/1,
     check_fs_stats_on_different_providers/1,
     remote_driver_internal_call_test/1,
-    list_children_recreated_remotely/1,
-    db_sync_basic_opts_with_errors_test/1
+    list_children_recreated_remotely/1
 ]).
 
 -define(TEST_CASES, [
     create_on_different_providers_test,
-    db_sync_basic_opts_test,
-    db_sync_many_ops_test,
-    db_sync_distributed_modification_test,
     proxy_basic_opts_test1,
     proxy_many_ops_test1,
     proxy_distributed_modification_test1,
@@ -88,8 +79,6 @@
     echo_and_delete_file_loop_test,
     distributed_delete_test,
     remote_driver_test,
-    db_sync_create_after_del_test,
-    db_sync_create_after_deletion_links_test,
     rtransfer_fetch_test,
     rtransfer_cancel_for_session_test,
     % TODO VFS-6618 Fix handling of file being removed during transfer and uncomment this test
@@ -99,25 +88,22 @@
     read_dir_collisions_test,
     check_fs_stats_on_different_providers,
     remote_driver_internal_call_test,
-    list_children_recreated_remotely,
-
-    % Warning - this test should be executed last as unmocking in cleanup can interfere next tests
-    db_sync_basic_opts_with_errors_test
+    list_children_recreated_remotely
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
-    db_sync_many_ops_test,
     proxy_many_ops_test1,
     proxy_many_ops_test2,
     mkdir_and_rmdir_loop_test,
     file_consistency_test,
     create_and_delete_file_loop_test,
-    echo_and_delete_file_loop_test,
-    db_sync_with_delays_test
+    echo_and_delete_file_loop_test
 ]).
 
 all() ->
     ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
+% TODO dodac suity nowe do testów performance !!!
+
 
 %%%===================================================================
 %%% Test functions
@@ -144,31 +130,8 @@ all() ->
 create_on_different_providers_test(Config) ->
     multi_provider_file_ops_test_base:create_on_different_providers_test_base(Config).
 
-db_sync_basic_opts_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60, false).
-
-db_sync_create_after_del_test(Config) ->
-    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-db_sync_create_after_deletion_links_test(Config) ->
-    % The same test as db_sync_create_after_del_test but with mock (see init_per_testcase)
-    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
 distributed_delete_test(Config) ->
     multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-db_sync_many_ops_test(Config) ->
-    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
-db_sync_many_ops_test_base(Config) ->
-    DirsNum = ?config(dirs_num, Config),
-    FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 180, DirsNum, FilesNum).
-
-db_sync_distributed_modification_test(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 proxy_basic_opts_test1(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user2">>, {0,4,1,2}, 0).
@@ -547,9 +510,6 @@ remote_driver_test(Config) ->
     }]}, rpc:call(Worker2, datastore_model, get_links, [
         Ctx2, Key, TreeId1, LinkName
     ])).
-
-db_sync_with_delays_test(Config) ->
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 300, 50, 50).
 
 rtransfer_fetch_test(Config) ->
     [Worker1a, Worker1b, Worker2 | _] = ?config(op_worker_nodes, Config),
@@ -1159,46 +1119,11 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).
 
-init_per_testcase(db_sync_create_after_deletion_links_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, fslogic_delete, [passthrough]),
-    test_utils:mock_expect(Workers, fslogic_delete, get_open_file_handling_method,
-        fun(Ctx) -> {deletion_link, Ctx} end),
-    init_per_testcase(?DEFAULT_CASE(db_sync_create_after_deletion_links_test), Config);
+
 init_per_testcase(file_consistency_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, file_meta, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
-init_per_testcase(db_sync_with_delays_test, Config) ->
-    ct:timetrap({hours, 3}),
-    Config2 = init_per_testcase(?DEFAULT_CASE(db_sync_with_delays_test), Config),
-
-    Workers = ?config(op_worker_nodes, Config),
-    {_Workers1, WorkersNot1} = lists:foldl(fun(W, {Acc2, Acc3}) ->
-        case string:str(atom_to_list(W), "p1") of
-            0 -> {Acc2, [W | Acc3]};
-            _ -> {[W | Acc2], Acc3}
-        end
-    end, {[], []}, Workers),
-
-    test_utils:mock_new(WorkersNot1, [
-        datastore_throttling
-    ]),
-    test_utils:mock_expect(WorkersNot1, datastore_throttling, configure_throttling,
-        fun() ->
-            ok
-        end
-    ),
-    test_utils:mock_expect(WorkersNot1, datastore_throttling, throttle_model, fun
-        (file_meta) ->
-            timer:sleep(50),
-            ok;
-        (_) ->
-            ok
-    end
-    ),
-
-    Config2;
 init_per_testcase(rtransfer_fetch_test, Config) ->
     Config2 = init_per_testcase(?DEFAULT_CASE(rtransfer_fetch_test), Config),
 
@@ -1223,28 +1148,15 @@ init_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [datastore_doc, datastore_remote_driver], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
-init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
-    MockedConfig = multi_provider_file_ops_test_base:mock_sync_errors(Config),
-    init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
 
-end_per_testcase(db_sync_create_after_deletion_links_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, fslogic_delete),
-    end_per_testcase(?DEFAULT_CASE(db_sync_create_after_deletion_links_test), Config);
+
 end_per_testcase(file_consistency_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, file_meta),
     end_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
-end_per_testcase(db_sync_with_delays_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [
-        datastore_throttling
-    ]),
-
-    end_per_testcase(?DEFAULT_CASE(db_sync_with_delays_test), Config);
 end_per_testcase(rtransfer_fetch_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     MinHoleSize = ?config(default_min_hole_size, Config),
@@ -1259,11 +1171,5 @@ end_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [datastore_doc, datastore_remote_driver]),
     end_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
-end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator]),
-    RequestDelay = ?config(request_delay, Config),
-    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
