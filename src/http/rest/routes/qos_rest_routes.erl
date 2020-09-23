@@ -75,16 +75,5 @@ routes() -> [
             aspect = file_qos_summary, 
             scope = private
         }
-    }},
-    %% Get available QoS parameters
-    {<<"/spaces/:sid/available_qos_parameters">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_space, 
-            id = ?BINDING(sid), 
-            aspect = available_qos_parameters, 
-            scope = private
-        }
     }}
 ].

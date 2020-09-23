@@ -59,9 +59,9 @@ operation_supported(_, _, _) -> false.
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
-        <<"expression">> => {binary, 
+        <<"expression">> => {binary,
             fun(Expression) -> {true, qos_expression:parse(Expression)} end},
-        <<"fileId">> => {binary, 
+        <<"fileId">> => {binary,
             fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)} end}
     },
     optional => #{<<"replicasNum">> => {integer, {not_lower_than, 1}}}
@@ -193,7 +193,7 @@ get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEnt
     {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
     {ok, Status} = ?check(lfm_qos:check_qos_status(SessionId, QosEntryId)),
     {ok, entry_to_details(QosEntry, Status, SpaceId)}.
-        
+
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -240,12 +240,6 @@ get_available_qos_parameters_test(Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Get QoS parameters using rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = prepare_args_fun_rest(MemRef, available_qos_parameters),
-                    validate_result_fun = validate_result_fun_rest(MemRef, available_qos_parameters)
-                },
-                #scenario_template{
                     name = <<"Get QoS parameters using gs endpoint">>,
                     type = gs,
                     prepare_args_fun = prepare_args_fun_gs(MemRef, available_qos_parameters),
@@ -305,13 +299,6 @@ prepare_args_fun_rest(MemRef, qos_summary) ->
             method = get,
             path = <<"data/", Id/binary, "/qos_summary">>
         } 
-    end;
-prepare_args_fun_rest(_MemRef, available_qos_parameters) ->
-    fun(_) ->
-        #rest_args{
-            method = get,
-            path = <<"spaces/", (?SPACE_2)/binary, "/available_qos_parameters">>
-        }
     end;
 
 prepare_args_fun_rest(MemRef, Method) ->
@@ -407,11 +394,6 @@ validate_result_fun_rest(MemRef, qos_summary) ->
             <<"status">> := <<"impossible">>
         }, RespBody),
         ok
-    end;
-
-validate_result_fun_rest(MemRef, available_qos_parameters) ->
-    fun(_, {ok, ?HTTP_200_OK, _RespHeaders, RespBody}) ->
-        verify_available_qos_parameters(MemRef, RespBody)
     end.
 
 
@@ -450,8 +432,32 @@ validate_result_fun_gs(MemRef, qos_summary) ->
     end;
 
 validate_result_fun_gs(MemRef, available_qos_parameters) ->
-    fun(_, {ok, Result}) ->
-        verify_available_qos_parameters(MemRef, maps:get(<<"qosParameters">>, Result))
+    fun(_, {ok, #{<<"qosParameters">> := AvailableQosParameters}}) ->
+        Providers = api_test_memory:get(MemRef, providers),
+        % parameters are set in env_desc.json
+        ?assertMatch(#{
+            <<"storageId">> := #{
+                <<"stringValues">> := [<<"mntst1">>, <<"mntst2">>],
+                <<"numberValues">> := []
+            },
+            <<"some_number">> := #{
+                <<"stringValues">> := [],
+                <<"numberValues">> := [8]
+            },
+            <<"providerId">> := #{
+                <<"stringValues">> := Providers,
+                <<"numberValues">> := []
+            },
+            <<"other_number">> := #{
+                <<"stringValues">> := [],
+                <<"numberValues">> := [64]
+            },
+            <<"geo">> := #{
+                <<"stringValues">> := [<<"FR">>, <<"PL">>],
+                <<"numberValues">> := []
+            }
+        }, AvailableQosParameters),
+        ok
     end.
 
 
@@ -511,34 +517,6 @@ maybe_inject_object_id(Data, Guid) ->
         objectId -> Data#{<<"fileId">> => ObjectId};
         _ -> Data
     end.
-
-
-verify_available_qos_parameters(MemRef, Response) ->
-    Providers = api_test_memory:get(MemRef, providers),
-    % parameters are set in env_desc.json
-    ?assertMatch(#{
-        <<"storageId">> := #{
-            <<"stringValues">> := [<<"mntst1">>, <<"mntst2">>],
-            <<"numberValues">> := []
-        },
-        <<"some_number">> := #{
-            <<"stringValues">> := [],
-            <<"numberValues">> := [8]
-        },
-        <<"providerId">> := #{
-            <<"stringValues">> := Providers,
-            <<"numberValues">> := []
-        },
-        <<"other_number">> := #{
-            <<"stringValues">> := [],
-            <<"numberValues">> := [64]
-        },
-        <<"geo">> := #{
-            <<"stringValues">> := [<<"FR">>, <<"PL">>],
-            <<"numberValues">> := []
-        }
-    }, Response),
-    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
