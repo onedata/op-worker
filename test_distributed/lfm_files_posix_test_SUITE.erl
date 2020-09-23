@@ -93,7 +93,8 @@
     rename_removed_opened_file_test/1,
     mkdir_removed_opened_file_test/1,
     rename_removed_opened_file_races_test/1,
-    rename_removed_opened_file_races_test2/1
+    rename_removed_opened_file_races_test2/1,
+    lfm_monitored_open/1
 ]).
 
 -define(TEST_CASES, [
@@ -166,7 +167,8 @@
     rename_removed_opened_file_test,
     mkdir_removed_opened_file_test,
     rename_removed_opened_file_races_test,
-    rename_removed_opened_file_races_test2
+    rename_removed_opened_file_races_test2,
+    lfm_monitored_open
 ]).
 
 -define(SPACE_ID, <<"space1">>).
@@ -182,6 +184,66 @@ all() ->
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
+lfm_monitored_open(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    FilePath = <<"/space_name1/lfm_monitored_open">>,
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath, 8#755)),
+
+    Self = self(),
+    Attempts = 10,
+
+    OpenAndHungFun = fun() ->
+        Self !  lfm:open(SessId1, {guid, FileGuid}, read),
+        receive _ -> ok end
+    end,
+    MonitoredOpenAndHungFun = fun() ->
+        Self !  lfm:monitored_open(SessId1, {guid, FileGuid}, read),
+        receive _ -> ok end
+    end,
+    GetAllProcessHandles = fun(Pid) ->
+        rpc:call(W, handles_per_process, get_all_process_handles, [Pid])
+    end,
+
+    % Assert that handle remains open if it was created using 'open' and wasn't closed before
+    % process died.
+    ProcOpeningFile = spawn(W, OpenAndHungFun),
+
+    receive
+        {ok, OpenedFileHandle} ->
+            HandleId1 = lfm_context:get_handle_id(OpenedFileHandle),
+            ?assertMatch({ok, _}, rpc:call(W, session_handles, get, [SessId1, HandleId1]), Attempts),
+            ?assertMatch(?ERROR_NOT_FOUND, GetAllProcessHandles(ProcOpeningFile), Attempts),
+
+            exit(ProcOpeningFile, kill),
+            timer:sleep(1000),
+
+            ?assertMatch({ok, _}, rpc:call(W, session_handles, get, [SessId1, HandleId1]), Attempts),
+            ?assertMatch(?ERROR_NOT_FOUND, GetAllProcessHandles(ProcOpeningFile), Attempts);
+        Error1 ->
+            ct:fail(Error1)
+    end,
+
+    % Assert that handle is release even if file wasn't closed before process died
+    % when it was created using 'monitored_open'.
+    ProcMonitorOpeningFile = spawn(W, MonitoredOpenAndHungFun),
+
+    receive
+        {ok, MonitorOpenedFileHandle} ->
+            HandleId2 = lfm_context:get_handle_id(MonitorOpenedFileHandle),
+            ?assertMatch({ok, _}, rpc:call(W, session_handles, get, [SessId1, HandleId2]), Attempts),
+            ?assertMatch({ok, [MonitorOpenedFileHandle]}, GetAllProcessHandles(ProcMonitorOpeningFile), Attempts),
+
+            exit(ProcMonitorOpeningFile, kill),
+            timer:sleep(1000),
+
+            ?assertMatch(?ERROR_NOT_FOUND, rpc:call(W, session_handles, get, [SessId1, HandleId2]), Attempts),
+            ?assertMatch(?ERROR_NOT_FOUND, GetAllProcessHandles(ProcMonitorOpeningFile), Attempts);
+        Error2 ->
+            ct:fail(Error2)
+    end.
 
 rename_removed_opened_file_test(Config) ->
     SpaceID = <<"space_id1">>,

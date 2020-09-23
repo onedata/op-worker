@@ -19,6 +19,7 @@
 -export([
     register_handle/2,
     deregister_handle/2,
+    get_all_process_handles/1,
     release_all_process_handles/1
 ]).
 -export([release_all_dead_processes_handles/0]).
@@ -98,11 +99,26 @@ deregister_handle(Pid, FileHandle) ->
     end.
 
 
--spec release_all_process_handles(pid()) -> ok | {error, term()}.
-release_all_process_handles(Pid) ->
+-spec get_all_process_handles(pid()) -> {ok, [lfm:handle()]} | {error, term()}.
+get_all_process_handles(Pid) ->
     case datastore_model:get(?CTX, ?KEY) of
         {ok, #document{value = #handles_per_process{handles = HandlesPerProcess}}} ->
-            release_handles(maps:values(maps:get(Pid, HandlesPerProcess, #{}))),
+            case maps:get(Pid, HandlesPerProcess, undefined) of
+                undefined ->
+                    ?ERROR_NOT_FOUND;
+                ProcessHandles ->
+                    {ok, maps:values(ProcessHandles)}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec release_all_process_handles(pid()) -> ok | {error, term()}.
+release_all_process_handles(Pid) ->
+    case get_all_process_handles(Pid) of
+        {ok, ProcessHandles} ->
+            release_handles(ProcessHandles),
 
             Diff = fun(#handles_per_process{handles = HandlesPerProcess} = Record) ->
                 {ok, Record#handles_per_process{handles = maps:remove(Pid, HandlesPerProcess)}}
