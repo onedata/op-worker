@@ -31,10 +31,7 @@
     terminate/2, code_change/3
 ]).
 
--record(state, {
-    monitored_processes = #{} :: #{pid() => reference()},
-    handles_per_process = #{} :: #{pid() => #{lfm_context:handle_id() => lfm:handle()}}
-}).
+-record(state, {monitored_processes = #{} :: #{pid() => reference()}}).
 
 -type state() :: #state{}.
 
@@ -89,6 +86,7 @@ spec() -> #{
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init(_Args) ->
+    handles_per_process:release_all_dead_processes_handles(),
     {ok, #state{}}.
 
 
@@ -121,10 +119,24 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(?REGISTER_OPEN(Pid, FileHandle), State) ->
-    {noreply, add_process_handle(Pid, FileHandle, State)};
-handle_cast(?REGISTER_CLOSE(Pid, FileHandle), State) ->
-    {noreply, remove_process_handle(Pid, FileHandle, State)};
+handle_cast(?REGISTER_OPEN(Pid, FileHandle), #state{monitored_processes = Processes} = State) ->
+    handles_per_process:register_handle(Pid, FileHandle),
+    NewState = case maps:is_key(Pid, Processes) of
+        true -> State;
+        false -> State#state{monitored_processes = Processes#{Pid => monitor(process, Pid)}}
+    end,
+    {noreply, NewState};
+handle_cast(?REGISTER_CLOSE(Pid, FileHandle), #state{monitored_processes = Processes} = State) ->
+    NewState = case handles_per_process:deregister_handle(Pid, FileHandle) of
+        {ok, []} ->
+            {MonitorRef, LeftoverProcesses} = maps:take(Pid, Processes),
+            demonitor(MonitorRef, [flush]),
+
+            State#state{monitored_processes = LeftoverProcesses};
+        _ ->
+            State
+    end,
+    {noreply, NewState};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -140,8 +152,11 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info({'DOWN', _MonitorRef, process, Pid, _Reason}, State) ->
-    {noreply, close_all_process_handles(Pid, State)};
+handle_info({'DOWN', _MonitorRef, process, Pid, _Reason}, #state{
+    monitored_processes = Processes
+} = State) ->
+    handles_per_process:release_all_process_handles(Pid),
+    {noreply, State#state{monitored_processes = maps:remove(Pid, Processes)}};
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -172,74 +187,3 @@ terminate(_Reason, _State) ->
     Extra :: term()) -> {ok, NewState :: state()} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec add_process_handle(pid(), lfm:handle(), state()) -> state().
-add_process_handle(Pid, FileHandle, #state{
-    monitored_processes = MonitoredProcesses,
-    handles_per_process = HandlesPerProcess
-} = State) ->
-    HandleId = lfm_context:get_handle_id(FileHandle),
-
-    case maps:get(Pid, HandlesPerProcess, undefined) of
-        undefined ->
-            State#state{
-                monitored_processes = MonitoredProcesses#{Pid => monitor(process, Pid)},
-                handles_per_process = HandlesPerProcess#{Pid => #{HandleId => FileHandle}}
-            };
-        ProcessHandles ->
-            State#state{handles_per_process = HandlesPerProcess#{
-                Pid => ProcessHandles#{HandleId => FileHandle}
-            }}
-    end.
-
-
-%% @private
--spec remove_process_handle(pid(), lfm:handle(), state()) -> state().
-remove_process_handle(Pid, FileHandle, #state{
-    monitored_processes = MonitoredProcesses,
-    handles_per_process = HandlesPerProcess
-} = State) ->
-    case maps:take(Pid, HandlesPerProcess) of
-        error ->
-            % Possible race with {'DOWN', _, _, _, _} message
-            State;
-        {ProcessHandles, LeftoverHandlesPerProcess} ->
-            HandleId = lfm_context:get_handle_id(FileHandle),
-
-            case maps:remove(HandleId, ProcessHandles) of
-                LeftoverProcessHandles when map_size(LeftoverProcessHandles) == 0 ->
-                    {MonitorRef, LeftoverMonitoredProcesses} = maps:take(Pid, MonitoredProcesses),
-                    demonitor(MonitorRef, [flush]),
-
-                    State#state{
-                        monitored_processes = LeftoverMonitoredProcesses,
-                        handles_per_process = LeftoverHandlesPerProcess
-                    };
-                LeftoverProcessHandles ->
-                    State#state{handles_per_process = LeftoverHandlesPerProcess#{
-                        Pid => LeftoverProcessHandles
-                    }}
-            end
-    end.
-
-
-%% @private
--spec close_all_process_handles(pid(), state()) -> state().
-close_all_process_handles(Pid, #state{handles_per_process = HandlesPerProcess} = State) ->
-    case maps:take(Pid, HandlesPerProcess) of
-        error ->
-            State;
-        {ProcessHandles, LeftoverHandlesPerProcess} ->
-            lists:foreach(
-                fun({_HandleId, FileHandle}) -> lfm:release(FileHandle) end,
-                maps:to_list(ProcessHandles)
-            ),
-            State#state{handles_per_process = LeftoverHandlesPerProcess}
-    end.

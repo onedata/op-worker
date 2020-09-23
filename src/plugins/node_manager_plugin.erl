@@ -254,7 +254,8 @@ filter_disabled_workers(WorkersSpecs) ->
 %%--------------------------------------------------------------------
 -spec master_node_down(FailedNode :: node()) -> ok.
 master_node_down(_FailedNode) ->
-    session_manager:restart_dead_sessions().
+    session_manager:restart_dead_sessions(),
+    handles_per_process:release_all_dead_processes_handles().
 
 %%--------------------------------------------------------------------
 %% @doc
