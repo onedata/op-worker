@@ -2026,7 +2026,7 @@ mock_opening_file_without_perms(Config) ->
     test_node_starter:load_modules(Workers, [?MODULE]),
     test_utils:mock_new(Workers, lfm),
     test_utils:mock_expect(
-        Workers, lfm, open, fun(_, _, _) -> {error, ?EACCES} end).
+        Workers, lfm, monitored_open, fun(_, _, _) -> {error, ?EACCES} end).
 
 unmock_opening_file_without_perms(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
