@@ -147,4 +147,8 @@ translate_resource(#gri{aspect = providers, scope = private}, ProviderIds) ->
         end, ProviderIds)
     };
 translate_resource(#gri{aspect = {view, _}, scope = private}, ViewInfo) ->
-    ViewInfo.
+    ViewInfo;
+translate_resource(#gri{aspect = available_qos_parameters}, QosParameters) ->
+    #{
+        <<"qosParameters">> => QosParameters
+    }.

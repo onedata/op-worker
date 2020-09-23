@@ -65,8 +65,8 @@
     read_dir_collisions_test/1,
     check_fs_stats_on_different_providers/1,
     remote_driver_internal_call_test/1,
-    db_sync_basic_opts_with_errors_test/1,
-    list_children_recreated_remotely/1
+    list_children_recreated_remotely/1,
+    db_sync_basic_opts_with_errors_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -99,8 +99,10 @@
     read_dir_collisions_test,
     check_fs_stats_on_different_providers,
     remote_driver_internal_call_test,
-    db_sync_basic_opts_with_errors_test,
-    list_children_recreated_remotely
+    list_children_recreated_remotely,
+
+    % Warning - this test should be executed last as unmocking in cleanup can interfere next tests
+    db_sync_basic_opts_with_errors_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -1026,7 +1028,7 @@ list_children_recreated_remotely(Config0) ->
     {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, -24, 24, <<"file_name">>),
 
     % Delete file on worker2
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), {guid, G}), 10),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), {guid, G}), 30),
     ok = lfm_proxy:rm_recursive(Worker2, SessId(Worker2), {guid, G}),
     {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, -24, 24, undefined),
     {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, 0, 24, undefined),

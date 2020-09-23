@@ -24,7 +24,7 @@
             "storages": [
                 {
                     "type": "posix",
-                    "name": "/mnt/st2"
+                    "name": "/mnt/synced_storage"
                 }
             ],
             "users": [],
@@ -103,56 +103,44 @@
     },
     "test_global_setup": {
         "groups": {
+            "group1": {
+                "users": [
+                "user1"
+                ]
+            },
+            "group2": {
+                "users": [
+                    "user2"
+                ]
+            }
         },
         "spaces": {
             "space1": {
-                "displayed_name": "space1",
+                "displayed_name": "space_name1",
                 "users": [
                     "user1",
                     "user2"
                 ],
                 "groups": [
+                    "group1",
+                    "group2"
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st1",
-                        "supported_size": 10737418240
-                    }
-                }
-            },
-            "space2": {
-                "displayed_name": "space2",
-                "users": [
-                    "user2",
-                    "user3"
-                ],
-                "groups": [
-                ],
-                "providers": {
-                    "p1": {
-                        "storage": "/mnt/st1",
-                        "supported_size": 10737418240
+                        "storage": "/mnt/st1"
                     },
                     "p2": {
-                        "storage": "/mnt/st2",
-                        "supported_size": 10737418240
+                        "storage": "/mnt/synced_storage"
                     }
                 }
             }
         },
         "storages": {
-            "p1": {"/mnt/st1": {
-                "qos_parameters" : {
-                    "geo" : "PL",
-                    "some_number": 8
+            "p2": {
+                "/mnt/synced_storage": {
+                    "imported_storage": true
                 }
-            }},
-            "p2": {"/mnt/st2": {
-                "qos_parameters" : {
-                    "geo" : "FR",
-                    "other_number": 64
-                }
-            }}
+            }
         }
     }
 }
