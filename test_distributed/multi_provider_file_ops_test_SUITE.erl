@@ -988,7 +988,9 @@ user_opens_file_test_base(Config0, IsRegisteredUser, UseShareGuid, TestCase) ->
 
     % create file on 1st provider
     SpaceName = <<"space7">>,
-    FilePath = fslogic_path:join([<<"/">>, SpaceName, atom_to_binary(TestCase, utf8)]),
+    DirPath = fslogic_path:join([<<"/">>, SpaceName, atom_to_binary(TestCase, utf8)]),
+    FilePath = fslogic_path:join([DirPath, <<"file">>]),
+    {ok, _} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), DirPath, 8#704)),
     {ok, FileGuid} = ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessionId(Worker1), FilePath, 8#704)),
     {ok, ShareId} = lfm_proxy:create_share(Worker1, SessionId(Worker1), {guid, FileGuid}, <<"share">>),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
