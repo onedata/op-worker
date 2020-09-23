@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, request_credentials_update/3]).
+-export([start_link/2, update_credentials/3]).
 
 %% gen_server callbacks
 -export([
@@ -76,17 +76,17 @@ start_link(SessId, SessType) ->
     gen_server2:start_link(?MODULE, [SessId, SessType], []).
 
 
--spec request_credentials_update(pid() | session:id(), auth_manager:access_token(),
+-spec update_credentials(pid() | session:id(), auth_manager:access_token(),
     auth_manager:consumer_token()) -> ok.
-request_credentials_update(SessionWatcher, AccessToken, ConsumerToken) when is_pid(SessionWatcher) ->
-    gen_server2:cast(
+update_credentials(SessionWatcher, AccessToken, ConsumerToken) when is_pid(SessionWatcher) ->
+    gen_server2:call(
         SessionWatcher,
         ?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken)
     );
-request_credentials_update(SessionId, AccessToken, ConsumerToken) ->
+update_credentials(SessionId, AccessToken, ConsumerToken) ->
     case session:get(SessionId) of
         {ok, #document{value = #session{watcher = SessionWatcher}}} ->
-            request_credentials_update(SessionWatcher, AccessToken, ConsumerToken);
+            update_credentials(SessionWatcher, AccessToken, ConsumerToken);
         _ ->
             ok
     end.
@@ -161,22 +161,7 @@ init([SessId, SessType]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_call(Request, _From, State) ->
-    ?log_bad_request(Request),
-    {reply, ok, State}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles cast messages.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: state()) ->
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
-handle_cast(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), #state{
+handle_call(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), _From, #state{
     session_id = SessionId,
     identity = Identity,
     credentials = OldTokenCredentials,
@@ -200,12 +185,27 @@ handle_cast(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), #state{
                 credentials = NewTokenCredentials,
                 validity_checkup_timer = NewTimer
             },
-            {noreply, NewState, hibernate};
+            {reply, ok, NewState, hibernate};
         false ->
             mark_inactive(SessionId),
             schedule_session_removal(0),
-            {noreply, State}
+            {reply, ok, State}
     end;
+handle_call(Request, _From, State) ->
+    ?log_bad_request(Request),
+    {reply, ok, State}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles cast messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_cast(Request :: term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}.
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.

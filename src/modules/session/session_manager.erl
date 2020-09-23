@@ -418,7 +418,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
 maybe_request_credentials_update(Credentials, #session{credentials = Credentials}) ->
     ok;
 maybe_request_credentials_update(NewCredentials, #session{watcher = SessionWatcher}) ->
-    incoming_session_watcher:request_credentials_update(
+    incoming_session_watcher:update_credentials(
         SessionWatcher,
         auth_manager:get_access_token(NewCredentials),
         auth_manager:get_consumer_token(NewCredentials)
