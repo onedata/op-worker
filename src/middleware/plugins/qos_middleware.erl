@@ -59,9 +59,9 @@ operation_supported(_, _, _) -> false.
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
-        <<"expression">> => {binary, 
+        <<"expression">> => {binary,
             fun(Expression) -> {true, qos_expression:parse(Expression)} end},
-        <<"fileId">> => {binary, 
+        <<"fileId">> => {binary,
             fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)} end}
     },
     optional => #{<<"replicasNum">> => {integer, {not_lower_than, 1}}}

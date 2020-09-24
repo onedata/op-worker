@@ -385,7 +385,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
     end,
     case session:update_doc_and_time(SessId, Diff) of
         {ok, #document{key = SessId, value = ProxySession}} when is_binary(ProxyVia) ->
-            maybe_request_credentials_update(Credentials, ProxySession),
+            update_credentials_if_changed(Credentials, ProxySession),
             {ok, SessId};
         {ok, #document{key = SessId}} ->
             {ok, SessId};
@@ -414,10 +414,10 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
 
 
 %% @private
--spec maybe_request_credentials_update(auth_manager:token_credentials(), session:record()) -> ok.
-maybe_request_credentials_update(Credentials, #session{credentials = Credentials}) ->
+-spec update_credentials_if_changed(auth_manager:token_credentials(), session:record()) -> ok.
+update_credentials_if_changed(Credentials, #session{credentials = Credentials}) ->
     ok;
-maybe_request_credentials_update(NewCredentials, #session{watcher = SessionWatcher}) ->
+update_credentials_if_changed(NewCredentials, #session{watcher = SessionWatcher}) ->
     incoming_session_watcher:update_credentials(
         SessionWatcher,
         auth_manager:get_access_token(NewCredentials),
