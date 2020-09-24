@@ -74,7 +74,7 @@ rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, Tar
     case TargetParentCtx =/= undefined of
         true ->
             TargetParentCtx2 = file_ctx:assert_not_readonly_storage(TargetParentCtx),
-            TargetParentCtx3 = ensure_not_share_file_ctx(TargetParentCtx2),
+            TargetParentCtx3 = share_to_standard_file_ctx(TargetParentCtx2),
             % we know target parent uuid, so we can create parent directories with correct mode
             % ensure all target parent directories are created
             {ok, _} = mkdir_deferred(TargetParentCtx3, UserCtx);
@@ -145,7 +145,7 @@ create_deferred(FileCtx) ->
 -spec create_deferred(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
     {file_location:doc(), file_ctx:ctx()} | {error, cancelled}.
 create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
-    FileCtx2 = ensure_not_share_file_ctx(FileCtx),
+    FileCtx2 = share_to_standard_file_ctx(FileCtx),
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
@@ -258,7 +258,7 @@ delete(FileCtx, UserCtx) ->
 -spec unlink(file_ctx:ctx(), user_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | {error, term()}.
 unlink(FileCtx, UserCtx) ->
-    FileCtx2 = ensure_not_share_file_ctx(FileCtx),
+    FileCtx2 = share_to_standard_file_ctx(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
     case storage_driver:new_handle(SessId, FileCtx2, false) of
         {undefined, _FileCtx3} ->
@@ -281,7 +281,7 @@ unlink(FileCtx, UserCtx) ->
 -spec rmdir(file_ctx:ctx(), user_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | {error, term()}.
 rmdir(DirCtx, UserCtx) ->
-    DirCtx2 = ensure_not_share_file_ctx(DirCtx),
+    DirCtx2 = share_to_standard_file_ctx(DirCtx),
     SessId = user_ctx:get_session_id(UserCtx),
     FileUuid = file_ctx:get_uuid_const(DirCtx2),
     case storage_driver:new_handle(SessId, DirCtx2, false) of
@@ -312,13 +312,12 @@ rmdir(DirCtx, UserCtx) ->
 %%% Internal functions
 %%%===================================================================
 
--spec ensure_not_share_file_ctx(file_ctx:ctx()) -> file_ctx:ctx().
-ensure_not_share_file_ctx(FileCtx) ->
+-spec share_to_standard_file_ctx(file_ctx:ctx()) -> file_ctx:ctx().
+share_to_standard_file_ctx(FileCtx) ->
     Guid = file_ctx:get_guid_const(FileCtx),
     case file_id:is_share_guid(Guid) of
         true ->
-            {Uuid, SpaceId, _} = file_id:unpack_share_guid(Guid),
-            Guid2 = file_id:pack_guid(Uuid, SpaceId),
+            Guid2 = file_id:share_guid_to_guid(Guid),
             file_ctx:new_by_guid(Guid2);
         false ->
             FileCtx
