@@ -18,6 +18,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include("proto/common/credentials.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -49,7 +50,8 @@
     synchronize_stress_test_base/2,
     cancel_synchronizations_for_session_with_mocked_rtransfer_test_base/1,
     cancel_synchronizations_for_session_test_base/1,
-    transfer_files_to_source_provider/1
+    transfer_files_to_source_provider/1,
+    proxy_session_token_update_test_base/3
 ]).
 -export([init_env/1, teardown_env/1, mock_sync_errors/1]).
 
@@ -1728,6 +1730,52 @@ transfer_files_to_source_provider(Config0) ->
         [(End-Start)/1000, (End-Start)/FilesNum, (EndGui-StartGui)/1000]).
 
 
+proxy_session_token_update_test_base(Config, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
+    proxy_session_token_update_test_base(Config, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
+proxy_session_token_update_test_base(Config0, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+    User = <<"user1">>,
+    SpaceName = <<"space4">>,       % supported on P1 but not on P2
+
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    [P1 | _] = ?config(workers1, Config),
+    [P2 | _] = ?config(workers_not1, Config),
+    GetSessIdFun = ?config(session, Config),
+
+    SessionId = GetSessIdFun(P2),   % proxy session on P1 should have the same SessionId as session on P2
+
+    OriginalAccessToken = initializer:create_access_token(User),
+    OriginalClientTokens = #client_tokens{access_token = OriginalAccessToken, consumer_token = undefined},
+
+    NewAccessToken = tokens:confine(OriginalAccessToken, #cv_data_readonly{}),
+    ?assertNotEqual(OriginalAccessToken, NewAccessToken),
+
+    NewClientTokens = #client_tokens{access_token = NewAccessToken, consumer_token = undefined},
+
+    % After making request resulting in proxy request session with the same SessionId should
+    % exist on P1 (proxy one) and P2
+    DirPath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(P2, SessionId, DirPath, 8#755)),
+
+    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
+    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
+
+    % Assert that when updating credentials on P2 proxy session on P1 is not automatically updated
+    ?assertEqual(ok, rpc:call(P2, incoming_session_watcher, update_credentials, [
+        SessionId, NewAccessToken, undefined
+    ]), Attempts),
+
+    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
+    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
+
+    % But any future proxy request will update those credentials (credentials are send with every
+    % proxy request)
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessionId, {guid, DirGuid}), Attempts),
+    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
+    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
+
+    ok.
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -2366,4 +2414,16 @@ await_replication_end(Node, TransferId, Attempts, GetFun) ->
         _ ->
             timer:sleep(timer:seconds(1)),
             await_replication_end(Node, TransferId, Attempts - 1, GetFun)
+    end.
+
+
+%% @private
+-spec get_session_client_tokens(node(), session:id()) ->
+    {ok, auth_manager:client_tokens()} | {error, term()}.
+get_session_client_tokens(Node, SessionId) ->
+    case rpc:call(Node, session, get, [SessionId]) of
+        {ok, #document{value = #session{credentials = TokenCredentials}}} ->
+            {ok, auth_manager:get_client_tokens(TokenCredentials)};
+        {error, _} = Error ->
+            Error
     end.
