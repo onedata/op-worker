@@ -395,7 +395,7 @@ get_slave_job(StorageFileCtx, Info) ->
     traverse:master_job_map().
 add_cancel_callback(CallbackModule, MasterJobsMap, StorageFileCtx) ->
     MasterJobsMap#{
-        cancel_callback => fun(_Args, Description) ->
+        cancel_callback => fun(Description) ->
             MasterJobsDelegated = -1 * ((maps:get(master_jobs_delegated, Description)) + 1),
             SlaveJobsDelegated = -1 * maps:get(slave_jobs_delegated, Description),
             call_on_cancel_callback(CallbackModule, MasterJobsDelegated, SlaveJobsDelegated, StorageFileCtx)
