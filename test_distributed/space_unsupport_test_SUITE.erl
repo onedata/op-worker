@@ -245,7 +245,11 @@ delete_synced_documents_stage_test(Config) ->
     % wait for documents to expire 
     timer:sleep(timer:seconds(70)),
     
-    assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID).
+    assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID),
+    
+    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), {guid, G1}),
+    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), {guid, G2}),
+    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), {guid, DirGuid}).
     
 
 delete_local_documents_stage_test(Config) ->
@@ -365,6 +369,11 @@ init_per_testcase(overall_test, Config) ->
         end),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
+    lists:foreach(fun(Worker) ->
+        ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, {guid, SpaceGuid}, 0, 10), ?ATTEMPTS)
+    end, Workers),
     ct:timetrap({minutes, 30}),
     lfm_proxy:init(Config).
 
