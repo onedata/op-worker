@@ -709,7 +709,10 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
                         % on this worker
                         Acc2;
                     {_, Timestamp} = Ans ->
-                        ?assert(Timestamp >= Timestamp0),
+                        case Timestamp >= Timestamp0 of
+                            true -> ok;
+                            false -> throw(too_small_timestamp)
+                        end,
                         [Ans | Acc2]
                 end
             end, [], sets:to_list(ProvIds)),
@@ -730,7 +733,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     end,
     % TODO VFS-6652 Always check sequences
     case CheckSequences of
-        true -> ?assertEqual(true, AreAllSeqsEqual(), 60);
+        true -> ?assertEqual(true, catch AreAllSeqsEqual(), 60);
         false -> ok
     end,
 
