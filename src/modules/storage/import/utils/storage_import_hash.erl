@@ -7,11 +7,11 @@
 %%% @doc
 %%% In this module util functions for computing and comparing
 %%% hashes calculated basing on files' attributes.
-%%% This hashes are used to prune tree traversed by storage sync
+%%% This hashes are used to prune tree traversed by auto storage import
 %%% when detecting changes on storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_sync_hash).
+-module(storage_import_hash).
 -author("Jakub Kudzia").
 
 

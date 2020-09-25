@@ -6,18 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module contains record definition of transfer model and
-%%% upgrader function for this model.
+%%% This module contains datastore callbacks for transfer model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer_model).
 -author("Jakub Kudzia").
 
--include("modules/datastore/datastore_models.hrl").
--include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/transfer.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
--include_lib("ctool/include/logging.hrl").
 
 -define(TRANSFER_MODEL, transfer).
 

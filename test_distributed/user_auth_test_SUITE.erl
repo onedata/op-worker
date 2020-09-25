@@ -424,7 +424,7 @@ token_expiration(Config) ->
     AccessToken3 = initializer:create_access_token(?USER_ID_1, [#cv_time{
         valid_until = ?NOW() + 6
     }]),
-    rpc:call(Worker1, incoming_session_watcher, request_credentials_update, [
+    rpc:call(Worker1, incoming_session_watcher, update_credentials, [
         SessId2, AccessToken3, undefined
     ]),
 

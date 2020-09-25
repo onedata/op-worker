@@ -7,7 +7,7 @@
 %%% @doc
 %%% In this module, util functions for operating on storage_sync_links
 %%% are implemented.
-%%% storage_sync_links are links used by storage_sync to compare lists of
+%%% storage_sync_links are links used by storage import to compare lists of
 %%% files on storage with lists of files in the Onedata system.
 %%% For each directory on synced storage, separate links tree is created.
 %%% Functions with suffix `_recursive` in this module operate on whole

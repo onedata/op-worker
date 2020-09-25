@@ -227,7 +227,8 @@ resupport_cleanup_test(Config) ->
     
     {ok, StorageId} = rpc:call(Node, space_logic, get_local_storage_id, [SpaceId]),
     
-    ok = rpc:call(Node, storage_sync, configure_import, [SpaceId, true, #{max_depth => 5, sync_acl => true}]),
+    ok = rpc:call(Node, storage_import, set_or_configure_auto_mode, [SpaceId,
+        #{enabled => true, max_depth => 5, sync_acl => true}]),
     ok = rpc:call(Node, file_popularity_api, enable, [SpaceId]),
     ACConfig =  #{
         enabled => true,
@@ -235,10 +236,10 @@ resupport_cleanup_test(Config) ->
         threshold => 100
     },
     ok = rpc:call(Node, autocleaning_api, configure, [SpaceId, ACConfig]),
-    ok = rpc:call(Node, storage_sync_worker, schedule_spaces_check, [0]),
+    ok = rpc:call(Node, storage_import_worker, schedule_spaces_check, [0]),
     
-    ?assertMatch({ok, _}, rpc:call(Node, space_strategies, get, [SpaceId])),
-    ?assertMatch({ok, _}, rpc:call(Node, storage_sync_monitoring, get, [SpaceId, StorageId]), 10),
+    ?assertMatch({ok, _}, rpc:call(Node, storage_import_config, get, [SpaceId])),
+    ?assertMatch({ok, _}, rpc:call(Node, storage_import_monitoring, get, [SpaceId]), 10),
     ?assertMatch({ok, _}, rpc:call(Node, autocleaning, get, [SpaceId])),
     ?assertMatch({ok, _}, rpc:call(Node, file_popularity_config, get, [SpaceId])),
     ?assertMatch(true, rpc:call(Node, file_popularity_api, is_enabled, [SpaceId])),
@@ -254,8 +255,8 @@ resupport_cleanup_test(Config) ->
     % force cleanup by adding new support when remnants of previous one still exist
     {ok, _} = rpc:call(Node, storage, support_space, [StorageId, Token, 10]),
     
-    ?assertEqual({error, not_found}, rpc:call(Node, space_strategies, get, [SpaceId])),
-    ?assertEqual({error, not_found}, rpc:call(Node, storage_sync_monitoring, get, [SpaceId, StorageId])),
+    ?assertEqual({error, not_found}, rpc:call(Node, storage_import_config, get, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Node, storage_import_monitoring, get, [SpaceId])),
     ?assertEqual(undefined, rpc:call(Node, autocleaning, get_config, [SpaceId])),
     ?assertEqual({error, not_found}, rpc:call(Node, autocleaning, get, [SpaceId])),
     ?assertEqual(false, rpc:call(Node, file_popularity_api, is_enabled, [SpaceId])),
@@ -285,6 +286,7 @@ init_per_testcase(resupport_cleanup_test, Config) ->
         test_utils:mock_expect(Node, space_logic, get_local_storage_id, fun(_) -> {ok, StorageId} end)
     end, Nodes),
     test_utils:mock_expect(Nodes, storage_logic, support_space, fun(_, _, _) ->  {ok, <<"space1">>} end),
+    test_utils:mock_expect(Nodes, storage_logic, is_imported, fun(_) ->  {ok, true} end),
     Config1;
 init_per_testcase(_, Config) ->
     logic_tests_common:init_per_testcase(Config).

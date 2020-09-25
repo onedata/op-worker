@@ -6,15 +6,15 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for detecting which files in the
-%%% synchronized space were deleted on storage and therefore should be
-%%% deleted from the Onedata file system.
+%%% space with enabled auto storage import mechanism were deleted on
+%%% storage and therefore should be deleted from the Onedata file system.
 %%% It uses storage_sync_links to compare lists of files on the storage
 %%% with files in the database.
 %%% Functions in this module are called from master and slave jobs
 %%% executed by storage_sync_traverse pool.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_sync_deletion).
+-module(storage_import_deletion).
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
@@ -30,7 +30,7 @@
 -type file_meta_children() :: [#child_link_uuid{}].
 -type sync_links_children() :: [{storage_sync_links:link_name(), storage_sync_links:link_target()}].
 
--define(BATCH_SIZE, application:get_env(?APP_NAME, storage_sync_deletion_batch_size, 1000)).
+-define(BATCH_SIZE, application:get_env(?APP_NAME, storage_import_deletion_batch_size, 1000)).
 
 %%%===================================================================
 %%% API functions
@@ -40,7 +40,7 @@
 get_master_job(Job = #storage_traverse_master{info = Info}) ->
     Job#storage_traverse_master{
         info = Info#{
-            detect_deletions => true,
+            deletion_job => true,
             sync_links_token => #link_token{},
             sync_links_children => [],
             file_meta_token => #link_token{},
@@ -98,7 +98,7 @@ do_master_job(Job = #storage_traverse_master{
                         {ok, #{}};
                     {SLChildren2, SLToken2} ->
                         {MasterJobs, SlaveJobs} = generate_deletion_jobs(Job, SLChildren2, SLToken2, FMChildren2, FMToken2),
-                        storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, length(SlaveJobs) + length(MasterJobs)),
+                        storage_import_monitoring:increase_to_process_counter(SpaceId, length(SlaveJobs) + length(MasterJobs)),
                         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId, length(MasterJobs)),
                         {ok, #{
@@ -123,7 +123,7 @@ do_master_job(Job = #storage_traverse_master{
             % so we can safely delete its links tree
             storage_sync_links:delete_recursive(StorageFileId, StorageId)
     end,
-    storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+    storage_import_monitoring:mark_processed_file(SpaceId),
     Result.
 
 %%--------------------------------------------------------------------
@@ -274,7 +274,7 @@ generate_deletion_jobs(Job, AllSLChildren = [{SLName, _} | _], SLToken,
 generate_deletion_jobs(Job, [{SLName, _} | RestSLChildren], SLToken,
     AllFMChildren = [#child_link_uuid{name = FMName} | _], FMToken, MasterJobs, SlaveJobs)
     when SLName < FMName ->
-    % SLName is missing on the file_meta list, we can ignore it, storage_sync will synchronise this file
+    % SLName is missing on the file_meta list, we can ignore it, storage import will synchronise this file
     generate_deletion_jobs(Job, RestSLChildren, SLToken, AllFMChildren, FMToken, MasterJobs, SlaveJobs).
 
 
@@ -284,7 +284,7 @@ new_slave_job(#storage_traverse_master{storage_file_ctx = StorageFileCtx}, Child
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     #storage_traverse_slave{
         info = #{
-            detect_deletions => true,
+            deletion_job => true,
             file_ctx => file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId)),
             storage_id => StorageId
         }}.
@@ -337,16 +337,16 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
                 % file is still missing on storage we can delete it from db
                delete_file_and_update_counters(FileCtx3, SpaceId, StorageId);
             false ->
-                storage_sync_monitoring:mark_processed_file(SpaceId, StorageId)
+                storage_import_monitoring:mark_processed_file(SpaceId)
         end
     catch
         throw:?ENOENT ->
-            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+            storage_import_monitoring:mark_processed_file(SpaceId),
             ok;
         Error:Reason ->
             ?error_stacktrace("~p:maybe_delete_file_and_update_counters failed due to ~p",
                 [?MODULE, {Error, Reason}]),
-            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId)
+            storage_import_monitoring:mark_failed_file(SpaceId)
     end.
 
 -spec delete_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
@@ -355,7 +355,7 @@ delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
         {true, FileCtx2} ->
             delete_dir_recursive_and_update_counters(FileCtx2, SpaceId, StorageId);
         {false, FileCtx2} ->
-            delete_regular_file_and_update_counters(FileCtx2, SpaceId, StorageId)
+            delete_regular_file_and_update_counters(FileCtx2, SpaceId)
     end.
 
 %%-------------------------------------------------------------------
@@ -369,22 +369,22 @@ delete_dir_recursive_and_update_counters(FileCtx, SpaceId, StorageId) ->
     {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     delete_dir_recursive(FileCtx3, SpaceId, StorageId),
-    storage_sync_logger:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
-    storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId).
+    storage_import_logger:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    storage_import_monitoring:mark_deleted_file(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% This function deletes regular file and updates sync counters.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_regular_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
-delete_regular_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
+-spec delete_regular_file_and_update_counters(file_ctx:ctx(), od_space:id()) -> ok.
+delete_regular_file_and_update_counters(FileCtx, SpaceId) ->
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     delete_file(FileCtx3),
-    storage_sync_logger:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
-    storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId).
+    storage_import_logger:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    storage_import_monitoring:mark_deleted_file(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -411,7 +411,7 @@ delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
 delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId) ->
     try
         {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, ChunkSize),
-        storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, length(ChildrenCtxs)),
+        storage_import_monitoring:increase_to_process_counter(SpaceId, length(ChildrenCtxs)),
         lists:foreach(fun(ChildCtx) ->
             delete_file_and_update_counters(ChildCtx, SpaceId, StorageId)
         end, ChildrenCtxs),
@@ -439,7 +439,7 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId) ->
 -spec delete_file(file_ctx:ctx()) -> ok.
 delete_file(FileCtx) ->
     try
-        fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx)
+        fslogic_delete:handle_file_deleted_on_imported_storage(FileCtx)
     catch
         throw:?ENOENT ->
             ok

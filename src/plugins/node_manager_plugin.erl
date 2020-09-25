@@ -154,7 +154,11 @@ upgrade_cluster(1) ->
     {ok, 2};
 upgrade_cluster(2) ->
     await_zone_connection_and_run(fun storage:migrate_imported_storages_to_zone/0),
-    {ok, 3}.
+    {ok, 3};
+upgrade_cluster(3) ->
+    await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
+    await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
+    {ok, 4}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -182,7 +186,7 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, rtransfer_worker:supervisor_flags()},
         {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}
     ]},
-    {storage_sync_worker, []},
+    {storage_import_worker, []},
     {harvesting_worker, [
         {supervisor_flags, harvesting_worker:supervisor_flags()},
         {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}

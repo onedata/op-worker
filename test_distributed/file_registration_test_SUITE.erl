@@ -437,9 +437,10 @@ init_per_suite(Config) ->
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
-        [W1 | _] = ?config(op_worker_nodes, NewConfig2),
-        rpc:call(W1, storage_sync_worker, notify_connection_to_oz, []),
-        sort_workers(NewConfig2)
+        NewConfig3 = sort_workers(NewConfig2),
+        [W1 | _] = ?config(op_worker_nodes, NewConfig3),
+        ok = rpc:call(W1, storage_import, set_manual_mode, [?SPACE_ID]),
+        NewConfig3
     end,
     {ok, _} = application:ensure_all_started(worker_pool),
     [{?LOAD_MODULES, [initializer, sd_test_utils, ?MODULE]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
