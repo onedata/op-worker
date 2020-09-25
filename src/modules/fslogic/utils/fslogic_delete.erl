@@ -117,7 +117,7 @@ cleanup_opened_files() ->
 check_if_opened_and_remove(UserCtx, FileCtx, Silent, DocsDeletionScope) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
-        case file_handles:exists(FileUuid) of
+        case file_handles:is_file_opened(FileUuid) of
             true ->
                 handle_opened_file(FileCtx, UserCtx, DocsDeletionScope);
             _ ->
@@ -138,7 +138,7 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
     ok = file_handles:mark_to_remove(FileCtx3, RemovalStatus),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     % Check once more to prevent race with last handle being closed
-    case file_handles:exists(FileUuid) of
+    case file_handles:is_file_opened(FileUuid) of
         true -> ok;
         false -> handle_release_of_deleted_file(FileCtx3, RemovalStatus)
     end.

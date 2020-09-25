@@ -148,7 +148,7 @@ lfm_recreate_handle(Config, CreatePerms, DeleteAfterOpen) ->
     ?assertEqual(ok, lfm_proxy:close(W, Handle)),
 
     ?assertEqual(false, rpc:call(
-        W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
+        W, file_handles, is_file_opened, [file_id:guid_to_uuid(FileGuid)])
     ).
 
 lfm_open_failure(Config) ->
@@ -165,7 +165,7 @@ lfm_open_failure(Config) ->
 
     ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
     ?assertEqual(false, rpc:call(
-        W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
+        W, file_handles, is_file_opened, [file_id:guid_to_uuid(FileGuid)])
     ),
 
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
@@ -218,7 +218,7 @@ lfm_open_and_create_open_failure(Config) ->
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
     ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
     ?assertEqual(false, rpc:call(
-        W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
+        W, file_handles, is_file_opened, [file_id:guid_to_uuid(FileGuid)])
     ),
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
@@ -245,7 +245,7 @@ lfm_open_multiple_times_failure(Config) ->
         W, SessId1, {guid, FileGuid}, rdwr)
     ),
     ?assertEqual(false, rpc:call(
-        W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
+        W, file_handles, is_file_opened, [file_id:guid_to_uuid(FileGuid)])
     ),
 
     % unload mock for open so that it will succeed again
@@ -257,7 +257,7 @@ lfm_open_multiple_times_failure(Config) ->
     ?assertEqual(ok, lfm_proxy:close(W, Handle2)),
 
     ?assertEqual(false, rpc:call(
-        W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
+        W, file_handles, is_file_opened, [file_id:guid_to_uuid(FileGuid)])
     ),
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
@@ -300,7 +300,7 @@ lfm_open_failure_multiple_users(Config) ->
     ?assertEqual(ok, lfm_proxy:close(W, Handle)),
 
     ?assertEqual(false, rpc:call(
-        W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
+        W, file_handles, is_file_opened, [file_id:guid_to_uuid(FileGuid)])
     ),
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
@@ -389,7 +389,7 @@ lfm_copy_failure_multiple_users(Config) ->
     ?assertEqual(ok, lfm_proxy:close(W, Handle)),
 
     ?assertEqual(false, rpc:call(
-        W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
+        W, file_handles, is_file_opened, [file_id:guid_to_uuid(FileGuid)])
     ),
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,

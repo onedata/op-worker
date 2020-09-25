@@ -658,18 +658,23 @@ lfm_monitored_open(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
 
-    FilePath = <<"/space_name1/lfm_monitored_open">>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath, 8#755)),
+    File1Path = <<"/space_name1/lfm_monitored_open1">>,
+    {ok, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File1Path, 8#755)),
+    File1Uuid = file_id:guid_to_uuid(File1Guid),
+
+    File2Path = <<"/space_name1/lfm_monitored_open2">>,
+    {ok, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File2Path, 8#755)),
+    File2Uuid = file_id:guid_to_uuid(File2Guid),
 
     Self = self(),
     Attempts = 10,
 
     OpenAndHungFun = fun() ->
-        Self !  lfm:open(SessId1, {guid, FileGuid}, read),
+        Self !  lfm:open(SessId1, {guid, File1Guid}, read),
         receive _ -> ok end
     end,
     MonitoredOpenAndHungFun = fun() ->
-        Self !  lfm:monitored_open(SessId1, {guid, FileGuid}, read),
+        Self !  lfm:monitored_open(SessId1, {guid, File2Guid}, read),
         receive _ -> ok end
     end,
     GetAllProcessHandles = fun(Pid) ->
@@ -684,12 +689,14 @@ lfm_monitored_open(Config) ->
         {ok, OpenedFileHandle} ->
             HandleId1 = lfm_context:get_handle_id(OpenedFileHandle),
             ?assertMatch({ok, _}, rpc:call(W, session_handles, get, [SessId1, HandleId1]), Attempts),
+            ?assertMatch(true, rpc:call(W, file_handles, is_file_opened, [File1Uuid]), Attempts),
             ?assertMatch(?ERROR_NOT_FOUND, GetAllProcessHandles(ProcOpeningFile), Attempts),
 
             exit(ProcOpeningFile, kill),
             timer:sleep(1000),
 
             ?assertMatch({ok, _}, rpc:call(W, session_handles, get, [SessId1, HandleId1]), Attempts),
+            ?assertMatch(true, rpc:call(W, file_handles, is_file_opened, [File1Uuid]), Attempts),
             ?assertMatch(?ERROR_NOT_FOUND, GetAllProcessHandles(ProcOpeningFile), Attempts);
         Error1 ->
             ct:fail(Error1)
@@ -703,12 +710,14 @@ lfm_monitored_open(Config) ->
         {ok, MonitorOpenedFileHandle} ->
             HandleId2 = lfm_context:get_handle_id(MonitorOpenedFileHandle),
             ?assertMatch({ok, _}, rpc:call(W, session_handles, get, [SessId1, HandleId2]), Attempts),
+            ?assertMatch(true, rpc:call(W, file_handles, is_file_opened, [File2Uuid]), Attempts),
             ?assertMatch({ok, [MonitorOpenedFileHandle]}, GetAllProcessHandles(ProcMonitorOpeningFile), Attempts),
 
             exit(ProcMonitorOpeningFile, kill),
             timer:sleep(1000),
 
             ?assertMatch(?ERROR_NOT_FOUND, rpc:call(W, session_handles, get, [SessId1, HandleId2]), Attempts),
+            ?assertMatch(false, rpc:call(W, file_handles, is_file_opened, [File2Uuid]), Attempts),
             ?assertMatch(?ERROR_NOT_FOUND, GetAllProcessHandles(ProcMonitorOpeningFile), Attempts);
         Error2 ->
             ct:fail(Error2)
