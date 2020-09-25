@@ -116,20 +116,23 @@ release_all_process_handles(Process) ->
 
 -spec release_all_dead_processes_handles() -> ok | {error, term()}.
 release_all_dead_processes_handles() ->
-    {ok, AllDocs} = list_all_docs(),
-
-    lists:foreach(fun(#document{
-        key = Key,
-        value = #process_handles{process = Process, handles = Handles}
-    }) ->
-        case is_alive(Process) of
-            true ->
-                ok;
-            false ->
-                release_handles(maps:values(Handles)),
-                delete_doc(Key)
-        end
-    end, AllDocs).
+    case list_all_docs() of
+        {ok, AllDocs} ->
+            lists:foreach(fun(#document{
+                key = Key,
+                value = #process_handles{process = Process, handles = Handles}
+            }) ->
+                case is_alive(Process) of
+                    true ->
+                        ok;
+                    false ->
+                        release_handles(maps:values(Handles)),
+                        delete_doc(Key)
+                end
+            end, AllDocs);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%%===================================================================
