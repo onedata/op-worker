@@ -604,8 +604,9 @@ release(FileHandle) ->
 -spec monitored_release(handle()) -> ok | error_reply().
 monitored_release(FileHandle) ->
     ?run(fun() ->
-        lfm_files:release(FileHandle),
-        process_handles:remove(FileHandle)
+        Result = lfm_files:release(FileHandle),
+        process_handles:remove(FileHandle),
+        Result
     end).
 
 %%--------------------------------------------------------------------

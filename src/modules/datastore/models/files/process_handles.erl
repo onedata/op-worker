@@ -14,6 +14,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % API
 -export([
@@ -39,6 +40,8 @@
     fold_enabled => true
 }).
 
+-define(DEFAULT_LIST_DOCS_LIMIT, 100).
+
 
 %%%===================================================================
 %%% API
@@ -60,6 +63,7 @@ add(FileHandle) ->
 
     case datastore_model:update(?CTX, key(Process), Diff, Default) of
         {ok, #document{value = #process_handles{handles = Handles}}} when map_size(Handles) == 1 ->
+            %% TODO VFS-6832
             lfm_handles_monitor:monitor_process(Process);
         {ok, _} ->
             ok;
@@ -79,6 +83,7 @@ remove(FileHandle) ->
     end,
     case datastore_model:update(?CTX, Key, Diff) of
         {ok, #document{value = #process_handles{handles = Handles}}} when map_size(Handles) == 0 ->
+            %% TODO VFS-6832
             lfm_handles_monitor:demonitor_process(Process),
             delete_doc(Key);
         {ok, _}  ->
@@ -115,8 +120,20 @@ release_all_process_handles(Process) ->
 
 -spec release_all_dead_processes_handles() -> ok | {error, term()}.
 release_all_dead_processes_handles() ->
-    case list_all_docs() of
-        {ok, AllDocs} ->
+    release_all_dead_processes_handles(undefined).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec release_all_dead_processes_handles(StartFromId :: undefined | id()) ->
+    ok | {error, term()}.
+release_all_dead_processes_handles(StartFromId) ->
+    case list_docs(StartFromId, ?DEFAULT_LIST_DOCS_LIMIT) of
+        {ok, FetchedDocs} ->
             lists:foreach(fun(#document{
                 key = Key,
                 value = #process_handles{process = Process, handles = Handles}
@@ -128,15 +145,18 @@ release_all_dead_processes_handles() ->
                         release_handles(maps:values(Handles)),
                         delete_doc(Key)
                 end
-            end, AllDocs);
+            end, FetchedDocs),
+
+            case length(FetchedDocs) < ?DEFAULT_LIST_DOCS_LIMIT of
+                true ->
+                    ok;
+                false ->
+                    [LastDoc | _] = FetchedDocs,  % Last doc fetched is first due to working of fold
+                    release_all_dead_processes_handles(LastDoc#document.key)
+            end;
         {error, _} = Error ->
             Error
     end.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 
 %% @private
@@ -147,9 +167,30 @@ key(Process) ->
 
 
 %% @private
--spec list_all_docs() -> {ok, [doc()]} | {error, term()}.
-list_all_docs() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+-spec list_docs(StartFromId :: undefined | id(), Limit :: all | non_neg_integer()) ->
+    {ok, [doc()]} | {error, term()}.
+list_docs(StartFromId, Limit) ->
+    Opts = case StartFromId of
+        undefined ->
+            #{};
+        _ ->
+            #{
+                prev_link_name => StartFromId,
+                offset => 1
+            }
+    end,
+    Opts2 = case Limit of
+        all -> Opts;
+        _ -> Opts#{size => Limit}
+    end,
+
+    datastore_model:fold_links(?CTX, <<?MODULE_STRING>>, ?MODEL_ALL_TREE_ID, fun
+        (#link{name = DocKey}, Acc) ->
+            case get_doc(DocKey) of
+                {ok, Doc} -> {ok, [Doc | Acc]};
+                {error, _} -> Acc
+            end
+    end, [], Opts2).
 
 
 %% @private
