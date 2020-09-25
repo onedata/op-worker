@@ -95,6 +95,8 @@ handle_deregistered_from_oz() ->
 %% @private
 -spec on_connect_to_oz() -> ok | no_return().
 on_connect_to_oz() ->
+    ok = node_manager_plugin:synchronize_clock(),
+    ?info("Synchronized node's clock with global Onezone time"),
     ok = oneprovider:set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
     ok = auth_cache:report_oz_connection_start(),

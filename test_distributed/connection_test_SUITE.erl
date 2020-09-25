@@ -215,7 +215,7 @@ python_client_test_base(Config) ->
     {ok, Port} = test_utils:get_env(Worker1, ?APP_NAME, https_server_port),
 
     % when
-    T1 = erlang:monotonic_time(milli_seconds),
+    T1 = time_utils:timestamp_millis(),
     Args = [
         "--host", Host,
         "--port", integer_to_list(Port),
@@ -229,7 +229,7 @@ python_client_test_base(Config) ->
     lists:foreach(fun(_) ->
         ?assertReceivedMatch(router_message_called, timer:seconds(15))
     end, lists:seq(1, PacketNum)),
-    T2 = erlang:monotonic_time(milli_seconds),
+    T2 = time_utils:timestamp_millis(),
     catch port_close(PythonClient),
     #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
 
@@ -307,7 +307,7 @@ sequential_ping_pong_test_base(Config) ->
     % when
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1),
 
-    T1 = erlang:monotonic_time(milli_seconds),
+    T1 = time_utils:timestamp_millis(),
     lists:foreach(fun({MsgId, Ping}) ->
         % send ping
         ok = ssl:send(Sock, Ping),
@@ -318,7 +318,7 @@ sequential_ping_pong_test_base(Config) ->
             message_body = {pong, #'Pong'{}}
         }, fuse_test_utils:receive_server_message())
     end, Pings),
-    T2 = erlang:monotonic_time(milli_seconds),
+    T2 = time_utils:timestamp_millis(),
 
     % then
     ok = ssl:close(Sock),
@@ -360,7 +360,7 @@ multi_ping_pong_test_base(Config) ->
 
     Self = self(),
 
-    T1 = erlang:monotonic_time(milli_seconds),
+    T1 = time_utils:timestamp_millis(),
     [
         spawn_link(fun() ->
             % when
@@ -387,7 +387,7 @@ multi_ping_pong_test_base(Config) ->
     lists:foreach(fun(_) ->
         ?assertReceivedMatch(success, infinity)
     end, ConnNumbersList),
-    T2 = erlang:monotonic_time(milli_seconds),
+    T2 = time_utils:timestamp_millis(),
     #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
 
 
@@ -424,17 +424,17 @@ bandwidth_test_base(Config) ->
 
     % when
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}]),
-    T1 = erlang:monotonic_time(milli_seconds),
+    T1 = time_utils:timestamp_millis(),
     lists:foreach(fun(_) ->
         ok = ssl:send(Sock, PacketRaw)
     end, lists:seq(1, PacketNum)),
-    T2 = erlang:monotonic_time(milli_seconds),
+    T2 = time_utils:timestamp_millis(),
 
     % then
     lists:foreach(fun(_) ->
         ?assertReceivedMatch(router_message_called, ?TIMEOUT)
     end, lists:seq(1, PacketNum)),
-    T3 = erlang:monotonic_time(milli_seconds),
+    T3 = time_utils:timestamp_millis(),
     ssl:close(Sock),
 
     [
@@ -485,15 +485,15 @@ bandwidth_test2_base(Config) ->
 
     % when
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}]),
-    T1 = erlang:monotonic_time(milli_seconds),
+    T1 = time_utils:timestamp_millis(),
     lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
-    T2 = erlang:monotonic_time(milli_seconds),
+    T2 = time_utils:timestamp_millis(),
 
     % then
     lists:foreach(fun(N) ->
         ?assertReceivedMatch(N, ?TIMEOUT)
     end, MsgNumbers),
-    T3 = erlang:monotonic_time(milli_seconds),
+    T3 = time_utils:timestamp_millis(),
     ok = ssl:close(Sock),
     [
         #parameter{name = sending_time, value = T2 - T1, unit = "ms"},

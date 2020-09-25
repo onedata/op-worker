@@ -43,7 +43,7 @@
 -type state() :: #state{}.
 -type error() :: {error, Reason :: term()}.
 
--define(NOW, time_utils:system_time_seconds()).
+-define(NOW, time_utils:timestamp_seconds()).
 -define(INACTIVITY_PERIOD, 60).
 -define(UPLOADS_CHECKUP_INTERVAL, ?INACTIVITY_PERIOD * 1000).
 

@@ -160,8 +160,6 @@ end).
 -define(HANDLE_RESOURCE_TYPE(__Handle), <<"Share">>).
 -define(HANDLE_RESOURCE_ID(__Handle), ?SHARE_1).
 -define(HANDLE_METADATA(__Handle), __Handle).
--define(HANDLE_TIMESTAMP_VALUE(__Handle), <<"2017-08-30T10:00:00Z">>).
--define(HANDLE_TIMESTAMP_MATCHER(__Handle), {{2017, 08, 30}, {10, 00, 00}}).
 -define(HANDLE_H_SERVICE(__Handle), ?HANDLE_SERVICE_1).
 -define(HANDLE_EFF_USERS_VALUE(__Handle), ?USER_PERMS_IN_HANDLE_VALUE_BINARIES).
 -define(HANDLE_EFF_USERS_MATCHER(__Handle), ?USER_PERMS_IN_HANDLE_MATCHER_ATOMS).
@@ -335,7 +333,6 @@ end).
     resource_type = ?HANDLE_RESOURCE_TYPE(__Handle),
     resource_id = ?HANDLE_RESOURCE_ID(__Handle),
     metadata = ?HANDLE_METADATA(__Handle),
-    timestamp = ?HANDLE_TIMESTAMP_MATCHER(__Handle),
     handle_service = ?HANDLE_H_SERVICE(__Handle),
     eff_users = ?HANDLE_EFF_USERS_MATCHER(__HService),
     eff_groups = ?HANDLE_EFF_GROUPS_MATCHER(__HService)
@@ -345,7 +342,6 @@ end).
     resource_type = undefined,
     resource_id = undefined,
     metadata = ?HANDLE_METADATA(__Handle),
-    timestamp = ?HANDLE_TIMESTAMP_MATCHER(__Handle),
     handle_service = undefined,
     eff_users = #{},
     eff_groups = #{}
@@ -503,8 +499,7 @@ end).
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = public}),
     <<"publicHandle">> => ?HANDLE_PUBLIC_HANDLE(__HandleId),
-    <<"metadata">> => ?HANDLE_METADATA(__HandleId),
-    <<"timestamp">> => ?HANDLE_TIMESTAMP_VALUE(__HandleId)
+    <<"metadata">> => ?HANDLE_METADATA(__HandleId)
 }).
 -define(HANDLE_PRIVATE_DATA_VALUE(__HandleId), begin
     __PublicData = ?HANDLE_PUBLIC_DATA_VALUE(__HandleId),

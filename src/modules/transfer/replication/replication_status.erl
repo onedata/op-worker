@@ -97,7 +97,7 @@ handle_enqueued(TransferId) ->
             ?SCHEDULED_STATUS ->
                 {ok, Transfer#transfer{
                     replication_status = ?ENQUEUED_STATUS,
-                    start_time = provider_logic:zone_time_seconds(),
+                    start_time = time_utils:timestamp_seconds(),
                     files_to_process = 1,
                     pid = EncodedPid
                 }};
@@ -226,7 +226,7 @@ mark_completed(Transfer = #transfer{replication_status = ?ACTIVE_STATUS}) ->
         replication_status = ?COMPLETED_STATUS,
         finish_time = case transfer:is_migration(Transfer) of
             true -> Transfer#transfer.finish_time;
-            false -> provider_logic:zone_time_seconds()
+            false -> time_utils:timestamp_seconds()
         end
     }};
 mark_completed(#transfer{replication_status = Status}) ->
@@ -251,7 +251,7 @@ mark_failed_forced(Transfer) ->
             IsMigration = transfer:is_migration(Transfer),
             {ok, Transfer#transfer{
                 replication_status = failed,
-                finish_time = provider_logic:zone_time_seconds(),
+                finish_time = time_utils:timestamp_seconds(),
                 eviction_status = case IsMigration of
                     true -> failed;
                     false -> Transfer#transfer.eviction_status
@@ -273,7 +273,7 @@ mark_cancelled(Transfer = #transfer{replication_status = ?SCHEDULED_STATUS}) ->
 mark_cancelled(Transfer = #transfer{replication_status = ?ABORTING_STATUS}) ->
     {ok, Transfer#transfer{
         replication_status = ?CANCELLED_STATUS,
-        finish_time = provider_logic:zone_time_seconds(),
+        finish_time = time_utils:timestamp_seconds(),
         eviction_status = case transfer:is_migration(Transfer) of
             true -> ?CANCELLED_STATUS;
             false -> Transfer#transfer.eviction_status

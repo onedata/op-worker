@@ -31,10 +31,10 @@
 %%% API
 %%%===================================================================
 
-
+%% @TODO rename to "timestamp_seconds" when moving the RPC API to OZ
 -spec cluster_time_seconds(node()) -> time_utils:seconds().
 cluster_time_seconds(OzNode) ->
-    rpc:call(OzNode, time_utils, cluster_time_seconds, []).
+    rpc:call(OzNode, time_utils, timestamp_seconds, []).
 
 
 -spec get_user_protected_data(node(), od_user:id()) -> {ok, map()} | no_return().

@@ -797,7 +797,7 @@ stop_http_server() ->
 
 do(#mod{method = "POST", request_uri = ?ENDED_TRANSFERS_PATH, entity_body = Body}) ->
     #{<<"transferId">> := TransferId} = json_utils:decode(Body),
-    CallTime = time_utils:system_time_millis() div 1000,
+    CallTime = time_utils:timestamp_millis() div 1000,
     ?TEST_PROCESS ! ?CALLBACK_CALL_TIME(TransferId, CallTime),
 
     done.

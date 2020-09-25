@@ -70,11 +70,11 @@ continuous_harvesting_test_base(Config) ->
         false ->
             NewFiles + NewDirs + BaseDirs
     end,
-    Start = time_utils:system_time_millis(),
+    Start = time_utils:timestamp_millis(),
     % start harvesting_stream
     harvesting_stress_test_utils:revise_all_spaces(Worker),
     harvesting_stress_test_utils:harvesting_receive_loop(AllFiles),
-    Diff = time_utils:system_time_millis() - Start,
+    Diff = time_utils:timestamp_millis() - Start,
     DiffSec = Diff/1000,
     AvgRate =  AllFiles /DiffSec,
     ct:print("Harvesting ~p files took ~p s.~n"

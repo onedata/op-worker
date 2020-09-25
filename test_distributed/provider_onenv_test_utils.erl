@@ -57,7 +57,7 @@ setup_sessions(Config) ->
 -spec setup_user_session(UserId :: binary(), OzwNode :: node(), OpwNode :: node()) ->
     {ok, SessId :: binary()}.
 setup_user_session(UserId, OzwNode, OpwNode) ->
-    TimeCaveat = #cv_time{valid_until = rpc:call(OzwNode, time_utils, cluster_time_seconds, []) + 100000},
+    TimeCaveat = #cv_time{valid_until = rpc:call(OzwNode, time_utils, timestamp_seconds, []) + 100000},
     {ok, AccessToken} =
         rpc:call(OzwNode, token_logic, create_user_temporary_token,
             [?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}]),
