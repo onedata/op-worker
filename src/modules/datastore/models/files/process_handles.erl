@@ -27,6 +27,9 @@
 %% datastore_model callbacks
 -export([get_ctx/0]).
 
+% Exports for tests
+-export([list_docs/2]).
+
 -type id() :: datastore:key().
 -type record() :: #process_handles{}.
 -type doc() :: datastore_doc:doc(record()).
@@ -55,11 +58,10 @@ add(FileHandle) ->
 
     Diff = fun(#process_handles{handles = ProcessHandles} = Record) ->
         {ok, Record#process_handles{
-            process = Process,
             handles = ProcessHandles#{HandleId => FileHandle}}
         }
     end,
-    {ok, Default} = Diff(#process_handles{}),
+    {ok, Default} = Diff(#process_handles{process = Process}),
 
     case datastore_model:update(?CTX, key(Process), Diff, Default) of
         {ok, #document{value = #process_handles{handles = Handles}}} when map_size(Handles) == 1 ->
@@ -167,21 +169,18 @@ key(Process) ->
 
 
 %% @private
--spec list_docs(StartFromId :: undefined | id(), Limit :: all | non_neg_integer()) ->
+-spec list_docs(StartFromId :: undefined | id(), Limit :: non_neg_integer()) ->
     {ok, [doc()]} | {error, term()}.
 list_docs(StartFromId, Limit) ->
     Opts = case StartFromId of
         undefined ->
-            #{};
+            #{size => Limit};
         _ ->
             #{
                 prev_link_name => StartFromId,
-                offset => 1
+                offset => 1,
+                size => Limit
             }
-    end,
-    Opts2 = case Limit of
-        all -> Opts;
-        _ -> Opts#{size => Limit}
     end,
 
     datastore_model:fold_links(?CTX, <<?MODULE_STRING>>, ?MODEL_ALL_TREE_ID, fun
@@ -190,7 +189,7 @@ list_docs(StartFromId, Limit) ->
                 {ok, Doc} -> {ok, [Doc | Acc]};
                 {error, _} -> Acc
             end
-    end, [], Opts2).
+    end, [], Opts).
 
 
 %% @private

@@ -721,7 +721,45 @@ lfm_monitored_open(Config) ->
             ?assertMatch(?ERROR_NOT_FOUND, GetAllProcessHandles(ProcMonitorOpeningFile), Attempts);
         Error2 ->
             ct:fail(Error2)
-    end.
+    end,
+
+    % TODO VFS-6833 move this to its own testcase.
+    FilesNum = 230,
+    BatchSize = 50,
+
+    ExpFileIds = lists:sort(lists:map(fun(Num) ->
+        FileIdx = integer_to_binary(Num),
+        FilePath = <<"/space_name1/file_", FileIdx/binary>>,
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath, 8#755)),
+
+        spawn(W, fun() ->
+            Self !  lfm:monitored_open(SessId1, {guid, FileGuid}, read),
+            receive _ -> ok end
+        end),
+
+        <<"/space_id1/file_", FileIdx/binary>>
+    end, lists:seq(1, FilesNum))),
+
+    GetFileIdsFun = fun(ProcessHandlesDocs) ->
+        lists:map(fun(#document{value = #process_handles{handles = Handles}}) ->
+            ?assertEqual(1, map_size(Handles)),
+            [FileHandle] = maps:values(Handles),
+            lfm_context:get_file_id(FileHandle)
+        end, ProcessHandlesDocs)
+    end,
+
+    GetAllDocsFun = fun F(StartFromId) ->
+        {ok, FetchedDocs} = rpc:call(W, process_handles, list_docs, [StartFromId, BatchSize]),
+        case length(FetchedDocs) < BatchSize of
+            true ->
+                GetFileIdsFun(FetchedDocs);
+            false ->
+                [LastDoc | _] = FetchedDocs,
+                GetFileIdsFun(FetchedDocs) ++ F(LastDoc#document.key)
+        end
+    end,
+
+    ?assertEqual(ExpFileIds, lists:usort(GetAllDocsFun(undefined)), Attempts).
 
 
 %%%===================================================================
