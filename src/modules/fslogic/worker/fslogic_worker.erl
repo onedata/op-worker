@@ -135,6 +135,7 @@ supervisor_flags() ->
 -spec supervisor_children_spec() -> [supervisor:child_spec()].
 supervisor_children_spec() ->
     [
+        auth_cache:spec(),
         lfm_handles_monitor:spec(),
         file_upload_manager:spec(),
         transfer_onf_stats_aggregator:spec()

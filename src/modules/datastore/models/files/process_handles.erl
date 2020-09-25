@@ -17,7 +17,7 @@
 
 % API
 -export([
-    add/2, remove/2,
+    add/1, remove/1,
     get_all_process_handles/1,
     release_all_process_handles/1
 ]).
@@ -45,22 +45,20 @@
 %%%===================================================================
 
 
--spec add(pid(), lfm:handle()) -> ok | {error, term()}.
-add(Process, FileHandle) ->
-    Key = key(Process),
+-spec add(lfm:handle()) -> ok | {error, term()}.
+add(FileHandle) ->
+    Process = self(),
     HandleId = lfm_context:get_handle_id(FileHandle),
 
     Diff = fun(#process_handles{handles = ProcessHandles} = Record) ->
-        {ok, Record#process_handles{handles = ProcessHandles#{HandleId => FileHandle}}}
-    end,
-    Default = #document{
-        key = Key,
-        value = #process_handles{
+        {ok, Record#process_handles{
             process = Process,
-            handles = #{HandleId => FileHandle}
+            handles = ProcessHandles#{HandleId => FileHandle}}
         }
-    },
-    case datastore_model:update(?CTX, Key, Diff, Default) of
+    end,
+    {ok, Default} = Diff(#process_handles{}),
+
+    case datastore_model:update(?CTX, key(Process), Diff, Default) of
         {ok, #document{value = #process_handles{handles = Handles}}} when map_size(Handles) == 1 ->
             lfm_handles_monitor:monitor_process(Process);
         {ok, _} ->
@@ -70,8 +68,9 @@ add(Process, FileHandle) ->
     end.
 
 
--spec remove(pid(), lfm:handle()) -> ok | {error, term()}.
-remove(Process, FileHandle) ->
+-spec remove(lfm:handle()) -> ok | {error, term()}.
+remove(FileHandle) ->
+    Process = self(),
     Key = key(Process),
 
     Diff = fun(#process_handles{handles = ProcessHandles} = Record) ->

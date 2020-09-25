@@ -89,6 +89,5 @@ supervisor_flags() ->
 -spec supervisor_children_spec() -> [supervisor:child_spec()].
 supervisor_children_spec() ->
     [
-        auth_cache:spec(),
         session_sup:spec()
     ].

@@ -494,7 +494,7 @@ open(SessId, FileKey, OpenType) ->
 monitored_open(SessId, FileKey, OpenType) ->
     ?run(fun() ->
         {ok, FileHandle} = lfm_files:open(SessId, FileKey, OpenType),
-        case process_handles:add(self(), FileHandle) of
+        case process_handles:add(FileHandle) of
             ok ->
                 {ok, FileHandle};
             {error, _} = Error ->
@@ -604,8 +604,8 @@ release(FileHandle) ->
 -spec monitored_release(handle()) -> ok | error_reply().
 monitored_release(FileHandle) ->
     ?run(fun() ->
-        process_handles:remove(self(), FileHandle),
-        lfm_files:release(FileHandle)
+        lfm_files:release(FileHandle),
+        process_handles:remove(FileHandle)
     end).
 
 %%--------------------------------------------------------------------

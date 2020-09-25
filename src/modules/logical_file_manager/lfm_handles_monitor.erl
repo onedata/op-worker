@@ -17,7 +17,6 @@
 -behaviour(gen_server).
 
 -include("modules/datastore/transfer.hrl").
--include("timeouts.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -41,6 +40,8 @@
 -define(MONITOR_PROCESS(__PROC), {monitor_process, __PROC}).
 -define(DEMONITOR_PROCESS(__PROC), {demonitor_process, __PROC}).
 
+-define(DEFAULT_REQUEST_TIMEOUT, timer:minutes(1)).
+
 
 %%%===================================================================
 %%% API
@@ -54,7 +55,7 @@ monitor_process(Process) ->
 
 -spec demonitor_process(pid()) -> ok.
 demonitor_process(Process) ->
-    gen_server2:call(?MODULE, ?MONITOR_PROCESS(Process)).
+    call_lfm_handles_monitor(?DEMONITOR_PROCESS(Process)).
 
 
 -spec start_link() -> {ok, pid()} | ignore | {error, Reason :: term()}.
@@ -84,10 +85,9 @@ spec() -> #{
 %% Initializes the server.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term()) ->
-    {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore.
+-spec init(Args :: term()) -> {ok, State :: state()}.
 init(_Args) ->
+    % In case when server died and was restarted try to release all handles for dead processes.
     process_handles:release_all_dead_processes_handles(),
     {ok, #state{}}.
 
@@ -99,12 +99,7 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: state()) ->
-    {reply, Reply :: term(), NewState :: state()} |
-    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
-    {stop, Reason :: term(), NewState :: state()}.
+    {reply, Reply :: term(), NewState :: state()}.
 handle_call(?MONITOR_PROCESS(Process), _From, #state{processes = Processes} = State) ->
     NewState = case maps:is_key(Process, Processes) of
         true -> State;
@@ -132,9 +127,7 @@ handle_call(Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: state()) ->
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
+    {noreply, NewState :: state()}.
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -147,9 +140,7 @@ handle_cast(Request, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout() | term(), State :: state()) ->
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
+    {noreply, NewState :: state()}.
 handle_info({'DOWN', _MonitorRef, process, Pid, _Reason}, #state{processes = Processes} = State) ->
     process_handles:release_all_process_handles(Pid),
     {noreply, State#state{processes = maps:remove(Pid, Processes)}};
@@ -167,8 +158,8 @@ handle_info(Info, State) ->
 %% with Reason. The return value is ignored.
 %% @end
 %%--------------------------------------------------------------------
--spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: state()) -> term().
+-spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), State :: state()) ->
+    ok.
 terminate(_Reason, _State) ->
     ok.
 
@@ -179,8 +170,8 @@ terminate(_Reason, _State) ->
 %% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
--spec code_change(OldVsn :: term() | {down, term()}, State :: state(),
-    Extra :: term()) -> {ok, NewState :: state()} | {error, Reason :: term()}.
+-spec code_change(OldVsn :: term() | {down, term()}, State :: state(), Extra :: term()) ->
+    {ok, NewState :: state()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -197,15 +188,15 @@ call_lfm_handles_monitor(Msg) ->
         gen_server2:call(?MODULE, Msg, ?DEFAULT_REQUEST_TIMEOUT)
     catch
         exit:{noproc, _} ->
-            ?debug("Lfm handles monitor process does not exist"),
+            ?error("Lfm handles monitor process does not exist"),
             {error, no_lfm_handles_monitor};
         exit:{normal, _} ->
-            ?debug("Exit of lfm handles monitor process"),
+            ?error("Exit of lfm handles monitor process"),
             {error, no_lfm_handles_monitor};
         exit:{timeout, _} ->
-            ?debug("Timeout of lfm handles monitor process"),
+            ?error("Timeout of lfm handles monitor process"),
             ?ERROR_TIMEOUT;
         Type:Reason ->
-            ?error("Cannot call lfm handles monitor due to ~p:~p", [Type, Reason]),
+            ?error_stacktrace("Cannot call lfm handles monitor due to ~p:~p", [Type, Reason]),
             {error, Reason}
     end.
