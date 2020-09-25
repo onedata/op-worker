@@ -483,9 +483,9 @@ open(SessId, FileKey, OpenType) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Opens a file in selected mode, register monitoring for opened handle (se that
-%% it can be closed when process abruptly dies) and returns a file handle used
-%% to read or write.
+%% Opens a file in selected mode. The state of process opening file using this function
+%% is monitored so that all opened handles can be closed when it unexpectedly dies
+%% (e.g. client abruptly closes connection).
 %% @end
 %%--------------------------------------------------------------------
 -spec monitored_open(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
@@ -493,9 +493,15 @@ open(SessId, FileKey, OpenType) ->
     {ok, handle()} | error_reply().
 monitored_open(SessId, FileKey, OpenType) ->
     ?run(fun() ->
-        {ok, FileHandle} = Result = lfm_files:open(SessId, FileKey, OpenType),
-        lfm_handles_monitor:register_open(FileHandle),
-        Result
+        {ok, FileHandle} = lfm_files:open(SessId, FileKey, OpenType),
+        case process_handles:add(self(), FileHandle) of
+            ok ->
+                {ok, FileHandle};
+            {error, _} = Error ->
+                ?error("Failed to perform 'monitored_open' due to ~p", [Error]),
+                monitored_release(FileHandle),
+                {error, ?EAGAIN}
+        end
     end).
 
 %%--------------------------------------------------------------------
@@ -590,13 +596,15 @@ release(FileHandle) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Releases previously opened file and deregister monitoring of said handle.
+%% Releases previously opened file. If it is the last handle opened by this process
+%% using `monitored_open` then the state of process will no longer be monitored
+%% (even if process unexpectedly dies there are no handles to release).
 %% @end
 %%--------------------------------------------------------------------
 -spec monitored_release(handle()) -> ok | error_reply().
 monitored_release(FileHandle) ->
     ?run(fun() ->
-        lfm_handles_monitor:register_close(FileHandle),
+        process_handles:remove(self(), FileHandle),
         lfm_files:release(FileHandle)
     end).
 

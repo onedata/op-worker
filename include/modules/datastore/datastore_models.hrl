@@ -786,9 +786,10 @@
     query_view_params = [] :: transfer:query_view_params()
 }).
 
-%% Model that tracks open handles per file
--record(handles_per_process, {
-    handles = #{} :: #{pid() => #{lfm_context:handle_id() => lfm:handle()}}
+%% Model that tracks process open handles
+-record(process_handles, {
+    process :: pid(),
+    handles = #{} :: #{lfm_context:handle_id() => lfm:handle()}
 }).
 
 %% Model that tracks what files are currently transferred

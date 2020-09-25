@@ -204,7 +204,7 @@ lfm_monitored_open(Config) ->
         receive _ -> ok end
     end,
     GetAllProcessHandles = fun(Pid) ->
-        rpc:call(W, handles_per_process, get_all_process_handles, [Pid])
+        rpc:call(W, process_handles, get_all_process_handles, [Pid])
     end,
 
     % Assert that handle remains open if it was created using 'open' and wasn't closed before

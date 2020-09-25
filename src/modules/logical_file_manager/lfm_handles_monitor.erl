@@ -7,8 +7,8 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Monitors cowboy processes (gui/REST handlers) that open file handles
-%%% so that those handles can be closed when said processes unexpectedly
-%%% dies (client abruptly closes connection).
+%%% so that all handles associated with process that unexpectedly dies
+%%% (e.g. client abruptly closes connection) can be closed.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(lfm_handles_monitor).
@@ -17,10 +17,12 @@
 -behaviour(gen_server).
 
 -include("modules/datastore/transfer.hrl").
+-include("timeouts.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([register_open/1, register_close/1]).
+-export([monitor_process/1, demonitor_process/1]).
 
 -export([start_link/0, spec/0]).
 
@@ -31,13 +33,13 @@
     terminate/2, code_change/3
 ]).
 
--record(state, {monitored_processes = #{} :: #{pid() => reference()}}).
+-record(state, {processes = #{} :: #{pid() => reference()}}).
 
 -type state() :: #state{}.
 
 
--define(REGISTER_OPEN(__PROC, __FILE_HANDLE), {register_open, __PROC, __FILE_HANDLE}).
--define(REGISTER_CLOSE(__PROC, __FILE_HANDLE), {register_close, __PROC, __FILE_HANDLE}).
+-define(MONITOR_PROCESS(__PROC), {monitor_process, __PROC}).
+-define(DEMONITOR_PROCESS(__PROC), {demonitor_process, __PROC}).
 
 
 %%%===================================================================
@@ -45,14 +47,14 @@
 %%%===================================================================
 
 
--spec register_open(lfm:handle()) -> ok.
-register_open(FileHandle) ->
-    gen_server2:cast(?MODULE, ?REGISTER_OPEN(self(), FileHandle)).
+-spec monitor_process(pid()) -> ok.
+monitor_process(Process) ->
+    call_lfm_handles_monitor(?MONITOR_PROCESS(Process)).
 
 
--spec register_close(lfm:handle()) -> ok.
-register_close(FileHandle) ->
-    gen_server2:cast(?MODULE, ?REGISTER_OPEN(self(), FileHandle)).
+-spec demonitor_process(pid()) -> ok.
+demonitor_process(Process) ->
+    gen_server2:call(?MODULE, ?MONITOR_PROCESS(Process)).
 
 
 -spec start_link() -> {ok, pid()} | ignore | {error, Reason :: term()}.
@@ -86,7 +88,7 @@ spec() -> #{
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init(_Args) ->
-    handles_per_process:release_all_dead_processes_handles(),
+    process_handles:release_all_dead_processes_handles(),
     {ok, #state{}}.
 
 
@@ -96,14 +98,28 @@ init(_Args) ->
 %% Handles call messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: state()) ->
+-spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: state()) ->
     {reply, Reply :: term(), NewState :: state()} |
     {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call(?MONITOR_PROCESS(Process), _From, #state{processes = Processes} = State) ->
+    NewState = case maps:is_key(Process, Processes) of
+        true -> State;
+        false -> State#state{processes = Processes#{Process => monitor(process, Process)}}
+    end,
+    {reply, ok, NewState};
+handle_call(?DEMONITOR_PROCESS(Process), _From, #state{processes = Processes} = State) ->
+    NewState = case maps:take(Process, Processes) of
+        error ->
+            State;
+        {MonitorRef, LeftoverProcesses} ->
+            demonitor(MonitorRef, [flush]),
+            State#state{processes = LeftoverProcesses}
+    end,
+    {reply, ok, NewState};
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
     {reply, wrong_request, State}.
@@ -119,24 +135,6 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(?REGISTER_OPEN(Pid, FileHandle), #state{monitored_processes = Processes} = State) ->
-    handles_per_process:register_handle(Pid, FileHandle),
-    NewState = case maps:is_key(Pid, Processes) of
-        true -> State;
-        false -> State#state{monitored_processes = Processes#{Pid => monitor(process, Pid)}}
-    end,
-    {noreply, NewState};
-handle_cast(?REGISTER_CLOSE(Pid, FileHandle), #state{monitored_processes = Processes} = State) ->
-    NewState = case handles_per_process:deregister_handle(Pid, FileHandle) of
-        {ok, []} ->
-            {MonitorRef, LeftoverProcesses} = maps:take(Pid, Processes),
-            demonitor(MonitorRef, [flush]),
-
-            State#state{monitored_processes = LeftoverProcesses};
-        _ ->
-            State
-    end,
-    {noreply, NewState};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -152,11 +150,9 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info({'DOWN', _MonitorRef, process, Pid, _Reason}, #state{
-    monitored_processes = Processes
-} = State) ->
-    handles_per_process:release_all_process_handles(Pid),
-    {noreply, State#state{monitored_processes = maps:remove(Pid, Processes)}};
+handle_info({'DOWN', _MonitorRef, process, Pid, _Reason}, #state{processes = Processes} = State) ->
+    process_handles:release_all_process_handles(Pid),
+    {noreply, State#state{processes = maps:remove(Pid, Processes)}};
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -187,3 +183,29 @@ terminate(_Reason, _State) ->
     Extra :: term()) -> {ok, NewState :: state()} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec call_lfm_handles_monitor(term()) -> ok | {error, term()}.
+call_lfm_handles_monitor(Msg) ->
+    try
+        gen_server2:call(?MODULE, Msg, ?DEFAULT_REQUEST_TIMEOUT)
+    catch
+        exit:{noproc, _} ->
+            ?debug("Lfm handles monitor process does not exist"),
+            {error, no_lfm_handles_monitor};
+        exit:{normal, _} ->
+            ?debug("Exit of lfm handles monitor process"),
+            {error, no_lfm_handles_monitor};
+        exit:{timeout, _} ->
+            ?debug("Timeout of lfm handles monitor process"),
+            ?ERROR_TIMEOUT;
+        Type:Reason ->
+            ?error("Cannot call lfm handles monitor due to ~p:~p", [Type, Reason]),
+            {error, Reason}
+    end.
