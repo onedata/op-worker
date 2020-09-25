@@ -88,11 +88,7 @@ supervisor_flags() ->
 %%--------------------------------------------------------------------
 -spec supervisor_children_spec() -> [supervisor:child_spec()].
 supervisor_children_spec() ->
-    [#{
-        id => session_sup,
-        start => {session_sup, start_link, []},
-        restart => temporary,
-        shutdown => infinity,
-        type => supervisor,
-        modules => [session_sup]
-    }].
+    [
+        auth_cache:spec(),
+        session_sup:spec()
+    ].

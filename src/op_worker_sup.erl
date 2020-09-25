@@ -53,9 +53,4 @@ start_link() ->
 -spec init(Args :: term()) ->
     {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init([]) ->
-    {ok, {#{strategy => one_for_one, intensity => 1000, period => 3600}, [
-        auth_cache:spec(),
-        lfm_handles_monitor:spec(),
-        file_upload_manager:spec(),
-        transfer_onf_stats_aggregator:spec()
-    ]}}.
+    {ok, {#{strategy => one_for_one, intensity => 1000, period => 3600}, []}}.

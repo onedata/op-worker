@@ -167,7 +167,10 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
     ], [worker_first]},
-    {fslogic_worker, []},
+    {fslogic_worker, [
+        {supervisor_flags, fslogic_worker:supervisor_flags()},
+        {supervisor_children_spec, fslogic_worker:supervisor_children_spec()}
+    ]},
     {dbsync_worker, [
         {supervisor_flags, dbsync_worker:supervisor_flags()}
     ]},

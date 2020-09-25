@@ -786,7 +786,7 @@
     query_view_params = [] :: transfer:query_view_params()
 }).
 
-%% Model that tracks process open handles
+%% Model that tracks process' open handles
 -record(process_handles, {
     process :: pid(),
     handles = #{} :: #{lfm_context:handle_id() => lfm:handle()}

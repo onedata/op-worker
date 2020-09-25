@@ -17,7 +17,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/2]).
+-export([spec/0, start_link/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -25,6 +25,21 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns child spec for ?SERVER to attach it to supervision.
+%% @end
+%%-------------------------------------------------------------------
+-spec spec() -> supervisor:child_spec().
+spec() -> #{
+    id => ?MODULE,
+    start => {?MODULE, start_link, []},
+    restart => temporary,
+    shutdown => infinity,
+    type => supervisor,
+    modules => [?MODULE]
+}.
 
 %%--------------------------------------------------------------------
 %% @doc
