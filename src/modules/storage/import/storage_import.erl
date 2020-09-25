@@ -70,40 +70,59 @@
 
 -export_type([status/0, mode/0, config/0, scan_config/0, scan_config_map/0, stats/0]).
 
+-define(RUN_AND_HANDLE_EXCEPTION(Fun),
+    try Fun()
+    catch
+        throw:{error, Reason} ->
+            {error, Reason};
+        throw:Reason ->
+            {error, Reason}
+    end
+).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 -spec set_manual_mode(od_space:id()) -> ok | {error, term()}.
 set_manual_mode(SpaceId) ->
-    assert_manual_storage_import_supported(SpaceId),
-    storage_import_config:set_manual_mode(SpaceId).
+    ?RUN_AND_HANDLE_EXCEPTION(fun() ->
+        assert_manual_storage_import_supported(SpaceId),
+        storage_import_config:set_manual_mode(SpaceId)
+    end).
 
 
 -spec set_or_configure_auto_mode(od_space:id(), scan_config_map()) -> ok | {error, term()}.
 set_or_configure_auto_mode(SpaceId, ScanConfigMap) ->
-    assert_auto_storage_import_supported(SpaceId),
+    ?RUN_AND_HANDLE_EXCEPTION(fun() ->
+        assert_auto_storage_import_supported(SpaceId),
 
-    file_meta:make_space_exist(SpaceId),
-    case storage_import_config:configure_auto_mode(SpaceId, ScanConfigMap) of
-        ok ->
-            storage_import_monitoring:ensure_created(SpaceId),
-            storage_import_worker:notify_space_with_auto_import_configured(SpaceId),
-            ok;
-        {error, _} = Error -> Error
-    end.
+        file_meta:make_space_exist(SpaceId),
+        case storage_import_config:configure_auto_mode(SpaceId, ScanConfigMap) of
+            ok ->
+                storage_import_monitoring:ensure_created(SpaceId),
+                storage_import_worker:notify_space_with_auto_import_configured(SpaceId),
+                ok;
+            {error, _} = Error -> Error
+        end
+    end).
+
 
 
 -spec start_auto_scan(od_space:id()) -> ok | {error, term()}.
 start_auto_scan(SpaceId) ->
-    assert_auto_import_mode(SpaceId),
-    storage_sync_traverse:run_scan(SpaceId).
+    ?RUN_AND_HANDLE_EXCEPTION(fun() ->
+        assert_auto_import_mode(SpaceId),
+        storage_sync_traverse:run_scan(SpaceId)
+    end).
 
 
 -spec stop_auto_scan(od_space:id()) -> ok.
 stop_auto_scan(SpaceId) ->
-    assert_auto_import_mode(SpaceId),
-    storage_sync_traverse:cancel(SpaceId).
+    ?RUN_AND_HANDLE_EXCEPTION(fun() ->
+        assert_auto_import_mode(SpaceId),
+        storage_sync_traverse:cancel(SpaceId)
+    end).
 
 
 -spec clean_up(od_space:id()) -> ok | {error, term()}.
@@ -161,17 +180,19 @@ get_stats(SpaceId, Type, Window) ->
 
 -spec get_manual_example(od_space:id()) -> {ok, binary()}.
 get_manual_example(SpaceId) ->
-    assert_manual_import_mode(SpaceId),
+    ?RUN_AND_HANDLE_EXCEPTION(fun() ->
+        assert_manual_import_mode(SpaceId),
 
-    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
-    Domain = oneprovider:get_domain(),
+        {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+        Domain = oneprovider:get_domain(),
 
-    {ok, str_utils:format_bin(
-        "curl -X POST -H \"X-Auth-Token:$TOKEN\" -H \"content-type:application/json\" \ "
-        "-d '{\"storageId\":\"~s\", \"spaceId\":\"~s\", \"storageFileId\":\"$STORAGE_FILE_ID\", \"destinationPath\":\"'$DESTINATION_PATH'\"}' \ "
-        "https://~s/api/v3/oneprovider/data/register",
-        [StorageId, SpaceId, Domain]
-    )}.
+        {ok, str_utils:format_bin(
+            "curl -X POST -H \"X-Auth-Token:$TOKEN\" -H \"content-type:application/json\" \ "
+            "-d '{\"storageId\":\"~s\", \"spaceId\":\"~s\", \"storageFileId\":\"$STORAGE_FILE_ID\", \"destinationPath\":\"'$DESTINATION_PATH'\"}' \ "
+            "https://~s/api/v3/oneprovider/data/register",
+            [StorageId, SpaceId, Domain]
+        )}
+    end).
 
 %%%===================================================================
 %%% Migrate from space_strategies
