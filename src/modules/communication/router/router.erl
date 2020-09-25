@@ -189,7 +189,7 @@ route_and_ignore_answer(#client_message{
         consumer_token = ConsumerToken
     }
 } = Msg) ->
-    incoming_session_watcher:request_credentials_update(
+    incoming_session_watcher:update_credentials(
         effective_session_id(Msg),
         AccessToken, ConsumerToken
     ),
