@@ -386,8 +386,8 @@ get_operation_supported(acl, private) -> true;
 get_operation_supported(shares, private) -> true;               % gs only
 get_operation_supported(transfers, private) -> true;
 get_operation_supported(file_qos_summary, private) -> true;     % REST/gs
-get_operation_supported(download_url, private) -> true;
-get_operation_supported(download_url, public) -> true;
+get_operation_supported(download_url, private) -> true;         % gs only
+get_operation_supported(download_url, public) -> true;          % gs only
 get_operation_supported(_, _) -> false.
 
 
@@ -713,10 +713,8 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) -
     case page_file_download:get_file_download_url(SessionId, FileGuid) of
         {ok, URL} ->
             {ok, value, URL};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
+        {error, _} = Error ->
+            Error
     end.
 
 
