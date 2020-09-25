@@ -149,9 +149,9 @@ get_next_jobs_base(delete_local_documents) -> [].
 
 %% @private
 -spec execute_stage(space_unsupport_job:record()) -> ok.
-execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId, storage_id = StorageId}) ->
+execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
     main_harvesting_stream:space_unsupported(SpaceId),
-    storage_sync:cancel(SpaceId, StorageId),
+    storage_import:stop_auto_scan(SpaceId),
     %% @TODO VFS-6133 Stop all incoming transfers
     %% @TODO VFS-6134 Close all open file handles
     %% @TODO VFS-6135 Block all modifying file operations
@@ -308,6 +308,6 @@ cleanup_local_documents(SpaceId, StorageId) ->
     file_popularity_api:delete_config(SpaceId),
     autocleaning_api:disable(SpaceId),
     autocleaning_api:delete_config(SpaceId),
-    storage_sync:clean_up(SpaceId, StorageId),
+    storage_import:clean_up(SpaceId),
     space_quota:delete(SpaceId),
     luma:clear_db(StorageId, SpaceId).

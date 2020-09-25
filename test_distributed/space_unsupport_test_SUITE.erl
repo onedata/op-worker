@@ -13,6 +13,7 @@
 -author("Michal Stanisz").
 
 -include("global_definitions.hrl").
+-include("modules/storage/import/storage_import.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -163,7 +164,8 @@ cleanup_traverse_stage_with_import_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     
     {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker, SessId),
-    ok = rpc:call(Worker, storage_sync, configure_import, [?SPACE_ID, true, #{max_depth => 5, sync_acl => true}]),
+    ok = rpc:call(Worker, storage_import, set_or_configure_auto_mode, [?SPACE_ID,
+        #{enabled => true, max_depth => 5, sync_acl => true}]),
     
     % Relative paths to space dir. Empty binary represents space dir.
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
@@ -212,9 +214,9 @@ cleanup_traverse_stage_persistence_test(Config) ->
 
 delete_synced_documents_stage_test(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    % TODO VFS-6135 before stopping dbsync during unsupport is implemented run this stage on the 
-    % same worker as the `overall_test` is ran on. Otherwise running this stage may 
-    % cause dbsync hooks to create documents for files, which were deleted long ago (e.g file_meta_posthooks), 
+    % TODO VFS-6135 before stopping dbsync during unsupport is implemented run this stage on the
+    % same worker as the `overall_test` is ran on. Otherwise running this stage may
+    % cause dbsync hooks to create documents for files, which were deleted long ago (e.g file_meta_posthooks),
     % and these documents will never be deleted resulting in a failure of the aforementioned test.
     Worker1 = select_provider_without_imported_storage(Workers),
     Worker2 = select_provider_with_imported_storage(Workers),
@@ -255,8 +257,9 @@ delete_local_documents_stage_test(Config) ->
     % select provider with imported storage because storage sync is being enabled later on
     Worker = select_provider_with_imported_storage(Workers),
     StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
-    ok = rpc:call(Worker, storage_sync, configure_import, [?SPACE_ID, true, #{max_depth => 5, sync_acl => true}]),
-    ok = rpc:call(Worker, storage_sync_worker, schedule_spaces_check, [0]),
+    ok = rpc:call(Worker, storage_import, set_or_configure_auto_mode, [?SPACE_ID,
+        #{continuous_scan => true, max_depth => 5, sync_acl => true}]),
+    ok = rpc:call(Worker, storage_import_worker, schedule_spaces_check, [0]),
     ok = rpc:call(Worker, file_popularity_api, enable, [?SPACE_ID]),
     ACConfig =  #{
         enabled => true,
@@ -265,13 +268,14 @@ delete_local_documents_stage_test(Config) ->
     },
     ok = rpc:call(Worker, autocleaning_api, configure, [?SPACE_ID, ACConfig]),
     
-    ?assertMatch({ok, _}, rpc:call(Worker, space_strategies, get, [?SPACE_ID])),
-    ?assertMatch({ok, _}, rpc:call(Worker, storage_sync_monitoring, get, [?SPACE_ID, StorageId]), 10),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_import_config, get, [?SPACE_ID])),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_import_monitoring, get, [?SPACE_ID]), 10),
     ?assertMatch({ok, _}, rpc:call(Worker, autocleaning, get, [?SPACE_ID])),
     ?assertMatch({ok, _}, rpc:call(Worker, file_popularity_config, get, [?SPACE_ID])),
     ?assertMatch(true, rpc:call(Worker, file_popularity_api, is_enabled, [?SPACE_ID])),
     % wait for storage sync to finish
-    ?assertEqual(finished, rpc:call(Worker, storage_sync_monitoring, get_import_status, [?SPACE_ID, StorageId]), 30),
+    ?assertMatch({ok, #{status := ?COMPLETED}},
+        rpc:call(Worker, storage_import_monitoring, get_info, [?SPACE_ID]), 30),
     
     StageJob = #space_unsupport_job{
         stage = delete_local_documents,
@@ -358,7 +362,7 @@ init_per_testcase(overall_test, Config) ->
             Self ! {Stage, meck:num_calls(space_unsupport, do_slave_job, 2)},
             meck:passthrough([Job, TaskId])
         end),
-    test_utils:mock_expect(Workers, space_unsupport, task_finished, 
+    test_utils:mock_expect(Workers, space_unsupport, task_finished,
         fun(TaskId, Pool) ->
             Self ! task_finished,
             meck:passthrough([TaskId, Pool])
@@ -397,8 +401,8 @@ assert_storage_cleaned_up(Worker, StorageId) ->
 
 
 assert_local_documents_cleaned_up(Worker, SpaceId, StorageId) ->
-    ?assertEqual({error, not_found}, rpc:call(Worker, space_strategies, get, [SpaceId])),
-    ?assertEqual({error, not_found}, rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId])),
+    ?assertEqual({error, not_found}, rpc:call(Worker, storage_import_config, get, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId])),
     ?assertEqual(undefined, rpc:call(Worker, autocleaning, get_config, [SpaceId])),
     ?assertEqual({error, not_found}, rpc:call(Worker, autocleaning, get, [SpaceId])),
     ?assertEqual(false, rpc:call(Worker, file_popularity_api, is_enabled, [SpaceId])),

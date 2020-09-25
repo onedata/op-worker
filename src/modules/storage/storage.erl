@@ -519,6 +519,7 @@ on_space_supported(SpaceId, StorageId) ->
 -spec on_space_unsupported(od_space:id(), id()) -> ok.
 on_space_unsupported(SpaceId, StorageId) ->
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
+    storage_import_worker:notify_space_unsupported(SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
 
@@ -651,7 +652,7 @@ migrate_imported_storages_to_zone() ->
     ?notice("Imported storages migration procedure finished succesfully").
 
 
-%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
+%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 %%%===================================================================
 %% Deprecated API and datastore_model callbacks
 %%

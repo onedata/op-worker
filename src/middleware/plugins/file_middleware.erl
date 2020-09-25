@@ -209,10 +209,10 @@ data_spec_create(#gri{aspect = rdf_metadata}) -> #{
 
 data_spec_create(#gri{aspect = register_file}) -> #{
     required => #{
-        <<"spaceId">> => {binary, any},
-        <<"storageId">> => {binary, any},
-        <<"storageFileId">> => {binary, any},
-        <<"destinationPath">> => {binary, any}
+        <<"spaceId">> => {binary, non_empty},
+        <<"storageId">> => {binary, non_empty},
+        <<"storageFileId">> => {binary, non_empty},
+        <<"destinationPath">> => {binary, non_empty}
     },
     optional => #{
         <<"size">> => {integer, {not_lower_than, 0}},
@@ -278,9 +278,7 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     StorageId = maps:get(<<"storageId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId),
     middleware_utils:assert_space_supported_with_storage(SpaceId, StorageId),
-    middleware_utils:assert_imported_storage(StorageId),
-    middleware_utils:assert_file_registration_supported(StorageId),
-    middleware_utils:assert_sync_not_enabled(SpaceId, StorageId).
+    storage_import:assert_manual_import_mode(SpaceId).
 
 
 %%--------------------------------------------------------------------

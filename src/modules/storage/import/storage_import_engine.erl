@@ -11,10 +11,10 @@
 %%% TODO VFS-6508 abstract mechanisms used by sync and file_registration to a separate module
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_sync_engine).
+-module(storage_import_engine).
 -author("Jakub Kudzia").
 
--include("modules/storage/sync/storage_sync.hrl").
+-include("modules/storage/import/storage_import.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -36,7 +36,7 @@
 -define(OWNER_ATTR_NAME, owner).
 -define(NFS4_ACL_ATTR_NAME, nfs4_acl).
 
--type result() :: ?IMPORTED | ?UPDATED | ?PROCESSED | ?FAILED.
+-type result() :: ?FILE_CREATED | ?FILE_MODIFIED | ?FILE_PROCESSED | ?FILE_PROCESSING_FAILED.
 %% @formatter:off
 -type file_attr_name() :: ?FILE_LOCATION_ATTR_NAME | ?MODE_ATTR_NAME | ?TIMESTAMPS_ATTR_NAME |
                           ?OWNER_ATTR_NAME | ?NFS4_ACL_ATTR_NAME.
@@ -67,7 +67,7 @@
 %%                     This might have happened if file hadn't been changed since last scan or if
 %%                     it was being deleted or if it was being replicated in the very moment of scan.
 %%                     and that it hasn't changed on storage since last scan
-%%      ** ?FAILED - which means that an error occurred during processing the file
+%%      ** ?FILE_PROCESSING_FAILED - which means that an error occurred during processing the file
 %%    * FileCtx is a:
 %%      ** file_ctx:ctx() - the file in the Onedata file system which is associated
 %%         with the file referenced by StorageFileCtx.
@@ -83,7 +83,7 @@ find_direct_parent_and_sync_file(StorageFileCtx, Info) ->
         {ok, Info2} ->
             sync_file(StorageFileCtx, Info2);
         {error, ?ENOENT} ->
-            {?PROCESSED, undefined, StorageFileCtx}
+            {?FILE_PROCESSED, undefined, StorageFileCtx}
     end.
 
 -spec sync_file(storage_file_ctx:ctx(), info()) -> {result(),
@@ -145,7 +145,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                         {ok, _FileUuid} ->
                             % deletion_link exists, it means that deletion of the file has been scheduled
                             % we may ignore this file
-                            {?PROCESSED, undefined, StorageFileCtx}
+                            {?FILE_PROCESSED, undefined, StorageFileCtx}
                     end;
                 {ok, ResolvedUuid} ->
                     FileUuid2 = utils:ensure_defined(FileUuid, ResolvedUuid),
@@ -153,9 +153,9 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                         {error, not_found} ->
                             FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
                             FileCtx = file_ctx:new_by_guid(FileGuid),
-                            storage_sync_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
+                            storage_import_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
                         {ok, _} ->
-                            {?PROCESSED, undefined, StorageFileCtx}
+                            {?FILE_PROCESSED, undefined, StorageFileCtx}
                     end
             end
     end.
@@ -244,7 +244,7 @@ ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info 
                         MissingParentCtx3;
                     {false, _} ->
                         % if it's not a directory first delete stalled file, and create missing parent
-                        {?IMPORTED, MissingParentCtx4} =
+                        {?FILE_CREATED, MissingParentCtx4} =
                             delete_stalled_file_and_create_missing_parent(MissingParentStorageCtx,
                                 MissingParentCtx2, Info),
                             MissingParentCtx4
@@ -270,7 +270,7 @@ ensure_missing_parent_exist(MissingParentName, MissingParentStorageCtx, Info = #
                 {ok, MissingParentCtx} -> MissingParentCtx;
                 {error, ?ENOENT} ->
                     case create_missing_parent(MissingParentStorageCtx, Info) of
-                        {?IMPORTED, MissingParentCtx} -> MissingParentCtx;
+                        {?FILE_CREATED, MissingParentCtx} -> MissingParentCtx;
                         {error, ?ENOENT} -> undefined
                     end
             end
@@ -368,7 +368,7 @@ check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsD
             case {FileId =:= StorageFileId, RenameSrcFileId =:= StorageFileId} of
                 {_, true} ->
                     % file is being renamed at the moment, ignore it
-                    {?PROCESSED, FileCtx, StorageFileCtx};
+                    {?FILE_PROCESSED, FileCtx, StorageFileCtx};
                 {true, false} ->
                     case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
                         [#file_block{offset = 0, size = Size}] ->
@@ -381,7 +381,7 @@ check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsD
                             check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, true);
                         _ ->
                             % file is not fully replicated (not in one block), ignore it
-                            {?PROCESSED, FileCtx, StorageFileCtx}
+                            {?FILE_PROCESSED, FileCtx, StorageFileCtx}
                     end;
                 {false, false} ->
                     % This may happen in 2 cases:
@@ -426,7 +426,7 @@ check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated
     try
         case get_attr_including_deleted(FileCtx) of
             {ok, _FileAttr, true} ->
-                {?PROCESSED, undefined, StorageFileCtx};
+                {?FILE_PROCESSED, undefined, StorageFileCtx};
             {ok, FileAttr, false} ->
                 check_file_type_and_maybe_sync(StorageFileCtx, FileAttr, FileCtx, Info, StorageFileCreated);
             {error, ?ENOENT} ->
@@ -454,7 +454,7 @@ check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = File
         {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, false} ->
             maybe_import_file(StorageFileCtx2, Info);
         {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE, false} ->
-            {?PROCESSED, undefined, StorageFileCtx2}
+            {?FILE_PROCESSED, undefined, StorageFileCtx2}
     end.
 
 -spec import_file_recreated_with_different_type(storage_file_ctx:ctx(), file_ctx:ctx(), info()) ->
@@ -462,8 +462,8 @@ check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = File
 import_file_recreated_with_different_type(StorageFileCtx, FileCtx, Info) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
-    storage_sync_deletion:delete_file_and_update_counters(FileCtx, SpaceId, StorageId),
+    storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
+    storage_import_deletion:delete_file_and_update_counters(FileCtx, SpaceId, StorageId),
     maybe_import_file(StorageFileCtx, Info).
 
 %%-------------------------------------------------------------------
@@ -481,8 +481,8 @@ import_file_recreated_with_different_type(StorageFileCtx, FileCtx, Info) ->
 delete_stalled_file_and_create_missing_parent(StorageFileCtx, FileCtx, Info) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
-    storage_sync_deletion:delete_file_and_update_counters(FileCtx, SpaceId, StorageId),
+    storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
+    storage_import_deletion:delete_file_and_update_counters(FileCtx, SpaceId, StorageId),
     create_missing_parent(StorageFileCtx, Info).
 
 %%-------------------------------------------------------------------
@@ -505,7 +505,7 @@ maybe_import_file(StorageFileCtx, Info) ->
         true ->
             case storage_driver:exists(SDHandle) of
                 true -> import_file(StorageFileCtx, Info);
-                false -> {?PROCESSED, undefined, StorageFileCtx}
+                false -> {?FILE_PROCESSED, undefined, StorageFileCtx}
             end;
         false ->
             import_file(StorageFileCtx, Info)
@@ -515,7 +515,7 @@ maybe_import_file(StorageFileCtx, Info) ->
     {result(), file_ctx:ctx(), storage_file_ctx:ctx()} | {error, term()}.
 import_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     try
-        storage_sync_engine:import_file_unsafe(StorageFileCtx, Info)
+        storage_import_engine:import_file_unsafe(StorageFileCtx, Info)
     catch
         throw:?ENOENT ->
             cleanup_file(ParentCtx, StorageFileCtx),
@@ -557,7 +557,7 @@ cleanup_file(ParentCtx, StorageFileCtx) ->
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     try
         {FileCtx, _} = file_ctx:get_child(ParentCtx, FileName, UserCtx),
-        fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx)
+        fslogic_delete:handle_file_deleted_on_imported_storage(FileCtx)
     catch
         throw:?ENOENT -> ok
     end.
@@ -575,8 +575,8 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    storage_sync_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
-    {?IMPORTED, FileCtx2, StorageFileCtx6}.
+    storage_import_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    {?FILE_CREATED, FileCtx2, StorageFileCtx6}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -595,8 +595,8 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
     create_times_from_current_time(FileUuid, SpaceId),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    storage_sync_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
-    {?IMPORTED, FileCtx2}.
+    storage_import_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    {?FILE_CREATED, FileCtx2}.
 
 
 -spec create_location(file_meta:uuid(), storage_file_ctx:ctx(), od_user:id()) -> {ok, storage_file_ctx:ctx()}.
@@ -670,7 +670,7 @@ get_attr_including_deleted(FileCtx) ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             ?debug_stacktrace(
-                "Error {error, ~p} occured when getting attr of file: ~p during storage sync procedure in space: ~p.",
+                "Error {error, ~p} occured when getting attr of file: ~p during auto storage import procedure in space: ~p.",
                 [Error, FileUuid, SpaceId]
             ),
             {error, Error}
@@ -719,7 +719,7 @@ create_times_from_stat_timestamps(FileUuid, StorageFileCtx) ->
 
 -spec create_times_from_current_time(file_meta:uuid(), od_space:id()) -> ok.
 create_times_from_current_time(FileUuid, SpaceId) ->
-    CurrentTime = time_utils:system_time_seconds(),
+    CurrentTime = time_utils:cluster_time_seconds(),
     times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime).
 
 %%-------------------------------------------------------------------
@@ -769,7 +769,7 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
         true->
             try
                 {ACLBin, StorageFileCtx2} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
-                {ok, NormalizedACL} = storage_sync_acl:decode_and_normalize(ACLBin, StorageId),
+                {ok, NormalizedACL} = storage_import_acl:decode_and_normalize(ACLBin, StorageId),
                 {SanitizedAcl, FileCtx2} = sanitize_acl(NormalizedACL, FileCtx),
                 #provider_response{status = #status{code = ?OK}} =
                     acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl),
@@ -791,14 +791,16 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
 %%--------------------------------------------------------------------
 -spec maybe_update_file(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(),
     info()) -> {result(), file_ctx:ctx(), storage_file_ctx:ctx()} | {error, term()}.
+maybe_update_file(StorageFileCtx, _FileAttr, FileCtx, #{detect_modifications := false}) ->
+    {?FILE_PROCESSED, FileCtx, StorageFileCtx};
 maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
     try
         maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info)
     catch
         error:{badmatch, {error, not_found}} ->
-            {?PROCESSED, FileCtx, StorageFileCtx};
+            {?FILE_PROCESSED, FileCtx, StorageFileCtx};
         throw:?ENOENT ->
-            {?PROCESSED, FileCtx, StorageFileCtx};
+            {?FILE_PROCESSED, FileCtx, StorageFileCtx};
         Error:Reason ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -836,15 +838,15 @@ maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
 
     case UpdatedAttrs of
         [] ->
-            {?PROCESSED, FileCtx2, StorageFileCtx2};
+            {?FILE_PROCESSED, FileCtx2, StorageFileCtx2};
         UpdatedAttrs ->
             SpaceId = file_ctx:get_space_id_const(FileCtx2),
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx2),
             {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
             FileUuid = file_ctx:get_uuid_const(FileCtx3),
-            storage_sync_logger:log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
+            storage_import_logger:log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
             fslogic_event_emitter:emit_file_attr_changed(FileCtx3, []),
-            {?UPDATED, FileCtx3, StorageFileCtx2}
+            {?FILE_MODIFIED, FileCtx3, StorageFileCtx2}
     end.
 
 -spec maybe_update_file_location(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
@@ -1075,7 +1077,7 @@ maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}) -
             #provider_response{provider_response = ACL} = acl_req:get_acl(UserCtx, FileCtx),
             try
                 {ACLBin, StorageFileCtx2} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
-                {ok, NormalizedNewACL} = storage_sync_acl:decode_and_normalize(ACLBin, StorageId),
+                {ok, NormalizedNewACL} = storage_import_acl:decode_and_normalize(ACLBin, StorageId),
                 {SanitizedAcl, FileCtx2} = sanitize_acl(NormalizedNewACL, FileCtx),
                 case #acl{value = SanitizedAcl} of
                     ACL ->

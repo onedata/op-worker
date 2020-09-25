@@ -6,7 +6,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module contains implementation of helper model used by
-%%% storage_sync. It is used to store information required by sync
+%%% storage import. It is used to store information required
 %%% to determine whether there were changes introduced to file
 %%% or children files on storage since last scan.
 %%% It stores last synchronized mtime and timestamp
@@ -36,8 +36,8 @@
 -type record() :: #storage_sync_info{}.
 -type error() :: {error, term()}.
 -type diff() :: datastore_doc:diff(record()).
--type hash() :: storage_sync_hash:hash().
--type hashes() :: #{non_neg_integer() => storage_sync_hash:hash()}.
+-type hash() :: storage_import_hash:hash().
+-type hashes() :: #{non_neg_integer() => storage_import_hash:hash()}.
 
 -export_type([key/0, doc/0, record/0, hashes/0]).
 

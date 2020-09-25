@@ -7,29 +7,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model for storing storage_sync configurations.
-%%% Each document stores map of configurations of storage_sync on each
+%%% Model for storing storage import configurations.
+%%% Each document stores map of configurations of storage import on each
 %%% storage supporting given space.
-%%% TODO VFS-5717 rename to space_sync_config
+%%%
+%%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_strategies).
 -author("Rafal Slota").
 -author("Jakub Kudzia").
 
--include("modules/storage/sync/storage_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get/1, delete/1]).
--export([
-    get_import_details/1, get_import_details/2,
-    get_update_details/1, get_update_details/2,
-    get_sync_configs/1, is_any_storage_imported/1,
-    configure_import/4, configure_update/4
-]).
 
 %% datastore_model callbacks
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2, get_ctx/0]).
@@ -38,10 +31,8 @@
 -type key() :: datastore:key().
 -type record() :: #space_strategies{}.
 -type doc() :: datastore_doc:doc(record()).
--type diff() :: datastore_doc:diff(record()).
 -type sync_config() :: #storage_sync_config{}.
 -type sync_configs() :: #{storage:id() => sync_config()}.
--type sync_details() :: {boolean(), import_config() | update_config()}.
 
 %% @formatter:off
 -type import_config() :: #{
@@ -60,21 +51,9 @@
 
 -type config() :: import_config() | update_config().
 
--export_type([import_config/0, update_config/0, config/0, sync_config/0, sync_configs/0, sync_details/0]).
+-export_type([record/0, import_config/0, update_config/0, config/0, sync_config/0, sync_configs/0]).
 
 -define(CTX, #{model => ?MODULE, memory_copies => all}).
--define(DEFAULT_IMPORT_SYNC_CONFIG(Enabled, Config),
-    #storage_sync_config{
-        import_enabled = Enabled,
-        import_config = Config
-    }).
--define(DEFAULT_UPDATE_SYNC_CONFIG(Enabled, Config),
-    #storage_sync_config{
-        update_enabled = Enabled,
-        update_config = Config
-    }).
--define(DEFAULT_RECORD(StorageId, SyncConfig),
-    #space_strategies{sync_configs = #{StorageId => SyncConfig}}).
 
 %%%===================================================================
 %%% API
@@ -92,116 +71,6 @@ get(Key) ->
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
     datastore_model:delete(?CTX, Key).
-
--spec is_any_storage_imported(od_space:id()) -> boolean().
-is_any_storage_imported(SpaceId) ->
-    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
-    lists:any(fun(StorageId) ->
-        case get_import_details(SpaceId, StorageId) of
-            {false, _} -> false;
-            _ -> true
-        end
-    end, StorageIds).
-
--spec configure_import(od_space:id(), storage:id(), boolean(), import_config()) -> ok.
-configure_import(SpaceId, StorageId, Enabled, NewConfig) ->
-    FilledConfig = fill_import_config(NewConfig),
-    DefaultSyncConfig = ?DEFAULT_IMPORT_SYNC_CONFIG(Enabled, FilledConfig),
-    ok = ?extract_ok(update(SpaceId, fun(#space_strategies{sync_configs = SyncConfigs} = SS) ->
-        NewSS = maps:update_with(StorageId, fun(SSC = #storage_sync_config{import_config = OldConfig}) ->
-            UpdatedConfig = maps:merge(OldConfig, FilledConfig),
-            SSC#storage_sync_config{import_enabled = Enabled, import_config = UpdatedConfig}
-        end,
-            DefaultSyncConfig, SyncConfigs
-        ),
-        {ok, SS#space_strategies{sync_configs = NewSS}}
-    end, ?DEFAULT_RECORD(StorageId, DefaultSyncConfig))).
-
--spec configure_update(od_space:id(), storage:id(), boolean(), update_config()) -> ok.
-configure_update(SpaceId, StorageId, Enabled, NewConfig) ->
-    FilledConfig = fill_update_config(NewConfig),
-    DefaultSyncConfig = ?DEFAULT_UPDATE_SYNC_CONFIG(Enabled, FilledConfig),
-    ok = ?extract_ok(update(SpaceId, fun(#space_strategies{sync_configs = SyncConfigs} = SS) ->
-        NewSS = maps:update_with(StorageId, fun(SSC = #storage_sync_config{update_config = OldConfig}) ->
-            UpdatedConfig = maps:merge(OldConfig, FilledConfig),
-            SSC#storage_sync_config{update_enabled = Enabled, update_config = UpdatedConfig}
-        end,
-            DefaultSyncConfig, SyncConfigs
-        ),
-        {ok, SS#space_strategies{sync_configs = NewSS}}
-    end, ?DEFAULT_RECORD(StorageId, DefaultSyncConfig))).
-
--spec get_import_details(od_space:id(), storage:id()) -> sync_details().
-get_import_details(SpaceId, StorageId) ->
-    case space_strategies:get(SpaceId) of
-        {ok, #document{value = #space_strategies{sync_configs = Configs}}} ->
-            case maps:get(StorageId, Configs, undefined) of
-                undefined -> {false, #{}};
-                SyncConfig -> get_import_details(SyncConfig)
-            end;
-        {error, not_found} ->
-            {false, #{}}
-    end.
-
--spec get_import_details(sync_config()) -> sync_details().
-get_import_details(#storage_sync_config{
-    import_enabled = ImportEnabled,
-    import_config = ImportConfig
-}) ->
-    {ImportEnabled, ImportConfig}.
-
--spec get_update_details(od_space:id(), storage:id()) -> sync_details().
-get_update_details(SpaceId, StorageId) ->
-    case space_strategies:get(SpaceId) of
-        {ok, #document{value = #space_strategies{sync_configs = Configs}}} ->
-            case maps:get(StorageId, Configs, undefined) of
-                undefined -> {false, #{}};
-                SyncConfig -> get_update_details(SyncConfig)
-            end;
-        {error, not_found} ->
-            {false, #{}}
-    end.
-
--spec get_update_details(sync_config()) -> sync_details().
-get_update_details(#storage_sync_config{
-    update_enabled = UpdateEnabled,
-    update_config = UpdateConfig
-}) ->
-    {UpdateEnabled, UpdateConfig}.
-
--spec get_sync_configs(od_space:id()) -> {ok, sync_configs()}.
-get_sync_configs(SpaceId) ->
-    case space_strategies:get(SpaceId) of
-        {error, not_found} ->
-            {ok, #{}};
-        {ok, #document{value = #space_strategies{sync_configs = SyncConfigs}}} ->
-            {ok, SyncConfigs}
-    end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
--spec update(key(), diff(), record()) -> {ok, key()} | {error, term()}.
-update(Key, Diff, Default) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff, Default)).
-
--spec fill_import_config(map()) -> import_config().
-fill_import_config(Config) ->
-    #{
-        max_depth => maps:get(max_depth, Config, ?DEFAULT_SYNC_MAX_DEPTH),
-        sync_acl => maps:get(sync_acl, Config, ?DEFAULT_SYNC_ACL)
-    }.
-
--spec fill_update_config(map()) -> update_config().
-fill_update_config(Config) ->
-    #{
-        delete_enable => maps:get(delete_enable, Config, ?DEFAULT_DELETE_ENABLE),
-        write_once => maps:get(write_once, Config, ?DEFAULT_WRITE_ONCE),
-        scan_interval => maps:get(scan_interval, Config, ?DEFAULT_SCAN_INTERVAL),
-        max_depth => maps:get(max_depth, Config, ?DEFAULT_SYNC_MAX_DEPTH),
-        sync_acl => maps:get(sync_acl, Config, ?DEFAULT_SYNC_ACL)
-    }.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -388,14 +257,14 @@ upgrade_record(5, {?MODULE, SyncConfigs, _, _, _}) ->
         } = StorageStrategy,
         ImportEnabled = ImportStrategyName =:= simple_scan,
         UpdateEnabled = UpdateStrategyName =:= simple_scan,
-        #storage_sync_config{
-            import_enabled = ImportEnabled,
-            import_config = ImportConfig,
-            update_enabled = UpdateEnabled,
-            update_config = UpdateConfig
+        {storage_sync_config,
+            ImportEnabled,
+            ImportConfig,
+            UpdateEnabled,
+            UpdateConfig
         }
     end, SyncConfigs),
-    {6, #space_strategies{sync_configs = NewSyncConfigs}}.
+    {6, {space_strategies, NewSyncConfigs}}.
 
 -spec encode(config()) -> binary().
 encode(Config) ->

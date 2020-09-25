@@ -4,7 +4,7 @@
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @doc
-%%% Macros used in tests of storage_sync.
+%%% Macros used in tests of storage import.
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Jakub Kudzia").
@@ -20,8 +20,8 @@
 
 %% defaults
 -define(SCAN_INTERVAL, 10).
--define(WRITE_ONCE, false).
--define(DELETE_ENABLE, false).
+-define(DETECT_MODIFICATIONS, true).
+-define(DETECT_DELETIONS, false).
 -define(SYNC_ACL, true).
 -define(MAX_DEPTH, 9999999999999999999999).
 
@@ -73,14 +73,14 @@
 -define(VERIFY_POOL, verify_pool).
 
 -define(assertMonitoring(Worker, ExpectedSSM, SpaceId, Attempts),
-    storage_sync_test_base:assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts)).
+    storage_import_test_base:assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts)).
 
 -define(assertMonitoring(Worker, ExpectedSSM, SpaceId),
     ?assertMonitoring(Worker, ExpectedSSM, SpaceId, 1)).
 
 -define(assertHashChangedFun(StorageFileId, SpaceId, ExpectedResult0),
     fun
-        ({_, {storage_sync_hash, children_attrs_hash_has_changed, Args}, ExpectedResult0}) ->
+        ({_, {storage_import_hash, children_attrs_hash_has_changed, Args}, ExpectedResult0}) ->
             Id = storage_sync_info:id(StorageFileId, SpaceId),
             case lists:nth(4, Args) of
                 #document{key = Id} -> 1;
