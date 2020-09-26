@@ -188,7 +188,7 @@ custom_predicate(SpaceId, JobType, JobId) ->
 delete_if_not_opened(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    case file_handles:exists(FileUuid) of
+    case file_handles:is_file_opened(FileUuid) of
         false ->
             % file is not opened, we can delete it
             Result = case replica_deletion_lock:acquire_write_lock(FileUuid) of

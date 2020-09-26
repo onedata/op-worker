@@ -171,7 +171,10 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
     ], [worker_first]},
-    {fslogic_worker, []},
+    {fslogic_worker, [
+        {supervisor_flags, fslogic_worker:supervisor_flags()},
+        {supervisor_children_spec, fslogic_worker:supervisor_children_spec()}
+    ]},
     {dbsync_worker, [
         {supervisor_flags, dbsync_worker:supervisor_flags()}
     ]},
@@ -258,7 +261,8 @@ filter_disabled_workers(WorkersSpecs) ->
 %%--------------------------------------------------------------------
 -spec master_node_down(FailedNode :: node()) -> ok.
 master_node_down(_FailedNode) ->
-    session_manager:restart_dead_sessions().
+    session_manager:restart_dead_sessions(),
+    process_handles:release_all_dead_processes_handles().
 
 %%--------------------------------------------------------------------
 %% @doc

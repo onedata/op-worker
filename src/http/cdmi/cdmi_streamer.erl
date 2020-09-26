@@ -51,7 +51,7 @@ stream_binary(HttpStatus, Req, #cdmi_req{
     end,
     StreamSize = binary_stream_size(Ranges, FileSize),
 
-    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, Guid}, read)),
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, Guid}, read)),
     try
         ReadBlockSize = file_download_utils:get_read_block_size(FileHandle),
 
@@ -67,7 +67,7 @@ stream_binary(HttpStatus, Req, #cdmi_req{
 
         Req2
     after
-        lfm:release(FileHandle)
+        lfm:monitored_release(FileHandle)
     end.
 
 
@@ -92,7 +92,7 @@ stream_cdmi(Req, #cdmi_req{
         Range1, Size, Encoding, JsonBodyPrefix, JsonBodySuffix
     ),
 
-    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, Guid}, read)),
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, Guid}, read)),
     try
         ReadBlockSize0 = file_download_utils:get_read_block_size(FileHandle),
         ReadBlockSize = case Encoding of
@@ -119,7 +119,7 @@ stream_cdmi(Req, #cdmi_req{
 
         Req2
     after
-        lfm:release(FileHandle)
+        lfm:monitored_release(FileHandle)
     end.
 
 

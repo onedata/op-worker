@@ -843,6 +843,12 @@
     query_view_params = [] :: transfer:query_view_params()
 }).
 
+%% Model that tracks process' open handles
+-record(process_handles, {
+    process :: pid(),
+    handles = #{} :: #{lfm_context:handle_id() => lfm:handle()}
+}).
+
 %% Model that tracks what files are currently transferred
 -record(transferred_file, {
     ongoing_transfers = ordsets:new() :: ordsets:ordset(transferred_file:entry()),
