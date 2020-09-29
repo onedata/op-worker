@@ -847,7 +847,7 @@ return_histogram_and_timestamp(SIM, ?QUEUE_LENGTH, day) ->
 -spec prepare(timestamp(), [integer()]) -> time_stats().
 prepare(Timestamp, Values) ->
     #{
-        lastValueDate => time_utils:epoch_to_iso8601(Timestamp),
+        lastValueDate => time_utils:seconds_to_iso8601(Timestamp),
         values => lists:reverse(Values)
     }.
 

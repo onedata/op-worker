@@ -18,7 +18,7 @@
 
 %% API
 -export([
-    cluster_time_seconds/1,
+    timestamp_seconds/1,
 
     get_user_protected_data/2,
     create_user_temporary_token/4,
@@ -31,9 +31,8 @@
 %%% API
 %%%===================================================================
 
-%% @TODO rename to "timestamp_seconds" when moving the RPC API to OZ
--spec cluster_time_seconds(node()) -> time_utils:seconds().
-cluster_time_seconds(OzNode) ->
+-spec timestamp_seconds(node()) -> time_utils:seconds().
+timestamp_seconds(OzNode) ->
     rpc:call(OzNode, time_utils, timestamp_seconds, []).
 
 

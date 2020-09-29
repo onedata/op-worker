@@ -476,11 +476,7 @@ mock_provider_logic(Config) ->
     end),
     test_utils:mock_expect(Workers, provider_logic, has_eff_user, fun(UserId) ->
         lists:member(UserId, [?USER_ID_1, ?USER_ID_2])
-    end),
-    test_utils:mock_expect(Workers ++ [node()], provider_logic, zone_time_seconds,
-        fun() ->
-            time_utils:timestamp_seconds()
-        end).
+    end).
 
 
 unmock_provider_logic(Config) ->

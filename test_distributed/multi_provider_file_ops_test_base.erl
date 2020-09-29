@@ -649,7 +649,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
 
-    Timestamp0 = rpc:call(Worker1, provider_logic, zone_time_seconds, []),
+    Timestamp0 = rpc:call(Worker1, time_utils, timestamp_seconds, []),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,

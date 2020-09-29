@@ -121,7 +121,9 @@ renamed_models() ->
 %%--------------------------------------------------------------------
 -spec synchronize_clock() -> ok | ignored | error.
 synchronize_clock() ->
-    case oneprovider:is_registered() of
+    % during cluster setup, before the database is ready the registration status check will crash
+    IsReadyAndRegistered = try oneprovider:is_registered() catch _:_ -> false end,
+    case IsReadyAndRegistered of
         false ->
             node_manager_plugin_default:synchronize_clock();
         true ->

@@ -24,7 +24,7 @@
 -export([get_record_struct/1, get_ctx/0, get_record_version/0, upgrade_record/2]).
 
 %% exported for CT tests
--export([cluster_time_hours/0]).
+-export([timestamp_hours/0]).
 
 -type id() :: file_meta:uuid().
 -type record() :: #file_popularity{}.
@@ -176,7 +176,7 @@ empty_file_popularity(FileCtx) ->
 increase_popularity(FileCtx, FilePopularity) ->
     {HourlyHistogram, DailyHistogram, MonthlyHistogram} =
         file_popularity_to_histograms(FilePopularity),
-    CurrentTimestampHours = file_popularity:cluster_time_hours(),
+    CurrentTimestampHours = file_popularity:timestamp_hours(),
     histograms_to_file_popularity(
         time_slot_histogram:increment(HourlyHistogram, CurrentTimestampHours),
         time_slot_histogram:increment(DailyHistogram, CurrentTimestampHours),
@@ -233,8 +233,8 @@ file_popularity_to_histograms(#file_popularity{
         time_slot_histogram:new(LastUpdate, ?MONTH_TIME_WINDOW, MonthlyHistogram)
     }.
 
--spec cluster_time_hours() -> non_neg_integer().
-cluster_time_hours() ->
+-spec timestamp_hours() -> non_neg_integer().
+timestamp_hours() ->
     time_utils:timestamp_seconds() div 3600.
 
 %%%===================================================================
