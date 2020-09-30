@@ -487,7 +487,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     ok = test_utils:mock_new(Workers2, transfer, [passthrough]),
     ok = test_utils:mock_new(Workers2, replica_updater, [passthrough]),
 
-    Start = time_utils:system_time_seconds(),
+    Start = time_utils:timestamp_seconds(),
     Result = try
         verify_workers(Workers2, fun(W) ->
             read_big_file(Config, FileSize, Level2File, W, TransferTimeout, true)
@@ -498,7 +498,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     end,
     ?assertMatch(ok, Result),
 
-    Duration = time_utils:system_time_seconds() - Start,
+    Duration = time_utils:timestamp_seconds() - Start,
     TransferUpdates = lists:sum(mock_get_num_calls(
         Workers2, transfer, mark_data_transfer_finished, '_')),
     TUPS = TransferUpdates / Duration,
@@ -649,7 +649,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
 
-    Timestamp0 = rpc:call(Worker1, provider_logic, zone_time_seconds, []),
+    Timestamp0 = rpc:call(Worker1, time_utils, timestamp_seconds, []),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -1575,15 +1575,15 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     timer:sleep(timer:seconds(2)),
     ct:pal("Transfers started"),
 
-    Start = erlang:monotonic_time(millisecond),
+    Start = time_utils:timestamp_millis(),
     Times = lists:map(fun(User) ->
         SessionId = SessId(User, Worker1),
-        Start1 = erlang:monotonic_time(millisecond),
+        Start1 = time_utils:timestamp_millis(),
         cancel_transfers_for_session_and_file_sync(Worker1, SessionId, FileCtx),
-        End1 = erlang:monotonic_time(millisecond),
+        End1 = time_utils:timestamp_millis(),
         End1-Start1
     end, Users),
-    End = erlang:monotonic_time(millisecond),
+    End = time_utils:timestamp_millis(),
 
     ct:pal("Transfers canceled"),
 
@@ -1643,7 +1643,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     timer:sleep(timer:seconds(5)),
     ct:pal("Transfers started"),
 
-    Start = erlang:monotonic_time(millisecond),
+    Start = time_utils:timestamp_millis(),
     lists:foreach(fun(User) ->
         SessionId = SessId(User, Worker1),
         cancel_transfers_for_session_and_file(Worker1, SessionId, FileCtx)
@@ -1661,7 +1661,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     end, {0,0}, Promises),
 
     ?assertEqual(0, rpc:call(Worker1, ets, info, [rtransfer_link_requests, size]), 500),
-    End = erlang:monotonic_time(millisecond),
+    End = time_utils:timestamp_millis(),
 
     ct:pal("Block size: ~p~n"
     "Block count: ~p~n"
@@ -1692,7 +1692,7 @@ transfer_files_to_source_provider(Config0) ->
 
     ct:pal("~p files created", [FilesNum]),
 
-    Start = erlang:monotonic_time(millisecond),
+    Start = time_utils:timestamp_millis(),
 
     TidsAndGuids = lists_utils:pmap(fun(Guid) ->
         {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
@@ -1709,9 +1709,9 @@ transfer_files_to_source_provider(Config0) ->
         end
     end, TidsAndGuids),
 
-    End = erlang:monotonic_time(millisecond),
+    End = time_utils:timestamp_millis(),
 
-    StartGui = erlang:monotonic_time(millisecond),
+    StartGui = time_utils:timestamp_millis(),
     lists_utils:pforeach(fun(Num) ->
         Data = #{
             <<"state">> => ?ENDED_TRANSFERS_STATE,
@@ -1725,7 +1725,7 @@ transfer_files_to_source_provider(Config0) ->
         )),
         ?assertMatch(100, length(List))
     end, lists:seq(1, FilesNum div 100)),
-    EndGui = erlang:monotonic_time(millisecond),
+    EndGui = time_utils:timestamp_millis(),
 
     ct:pal("Transfer time[s]: ~p~n"
            "Average time per file[ms]: ~p~n"

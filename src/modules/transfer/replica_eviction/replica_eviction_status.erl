@@ -176,7 +176,7 @@ mark_enqueued(T = #transfer{eviction_status = ?SCHEDULED_STATUS}) ->
         eviction_status = ?ENQUEUED_STATUS,
         start_time = case transfer:is_migration(T) of
             true -> T#transfer.start_time;
-            false -> provider_logic:zone_time_seconds()
+            false -> time_utils:timestamp_seconds()
         end
     }};
 mark_enqueued(#transfer{eviction_status = Status}) ->
@@ -196,7 +196,7 @@ mark_aborting(#transfer{eviction_status = Status}) ->
 mark_completed(T = #transfer{eviction_status = ?ACTIVE_STATUS}) ->
     {ok, T#transfer{
         eviction_status = ?COMPLETED_STATUS,
-        finish_time = provider_logic:zone_time_seconds()
+        finish_time = time_utils:timestamp_seconds()
     }};
 mark_completed(#transfer{eviction_status = Status}) ->
     {error, Status}.
@@ -219,7 +219,7 @@ mark_failed_forced(Transfer) ->
         false ->
             {ok, Transfer#transfer{
                 eviction_status = ?FAILED_STATUS,
-                finish_time = provider_logic:zone_time_seconds()
+                finish_time = time_utils:timestamp_seconds()
             }}
     end.
 
@@ -235,7 +235,7 @@ mark_cancelled(Transfer) ->
         Status when Status == ?ENQUEUED_STATUS orelse Status == ?ABORTING_STATUS ->
             {ok, Transfer#transfer{
                 eviction_status = ?CANCELLED_STATUS,
-                finish_time = provider_logic:zone_time_seconds()
+                finish_time = time_utils:timestamp_seconds()
             }};
         Status ->
             {error, Status}

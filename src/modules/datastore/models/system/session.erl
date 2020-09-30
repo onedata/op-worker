@@ -78,7 +78,7 @@
 create(Doc = #document{value = Sess}) ->
     ?update_counter(?EXOMETER_NAME(active_sessions)),
     ?extract_key(datastore_model:create(?CTX, Doc#document{value = Sess#session{
-        accessed = time_utils:cluster_time_seconds()
+        accessed = time_utils:timestamp_seconds()
     }})).
 
 %%--------------------------------------------------------------------
@@ -89,7 +89,7 @@ create(Doc = #document{value = Sess}) ->
 -spec save(doc()) -> {ok, id()} | {error, term()}.
 save(Doc = #document{value = Sess}) ->
     ?extract_key(datastore_model:save(?CTX, Doc#document{value = Sess#session{
-        accessed = time_utils:cluster_time_seconds()
+        accessed = time_utils:timestamp_seconds()
     }})).
 
 %%--------------------------------------------------------------------
@@ -140,7 +140,7 @@ update_doc_and_time(SessId, Diff) when is_function(Diff) ->
         case Diff(Sess) of
             {ok, NewSess} ->
                 {ok, NewSess#session{
-                    accessed = time_utils:cluster_time_seconds()
+                    accessed = time_utils:timestamp_seconds()
                 }};
             {error, Reason} ->
                 {error, Reason}

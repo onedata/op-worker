@@ -109,4 +109,4 @@ get_throttled_models() ->
 %%--------------------------------------------------------------------
 -spec get_timestamp() -> datastore_doc:timestamp().
 get_timestamp() ->
-    provider_logic:zone_time_seconds().
+    time_utils:timestamp_seconds().

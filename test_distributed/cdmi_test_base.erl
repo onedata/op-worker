@@ -310,9 +310,9 @@ metadata(Config) ->
                             <<"cdmi_not_allowed">> => <<"my_value">>}},
 
     RawRequestBody1 = json_utils:encode(RequestBody1),
-    Before = calendar:now_to_datetime(erlang:timestamp()),
+    Before = time_utils:seconds_to_datetime(time_utils:timestamp_seconds()),
     {ok, Code1, _Headers1, Response1} = do_request(Workers, FileName, put, RequestHeaders1, RawRequestBody1),
-    After = calendar:now_to_datetime(erlang:timestamp()),
+    After = time_utils:seconds_to_datetime(time_utils:timestamp_seconds()),
 
     ?assertEqual(201, Code1),
     CdmiResponse1 = (json_utils:decode(Response1)),

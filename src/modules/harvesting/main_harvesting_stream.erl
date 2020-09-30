@@ -215,7 +215,7 @@ custom_error_handling(State = #hs_state{
                         aux_destination = AuxDestination2,
                         last_seen_seq = MaxSeenSeq,
                         last_persisted_seq = MaxSeenSeq,
-                        last_harvest_timestamp = time_utils:system_time_seconds()
+                        last_harvest_timestamp = time_utils:timestamp_seconds()
                     })};
                 ?ERROR_NOT_FOUND ->
                     harvesting_stream:throw_harvesting_not_found_exception(State)

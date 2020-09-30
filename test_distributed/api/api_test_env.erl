@@ -259,7 +259,7 @@ get_spaces_desc(Config) ->
 -spec create_oz_temp_access_token(node(), UserId :: binary()) -> tokens:serialized().
 create_oz_temp_access_token(OzNode, UserId) ->
     Auth = ?USER(UserId),
-    Now = oz_test_rpc:cluster_time_seconds(OzNode),
+    Now = oz_test_rpc:timestamp_seconds(OzNode),
 
     {ok, Token} = oz_test_rpc:create_user_temporary_token(OzNode, Auth, UserId, #{
         <<"type">> => ?ACCESS_TOKEN,

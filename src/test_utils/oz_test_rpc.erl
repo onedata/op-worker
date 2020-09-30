@@ -18,7 +18,7 @@
 
 %% API
 -export([
-    cluster_time_seconds/1,
+    timestamp_seconds/1,
 
     get_user_protected_data/2,
     create_user_temporary_token/4,
@@ -31,10 +31,9 @@
 %%% API
 %%%===================================================================
 
-
--spec cluster_time_seconds(node()) -> time_utils:seconds().
-cluster_time_seconds(OzNode) ->
-    rpc:call(OzNode, time_utils, cluster_time_seconds, []).
+-spec timestamp_seconds(node()) -> time_utils:seconds().
+timestamp_seconds(OzNode) ->
+    rpc:call(OzNode, time_utils, timestamp_seconds, []).
 
 
 -spec get_user_protected_data(node(), od_user:id()) -> {ok, map()} | no_return().

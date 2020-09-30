@@ -231,7 +231,7 @@ maybe_start_consecutive_scan(SpaceId, SIMDoc, ScanConfig) ->
                     ?NOT_SCHEDULED_SCAN;
                 false ->
                     {ok, ScanStopTime} = storage_import_monitoring:get_scan_stop_time(SIMDoc),
-                    case ScanStopTime + (ScanInterval * 1000) =< time_utils:cluster_time_millis() of
+                    case ScanStopTime + (ScanInterval * 1000) =< time_utils:timestamp_millis() of
                         true -> schedule_scan(SpaceId, ScanConfig);
                         false -> ?NOT_SCHEDULED_SCAN
                     end

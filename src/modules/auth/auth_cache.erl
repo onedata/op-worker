@@ -116,7 +116,7 @@
     {temporary_tokens_deleted, __UserId}
 ).
 
--define(NOW(), time_utils:system_time_seconds()).
+-define(NOW(), time_utils:timestamp_seconds()).
 
 
 %%%===================================================================
