@@ -243,7 +243,7 @@ metric_get(Config) ->
         provider_id = Prov1ID
     },
 
-    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [SpaceId, MonitoringId, time_utils:system_time_seconds()])),
+    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [SpaceId, MonitoringId, time_utils:timestamp_seconds()])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
     ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save, [
         #document{

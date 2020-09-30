@@ -95,6 +95,8 @@ handle_deregistered_from_oz() ->
 %% @private
 -spec on_connect_to_oz() -> ok | no_return().
 on_connect_to_oz() ->
+    ok = node_manager_plugin:synchronize_clock(),
+    ?info("Synchronized node's clock with global Onezone time"),
     ok = oneprovider:set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
     ok = auth_cache:report_oz_connection_start(),
@@ -102,7 +104,7 @@ on_connect_to_oz() ->
     ok = main_harvesting_stream:revise_all_spaces(),
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
     ok = rtransfer_config:add_storages(),
-    ok = storage_sync_worker:notify_connection_to_oz(),
+    ok = storage_import_worker:notify_connection_to_oz(),
     ok = dbsync_worker:start_streams(),
     ok = qos_worker:init_retry_failed_files().
 

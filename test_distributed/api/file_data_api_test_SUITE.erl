@@ -12,17 +12,11 @@
 -module(file_data_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_test_runner.hrl").
--include("global_definitions.hrl").
--include("file_metadata_api_test_utils.hrl").
+-include("file_api_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
--include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
     all/0,
@@ -501,7 +495,7 @@ get_file_shares_test(Config) ->
             type = gs_not_supported,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
-            prepare_args_fun = build_set_mode_prepare_gs_args_fun(ShareGuid1, public),
+            prepare_args_fun = build_get_shares_prepare_gs_args_fun(ShareGuid1, public),
             validate_result_fun = fun(_TestCaseCtx, Result) ->
                 ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
             end,
@@ -857,22 +851,27 @@ get_dir_distribution_test(Config) ->
 
 %% @private
 wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
-    ?assertMatch(
-        {ok, ExpDistribution},
-        lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}),
-        ?ATTEMPTS
-    ).
+    SortedExpDistribution = lists:usort(ExpDistribution),
+
+    GetDistFun = fun() ->
+        case lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}) of
+            {ok, Dist} -> {ok, lists:usort(Dist)};
+            {error, _} = Error -> Error
+        end
+    end,
+    ?assertMatch({ok, SortedExpDistribution}, GetDistFun(), ?ATTEMPTS).
 
 
 %% @private
 get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistribution, Config) ->
+    SortedExpDistribution = lists:usort(ExpDistribution),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ValidateRestSuccessfulCallFun =  fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ?assertEqual({?HTTP_200_OK, ExpDistribution}, {RespCode, RespBody})
+        ?assertEqual({?HTTP_200_OK, SortedExpDistribution}, {RespCode, lists:usort(RespBody)})
     end,
 
-    ExpGsDistribution = file_gui_gs_translator:translate_distribution(ExpDistribution),
+    ExpGsDistribution = file_gui_gs_translator:translate_distribution(SortedExpDistribution),
 
     CreateValidateGsSuccessfulCallFun = fun(Type) ->
         ExpGsResponse = ExpGsDistribution#{

@@ -18,6 +18,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include("proto/common/credentials.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -49,7 +50,8 @@
     synchronize_stress_test_base/2,
     cancel_synchronizations_for_session_with_mocked_rtransfer_test_base/1,
     cancel_synchronizations_for_session_test_base/1,
-    transfer_files_to_source_provider/1
+    transfer_files_to_source_provider/1,
+    proxy_session_token_update_test_base/3
 ]).
 -export([init_env/1, teardown_env/1, mock_sync_errors/1]).
 
@@ -485,7 +487,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     ok = test_utils:mock_new(Workers2, transfer, [passthrough]),
     ok = test_utils:mock_new(Workers2, replica_updater, [passthrough]),
 
-    Start = time_utils:system_time_seconds(),
+    Start = time_utils:timestamp_seconds(),
     Result = try
         verify_workers(Workers2, fun(W) ->
             read_big_file(Config, FileSize, Level2File, W, TransferTimeout, true)
@@ -496,7 +498,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     end,
     ?assertMatch(ok, Result),
 
-    Duration = time_utils:system_time_seconds() - Start,
+    Duration = time_utils:timestamp_seconds() - Start,
     TransferUpdates = lists:sum(mock_get_num_calls(
         Workers2, transfer, mark_data_transfer_finished, '_')),
     TUPS = TransferUpdates / Duration,
@@ -647,7 +649,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
 
-    Timestamp0 = rpc:call(Worker1, provider_logic, zone_time_seconds, []),
+    Timestamp0 = rpc:call(Worker1, time_utils, timestamp_seconds, []),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -707,7 +709,10 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
                         % on this worker
                         Acc2;
                     {_, Timestamp} = Ans ->
-                        ?assert(Timestamp >= Timestamp0),
+                        case Timestamp >= Timestamp0 of
+                            true -> ok;
+                            false -> throw(too_small_timestamp)
+                        end,
                         [Ans | Acc2]
                 end
             end, [], sets:to_list(ProvIds)),
@@ -728,7 +733,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     end,
     % TODO VFS-6652 Always check sequences
     case CheckSequences of
-        true -> ?assertEqual(true, AreAllSeqsEqual(), 60);
+        true -> ?assertEqual(true, catch AreAllSeqsEqual(), 60);
         false -> ok
     end,
 
@@ -1570,15 +1575,15 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     timer:sleep(timer:seconds(2)),
     ct:pal("Transfers started"),
 
-    Start = erlang:monotonic_time(millisecond),
+    Start = time_utils:timestamp_millis(),
     Times = lists:map(fun(User) ->
         SessionId = SessId(User, Worker1),
-        Start1 = erlang:monotonic_time(millisecond),
+        Start1 = time_utils:timestamp_millis(),
         cancel_transfers_for_session_and_file_sync(Worker1, SessionId, FileCtx),
-        End1 = erlang:monotonic_time(millisecond),
+        End1 = time_utils:timestamp_millis(),
         End1-Start1
     end, Users),
-    End = erlang:monotonic_time(millisecond),
+    End = time_utils:timestamp_millis(),
 
     ct:pal("Transfers canceled"),
 
@@ -1638,7 +1643,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     timer:sleep(timer:seconds(5)),
     ct:pal("Transfers started"),
 
-    Start = erlang:monotonic_time(millisecond),
+    Start = time_utils:timestamp_millis(),
     lists:foreach(fun(User) ->
         SessionId = SessId(User, Worker1),
         cancel_transfers_for_session_and_file(Worker1, SessionId, FileCtx)
@@ -1656,7 +1661,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     end, {0,0}, Promises),
 
     ?assertEqual(0, rpc:call(Worker1, ets, info, [rtransfer_link_requests, size]), 500),
-    End = erlang:monotonic_time(millisecond),
+    End = time_utils:timestamp_millis(),
 
     ct:pal("Block size: ~p~n"
     "Block count: ~p~n"
@@ -1687,7 +1692,7 @@ transfer_files_to_source_provider(Config0) ->
 
     ct:pal("~p files created", [FilesNum]),
 
-    Start = erlang:monotonic_time(millisecond),
+    Start = time_utils:timestamp_millis(),
 
     TidsAndGuids = lists_utils:pmap(fun(Guid) ->
         {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
@@ -1704,9 +1709,9 @@ transfer_files_to_source_provider(Config0) ->
         end
     end, TidsAndGuids),
 
-    End = erlang:monotonic_time(millisecond),
+    End = time_utils:timestamp_millis(),
 
-    StartGui = erlang:monotonic_time(millisecond),
+    StartGui = time_utils:timestamp_millis(),
     lists_utils:pforeach(fun(Num) ->
         Data = #{
             <<"state">> => ?ENDED_TRANSFERS_STATE,
@@ -1720,12 +1725,58 @@ transfer_files_to_source_provider(Config0) ->
         )),
         ?assertMatch(100, length(List))
     end, lists:seq(1, FilesNum div 100)),
-    EndGui = erlang:monotonic_time(millisecond),
+    EndGui = time_utils:timestamp_millis(),
 
     ct:pal("Transfer time[s]: ~p~n"
            "Average time per file[ms]: ~p~n"
            "GUI time [s]: ~p",
         [(End-Start)/1000, (End-Start)/FilesNum, (EndGui-StartGui)/1000]).
+
+
+proxy_session_token_update_test_base(Config, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
+    proxy_session_token_update_test_base(Config, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
+proxy_session_token_update_test_base(Config0, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+    User = <<"user1">>,
+    SpaceName = <<"space4">>,       % supported on P1 but not on P2
+
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    [P1 | _] = ?config(workers1, Config),
+    [P2 | _] = ?config(workers_not1, Config),
+    GetSessIdFun = ?config(session, Config),
+
+    SessionId = GetSessIdFun(P2),   % proxy session on P1 should have the same SessionId as session on P2
+
+    OriginalAccessToken = initializer:create_access_token(User),
+    OriginalClientTokens = #client_tokens{access_token = OriginalAccessToken, consumer_token = undefined},
+
+    NewAccessToken = tokens:confine(OriginalAccessToken, #cv_data_readonly{}),
+    ?assertNotEqual(OriginalAccessToken, NewAccessToken),
+
+    NewClientTokens = #client_tokens{access_token = NewAccessToken, consumer_token = undefined},
+
+    % After making request resulting in proxy request session with the same SessionId should
+    % exist on P1 (proxy one) and P2
+    DirPath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(P2, SessionId, DirPath, 8#755)),
+
+    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
+    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
+
+    % Assert that when updating credentials on P2 proxy session on P1 is not automatically updated
+    ?assertEqual(ok, rpc:call(P2, incoming_session_watcher, update_credentials, [
+        SessionId, NewAccessToken, undefined
+    ]), Attempts),
+
+    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
+    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
+
+    % But any future proxy request will update those credentials (credentials are send with every
+    % proxy request)
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessionId, {guid, DirGuid}), Attempts),
+    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
+    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
+
+    ok.
 
 
 %%%===================================================================
@@ -2366,4 +2417,16 @@ await_replication_end(Node, TransferId, Attempts, GetFun) ->
         _ ->
             timer:sleep(timer:seconds(1)),
             await_replication_end(Node, TransferId, Attempts - 1, GetFun)
+    end.
+
+
+%% @private
+-spec get_session_client_tokens(node(), session:id()) ->
+    {ok, auth_manager:client_tokens()} | {error, term()}.
+get_session_client_tokens(Node, SessionId) ->
+    case rpc:call(Node, session, get, [SessionId]) of
+        {ok, #document{value = #session{credentials = TokenCredentials}}} ->
+            {ok, auth_manager:get_client_tokens(TokenCredentials)};
+        {error, _} = Error ->
+            Error
     end.

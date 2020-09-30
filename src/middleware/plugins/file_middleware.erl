@@ -209,10 +209,10 @@ data_spec_create(#gri{aspect = rdf_metadata}) -> #{
 
 data_spec_create(#gri{aspect = register_file}) -> #{
     required => #{
-        <<"spaceId">> => {binary, any},
-        <<"storageId">> => {binary, any},
-        <<"storageFileId">> => {binary, any},
-        <<"destinationPath">> => {binary, any}
+        <<"spaceId">> => {binary, non_empty},
+        <<"storageId">> => {binary, non_empty},
+        <<"storageFileId">> => {binary, non_empty},
+        <<"destinationPath">> => {binary, non_empty}
     },
     optional => #{
         <<"size">> => {integer, {not_lower_than, 0}},
@@ -278,9 +278,7 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     StorageId = maps:get(<<"storageId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId),
     middleware_utils:assert_space_supported_with_storage(SpaceId, StorageId),
-    middleware_utils:assert_imported_storage(StorageId),
-    middleware_utils:assert_file_registration_supported(StorageId),
-    middleware_utils:assert_sync_not_enabled(SpaceId, StorageId).
+    storage_import:assert_manual_import_mode(SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -386,8 +384,8 @@ get_operation_supported(acl, private) -> true;
 get_operation_supported(shares, private) -> true;               % gs only
 get_operation_supported(transfers, private) -> true;
 get_operation_supported(file_qos_summary, private) -> true;     % REST/gs
-get_operation_supported(download_url, private) -> true;
-get_operation_supported(download_url, public) -> true;
+get_operation_supported(download_url, private) -> true;         % gs only
+get_operation_supported(download_url, public) -> true;          % gs only
 get_operation_supported(_, _) -> false.
 
 
@@ -713,10 +711,8 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) -
     case page_file_download:get_file_download_url(SessionId, FileGuid) of
         {ok, URL} ->
             {ok, value, URL};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
+        {error, _} = Error ->
+            Error
     end.
 
 

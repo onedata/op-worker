@@ -8,6 +8,10 @@
 %%% @todo simplify rename logic here
 %%% @doc
 %%% Utility functions for storage file manager module.
+%%%
+%%% ATTENTION!!!
+%%% Functions in this module should not operate on share guids and
+%%% file contexts associated with share guids.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(sd_utils).
@@ -70,9 +74,10 @@ rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, Tar
     case TargetParentCtx =/= undefined of
         true ->
             TargetParentCtx2 = file_ctx:assert_not_readonly_storage(TargetParentCtx),
+            TargetParentCtx3 = share_to_standard_file_ctx(TargetParentCtx2),
             % we know target parent uuid, so we can create parent directories with correct mode
             % ensure all target parent directories are created
-            {ok, _} = mkdir_deferred(TargetParentCtx2, UserCtx);
+            {ok, _} = mkdir_deferred(TargetParentCtx3, UserCtx);
         false ->
             % We don't know target parent uuid because it is a remote rename, check whether storage is readonly "manually"
             case storage:is_storage_readonly(StorageId, SpaceId) of
@@ -140,14 +145,15 @@ create_deferred(FileCtx) ->
 -spec create_deferred(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
     {file_location:doc(), file_ctx:ctx()} | {error, cancelled}.
 create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
+    FileCtx2 = share_to_standard_file_ctx(FileCtx),
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
-    }, FileCtx2} = Ans = file_ctx:get_or_create_local_regular_file_location_doc(FileCtx, false, CheckLocationExists),
+    }, FileCtx3} = Ans = file_ctx:get_or_create_local_regular_file_location_doc(FileCtx2, false, CheckLocationExists),
 
     case StorageFileCreated of
         false ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_uuid_const(FileCtx3),
             % TODO VFS-5270
             replica_synchronizer:apply(FileCtx, fun() ->
                 try
@@ -155,11 +161,11 @@ create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
                         true ->
                             Ans;
                         _ ->
-                            {ok, FileCtx3} = sd_utils:generic_create_deferred(UserCtx, FileCtx2, VerifyDeletionLink),
-                            {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+                            {ok, FileCtx4} = sd_utils:generic_create_deferred(UserCtx, FileCtx3, VerifyDeletionLink),
+                            {StorageFileId, FileCtx5} = file_ctx:get_storage_file_id(FileCtx4),
                             {ok, Doc} = location_and_link_utils:mark_location_created(FileUuid,
                                 FileLocationId, StorageFileId),
-                            {Doc, FileCtx4}
+                            {Doc, FileCtx5}
                     end
                 catch
                     _:{badmatch,{error, not_found}} ->
@@ -206,7 +212,7 @@ generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
             {Storage, FileCtx5} = file_ctx:get_storage(FileCtx4),
             Helper = storage:get_helper(Storage),
             HelperName = helper:get_name(Helper),
-            case HelperName =:= ?S3_HELPER_NAME andalso helper:is_sync_supported(Helper) of
+            case HelperName =:= ?S3_HELPER_NAME andalso helper:is_auto_import_supported(Helper) of
                 true ->
                     % pretend that parent directories has been created
                     % this should only happen on synced S3 storage
@@ -252,15 +258,16 @@ delete(FileCtx, UserCtx) ->
 -spec unlink(file_ctx:ctx(), user_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | {error, term()}.
 unlink(FileCtx, UserCtx) ->
+    FileCtx2 = share_to_standard_file_ctx(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    case storage_driver:new_handle(SessId, FileCtx, false) of
-        {undefined, _FileCtx2} ->
+    case storage_driver:new_handle(SessId, FileCtx2, false) of
+        {undefined, _FileCtx3} ->
             {error, ?ENOENT};
-        {SDHandle, FileCtx2} ->
-            {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
+        {SDHandle, FileCtx3} ->
+            {Size, FileCtx4} = file_ctx:get_file_size(FileCtx3),
             case storage_driver:unlink(SDHandle, Size) of
                 ok ->
-                    {ok, FileCtx3};
+                    {ok, FileCtx4};
                 {error, _} = Error ->
                     Error
             end
@@ -274,26 +281,27 @@ unlink(FileCtx, UserCtx) ->
 -spec rmdir(file_ctx:ctx(), user_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | {error, term()}.
 rmdir(DirCtx, UserCtx) ->
+    DirCtx2 = share_to_standard_file_ctx(DirCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    FileUuid = file_ctx:get_uuid_const(DirCtx),
-    case storage_driver:new_handle(SessId, DirCtx, false) of
-        {undefined, FileCtx2} ->
-            {ok, FileCtx2};
-        {SDHandle, FileCtx2} ->
+    FileUuid = file_ctx:get_uuid_const(DirCtx2),
+    case storage_driver:new_handle(SessId, DirCtx2, false) of
+        {undefined, DirCtx3} ->
+            {ok, DirCtx3};
+        {SDHandle, DirCtx3} ->
             case storage_driver:rmdir(SDHandle) of
                 ok ->
                     dir_location:mark_deleted_from_storage(FileUuid),
-                    {ok, FileCtx2};
+                    {ok, DirCtx3};
                 {error, ?ENOENT} ->
                     dir_location:mark_deleted_from_storage(FileUuid),
-                    {ok, FileCtx2};
+                    {ok, DirCtx3};
                 {error, ?ENOTEMPTY} = Error ->
                     ?debug("sd_utils:rmdir failed with ~p", [Error]),
                     Error;
                 {error,'Function not implemented'} = Error ->
                     % Some helpers do not support rmdir
                     ?debug("sd_utils:rmdir failed with ~p", [Error]),
-                    {ok, FileCtx2};
+                    {ok, DirCtx3};
                 Error ->
                     ?error("sd_utils:rmdir ~p ~p failed with ~p", [DirCtx, SDHandle, Error]),
                     Error
@@ -303,6 +311,18 @@ rmdir(DirCtx, UserCtx) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec share_to_standard_file_ctx(file_ctx:ctx()) -> file_ctx:ctx().
+share_to_standard_file_ctx(FileCtx) ->
+    Guid = file_ctx:get_guid_const(FileCtx),
+    case file_id:is_share_guid(Guid) of
+        true ->
+            Guid2 = file_id:share_guid_to_guid(Guid),
+            file_ctx:new_by_guid(Guid2);
+        false ->
+            FileCtx
+    end.
+
 
 -spec create_storage_file(storage_driver:handle(), file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 create_storage_file(SDHandle, FileCtx) ->
@@ -388,8 +408,8 @@ create_missing_parent_dirs(UserCtx, FileCtx, ParentCtxsToCreate) ->
 -spec create_missing_parent_dir(user_ctx:ctx(), file_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | {error, term()}.
 create_missing_parent_dir(UserCtx, FileCtx) ->
-        {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx),
-        mkdir_and_maybe_chown(UserCtx, FileCtx3, file_meta:get_mode(FileDoc)).
+    {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx),
+    mkdir_and_maybe_chown(UserCtx, FileCtx3, file_meta:get_mode(FileDoc)).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -510,7 +530,7 @@ should_chown(UserCtx, FileCtx) ->
 %% @private
 %% @doc
 %% This function is used to pretend that directory has been created
-%% on S3 storage with storage_sync enabled. It is necessary, as S3 does
+%% on S3 storage with storage import enabled. It is necessary, as S3 does
 %% not create directories on storage and sync must be able to distinguish
 %% remote directory that has never been synchronized with local directory.
 %% @end

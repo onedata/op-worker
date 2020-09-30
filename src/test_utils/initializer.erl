@@ -556,7 +556,7 @@ mock_auth_manager(Config, CheckIfUserIsSupported, NoHistory) ->
                                     Csm
                             end,
                             AuthCtx = #auth_ctx{
-                                current_timestamp = time_utils:cluster_time_seconds(),
+                                current_timestamp = time_utils:timestamp_seconds(),
                                 ip = auth_manager:get_peer_ip(TokenCredentials),
                                 interface = auth_manager:get_interface(TokenCredentials),
                                 service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
@@ -628,7 +628,7 @@ mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
     ),
 
     % Mock cached auth and identity tokens with large TTL
-    ExpirationTime = time_utils:system_time_seconds() + 999999999,
+    ExpirationTime = time_utils:timestamp_seconds() + 999999999,
     {RpcAns, []} = rpc:multicall(Workers, datastore_model, save, [#{model => provider_auth}, #document{
         key = <<"provider_auth">>,
         value = #provider_auth{
@@ -1264,6 +1264,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     
     test_utils:mock_expect(Workers, space_logic, report_provider_sync_progress, fun(_SpaceId, _) ->
         ok
+    end),
+    
+    test_utils:mock_expect(Workers, space_logic, has_eff_user, fun(SessionId, SpaceId, UserId) ->
+        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(SessionId, SpaceId),
+        maps:is_key(UserId, EffUsers)
     end).
 
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
@@ -1499,18 +1504,6 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
             {ok, StorageIds} = GetStorageIdsFun(oneprovider:get_id()),
             lists:member(StorageId, StorageIds)
         end),
-
-    test_utils:mock_expect(AllWorkers, provider_logic, zone_time_seconds,
-        fun() ->
-            time_utils:cluster_time_seconds()
-        end),
-
-
-    test_utils:mock_expect(AllWorkers, provider_logic, zone_time_seconds,
-        fun() ->
-            time_utils:cluster_time_seconds()
-        end),
-
 
     test_utils:mock_expect(AllWorkers, provider_logic, assert_zone_compatibility,
         fun() ->

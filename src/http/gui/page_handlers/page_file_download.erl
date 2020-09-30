@@ -42,26 +42,20 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_download_url(session:id(), fslogic_worker:file_guid()) ->
-    {ok, binary()} | {error, term()}.
+    {ok, binary()} | errors:error().
 get_file_download_url(SessionId, FileGuid) ->
-    case lfm:check_perms(SessionId, {guid, FileGuid}, read) of
-        ok ->
-            try
-                maybe_sync_first_file_block(SessionId, FileGuid),
-                Hostname = oneprovider:get_domain(),
-                {ok, Code} = file_download_code:create(SessionId, FileGuid),
-                URL = str_utils:format_bin("https://~s~s/~s", [
-                    Hostname, ?FILE_DOWNLOAD_PATH, Code
-                ]),
-                {ok, URL}
-            catch throw:Error ->
-                Error
-            end;
-        {error, ?EACCES} ->
+    try
+        maybe_sync_first_file_block(SessionId, FileGuid),
+        Hostname = oneprovider:get_domain(),
+        {ok, Code} = file_download_code:create(SessionId, FileGuid),
+        URL = str_utils:format_bin("https://~s~s/~s", [
+            Hostname, ?FILE_DOWNLOAD_PATH, Code
+        ]),
+        {ok, URL}
+    catch
+        throw:?ERROR_POSIX(Errno) when Errno == ?EACCES; Errno == ?EPERM ->
             ?ERROR_FORBIDDEN;
-        {error, ?EPERM} ->
-            ?ERROR_FORBIDDEN;
-        Error ->
+        throw:Error ->
             Error
     end.
 
@@ -69,10 +63,10 @@ get_file_download_url(SessionId, FileGuid) ->
 %% @private
 -spec maybe_sync_first_file_block(session:id(), file_id:file_guid()) -> ok.
 maybe_sync_first_file_block(SessionId, FileGuid) ->
-    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, FileGuid}, read)),
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, read)),
     ReadBlockSize = file_download_utils:get_read_block_size(FileHandle),
     ?check(lfm:read(FileHandle, 0, ReadBlockSize)),
-    lfm:release(FileHandle),
+    lfm:monitored_release(FileHandle),
     ok.
 
 
@@ -111,7 +105,7 @@ handle(<<"GET">>, Req) ->
 -spec handle_http_download(cowboy_req:req(), session:id(), fslogic_worker:file_guid()) ->
     cowboy_req:req().
 handle_http_download(Req, SessionId, FileGuid) ->
-    case lfm:open(SessionId, {guid, FileGuid}, read) of
+    case lfm:monitored_open(SessionId, {guid, FileGuid}, read) of
         {ok, FileHandle} ->
             try
                 stream_file(FileGuid, FileHandle, SessionId, Req)
@@ -123,7 +117,7 @@ handle_http_download(Req, SessionId, FileGuid) ->
                 ]),
                 send_error_response(Reason, Req)
             after
-                lfm:release(FileHandle)
+                lfm:monitored_release(FileHandle)
             end;
         {error, Errno} ->
             send_error_response(?ERROR_POSIX(Errno), Req)

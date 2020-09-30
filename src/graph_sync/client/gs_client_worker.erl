@@ -413,7 +413,8 @@ process_push_message_async(#gs_push_graph{gri = GRI, change_type = deleted}) ->
         #gri{type = od_provider, id = ProviderId, aspect = instance} ->
             gs_hooks:handle_deregistered_from_oz();
         #gri{type = od_space, id = SpaceId, aspect = instance} ->
-            main_harvesting_stream:space_removed(SpaceId);
+            main_harvesting_stream:space_removed(SpaceId),
+            storage_import_worker:notify_space_deleted(SpaceId);
         #gri{type = od_token, id = TokenId, aspect = instance} ->
             auth_cache:report_token_deletion(TokenId);
         #gri{type = temporary_token_secret, id = UserId, aspect = user} ->

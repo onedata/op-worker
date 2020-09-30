@@ -378,7 +378,7 @@ get_file_info(RequestedInfo, #cdmi_req{
     CdmiPartialFlag :: undefined | binary()) ->
     cowboy_req:req().
 write_req_body_to_file(Req, SessId, FileKey, Truncate, Offset, CdmiPartialFlag) ->
-    {ok, FileHandle} = ?check(lfm:open(SessId, FileKey, write)),
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessId, FileKey, write)),
     cdmi_metadata:update_cdmi_completion_status(
         SessId,
         FileKey,
@@ -392,7 +392,7 @@ write_req_body_to_file(Req, SessId, FileKey, Truncate, Offset, CdmiPartialFlag) 
     ),
 
     ?check(lfm:fsync(FileHandle)),
-    ?check(lfm:release(FileHandle)),
+    ?check(lfm:monitored_release(FileHandle)),
     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
         SessId,
         FileKey,
@@ -408,7 +408,7 @@ write_req_body_to_file(Req, SessId, FileKey, Truncate, Offset, CdmiPartialFlag) 
     ok.
 write_binary_to_file(SessionId, FileKey, Truncate, Offset, Data, CdmiPartialFlag) ->
     DataSize = byte_size(Data),
-    {ok, FileHandle} = ?check(lfm:open(SessionId, FileKey, write)),
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileKey, write)),
     cdmi_metadata:update_cdmi_completion_status(
         SessionId,
         FileKey,
@@ -418,7 +418,7 @@ write_binary_to_file(SessionId, FileKey, Truncate, Offset, Data, CdmiPartialFlag
 
     {ok, _, DataSize} = ?check(lfm:write(FileHandle, Offset, Data)),
     ?check(lfm:fsync(FileHandle)),
-    ?check(lfm:release(FileHandle)),
+    ?check(lfm:monitored_release(FileHandle)),
     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
         SessionId,
         FileKey,

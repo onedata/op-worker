@@ -179,7 +179,6 @@
     resource_type :: od_handle:resource_type() | undefined,
     resource_id :: od_handle:resource_id() | undefined,
     metadata :: od_handle:metadata() | undefined,
-    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp(),
 
     % Direct relations to other entities
     handle_service :: od_handle_service:id() | undefined,
@@ -244,7 +243,7 @@
 %% User session
 -record(session, {
     status :: undefined | session:status(),
-    accessed :: undefined | integer(),
+    accessed :: undefined | time_utils:seconds(),
     type :: undefined | session:type(),
     identity :: aai:subject(),
     credentials :: undefined | auth_manager:credentials(),
@@ -379,7 +378,7 @@
 }).
 
 
-%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 -record(storage, {
     name = <<>> :: storage_config:name(),
     helpers = [] :: [helpers:helper()],
@@ -396,7 +395,7 @@
 }).
 
 %% Model that maps space to storage
-%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
     mounted_in_root = [] :: [storage:id()]
@@ -537,7 +536,7 @@
     last_rename :: undefined | replica_changes:last_rename(),
     storage_file_created = false :: boolean(),
     last_replication_timestamp :: non_neg_integer() | undefined,
-    % synced_gid field is set by storage_sync, only on POSIX-compatible storages.
+    % synced_gid field is set by storage import, only on POSIX-compatible storages.
     % It is used to override display gid, only in
     % the syncing provider, with the gid that file
     % belongs to on synced storage.
@@ -553,14 +552,22 @@
 %% Model for storing dir's location data
 -record(dir_location, {
     storage_file_created = false :: boolean(),
-    % synced_gid field is set by storage_sync, only on POSIX-compatible storages.
+    % synced_gid field is set by storage import, only on POSIX-compatible storages.
     % It is used to override display gid, only in
     % the syncing provider, with the gid that file
     % belongs to on synced storage.
     synced_gid :: undefined | luma:gid()
 }).
 
-%% Model that stores configuration of storage_sync mechanism
+%% Model that stores configuration of storage import
+-record(storage_import_config, {
+    mode :: storage_import_config:mode(),
+    % below field is undefined for manual mode
+    auto_storage_import_config :: undefined | auto_storage_import_config:config()
+}).
+
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%% Model that stores configuration of storage import mechanism
 -record(storage_sync_config, {
     import_enabled = false :: boolean(),
     update_enabled = false :: boolean(),
@@ -568,12 +575,13 @@
     update_config = #{} :: space_strategies:update_config()
 }).
 
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 %% Model that maps space to storage strategies
 -record(space_strategies, {
-    % todo VFS-5717 rename model to storage_sync_configs?
     sync_configs = #{} :: space_strategies:sync_configs()
 }).
 
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 -record(storage_sync_monitoring, {
     scans = 0 :: non_neg_integer(), % overall number of finished scans,
     import_start_time :: undefined | non_neg_integer(),
@@ -616,6 +624,54 @@
     queue_length_hour_hist :: time_slot_histogram:histogram(),
     queue_length_day_hist :: time_slot_histogram:histogram()
 }).
+
+%% Model that storage monitoring data of auto storage import.
+%% The doc is stored per space.
+-record(storage_import_monitoring, {
+    finished_scans = 0 :: non_neg_integer(), % overall number of finished scans,
+    status :: storage_import_monitoring:status(),
+
+    % start/stop timestamps of last scan in millis
+    scan_start_time :: undefined | time_utils:millis(),
+    scan_stop_time :: undefined | time_utils:millis(),
+
+    % counters used for scan management, they're reset on the beginning of each scan
+    to_process = 0 :: non_neg_integer(),
+    created = 0 :: non_neg_integer(),
+    modified = 0 :: non_neg_integer(),
+    deleted = 0 :: non_neg_integer(),
+    failed = 0 :: non_neg_integer(),
+    % counter for tasks which don't match to any one of the above categories
+    % i.e.
+    %   * remote files that were processed by sync algorithm but not deleted
+    %   * directories are processed many times (for each batch) but we increase
+    %     `updated` counter only for 1 batch, for other batches we increase
+    %     `other_processed_tasks` to keep track of algorithm and check whether
+    %     it performs as intended
+    other_processed = 0 :: non_neg_integer(),
+
+    % summary of all scans
+    created_sum = 0 :: non_neg_integer(),
+    modified_sum = 0 :: non_neg_integer(),
+    deleted_sum = 0 :: non_neg_integer(),
+
+    created_min_hist :: time_slot_histogram:histogram(),
+    created_hour_hist :: time_slot_histogram:histogram(),
+    created_day_hist :: time_slot_histogram:histogram(),
+
+    modified_min_hist :: time_slot_histogram:histogram(),
+    modified_hour_hist :: time_slot_histogram:histogram(),
+    modified_day_hist :: time_slot_histogram:histogram(),
+
+    deleted_min_hist :: time_slot_histogram:histogram(),
+    deleted_hour_hist :: time_slot_histogram:histogram(),
+    deleted_day_hist :: time_slot_histogram:histogram(),
+
+    queue_length_min_hist :: time_slot_histogram:histogram(),
+    queue_length_hour_hist :: time_slot_histogram:histogram(),
+    queue_length_day_hist :: time_slot_histogram:histogram()
+}).
+
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
@@ -787,6 +843,12 @@
     % query_view_params are directly passed to couchbase
     % if index_name (view_name) is undefined query_view_params are ignored
     query_view_params = [] :: transfer:query_view_params()
+}).
+
+%% Model that tracks process' open handles
+-record(process_handles, {
+    process :: pid(),
+    handles = #{} :: #{lfm_context:handle_id() => lfm:handle()}
 }).
 
 %% Model that tracks what files are currently transferred

@@ -80,11 +80,11 @@ get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 -spec remove_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
 remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
-    FileCtx1 = fslogic_authz:ensure_authorized(
+    fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),
-    remove_qos_entry_insecure(UserCtx, FileCtx1, QosEntryId).
+    remove_qos_entry_insecure(UserCtx, QosEntryId).
 
 
 %%--------------------------------------------------------------------
@@ -191,9 +191,9 @@ get_qos_entry_insecure(QosEntryId) ->
 %% Removes qos_entry ID from file_qos documents then removes qos_entry document.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_entry_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
+-spec remove_qos_entry_insecure(user_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
-remove_qos_entry_insecure(UserCtx, FileCtx, QosEntryId) ->
+remove_qos_entry_insecure(UserCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     
     % Only root can remove internal QoS entry

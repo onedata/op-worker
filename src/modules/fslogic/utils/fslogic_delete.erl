@@ -18,9 +18,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete_file_locally/3, handle_remotely_deleted_file/1,
-    handle_release_of_deleted_file/2, handle_file_deleted_on_synced_storage/1,
-    cleanup_opened_files/0, remove_local_associated_documents/1]).
+-export([
+    delete_file_locally/3,
+    handle_remotely_deleted_file/1,
+    handle_release_of_deleted_file/2,
+    handle_file_deleted_on_imported_storage/1]).
+-export([cleanup_opened_files/0]).
+-export([remove_local_associated_documents/1]).
 
 %% Test API
 -export([delete_parent_link/2, get_open_file_handling_method/1]).
@@ -64,8 +68,8 @@ handle_release_of_deleted_file(FileCtx, RemovalStatus) ->
     DocsDeletionScope = removal_status_to_docs_deletion_scope(RemovalStatus),
     ok = remove_file(FileCtx, UserCtx, true, ?TWO_STEP_DEL_FIN(DocsDeletionScope)).
 
-    -spec handle_file_deleted_on_synced_storage(file_ctx:ctx()) -> ok.
-handle_file_deleted_on_synced_storage(FileCtx) ->
+    -spec handle_file_deleted_on_imported_storage(file_ctx:ctx()) -> ok.
+handle_file_deleted_on_imported_storage(FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     ok = remove_file(FileCtx, UserCtx, false, ?SINGLE_STEP_DEL(?ALL_DOCS)),
     fslogic_event_emitter:emit_file_removed(FileCtx, []),
@@ -102,6 +106,14 @@ cleanup_opened_files() ->
             ?error("Cannot clean open files descriptors - ~p", [Error])
     end.
 
+-spec remove_local_associated_documents(file_ctx:ctx()) -> ok.
+remove_local_associated_documents(FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    % TODO VFS-6114 delete storage_sync_info here?
+    ok = file_qos:clean_up(FileCtx),
+    ok = file_meta_posthooks:delete(FileUuid),
+    ok = file_popularity:delete(FileUuid).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -117,7 +129,7 @@ cleanup_opened_files() ->
 check_if_opened_and_remove(UserCtx, FileCtx, Silent, DocsDeletionScope) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
-        case file_handles:exists(FileUuid) of
+        case file_handles:is_file_opened(FileUuid) of
             true ->
                 handle_opened_file(FileCtx, UserCtx, DocsDeletionScope);
             _ ->
@@ -138,7 +150,7 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
     ok = file_handles:mark_to_remove(FileCtx3, RemovalStatus),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     % Check once more to prevent race with last handle being closed
-    case file_handles:exists(FileUuid) of
+    case file_handles:is_file_opened(FileUuid) of
         true -> ok;
         false -> handle_release_of_deleted_file(FileCtx3, RemovalStatus)
     end.
@@ -462,6 +474,7 @@ remove_associated_documents(FileCtx) ->
     remove_synced_associated_documents(FileCtx),
     remove_local_associated_documents(FileCtx).
 
+
 -spec remove_synced_associated_documents(file_ctx:ctx()) -> ok.
 remove_synced_associated_documents(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -471,13 +484,6 @@ remove_synced_associated_documents(FileCtx) ->
     ok = transferred_file:clean_up(FileGuid),
     ok = file_qos:delete_associated_entries(FileUuid).
 
--spec remove_local_associated_documents(file_ctx:ctx()) -> ok.
-remove_local_associated_documents(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    % TODO VFS-6114 delete storage_sync_info here?
-    ok = file_qos:clean_up(FileCtx),
-    ok = file_meta_posthooks:delete(FileUuid),
-    ok = file_popularity:delete(FileUuid).
 
 %%--------------------------------------------------------------------
 %% @private

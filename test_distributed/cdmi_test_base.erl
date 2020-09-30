@@ -310,9 +310,9 @@ metadata(Config) ->
                             <<"cdmi_not_allowed">> => <<"my_value">>}},
 
     RawRequestBody1 = json_utils:encode(RequestBody1),
-    Before = calendar:now_to_datetime(erlang:timestamp()),
+    Before = time_utils:seconds_to_datetime(time_utils:timestamp_seconds()),
     {ok, Code1, _Headers1, Response1} = do_request(Workers, FileName, put, RequestHeaders1, RawRequestBody1),
-    After = calendar:now_to_datetime(erlang:timestamp()),
+    After = time_utils:seconds_to_datetime(time_utils:timestamp_seconds()),
 
     ?assertEqual(201, Code1),
     CdmiResponse1 = (json_utils:decode(Response1)),
@@ -2026,7 +2026,7 @@ mock_opening_file_without_perms(Config) ->
     test_node_starter:load_modules(Workers, [?MODULE]),
     test_utils:mock_new(Workers, lfm),
     test_utils:mock_expect(
-        Workers, lfm, open, fun(_, _, _) -> {error, ?EACCES} end).
+        Workers, lfm, monitored_open, fun(_, _, _) -> {error, ?EACCES} end).
 
 unmock_opening_file_without_perms(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),

@@ -519,7 +519,7 @@ remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged(Conf
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, rdwr), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, TestDataSize)),
+    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, TestDataSize), ?ATTEMPTS),
     ?assertMatch({ok, _}, lfm_proxy:write(W2, H, 0, ?TEST_DATA2)),
     lfm_proxy:close(W2, H),
 
@@ -542,7 +542,7 @@ remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged2(Con
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, rdwr), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, TestDataSize)),
+    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, TestDataSize), ?ATTEMPTS),
     ?assertMatch({ok, _}, lfm_proxy:write(W2, H, ChangedByteOffset, <<"#">>)),
     lfm_proxy:close(W2, H),
 
@@ -587,7 +587,7 @@ eviction_job_should_succeed(Config) ->
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, TestDataSize)),
+    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, TestDataSize), ?ATTEMPTS),
     lfm_proxy:close(W2, H),
 
     ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [TestDataSize, TestDataSize]), Guid, ?ATTEMPTS),

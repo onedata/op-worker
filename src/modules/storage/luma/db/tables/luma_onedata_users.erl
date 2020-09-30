@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module implements LUMA DB table that associates storage user
 %%% with Onedata user, represented by #luma_onedata_user record.
-%%% Tha mappings are used by storage_sync in 2 cases:
+%%% Tha mappings are used by storage import in 2 cases:
 %%%  1) to associate synchronized file owners (represented as UID)
 %%%     with corresponding Onedata user,
 %%%  2) to associate synchronized ACLs, set for specific, named user,

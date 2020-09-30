@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete/1, exists/1, list/0]).
+-export([is_file_opened/1, delete/1, list/0]).
 -export([register_open/4, register_release/3, mark_to_remove/2, is_removed/1,
     invalidate_session_entry/2, is_used_by_session/2, get_creation_handle/1]).
 
@@ -46,6 +46,15 @@
 %%% API
 %%%===================================================================
 
+-spec is_file_opened(key()) -> boolean().
+is_file_opened(FileUuid) ->
+    case datastore_model:get(?CTX, FileUuid) of
+        {ok, #document{value = #file_handles{descriptors = Fds}}} ->
+            maps:size(Fds) =/= 0;
+        {error, not_found} ->
+            false
+    end.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes file handle.
@@ -54,16 +63,6 @@
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
     datastore_model:delete(?CTX, Key).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether file handle exists.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(key()) -> boolean().
-exists(Key) ->
-    {ok, Exists} = datastore_model:exists(?CTX, Key),
-    Exists.
 
 %%--------------------------------------------------------------------
 %% @doc

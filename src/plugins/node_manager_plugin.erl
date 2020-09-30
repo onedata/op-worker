@@ -31,6 +31,7 @@
 -export([on_db_and_workers_ready/0]).
 -export([listeners/0]).
 -export([renamed_models/0]).
+-export([synchronize_clock/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 -export([master_node_down/1, master_node_up/1, master_node_ready/1]).
 
@@ -115,6 +116,29 @@ renamed_models() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Overrides {@link node_manager_plugin_default:synchronize_clock/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec synchronize_clock() -> ok | ignored | error.
+synchronize_clock() ->
+    % during cluster setup, before the database is ready the registration status check will crash
+    IsReadyAndRegistered = try oneprovider:is_registered() catch _:_ -> false end,
+    case IsReadyAndRegistered of
+        false ->
+            node_manager_plugin_default:synchronize_clock();
+        true ->
+            case gs_channel_service:is_connected() of
+                false ->
+                    % if the Oneprovider is registered, but not connected, do not
+                    % re-synchronize the clock - it will be done upon reconnection
+                    ignored;
+                true ->
+                    time_utils:synchronize_with_remote_clock(fun provider_logic:get_zone_time/0)
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Overrides {@link node_manager_plugin_default:before_init/0}.
 %% This callback is executed on all cluster nodes.
 %% @end
@@ -154,7 +178,11 @@ upgrade_cluster(1) ->
     {ok, 2};
 upgrade_cluster(2) ->
     await_zone_connection_and_run(fun storage:migrate_imported_storages_to_zone/0),
-    {ok, 3}.
+    {ok, 3};
+upgrade_cluster(3) ->
+    await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
+    await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
+    {ok, 4}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -167,7 +195,10 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
     ], [worker_first]},
-    {fslogic_worker, []},
+    {fslogic_worker, [
+        {supervisor_flags, fslogic_worker:supervisor_flags()},
+        {supervisor_children_spec, fslogic_worker:supervisor_children_spec()}
+    ]},
     {dbsync_worker, [
         {supervisor_flags, dbsync_worker:supervisor_flags()}
     ]},
@@ -179,7 +210,7 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, rtransfer_worker:supervisor_flags()},
         {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}
     ]},
-    {storage_sync_worker, []},
+    {storage_import_worker, []},
     {harvesting_worker, [
         {supervisor_flags, harvesting_worker:supervisor_flags()},
         {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}
@@ -254,7 +285,8 @@ filter_disabled_workers(WorkersSpecs) ->
 %%--------------------------------------------------------------------
 -spec master_node_down(FailedNode :: node()) -> ok.
 master_node_down(_FailedNode) ->
-    session_manager:restart_dead_sessions().
+    session_manager:restart_dead_sessions(),
+    process_handles:release_all_dead_processes_handles().
 
 %%--------------------------------------------------------------------
 %% @doc

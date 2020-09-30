@@ -73,11 +73,11 @@ incremental_harvesting_test_base(Config) ->
     NewFilesSum = OldFilesSum + AllFiles,
     put(files_sum, NewFilesSum),
 
-    Start = time_utils:system_time_millis(),
+    Start = time_utils:timestamp_millis(),
     % start harvesting_stream
     harvesting_stress_test_utils:revise_all_spaces(Worker),
     harvesting_stress_test_utils:harvesting_receive_loop(NewFilesSum),
-    Diff = time_utils:system_time_millis() - Start,
+    Diff = time_utils:timestamp_millis() - Start,
 
     DiffSec = Diff/1000,
     AvgRate =  NewFilesSum /DiffSec,

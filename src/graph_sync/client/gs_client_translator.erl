@@ -231,7 +231,6 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = private}, R
             resource_type = maps:get(<<"resourceType">>, Result),
             resource_id = maps:get(<<"resourceId">>, Result),
             metadata = maps:get(<<"metadata">>, Result),
-            timestamp = time_utils:datestamp_to_datetime(maps:get(<<"timestamp">>, Result)),
             handle_service = maps:get(<<"handleServiceId">>, Result),
 
             eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result)),
@@ -244,8 +243,7 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
         key = Id,
         value = #od_handle{
             public_handle = maps:get(<<"publicHandle">>, Result),
-            metadata = maps:get(<<"metadata">>, Result),
-            timestamp = time_utils:datestamp_to_datetime(maps:get(<<"timestamp">>, Result))
+            metadata = maps:get(<<"metadata">>, Result)
         }
     };
 

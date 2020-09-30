@@ -13,7 +13,7 @@
 -module(file_metadata_delete_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("file_metadata_api_test_utils.hrl").
+-include("file_api_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
