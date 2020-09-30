@@ -15,7 +15,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/fslogic/file_popularity_view.hrl").
+-include("modules/file_popularity/file_popularity_view.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 

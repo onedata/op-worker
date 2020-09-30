@@ -19,6 +19,8 @@
 -export([try_to_resolve_child_link/2, try_to_resolve_child_deletion_link/2,
     add_deletion_link/2, remove_deletion_link/2]).
 
+% TODO Get rid of this module?
+
 %%%===================================================================
 %%% API
 %%%===================================================================

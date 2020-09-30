@@ -15,7 +15,7 @@
 -behaviour(view_traverse).
 
 -include("global_definitions.hrl").
--include("modules/fslogic/file_popularity_view.hrl").
+-include("modules/file_popularity/file_popularity_view.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

@@ -370,6 +370,12 @@
     parent_uuid :: undefined | file_meta:uuid()
 }).
 
+
+% An empty model used for creating deletion_markers
+% For more information see deletion_markers.erl
+-record(deletion_marker, {}).
+
+
 -record(storage_config, {
     helper :: helpers:helper(),
     luma_config :: storage:luma_config(),

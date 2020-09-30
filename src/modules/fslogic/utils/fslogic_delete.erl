@@ -31,8 +31,8 @@
 
 % Macros defining methods of handling opened files
 -define(RENAME_HANDLING_METHOD, rename).
--define(LINK_HANDLING_METHOD, deletion_link).
--type opened_file_handling_method() :: ?RENAME_HANDLING_METHOD | ?LINK_HANDLING_METHOD.
+-define(MARKER_HANDLING_METHOD, deletion_marker).
+-type opened_file_handling_method() :: ?RENAME_HANDLING_METHOD | ?MARKER_HANDLING_METHOD.
 
 %% Macros defining scopes of deleting docs associated with file.
 -define(LOCAL_DOCS, local_docs).
@@ -171,16 +171,16 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
         {RemoveStorageFileResult, FileCtx3} = case RemoveStorageFile of
             true ->
                 % TODO VFS-6091 if there is a race between deleting nonempty directory
-                % and creating the new one with the same name, the deletion link will stay forever
+                % and creating the new one with the same name, the deletion marker will stay forever
                 case maybe_remove_file_on_storage(FileCtx, UserCtx) of
                     {ok, FileCtx2} ->
                         {ok, FileCtx2};
                     Error = {error, _} ->
-                        % add deletion_link even if open_file_handling method is rename
+                        % add deletion marker even if open_file_handling method is rename
                         % this way we are sure that remotely deleted file won't be reimported
                         % even if it hasn't been deleted because it's not empty yet
-                        % TODO VFS-6082 deletion links are left forever when deleting file on storage failed
-                        FileCtx2 = maybe_add_deletion_link(FileCtx, UserCtx),
+                        % TODO VFS-6082 deletion markers are left forever when deleting file on storage failed
+                        FileCtx2 = maybe_add_deletion_marker(FileCtx, UserCtx),
                         {Error, FileCtx2}
                 end;
             false ->
@@ -196,7 +196,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 ok = delete_location(FileCtx),
                 ok = file_meta:delete(FileDoc),
                 remove_associated_documents(FileCtx6),
-                FileCtx7 = maybe_remove_deletion_link(FileCtx6, UserCtx, RemoveStorageFileResult),
+                FileCtx7 = maybe_remove_deletion_marker(FileCtx6, UserCtx, RemoveStorageFileResult),
                 maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult, ?ALL_DOCS);
             ?TWO_STEP_DEL_INIT ->
                 % TODO VFS-6114 maybe delete file_meta and associated documents here?
@@ -211,9 +211,9 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                     ?ALL_DOCS -> remove_associated_documents(FileCtx4);
                     ?LOCAL_DOCS-> remove_local_associated_documents(FileCtx4)
                 end,
-                % remove deletion_link even if open_file_handling method is rename
-                % as deletion_link may have been created when error occurred on deleting file on storage
-                FileCtx5 = maybe_remove_deletion_link(FileCtx4, UserCtx, RemoveStorageFileResult),
+                % remove deletion marker even if open_file_handling method is rename
+                % as deletion marker may have been created when error occurred on deleting file on storage
+                FileCtx5 = maybe_remove_deletion_marker(FileCtx4, UserCtx, RemoveStorageFileResult),
                 maybe_try_to_delete_parent(FileCtx5, UserCtx, RemoveStorageFileResult, DocsDeletionScope);
             ?SINGLE_STEP_DEL(?LOCAL_DOCS) ->
                 FileCtx4 = delete_storage_sync_info(FileCtx3),
@@ -240,10 +240,10 @@ custom_handle_opened_file(FileCtx, UserCtx, DocsDeletionScope, ?RENAME_HANDLING_
     end,
     % TODO VFS-6114 maybe we should call maybe_try_to_delete_parent/3 here?
     maybe_delete_parent_link(FileCtx3, UserCtx, DocsDeletionScope == ?LOCAL_DOCS);
-custom_handle_opened_file(FileCtx, UserCtx, ?LOCAL_DOCS, ?LINK_HANDLING_METHOD) ->
-    maybe_add_deletion_link(FileCtx, UserCtx);
-custom_handle_opened_file(FileCtx, UserCtx, _DocsDeletionScope, ?LINK_HANDLING_METHOD) ->
-    FileCtx2 = maybe_add_deletion_link(FileCtx, UserCtx),
+custom_handle_opened_file(FileCtx, UserCtx, ?LOCAL_DOCS, ?MARKER_HANDLING_METHOD) ->
+    maybe_add_deletion_marker(FileCtx, UserCtx);
+custom_handle_opened_file(FileCtx, UserCtx, _DocsDeletionScope, ?MARKER_HANDLING_METHOD) ->
+    FileCtx2 = maybe_add_deletion_marker(FileCtx, UserCtx),
     delete_parent_link(FileCtx2, UserCtx).
 
 
@@ -268,28 +268,28 @@ maybe_try_to_delete_parent(_FileCtx, _UserCtx, _, _) ->
     ok.
 
 
--spec maybe_add_deletion_link(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
-maybe_add_deletion_link(FileCtx, UserCtx) ->
+-spec maybe_add_deletion_marker(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
+maybe_add_deletion_marker(FileCtx, UserCtx) ->
     case file_ctx:is_space_dir_const(FileCtx) orelse file_ctx:is_root_dir_const(FileCtx) of
         true ->
             % this case should never happen
-            ?warning("Adding deletion link for space or root directory is not allowed"),
+            ?warning("Adding deletion marker for space or root directory is not allowed"),
             FileCtx;
         false ->
             {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
             {ParentUuid, _} = file_id:unpack_guid(ParentGuid),
-            link_utils:add_deletion_link(FileCtx2, ParentUuid)
+            deletion_marker:add(ParentUuid, FileCtx2)
     end.
 
 
--spec maybe_remove_deletion_link(file_ctx:ctx(), user_ctx:ctx(), RemoveStorageFileResult :: ok | ignored | {error, term()}) ->
+-spec maybe_remove_deletion_marker(file_ctx:ctx(), user_ctx:ctx(), RemoveStorageFileResult :: ok | ignored | {error, term()}) ->
     file_ctx:ctx().
-maybe_remove_deletion_link(FileCtx, UserCtx, ok) ->
+maybe_remove_deletion_marker(FileCtx, UserCtx, ok) ->
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
-    link_utils:remove_deletion_link(FileCtx2, ParentUuid);
-maybe_remove_deletion_link(FileCtx, _UserCtx, _) ->
-    % TODO VFS-6082 deletion links are left forever when deleting file on storage failed
+    deletion_marker:remove(ParentUuid, FileCtx2);
+maybe_remove_deletion_marker(FileCtx, _UserCtx, _) ->
+    % TODO VFS-6082 deletion markers are left forever when deleting file on storage failed
     FileCtx.
 
 -spec delete_parent_link(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
@@ -399,7 +399,7 @@ get_open_file_handling_method(FileCtx) ->
     Helper = storage:get_helper(Storage),
     case helper:is_rename_supported(Helper) of
         true -> {?RENAME_HANDLING_METHOD, FileCtx2};
-        _ -> {?LINK_HANDLING_METHOD, FileCtx2}
+        _ -> {?MARKER_HANDLING_METHOD, FileCtx2}
     end.
 
 -spec maybe_rename_storage_file(file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, ?ENOENT}.

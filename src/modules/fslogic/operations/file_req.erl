@@ -299,7 +299,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
     {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
-        {_, FileCtx2} = location_and_link_utils:create_new_file_location_doc(FileCtx, false, true),
+        {_, FileCtx2} = fslogic_location:create_doc(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx3),
         #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,

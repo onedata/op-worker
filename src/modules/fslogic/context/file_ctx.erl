@@ -842,7 +842,7 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange)
     {Locations, FileCtx2} = get_file_location_docs(FileCtx),
     {FileLocationDoc, FileCtx3} =
         get_or_create_local_file_location_doc(FileCtx2),
-    {location_and_link_utils:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
+    {fslogic_location:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
         get_uuid_const(FileCtx3)), FileCtx3};
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     get_file_location_with_filled_gaps(FileCtx, [ReqRange]).
@@ -1318,8 +1318,8 @@ resolve_and_cache_path(FileCtx, Type) ->
     {#document{key = Uuid, value = #file_meta{type = FileType, name = Filename}, scope = SpaceId} = Doc, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
     {FilenameOrUuid, CacheName} = case Type of
-        name -> {Filename, location_and_link_utils:get_canonical_paths_cache_name(SpaceId)};
-        uuid -> {Uuid, location_and_link_utils:get_uuid_based_paths_cache_name(SpaceId)}
+        name -> {Filename, paths_cache:get_canonical_paths_cache_name(SpaceId)};
+        uuid -> {Uuid, paths_cache:get_uuid_based_paths_cache_name(SpaceId)}
     end,
     case FileType of
         ?DIRECTORY_TYPE ->
@@ -1356,7 +1356,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true) ->
             {Location, FileCtx2}
     end;
 get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocationExists) ->
-    case location_and_link_utils:create_new_file_location_doc(FileCtx, false, false) of
+    case fslogic_location:create_doc(FileCtx, false, false) of
         {{ok, _}, FileCtx2} ->
             {LocationDocs, FileCtx3} = get_file_location_docs(FileCtx2, true, false),
             lists:foreach(fun(ChangedLocation) ->

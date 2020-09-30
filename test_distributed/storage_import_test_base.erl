@@ -6092,10 +6092,10 @@ remove_link(Worker, ParentUuid, FileName, FileUuid) ->
 
 remove_deletion_link(Worker, SpaceId, FileName, ParentCtx) ->
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    {ok, Uuid} = rpc:call(Worker, link_utils, try_to_resolve_child_deletion_link, [FileName, ParentCtx]),
+    {ok, Uuid} = rpc:call(Worker, deletion_marker, check, [ParentUuid, FileName]),
     Guid = file_id:pack_guid(Uuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(Guid),
-    rpc:call(Worker, link_utils, remove_deletion_link, [FileCtx, ParentUuid]).
+    rpc:call(Worker, deletion_marker, remove, [ParentUuid, FileCtx]).
 
 clean_traverse_tasks(Worker) ->
     Pool = <<"storage_sync_traverse">>,
