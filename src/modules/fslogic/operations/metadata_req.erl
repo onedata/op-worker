@@ -33,12 +33,10 @@
     Inherited :: boolean()
 ) ->
     fslogic_worker:provider_response().
-get_metadata(UserCtx, FileCtx0, Type, Query, Inherited) ->
-    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-
+get_metadata(UserCtx, FileCtx, Type, Query, Inherited) ->
     Result = case Type of
-        json -> json_metadata:get(UserCtx, FileCtx1, Query, Inherited);
-        rdf -> xattr:get(UserCtx, FileCtx1, ?RDF_METADATA_KEY, Inherited)
+        json -> json_metadata:get(UserCtx, FileCtx, Query, Inherited);
+        rdf -> xattr:get(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited)
     end,
     case Result of
         {ok, Value} ->
@@ -61,23 +59,19 @@ get_metadata(UserCtx, FileCtx0, Type, Query, Inherited) ->
     Replace :: boolean()
 ) ->
     fslogic_worker:provider_response().
-set_metadata(UserCtx, FileCtx0, json, Value, Query, Create, Replace) ->
-    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-    {ok, _} = json_metadata:set(UserCtx, FileCtx1, Value, Query, Create, Replace),
+set_metadata(UserCtx, FileCtx, json, Value, Query, Create, Replace) ->
+    {ok, _} = json_metadata:set(UserCtx, FileCtx, Value, Query, Create, Replace),
     #provider_response{status = #status{code = ?OK}};
-set_metadata(UserCtx, FileCtx0, rdf, Value, _, Create, Replace) ->
-    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-    {ok, _} = xattr:set(UserCtx, FileCtx1, ?RDF_METADATA_KEY, Value, Create, Replace),
+set_metadata(UserCtx, FileCtx, rdf, Value, _, Create, Replace) ->
+    {ok, _} = xattr:set(UserCtx, FileCtx, ?RDF_METADATA_KEY, Value, Create, Replace),
     #provider_response{status = #status{code = ?OK}}.
 
 
 -spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
     fslogic_worker:provider_response().
-remove_metadata(UserCtx, FileCtx0, json) ->
-    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-    ok = json_metadata:remove(UserCtx, FileCtx1),
+remove_metadata(UserCtx, FileCtx, json) ->
+    ok = json_metadata:remove(UserCtx, FileCtx),
     #provider_response{status = #status{code = ?OK}};
-remove_metadata(UserCtx, FileCtx0, rdf) ->
-    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-    ok = xattr:remove(UserCtx, FileCtx1, ?RDF_METADATA_KEY),
+remove_metadata(UserCtx, FileCtx, rdf) ->
+    ok = xattr:remove(UserCtx, FileCtx, ?RDF_METADATA_KEY),
     #provider_response{status = #status{code = ?OK}}.

@@ -477,7 +477,7 @@ data_spec_get(#gri{aspect = download_url}) -> #{
 
 %% @private
 -spec authorize_get(middleware:req(), middleware:entity()) -> boolean().
-authorize_get(#op_req{gri = #gri{aspect = As, scope = public}}, _) when
+authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _) when
     As =:= instance;
     As =:= children;
     As =:= children_details;
@@ -487,7 +487,7 @@ authorize_get(#op_req{gri = #gri{aspect = As, scope = public}}, _) when
     As =:= rdf_metadata;
     As =:= download_url
 ->
-    true;
+    file_id:is_share_guid(FileGuid);
 
 authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;

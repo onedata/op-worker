@@ -147,12 +147,11 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
 %%--------------------------------------------------------------------
 -spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) -> provider_response().
 get_file_distribution(UserCtx, FileCtx0) ->
-    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-    FileCtx2 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx1,
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
         [traverse_ancestors, ?read_metadata]
     ),
-    get_file_distribution_insecure(UserCtx, FileCtx2).
+    get_file_distribution_insecure(UserCtx, FileCtx1).
 
 
 %%--------------------------------------------------------------------
