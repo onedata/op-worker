@@ -197,7 +197,7 @@ register_file_test(Config) ->
         <<"destinationPath">> => FileName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"mtime">> => time_utils:system_time_seconds(),
+        <<"mtime">> => time_utils:timestamp_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
@@ -230,7 +230,7 @@ register_file_and_create_parents_test(Config) ->
         <<"destinationPath">> => DestinationPath,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"mtime">> => time_utils:system_time_seconds(),
+        <<"mtime">> => time_utils:timestamp_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
@@ -263,7 +263,7 @@ update_registered_file_test(Config) ->
         <<"destinationPath">> => DestinationPath,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"mtime">> => time_utils:system_time_seconds(),
+        <<"mtime">> => time_utils:timestamp_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
@@ -284,7 +284,7 @@ update_registered_file_test(Config) ->
         <<"destinationPath">> => DestinationPath,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"mtime">> => time_utils:system_time_seconds(),
+        <<"mtime">> => time_utils:timestamp_seconds(),
         <<"size">> => byte_size(?TEST_DATA2),
         <<"mode">> => <<"664">>
         })),
@@ -327,7 +327,7 @@ stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
     ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
-    Timestamp = time_utils:system_time_seconds(),
+    Timestamp = time_utils:timestamp_seconds(),
 
     ok = test_utils:mock_new(W1, [storage_driver], [passthrough]),
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
@@ -437,9 +437,10 @@ init_per_suite(Config) ->
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
-        [W1 | _] = ?config(op_worker_nodes, NewConfig2),
-        rpc:call(W1, storage_sync_worker, notify_connection_to_oz, []),
-        sort_workers(NewConfig2)
+        NewConfig3 = sort_workers(NewConfig2),
+        [W1 | _] = ?config(op_worker_nodes, NewConfig3),
+        ok = rpc:call(W1, storage_import, set_manual_mode, [?SPACE_ID]),
+        NewConfig3
     end,
     {ok, _} = application:ensure_all_started(worker_pool),
     [{?LOAD_MODULES, [initializer, sd_test_utils, ?MODULE]}, {?ENV_UP_POSTHOOK, Posthook} | Config].

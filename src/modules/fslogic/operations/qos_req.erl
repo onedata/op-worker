@@ -35,14 +35,14 @@
 %% @equiv add_qos_entry_insecure/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:rpn(),
+-spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:expression(),
     qos_entry:replicas_num(), qos_entry:type()) -> fslogic_worker:provider_response().
-add_qos_entry(UserCtx, FileCtx, ExpressionInRpn, ReplicasNum, EntryType) ->
+add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx,
         [traverse_ancestors, ?write_metadata]
     ),
-    add_qos_entry_insecure(FileCtx1, ExpressionInRpn, ReplicasNum, EntryType).
+    add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum, EntryType).
 
 
 %%--------------------------------------------------------------------
@@ -80,11 +80,11 @@ get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 -spec remove_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
 remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
-    FileCtx1 = fslogic_authz:ensure_authorized(
+    fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),
-    remove_qos_entry_insecure(UserCtx, FileCtx1, QosEntryId).
+    remove_qos_entry_insecure(UserCtx, QosEntryId).
 
 
 %%--------------------------------------------------------------------
@@ -116,24 +116,21 @@ check_status(UserCtx, FileCtx0, QosEntryId) ->
 %% traverse should be run.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), 
+-spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
-    add_qos_entry_insecure(FileCtx, QosExpressionInRpn, ReplicasNum, EntryType) ->
+add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
     % TODO: VFS-5567 for now target storage for dir is selected here and
     % does not change in qos traverse task. Have to figure out how to
     % choose different storages for subdirs and/or file if multiple storage
     % fulfilling qos are available.
-    CalculatedStorages = qos_expression:calculate_assigned_storages(
-        FileCtx, QosExpressionInRpn, ReplicasNum
-    ),
-
-    case CalculatedStorages of
-        {true, Storages} ->
-            add_possible_qos(FileCtx, QosExpressionInRpn, ReplicasNum, EntryType, Storages);
+    
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    
+    case qos_hooks:try_assigning_storages(SpaceId, Expression, ReplicasNum) of
+        {true, AssignedStorages} ->
+            add_possible_qos(FileCtx, Expression, ReplicasNum, EntryType, AssignedStorages);
         false ->
-            add_impossible_qos(FileCtx, QosExpressionInRpn, ReplicasNum, EntryType);
-        ?ERROR_INVALID_QOS_EXPRESSION ->
-            #provider_response{status = #status{code = ?EINVAL}}
+            add_impossible_qos(FileCtx, Expression, ReplicasNum, EntryType)
     end.
 
 
@@ -194,12 +191,9 @@ get_qos_entry_insecure(QosEntryId) ->
 %% Removes qos_entry ID from file_qos documents then removes qos_entry document.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_entry_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
+-spec remove_qos_entry_insecure(user_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
-remove_qos_entry_insecure(UserCtx, FileCtx, QosEntryId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-
+remove_qos_entry_insecure(UserCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     
     % Only root can remove internal QoS entry
@@ -207,7 +201,6 @@ remove_qos_entry_insecure(UserCtx, FileCtx, QosEntryId) ->
         true ->
             % TODO: VFS-5567 For now QoS entry is added only for file or dir
             % for which it has been added, so starting traverse is not needed.
-            ok = file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId),
             ok = qos_hooks:handle_entry_delete(QosDoc),
             ok = qos_entry:delete(QosEntryId),
             #provider_response{status = #status{code = ?OK}};
@@ -243,16 +236,16 @@ check_status_insecure(FileCtx, QosEntryId) ->
 %% Creates new qos_entry document with appropriate traverse requests.
 %% @end
 %%--------------------------------------------------------------------
--spec add_possible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), 
+-spec add_possible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type(), [storage:id()]) -> fslogic_worker:provider_response().
-add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType, Storages) ->
+add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     AllTraverseReqs = qos_traverse_req:build_traverse_reqs(FileUuid, Storages),
 
     case qos_entry:create(
-        SpaceId, FileUuid, QosExpressionInRPN, ReplicasNum, EntryType, true, AllTraverseReqs
+        SpaceId, FileUuid, QosExpression, ReplicasNum, EntryType, true, AllTraverseReqs
     ) of
         {ok, QosEntryId} ->
             file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
@@ -272,7 +265,7 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType, Storages) 
 %% Creates new qos_entry document and adds it to impossible list.
 %% @end
 %%--------------------------------------------------------------------
--spec add_impossible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), 
+-spec add_impossible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
 add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),

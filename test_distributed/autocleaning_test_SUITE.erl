@@ -553,7 +553,7 @@ restart_autocleaning_run_test(Config) ->
         value = #autocleaning_run{
             status = binary_to_atom(?ACTIVE, utf8),
             space_id = ?SPACE_ID,
-            started_at = StartTime = rpc:call(W1, time_utils, cluster_time_seconds, []),
+            started_at = StartTime = rpc:call(W1, time_utils, timestamp_seconds, []),
             bytes_to_release = Size - Target
         },
         scope = ?SPACE_ID
@@ -748,8 +748,6 @@ init_per_suite(Config) ->
         NewConfig2 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig),
         Workers = ?config(op_worker_nodes, NewConfig2),
         test_utils:set_env(Workers, op_worker, autocleaning_restart_runs, false),
-        test_utils:set_env(Workers, op_worker, max_file_replication_retries_per_file, 5),
-        test_utils:set_env(Workers, op_worker, max_eviction_retries_per_file_replica, 5),
         sort_workers(NewConfig2)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
@@ -967,7 +965,7 @@ current_size(Worker, SpaceId) ->
     rpc:call(Worker, space_quota, current_size, [SpaceId]).
 
 current_timestamp_hours(Worker) ->
-    rpc:call(Worker, time_utils, cluster_time_seconds, []) div 3600.
+    rpc:call(Worker, time_utils, timestamp_seconds, []) div 3600.
 
 change_last_open(Worker, FileGuid, NewLastOpen) ->
     Uuid = file_id:guid_to_uuid(FileGuid),

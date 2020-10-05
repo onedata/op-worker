@@ -32,15 +32,17 @@
 ]).
 -export([
     restart_dead_sessions/0,
-    maybe_restart_session/1,
-    remove_session/1
+    restart_session_if_dead/1,
+    terminate_session/1,
+    clean_terminated_session/1,
+    restore_session_on_slave_node/3
 ]).
 
 -type error() :: {error, Reason :: term()}.
 
 % Macros used when process is waiting for other process to init session
--define(SESSION_INITIALISATION_CHECK_PERIOD_BASE, 100).
--define(SESSION_INITIALISATION_RETRIES, 8).
+-define(SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 100).
+-define(SESSION_INITIALIZATION_RETRIES, application:get_env(?APP_NAME, session_initialization_retries, 8)).
 
 %%%===================================================================
 %%% API
@@ -172,49 +174,84 @@ create_guest_session() ->
 restart_dead_sessions() ->
     {ok, AllSessions} = session:list(),
 
-    lists:foreach(fun(#document{key = SessId, value = #session{supervisor = Sup}}) ->
-        case is_alive(Sup) of
-            true -> ok;
-            false -> maybe_restart_session(SessId)
-        end
+    lists:foreach(fun(#document{key = SessId}) ->
+        restart_session_if_dead(SessId)
     end, AllSessions).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv maybe_restart_session_internal(SessId) in critical section.
+%% Checks if session processes are still alive and if not restarts them.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_restart_session(SessId) ->
-    {ok, SessId} | error() when SessId :: session:id().
-maybe_restart_session(SessId) ->
-    % TODO VFS-5895 check if this critical section is still necessary
-    critical_section:run([?MODULE, SessId], fun() ->
-        maybe_restart_session_internal(SessId)
-    end).
+-spec restart_session_if_dead(SessId :: session:id()) -> ok.
+restart_session_if_dead(SessId) ->
+    case session:update_doc_and_time(SessId, fun try_to_clear_dead_connections/1) of
+        {ok, #document{key = SessId}} ->
+            ok;
+        {error, update_not_needed} ->
+            ok;
+        {error, {supervisor_dead, SessType}} ->
+            restart_session(SessId, SessType),
+            ok;
+        {error, Reason} ->
+            ?error("Unexpected error cleaning dead connections for session ~p: ~p", [SessId, Reason]),
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes session from cache, stops session supervisor and disconnects remote
-%% client.
+%% Checks if session supervisor is alive and if not clears entries in
+%% session doc and sets new one.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_session(session:id()) -> ok | error().
-remove_session(SessId) ->
+-spec restore_session_on_slave_node(session:id(), pid(), node()) ->
+    {ok, session:record()} | {error, update_not_needed}.
+restore_session_on_slave_node(SessId, NewSup, NewSupNode) ->
+    session:update(SessId, fun(#session{supervisor = Sup, connections = Cons} = Sess) ->
+        case is_pid_alive(Sup) of
+            true ->
+                {error, supervisor_alive};
+            false ->
+                % All session processes but connection ones are on the same
+                % node as supervisor. If supervisor is dead so they are.
+                {ok, Sess#session{
+                    node = NewSup,
+                    supervisor = NewSupNode,
+                    event_manager = undefined,
+                    watcher = undefined,
+                    sequencer_manager = undefined,
+                    async_request_manager = undefined,
+                    connections = lists:filter(fun is_pid_alive/1, Cons)
+                }}
+        end
+    end).
+
+
+-spec terminate_session(session:id()) -> ok | error().
+terminate_session(SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{supervisor = undefined, connections = Cons}}} ->
-            session:delete(SessId),
-            % VFS-5155 Should connections be closed before session document is deleted?
-            close_connections(Cons);
-        {ok, #document{value = #session{supervisor = Sup, node = Node, connections = Cons}}} ->
+        {ok, #document{value = #session{supervisor = Sup, node = Node}}} ->
             try
                 supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup)
             catch
                 exit:{noproc, _} -> ok;
                 exit:{shutdown, _} -> ok
-            end,
+            end;
+        {error, not_found} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+-spec clean_terminated_session(session:id()) -> ok | error().
+clean_terminated_session(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{connections = Cons}}} ->
             session:delete(SessId),
+            % VFS-5155 Should connections be closed before session document is deleted?
             close_connections(Cons);
         {error, not_found} ->
             ok;
@@ -244,7 +281,8 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates session or if session exists reuses it.
+%% @equiv reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia)
+%% where additional argument DataConstraints is constructed using caveats obtained using Credentials
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(
@@ -279,8 +317,8 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, ProxyVia) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia,
-%%        ?SESSION_INITIALISATION_CHECK_PERIOD_BASE, ?SESSION_INITIALISATION_RETRIES)
+%% @equiv reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints,
+%%        ProxyVia, ?SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 0)
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(
@@ -294,13 +332,17 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, ProxyVia) ->
     {ok, SessId} | error() when SessId :: session:id().
 reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia) ->
     reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia,
-        ?SESSION_INITIALISATION_CHECK_PERIOD_BASE, ?SESSION_INITIALISATION_RETRIES).
+        ?SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 0).
+
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates session or if session exists reuses it.
-%% NOTE !!!
+%% Creates session or reuses it if session exists. Session creation results in
+%% starting of session's supervisor together with its children and saving session document to datastore
+%% (document is created during initialization of supervisor).
+%% If session is corrupted after failure of node that hosted session's supervisor,
+%% this function recreates supervisor together with its children.
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(
@@ -314,7 +356,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
     Retries :: non_neg_integer()
 ) ->
     {ok, SessId} | error() when SessId :: session:id().
-reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, Retries) ->
+reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, RetryNum) ->
     Sess = #session{
         type = SessType,
         status = initializing,
@@ -333,127 +375,138 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
         (#session{identity = ValidIdentity} = ExistingSess) ->
             case Identity of
                 ValidIdentity ->
-                    maybe_clear_session_record(ExistingSess);
+                    case try_to_clear_dead_connections(ExistingSess) of
+                        {error, update_not_needed} -> {ok, ExistingSess};
+                        Other -> Other
+                    end;
                 _ ->
                     {error, {invalid_identity, Identity}}
             end
     end,
-    case session:update(SessId, Diff) of
-        {ok, #document{key = SessId, value = #session{supervisor = undefined}}} ->
-            supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
+    case session:update_doc_and_time(SessId, Diff) of
+        {ok, #document{key = SessId, value = ProxySession}} when is_binary(ProxyVia) ->
+            update_credentials_if_changed(Credentials, ProxySession),
             {ok, SessId};
         {ok, #document{key = SessId}} ->
             {ok, SessId};
-        {error, not_found} ->
+        {error, not_found} = Error ->
             case start_session(#document{key = SessId, value = Sess}) of
                 {error, already_exists} ->
-                    reuse_or_create_session(
-                        SessId, SessType, Identity, Credentials,
-                        DataConstraints, ProxyVia
-                    );
+                    maybe_retry_session_init(SessId, SessType, Identity, Credentials,
+                        DataConstraints, ProxyVia, ErrorSleep, RetryNum, Error);
+                Other ->
+                    Other
+            end;
+        {error, {supervisor_dead, SessType}} ->
+            case restart_session(SessId, SessType)of
+                {error, already_exists} = Error ->
+                    maybe_retry_session_init(SessId, SessType, Identity, Credentials,
+                        DataConstraints, ProxyVia, ErrorSleep, RetryNum, Error);
                 Other ->
                     Other
             end;
         {error, initializing} = Error ->
-            case Retries of
-                0 ->
-                    % Process that is initializing session probably hangs - return error
-                    Error;
-                _ ->
-                    % Other process is initializing session - wait
-                    timer:sleep(ErrorSleep),
-                    ?debug("Waiting for session ~p init", [SessId]),
-                    reuse_or_create_session(SessId, SessType, Identity, Credentials,
-                        DataConstraints, ProxyVia, ErrorSleep * 2, Retries - 1)
-            end;
+            maybe_retry_session_init(SessId, SessType, Identity, Credentials,
+                DataConstraints, ProxyVia, ErrorSleep, RetryNum, Error);
         {error, Reason} ->
             {error, Reason}
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks if session processes are still alive and if not restarts them.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_restart_session_internal(SessId) ->
-    {ok, SessId} | {error, term()} when SessId :: session:id().
-maybe_restart_session_internal(SessId) ->
-    case session:update(SessId, fun maybe_clear_session_record/1) of
-        {ok, #document{key = SessId, value = #session{type = SessType, supervisor = undefined}}} ->
-            supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
-            {ok, SessId};
-        {ok, #document{key = SessId}} ->
-            {ok, SessId};
-        {error, _Reason} = Error ->
-            Error
+-spec update_credentials_if_changed(auth_manager:token_credentials(), session:record()) -> ok.
+update_credentials_if_changed(Credentials, #session{credentials = Credentials}) ->
+    ok;
+update_credentials_if_changed(NewCredentials, #session{watcher = SessionWatcher}) ->
+    incoming_session_watcher:update_credentials(
+        SessionWatcher,
+        auth_manager:get_access_token(NewCredentials),
+        auth_manager:get_consumer_token(NewCredentials)
+    ).
+
+
+%% @private
+-spec maybe_retry_session_init(
+    SessId,
+    SessType :: session:type(),
+    Identity :: aai:subject(),
+    Credentials :: undefined | auth_manager:credentials(),
+    DataConstraints :: data_constraints:constraints(),
+    ProxyVia :: undefined | oneprovider:id(),
+    ErrorSleep:: non_neg_integer(),
+    Retries :: non_neg_integer(),
+    Error :: {error, term()}
+) ->
+    {ok, SessId} | error() when SessId :: session:id().
+maybe_retry_session_init(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, RetryNum, Error) ->
+    MaxRetries = ?SESSION_INITIALIZATION_RETRIES,
+    case RetryNum of
+        MaxRetries ->
+            % Process that is initializing session probably hangs - return error
+            Error;
+        _ ->
+            % Other process is initializing session - wait
+            timer:sleep(ErrorSleep),
+            ?debug("Waiting for session ~p init", [SessId]),
+            reuse_or_create_session(SessId, SessType, Identity, Credentials,
+                DataConstraints, ProxyVia, ErrorSleep * 2, RetryNum + 1)
     end.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks if session processes are still alive and if not clears entries in
+%% Checks if session connections are still alive and if not clears entries in
 %% session doc.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_clear_session_record(session:record()) -> {ok, session:record()}.
-maybe_clear_session_record(#session{supervisor = Sup, connections = Cons} = Sess) ->
-    case is_alive(Sup) of
+-spec try_to_clear_dead_connections(session:record()) -> {ok, session:record()} | {error, update_not_needed}.
+try_to_clear_dead_connections(#session{supervisor = Sup, connections = Cons, type = SessType} = Sess) ->
+    case is_pid_alive(Sup) of
         true ->
-            case lists:partition(fun is_alive/1, Cons) of
+            case lists:partition(fun is_pid_alive/1, Cons) of
                 {_, []} ->
-                    {ok, Sess};
+                    {error, update_not_needed};
                 {AliveCons, _DeadCons} ->
                     {ok, Sess#session{connections = AliveCons}}
             end;
         false ->
-            % All session processes but connection ones are on the same
-            % node as supervisor. If supervisor is dead so they are.
-            {ok, Sess#session{
-                node = undefined,
-                supervisor = undefined,
-                event_manager = undefined,
-                watcher = undefined,
-                sequencer_manager = undefined,
-                async_request_manager = undefined,
-                connections = lists:filter(fun is_alive/1, Cons)
-            }}
+            {error, {supervisor_dead, SessType}}
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Creates session doc and starts supervisor.
-%% @end
-%%--------------------------------------------------------------------
 -spec start_session(session:doc()) -> {ok, session:id()} | error().
-start_session(#document{value = #session{type = SessType}} = Doc) ->
-    case session:create(Doc) of
-        {ok, SessId} ->
-            case supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]) of
-                {ok, _} ->
-                    {ok, SessId};
-                {error, already_present} ->
-                    ?warning("Session ~p supervisor already exists", [SessId]),
-                    {ok, SessId};
-                {error, {already_started, _}} ->
-                    ?warning("Session ~p supervisor already exists", [SessId]),
-                    {ok, SessId};
-                Error ->
-                    session:delete_doc(SessId),
-                    Error
-            end;
+start_session(#document{key = SessId, value = #session{type = SessType}} = Doc) ->
+    case supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [Doc, SessType]) of
+        {ok, undefined} ->
+            {error, already_exists};
+        {ok, _} ->
+            {ok, SessId};
         Error ->
+            ?error("Session ~p start error: ~p", [SessId, Error]),
+            session:delete_doc(SessId),
             Error
     end.
 
 
 %% @private
--spec is_alive(pid()) -> boolean().
-is_alive(Pid) ->
+-spec restart_session(session:id(), session:type()) -> {ok, session:id()} | error().
+restart_session(SessId, SessType) ->
+    case supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]) of
+        {ok, undefined} ->
+            {error, already_exists};
+        {ok, _} ->
+            {ok, SessId};
+        Error ->
+            ?error("Session ~p restart error: ~p", [SessId, Error]),
+            Error
+    end.
+
+
+%% @private
+-spec is_pid_alive(pid()) -> boolean().
+is_pid_alive(Pid) ->
     try rpc:pinfo(Pid, [status]) of
         [{status, _}] -> true;
         _ -> false

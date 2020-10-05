@@ -145,7 +145,7 @@ avg_open_count_per_day_parameter_should_be_bounded_by_100_by_default(Config) ->
     {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
 
     % ensure that all files will have the same timestamp
-    mock_cluster_time_hours(W, current_timestamp_hours(W)),
+    mock_timestamp_hours(W, current_timestamp_hours(W)),
 
     open_and_close_file(W, ?SESSION(W, Config), G1, OpenCountPerMonth1),
     open_and_close_file(W, ?SESSION(W, Config), G2, OpenCountPerMonth2),
@@ -247,7 +247,7 @@ query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     FilePath3 = ?FILE_PATH(FileName3),
 
     % ensure that all files will have the same timestamp
-    mock_cluster_time_hours(W, current_timestamp_hours(W)),
+    mock_timestamp_hours(W, current_timestamp_hours(W)),
 
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read),
@@ -287,19 +287,19 @@ query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
 
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
     % pretend that G1 was opened for the last time 3 hours ago
-    mock_cluster_time_hours(W, Timestamp - 3),
+    mock_timestamp_hours(W, Timestamp - 3),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read),
     ok = lfm_proxy:close(W, H),
 
     {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
     % pretend that G2 was opened for the last time 2 hours ago
-    mock_cluster_time_hours(W, Timestamp - 2),
+    mock_timestamp_hours(W, Timestamp - 2),
     {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read),
     ok = lfm_proxy:close(W, H2),
 
     % pretend that G3 was opened for the last time 1 hours ago
     {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3, 8#664),
-    mock_cluster_time_hours(W, Timestamp - 1),
+    mock_timestamp_hours(W, Timestamp - 1),
     {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
     ok = lfm_proxy:close(W, H3),
 
@@ -319,7 +319,7 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
     Timestamp = current_timestamp_hours(W),
-    mock_cluster_time_hours(W, Timestamp),
+    mock_timestamp_hours(W, Timestamp),
     AvgOpen = 1 / 30,
     Popularity = popularity(Timestamp, LastOpenW, AvgOpen, AvgOpenW),
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
@@ -479,7 +479,7 @@ delete_files(Worker, SessId, GuidsAndPaths) ->
     end, GuidsAndPaths).
 
 current_timestamp_hours(Worker) ->
-    rpc:call(Worker, time_utils, cluster_time_seconds, []) div 3600.
+    rpc:call(Worker, time_utils, timestamp_seconds, []) div 3600.
 
 open_and_close_file(Worker, SessId, Guid, Times) ->
     lists:foreach(fun(_) ->
@@ -499,9 +499,9 @@ filter_undefined_values(Map) ->
         (_, _) -> true
     end, Map).
 
-mock_cluster_time_hours(Worker, Hours) ->
+mock_timestamp_hours(Worker, Hours) ->
     test_utils:mock_new(Worker, file_popularity),
-    ok = test_utils:mock_expect(Worker, file_popularity, cluster_time_hours, fun() -> Hours end).
+    ok = test_utils:mock_expect(Worker, file_popularity, timestamp_hours, fun() -> Hours end).
 
 whereis(Node, Name) ->
     rpc:call(Node, erlang, whereis, [Name]).

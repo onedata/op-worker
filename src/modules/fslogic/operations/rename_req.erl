@@ -301,10 +301,9 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targe
     TargetGuid :: undefined | fslogic_worker:file_guid()) -> #fuse_response{}.
 rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid) ->
     SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
-    {ParentDoc, _TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
+    {ParentDoc, TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
     {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
-    {PrevName, SourceFileCtx4} = file_ctx:get_aliased_name(SourceFileCtx3, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     ok = case TargetGuid of
         undefined ->
@@ -314,10 +313,7 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
             ok = lfm:unlink(SessId, {guid, TargetGuid}, false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
-    fslogic_times:update_ctime(SourceFileCtx4, time_utils:cluster_time_seconds()),
-    update_parent_times(SourceParentFileCtx2, TargetParentFileCtx),
-    ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
-    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx4, ParentGuid, TargetName, PrevName, UserCtx),
+    on_successful_rename(UserCtx, SourceFileCtx3, SourceParentFileCtx2, TargetParentFileCtx2, TargetName),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -448,12 +444,10 @@ rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
 -spec rename_file_insecure(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    {SourceParentFileCtx, SourceFileCtx2} = file_ctx:get_parent(SourceFileCtx, UserCtx),
     {SourceFileCtx3, TargetFileId} =
-        rename_meta_and_storage_file(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName, false),
+        rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, false),
     replica_updater:rename(SourceFileCtx, TargetFileId),
     FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
-    update_parent_times(SourceParentFileCtx, TargetParentFileCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -471,12 +465,10 @@ rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 -spec rename_dir_insecure(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    {SourceParentFileCtx, SourceFileCtx2} = file_ctx:get_parent(SourceFileCtx, UserCtx),
     {SourceFileCtx3, TargetFileId} =
-        rename_meta_and_storage_file(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName, true),
+        rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, true),
     ChildEntries = rename_child_locations(UserCtx, SourceFileCtx3, TargetFileId, 0),
     FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
-    update_parent_times(SourceParentFileCtx, TargetParentFileCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -503,17 +495,16 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     {ParentDoc, TargetParentCtx2} = file_ctx:get_file_doc(TargetParentCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
     {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
-    {PrevName, SourceFileCtx4} = file_ctx:get_aliased_name(SourceFileCtx3, UserCtx),
-    {SourceParentDoc, _SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
+    {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
 
-    SpaceId = file_ctx:get_space_id_const(SourceFileCtx4),
+    SpaceId = file_ctx:get_space_id_const(SourceFileCtx3),
     case InvalidateCache of
         true -> location_and_link_utils:invalidate_paths_caches(SpaceId);
         _ -> ok
     end,
 
-    {Storage, SourceFileCtx5} = file_ctx:get_storage(SourceFileCtx4),
+    {Storage, SourceFileCtx5} = file_ctx:get_storage(SourceFileCtx3),
     Helper = storage:get_helper(Storage),
     StoragePathType = helper:get_storage_path_type(Helper),
     StorageId = storage:get_id(Storage),
@@ -529,8 +520,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
         false ->
             ok
     end,
-    ParentGuid = file_ctx:get_guid_const(TargetParentCtx2),
-    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx6, ParentGuid, TargetName, PrevName, UserCtx),
+    on_successful_rename(UserCtx, SourceFileCtx3, SourceParentFileCtx2, TargetParentCtx2, TargetName),
     {SourceFileCtx6, TargetFileId}.
 
 %%--------------------------------------------------------------------
@@ -624,15 +614,16 @@ remotely_get_child_type(SessId, ParentGuid, ChildName) ->
             {undefined, undefined}
     end.
 
-%%--------------------------------------------------------------------
+
 %% @private
-%% @doc
-%% Update mtime and ctime of parent files to the current time.
-%% @end
-%%--------------------------------------------------------------------
--spec update_parent_times(SourceParentFileCtx :: file_ctx:ctx(),
-    TargetParentFileCtx :: file_ctx:ctx()) -> ok.
-update_parent_times(SourceParentFileCtx, TargetParentFileCtx) ->
-    CurrentTime = time_utils:cluster_time_seconds(),
-    fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
-    fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime).
+-spec on_successful_rename(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(), 
+    SourceParentFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(), 
+    file_meta:name()) -> ok | no_return().
+on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFileCtx, TargetName) ->
+    {PrevName, SourceFileCtx2} = file_ctx:get_aliased_name(SourceFileCtx, UserCtx),
+    ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
+    CurrentTime = time_utils:timestamp_seconds(),
+    ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
+    ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime),
+    ok = fslogic_times:update_ctime(SourceFileCtx2, CurrentTime),
+    ok = fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx2, ParentGuid, TargetName, PrevName, UserCtx).

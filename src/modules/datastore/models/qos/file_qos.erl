@@ -45,7 +45,7 @@
     get_effective/1, 
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
-    has_any_qos_entry/2, clean_up/1
+    has_any_qos_entry/2, clean_up/1, delete_associated_entries/1
 ]).
 
 %% higher-level functions operating on effective_file_qos record.
@@ -103,12 +103,11 @@ delete(Key, Pred) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective(file_meta:doc() | file_meta:uuid()) -> 
-    {ok, effective_file_qos()} | {error, term()} | undefined.
+    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
 get_effective(FileUuid) when is_binary(FileUuid) ->
     case file_meta:get(FileUuid) of
         {ok, FileDoc} -> get_effective(FileDoc);
-        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}};
-        _ -> undefined
+        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}}
     end;
 get_effective(#document{scope = SpaceId} = FileDoc) ->
     Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
@@ -267,7 +266,7 @@ has_any_qos_entry(UuidOrDoc, effective) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes all QoS documents related to given file.
+%% Deletes documents created to maintain QoS for given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec clean_up(file_ctx:ctx()) -> ok.
@@ -285,7 +284,16 @@ clean_up(FileCtx) ->
             ok
     end,
     Uuid = file_ctx:get_uuid_const(FileCtx1),
-    % delete all QoS entries added to given file
+    ok = delete(Uuid).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes all QoS entries added to given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_associated_entries(key()) -> ok.
+delete_associated_entries(Uuid) ->
     case datastore_model:get(?CTX, Uuid) of
         {ok, #document{value = #file_qos{qos_entries = QosEntries}}} ->
             lists:foreach(fun(QosEntryId) ->
@@ -293,8 +301,7 @@ clean_up(FileCtx) ->
                 ok = qos_entry:delete(QosEntryId)
             end, QosEntries);
         ?ERROR_NOT_FOUND -> ok
-    end,
-    ok = delete(Uuid).
+    end.
 
 %%%===================================================================
 %%% Functions operating on effective_file_qos record.

@@ -18,30 +18,39 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% node_manager_plugin_behaviour callbacks
--export([installed_cluster_generation/0]).
--export([oldest_known_cluster_generation/0]).
+-export([cluster_generations/0]).
+-export([oldest_upgradable_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([before_init/0]).
--export([upgrade_essential_workers/0]).
+-export([before_cluster_upgrade/0]).
 -export([upgrade_cluster/1]).
 -export([custom_workers/0]).
 -export([on_db_and_workers_ready/0]).
 -export([listeners/0]).
 -export([renamed_models/0]).
+-export([synchronize_clock/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 -export([master_node_down/1, master_node_up/1, master_node_ready/1]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
 
+% List of all known cluster generations.
 % When cluster is not in newest generation it will be upgraded during initialization.
 % This can be used to e.g. move models between services.
-% Oldest known generation is the lowest one that can be directly upgraded to newest.
+% Oldest upgradable generation is the lowest one that can be directly upgraded to newest.
 % Human readable version is included to for logging purposes.
--define(INSTALLED_CLUSTER_GENERATION, 3).
--define(OLDEST_KNOWN_CLUSTER_GENERATION, {1, <<"19.02.*">>}).
+-define(CLUSTER_GENERATIONS, [
+    {1, ?LINE_19_02},
+    {2, ?LINE_20_02(<<"0-beta3">>)},
+    {3, ?LINE_20_02(<<"1">>)},
+    {4, oneprovider:get_version()}
+]).
+-define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 1).
+
 
 %%%===================================================================
 %%% node_manager_plugin_default callbacks
@@ -49,22 +58,23 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:installed_cluster_generation/0}.
+%% Overrides {@link node_manager_plugin_default:cluster_generations/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec installed_cluster_generation() -> node_manager:cluster_generation().
-installed_cluster_generation() ->
-    ?INSTALLED_CLUSTER_GENERATION.
+-spec cluster_generations() ->
+    [{node_manager:cluster_generation(), onedata:release_version()}].
+cluster_generations() ->
+    ?CLUSTER_GENERATIONS.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:oldest_known_cluster_generation/0}.
+%% Overrides {@link node_manager_plugin_default:oldest_upgradable_cluster_generation/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec oldest_known_cluster_generation() ->
-    {node_manager:cluster_generation(), HumanReadableVersion :: binary()}.
-oldest_known_cluster_generation() ->
-    ?OLDEST_KNOWN_CLUSTER_GENERATION.
+-spec oldest_upgradable_cluster_generation() ->
+    node_manager:cluster_generation().
+oldest_upgradable_cluster_generation() ->
+    ?OLDEST_UPGRADABLE_CLUSTER_GENERATION.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -106,6 +116,29 @@ renamed_models() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Overrides {@link node_manager_plugin_default:synchronize_clock/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec synchronize_clock() -> ok | ignored | error.
+synchronize_clock() ->
+    % during cluster setup, before the database is ready the registration status check will crash
+    IsReadyAndRegistered = try oneprovider:is_registered() catch _:_ -> false end,
+    case IsReadyAndRegistered of
+        false ->
+            node_manager_plugin_default:synchronize_clock();
+        true ->
+            case gs_channel_service:is_connected() of
+                false ->
+                    % if the Oneprovider is registered, but not connected, do not
+                    % re-synchronize the clock - it will be done upon reconnection
+                    ignored;
+                true ->
+                    time_utils:synchronize_with_remote_clock(fun provider_logic:get_zone_time/0)
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Overrides {@link node_manager_plugin_default:before_init/0}.
 %% This callback is executed on all cluster nodes.
 %% @end
@@ -124,15 +157,13 @@ before_init() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% List of workers modules with configs that should be started before upgrade.
+%% Callback executed before cluster upgrade so that any required preparation
+%% can be done.
 %% @end
 %%--------------------------------------------------------------------
--spec upgrade_essential_workers() -> [{module(), [any()]}].
-upgrade_essential_workers() -> filter_disabled_workers([
-    {gs_worker, [
-        {supervisor_flags, gs_worker:supervisor_flags()}
-    ]}
-]).
+-spec before_cluster_upgrade() -> ok.
+before_cluster_upgrade() ->
+    gs_channel_service:setup_internal_service().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -147,7 +178,11 @@ upgrade_cluster(1) ->
     {ok, 2};
 upgrade_cluster(2) ->
     await_zone_connection_and_run(fun storage:migrate_imported_storages_to_zone/0),
-    {ok, 3}.
+    {ok, 3};
+upgrade_cluster(3) ->
+    await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
+    await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
+    {ok, 4}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -159,8 +194,11 @@ custom_workers() -> filter_disabled_workers([
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
+    ], [worker_first]},
+    {fslogic_worker, [
+        {supervisor_flags, fslogic_worker:supervisor_flags()},
+        {supervisor_children_spec, fslogic_worker:supervisor_children_spec()}
     ]},
-    {fslogic_worker, []},
     {dbsync_worker, [
         {supervisor_flags, dbsync_worker:supervisor_flags()}
     ]},
@@ -172,7 +210,7 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, rtransfer_worker:supervisor_flags()},
         {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}
     ]},
-    {storage_sync_worker, []},
+    {storage_import_worker, []},
     {harvesting_worker, [
         {supervisor_flags, harvesting_worker:supervisor_flags()},
         {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}
@@ -189,7 +227,7 @@ custom_workers() -> filter_disabled_workers([
 on_db_and_workers_ready() ->
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
-    gs_worker:on_db_and_workers_ready().
+    gs_channel_service:on_db_and_workers_ready().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -226,17 +264,17 @@ exometer_reporters() -> [].
 %% @end
 %%-------------------------------------------------------------------
 -spec filter_disabled_workers(
-    [{atom(), [any()]} |{singleton | early_init, atom(), [any()]}]) ->
-    [{atom(), [any()]} |{singleton | early_init, atom(), [any()]}].
+    [{atom(), [any()]} |{singleton, atom(), [any()]}] | {atom(), [any()], list()}) ->
+    [{atom(), [any()]} |{singleton, atom(), [any()]}] | {atom(), [any()], list()}.
 filter_disabled_workers(WorkersSpecs) ->
     DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
     DisabledWorkersSet = sets:from_list(DisabledWorkers),
     lists:filter(fun
         ({Worker, _WorkerArgs}) ->
             not sets:is_element(Worker, DisabledWorkersSet);
-        ({early_init, Worker, _WorkerArgs}) ->
-            not sets:is_element(Worker, DisabledWorkersSet);
         ({singleton, Worker, _WorkerArgs}) ->
+            not sets:is_element(Worker, DisabledWorkersSet);
+        ({Worker, _WorkerArgs, _Options}) ->
             not sets:is_element(Worker, DisabledWorkersSet)
     end, WorkersSpecs).
 
@@ -247,7 +285,8 @@ filter_disabled_workers(WorkersSpecs) ->
 %%--------------------------------------------------------------------
 -spec master_node_down(FailedNode :: node()) -> ok.
 master_node_down(_FailedNode) ->
-    session_manager:restart_dead_sessions().
+    session_manager:restart_dead_sessions(),
+    process_handles:release_all_dead_processes_handles().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -277,17 +316,17 @@ master_node_ready(_RecoveredNode) ->
 %% @private
 -spec await_zone_connection_and_run(Fun :: fun(() -> ok)) -> ok.
 await_zone_connection_and_run(Fun) ->
-    ?info("Checking connection to Onezone..."),
-    await_zone_connection_and_run(oneprovider:is_connected_to_oz(), ?ZONE_CONNECTION_RETRIES, Fun).
+    ?info("Awaiting Onezone connection..."),
+    await_zone_connection_and_run(gs_channel_service:is_connected(), ?ZONE_CONNECTION_RETRIES, Fun).
 
 -spec await_zone_connection_and_run(IsConnectedToZone :: boolean(), Retries :: integer(),
     Fun :: fun(() -> ok)) -> ok.
 await_zone_connection_and_run(false, 0, _) ->
-    ?critical("Could not establish connection to Onezone. Aborting upgrade procedure."),
+    ?critical("Could not establish Onezone connection. Aborting upgrade procedure."),
     throw(?ERROR_NO_CONNECTION_TO_ONEZONE);
 await_zone_connection_and_run(false, Retries, Fun) ->
-    ?warning("There is no connection to Onezone. Next retry in 10 seconds"),
+    ?warning("The Onezone connection is down. Next retry in 10 seconds..."),
     timer:sleep(timer:seconds(10)),
-    await_zone_connection_and_run(oneprovider:is_connected_to_oz(), Retries - 1, Fun);
+    await_zone_connection_and_run(gs_channel_service:is_connected(), Retries - 1, Fun);
 await_zone_connection_and_run(true, _, Fun) ->
     Fun().

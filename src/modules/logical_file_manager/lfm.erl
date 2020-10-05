@@ -57,9 +57,13 @@
     schedule_replication_by_view/6, schedule_replica_eviction_by_view/6
 ]).
 %% Functions operating on files
--export([create/2, create/3, create/4, open/3, get_file_location/2, fsync/1, fsync/3,
+-export([create/2, create/3, create/4,
+    open/3, monitored_open/3,
+    get_file_location/2, fsync/1, fsync/3,
     write/3, read/3, check_size_and_read/3,
-    silent_read/3, truncate/3, release/1, get_file_distribution/2,
+    silent_read/3, truncate/3,
+    release/1, monitored_release/1,
+    get_file_distribution/2,
     create_and_open/4, create_and_open/5]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
@@ -479,6 +483,29 @@ open(SessId, FileKey, OpenType) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Opens a file in selected mode. The state of process opening file using this function
+%% is monitored so that all opened handles can be closed when it unexpectedly dies
+%% (e.g. client abruptly closes connection).
+%% @end
+%%--------------------------------------------------------------------
+-spec monitored_open(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    OpenType :: helpers:open_flag()) ->
+    {ok, handle()} | error_reply().
+monitored_open(SessId, FileKey, OpenType) ->
+    ?run(fun() ->
+        {ok, FileHandle} = lfm_files:open(SessId, FileKey, OpenType),
+        case process_handles:add(FileHandle) of
+            ok ->
+                {ok, FileHandle};
+            {error, _} = Error ->
+                ?error("Failed to perform 'monitored_open' due to ~p", [Error]),
+                monitored_release(FileHandle),
+                {error, ?EAGAIN}
+        end
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns location to file.
 %% @end
 %%--------------------------------------------------------------------
@@ -566,6 +593,21 @@ truncate(SessId, FileKey, Size) ->
 -spec release(handle()) -> ok | error_reply().
 release(FileHandle) ->
     ?run(fun() -> lfm_files:release(FileHandle) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Releases previously opened file. If it is the last handle opened by this process
+%% using `monitored_open` then the state of process will no longer be monitored
+%% (even if process unexpectedly dies there are no handles to release).
+%% @end
+%%--------------------------------------------------------------------
+-spec monitored_release(handle()) -> ok | error_reply().
+monitored_release(FileHandle) ->
+    ?run(fun() ->
+        Result = lfm_files:release(FileHandle),
+        process_handles:remove(FileHandle),
+        Result
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -862,12 +904,12 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 %% Adds new qos_entry for file or directory.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry(session:id(), file_key(), qos_expression:rpn(),
+-spec add_qos_entry(session:id(), file_key(), qos_expression:infix() | qos_expression:expression(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
 add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
     add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, user_defined).
 
--spec add_qos_entry(session:id(), file_key(), qos_expression:rpn(),
+-spec add_qos_entry(session:id(), file_key(), qos_expression:infix() | qos_expression:expression(),
     qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | error_reply().
 add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) ->
     ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) end).

@@ -32,12 +32,6 @@
     qos_bounded_cache_should_be_periodically_cleaned_if_overfilled/1,
     qos_bounded_cache_should_not_be_cleaned_if_not_overfilled/1,
 
-    % Invalid QoS expression tests
-    key_without_value/1,
-    two_keys_without_value_connected_with_operand/1,
-    operator_without_second_operand/1,
-    operator_without_first_operand/1,
-
     % Single QoS expression tests
     simple_key_val_qos/1,
     qos_with_intersection/1,
@@ -73,19 +67,16 @@
     qos_status_during_traverse_multi_batch_test/1,
     qos_status_during_traverse_with_file_deletion/1,
     qos_status_during_traverse_with_dir_deletion/1,
-    qos_status_during_traverse_file_without_qos_test/1
+    qos_status_during_traverse_file_without_qos_test/1,
+    qos_status_after_failed_transfers/1,
+    qos_status_after_failed_transfers_deleted_file/1,
+    qos_status_after_failed_transfers_deleted_entry/1
 ]).
 
 all() -> [
     % QoS bounded cache tests
     qos_bounded_cache_should_be_periodically_cleaned_if_overfilled,
     qos_bounded_cache_should_not_be_cleaned_if_not_overfilled,
-
-    % Invalid QoS expression tests
-    key_without_value,
-    two_keys_without_value_connected_with_operand,
-    operator_without_second_operand,
-    operator_without_first_operand,
 
     % Single QoS expression tests
     simple_key_val_qos,
@@ -122,7 +113,10 @@ all() -> [
     qos_status_during_traverse_multi_batch_test,
     qos_status_during_traverse_with_file_deletion,
     qos_status_during_traverse_with_dir_deletion,
-    qos_status_during_traverse_file_without_qos_test
+    qos_status_during_traverse_file_without_qos_test,
+    qos_status_after_failed_transfers,
+    qos_status_after_failed_transfers_deleted_file,
+    qos_status_after_failed_transfers_deleted_entry
 ].
 
 % Although this test SUITE is single provider, QoS parameters
@@ -277,42 +271,6 @@ qos_bounded_cache_should_not_be_cleaned_if_not_overfilled(Config) ->
 
     SizeAfterCleaning = ?GET_CACHE_TABLE_SIZE(?SPACE1_ID),
     ?assertEqual(6, SizeAfterCleaning).
-
-
-%%%===================================================================
-%%% Invalid QoS expression tests.
-%%%===================================================================
-
-key_without_value(Config) ->
-    Expr = [<<"country">>],
-    invalid_expression_test_base(Config, Expr).
-
-
-two_keys_without_value_connected_with_operand(Config) ->
-    Expr = [<<"country">>, <<"|">>, <<"type">>],
-    invalid_expression_test_base(Config, Expr).
-
-
-operator_without_second_operand(Config) ->
-    Expr = [<<"country=PL">>,<<"&">>],
-    invalid_expression_test_base(Config, Expr).
-
-
-operator_without_first_operand(Config) ->
-    Expr = [<<"country=PL">>,<<"|">>],
-    invalid_expression_test_base(Config, Expr).
-
-
-invalid_expression_test_base(Config, Expr) ->
-    [Worker] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    
-    create_test_file(Config),
-    
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, Expr, 1)
-    ).
 
 
 %%%===================================================================
@@ -590,16 +548,29 @@ qos_status_during_traverse_with_dir_deletion(Config) ->
 qos_status_during_traverse_file_without_qos_test(Config) ->
     qos_test_base:qos_status_during_traverse_file_without_qos_test_base(Config, ?SPACE_PATH1).
 
+qos_status_after_failed_transfers(Config) ->
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer(Config, ?SPACE_PATH1, Worker1).
+
+qos_status_after_failed_transfers_deleted_file(Config) ->
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer_deleted_file(Config, ?SPACE_PATH1, Worker1).
+
+qos_status_after_failed_transfers_deleted_entry(Config) ->
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer_deleted_entry(Config, ?SPACE_PATH1, Worker1).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = initializer:setup_storage(NewConfig),
         hackney:start(),
         application:start(ssl),
-        NewConfig1
+        Workers = ?config(op_worker_nodes, NewConfig),
+        test_utils:set_env(Workers, ?APP_NAME, qos_retry_failed_files_interval_seconds, 5),
+        initializer:setup_storage(NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, qos_tests_utils]} | Config].
 
@@ -613,12 +584,23 @@ end_per_suite(Config) ->
 init_per_testcase(qos_status_during_traverse_multi_batch_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     rpc:multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 2]),
-    init_per_testcase(qos_status_during_traverse_test, Config);
+    init_per_testcase(qos_status_default , Config);
+init_per_testcase(Case, Config) when 
+    Case =:= qos_status_after_failed_transfers;
+    Case =:= qos_status_after_failed_transfers_deleted_file;
+    Case =:= qos_status_after_failed_transfers_deleted_entry ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, file_qos, [passthrough]),
+    test_utils:mock_expect(Workers, file_qos, get_assigned_entries_for_storage, 
+        fun(EffFileQos, _) -> lists:flatten(maps:values(file_qos:get_assigned_entries(EffFileQos))) end
+    ),
+    init_per_testcase(qos_status_default , Config);
 init_per_testcase(Case, Config) when
     Case =:= qos_status_during_traverse_test;
     Case =:= qos_status_during_traverse_with_file_deletion;
     Case =:= qos_status_during_traverse_with_dir_deletion;
-    Case =:= qos_status_during_traverse_file_without_qos_test ->
+    Case =:= qos_status_during_traverse_file_without_qos_test;
+    Case =:= qos_status_default ->
     
     Workers = ?config(op_worker_nodes, Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
@@ -631,7 +613,8 @@ init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     % do not start file synchronization
-    mock_synchronize_transfers(ConfigWithSessionInfo),
+    test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
+    qos_tests_utils:mock_replica_synchronizer(Workers, {ok, ok}),
     mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
     mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),
     mock_storage_get_provider(ConfigWithSessionInfo),
@@ -641,6 +624,13 @@ init_per_testcase(_, Config) ->
 end_per_testcase(qos_status_during_traverse_multi_batch_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     rpc:multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 40]),
+    end_per_testcase(default, Config);
+end_per_testcase(Case, Config) when
+    Case =:= qos_status_after_failed_transfers;
+    Case =:= qos_status_after_failed_transfers_deleted_file;
+    Case =:= qos_status_after_failed_transfers_deleted_entry ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, file_qos),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -733,15 +723,6 @@ mock_storage_qos_parameters(Workers, StorageQos) ->
     test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(StorageId, _SpaceId) ->
         {ok, maps:get(StorageId, StorageQos, #{})}
     end).
-
-
-mock_synchronize_transfers(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
-    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) ->
-            {ok, ok}
-        end).
 
 
 mock_storage_get_provider(Config) ->

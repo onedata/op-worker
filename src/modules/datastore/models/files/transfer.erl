@@ -156,7 +156,7 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
         undefined -> ?SKIPPED_STATUS;
         _ -> ?SCHEDULED_STATUS
     end,
-    ScheduleTime = provider_logic:zone_time_seconds(),
+    ScheduleTime = time_utils:timestamp_seconds(),
     SpaceId = file_id:guid_to_space_id(FileGuid),
     ToCreate = #document{
         scope = SpaceId,
@@ -234,8 +234,13 @@ rerun_not_ended_transfers(SpaceId) ->
 
 -spec rerun_ended(undefined | od_user:id(), doc() | id()) ->
     {ok, id()} | {error, term()}.
-rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
-    case is_ended(Transfer) of
+rerun_ended(UserId, TransferDoc) ->
+    rerun_ended(UserId, TransferDoc, false).
+
+-spec rerun_ended(undefined | od_user:id(), doc() | id(), boolean()) ->
+    {ok, id()} | {error, term()}.
+rerun_ended(UserId, #document{key = TransferId, value = Transfer}, MarkTransferFailed) ->
+    case is_ended(Transfer) orelse MarkTransferFailed of
         false ->
             {error, not_ended};
         true ->
@@ -258,14 +263,12 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 EvictingProviderId, ReplicatingProviderId, Callback, IndexName,
                 QueryViewParams
             ),
-            update(TransferId, fun(OldTransfer) ->
-                {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
-            end),
+            replication_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed),
             {ok, NewTransferId}
     end;
-rerun_ended(UserId, TransferId) ->
+rerun_ended(UserId, TransferId, MarkTransferFailed) ->
     case ?MODULE:get(TransferId) of
-        {ok, Doc} -> rerun_ended(UserId, Doc);
+        {ok, Doc} -> rerun_ended(UserId, Doc, MarkTransferFailed);
         {error, Error} -> {error, Error}
     end.
 
@@ -548,7 +551,7 @@ mark_data_replication_finished(undefined, SpaceId, BytesPerProvider) ->
     ),
     {ok, undefined};
 mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
-    CurrentTime = provider_logic:zone_time_seconds(),
+    CurrentTime = time_utils:timestamp_seconds(),
     ok = space_transfer_stats:update(
         ?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
     ),
@@ -571,7 +574,7 @@ mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
         LatestLastUpdate = lists:max(LastUpdates),
         % Due to race between processes updating stats it is possible
         % for LatestLastUpdate to be larger than CurrentTime, also because
-        % provider_logic:zone_time_seconds() caches zone time locally it is
+        % time_utils:timestamp_seconds() caches zone time locally it is
         % possible for time of various provider nodes to differ by several
         % seconds.
         % So if the CurrentTime is less than LatestLastUpdate by no more than
@@ -743,7 +746,6 @@ create(Doc) ->
     datastore_model:create(?CTX, Doc).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Updates transfer.
 %% @end
@@ -794,14 +796,12 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
         IsEvictionOngoing, IsEvictionAborting, SelfId
     } of
         {true, _, _, _, TargetProviderId} ->
-            replication_status:handle_failed(TransferId, true),
-            rerun_ended(undefined, TransferId);
+            rerun_ended(undefined, TransferId, true);
         {_, true, _, _, TargetProviderId} ->
             replication_status:handle_failed(TransferId, true),
             {ok, marked_failed};
         {_, _, true, _, SourceProviderId} ->
-            replica_eviction_status:handle_failed(TransferId, true),
-            rerun_ended(undefined, TransferId);
+            rerun_ended(undefined, TransferId, true);
         {_, _, _, true, SourceProviderId} ->
             replica_eviction_status:handle_failed(TransferId, true),
             {ok, marked_failed};

@@ -46,7 +46,7 @@
 -export([get_nodes/1, get_nodes/2]).
 -export([get_rtransfer_port/1]).
 -export([set_txt_record/3, remove_txt_record/1]).
--export([zone_time_seconds/0]).
+-export([get_zone_time/0]).
 -export([zone_get_offline_access_idps/0]).
 -export([fetch_peer_version/1]).
 -export([assert_zone_compatibility/0]).
@@ -656,28 +656,13 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
     })).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns current timestamp that is synchronized with the Onezone service.
-%% It has the accuracy of 1 second in most cases, but this might be worse under
-%% very high load. When evaluated on different providers within the same zone
-%% simultaneously, it should yield times at most one second apart from each
-%% other.
-%% @end
-%%--------------------------------------------------------------------
--spec zone_time_seconds() -> non_neg_integer().
-zone_time_seconds() ->
-    TimeMillis = time_utils:remote_timestamp(zone_time_bias, fun() ->
-        try
-            case oneprovider:is_registered() andalso get_remote_timestamp() of
-                {ok, Timestamp} -> {ok, Timestamp};
-                _ -> {ok, time_utils:system_time_millis()}
-            end
-        catch
-            _:_  -> {ok, time_utils:system_time_millis()}
-        end 
-    end),
-    TimeMillis div 1000.
+-spec get_zone_time() -> time_utils:millis() | no_return().
+get_zone_time() ->
+    {ok, Millis} = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_provider, id = undefined, aspect = current_time}
+    }),
+    Millis.
 
 
 %%--------------------------------------------------------------------
@@ -780,19 +765,18 @@ assert_zone_compatibility() ->
                 true ->
                     ok;
                 {false, CompOzVersions} ->
-                    ?critical("This Oneprovider is not compatible with its Onezone "
-                    "service.~n"
+                    ?critical("This Oneprovider is not compatible with its Onezone service.~n"
                     "Oneprovider version: ~s, supports zones: ~s~n"
                     "Onezone version: ~s~n"
                     "The service will not be operational until the problem is resolved "
                     "(may require Oneprovider / Onezone upgrade or compatibility registry refresh).", [
                         OpVersion,
-                        string:join(binaries_to_strings(CompOzVersions), ", "),
+                        str_utils:join_binary(CompOzVersions, <<", ">>),
                         OzVersion
                     ]),
                     throw({error, incompatible_oneprovider_version});
                 {error, Error} ->
-                    ?critical("Cannot check Oneprovider's compatibility due to ~w."
+                    ?critical("Cannot check Oneprovider's compatibility due to ~w. "
                     "The service will not be operational until the problem is resolved.", [
                         {error, Error}
                     ]),
@@ -842,7 +826,7 @@ assert_provider_compatibility(Domain) ->
                     throw({
                         incompatible_peer_op_version,
                         RemoteOpVersion,
-                        binaries_to_strings(RemoteCompOpVersions)
+                        RemoteCompOpVersions
                     });
                 {error, Error} ->
                     error(Error)
@@ -938,12 +922,6 @@ http_get_configuration(URL, SslOpts) ->
 
 
 %% @private
--spec binaries_to_strings([binary()]) -> [string()].
-binaries_to_strings(List) ->
-    [binary_to_list(B) || B <- List].
-
-
-%% @private
 -spec verify_provider_identity(od_provider:id(), IdentityToken :: binary()) ->
     ok | errors:error().
 verify_provider_identity(ProviderId, IdentityToken) ->
@@ -954,20 +932,4 @@ verify_provider_identity(ProviderId, IdentityToken) ->
             ?ERROR_TOKEN_SUBJECT_INVALID;
         {error, _} = Error ->
             Error
-    end.
-
-
-%% @private
--spec get_remote_timestamp() -> {ok, non_neg_integer()}.
-get_remote_timestamp() ->
-    Req = #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_provider, id = undefined, aspect = current_time}
-    },
-    case gs_client_worker:request(?ROOT_SESS_ID, Req) of
-        {ok, Timestamp} ->
-            {ok, Timestamp};
-        _ ->
-            % Fallback to REST in case GS returned an error. 
-            oz_providers:get_zone_time(none)
     end.

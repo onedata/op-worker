@@ -53,7 +53,7 @@
 % (they might expire before they are consumed), a new one will be generated.
 -define(MIN_TTL_FROM_CACHE, 15).
 
--define(NOW(), provider_logic:zone_time_seconds()).
+-define(NOW(), time_utils:timestamp_seconds()).
 
 -define(FILE_COMMENT,
     <<"This file holds the Oneprovider root token "

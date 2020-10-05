@@ -106,7 +106,7 @@ session_update_should_update_session_access_time(Config) ->
     timer:sleep(timer:seconds(1)),
     ?assertMatch(
         {ok, #document{key = SessId}},
-        ?call(Worker, update, [SessId, fun(Sess) -> {ok, Sess} end])
+        ?call(Worker, update_doc_and_time, [SessId, fun(Sess) -> {ok, Sess} end])
     ),
     Accessed2 = get_session_access_time(Config),
     ?assert(Accessed2 - Accessed1 > 0).
@@ -126,7 +126,7 @@ session_save_should_update_session_access_time(Config) ->
 session_create_should_set_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = base64:encode(crypto:strong_rand_bytes(20)),
-    Accessed1 = rpc:call(Worker, time_utils, cluster_time_seconds, []),
+    Accessed1 = rpc:call(Worker, time_utils, timestamp_seconds, []),
     timer:sleep(timer:seconds(1)),
     ?call(Worker, create, [#document{key = SessId, value = #session{}}]),
     Accessed2 = get_session_access_time([{session_id, SessId} | Config]),
@@ -206,7 +206,7 @@ stop_incoming_session_watcher(Worker, Pid, SessId) ->
 mock_session_manager(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, session_manager),
-    test_utils:mock_expect(Worker, session_manager, remove_session, fun
+    test_utils:mock_expect(Worker, session_manager, terminate_session, fun
         (SessID) -> Self ! {remove_session, SessID}, ok
     end).
 
@@ -247,7 +247,7 @@ get_session_doc(Config) ->
 %% Returns session access time.
 %% @end
 %%--------------------------------------------------------------------
--spec get_session_access_time(Config :: term()) -> Accessed :: erlang:timestamp().
+-spec get_session_access_time(Config :: term()) -> time_utils:seconds().
 get_session_access_time(Config) ->
     #document{value = #session{accessed = Accessed}} = get_session_doc(Config),
     Accessed.

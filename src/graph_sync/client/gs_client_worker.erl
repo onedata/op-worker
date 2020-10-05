@@ -6,9 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for maintaining graph sync connection to Onezone
-%%% and handling incoming push messages Whenever the connection dies, this
-%%% gen_server is killed and new one is instantiated by gs_worker.
+%%% This module implements a singleton gen_server that is responsible for
+%%% maintaining Graph Sync connection to Onezone and handling incoming push
+%%% messages. Whenever the connection dies, this gen_server is killed and a new
+%%% one is instantiated by gs_channel_service.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_client_worker).
@@ -50,9 +51,15 @@
 -type connection_ref() :: pid().
 -type doc() :: datastore:doc().
 
+% Global GS channel identifier - registered upon successful connection to
+% Onezone and used to identify the process responsible for communication with
+% Onezone. A registered pid means that the Oneprovider is connected.
+-define(GS_CHANNEL_GLOBAL_NAME, graph_sync_channel).
 
 %% API
--export([start_link/0]).
+-export([start/0]).
+-export([is_connected/0]).
+-export([get_connection_pid/0]).
 -export([force_terminate/0]).
 -export([request/1, request/2, request/3]).
 -export([invalidate_cache/1, invalidate_cache/2]).
@@ -66,28 +73,50 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts gs_client_worker instance and registers it globally.
-%% @end
-%%--------------------------------------------------------------------
--spec start_link() -> {ok, pid()} | errors:error().
-start_link() ->
-    gen_server2:start_link(?MODULE, [], []).
+-spec start() -> ok | already_started | error.
+start() ->
+    % This gen_server is a singleton, the critical section is used to make sure
+    % that there is only one instance running. This is used instead of a global
+    % identifier, which is reserved for determining existence of the GS
+    % connection (only one global identifier can be registered for one pid).
+    % The gen_server running does not precisely indicate whether the connection
+    % was established (it might still be in the init phase).
+    critical_section:run(start_gs_client_worker, fun() ->
+        case is_connected() of
+            true ->
+                already_started;
+            false ->
+                case gen_server2:start(?MODULE, [], []) of
+                    {ok, _Pid} ->
+                        ok;
+                    {error, normal} ->
+                        error;
+                    {error, _} = Error ->
+                        ?error("Failed to start gs_client_worker: ~w", [Error]),
+                        error
+                end
+        end
+    end).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Forces termination of gs_client_worker.
-%% @end
-%%--------------------------------------------------------------------
--spec force_terminate() -> ok.
+-spec is_connected() -> boolean().
+is_connected() ->
+    is_pid(get_connection_pid()).
+
+
+-spec get_connection_pid() -> undefined | pid().
+get_connection_pid() ->
+    global:whereis_name(?GS_CHANNEL_GLOBAL_NAME).
+
+
+-spec force_terminate() -> ok | not_started.
 force_terminate() ->
     case get_connection_pid() of
+        undefined ->
+            not_started;
         Pid when is_pid(Pid) ->
+            ?info("Terminating Onezone connection (forced)..."),
             gen_server2:call(Pid, {terminate, normal}),
-            ok;
-        _ ->
             ok
     end.
 
@@ -199,17 +228,18 @@ init([]) ->
     process_flag(trap_exit, true),
     case start_gs_connection() of
         {ok, _ClientRef, #gs_resp_handshake{identity = ?SUB(nobody)}} ->
+            ?warning("Cannot start Onezone connection: provider failed to authenticate"),
             {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = ?SUB(?ONEPROVIDER)}} ->
-            yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
-            ?info("Started connection to Onezone: ~p", [ClientRef]),
+            ?notice("Onezone connection established: ~p", [ClientRef]),
+            yes = global:register_name(?GS_CHANNEL_GLOBAL_NAME, self()),
             {ok, #state{client_ref = ClientRef}};
         ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
-            oneprovider:on_deregister(),
+            gs_hooks:handle_deregistered_from_oz(),
             {stop, normal};
         {error, _} = Error ->
-            ?warning("Cannot start connection to Onezone: ~p", [Error]),
+            ?error("Failed to establish Onezone connection: ~w", [Error]),
             {stop, normal}
     end.
 
@@ -240,10 +270,12 @@ handle_call({async_request, GsReq, Timeout}, {From, _}, #state{client_ref = Clie
     }};
 
 handle_call({terminate, Reason}, _From, State = #state{client_ref = ClientRef}) ->
-    ?warning("Connection to Onezone terminated"),
     case ClientRef of
-        undefined -> ok;
-        _ -> gs_client:kill(ClientRef)
+        undefined ->
+            ok;
+        _ ->
+            gs_client:kill(ClientRef),
+            ?warning("Onezone connection terminated")
     end,
     {stop, Reason, ok, State};
 
@@ -300,8 +332,7 @@ handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
             {noreply, State}
     end;
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
-    ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
-    oneprovider:on_disconnect_from_oz(),
+    ?warning("Onezone connection lost, reason: ~p", [Reason]),
     {stop, normal, State};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
@@ -319,6 +350,8 @@ handle_info(Info, #state{} = State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
 terminate(Reason, #state{} = State) ->
+    global:unregister_name(?GS_CHANNEL_GLOBAL_NAME),
+    gs_hooks:handle_disconnected_from_oz(),
     ?log_terminate(Reason, State).
 
 %%--------------------------------------------------------------------
@@ -378,9 +411,10 @@ process_push_message_async(#gs_push_graph{gri = GRI, change_type = deleted}) ->
     ProviderId = oneprovider:get_id_or_undefined(),
     case GRI of
         #gri{type = od_provider, id = ProviderId, aspect = instance} ->
-            oneprovider:on_deregister();
+            gs_hooks:handle_deregistered_from_oz();
         #gri{type = od_space, id = SpaceId, aspect = instance} ->
-            main_harvesting_stream:space_removed(SpaceId);
+            main_harvesting_stream:space_removed(SpaceId),
+            storage_import_worker:notify_space_deleted(SpaceId);
         #gri{type = od_token, id = TokenId, aspect = instance} ->
             auth_cache:report_token_deletion(TokenId);
         #gri{type = temporary_token_secret, id = UserId, aspect = user} ->
@@ -636,12 +670,6 @@ get_from_cache(#gri{type = Type, id = Id}) ->
 
 
 %% @private
--spec get_connection_pid() -> undefined | pid().
-get_connection_pid() ->
-    global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME).
-
-
-%% @private
 -spec client_to_credentials(client()) -> auth_manager:credentials().
 client_to_credentials(SessionId) when is_binary(SessionId) ->
     {ok, Credentials} = session:get_credentials(SessionId),
@@ -852,8 +880,8 @@ is_user_authorized_to_get(UserId, _, _, #gri{type = od_space, scope = private}, 
 is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_space, scope = protected}, CachedDoc) ->
     user_logic:has_eff_space(SessionId, UserId, CachedDoc#document.key);
 
-is_user_authorized_to_get(UserId, Client, _, #gri{type = od_share, scope = private}, CachedDoc) ->
-    space_logic:has_eff_user(Client, CachedDoc#document.value#od_share.space, UserId);
+is_user_authorized_to_get(UserId, _, _, #gri{type = od_share, scope = private}, CachedDoc) ->
+    space_logic:has_eff_privilege(CachedDoc#document.value#od_share.space, UserId, ?SPACE_VIEW);
 
 is_user_authorized_to_get(_UserId, _, _, #gri{type = od_provider, scope = private}, _) ->
     false;

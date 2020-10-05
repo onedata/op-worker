@@ -22,6 +22,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 
+-export([supervisor_flags/0, supervisor_children_spec/0]).
 -export([init_paths_caches/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
@@ -116,6 +117,29 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a fslogic worker supervisor flags.
+%% @end
+%%--------------------------------------------------------------------
+-spec supervisor_flags() -> supervisor:sup_flags().
+supervisor_flags() ->
+    #{strategy => one_for_one, intensity => 1000, period => 3600}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a children spec for a fslogic supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec supervisor_children_spec() -> [supervisor:child_spec()].
+supervisor_children_spec() ->
+    [
+        auth_cache:spec(),
+        lfm_handles_monitor:spec(),
+        file_upload_manager:spec(),
+        transfer_onf_stats_aggregator:spec()
+    ].
 
 %%--------------------------------------------------------------------
 %% @doc

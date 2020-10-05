@@ -60,16 +60,25 @@ continuous_harvesting_test(Config) ->
 continuous_harvesting_test_base(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = files_stress_test_base:many_files_creation_tree_test_base(Config, false, true, true),
+    RepNum = ?config(rep_num, Config),
     NewFiles = files_stress_test_base:get_param_value(files_saved, Result),
-    Start = time_utils:system_time_millis(),
+    NewDirs = files_stress_test_base:get_param_value(dirs_saved, Result),
+    BaseDirs = files_stress_test_base:get_param_value(base_dirs_created, Result),
+    AllFiles = case RepNum =:= 1 of
+        true ->
+            NewFiles + NewDirs + BaseDirs + 1;
+        false ->
+            NewFiles + NewDirs + BaseDirs
+    end,
+    Start = time_utils:timestamp_millis(),
     % start harvesting_stream
     harvesting_stress_test_utils:revise_all_spaces(Worker),
-    harvesting_stress_test_utils:harvesting_receive_loop(NewFiles),
-    Diff = time_utils:system_time_millis() - Start,
+    harvesting_stress_test_utils:harvesting_receive_loop(AllFiles),
+    Diff = time_utils:timestamp_millis() - Start,
     DiffSec = Diff/1000,
-    AvgRate =  NewFiles /DiffSec,
+    AvgRate =  AllFiles /DiffSec,
     ct:print("Harvesting ~p files took ~p s.~n"
-    "Average rate was ~p files per second.", [NewFiles, DiffSec, AvgRate]),
+    "Average rate was ~p files per second.", [AllFiles, DiffSec, AvgRate]),
     [
         #parameter{name = total_time, description = "Total harvesting time", value = DiffSec},
         #parameter{name = avg_rate, description = "Average harvesting rate", value = AvgRate}

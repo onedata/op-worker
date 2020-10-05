@@ -74,7 +74,7 @@ create(SpaceId, BytesToRelease) ->
         value = #autocleaning_run{
             status = ?ACTIVE,
             space_id = SpaceId,
-            started_at = time_utils:cluster_time_seconds(),
+            started_at = time_utils:timestamp_seconds(),
             bytes_to_release = BytesToRelease
         }
     },
@@ -112,7 +112,7 @@ mark_cancelling(ARId) ->
 mark_finished(undefined) -> ok;
 mark_finished(ARId) ->
     case update(ARId, fun(ACR) ->
-        ACR2 = ACR#autocleaning_run{stopped_at = time_utils:cluster_time_seconds()},
+        ACR2 = ACR#autocleaning_run{stopped_at = time_utils:timestamp_seconds()},
         {ok, set_final_status(ACR2)}
     end) of
         {ok, #document{value = #autocleaning_run{space_id = SpaceId}}} ->
@@ -128,7 +128,7 @@ mark_finished(undefined, _, _) -> ok;
 mark_finished(ARId, FinalReleasedFiles, FinalReleasedBytes) ->
     case update(ARId, fun(ACR) ->
         ACR2 = ACR#autocleaning_run{
-            stopped_at = time_utils:cluster_time_seconds(),
+            stopped_at = time_utils:timestamp_seconds(),
             released_files = FinalReleasedFiles,
             released_bytes = FinalReleasedBytes
         },

@@ -151,6 +151,7 @@ get_next_jobs_base(delete_local_documents) -> [].
 -spec execute_stage(space_unsupport_job:record()) -> ok.
 execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
     main_harvesting_stream:space_unsupported(SpaceId),
+    storage_import:stop_auto_scan(SpaceId),
     %% @TODO VFS-6133 Stop all incoming transfers
     %% @TODO VFS-6134 Close all open file handles
     %% @TODO VFS-6135 Block all modifying file operations
@@ -160,7 +161,7 @@ execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    Expression = [?QOS_ANY_STORAGE, <<"storageId=", StorageId/binary>>, <<"-">>],
+    Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
     {ok, QosEntryId} = lfm:add_qos_entry(?ROOT_SESS_ID, {guid, SpaceGuid}, Expression, 1, internal),
     NewJob = Job#space_unsupport_job{subtask_id = QosEntryId},
     space_unsupport_job:save(NewJob),
@@ -213,6 +214,9 @@ execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
     cleanup_local_documents(SpaceId, StorageId),
     qos_entry:apply_to_all_impossible_in_space(SpaceId, fun(QosEntryId) -> 
         qos_entry:remove_from_impossible_list(SpaceId, QosEntryId)
+    end),
+    qos_entry:apply_to_all_in_failed_files_list(SpaceId, fun(FileUuid) ->
+        qos_entry:remove_from_failed_files_list(SpaceId, FileUuid)
     end),
     unsupport_cleanup_traverse:delete_ended(SpaceId, StorageId),
     ok.
@@ -304,6 +308,6 @@ cleanup_local_documents(SpaceId, StorageId) ->
     file_popularity_api:delete_config(SpaceId),
     autocleaning_api:disable(SpaceId),
     autocleaning_api:delete_config(SpaceId),
-    storage_sync:clean_up(SpaceId, StorageId),
+    storage_import:clean_up(SpaceId),
     space_quota:delete(SpaceId),
     luma:clear_db(StorageId, SpaceId).

@@ -67,7 +67,7 @@ register(SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
         FilePartialCtx = file_partial_ctx:new_by_canonical_path(UserCtx, CanonicalPath),
         DirectParentCtx = ensure_all_parents_exist_and_are_dirs(FilePartialCtx, UserCtx),
         % TODO VFS-6508 do not use TraverseInfo as its associated with storage_traverse
-        {_, FileCtx, _} = storage_sync_engine:sync_file(StorageFileCtx3, #{
+        {_, FileCtx, _} = storage_import_engine:sync_file(StorageFileCtx3, #{
                 parent_ctx => DirectParentCtx,
                 space_storage_file_id => storage_file_id:space_dir_id(SpaceId, StorageId),
                 iterator_type => storage_traverse:get_iterator(StorageId),
@@ -112,7 +112,7 @@ create_missing_directory(ParentCtx, DirName, UserId) ->
     FileUuid = datastore_key:new(),
     ok = dir_location:mark_dir_synced_from_storage(FileUuid, undefined),
     {ok, DirCtx} = create_missing_directory_file_meta(FileUuid, ParentCtx, DirName, SpaceId, UserId),
-    CurrentTime = time_utils:system_time_seconds(),
+    CurrentTime = time_utils:timestamp_seconds(),
     times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime),
     {ok, DirCtx}.
 
@@ -349,7 +349,7 @@ ensure_stat_defined(Stat, DefaultStat) ->
 -spec get_default_file_stat(storage_file_ctx:ctx()) -> {helpers:stat(), storage_file_ctx:ctx()}.
 get_default_file_stat(StorageFileCtx) ->
     {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
-    CurrentTimestamp = time_utils:system_time_seconds(),
+    CurrentTimestamp = time_utils:timestamp_seconds(),
     DefaultStat = #statbuf{
         % st_size is not set intentionally as we cannot assume default size
         st_mtime = CurrentTimestamp,

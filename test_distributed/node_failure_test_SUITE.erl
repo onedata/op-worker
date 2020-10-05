@@ -66,9 +66,9 @@ failure_test(Config) ->
     ?assert(is_atom(DBsyncWorkerP1)),
     DBsyncWorkerP2 = rpc:call(Worker1P2, datastore_key, any_responsible_node, [SpaceId]),
     ?assert(is_atom(DBsyncWorkerP2)),
-    GSWorkerP1 = rpc:call(Worker1P1, datastore_key, any_responsible_node, [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN]),
+    GSWorkerP1 = rpc:call(Worker1P1, datastore_key, any_responsible_node, [?GS_CHANNEL_SERVICE_NAME]),
     ?assert(is_atom(GSWorkerP1)),
-    GSWorkerP2 = rpc:call(Worker1P2, datastore_key, any_responsible_node, [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN]),
+    GSWorkerP2 = rpc:call(Worker1P2, datastore_key, any_responsible_node, [?GS_CHANNEL_SERVICE_NAME]),
     ?assert(is_atom(GSWorkerP2)),
 
     % Execute base test that kill nodes many times to verify if multiple failures will be handled properly
@@ -101,9 +101,9 @@ failure_test(Config) ->
     ?assertEqual(DBsyncWorkerP2, node(rpc:call(Worker1P2, global, whereis_name, [{dbsync_in_stream, SpaceId}]))),
 
     ?assertEqual(GSWorkerP1, rpc:call(Worker1P1, internal_services_manager, get_processing_node,
-        [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN])),
+        [?GS_CHANNEL_SERVICE_NAME])),
     ?assertEqual(GSWorkerP2, rpc:call(Worker1P2, internal_services_manager, get_processing_node,
-        [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN])),
+        [?GS_CHANNEL_SERVICE_NAME])),
 
     ok.
 
@@ -161,27 +161,21 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        Workers = test_config:get_all_op_worker_nodes(Config),
-        test_utils:set_env(Workers, ?APP_NAME, session_validity_check_interval_seconds, 1800),
-        test_utils:set_env(Workers, ?APP_NAME, fuse_session_grace_period_seconds, 1800),
-        onenv_test_utils:prepare_base_test_config(NewConfig)
+        provider_onenv_test_utils:initialize(NewConfig)
     end,
     test_config:set_many(Config, [
-        {add_envs, [op_worker, op_worker, [{key, value}]]},
-        {add_envs, [op_worker, cluster_worker, [{key, value}]]},
-        {add_envs, [oz_worker, cluster_worker, [{key, value}]]},
-        {add_envs, [cluster_manager, cluster_manager, [{key, value}]]},
+        {add_envs, [op_worker, op_worker, [{session_validity_check_interval_seconds, 1800}]]},
+        {add_envs, [op_worker, op_worker, [{fuse_session_grace_period_seconds, 1800}]]},
         {set_onenv_scenario, ["2op-2nodes"]}, % name of yaml file in test_distributed/onenv_scenarios
         {set_posthook, Posthook}
     ]).
 
 init_per_testcase(_Case, Config) ->
-    lfm_proxy:init(Config, false).
-
-
-end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config),
     Config.
+
+
+end_per_testcase(_Case, _Config) ->
+    ok.
 
 end_per_suite(_Config) ->
     ok.
@@ -215,12 +209,12 @@ verify_files_and_dirs(Worker, SessId, Attempts, Dirs, Files) ->
             rpc:call(Worker, lfm, stat, [SessId, {guid, Dir}], 1000), Attempts)
     end, Dirs),
 
+    FileDataSize = size(?FILE_DATA),
     lists:foreach(fun(File) ->
-        ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
+        ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileDataSize}},
             rpc:call(Worker, lfm, stat, [SessId, {guid, File}], 1000), Attempts)
     end, Files),
 
-    FileDataSize = size(?FILE_DATA),
     lists:foreach(fun(File) ->
         ?assertEqual(FileDataSize,
             begin

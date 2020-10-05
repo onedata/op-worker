@@ -65,6 +65,10 @@
     qos_status_during_reconciliation_prefix_file_test/1,
     qos_status_during_reconciliation_with_file_deletion_test/1,
     qos_status_during_reconciliation_with_dir_deletion_test/1,
+    qos_status_during_traverse_file_without_qos_test/1,
+    qos_status_after_failed_transfers/1,
+    qos_status_after_failed_transfers_deleted_file/1,
+    qos_status_after_failed_transfers_deleted_entry/1,
 
     reevaluate_impossible_qos_test/1,
     reevaluate_impossible_qos_race_test/1,
@@ -109,6 +113,10 @@ all() -> [
     qos_status_during_reconciliation_prefix_file_test,
     qos_status_during_reconciliation_with_file_deletion_test,
     qos_status_during_reconciliation_with_dir_deletion_test,
+    qos_status_during_traverse_file_without_qos_test,
+    qos_status_after_failed_transfers,
+    qos_status_after_failed_transfers_deleted_file,
+    qos_status_after_failed_transfers_deleted_entry,
 
     reevaluate_impossible_qos_test,
     reevaluate_impossible_qos_race_test,
@@ -710,6 +718,21 @@ qos_status_during_reconciliation_with_file_deletion_test(Config) ->
 qos_status_during_reconciliation_with_dir_deletion_test(Config) ->
     qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID).
 
+qos_status_during_traverse_file_without_qos_test(Config) ->
+    qos_test_base:qos_status_during_traverse_file_without_qos_test_base(Config, ?SPACE_ID).
+
+qos_status_after_failed_transfers(Config) ->
+    [_Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer(Config, ?SPACE_ID, Worker3).
+
+qos_status_after_failed_transfers_deleted_file(Config) ->
+    [_Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer_deleted_file(Config, ?SPACE_ID, Worker3).
+
+qos_status_after_failed_transfers_deleted_entry(Config) ->
+    [_Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_test_base:qos_status_after_failed_transfer_deleted_entry(Config, ?SPACE_ID, Worker3).
+
 
 %%%===================================================================
 %%% QoS reevaluate
@@ -744,7 +767,7 @@ reevaluate_impossible_qos_test(Config) ->
                 qos_name = ?QOS1,
                 file_key = {path, DirPath},
                 replicas_num = 2,
-                qos_expression_in_rpn = [<<"country=PL">>],
+                qos_expression = [<<"country=PL">>],
                 possibility_check = {impossible, ?PROVIDER_ID(Worker1)}
             }
         ],
@@ -762,7 +785,7 @@ reevaluate_impossible_qos_test(Config) ->
             qos_name = ?QOS1,
             file_key = {path, DirPath},
             replicas_num = 2,
-            qos_expression_in_rpn = [<<"country=PL">>],
+            qos_expression = [<<"country=PL">>],
             possibility_check = {possible, ?PROVIDER_ID(Worker2)}
         }
     ],
@@ -814,7 +837,7 @@ reevaluate_impossible_qos_race_test(Config) ->
                 qos_name = ?QOS1,
                 file_key = {path, DirPath},
                 replicas_num = 1,
-                qos_expression_in_rpn = [<<"country=other">>],
+                qos_expression = [<<"country=other">>],
                 possibility_check = {possible, ?PROVIDER_ID(Worker2)}
             }
         ],
@@ -863,7 +886,7 @@ reevaluate_impossible_qos_conflict_test(Config) ->
                 qos_name = ?QOS1,
                 file_key = {path, DirPath},
                 replicas_num = 1,
-                qos_expression_in_rpn = [<<"country=other">>],
+                qos_expression = [<<"country=other">>],
                 possibility_check = {impossible, ?PROVIDER_ID(Worker1)}
             }
         ],
@@ -883,7 +906,7 @@ reevaluate_impossible_qos_conflict_test(Config) ->
             qos_name = ?QOS1,
             file_key = {path, DirPath},
             replicas_num = 1,
-            qos_expression_in_rpn = [<<"country=other">>],
+            qos_expression = [<<"country=other">>],
             possibility_check = {possible, ?PROVIDER_ID(Worker1)}
         }
     ],
@@ -941,7 +964,7 @@ qos_traverse_cancellation_test(Config) ->
                 workers = Workers,
                 qos_name = ?QOS1,
                 file_key = {path, QosRootFilePath},
-                qos_expression_in_rpn = [<<"country=PL">>],
+                qos_expression = [<<"country=PL">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(Worker1)}
             }
@@ -989,7 +1012,8 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?APP_NAME, prefetching, off)
+            test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
+            test_utils:set_env(Worker, ?APP_NAME, qos_retry_failed_files_interval_seconds, 5)
         end, ?config(op_worker_nodes, NewConfig)),
 
         application:start(ssl),
@@ -1015,7 +1039,12 @@ init_per_testcase(Case, Config) when
     Case =:= qos_status_during_reconciliation_test;
     Case =:= qos_status_during_reconciliation_prefix_file_test;
     Case =:= qos_status_during_reconciliation_with_file_deletion_test;
-    Case =:= qos_status_during_reconciliation_with_dir_deletion_test; 
+    Case =:= qos_status_during_reconciliation_with_dir_deletion_test;
+    Case =:= qos_status_during_traverse_file_without_qos_test;
+    Case =:= qos_status_after_failed_transfers;
+    Case =:= qos_status_after_failed_transfers_deleted_file;
+    Case =:= qos_status_after_failed_transfers_deleted_entry;
+    Case =:= qos_status_after_failed_transfers; 
     Case =:= qos_traverse_cancellation_test ->
     
     Workers = ?config(op_worker_nodes, Config),
@@ -1116,7 +1145,7 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename, WaitForQos) ->
             #expected_qos_entry{
                 qos_name = ?QOS1,
                 file_key = {path, ?FILE_PATH(QosFilename)},
-                qos_expression_in_rpn = [<<"country=PT">>],
+                qos_expression = [<<"country=PT">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(Worker1)}
             }

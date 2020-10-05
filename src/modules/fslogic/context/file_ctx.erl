@@ -45,7 +45,6 @@
     storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
-    is_space_synced :: undefined | boolean(),
     is_imported_storage :: undefined | boolean()
 }).
 
@@ -87,9 +86,9 @@
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
-    get_local_storage_file_size/1, is_space_synced/1, get_and_cache_file_doc_including_deleted/1]).
+    get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
--export([assert_not_readonly_storage/1]).
+-export([assert_not_readonly_storage/1, assert_file_exists/1]).
 
 %%%===================================================================
 %%% API
@@ -527,14 +526,6 @@ get_new_storage_file_id(FileCtx) ->
             {StorageFileId, FileCtx3} = storage_file_id:canonical(FileCtx2),
             {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}}
     end.
-
--spec is_space_synced(ctx()) -> {boolean(), ctx()}.
-is_space_synced(FileCtx = #file_ctx{is_space_synced = undefined}) ->
-    SpaceId = get_space_id_const(FileCtx),
-    IsSynced = space_strategies:is_any_storage_imported(SpaceId),
-    {IsSynced, FileCtx#file_ctx{is_space_synced = IsSynced}};
-is_space_synced(FileCtx = #file_ctx{is_space_synced = IsSynced}) ->
-    {IsSynced, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1294,6 +1285,14 @@ assert_not_readonly_target_storage_const(FileCtx, TargetProviderId) ->
         false -> ok
     end.
 
+-spec assert_file_exists(ctx()) -> ctx().
+assert_file_exists(FileCtx0) ->
+    % If file doesn't exists (or was deleted) fetching doc will fail,
+    % {badmatch, {error, not_found}} will propagate up and fslogic_worker will
+    % translate it to ?ENOENT
+    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0),
+    FileCtx1.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1427,25 +1426,30 @@ get_file_size_from_remote_locations(FileCtx) ->
     SpaceWhiteList :: undefined | [od_space:id()]) -> Children :: [ctx()].
 list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    #document{value = #od_user{eff_spaces = AllSpaces}} = user_ctx:get_user(UserCtx),
+    #document{value = #od_user{eff_spaces = UserEffSpaces}} = user_ctx:get_user(UserCtx),
 
     FilteredSpaces = case SpaceWhiteList of
         undefined ->
-            AllSpaces;
+            UserEffSpaces;
         _ ->
             lists:filter(fun(Space) ->
                 lists:member(Space, SpaceWhiteList)
-            end, AllSpaces)
+            end, UserEffSpaces)
     end,
     case Offset < length(FilteredSpaces) of
         true ->
-            SpacesChunk = lists:sublist(FilteredSpaces, Offset + 1, Limit),
-            Children = lists:map(fun(SpaceId) ->
-                {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
+            SpacesChunk = lists:sublist(
+                lists:sort(lists:map(fun(SpaceId) ->
+                    {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
+                    {SpaceName, SpaceId}
+                end, FilteredSpaces)),
+                Offset + 1,
+                Limit
+            ),
+            lists:map(fun({SpaceName, SpaceId}) ->
                 SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                 new_child_by_uuid(SpaceDirUuid, SpaceName, SpaceId, undefined)
-            end, SpacesChunk),
-            Children;
+            end, SpacesChunk);
         false ->
             []
     end.

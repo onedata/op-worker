@@ -50,6 +50,7 @@
 -module(harvesting_batch).
 -author("Jakub Kudzia").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
 
@@ -220,7 +221,7 @@ accumulate_custom_metadata(#document{
 
 -spec submission_batch_entry(file_id(),  couchbase_changes:seq(), undefined | doc(), undefined | doc()) -> batch_entry().
 submission_batch_entry(FileId, Seq,
-    #document{value = #file_meta{name = FileName}},
+    FileMetaDoc = #document{value = #file_meta{}},
     #document{value = #custom_metadata{value = Metadata, space_id = SpaceId}}
 ) ->
     #{
@@ -228,11 +229,11 @@ submission_batch_entry(FileId, Seq,
         <<"operation">> => ?SUBMIT,
         <<"seq">> => Seq,
         <<"spaceId">> => SpaceId,
-        <<"fileName">> => FileName,
+        <<"fileName">> => get_file_name(FileMetaDoc),
         <<"payload">> => Metadata
     };
 submission_batch_entry(FileId, Seq,
-    #document{value = #file_meta{name = FileName}, scope = SpaceId},
+    FileMetaDoc = #document{value = #file_meta{}, scope = SpaceId},
     undefined
 ) ->
     #{
@@ -240,7 +241,7 @@ submission_batch_entry(FileId, Seq,
         <<"operation">> => ?SUBMIT,
         <<"seq">> => Seq,
         <<"spaceId">> => SpaceId,
-        <<"fileName">> => FileName,
+        <<"fileName">> => get_file_name(FileMetaDoc),
         <<"payload">> => #{}
     };
 submission_batch_entry(FileId, Seq,
@@ -277,11 +278,11 @@ encode_entry(Entry = #{<<"operation">> := ?SUBMIT, <<"payload">> := Payload}) ->
 encode_payload(Payload) ->
     maps:fold(fun
         (<<"onedata_json">>, JSON, PayloadIn) ->
-            PayloadIn#{<<"json">> => json_utils:encode(JSON)};
+            PayloadIn#{<<"json">> => JSON};
         (<<"onedata_rdf">>, RDF, PayloadIn) ->
-            PayloadIn#{<<"rdf">> => json_utils:encode(RDF)};
+            PayloadIn#{<<"rdf">> => RDF};
         (Key, Value, PayloadIn) ->
-            case is_cdmi_xattr(Key) of
+            case is_cdmi_xattr(Key) orelse is_faas_xattr(Key) of
                 true ->
                     PayloadIn;
                 false ->
@@ -291,11 +292,18 @@ encode_payload(Payload) ->
             end
     end, #{}, Payload).
 
+
 -spec is_cdmi_xattr(binary()) -> boolean().
 is_cdmi_xattr(XattrKey) ->
     KeyLen = byte_size(XattrKey),
     CdmiPrefixLen = byte_size(?CDMI_PREFIX),
     binary:part(XattrKey, 0, min(KeyLen, CdmiPrefixLen)) =:= ?CDMI_PREFIX.
+
+
+-spec is_faas_xattr(binary()) -> boolean().
+is_faas_xattr(<<?FAAS_PREFIX_STR, _/binary>>) -> true;
+is_faas_xattr(_) -> false.
+
 
 -spec get_seq(batch_entry()) -> seq().
 get_seq(#{<<"seq">> := Seq}) ->
@@ -306,3 +314,11 @@ get_seq(#{<<"seq">> := Seq}) ->
 compute_file_id(#document{key = FileUuid, scope = SpaceId}) ->
     {ok, FileId} = file_id:guid_to_objectid(file_id:pack_guid(FileUuid, SpaceId)),
     FileId.
+
+
+-spec get_file_name(file_meta:doc()) -> file_meta:name().
+get_file_name(#document{value = #file_meta{is_scope = true, name = SpaceId}}) ->
+    {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
+    SpaceName;
+get_file_name(#document{value = #file_meta{name = FileName}}) ->
+    FileName.

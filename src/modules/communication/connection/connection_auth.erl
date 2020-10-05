@@ -166,11 +166,11 @@ assert_client_compatibility(#client_handshake_request{
         {false, CompatibleOcVersions} ->
             ?debug("Discarding connection from oneclient @ ~s because of "
             "incompatible version.~n"
-            "Oneclient version: ~s ~n"
-            "Oneprovider version: ~s, supports clients: ~p~n", [
+            "Oneclient version: ~s~n"
+            "Oneprovider version: ~s, supports clients: ~s", [
                 inet_parse:ntoa(IpAddress),
                 OcVersion,
-                OpVersion, CompatibleOcVersions
+                OpVersion, str_utils:join_binary(CompatibleOcVersions, <<", ">>)
             ]),
             throw(incompatible_client_version)
     end.

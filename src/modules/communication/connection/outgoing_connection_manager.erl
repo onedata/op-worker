@@ -64,7 +64,9 @@
     connections = #{} :: #{pid() => Hostname :: binary()},
 
     renewal_timer = undefined :: undefined | reference(),
-    renewal_interval = ?INITIAL_RENEWAL_INTERVAL :: pos_integer()
+    renewal_interval = ?INITIAL_RENEWAL_INTERVAL :: pos_integer(),
+
+    is_stopping = false :: boolean()
 }).
 
 -type state() :: #state{}.
@@ -169,39 +171,42 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(?RENEW_CONNECTIONS_REQ, State) ->
+handle_info(_, #state{is_stopping = true} = State) ->
+    {noreply, State};
+handle_info(?RENEW_CONNECTIONS_REQ, #state{session_id = SessionId} = State) ->
     case renew_connections(State#state{renewal_timer = undefined}) of
         {ok, NewState} ->
             {noreply, NewState};
         {error, peer_offline} ->
-            {stop, normal, State}
+            terminate_session(SessionId, State)
     end;
 
-handle_info({'EXIT', _ConnPid, timeout}, State) ->
-    {stop, normal, State};
+handle_info({'EXIT', _ConnPid, timeout}, #state{session_id = SessionId} = State) ->
+    terminate_session(SessionId, State);
 
 handle_info({'EXIT', ConnPid, handshake_failed}, #state{
     connections = AllConnections,
-    renewal_interval = Interval
+    renewal_interval = Interval,
+    session_id = SessionId
 } = State) ->
     WorkingConnections = maps:remove(ConnPid, AllConnections),
     AfterLastConnectionRetry = Interval > ?MAX_RENEWAL_INTERVAL,
 
     case {map_size(WorkingConnections), AfterLastConnectionRetry} of
         {0, true} ->
-            {stop, normal, State};
+            terminate_session(SessionId, State);
         _ ->
             NewState = State#state{connections = WorkingConnections},
             {noreply, schedule_next_renewal(NewState)}
     end;
 
-handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons} = State0) ->
+handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons, session_id = SessionId} = State0) ->
     State1 = State0#state{connections = maps:remove(ConnPid, Cons)},
     case renew_connections(State1) of
         {ok, State2} ->
             {noreply, State2};
         {error, peer_offline} ->
-            {stop, normal, State1}
+            terminate_session(SessionId, State1)
     end;
 
 handle_info(Info, State) ->
@@ -222,10 +227,7 @@ handle_info(Info, State) ->
     state()) -> term().
 terminate(Reason, #state{session_id = SessionId} = State) ->
     ?log_terminate(Reason, State),
-    % remove_session tears down supervision tree, so it can not be simple
-    % called as this process is also part of mentioned supervision tree.
-    % Instead new process is spawned that can call it.
-    spawn(fun() -> session_manager:remove_session(SessionId) end).
+    session_manager:clean_terminated_session(SessionId).
 
 
 %%--------------------------------------------------------------------
@@ -244,6 +246,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
+-spec terminate_session(session:id(), state()) -> {noreply, state()}.
+terminate_session(SessionId, State) ->
+    spawn(fun() ->
+        session_manager:terminate_session(SessionId)
+    end),
+    {noreply, State#state{is_stopping = true}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -347,19 +356,19 @@ schedule_next_renewal(State) ->
     ok.
 log_error(State, throw, {cannot_verify_peer_op_identity, Reason}) ->
     ?warning("Discarding connections renewal to provider ~ts because "
-             "its identity cannot be verified due to ~p. ~n"
-             "Next retry not sooner than ~g s. ~n", [
+             "its identity cannot be verified due to ~w.~n"
+             "Next retry not sooner than ~B s.", [
         provider_logic:to_printable(State#state.peer_id),
         Reason,
-        State#state.renewal_interval / 1000
+        State#state.renewal_interval div 1000
     ]);
 log_error(State, throw, {cannot_check_peer_op_version, HTTPErrorCode}) ->
     ?warning("Discarding connections renewal to provider ~ts because "
-             "its version cannot be determined (HTTP ~b). ~n"
-             "Next retry not sooner than ~g s. ~n", [
+             "its version cannot be determined (HTTP ~B).~n"
+             "Next retry not sooner than ~B s.", [
         provider_logic:to_printable(State#state.peer_id),
         HTTPErrorCode,
-        State#state.renewal_interval / 1000
+        State#state.renewal_interval div 1000
     ]);
 log_error(State, throw, {incompatible_peer_op_version, PeerOpVersion, PeerCompOpVersions}) ->
     Version = oneprovider:get_version(),
@@ -367,21 +376,20 @@ log_error(State, throw, {incompatible_peer_op_version, PeerOpVersion, PeerCompOp
         ?ONEPROVIDER, Version, ?ONEPROVIDER
     ),
     ?warning("Discarding connections renewal to provider ~ts "
-             "because of incompatible version. ~n"
-             "Local version: ~s, supports providers: ~p~n"
-             "Remote version: ~s, supports providers: ~p~n"
-             "Next retry not sooner than ~g s. ~n", [
+             "because of incompatible version.~n"
+             "Local version: ~s, supports providers: ~s~n"
+             "Remote version: ~s, supports providers: ~s~n"
+             "Next retry not sooner than ~B s.", [
         provider_logic:to_printable(State#state.peer_id),
-        Version,
-        [binary_to_list(B) || B <- CompatibleOpVersions],
-        PeerOpVersion, PeerCompOpVersions,
-        State#state.renewal_interval / 1000
+        Version, str_utils:join_binary(CompatibleOpVersions, <<", ">>),
+        PeerOpVersion, str_utils:join_binary(PeerCompOpVersions, <<", ">>),
+        State#state.renewal_interval div 1000
     ]);
 log_error(State, Type, Reason) ->
-    ?warning("Failed to renew connections to provider ~ts "
-             "because of ~p:~p. ~n"
-             "Next retry not sooner than ~g s. ~n", [
+    ?warning("Failed to renew connections to provider ~ts~n"
+             "Error was: ~w:~p.~n"
+             "Next retry not sooner than ~B s.", [
         provider_logic:to_printable(State#state.peer_id),
         Type, Reason,
-        State#state.renewal_interval / 1000
+        State#state.renewal_interval div 1000
     ]).

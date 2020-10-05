@@ -64,6 +64,7 @@ operation_supported(get, providers, private) -> true;
 operation_supported(get, transfers, private) -> true;
 operation_supported(get, transfers_active_channels, private) -> true;
 operation_supported(get, {transfers_throughput_charts, _}, private) -> true;
+operation_supported(get, available_qos_parameters, private) -> true;
 
 operation_supported(update, {view, _}, private) -> true;
 
@@ -132,6 +133,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {query_view, _}}}) -> #{
         <<"end_range">> => {binary, any},
         <<"startkey">> => {binary, any},
         <<"endkey">> => {binary, any},
+        <<"startkey_docid">> => {binary, any},
+        <<"endkey_docid">> => {binary, any},
         <<"key">> => {binary, any},
         <<"keys">> => {binary, any},
         <<"bbox">> => {binary, any}
@@ -181,6 +184,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_cha
         ]}
     }
 };
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = available_qos_parameters}}) ->
+    undefined;
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
     optional => #{
@@ -246,8 +252,11 @@ authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     id = SpaceId,
-    aspect = instance
-}}, _) ->
+    aspect = As
+}}, _) when
+    As =:= instance;
+    As =:= providers
+->
     middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
@@ -274,8 +283,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 }}, _) when
     As =:= eff_users;
     As =:= eff_groups;
-    As =:= shares;
-    As =:= providers
+    As =:= shares
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
 
@@ -293,6 +301,13 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     aspect = {transfers_throughput_charts, _}
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
+
+authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
+    id = SpaceId,
+    aspect = available_qos_parameters
+}}, _) ->
+    SessionId = Auth#auth.session_id,
+    space_logic:has_eff_user(SessionId, SpaceId, UserId);
 
 authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
@@ -378,6 +393,12 @@ validate(#op_req{operation = get, gri = #gri{
 }}, _) ->
     middleware_utils:assert_space_supported_locally(SpaceId);
 
+validate(#op_req{operation = get, gri = #gri{
+    id = SpaceId,
+    aspect = available_qos_parameters
+}}, _QosEntry) ->
+    middleware_utils:assert_space_supported_locally(SpaceId);
+
 validate(#op_req{operation = update, gri = #gri{
     id = SpaceId,
     aspect = {view, _}
@@ -440,12 +461,15 @@ get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
         {ok, EffSpaces} ->
             {ok ,lists:map(fun(SpaceId) ->
                 {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
-                #{<<"spaceId">> => SpaceId, <<"name">> => SpaceName}
+                #{
+                    <<"spaceId">> => SpaceId,
+                    <<"fileId">> => fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                    <<"name">> => SpaceName
+                }
             end, EffSpaces)};
         {error, _} = Error ->
             Error
     end;
-
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     case space_logic:get(Auth#auth.session_id, SpaceId) of
         {ok, #document{value = Space}} ->
@@ -603,7 +627,29 @@ get(#op_req{data = Data, gri = #gri{
         <<"timestamp">> => LastUpdate,
         <<"inputCharts">> => InputThroughputCharts,
         <<"outputCharts">> => OutputThroughputCharts
-    }}.
+    }};
+
+get(#op_req{gri = #gri{id = SpaceId, aspect = available_qos_parameters}}, _) ->
+    {ok, Storages} = space_logic:get_all_storage_ids(SpaceId),
+    Res = lists:foldl(fun(StorageId, OuterAcc) ->
+        QosParameters = storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId),
+        maps:fold(fun(ParameterKey, Value, InnerAcc) ->
+            Key = case is_integer(Value) of
+                true -> <<"numberValues">>;
+                false -> <<"stringValues">>
+            end,
+            InnerAcc#{ParameterKey => maps:update_with(
+                Key,
+                fun(Values) -> lists:usort([Value | Values]) end,
+                [Value],
+                maps:get(ParameterKey, InnerAcc, #{
+                    <<"stringValues">> => [],
+                    <<"numberValues">> => []
+                })
+            )}
+        end, OuterAcc, QosParameters)
+    end, #{}, Storages),
+    {ok, Res}.
 
 
 %%--------------------------------------------------------------------

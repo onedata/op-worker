@@ -70,7 +70,7 @@
     verification_result/0
 ]).
 
--define(NOW(), time_utils:system_time_seconds()).
+-define(NOW(), time_utils:timestamp_seconds()).
 
 
 %%%===================================================================

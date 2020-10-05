@@ -384,8 +384,8 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:mock_auth_manager(Config),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config, true),
+    initializer:mock_auth_manager(Config, false, true),
     Config;
 
 init_per_testcase(_Case, Config) ->
@@ -459,7 +459,7 @@ session_setup(Worker, Nonce, ?SUB(user, UserId) = Iden, Conn) ->
 %%--------------------------------------------------------------------
 -spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
 session_teardown(Worker, SessId) ->
-    rpc:call(Worker, session_manager, remove_session, [SessId]).
+    rpc:call(Worker, session_manager, terminate_session, [SessId]).
 
 %%--------------------------------------------------------------------
 %% @private

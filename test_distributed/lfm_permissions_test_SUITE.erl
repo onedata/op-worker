@@ -1865,7 +1865,7 @@ add_qos_entry_test(Config) ->
         operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:add_qos_entry(W, SessId, FileKey, [<<"country=FR">>], 1))
+            extract_ok(lfm_proxy:add_qos_entry(W, SessId, FileKey, <<"country=FR">>, 1))
         end
     }, Config).
 
@@ -1881,7 +1881,7 @@ get_qos_entry_test(Config) ->
             perms = [?read_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, QosEntryId} = lfm_proxy:add_qos_entry(
-                    W, FileOwnerSessId, {guid, Guid}, [<<"country=FR">>], 1
+                    W, FileOwnerSessId, {guid, Guid}, <<"country=FR">>, 1
                 ),
                 QosEntryId
             end 
@@ -1909,7 +1909,7 @@ remove_qos_entry_test(Config) ->
             perms = [?write_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, QosEntryId} = lfm_proxy:add_qos_entry(
-                    W, FileOwnerSessId, {guid, Guid}, [<<"country=FR">>], 1
+                    W, FileOwnerSessId, {guid, Guid}, <<"country=FR">>, 1
                 ),
                 QosEntryId
             end
@@ -1937,7 +1937,7 @@ get_effective_file_qos_test(Config) ->
             perms = [?read_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, _QosEntryId} = lfm_proxy:add_qos_entry(
-                    W, FileOwnerSessId, {guid, Guid}, [<<"country=FR">>], 1
+                    W, FileOwnerSessId, {guid, Guid}, <<"country=FR">>, 1
                 ),
                 {guid, Guid}
             end
@@ -1965,7 +1965,7 @@ check_qos_fulfillment_test(Config) ->
             perms = [?read_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, QosEntryId} = lfm_proxy:add_qos_entry(
-                    W, FileOwnerSessId, {guid, Guid}, [<<"country=FR">>], 1
+                    W, FileOwnerSessId, {guid, Guid}, <<"country=FR">>, 1
                 ),
                 QosEntryId
             end

@@ -45,7 +45,78 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
+                    }
+                }
+            }
+        }
+    },
+    "test_global_setup": {
+        "groups": {
+        },
+        "spaces": {
+            "space_id1": {
+                "displayed_name": "space_name1",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "supported_size": 10000000000
+                    }
+                }
+            },
+            "space_id2": {
+                "displayed_name": "space_name2",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "supported_size": 10000000000
+                    }
+                }
+            },
+            "space_id3": {
+                "displayed_name": "space_name4",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "supported_size": 10000000000
+                    }
+                }
+            },
+            "space_id4": {
+                "displayed_name": "space_name4",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "supported_size": 10000000000
+                    }
+                }
+            },
+            "space_id5": {
+                "displayed_name": "space_name5",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "supported_size": 10000000000
                     }
                 }
             }

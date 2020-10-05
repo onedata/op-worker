@@ -132,10 +132,10 @@ validate(#op_req{operation = delete} = Req, Entity) ->
     boolean().
 create_operation_supported(instance, private) -> true;
 create_operation_supported(object_id, private) -> true;
-create_operation_supported(attrs, private) -> true;
-create_operation_supported(xattrs, private) -> true;
-create_operation_supported(json_metadata, private) -> true;
-create_operation_supported(rdf_metadata, private) -> true;
+create_operation_supported(attrs, private) -> true;                 % REST/gs
+create_operation_supported(xattrs, private) -> true;                % REST/gs
+create_operation_supported(json_metadata, private) -> true;         % REST/gs
+create_operation_supported(rdf_metadata, private) -> true;          % REST/gs
 create_operation_supported(register_file, private) -> true;
 create_operation_supported(_, _) -> false.
 
@@ -163,18 +163,24 @@ data_spec_create(#gri{aspect = instance}) -> #{
 data_spec_create(#gri{aspect = object_id}) ->
     undefined;
 
-data_spec_create(#gri{aspect = attrs}) -> #{
-    required => #{
-        id => {binary, guid},
-        <<"mode">> => {binary, fun(Mode) ->
-            try
-                {true, binary_to_integer(Mode, 8)}
-            catch _:_ ->
-                throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
-            end
-        end}
-    }
-};
+data_spec_create(#gri{aspect = attrs}) ->
+    ModeParam = <<"mode">>,
+
+    #{
+        required => #{
+            id => {binary, guid},
+            ModeParam => {binary, fun(Mode) ->
+                try binary_to_integer(Mode, 8) of
+                    ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
+                        {true, ValidMode};
+                    _ ->
+                        throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(ModeParam, 0, 8#1777))
+                catch _:_ ->
+                    throw(?ERROR_BAD_VALUE_INTEGER(ModeParam))
+                end
+            end}
+        }
+    };
 
 data_spec_create(#gri{aspect = xattrs}) -> #{
     required => #{
@@ -203,10 +209,10 @@ data_spec_create(#gri{aspect = rdf_metadata}) -> #{
 
 data_spec_create(#gri{aspect = register_file}) -> #{
     required => #{
-        <<"spaceId">> => {binary, any},
-        <<"storageId">> => {binary, any},
-        <<"storageFileId">> => {binary, any},
-        <<"destinationPath">> => {binary, any}
+        <<"spaceId">> => {binary, non_empty},
+        <<"storageId">> => {binary, non_empty},
+        <<"storageFileId">> => {binary, non_empty},
+        <<"destinationPath">> => {binary, non_empty}
     },
     optional => #{
         <<"size">> => {integer, {not_lower_than, 0}},
@@ -272,9 +278,7 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     StorageId = maps:get(<<"storageId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId),
     middleware_utils:assert_space_supported_with_storage(SpaceId, StorageId),
-    middleware_utils:assert_imported_storage(StorageId),
-    middleware_utils:assert_file_registration_supported(StorageId),
-    middleware_utils:assert_sync_not_enabled(SpaceId, StorageId).
+    storage_import:assert_manual_import_mode(SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -362,26 +366,26 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     boolean().
 get_operation_supported(instance, private) -> true;
 get_operation_supported(instance, public) -> true;
-get_operation_supported(list, private) -> true;
-get_operation_supported(children, private) -> true;
-get_operation_supported(children, public) -> true;
+get_operation_supported(list, private) -> true;                 % REST only (deprecated)
+get_operation_supported(children, private) -> true;             % REST/gs
+get_operation_supported(children, public) -> true;              % REST/gs
 get_operation_supported(children_details, private) -> true;
 get_operation_supported(children_details, public) -> true;
-get_operation_supported(attrs, private) -> true;
-get_operation_supported(attrs, public) -> true;
-get_operation_supported(xattrs, private) -> true;
-get_operation_supported(xattrs, public) -> true;
-get_operation_supported(json_metadata, private) -> true;
-get_operation_supported(json_metadata, public) -> true;
-get_operation_supported(rdf_metadata, private) -> true;
-get_operation_supported(rdf_metadata, public) -> true;
-get_operation_supported(distribution, private) -> true;
+get_operation_supported(attrs, private) -> true;                % REST/gs
+get_operation_supported(attrs, public) -> true;                 % REST/gs
+get_operation_supported(xattrs, private) -> true;               % REST/gs
+get_operation_supported(xattrs, public) -> true;                % REST/gs
+get_operation_supported(json_metadata, private) -> true;        % REST/gs
+get_operation_supported(json_metadata, public) -> true;         % REST/gs
+get_operation_supported(rdf_metadata, private) -> true;         % REST/gs
+get_operation_supported(rdf_metadata, public) -> true;          % REST/gs
+get_operation_supported(distribution, private) -> true;         % REST/gs
 get_operation_supported(acl, private) -> true;
-get_operation_supported(shares, private) -> true;
+get_operation_supported(shares, private) -> true;               % gs only
 get_operation_supported(transfers, private) -> true;
-get_operation_supported(file_qos_summary, private) -> true;
-get_operation_supported(download_url, private) -> true;
-get_operation_supported(download_url, public) -> true;
+get_operation_supported(file_qos_summary, private) -> true;     % REST/gs
+get_operation_supported(download_url, private) -> true;         % gs only
+get_operation_supported(download_url, public) -> true;          % gs only
 get_operation_supported(_, _) -> false.
 
 
@@ -707,10 +711,8 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) -
     case page_file_download:get_file_download_url(SessionId, FileGuid) of
         {ok, URL} ->
             {ok, value, URL};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -806,9 +808,9 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 -spec delete_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
 delete_operation_supported(instance, private) -> true;
-delete_operation_supported(xattrs, private) -> true;
-delete_operation_supported(json_metadata, private) -> true;
-delete_operation_supported(rdf_metadata, private) -> true;
+delete_operation_supported(xattrs, private) -> true;                % REST/gs
+delete_operation_supported(json_metadata, private) -> true;         % REST/gs
+delete_operation_supported(rdf_metadata, private) -> true;          % REST/gs
 delete_operation_supported(_, _) -> false.
 
 
@@ -961,7 +963,7 @@ maybe_add_file_suffix(OriginalName, 0) ->
 maybe_add_file_suffix(OriginalName, Counter) ->
     RootName = filename:rootname(OriginalName),
     Ext = filename:extension(OriginalName),
-    str_utils:format_bin("~s(~B)~s", [RootName, Counter, Ext]).
+    str_utils:format_bin("~ts(~B)~ts", [RootName, Counter, Ext]).
 
 
 %% @private

@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module is responsible for traversing files tree in order to 
 %%% perform necessary clean up after space was unsupported, i.e foreach file: 
-%%%     * deletes it on storage (when storage sync is not enabled), 
+%%%     * deletes it on storage (if storage is not imported),
 %%%     * deletes file_qos document
 %%%     * deletes local file_location or dir_location document
 %%% 
@@ -63,8 +63,8 @@ start(SpaceId, StorageId) ->
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
         traverse_info => #{
-            % do not remove storage files if storage sync was enabled
-            remove_storage_files => not storage_sync:is_import_enabled(SpaceId, StorageId)
+            % do not remove storage files if storage was imported
+            remove_storage_files => not storage:is_imported(StorageId)
         },
         additional_data => #{
             <<"space_id">> => SpaceId,
@@ -151,7 +151,7 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId)
     FileCtx = file_ctx:new_by_guid(FileGuid),
     #{remove_storage_files := RemoveStorageFiles} = TraverseInfo,
     
-    ok = file_qos:delete(FileUuid),
+    fslogic_delete:remove_local_associated_documents(FileCtx),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     LocationId = file_location:local_id(FileUuid),
     
@@ -178,6 +178,7 @@ gen_id(SpaceId, StorageId) ->
 -spec cleanup_dir(id(), file_ctx:ctx(), boolean()) -> ok.
 cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
+
     RemoveStorageFiles andalso sd_utils:rmdir(FileCtx, UserCtx),
     dir_location:delete(file_ctx:get_uuid_const(FileCtx)),
     cleanup_traverse_status:delete(TaskId, file_ctx:get_uuid_const(FileCtx)),

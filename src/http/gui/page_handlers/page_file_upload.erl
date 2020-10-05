@@ -121,7 +121,7 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
 
     SpaceId = file_id:guid_to_space_id(FileGuid),
     Offset = ChunkSize * (ChunkNumber - 1),
-    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, FileGuid}, write)),
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, write)),
 
     try
         file_upload_utils:upload_file(
@@ -129,7 +129,7 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
             fun cowboy_req:read_part_body/2, read_body_opts(SpaceId)
         )
     after
-        lfm:release(FileHandle) % release if possible
+        lfm:monitored_release(FileHandle) % release if possible
     end.
 
 

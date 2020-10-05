@@ -82,36 +82,36 @@ counting_file_open_and_release_test(Config) ->
     {ok, SessId} = init_session(Worker, <<"nonce">>),
     FileCtx = file_ctx:new_by_guid(?FILE_GUID),
 
-    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(false, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileCtx, SessId, 30, undefined])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileCtx, SessId, 70, undefined])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
         [FileCtx, SessId, 50])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
         [FileCtx, SessId, 30])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
         [FileCtx, SessId, 20])),
-    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(false, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     %% Release of non existing file should not fail.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
         [FileCtx, SessId, 50])),
-    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(false, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileCtx, SessId, 1, undefined])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     %% Release of file marked to remove should trigger call to file deletion worker.
     ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx, ?LOCAL_REMOVE])),
@@ -126,14 +126,14 @@ invalidating_session_open_files_test(Config) ->
 
     {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     %% With one active session entry for UUID should be removed after its expiration.
-    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(false, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileCtx, SessId1, 30, undefined])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
-    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(false, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     {ok, SessId2} = init_session(Worker, <<"nonce_2">>),
@@ -141,24 +141,24 @@ invalidating_session_open_files_test(Config) ->
     %% all of them expired.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileCtx, SessId1, 30, undefined])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileCtx, SessId2, 30, undefined])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId2])),
-    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(false, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     %% Last session expiration should trigger call to file deletion worker when
     %% file is marked to remove.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileCtx, SessId1, 30, undefined])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, is_file_opened, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx, ?LOCAL_REMOVE])),
     ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
@@ -254,7 +254,7 @@ deletion_of_not_open_file_test_base(Config, DeferredFileCreation) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     FileCtx = file_ctx:new_by_guid(FileGuid),
 
-    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUuid])),
+    ?assertEqual(false, rpc:call(Worker, file_handles, is_file_opened, [FileUuid])),
     ?assertEqual(ok, rpc:call(Worker, fslogic_delete, delete_file_locally, [UserCtx, FileCtx, false])),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),

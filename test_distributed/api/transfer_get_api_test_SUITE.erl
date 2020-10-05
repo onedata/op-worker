@@ -102,12 +102,12 @@ get_transfer_status_test_base(Config, TransferType, DataSourceType) ->
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
     % Start transfer and check returned stats for ongoing transfer (transfer is prolonged via mock)
-    EnvRef = api_test_env:init(),
+    MemRef = api_test_memory:init(),
     SetupFun = transfer_api_test_utils:build_env_with_started_transfer_setup_fun(
-        TransferType, EnvRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
+        TransferType, MemRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
     ),
     SetupFun(),
-    #{transfer_id := TransferId} = TransferDetails = api_test_env:get(EnvRef, transfer_details),
+    #{transfer_id := TransferId} = TransferDetails = api_test_memory:get(MemRef, transfer_details),
 
     get_transfer_status_test_base(Config, TransferType, DataSourceType, TransferDetails, ongoing),
     transfer_api_test_utils:await_transfer_end(Providers, TransferId, TransferType),
@@ -202,7 +202,7 @@ build_get_transfer_status_validate_rest_call_result_fun(TransferType, DataSource
         assert_proper_histograms_in_get_status_rest_response(TransferType, ExpState, Env, Body),
 
         CreationTime = maps:get(creation_time, Env),
-        Now = time_utils:system_time_millis() div 1000,
+        Now = time_utils:timestamp_millis() div 1000,
         assert_proper_times_in_get_status_rest_response(ExpState, CreationTime, Now, Body)
     end.
 
@@ -427,7 +427,7 @@ build_get_transfer_status_validate_gs_call_result_fun(DataSourceType, ExpState, 
                 ?assert(0 == StartTime orelse ScheduleTime =< StartTime),
                 ?assertEqual(null, FinishTime);
             ended ->
-                Now = time_utils:system_time_millis() div 1000,
+                Now = time_utils:timestamp_millis() div 1000,
 
                 ?assert(not IsOngoing),
                 ?assert(CreationTime =< ScheduleTime),
@@ -453,13 +453,13 @@ get_rerun_transfer_status(Config) ->
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
-    EnvRef = api_test_env:init(),
+    MemRef = api_test_memory:init(),
     SetupFun = transfer_api_test_utils:build_env_with_started_transfer_setup_fun(
-        TransferType, EnvRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
+        TransferType, MemRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
     ),
     SetupFun(),
 
-    #{transfer_id := TransferId} = TransferDetails = api_test_env:get(EnvRef, transfer_details),
+    #{transfer_id := TransferId} = TransferDetails = api_test_memory:get(MemRef, transfer_details),
     transfer_api_test_utils:await_transfer_end(Providers, TransferId, TransferType),
     get_rerun_transfer_status(Config, TransferType, TransferDetails, null, TransferId, <<"completed">>),
 
@@ -527,7 +527,7 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
         end, ?config(op_worker_nodes, NewConfig2)),
-        application:start(ssl),
+        ssl:start(),
         hackney:start(),
         NewConfig3 = initializer:create_test_users_and_spaces(
             ?TEST_FILE(NewConfig2, "env_desc.json"),
@@ -541,7 +541,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     hackney:stop(),
-    application:stop(ssl),
+    ssl:stop(),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:teardown_storage(Config).
 

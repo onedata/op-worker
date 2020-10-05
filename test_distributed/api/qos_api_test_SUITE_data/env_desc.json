@@ -61,7 +61,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -95,7 +95,7 @@
                             "127.0.0.1:49161"
                         ],
                         "oz_domain": "oz",
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
                     }
                 }
             }
@@ -139,6 +139,20 @@
                     }
                 }
             }
+        },
+        "storages": {
+            "p1": {"/mnt/st1": {
+                "qos_parameters" : {
+                    "geo" : "PL",
+                    "some_number": 8
+                }
+            }},
+            "p2": {"/mnt/st2": {
+                "qos_parameters" : {
+                    "geo" : "FR",
+                    "other_number": 64
+                }
+            }}
         }
     }
 }

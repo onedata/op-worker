@@ -53,24 +53,19 @@ failure_test(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        onenv_test_utils:prepare_base_test_config(NewConfig)
+        provider_onenv_test_utils:initialize(NewConfig)
     end,
     test_config:set_many(Config, [
-        {add_envs, [op_worker, op_worker, [{key, value}]]},
-        {add_envs, [op_worker, cluster_worker, [{key, value}]]},
-        {add_envs, [oz_worker, cluster_worker, [{key, value}]]},
-        {add_envs, [cluster_manager, cluster_manager, [{key, value}]]},
         {set_onenv_scenario, ["1op"]}, % name of yaml file in test_distributed/onenv_scenarios
         {set_posthook, Posthook}
     ]).
 
 init_per_testcase(_Case, Config) ->
-    lfm_proxy:init(Config, false).
-
-
-end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config),
     Config.
+
+
+end_per_testcase(_Case, _Config) ->
+    ok.
 
 end_per_suite(_Config) ->
     ok.

@@ -31,26 +31,27 @@ all() -> ?ALL([
 
 update_version_info_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_cluster),
+    
+    ClusterGriMatcher = #gri{type = od_cluster, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, ClusterGriMatcher),
 
     ?assertMatch(
         ok,
         rpc:call(Node, cluster_logic, update_version_info, [<<"1">>, <<"2">>, <<"3">>])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_cluster)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ClusterGriMatcher)),
 
     ?assertMatch(
         ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>),
         rpc:call(Node, cluster_logic, update_version_info, [1, 2, 3])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_cluster)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ClusterGriMatcher)),
 
     ?assertMatch(
         ok,
         rpc:call(Node, cluster_logic, update_version_info, [<<"a">>, <<"b">>, <<"c">>])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_cluster)).
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, ClusterGriMatcher)).
 
 
 %%%===================================================================

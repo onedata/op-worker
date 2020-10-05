@@ -55,7 +55,6 @@ get_models() -> [
     permissions_cache_helper2,
     times,
     helper_handle,
-    space_strategies,
     file_popularity,
     space_transfer_stats,
     space_transfer_stats_cache,
@@ -63,7 +62,6 @@ get_models() -> [
     transferred_file,
     autocleaning,
     dir_location,
-    storage_sync_monitoring,
     storage_sync_info,
     replica_deletion,
     replica_deletion_lock,
@@ -82,10 +80,17 @@ get_models() -> [
     space_unsupport_job,
     cleanup_traverse_status,
     luma_db,
+    storage_import_config,
+    storage_import_monitoring,
+    process_handles,
 
-    %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
+    %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
     space_storage,
-    storage
+    storage,
+
+    %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+    space_strategies,
+    storage_sync_monitoring
 ].
 
 %%--------------------------------------------------------------------
@@ -104,4 +109,4 @@ get_throttled_models() ->
 %%--------------------------------------------------------------------
 -spec get_timestamp() -> datastore_doc:timestamp().
 get_timestamp() ->
-    provider_logic:zone_time_seconds().
+    time_utils:timestamp_seconds().

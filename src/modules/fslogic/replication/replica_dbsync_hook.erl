@@ -303,8 +303,8 @@ notify_attrs_change_if_necessary(FileCtx,
 -spec maybe_truncate_file_on_storage(file_ctx:ctx(), non_neg_integer(),
     non_neg_integer()) -> {ok, file_ctx:ctx()}.
 maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize > NewSize ->
-    {IsImportOn, FileCtx2} = file_ctx:is_space_synced(FileCtx),
-    case IsImportOn of
+    {IsImportedStorage, FileCtx2} = file_ctx:is_imported_storage(FileCtx),
+    case IsImportedStorage of
         true ->
             {ok, FileCtx2};
         false ->

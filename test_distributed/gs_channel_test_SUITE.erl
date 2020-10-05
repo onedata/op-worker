@@ -182,12 +182,12 @@ async_request_handling_test(Config) ->
     end, lists:seq(1, 5)),
 
     % Short requests are made in parallel and the results are collected (blocks the test process)
-    Start = time_utils:system_time_millis(),
+    Start = time_utils:timestamp_millis(),
     lists_utils:pforeach(fun(_) ->
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     end, lists:seq(1, 20)),
     % Processing time should be shorter than for harvest requests
-    End = time_utils:system_time_millis(),
+    End = time_utils:timestamp_millis(),
     ?assert(End - Start < 15000),
 
 
@@ -238,7 +238,7 @@ init_per_suite(Config) ->
 init_per_testcase(oz_connection_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     % Modify env variables to ensure frequent reconnect attempts
-    test_utils:set_env(Nodes, ?APP_NAME, graph_sync_healthcheck_interval, 1000),
+    test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_base_interval, 1000),
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_backoff_rate, 1),
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_max_backoff, 1000),
     % In oz_connection_test, start with a bad connection path to test connection

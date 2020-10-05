@@ -85,12 +85,16 @@ get_children(UserCtx, FileCtx, Offset, Limit, Token) ->
 ) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
-    {ChildrenWhiteList, FileCtx1} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx0,
-        [traverse_ancestors, ?list_container]
+    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+    PermsToCheck = case IsDir of
+        true -> [traverse_ancestors, ?list_container];
+        false -> [traverse_ancestors]
+    end,
+    {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+        UserCtx, FileCtx1, PermsToCheck
     ),
     get_children_insecure(
-        UserCtx, FileCtx1, Offset, Limit, Token, StartId, ChildrenWhiteList
+        UserCtx, FileCtx2, Offset, Limit, Token, StartId, ChildrenWhiteList
     ).
 
 
@@ -108,12 +112,16 @@ get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
 ) ->
     fslogic_worker:fuse_response().
 get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token, IncludeReplicationStatus) ->
-    {ChildrenWhiteList, FileCtx1} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx0,
-        [traverse_ancestors, ?traverse_container, ?list_container]
+    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+    PermsToCheck = case IsDir of
+        true -> [traverse_ancestors, ?traverse_container, ?list_container];
+        false -> [traverse_ancestors]
+    end,
+    {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+        UserCtx, FileCtx1, PermsToCheck
     ),
     get_children_attrs_insecure(
-        UserCtx, FileCtx1, Offset, Limit, Token, IncludeReplicationStatus, ChildrenWhiteList
+        UserCtx, FileCtx2, Offset, Limit, Token, IncludeReplicationStatus, ChildrenWhiteList
     ).
 
 
@@ -130,12 +138,16 @@ get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token, IncludeReplicationSt
 ) ->
     fslogic_worker:fuse_response().
 get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
-    {ChildrenWhiteList, FileCtx1} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx0,
-        [traverse_ancestors, ?traverse_container, ?list_container]
+    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+    PermsToCheck = case IsDir of
+        true -> [traverse_ancestors, ?traverse_container, ?list_container];
+        false -> [traverse_ancestors]
+    end,
+    {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+        UserCtx, FileCtx1, PermsToCheck
     ),
     get_children_details_insecure(
-        UserCtx, FileCtx1, Offset, Limit, StartId, ChildrenWhiteList
+        UserCtx, FileCtx2, Offset, Limit, StartId, ChildrenWhiteList
     ).
 
 
@@ -160,7 +172,7 @@ get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
-    CTime = time_utils:cluster_time_seconds(),
+    CTime = time_utils:timestamp_seconds(),
     Owner = user_ctx:get_user_id(UserCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
