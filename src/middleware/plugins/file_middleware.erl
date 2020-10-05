@@ -369,8 +369,8 @@ get_operation_supported(instance, public) -> true;
 get_operation_supported(list, private) -> true;                 % REST only (deprecated)
 get_operation_supported(children, private) -> true;             % REST/gs
 get_operation_supported(children, public) -> true;              % REST/gs
-get_operation_supported(children_details, private) -> true;
-get_operation_supported(children_details, public) -> true;
+get_operation_supported(children_details, private) -> true;     % gs only
+get_operation_supported(children_details, public) -> true;      % gs only
 get_operation_supported(attrs, private) -> true;                % REST/gs
 get_operation_supported(attrs, public) -> true;                 % REST/gs
 get_operation_supported(xattrs, private) -> true;               % REST/gs

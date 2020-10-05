@@ -27,6 +27,7 @@
     get_dir_children_test/1,
     get_shared_dir_children_test/1,
     get_file_children_test/1,
+    get_shared_file_children_test/1,
     get_user_root_dir_children_test/1,
     get_dir_children_on_provider_not_supporting_space_test/1
 ]).
@@ -35,6 +36,7 @@ all() -> [
     get_dir_children_test,
     get_shared_dir_children_test,
     get_file_children_test,
+    get_shared_file_children_test,
     get_user_root_dir_children_test,
     get_dir_children_on_provider_not_supporting_space_test
 ].
@@ -59,6 +61,13 @@ get_dir_children_test(Config) ->
     {DirPath, DirGuid, _ShareId, Files} = create_get_children_tests_env(Config, normal_mode),
 
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+
+    ValidateGdPublicApiCallResultFun = fun(#api_test_ctx{client = Client}, Result) ->
+        case Client of
+            ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
+            _ -> ?assertMatch(?ERROR_FORBIDDEN, Result)
+        end
+    end,
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
@@ -90,7 +99,7 @@ get_dir_children_test(Config) ->
                     end
                 },
                 #scenario_template{
-                    name = <<"List normal dir using gs api">>,
+                    name = <<"List normal dir using gs private api">>,
                     type = gs,
                     prepare_args_fun = build_get_children_prepare_gs_args_fun(DirGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
@@ -98,7 +107,7 @@ get_dir_children_test(Config) ->
                     end
                 },
                 #scenario_template{
-                    name = <<"List normal dir children details using gs api">>,
+                    name = <<"List normal dir children details using gs private api">>,
                     type = gs,
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(DirGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
@@ -110,6 +119,24 @@ get_dir_children_test(Config) ->
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, undefined, get_children_data_spec()
             )
+        },
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = #client_spec{correct = [nobody, user1, user2, user3, user4]},
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"List normal dir using gs public api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_children_prepare_gs_args_fun(DirGuid, public),
+                    validate_result_fun = ValidateGdPublicApiCallResultFun
+                },
+                #scenario_template{
+                    name = <<"List normal dir children details using gs public api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(DirGuid, public),
+                    validate_result_fun = ValidateGdPublicApiCallResultFun
+                }
+            ]
         }
     ])).
 
@@ -241,6 +268,13 @@ get_file_children_test(Config) ->
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
+    ValidateGdPublicApiCallResultFun = fun(#api_test_ctx{client = Client}, Result) ->
+        case Client of
+            ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
+            _ -> ?assertMatch(?ERROR_FORBIDDEN, Result)
+        end
+    end,
+
     % Listing file result in returning this file info only - index/limit parameters are ignored.
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
@@ -290,7 +324,7 @@ get_file_children_test(Config) ->
                     end
                 },
                 #scenario_template{
-                    name = <<"List file using gs api">>,
+                    name = <<"List file using gs private api">>,
                     type = gs,
                     prepare_args_fun = build_get_children_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
@@ -298,7 +332,7 @@ get_file_children_test(Config) ->
                     end
                 },
                 #scenario_template{
-                    name = <<"List file details using gs api">>,
+                    name = <<"List file details using gs private api">>,
                     type = gs,
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = _Data}, {ok, Result}) ->
@@ -311,6 +345,124 @@ get_file_children_test(Config) ->
             randomly_select_scenarios = true,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, undefined, get_children_data_spec()
+            )
+        },
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = #client_spec{correct = [nobody, user1, user2, user3, user4]},
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"List file using gs public api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_children_prepare_gs_args_fun(FileGuid, public),
+                    validate_result_fun = ValidateGdPublicApiCallResultFun
+                },
+                #scenario_template{
+                    name = <<"List file details using gs public api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(FileGuid, public),
+                    validate_result_fun = ValidateGdPublicApiCallResultFun
+                }
+            ]
+        }
+    ])).
+
+
+get_shared_file_children_test(Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P1Node, P2Node],
+
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+
+    {_FileType, _FilePath, FileGuid, #file_details{
+        file_attr = FileAttrs = #file_attr{
+            guid = FileGuid,
+            name = FileName,
+            shares = Shares
+        }
+    } = FileDetails0} = api_test_utils:create_file_in_space2_with_additional_metadata(
+        <<"/", ?SPACE_2/binary>>, false, <<"file">>, ?RANDOM_FILE_NAME(), Config
+    ),
+
+    ShareId = api_test_utils:share_file_and_sync_file_attrs(
+        P1Node, SpaceOwnerSessIdP1, Providers, FileGuid
+    ),
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+    {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
+
+    FileDetails1 = FileDetails0#file_details{
+        file_attr = FileAttrs#file_attr{shares = [ShareId | Shares]}
+    },
+
+    % Listing file result in returning this file info only - index/limit parameters are ignored.
+    ?assert(onenv_api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"List shared file using /data/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(ShareFileObjectId),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
+                        ?assertEqual(#{<<"children">> => [#{
+                            <<"id">> => ShareFileObjectId,
+                            <<"name">> => FileName
+                        }]}, Response)
+                    end
+                },
+                % Old endpoint returns "id" and "path" - for now get_path is forbidden
+                % for shares so this method returns ?ERROR_NOT_SUPPORTED in case of
+                % listing share dir
+                #scenario_template{
+                    name = <<"List shared file using deprecated /files-id/ rest endpoint">>,
+                    type = rest_not_supported,
+                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(ShareFileObjectId),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, _, Response}) ->
+                        ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
+                    end
+                },
+                #scenario_template{
+                    name = <<"List shared file using gs api with public scope">>,
+                    type = gs,
+                    prepare_args_fun = build_get_children_prepare_gs_args_fun(ShareFileGuid, public),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
+                        ?assertEqual(#{<<"children">> => [ShareFileGuid]}, Result)
+                    end
+                },
+                #scenario_template{
+                    name = <<"List shared file details using gs private api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(ShareFileGuid, private),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
+                        ?assertEqual(#{
+                            <<"children">> => [file_details_to_gs_json(ShareId, FileDetails1)]
+                        }, Result)
+                    end
+                }
+                % 'private' scope is forbidden for shares even if user would be able to
+                % list children using normal guid
+                #scenario_template{
+                    name = <<"List shared file using gs api with private scope">>,
+                    type = gs_with_shared_guid_and_aspect_private,
+                    prepare_args_fun = build_get_children_prepare_gs_args_fun(ShareFileGuid, private),
+                    validate_result_fun = fun(_TestCaseCtx, Result) ->
+                        ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                    end
+                },
+                #scenario_template{
+                    name = <<"List shared file children details using gs api with private scope">>,
+                    type = gs_with_shared_guid_and_aspect_private,
+                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(ShareFileGuid, private),
+                    validate_result_fun = fun(_TestCaseCtx, Result) ->
+                        ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                    end
+                }
+            ],
+            randomly_select_scenarios = true,
+            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+                FileGuid, ShareId, get_children_data_spec()
             )
         }
     ])).
