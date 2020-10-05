@@ -76,6 +76,7 @@ test_base(Config, InitialData, StopAppBeforeKill) ->
         end
     end,
 
+    % Error appears if provider dit not manage to connect to zone so a few tries are needed
     {ok, UpdatedConfig} = ?assertMatch({ok, _}, RestartSession(), 30),
     ct:pal("Node restarted"),
 
@@ -152,52 +153,6 @@ verify(Config, #{p1_dir := P1DirGuid, p2_dir := P2DirGuid} = _InitialData, TestD
             test_dir_after_node_restart(Config, P2DirGuid)
     end.
 
-create_files_and_dirs(Worker, SessId, ParentUuid) ->
-    Dirs = lists:map(fun(_) ->
-        Dir = generator:gen_name(),
-        {ok, DirGuid} = ?assertMatch({ok, _}, rpc:call(Worker, lfm, mkdir, [SessId, ParentUuid, Dir, 8#755], 5000)),
-        DirGuid
-    end, lists:seq(1, 20)),
-
-    Files = lists:map(fun(_) ->
-        File = generator:gen_name(),
-        {ok, FileGuid} = ?assertMatch({ok, _}, rpc:call(Worker, lfm, create, [SessId, ParentUuid, File, 8#755], 5000)),
-        {ok, Handle} = ?assertMatch({ok, _}, rpc:call(Worker, lfm, open, [SessId, {guid, FileGuid}, rdwr], 5000)),
-        {ok, NewHandle, _} = ?assertMatch({ok, _, _}, rpc:call(Worker, lfm, write,  [Handle, 0, ?FILE_DATA], 5000)),
-        ?assertEqual(ok, rpc:call(Worker, lfm, fsync, [NewHandle], 35000)),
-        ?assertEqual(ok, rpc:call(Worker, lfm, release, [NewHandle], 5000)),
-        FileGuid
-    end, lists:seq(1, 50)),
-
-    {Dirs, Files}.
-
-verify_files_and_dirs(Worker, SessId, {Dirs, Files}) ->
-    lists:foreach(fun(Dir) ->
-        ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-            rpc:call(Worker, lfm, stat, [SessId, {guid, Dir}], 1000), 30)
-    end, Dirs),
-
-    FileDataSize = size(?FILE_DATA),
-    lists:foreach(fun(File) ->
-        ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileDataSize}},
-            rpc:call(Worker, lfm, stat, [SessId, {guid, File}], 1000), 30)
-    end, Files),
-
-    lists:foreach(fun(File) ->
-        ?assertEqual(FileDataSize,
-            begin
-                {ok, Handle} = rpc:call(Worker, lfm, open, [SessId, {guid, File}, rdwr]),
-                try
-                    {ok, _, ReadData} = rpc:call(Worker, lfm, check_size_and_read, [Handle, 0, 1000]), % use check_size_and_read because of null helper usage
-                    size(ReadData) % compare size because of null helper usage
-                catch
-                    E1:E2 -> {E1, E2}
-                after
-                    rpc:call(Worker, lfm, release, [Handle])
-                end
-            end, 30)
-    end, Files).
-
 verify_dir_after_node_restart(Worker, SessId, TestData) ->
     verify_files_and_dirs(Worker, SessId, maps:get(p2_root, TestData)),
     verify_files_and_dirs(Worker, SessId, maps:get(p2_local, TestData)),
@@ -214,18 +169,18 @@ test_dir_after_node_restart(Config, Dir) ->
     verify_files_and_dirs(WorkerP1, SessId(P1), TestData),
     verify_files_and_dirs(WorkerP2, SessId(P2), TestData).
 
+create_files_and_dirs(Worker, SessId, ParentUuid) ->
+    failure_test_utils:create_files_and_dirs(Worker, SessId, ParentUuid, 20, 50).
+
+verify_files_and_dirs(Worker, SessId, DirsAndFiles) ->
+    failure_test_utils:verify_files_and_dirs(Worker, SessId, DirsAndFiles, 30).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        provider_onenv_test_utils:initialize(NewConfig)
-    end,
-    test_config:set_many(Config, [
-        {set_onenv_scenario, ["2op"]}, % name of yaml file in test_distributed/onenv_scenarios
-        {set_posthook, Posthook}
-    ]).
+    failure_test_utils:init_per_suite(Config, "2op").
 
 init_per_testcase(_Case, Config) ->
     Config.

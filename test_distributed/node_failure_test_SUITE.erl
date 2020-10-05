@@ -31,8 +31,6 @@ all() -> [
     failure_test
 ].
 
--define(FILE_DATA, <<"1234567890abcd">>).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -126,7 +124,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     ok = onenv_test_utils:disable_panel_healthcheck(Config),
 
     ct:pal("Init tests using node ~p", [WorkerToKillP1]),
-    {Dirs, Files} = create_dirs_and_files(WorkerToKillP1, SpaceGuid, SessId(P1)),
+    DirsAndFiles = create_dirs_and_files(WorkerToKillP1, SessId(P1), SpaceGuid),
 
     ok = onenv_test_utils:kill_node(Config, WorkerToKillP1),
     ok = onenv_test_utils:kill_node(Config, WorkerToKillP2),
@@ -134,10 +132,10 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 10),
     ct:pal("Killed nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
 
-    verify_files_and_dirs(WorkerToCheckP2, SessId(P2), Attempts, Dirs, Files),
+    failure_test_utils:verify_files_and_dirs(WorkerToCheckP2, SessId(P2), DirsAndFiles, Attempts),
     ct:pal("Check after kill done"),
     timer:sleep(5000),
-    {Dirs2, Files2} = create_dirs_and_files(WorkerToCheckP1, SpaceGuid, SessId(P1)),
+    DirsAndFiles2 = create_dirs_and_files(WorkerToCheckP1, SessId(P1), SpaceGuid),
     ct:pal("New dirs and files created"),
 
     ok = onenv_test_utils:start_node(Config, WorkerToKillP1),
@@ -147,9 +145,9 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     timer:sleep(3000), % TODO - better check node status to be sure that it is running
     ct:pal("Started nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
 
-    verify_files_and_dirs(WorkerToKillP1, SessId(P1), Attempts, Dirs2, Files2),
+    failure_test_utils:verify_files_and_dirs(WorkerToKillP1, SessId(P1), DirsAndFiles2, Attempts),
     ct:pal("Check after restart on P1 done"),
-    verify_files_and_dirs(WorkerToKillP2, SessId(P2), Attempts, Dirs2, Files2),
+    failure_test_utils:verify_files_and_dirs(WorkerToKillP2, SessId(P2), DirsAndFiles2, Attempts),
     ct:pal("Check after restart on P2 done"),
 
     ok.
@@ -160,15 +158,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        provider_onenv_test_utils:initialize(NewConfig)
-    end,
-    test_config:set_many(Config, [
-        {add_envs, [op_worker, op_worker, [{session_validity_check_interval_seconds, 1800}]]},
-        {add_envs, [op_worker, op_worker, [{fuse_session_grace_period_seconds, 1800}]]},
-        {set_onenv_scenario, ["2op-2nodes"]}, % name of yaml file in test_distributed/onenv_scenarios
-        {set_posthook, Posthook}
-    ]).
+    failure_test_utils:init_per_suite(Config, "2op-2nodes").
 
 init_per_testcase(_Case, Config) ->
     Config.
@@ -184,48 +174,5 @@ end_per_suite(_Config) ->
 %%% Internal functions
 %%%===================================================================
 
-create_dirs_and_files(Worker, SpaceGuid, SessId) ->
-    Dirs = lists:map(fun(_) ->
-        Dir = generator:gen_name(),
-        {ok, DirGuid} = ?assertMatch({ok, _}, rpc:call(Worker, lfm, mkdir, [SessId, SpaceGuid, Dir, 8#755], 5000)),
-        DirGuid
-    end, lists:seq(1, 1)),
-
-    Files = lists:map(fun(_) ->
-        File = generator:gen_name(),
-        {ok, FileGuid} = ?assertMatch({ok, _}, rpc:call(Worker, lfm, create, [SessId, SpaceGuid, File, 8#755], 5000)),
-        {ok, Handle} = ?assertMatch({ok, _}, rpc:call(Worker, lfm, open, [SessId, {guid, FileGuid}, rdwr], 5000)),
-        {ok, NewHandle, _} = ?assertMatch({ok, _, _}, rpc:call(Worker, lfm, write,  [Handle, 0, ?FILE_DATA], 5000)),
-        ?assertEqual(ok, rpc:call(Worker, lfm, fsync, [NewHandle], 35000)),
-        ?assertEqual(ok, rpc:call(Worker, lfm, release, [NewHandle], 5000)),
-        FileGuid
-    end, lists:seq(1, 1)),
-
-    {Dirs, Files}.
-
-verify_files_and_dirs(Worker, SessId, Attempts, Dirs, Files) ->
-    lists:foreach(fun(Dir) ->
-        ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-            rpc:call(Worker, lfm, stat, [SessId, {guid, Dir}], 1000), Attempts)
-    end, Dirs),
-
-    FileDataSize = size(?FILE_DATA),
-    lists:foreach(fun(File) ->
-        ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileDataSize}},
-            rpc:call(Worker, lfm, stat, [SessId, {guid, File}], 1000), Attempts)
-    end, Files),
-
-    lists:foreach(fun(File) ->
-        ?assertEqual(FileDataSize,
-            begin
-                {ok, Handle} = rpc:call(Worker, lfm, open, [SessId, {guid, File}, rdwr]),
-                try
-                    {ok, _, ReadData} = rpc:call(Worker, lfm, check_size_and_read, [Handle, 0, 1000]), % use check_size_and_read because of null helper usage
-                    size(ReadData) % compare size because of null helper usage
-                catch
-                    E1:E2 -> {E1, E2}
-                after
-                    rpc:call(Worker, lfm, release, [Handle])
-                end
-            end, Attempts)
-    end, Files).
+create_dirs_and_files(Worker, SessId, SpaceGuid) ->
+    failure_test_utils:create_files_and_dirs(Worker, SessId, SpaceGuid, 1, 1).
