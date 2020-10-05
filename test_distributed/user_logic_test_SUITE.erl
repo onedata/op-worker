@@ -228,12 +228,15 @@ get_shared_data_test(Config) ->
     % Other user should be able to fetch the data through common membership
     % in space. Number of calls should rise because common space has to be
     % fetched to verify authorization.
-    % fixme check that space calls are updated
+    
+    SpaceGriMatcher =  #gri{type = od_space, id = ?SPACE_1, aspect = instance, _ = '_'},
+    SpaceGraphCalls = logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher),
     ?assertMatch(
         {ok, ?USER_SHARED_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get_shared_data, [User2Sess, ?USER_1, ?THROUGH_SPACE(?SPACE_1)])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
+    ?assertEqual(SpaceGraphCalls + 1, logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher)),
 
     ?assertMatch(
         ?ERROR_FORBIDDEN,
