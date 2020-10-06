@@ -66,18 +66,8 @@ test_base(Config, InitialData, StopAppBeforeKill) ->
 
     ok = onenv_test_utils:start_node(Config, WorkerP1),
     ?assertMatch({ok, _}, rpc:call(WorkerP1, provider_auth, get_provider_id, []), 60),
-
-    RestartSession = fun() ->
-        try
-            {ok, provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config))}
-        catch
-            Error:Reason  ->
-                {error, {Error, Reason}}
-        end
-    end,
-
-    % Error appears if provider dit not manage to connect to zone so a few tries are needed
-    {ok, UpdatedConfig} = ?assertMatch({ok, _}, RestartSession(), 30),
+    ?assertEqual(true, rpc:call(WorkerP1, gs_channel_service, is_connected, []), 30),
+    UpdatedConfig = provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
     ct:pal("Node restarted"),
 
     verify(UpdatedConfig, InitialData, TestData, StopAppBeforeKill),

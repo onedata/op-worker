@@ -48,8 +48,8 @@ db_error_test(Config) ->
     onenv_test_utils:disable_panel_healthcheck(Config),
 
     DirsAndFiles = failure_test_utils:create_files_and_dirs(Worker, SessId, SpaceGuid, 20, 50),
+    disable_db(),
     ct:pal("Test data created"),
-    disable_db(Config),
 
     ct:pal("Stopping application"),
     Master = self(),
@@ -62,13 +62,13 @@ db_error_test(Config) ->
         end
     end),
 
-    timer:sleep(timer:seconds(11)),
-    enable_db(Config),
+    timer:sleep(timer:seconds(15)),
+    enable_db(),
 
     StopMsg = receive
         {application_stop, StopAns} -> StopAns
     after
-        timer:seconds(30) -> timeout
+        timer:minutes(2) -> timeout
     end,
     ?assertEqual(ok, StopMsg),
     ct:pal("Application stopped"),
@@ -80,25 +80,16 @@ db_error_test(Config) ->
     ok = onenv_test_utils:start_node(Config, Worker),
     ?assertMatch({ok, _}, rpc:call(Worker, provider_auth, get_provider_id, []), 60),
 
-    RestartSession = fun() ->
-        try
-            {ok, provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config))}
-        catch
-            Error:Reason  ->
-                {error, {Error, Reason}}
-        end
-    end,
-
-    % Error appears if provider dit not manage to connect to zone so a few tries are needed
-    {ok, UpdatedConfig} = ?assertMatch({ok, _}, RestartSession(), 30),
+    ?assertEqual(true, rpc:call(Worker, gs_channel_service, is_connected, []), 30),
+    UpdatedConfig = provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
     RecreatedSessId = test_config:get_user_session_id_on_provider(UpdatedConfig, User1, ProviderId),
     mock_cberl(UpdatedConfig, true),
     ct:pal("Node restarted"),
 
-    disable_db(Config),
+    disable_db(),
     test_read_operations_on_db_error(Worker, RecreatedSessId, DirsAndFiles),
     test_write_operations_on_db_error(Worker, RecreatedSessId, SpaceGuid),
-    enable_db(Config),
+    enable_db(),
 
     ct:pal("Verifying test data"),
     failure_test_utils:verify_files_and_dirs(Worker, RecreatedSessId, DirsAndFiles, 1),
@@ -125,14 +116,12 @@ test_read_operations_on_db_error(Worker, SessId, {Dirs, Files}) ->
         ?assertMatch({error, ?EAGAIN}, rpc:call(Worker, lfm, open, [SessId, {guid, File}, rdwr]))
     end, Files).
 
-disable_db(Config) ->
-    [Worker] = test_config:get_all_op_worker_nodes(Config),
-    rpc:call(Worker, application, set_env, [?APP_NAME, emulate_db_error, true]).
+disable_db() ->
+    application:set_env(?APP_NAME, emulate_db_error, true).
 
 
-enable_db(Config) ->
-    [Worker] = test_config:get_all_op_worker_nodes(Config),
-    rpc:call(Worker, application, set_env, [?APP_NAME, emulate_db_error, false]).
+enable_db() ->
+    application:set_env(?APP_NAME, emulate_db_error, false).
 
 mock_cberl(Config, InitMockManager) ->
     [Worker] = Workers = test_config:get_all_op_worker_nodes(Config),
@@ -145,8 +134,9 @@ mock_cberl(Config, InitMockManager) ->
 
     test_utils:mock_new(Workers, cberl, [passthrough]),
 
+    Node = node(),
     GenericMock = fun(ArgsList) ->
-        case application:get_env(?APP_NAME, emulate_db_error, false) of
+        case rpc:call(Node, application, get_env, [?APP_NAME, emulate_db_error, false]) of
             true -> {error, etmpfail};
             false -> meck:passthrough(ArgsList)
         end
