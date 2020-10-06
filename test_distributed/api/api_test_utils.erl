@@ -52,7 +52,8 @@
     randomly_set_acl/2,
     randomly_create_share/3,
 
-    guids_to_object_ids/1
+    guids_to_object_ids/1,
+    file_details_to_gs_json/2
 ]).
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
@@ -423,6 +424,99 @@ guids_to_object_ids(Guids) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         ObjectId
     end, Guids).
+
+
+-spec file_details_to_gs_json(undefined | od_share:id(), #file_details{}) -> map().
+file_details_to_gs_json(undefined, #file_details{
+    file_attr = #file_attr{
+        guid = FileGuid,
+        parent_uuid = ParentGuid,
+        name = FileName,
+        type = Type,
+        mode = Mode,
+        size = Size,
+        mtime = MTime,
+        shares = Shares,
+        owner_id = OwnerId,
+        provider_id = ProviderId
+    },
+    index_startid = IndexStartId,
+    active_permissions_type = ActivePermissionsType,
+    has_metadata = HasMetadata,
+    has_direct_qos = HasDirectQos,
+    has_eff_qos = HasEffQos
+}) ->
+    {DisplayedType, DisplayedSize} = case Type of
+        ?DIRECTORY_TYPE ->
+            {<<"dir">>, null};
+        _ ->
+            {<<"file">>, Size}
+    end,
+
+    #{
+        <<"hasMetadata">> => HasMetadata,
+        <<"guid">> => FileGuid,
+        <<"name">> => FileName,
+        <<"index">> => IndexStartId,
+        <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
+        % For space dir gs returns null as parentId instead of user root dir
+        % (gui doesn't know about user root dir)
+        <<"parentId">> => case fslogic_uuid:is_space_dir_guid(FileGuid) of
+            true -> null;
+            false -> ParentGuid
+        end,
+        <<"mtime">> => MTime,
+        <<"type">> => DisplayedType,
+        <<"size">> => DisplayedSize,
+        <<"shares">> => Shares,
+        <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
+        <<"providerId">> => ProviderId,
+        <<"ownerId">> => OwnerId,
+        <<"hasDirectQos">> => HasDirectQos,
+        <<"hasEffQos">> => HasEffQos
+    };
+file_details_to_gs_json(ShareId, #file_details{
+    file_attr = #file_attr{
+        guid = FileGuid,
+        parent_uuid = ParentGuid,
+        name = FileName,
+        type = Type,
+        mode = Mode,
+        size = Size,
+        mtime = MTime,
+        shares = Shares
+    },
+    index_startid = IndexStartId,
+    active_permissions_type = ActivePermissionsType,
+    has_metadata = HasMetadata
+}) ->
+    {DisplayedType, DisplayedSize} = case Type of
+        ?DIRECTORY_TYPE ->
+            {<<"dir">>, null};
+        _ ->
+            {<<"file">>, Size}
+    end,
+    IsShareRoot = lists:member(ShareId, Shares),
+
+    #{
+        <<"hasMetadata">> => HasMetadata,
+        <<"guid">> => file_id:guid_to_share_guid(FileGuid, ShareId),
+        <<"name">> => FileName,
+        <<"index">> => IndexStartId,
+        <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
+        <<"parentId">> => case IsShareRoot of
+            true -> null;
+            false -> file_id:guid_to_share_guid(ParentGuid, ShareId)
+        end,
+        <<"mtime">> => MTime,
+        <<"type">> => DisplayedType,
+        <<"size">> => DisplayedSize,
+        <<"shares">> => case IsShareRoot of
+            true -> [ShareId];
+            false -> []
+        end,
+        <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8)
+    }.
 
 
 %%--------------------------------------------------------------------

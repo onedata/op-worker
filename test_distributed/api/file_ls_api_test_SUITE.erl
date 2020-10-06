@@ -65,7 +65,7 @@ get_dir_children_test(Config) ->
     ValidateGdPublicApiCallResultFun = fun(#api_test_ctx{client = Client}, Result) ->
         case Client of
             ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
-            _ -> ?assertMatch(?ERROR_FORBIDDEN, Result)
+            _ -> ?assertEqual(?ERROR_FORBIDDEN, Result)
         end
     end,
 
@@ -122,7 +122,7 @@ get_dir_children_test(Config) ->
         },
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
-            client_spec = #client_spec{correct = [nobody, user1, user2, user3, user4]},
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
             scenario_templates = [
                 #scenario_template{
                     name = <<"List normal dir using gs public api">>,
@@ -271,7 +271,7 @@ get_file_children_test(Config) ->
     ValidateGdPublicApiCallResultFun = fun(#api_test_ctx{client = Client}, Result) ->
         case Client of
             ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
-            _ -> ?assertMatch(?ERROR_FORBIDDEN, Result)
+            _ -> ?assertEqual(?ERROR_FORBIDDEN, Result)
         end
     end,
 
@@ -337,7 +337,7 @@ get_file_children_test(Config) ->
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = _Data}, {ok, Result}) ->
                         ?assertEqual(#{
-                            <<"children">> => [file_details_to_gs_json(undefined, FileDetails)]
+                            <<"children">> => [api_test_utils:file_details_to_gs_json(undefined, FileDetails)]
                         }, Result)
                     end
                 }
@@ -349,7 +349,7 @@ get_file_children_test(Config) ->
         },
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
-            client_spec = #client_spec{correct = [nobody, user1, user2, user3, user4]},
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
             scenario_templates = [
                 #scenario_template{
                     name = <<"List file using gs public api">>,
@@ -437,7 +437,7 @@ get_shared_file_children_test(Config) ->
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(ShareFileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
                         ?assertEqual(#{
-                            <<"children">> => [file_details_to_gs_json(ShareId, FileDetails1)]
+                            <<"children">> => [api_test_utils:file_details_to_gs_json(ShareId, FileDetails1)]
                         }, Result)
                     end
                 }
@@ -790,101 +790,11 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
 
         gs_with_details ->
             #{<<"children">> => lists:map(fun({Guid, _Name, _Path, Details}) ->
-                file_details_to_gs_json(ShareId, Details)
+                api_test_utils:file_details_to_gs_json(ShareId, Details)
             end, ExpFiles2)}
     end,
 
     ?assertEqual(ExpFiles3, ListedChildren).
-
-
-%% @private
--spec file_details_to_gs_json(undefined | od_share:id(), #file_details{}) -> map().
-file_details_to_gs_json(undefined, #file_details{
-    file_attr = #file_attr{
-        guid = FileGuid,
-        parent_uuid = ParentGuid,
-        name = FileName,
-        type = Type,
-        mode = Mode,
-        size = Size,
-        mtime = MTime,
-        shares = Shares,
-        owner_id = OwnerId,
-        provider_id = ProviderId
-    },
-    index_startid = IndexStartId,
-    active_permissions_type = ActivePermissionsType,
-    has_metadata = HasMetadata,
-    has_direct_qos = HasDirectQos,
-    has_eff_qos = HasEffQos
-}) ->
-    {DisplayedType, DisplayedSize} = case Type of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, Size}
-    end,
-
-    #{
-        <<"hasMetadata">> => HasMetadata,
-        <<"guid">> => FileGuid,
-        <<"name">> => FileName,
-        <<"index">> => IndexStartId,
-        <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
-        % For space dir gs returns null as parentId instead of user root dir
-        % (gui doesn't know about user root dir)
-        <<"parentId">> => case fslogic_uuid:is_space_dir_guid(FileGuid) of
-            true -> null;
-            false -> ParentGuid
-        end,
-        <<"mtime">> => MTime,
-        <<"type">> => DisplayedType,
-        <<"size">> => DisplayedSize,
-        <<"shares">> => Shares,
-        <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
-        <<"providerId">> => ProviderId,
-        <<"ownerId">> => OwnerId,
-        <<"hasDirectQos">> => HasDirectQos,
-        <<"hasEffQos">> => HasEffQos
-    };
-file_details_to_gs_json(ShareId, #file_details{
-    file_attr = #file_attr{
-        guid = FileGuid,
-        parent_uuid = ParentGuid,
-        name = FileName,
-        type = Type,
-        mode = Mode,
-        size = Size,
-        mtime = MTime,
-        shares = Shares
-    },
-    index_startid = IndexStartId,
-    active_permissions_type = ActivePermissionsType,
-    has_metadata = HasMetadata
-}) ->
-    {DisplayedType, DisplayedSize} = case Type of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, Size}
-    end,
-
-    #{
-        <<"hasMetadata">> => HasMetadata,
-        <<"guid">> => file_id:guid_to_share_guid(FileGuid, ShareId),
-        <<"name">> => FileName,
-        <<"index">> => IndexStartId,
-        <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
-        <<"parentId">> => file_id:guid_to_share_guid(ParentGuid, ShareId),
-        <<"mtime">> => MTime,
-        <<"type">> => DisplayedType,
-        <<"size">> => DisplayedSize,
-        <<"shares">> => case lists:member(ShareId, Shares) of
-            true -> [ShareId];
-            false -> []
-        end,
-        <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8)
-    }.
 
 
 %%%===================================================================
