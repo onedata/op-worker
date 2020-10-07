@@ -334,7 +334,7 @@ call(SpaceId, Request) ->
     end.
 
 -spec handle_deletion_request(request(), state()) -> ok.
-handle_deletion_request(Request = #request{type =#deletion{}, job_id = JobId, job_type = JobType}, #state{
+handle_deletion_request(Request = #request{type = #deletion{}, job_id = JobId, job_type = JobType}, #state{
     active_requests_num = ActiveRequestsNum,
     max_requests_num = MaxRequestsNum,
     jobs_to_cancel = JobsToCancel,
