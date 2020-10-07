@@ -828,7 +828,7 @@ upgrade_record(3, {_, Name, Helpers, Readonly, LumaConfig}) ->
         Readonly,
         LumaConfig
     }};
-upgrade_record(4, {_, Name, Helpers, Readonly, LumaConfig}) ->
+upgrade_record(4, {_, Name, Helpers, Readonly, {luma_config, Url, _CacheTimeout, ApiKey}}) ->
     {5, {storage,
         Name,
         [
@@ -843,5 +843,5 @@ upgrade_record(4, {_, Name, Helpers, Readonly, LumaConfig}) ->
             ExtendedDirectIO} <- Helpers
         ],
         Readonly,
-        LumaConfig
+        {luma_config, Url, ApiKey}
     }}.
