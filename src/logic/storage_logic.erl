@@ -46,7 +46,7 @@
 -export([supports_access_type/3]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
--export([set_imported/2, set_readonly/2]).
+-export([set_imported/2, update_readonly_and_imported/3]).
 -export([upgrade_legacy_support/2]).
 
 -compile({no_auto_import, [get/1]}).
@@ -297,12 +297,14 @@ set_imported(StorageId, Imported) ->
     end).
 
 
--spec set_readonly(storage:id(), boolean()) -> ok | errors:error().
-set_readonly(StorageId, Readonly) ->
+update_readonly_and_imported(StorageId, Readonly, Imported) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        data = #{<<"readonly">> => Readonly}
+        data = #{
+            <<"imported">> => Imported,
+            <<"readonly">> => Readonly
+        }
     }),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_storage, StorageId)

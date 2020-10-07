@@ -31,8 +31,8 @@
 ]).
 -export([
     is_posix_compatible/1, is_rename_supported/1, is_auto_import_supported/1,
-    is_file_registration_supported/1, is_nfs4_acl_supported/1, should_skip_storage_detection/1
-]).
+    is_file_registration_supported/1, is_nfs4_acl_supported/1, should_skip_storage_detection/1,
+    is_only_readonly_supported/1]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
 
@@ -285,6 +285,16 @@ is_rename_supported(?WEBDAV_HELPER_NAME) -> true;
 is_rename_supported(?XROOTD_HELPER_NAME) -> true;
 is_rename_supported(#helper{name = HelperName}) -> is_rename_supported(HelperName);
 is_rename_supported(_) -> false.
+
+
+-spec is_only_readonly_supported(helpers:helper() | name()) -> boolean().
+is_only_readonly_supported(#helper{name = HelperName}) ->
+    is_only_readonly_supported(HelperName);
+is_only_readonly_supported(?HTTP_HELPER_NAME) ->
+    true;
+is_only_readonly_supported(_) ->
+    false.
+
 
 -spec is_canonical_helper(helpers:helper()) -> boolean().
 is_canonical_helper(Helper) ->

@@ -25,8 +25,7 @@
     storage_get_helper/1,
     storage_update_admin_ctx/2,
     storage_update_helper_args/2,
-    storage_set_imported_storage/2,
-    storage_set_readonly/2,
+    storage_update_readonly_and_imported/3,
     storage_set_qos_parameters/2,
     storage_update_luma_config/2,
     storage_update_name/2,
@@ -34,6 +33,7 @@
     storage_describe/1,
     storage_is_imported_storage/1,
     storage_get_luma_feed/1,
+    storage_verify_configuration/4,
     luma_clear_db/1,
     luma_storage_users_get_and_describe/2,
     luma_storage_users_store/3,
@@ -173,16 +173,10 @@ storage_update_helper_args(StorageId, Changes) ->
     storage:update_helper_args(StorageId, Changes).
 
 
--spec storage_set_imported_storage(storage:id(), boolean()) ->
+-spec storage_update_readonly_and_imported(storage:id(), boolean(), boolean()) ->
     ok | {error, term()}.
-storage_set_imported_storage(StorageId, Value) ->
-    storage:set_imported(StorageId, Value).
-
-
--spec storage_set_readonly(storage:id(), boolean()) ->
-    ok | {error, term()}.
-storage_set_readonly(StorageId, Value) ->
-    storage:set_readonly(StorageId, Value).
+storage_update_readonly_and_imported(StorageId, Readonly, Imported) ->
+    storage:update_readonly_and_imported(StorageId, Readonly, Imported).
 
 
 -spec storage_set_qos_parameters(storage:id(), storage:qos_parameters()) ->
@@ -220,6 +214,12 @@ storage_is_imported_storage(StorageId) ->
 -spec storage_get_luma_feed(storage:id() | storage:data()) -> luma:feed().
 storage_get_luma_feed(Storage) ->
     storage:get_luma_feed(Storage).
+
+
+-spec storage_verify_configuration(storage:id() | storage:name(),
+    helper:name(), storage:imported(), storage:readonly()) -> ok | {error, term()}.
+storage_verify_configuration(IdOrName, HelperName, ImportedStorage, Readonly) ->
+    storage:verify_configuration(IdOrName, HelperName, ImportedStorage, Readonly).
 
 
 -spec luma_clear_db(storage:id()) -> ok.
