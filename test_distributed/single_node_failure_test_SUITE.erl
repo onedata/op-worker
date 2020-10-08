@@ -59,7 +59,6 @@ test_base(Config, InitialData, StopAppBeforeKill) ->
             ok
     end,
 
-
     failure_test_utils:kill_nodes(Config, WorkerP1),
     ct:pal("Node killed"),
     UpdatedConfig = failure_test_utils:restart_nodes(Config, WorkerP1),
@@ -82,13 +81,13 @@ create_initial_data_structure(Config) ->
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
     SpaceGuid = rpc:call(WorkerP1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
 
-    {ok, P1DirGuid} = ?assertMatch({ok, _}, rpc:call(WorkerP1, lfm, mkdir, [SessId(P1), SpaceGuid, <<"P1_dir">>, 8#755], 5000)),
-    {ok, P2DirGuid} = ?assertMatch({ok, _}, rpc:call(WorkerP2, lfm, mkdir, [SessId(P2), SpaceGuid, <<"P1_dir">>, 8#755], 5000)),
+    {ok, P1DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP1, SessId(P1), SpaceGuid, <<"P1_dir">>, 8#755)),
+    {ok, P2DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP2, SessId(P2), SpaceGuid, <<"P1_dir">>, 8#755)),
 
     lists:foreach(fun(Dir) ->
         lists:foreach(fun({Worker, ProvId}) ->
             ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-                rpc:call(Worker, lfm, stat, [SessId(ProvId), {guid, Dir}], 1000), 30)
+                lfm_proxy:stat(Worker, SessId(ProvId), {guid, Dir}), 30)
         end, [{WorkerP1, P1}, {WorkerP2, P2}])
     end, [P1DirGuid, P2DirGuid]),
 
@@ -175,11 +174,11 @@ init_per_suite(Config) ->
     failure_test_utils:init_per_suite(Config, "2op").
 
 init_per_testcase(_Case, Config) ->
-    Config.
+    lfm_proxy:init(Config).
 
 
-end_per_testcase(_Case, _Config) ->
-    ok.
+end_per_testcase(_Case, Config) ->
+    lfm_proxy:teardown(Config).
 
 end_per_suite(_Config) ->
     ok.

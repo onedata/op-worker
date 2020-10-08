@@ -96,18 +96,18 @@ db_error_test(Config) ->
 
 test_write_operations_on_db_error(Worker, SessId, ParentUuid) ->
     Name = generator:gen_name(),
-    ?assertEqual({error, ?EAGAIN}, rpc:call(Worker, lfm, mkdir, [SessId, ParentUuid, Name, 8#755], 5000)),
-    ?assertMatch({error, ?EAGAIN}, rpc:call(Worker, lfm, create, [SessId, ParentUuid, Name, 8#755], 5000)).
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, Name, 8#755)),
+    ?assertMatch({error, ?EAGAIN}, lfm_proxy:create(Worker, SessId, ParentUuid, Name, 8#755)).
 
 test_read_operations_on_db_error(Worker, SessId, {Dirs, Files}) ->
     lists:foreach(fun(Dir) ->
-        ?assertMatch({error, ?EAGAIN}, rpc:call(Worker, lfm, stat, [SessId, {guid, Dir}], 1000)),
-        ?assertMatch({error, ?EAGAIN}, rpc:call(Worker, lfm, get_children_attrs, [SessId, {guid, Dir}, 0, 100], 1000))
+        ?assertMatch({error, ?EAGAIN}, lfm_proxy:stat(Worker, SessId, {guid, Dir})),
+        ?assertMatch({error, ?EAGAIN}, lfm_proxy:get_children_attrs(Worker, SessId, {guid, Dir}, 0, 100))
     end, Dirs),
 
     lists:foreach(fun(File) ->
-        ?assertMatch({error, ?EAGAIN}, rpc:call(Worker, lfm, stat, [SessId, {guid, File}], 1000)),
-        ?assertMatch({error, ?EAGAIN}, rpc:call(Worker, lfm, open, [SessId, {guid, File}, rdwr]))
+        ?assertMatch({error, ?EAGAIN}, lfm_proxy:stat(Worker, SessId, {guid, File})),
+        ?assertMatch({error, ?EAGAIN}, lfm_proxy:open(Worker, SessId, {guid, File}, rdwr))
     end, Files).
 
 disable_db() ->
@@ -149,10 +149,11 @@ init_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     mock_cberl(Config),
-    Config.
+    lfm_proxy:init(Config).
 
 
 end_per_testcase(_Case, Config) ->
+    lfm_proxy:teardown(Config),
     Workers = test_config:get_all_op_worker_nodes(Config),
     test_utils:mock_unload(Workers, cberl).
 

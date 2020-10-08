@@ -47,52 +47,53 @@ restart_nodes(Config, Nodes) when is_list(Nodes) ->
         ?assertEqual(true, rpc:call(Node, gs_channel_service, is_connected, []), 30)
     end, Nodes),
 
-    provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config));
+    UpdatedConfig = provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
+    lfm_proxy:init(UpdatedConfig, true, Nodes);
 restart_nodes(Config, Node) ->
     restart_nodes(Config, [Node]).
 
 create_files_and_dirs(Worker, SessId, ParentUuid, DirsNum, FilesNum) ->
     Dirs = lists:map(fun(_) ->
         Dir = generator:gen_name(),
-        {ok, DirGuid} = ?assertMatch({ok, _}, rpc:call(Worker, lfm, mkdir, [SessId, ParentUuid, Dir, 8#755], 5000)),
+        {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, Dir, 8#755)),
         DirGuid
     end, lists:seq(1, DirsNum)),
 
+    FileDataSize = size(?FILE_DATA),
     Files = lists:map(fun(_) ->
         File = generator:gen_name(),
-        {ok, FileGuid} = ?assertMatch({ok, _}, rpc:call(Worker, lfm, create, [SessId, ParentUuid, File, 8#755], 5000)),
-        {ok, Handle} = ?assertMatch({ok, _}, rpc:call(Worker, lfm, open, [SessId, {guid, FileGuid}, rdwr], 5000)),
-        {ok, NewHandle, _} = ?assertMatch({ok, _, _}, rpc:call(Worker, lfm, write,  [Handle, 0, ?FILE_DATA], 5000)),
-        ?assertEqual(ok, rpc:call(Worker, lfm, fsync, [NewHandle], 35000)),
-        ?assertEqual(ok, rpc:call(Worker, lfm, release, [NewHandle], 5000)),
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, ParentUuid, File, 8#755)),
+        {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, rdwr)),
+        ?assertMatch({ok, FileDataSize}, lfm_proxy:write(Worker, Handle, 0, ?FILE_DATA)),
+        ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
         FileGuid
-    end, lists:seq(1, FilesNum)),
+    end, lists:seq(1, FilesNum)), % TODO VFS-6873 - create `FilesNum` files when rtransfer problems are fixed
 
     {Dirs, Files}.
 
 verify_files_and_dirs(Worker, SessId, {Dirs, Files}, Attempts) ->
     lists:foreach(fun(Dir) ->
         ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-            rpc:call(Worker, lfm, stat, [SessId, {guid, Dir}], 1000), Attempts)
+            lfm_proxy:stat(Worker, SessId, {guid, Dir}), Attempts)
     end, Dirs),
 
     FileDataSize = size(?FILE_DATA),
     lists:foreach(fun(File) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileDataSize}},
-            rpc:call(Worker, lfm, stat, [SessId, {guid, File}], 1000), Attempts)
+            lfm_proxy:stat(Worker, SessId, {guid, File}), Attempts)
     end, Files),
 
     lists:foreach(fun(File) ->
         ?assertEqual(FileDataSize,
             begin
-                {ok, Handle} = rpc:call(Worker, lfm, open, [SessId, {guid, File}, rdwr]),
+                {ok, Handle} = lfm_proxy:open(Worker, SessId, {guid, File}, rdwr),
                 try
-                    {ok, _, ReadData} = rpc:call(Worker, lfm, check_size_and_read, [Handle, 0, 1000]), % use check_size_and_read because of null helper usage
+                    {ok, _, ReadData} = lfm_proxy:check_size_and_read(Worker, Handle, 0, 1000), % use check_size_and_read because of null helper usage
                     size(ReadData) % compare size because of null helper usage
                 catch
                     E1:E2 -> {E1, E2}
                 after
-                    rpc:call(Worker, lfm, release, [Handle])
+                    lfm_proxy:close(Worker, Handle)
                 end
             end, Attempts)
     end, Files).

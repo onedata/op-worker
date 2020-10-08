@@ -17,7 +17,7 @@
 
 
 %% API
--export([init/1, init/2, teardown/1]).
+-export([init/1, init/2, init/3, teardown/1]).
 -export([
     stat/3, get_fs_stats/3, get_details/3,
     resolve_guid/3, get_file_path/3,
@@ -33,7 +33,7 @@
     create_and_open/4, create_and_open/5,
     open/4,
     close/2, close_all/1,
-    read/4, silent_read/4,
+    read/4, silent_read/4, check_size_and_read/4,
     write/4, write_and_check/4,
     fsync/2, fsync/4,
     truncate/4,
@@ -94,6 +94,12 @@ init(Config) ->
 
 -spec init(Config :: list(), boolean()) -> list().
 init(Config, Link) ->
+    init(Config, Link, ?config(op_worker_nodes, Config)).
+
+-spec init(Config :: list(), boolean(), [node()]) -> list().
+init(Config, Link, Workers) ->
+    InitialServers = proplists:get_value(servers, Config, #{}),
+
     Host = self(),
     ServerFun = fun() ->
         lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
@@ -102,13 +108,13 @@ init(Config, Link) ->
             exit -> ok
         end
     end,
-    Servers = lists:map(
-        fun(W) ->
+    Servers = lists:foldl(
+        fun(W, Acc) ->
             case Link of
-                true -> spawn_link(W, ServerFun);
-                false -> spawn(W, ServerFun)
+                true -> Acc#{W => spawn_link(W, ServerFun)};
+                false -> Acc#{W => spawn(W, ServerFun)}
             end
-        end, lists:usort(?config(op_worker_nodes, Config))),
+        end, maps:without(Workers, InitialServers), lists:usort(Workers)),
 
     lists:foreach(
         fun(Server) ->
@@ -117,7 +123,7 @@ init(Config, Link) ->
             after timer:seconds(5) ->
                 error("Cannot setup lfm_handles ETS")
             end
-        end, Servers),
+        end, maps:values(Servers)),
 
     [{servers, Servers} | Config].
 
@@ -127,7 +133,7 @@ teardown(Config) ->
     lists:foreach(
         fun(Pid) ->
             Pid ! exit
-        end, ?config(servers, Config)).
+        end, maps:values(?config(servers, Config))).
 
 
 %%%===================================================================
@@ -331,6 +337,21 @@ silent_read(Worker, TestHandle, Offset, Size) ->
         begin
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
             case lfm:silent_read(Handle, Offset, Size) of
+                {ok, NewHandle, Res}  ->
+                    ets:insert(lfm_handles, {TestHandle, NewHandle}),
+                    {ok, Res};
+                Other -> Other
+            end
+        end).
+
+
+-spec check_size_and_read(node(), lfm:handle(), integer(), integer()) ->
+    {ok, binary()} | lfm:error_reply().
+check_size_and_read(Worker, TestHandle, Offset, Size) ->
+    ?EXEC(Worker,
+        begin
+            [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
+            case lfm:check_size_and_read(Handle, Offset, Size) of
                 {ok, NewHandle, Res}  ->
                     ets:insert(lfm_handles, {TestHandle, NewHandle}),
                     {ok, Res};

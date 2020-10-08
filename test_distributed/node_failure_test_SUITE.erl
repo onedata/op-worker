@@ -132,11 +132,11 @@ init_per_suite(Config) ->
     failure_test_utils:init_per_suite(Config, "2op-2nodes").
 
 init_per_testcase(_Case, Config) ->
-    Config.
+    lfm_proxy:init(Config).
 
 
-end_per_testcase(_Case, _Config) ->
-    ok.
+end_per_testcase(_Case, Config) ->
+    lfm_proxy:teardown(Config).
 
 end_per_suite(_Config) ->
     ok.
