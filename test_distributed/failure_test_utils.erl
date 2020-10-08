@@ -16,7 +16,9 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
+-export([kill_nodes/2, restart_nodes/2]).
 -export([create_files_and_dirs/5, verify_files_and_dirs/4]).
+
 -export([init_per_suite/2]).
 
 -define(FILE_DATA, <<"1234567890abcd">>).
@@ -24,6 +26,30 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+kill_nodes(_Config, []) ->
+    ok;
+kill_nodes(Config, [Node | Nodes]) ->
+    kill_nodes(Config, Node),
+    kill_nodes(Config, Nodes);
+kill_nodes(Config, Node) ->
+    ok = onenv_test_utils:kill_node(Config, Node),
+    ?assertEqual({badrpc, nodedown}, rpc:call(Node, oneprovider, get_id, []), 10).
+
+restart_nodes(Config, Nodes) when is_list(Nodes) ->
+    lists:foreach(fun(Node) ->
+        ok = onenv_test_utils:start_node(Config, Node)
+    end, Nodes),
+
+    lists:foreach(fun(Node) ->
+        ?assertMatch({ok, _}, rpc:call(Node, provider_auth, get_provider_id, []), 60),
+        {ok, _} = rpc:call(Node, mock_manager, start, []),
+        ?assertEqual(true, rpc:call(Node, gs_channel_service, is_connected, []), 30)
+    end, Nodes),
+
+    provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config));
+restart_nodes(Config, Node) ->
+    restart_nodes(Config, [Node]).
 
 create_files_and_dirs(Worker, SessId, ParentUuid, DirsNum, FilesNum) ->
     Dirs = lists:map(fun(_) ->

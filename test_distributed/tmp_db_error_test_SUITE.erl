@@ -44,7 +44,6 @@ db_error_test(Config) ->
     SpaceGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
 
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
-    % TODO - delete when framework handles node stop properly
     onenv_test_utils:disable_panel_healthcheck(Config),
 
     DirsAndFiles = failure_test_utils:create_files_and_dirs(Worker, SessId, SpaceGuid, 20, 50),
@@ -73,17 +72,12 @@ db_error_test(Config) ->
     ?assertEqual(ok, StopMsg),
     ct:pal("Application stopped"),
 
-    ok = onenv_test_utils:kill_node(Config, Worker),
-    ?assertEqual({badrpc, nodedown}, rpc:call(Worker, oneprovider, get_id, []), 10),
+    failure_test_utils:kill_nodes(Config, Worker),
     ct:pal("Node killed"),
 
-    ok = onenv_test_utils:start_node(Config, Worker),
-    ?assertMatch({ok, _}, rpc:call(Worker, provider_auth, get_provider_id, []), 60),
-
-    ?assertEqual(true, rpc:call(Worker, gs_channel_service, is_connected, []), 30),
-    UpdatedConfig = provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
+    UpdatedConfig = failure_test_utils:restart_nodes(Config, Worker),
     RecreatedSessId = test_config:get_user_session_id_on_provider(UpdatedConfig, User1, ProviderId),
-    mock_cberl(UpdatedConfig, true),
+    mock_cberl(UpdatedConfig),
     ct:pal("Node restarted"),
 
     disable_db(),
@@ -123,15 +117,9 @@ disable_db() ->
 enable_db() ->
     application:set_env(?APP_NAME, emulate_db_error, false).
 
-mock_cberl(Config, InitMockManager) ->
-    [Worker] = Workers = test_config:get_all_op_worker_nodes(Config),
+mock_cberl(Config) ->
+    Workers = test_config:get_all_op_worker_nodes(Config),
     test_node_starter:load_modules(Workers, [?MODULE]),
-
-    case InitMockManager of
-        true -> {ok, _} = rpc:call(Worker, mock_manager, start, []);
-        false -> ok
-    end,
-
     test_utils:mock_new(Workers, cberl, [passthrough]),
 
     Node = node(),
@@ -160,7 +148,7 @@ init_per_suite(Config) ->
     failure_test_utils:init_per_suite(Config, "1op").
 
 init_per_testcase(_Case, Config) ->
-    mock_cberl(Config, false),
+    mock_cberl(Config),
     Config.
 
 

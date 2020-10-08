@@ -36,7 +36,6 @@ all() -> [
 
 failure_test(Config) ->
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
-    % TODO - delete when framework handles node stop properly
     onenv_test_utils:disable_panel_healthcheck(Config),
 
     InitialData = create_initial_data_structure(Config),
@@ -60,14 +59,10 @@ test_base(Config, InitialData, StopAppBeforeKill) ->
             ok
     end,
 
-    ok = onenv_test_utils:kill_node(Config, WorkerP1),
-    ?assertEqual({badrpc, nodedown}, rpc:call(WorkerP1, oneprovider, get_id, []), 10),
-    ct:pal("Node killed"),
 
-    ok = onenv_test_utils:start_node(Config, WorkerP1),
-    ?assertMatch({ok, _}, rpc:call(WorkerP1, provider_auth, get_provider_id, []), 60),
-    ?assertEqual(true, rpc:call(WorkerP1, gs_channel_service, is_connected, []), 30),
-    UpdatedConfig = provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
+    failure_test_utils:kill_nodes(Config, WorkerP1),
+    ct:pal("Node killed"),
+    UpdatedConfig = failure_test_utils:restart_nodes(Config, WorkerP1),
     ct:pal("Node restarted"),
 
     verify(UpdatedConfig, InitialData, TestData, StopAppBeforeKill),
@@ -126,29 +121,34 @@ verify(Config, #{p1_dir := P1DirGuid, p2_dir := P2DirGuid} = _InitialData, TestD
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
     SpaceGuid = rpc:call(WorkerP1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
 
-    verify_dir_after_node_restart(WorkerP2, SessId(P2), TestData),
+    verify_all_files_and_dirs_created_by_provider(WorkerP2, SessId(P2), TestData, p2),
 
     case StopAppBeforeKill of
         true ->
             % App was stopped before node killing - all data should be present
-            verify_dir_after_node_restart(WorkerP1, SessId(P1), TestData),
-            verify_files_and_dirs(WorkerP1, SessId(P1), maps:get(p1_root, TestData)),
-            verify_files_and_dirs(WorkerP1, SessId(P1), maps:get(p1_local, TestData)),
-            verify_files_and_dirs(WorkerP1, SessId(P1), maps:get(p1_remote, TestData));
+            verify_all_files_and_dirs_created_by_provider(WorkerP1, SessId(P1), TestData, p2),
+            verify_all_files_and_dirs_created_by_provider(WorkerP1, SessId(P1), TestData, p1),
+            verify_all_files_and_dirs_created_by_provider(WorkerP2, SessId(P2), TestData, p1);
         false ->
             % App wasn't stopped before node killing - some data can be lost
             % but operations on dirs should be possible,
-            test_dir_after_node_restart(Config, SpaceGuid),
-            test_dir_after_node_restart(Config, P1DirGuid),
-            test_dir_after_node_restart(Config, P2DirGuid)
+            create_new_files_and_dirs_creation(Config, SpaceGuid),
+            create_new_files_and_dirs_creation(Config, P1DirGuid),
+            create_new_files_and_dirs_creation(Config, P2DirGuid)
     end.
 
-verify_dir_after_node_restart(Worker, SessId, TestData) ->
-    verify_files_and_dirs(Worker, SessId, maps:get(p2_root, TestData)),
-    verify_files_and_dirs(Worker, SessId, maps:get(p2_local, TestData)),
-    verify_files_and_dirs(Worker, SessId, maps:get(p2_remote, TestData)).
+verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData, p1) ->
+    verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData,
+        [p1_root, p1_local, p1_remote]);
+verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData, p2) ->
+    verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData,
+        [p2_root, p2_local, p2_remote]);
+verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData, KeyList) ->
+    lists:foreach(fun(Key) ->
+        verify_files_and_dirs(Worker, SessId, maps:get(Key, TestData))
+    end, KeyList).
 
-test_dir_after_node_restart(Config, Dir) ->
+create_new_files_and_dirs_creation(Config, Dir) ->
     [P1, P2] = test_config:get_providers(Config),
     [WorkerP1] = test_config:get_provider_nodes(Config, P1),
     [WorkerP2] = test_config:get_provider_nodes(Config, P2),
