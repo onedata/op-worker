@@ -154,6 +154,8 @@ filter_storages_test() ->
     check_filter_storages(<<"latency = 12.34E+1">>, [<<"3">>], StoragesMap),
     check_filter_storages(<<"latency = 1234.0e-1">>, [<<"3">>], StoragesMap),
     check_filter_storages(<<"latency = 1234.0E-1">>, [<<"3">>], StoragesMap),
+    check_filter_storages(<<"latency = 1234e-1">>, [<<"3">>], StoragesMap),
+    check_filter_storages(<<"latency = 1234E-1">>, [<<"3">>], StoragesMap),
     check_filter_storages(<<"latency < 8.0">>, [<<"2">>], StoragesMap),
     check_filter_storages(<<"latency <= 8.0">>, [<<"0">>, <<"2">>], StoragesMap),
     ok.

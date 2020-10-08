@@ -63,10 +63,8 @@ to_infix(<<?QOS_ANY_STORAGE>>) ->
     <<?QOS_ANY_STORAGE>>;
 to_infix({Op, Expr1, Expr2}) when is_binary(Expr1) and is_binary(Expr2) ->
     <<Expr1/binary, Op/binary, Expr2/binary>>;
-to_infix({Op, Expr1, Expr2}) when is_integer(Expr2) ->
-    <<Expr1/binary, Op/binary, (integer_to_binary(Expr2))/binary>>;
-to_infix({Op, Expr1, Expr2}) when is_float(Expr2) ->
-    <<Expr1/binary, Op/binary, (float_to_binary(Expr2))/binary>>;
+to_infix({Op, Expr1, Expr2}) when is_number(Expr2) ->
+    <<Expr1/binary, Op/binary, (json_utils:encode(Expr2))/binary>>;
 to_infix({Op, Expr1, Expr2}) ->
     <<"(", (to_infix(Expr1))/binary, Op/binary, (to_infix(Expr2))/binary, ")">>.
 
