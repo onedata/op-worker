@@ -163,7 +163,9 @@ create_files_and_dirs(Worker, SessId, ParentUuid) ->
     failure_test_utils:create_files_and_dirs(Worker, SessId, ParentUuid, 20, 50).
 
 verify_files_and_dirs(Worker, SessId, DirsAndFiles) ->
-    failure_test_utils:verify_files_and_dirs(Worker, SessId, DirsAndFiles, 30).
+    % Verify with 90 attempts as additional time can be needed for
+    % connection recreation after node restart
+    failure_test_utils:verify_files_and_dirs(Worker, SessId, DirsAndFiles, 90).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
