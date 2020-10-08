@@ -123,7 +123,7 @@ init(Config, Link, Workers) ->
             after timer:seconds(5) ->
                 error("Cannot setup lfm_handles ETS")
             end
-        end, maps:values(Servers)),
+        end, maps:values(maps:with(Workers, Servers))),
 
     [{servers, Servers} | Config].
 

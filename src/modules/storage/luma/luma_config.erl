@@ -27,6 +27,7 @@
 }).
 
 -type config() :: #luma_config{}.
+-type deprecated_config() :: {luma_config, Url :: undefined | url(), ApiKey :: undefined | api_key()}.
 -type feed() :: ?AUTO_FEED | ?LOCAL_FEED | ?EXTERNAL_FEED.
 -type url() :: binary().
 -type api_key() :: undefined | binary().
@@ -70,9 +71,12 @@ get_url(#luma_config{url = LumaUrl}) ->
 get_api_key(#luma_config{api_key = ApiKey}) ->
     ApiKey.
 
--spec set_feed(config(), feed()) -> config().
-set_feed(LumaConfig, Feed) ->
-    LumaConfig#luma_config{feed = Feed}.
+-spec set_feed(config() | deprecated_config(), feed()) -> config().
+set_feed(#luma_config{} = LumaConfig, Feed) ->
+    LumaConfig#luma_config{feed = Feed};
+% Upgrade from older version saved in #storage{} record
+set_feed({luma_config, Url, ApiKey}, Feed) ->
+    #luma_config{feed = Feed, url = Url, api_key = ApiKey}.
 
 
 -spec update(config(), diff()) -> {ok, config()} | {error, term()}.

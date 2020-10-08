@@ -149,7 +149,7 @@ init_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     mock_cberl(Config),
-    lfm_proxy:init(Config).
+    lfm_proxy:init(Config, false).
 
 
 end_per_testcase(_Case, Config) ->

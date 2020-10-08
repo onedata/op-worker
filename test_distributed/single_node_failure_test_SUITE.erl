@@ -174,7 +174,7 @@ init_per_suite(Config) ->
     failure_test_utils:init_per_suite(Config, "2op").
 
 init_per_testcase(_Case, Config) ->
-    lfm_proxy:init(Config).
+    lfm_proxy:init(Config, false).
 
 
 end_per_testcase(_Case, Config) ->

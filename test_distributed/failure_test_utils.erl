@@ -48,11 +48,11 @@ restart_nodes(Config, Nodes) when is_list(Nodes) ->
     end, Nodes),
 
     UpdatedConfig = provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
-    lfm_proxy:init(UpdatedConfig, true, Nodes);
+    lfm_proxy:init(UpdatedConfig, false, Nodes);
 restart_nodes(Config, Node) ->
     restart_nodes(Config, [Node]).
 
-create_files_and_dirs(Worker, SessId, ParentUuid, DirsNum, FilesNum) ->
+create_files_and_dirs(Worker, SessId, ParentUuid, DirsNum, _FilesNum) ->
     Dirs = lists:map(fun(_) ->
         Dir = generator:gen_name(),
         {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, Dir, 8#755)),
@@ -67,7 +67,7 @@ create_files_and_dirs(Worker, SessId, ParentUuid, DirsNum, FilesNum) ->
         ?assertMatch({ok, FileDataSize}, lfm_proxy:write(Worker, Handle, 0, ?FILE_DATA)),
         ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
         FileGuid
-    end, lists:seq(1, FilesNum)), % TODO VFS-6873 - create `FilesNum` files when rtransfer problems are fixed
+    end, lists:seq(1, 0)), % TODO VFS-6873 - create `FilesNum` files when rtransfer problems are fixed
 
     {Dirs, Files}.
 
@@ -88,7 +88,7 @@ verify_files_and_dirs(Worker, SessId, {Dirs, Files}, Attempts) ->
             begin
                 {ok, Handle} = lfm_proxy:open(Worker, SessId, {guid, File}, rdwr),
                 try
-                    {ok, _, ReadData} = lfm_proxy:check_size_and_read(Worker, Handle, 0, 1000), % use check_size_and_read because of null helper usage
+                    {ok, ReadData} = lfm_proxy:check_size_and_read(Worker, Handle, 0, 1000), % use check_size_and_read because of null helper usage
                     size(ReadData) % compare size because of null helper usage
                 catch
                     E1:E2 -> {E1, E2}
