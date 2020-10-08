@@ -126,12 +126,12 @@ verify(Config, #{p1_dir := P1DirGuid, p2_dir := P2DirGuid} = _InitialData, TestD
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
     SpaceGuid = rpc:call(WorkerP1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
 
-    verify_dir_after_node_restart(WorkerP1, SessId(P1), TestData),
     verify_dir_after_node_restart(WorkerP2, SessId(P2), TestData),
 
     case StopAppBeforeKill of
         true ->
             % App was stopped before node killing - all data should be present
+            verify_dir_after_node_restart(WorkerP1, SessId(P1), TestData),
             verify_files_and_dirs(WorkerP1, SessId(P1), maps:get(p1_root, TestData)),
             verify_files_and_dirs(WorkerP1, SessId(P1), maps:get(p1_local, TestData)),
             verify_files_and_dirs(WorkerP1, SessId(P1), maps:get(p1_remote, TestData));
