@@ -18,7 +18,7 @@ Nonterminals
 expression value.
 
 Terminals '(' ')' 
-integer string operator comparator eq any_storage.
+number string operator comparator eq any_storage.
 
 Rootsymbol expression.
 
@@ -26,9 +26,9 @@ Left 100 operator.
 Nonassoc 200 '('.
 
 value -> string : '$1'.
-value -> integer : '$1'.
+value -> number : '$1'.
 
-expression -> string comparator integer : {unwrap('$2'), unwrap('$1'), unwrap('$3')}.
+expression -> string comparator number : {unwrap('$2'), unwrap('$1'), unwrap('$3')}.
 expression -> string eq value : {unwrap('$2'), unwrap('$1'), unwrap('$3')}.
 expression -> any_storage : unwrap('$1').
 expression -> expression operator expression : {unwrap('$2'), '$1', '$3'}.

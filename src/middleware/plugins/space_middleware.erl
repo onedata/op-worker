@@ -634,7 +634,7 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = available_qos_parameters}}, _) ->
     Res = lists:foldl(fun(StorageId, OuterAcc) ->
         QosParameters = storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId),
         maps:fold(fun(ParameterKey, Value, InnerAcc) ->
-            Key = case is_integer(Value) of
+            Key = case is_number(Value) of
                 true -> <<"numberValues">>;
                 false -> <<"stringValues">>
             end,
