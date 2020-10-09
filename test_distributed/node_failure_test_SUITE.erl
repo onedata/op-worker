@@ -92,10 +92,10 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     [P1, P2] = test_config:get_providers(Config),
     [User1] = test_config:get_provider_users(Config, P1),
     SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
-    [Worker1P1 | _] = WorkersP1 = test_config:get_provider_nodes(Config, P1),
+    WorkersP1 = test_config:get_provider_nodes(Config, P1),
     WorkersP2 = test_config:get_provider_nodes(Config, P2),
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
-    SpaceGuid = rpc:call(Worker1P1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     Attempts = 60,
 
     [WorkerToCheckP2] = WorkersP2 -- [WorkerToKillP2],
@@ -107,7 +107,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     failure_test_utils:kill_nodes(Config, [WorkerToKillP1, WorkerToKillP2]),
     ct:pal("Killed nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
 
-    failure_test_utils:verify_files_and_dirs(WorkerToCheckP2, SessId(P2), DirsAndFiles, Attempts),
+    file_ops_test_utils:verify_files_and_dirs(WorkerToCheckP2, SessId(P2), DirsAndFiles, Attempts),
     ct:pal("Check after node kill: done"),
     timer:sleep(5000),
     DirsAndFiles2 = create_dirs_and_files(WorkerToCheckP1, SessId(P1), SpaceGuid),
@@ -116,9 +116,9 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     _UpdatedConfig = failure_test_utils:restart_nodes(Config, [WorkerToKillP1, WorkerToKillP2]),
     ct:pal("Started nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
 
-    failure_test_utils:verify_files_and_dirs(WorkerToKillP1, SessId(P1), DirsAndFiles2, Attempts),
+    file_ops_test_utils:verify_files_and_dirs(WorkerToKillP1, SessId(P1), DirsAndFiles2, Attempts),
     ct:pal("Check on P1 after restart: done"),
-    failure_test_utils:verify_files_and_dirs(WorkerToKillP2, SessId(P2), DirsAndFiles2, Attempts),
+    file_ops_test_utils:verify_files_and_dirs(WorkerToKillP2, SessId(P2), DirsAndFiles2, Attempts),
     ct:pal("Check on P2 after restart: done"),
 
     ok.
@@ -163,7 +163,7 @@ enable_ha(Config) ->
     timer:sleep(10000). % Give time to flush data saved before HA settings change
 
 create_dirs_and_files(Worker, SessId, SpaceGuid) ->
-    failure_test_utils:create_files_and_dirs(Worker, SessId, SpaceGuid, 1, 1).
+    file_ops_test_utils:create_files_and_dirs(Worker, SessId, SpaceGuid, 1, 1).
 
 responsible_node(NodeToCall, TermToCheck) ->
     Node = rpc:call(NodeToCall, datastore_key, any_responsible_node, [TermToCheck]),

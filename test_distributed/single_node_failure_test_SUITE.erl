@@ -79,7 +79,7 @@ create_initial_data_structure(Config) ->
     [User1] = test_config:get_provider_users(Config, P1),
     SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
-    SpaceGuid = rpc:call(WorkerP1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
     {ok, P1DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP1, SessId(P1), SpaceGuid, <<"P1_dir">>, 8#755)),
     {ok, P2DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP2, SessId(P2), SpaceGuid, <<"P1_dir">>, 8#755)),
@@ -100,7 +100,7 @@ create_test_data(Config, #{p1_dir := P1DirGuid, p2_dir := P2DirGuid}) ->
     [User1] = test_config:get_provider_users(Config, P1),
     SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
-    SpaceGuid = rpc:call(WorkerP1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
     #{
         p1_root => create_files_and_dirs(WorkerP1, SessId(P1), SpaceGuid),
@@ -118,7 +118,7 @@ verify(Config, #{p1_dir := P1DirGuid, p2_dir := P2DirGuid} = _InitialData, TestD
     [User1] = test_config:get_provider_users(Config, P1),
     SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
-    SpaceGuid = rpc:call(WorkerP1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
     verify_all_files_and_dirs_created_by_provider(WorkerP2, SessId(P2), TestData, p2),
 
@@ -131,9 +131,9 @@ verify(Config, #{p1_dir := P1DirGuid, p2_dir := P2DirGuid} = _InitialData, TestD
         false ->
             % App wasn't stopped before node killing - some data can be lost
             % but operations on dirs should be possible,
-            create_new_files_and_dirs_creation(Config, SpaceGuid),
-            create_new_files_and_dirs_creation(Config, P1DirGuid),
-            create_new_files_and_dirs_creation(Config, P2DirGuid)
+            test_new_files_and_dirs_creation(Config, SpaceGuid),
+            test_new_files_and_dirs_creation(Config, P1DirGuid),
+            test_new_files_and_dirs_creation(Config, P2DirGuid)
     end.
 
 verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData, p1) ->
@@ -147,7 +147,7 @@ verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData, KeyList)
         verify_files_and_dirs(Worker, SessId, maps:get(Key, TestData))
     end, KeyList).
 
-create_new_files_and_dirs_creation(Config, Dir) ->
+test_new_files_and_dirs_creation(Config, Dir) ->
     [P1, P2] = test_config:get_providers(Config),
     [WorkerP1] = test_config:get_provider_nodes(Config, P1),
     [WorkerP2] = test_config:get_provider_nodes(Config, P2),
@@ -159,12 +159,12 @@ create_new_files_and_dirs_creation(Config, Dir) ->
     verify_files_and_dirs(WorkerP2, SessId(P2), TestData).
 
 create_files_and_dirs(Worker, SessId, ParentUuid) ->
-    failure_test_utils:create_files_and_dirs(Worker, SessId, ParentUuid, 20, 50).
+    file_ops_test_utils:create_files_and_dirs(Worker, SessId, ParentUuid, 20, 50).
 
 verify_files_and_dirs(Worker, SessId, DirsAndFiles) ->
     % Verify with 90 attempts as additional time can be needed for
     % connection recreation after node restart
-    failure_test_utils:verify_files_and_dirs(Worker, SessId, DirsAndFiles, 90).
+    file_ops_test_utils:verify_files_and_dirs(Worker, SessId, DirsAndFiles, 90).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -295,9 +295,9 @@ get_record_struct(2) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, Helper, Readonly, LumaConfig, ImportedStorage}) ->
-    LumaConfig2 = case LumaConfig =:= undefined of
-        true -> luma_config:new(?AUTO_FEED);
-        false -> luma_config:set_feed(LumaConfig, ?EXTERNAL_FEED)
+    LumaConfig2 = case LumaConfig of
+        undefined -> luma_config:new(?AUTO_FEED);
+        {luma_config, Url, ApiKey} -> luma_config:new_with_external_feed(Url, ApiKey)
     end,
     {helper,
         HelperName,

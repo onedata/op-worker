@@ -41,13 +41,13 @@ db_error_test(Config) ->
     [User1] = test_config:get_provider_users(Config, ProviderId),
     SessId = test_config:get_user_session_id_on_provider(Config, User1, ProviderId),
     [SpaceId | _] = test_config:get_provider_spaces(Config, ProviderId),
-    SpaceGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
     onenv_test_utils:disable_panel_healthcheck(Config),
 
-    DirsAndFiles = failure_test_utils:create_files_and_dirs(Worker, SessId, SpaceGuid, 20, 50),
-    disable_db(),
+    DirsAndFiles = file_ops_test_utils:create_files_and_dirs(Worker, SessId, SpaceGuid, 20, 50),
+    enable_db_error_emulation(),
     ct:pal("Test data created"),
 
     ct:pal("Stopping application"),
@@ -62,7 +62,7 @@ db_error_test(Config) ->
     end),
 
     timer:sleep(timer:seconds(15)),
-    enable_db(),
+    disable_db_error_emulation(),
 
     StopMsg = receive
         {application_stop, StopAns} -> StopAns
@@ -72,6 +72,7 @@ db_error_test(Config) ->
     ?assertEqual(ok, StopMsg),
     ct:pal("Application stopped"),
 
+    % Kill node to be sure that nothing is in memory and all documents will be read from db
     failure_test_utils:kill_nodes(Config, Worker),
     ct:pal("Node killed"),
 
@@ -80,13 +81,15 @@ db_error_test(Config) ->
     mock_cberl(UpdatedConfig),
     ct:pal("Node restarted"),
 
-    disable_db(),
+    enable_db_error_emulation(),
     test_read_operations_on_db_error(Worker, RecreatedSessId, DirsAndFiles),
-    test_write_operations_on_db_error(Worker, RecreatedSessId, SpaceGuid),
-    enable_db(),
+    TestedName1 = test_write_operations_on_db_error(Worker, RecreatedSessId, SpaceGuid),
+    TestedName2 = test_write_operations_on_db_error(Worker, RecreatedSessId, SpaceGuid),
+    disable_db_error_emulation(),
+    test_write_operations_after_db_error(Worker, RecreatedSessId, SpaceGuid, TestedName1, TestedName2),
 
     ct:pal("Verifying test data"),
-    failure_test_utils:verify_files_and_dirs(Worker, RecreatedSessId, DirsAndFiles, 1),
+    file_ops_test_utils:verify_files_and_dirs(Worker, RecreatedSessId, DirsAndFiles, 1),
 
     ok.
 
@@ -97,24 +100,21 @@ db_error_test(Config) ->
 test_write_operations_on_db_error(Worker, SessId, ParentUuid) ->
     Name = generator:gen_name(),
     ?assertEqual({error, ?EAGAIN}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, Name, 8#755)),
-    ?assertMatch({error, ?EAGAIN}, lfm_proxy:create(Worker, SessId, ParentUuid, Name, 8#755)).
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:create(Worker, SessId, ParentUuid, Name, 8#755)),
+    Name.
 
-test_read_operations_on_db_error(Worker, SessId, {Dirs, Files}) ->
-    lists:foreach(fun(Dir) ->
-        ?assertMatch({error, ?EAGAIN}, lfm_proxy:stat(Worker, SessId, {guid, Dir})),
-        ?assertMatch({error, ?EAGAIN}, lfm_proxy:get_children_attrs(Worker, SessId, {guid, Dir}, 0, 100))
-    end, Dirs),
+test_write_operations_after_db_error(Worker, SessId, ParentUuid, PreviouslyTestedName1, PreviouslyTestedName2) ->
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, PreviouslyTestedName1, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, ParentUuid, PreviouslyTestedName2, 8#755)).
 
-    lists:foreach(fun(File) ->
-        ?assertMatch({error, ?EAGAIN}, lfm_proxy:stat(Worker, SessId, {guid, File})),
-        ?assertMatch({error, ?EAGAIN}, lfm_proxy:open(Worker, SessId, {guid, File}, rdwr))
-    end, Files).
+test_read_operations_on_db_error(Worker, SessId, DirsAndFiles) ->
+    file_ops_test_utils:test_read_operations_on_error(Worker, SessId, DirsAndFiles, ?EAGAIN).
 
-disable_db() ->
+enable_db_error_emulation() ->
     application:set_env(?APP_NAME, emulate_db_error, true).
 
 
-enable_db() ->
+disable_db_error_emulation() ->
     application:set_env(?APP_NAME, emulate_db_error, false).
 
 mock_cberl(Config) ->
