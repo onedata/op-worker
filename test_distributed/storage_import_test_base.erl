@@ -31,13 +31,15 @@
     enable_initial_scan/2, enable_continuous_scans/2, enable_continuous_scans/3, disable_continuous_scan/1,
     assertInitialScanFinished/2, assertInitialScanFinished/3,
     assertSecondScanFinished/2, assertScanFinished/3, assertScanFinished/4,
+    assertNoScanInProgress/3,
     parallel_assert/5,
     assert_monitoring_state/4,
     provider_storage_path/2, provider_storage_path/3, get_rdwr_storage/2,
     create_nested_directory_tree/3, generate_nested_directory_tree_file_paths/2,
     clean_traverse_tasks/1,
     mock_import_file_error/2, unmock_import_file_error/1,
-    stop_scan/2
+    stop_scan/2, start_scan/2,
+    get_finished_scans_num/2
 ]).
 
 % exported for RPC
@@ -5623,6 +5625,13 @@ enable_continuous_scans(Config, SpaceId, Opts) ->
 cleanup_storage_import_monitoring_model(Worker, SpaceId) ->
     rpc:call(Worker, storage_import_monitoring, delete, [SpaceId]).
 
+monitoring_describe(Worker, SpaceId) ->
+    rpc:call(Worker, storage_import_monitoring, describe, [SpaceId]).
+
+get_finished_scans_num(Worker, SpaceId) ->
+    #{<<"scans">> := Scans} = monitoring_describe(Worker, SpaceId),
+    Scans.
+
 get_scan_config(Worker, SpaceId) ->
     {ok, ImportConfig} = rpc:call(Worker, storage_import, get_configuration, [SpaceId]),
     {ok, maps:get(auto_storage_import_config, ImportConfig)}.
@@ -5908,7 +5917,6 @@ create_nested_directory_tree(Worker, [SubDirsNum | Rest], RootHandle) ->
         ok = create_nested_directory_tree(Worker, Rest, ChildHandle)
     end, lists:seq(1, SubDirsNum)).
 
-
 assertInitialScanFinished(Worker, SpaceId) ->
     assertInitialScanFinished(Worker, SpaceId, ?ATTEMPTS).
 
@@ -5948,7 +5956,7 @@ get_last_stat_timestamp(Worker, FilePath, SpaceId) ->
     StatTime.
 
 assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
-    SSM = rpc:call(Worker, storage_import_monitoring, describe, [SpaceId]),
+    SSM = monitoring_describe(Worker, SpaceId),
     SSM2 = flatten_histograms(SSM),
     try
         assert(ExpectedSSM, SSM2),

@@ -29,6 +29,7 @@ all() -> [
 ].
 
 -define(FILE_DATA, <<"1234567890abcd">>).
+-define(ATTEMPTS, 30).
 
 %%%===================================================================
 %%% API
@@ -102,13 +103,30 @@ create_test_data(Config, #{p1_dir := P1DirGuid, p2_dir := P2DirGuid}) ->
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
+    ImportingProvider = provider_onenv_test_utils:find_importing_provider(Config, SpaceId),
+    [ImportingOpNode | _] = test_config:get_provider_nodes(Config, ImportingProvider),
+
+
+    % check whether initial scan has been finished
+    storage_import_test_base:assertInitialScanFinished(ImportingOpNode, SpaceId, ?ATTEMPTS),
+    storage_import_test_base:assertNoScanInProgress(ImportingOpNode, SpaceId, ?ATTEMPTS),
+    FinishedScans = storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId),
+
+    % wait for new files to occur on storage
+    timer:sleep(timer:seconds(1)),
+    % mock importing process to block
+    block_import(ImportingOpNode),
+    % forcefully start import scan
+    storage_import_test_base:start_scan(ImportingOpNode, SpaceId),
+
     #{
         p1_root => create_files_and_dirs(WorkerP1, SessId(P1), SpaceGuid),
         p1_local => create_files_and_dirs(WorkerP1, SessId(P1), P1DirGuid),
         p1_remote => create_files_and_dirs(WorkerP1, SessId(P1), P2DirGuid),
         p2_root => create_files_and_dirs(WorkerP2, SessId(P2), SpaceGuid),
         p2_local => create_files_and_dirs(WorkerP2, SessId(P2), P2DirGuid),
-        p2_remote => create_files_and_dirs(WorkerP2, SessId(P2), P1DirGuid)
+        p2_remote => create_files_and_dirs(WorkerP2, SessId(P2), P1DirGuid),
+        finished_scans => FinishedScans
     }.
 
 verify(Config, #{p1_dir := P1DirGuid, p2_dir := P2DirGuid} = _InitialData, TestData, StopAppBeforeKill) ->
@@ -134,7 +152,18 @@ verify(Config, #{p1_dir := P1DirGuid, p2_dir := P2DirGuid} = _InitialData, TestD
             test_new_files_and_dirs_creation(Config, SpaceGuid),
             test_new_files_and_dirs_creation(Config, P1DirGuid),
             test_new_files_and_dirs_creation(Config, P2DirGuid)
-    end.
+    end,
+
+    % verify import
+    ImportingProvider = provider_onenv_test_utils:find_importing_provider(Config, SpaceId),
+    [ImportingOpNode | _] = test_config:get_provider_nodes(Config, ImportingProvider),
+
+    % verify whether further scans is correctly restarted after node restart
+    % get last finished scan
+    Scans0 = maps:get(finished_scans, TestData),
+    % wait till scan is finished
+    ?assertEqual(Scans0 + 1, storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId), ?ATTEMPTS).
+
 
 verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData, p1) ->
     verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData,
@@ -182,3 +211,10 @@ end_per_testcase(_Case, Config) ->
 
 end_per_suite(_Config) ->
     ok.
+
+block_import(OpwNode) ->
+    test_node_starter:load_modules([OpwNode], [?MODULE]),
+    ok = test_utils:mock_new(OpwNode, storage_import_engine),
+    ok = test_utils:mock_expect(OpwNode, storage_import_engine, import_file_unsafe, fun(StorageFileCtx, Info) ->
+        timer:sleep(timer:minutes(10))
+    end).

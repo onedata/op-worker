@@ -17,8 +17,8 @@
 %% API
 -export([
     initialize/1,
-    setup_sessions/1
-]).
+    setup_sessions/1,
+    find_importing_provider/2]).
 
 %%%===================================================================
 %%% API
@@ -44,9 +44,23 @@ setup_sessions(Config) ->
         end, Users)
     end, ProviderUsers),
     
-    test_config:set_many(Config, [
-        [sess_id, Sessions]
-    ]).
+    test_config:set_many(Config, [[sess_id, Sessions]]).
+
+
+-spec find_importing_provider(test_config:config(), od_space:id()) -> od_provider:id() | undefined.
+find_importing_provider(Config, SpaceId) ->
+    Providers = test_config:get_providers(Config),
+    lists:foldl(fun
+        (ProviderId, undefined) ->
+            [OpNode | _] = test_config:get_provider_nodes(Config, ProviderId),
+            {ok, StorageId} = rpc:call(OpNode, space_logic, get_local_storage_id, [SpaceId]),
+            case rpc:call(OpNode, storage, is_imported, [StorageId]) of
+                true -> ProviderId;
+                false -> undefined
+            end;
+        (_ProviderId, ImportingProviderId) ->
+            ImportingProviderId
+    end, undefined, Providers).
 
 
 %%%===================================================================
