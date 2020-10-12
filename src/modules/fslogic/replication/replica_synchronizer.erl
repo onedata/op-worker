@@ -1390,7 +1390,7 @@ flush_blocks(State) ->
 %%--------------------------------------------------------------------
 -spec flush_blocks(#state{}, [session:id()], [{from(), block(), request_type()}],
     boolean()) -> {[{from(), #file_location_changed{}}], #state{}}.
-flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
+flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, ExcludeSessions,
     FinalBlocks, IsTransfer) ->
 
     FlushFinalBlocks = case IsTransfer of
@@ -1425,6 +1425,13 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
     case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
         on_flush_blocks ->
             erlang:garbage_collect();
+        _ ->
+            ok
+    end,
+    #document{value = #file_location{size = Size}} = LocationDoc = fslogic_cache:get_local_location(),
+    case fslogic_location_cache:get_blocks(LocationDoc, #{count => 2}) of
+        [#file_block{offset = 0, size = Size}] ->
+            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, false, []);
         _ ->
             ok
     end,
@@ -1674,7 +1681,13 @@ try_to_clear_blocks_and_truncate(LocalFileLocId, LocationDoc, #state{file_ctx = 
         #fuse_response{status = #status{code = ?OK}} = truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
         %todo VFS-4433 file_popularity should be updated after updates on file_location, not in truncate_req
         State2 = flush_events(State),
-        {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2}
+        case Blocks of
+            [] ->
+                {ok, State2};
+            _ ->
+                fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, false, []),
+                {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2}
+        end
     catch
         E:R ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
