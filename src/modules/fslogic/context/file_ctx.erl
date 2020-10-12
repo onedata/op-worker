@@ -554,15 +554,21 @@ get_space_name(FileCtx = #file_ctx{space_name = SpaceName}, _Ctx) ->
 -spec get_aliased_name(ctx(), user_ctx:ctx() | undefined) ->
     {file_meta:name(), ctx()} | no_return().
 get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, UserCtx) ->
-    case is_space_dir_const(FileCtx)
-        andalso UserCtx =/= undefined
-        andalso (not session_utils:is_special(user_ctx:get_session_id(UserCtx))) of
+    FileGuid = get_guid_const(FileCtx),
+
+    case is_space_dir_const(FileCtx) andalso UserCtx =/= undefined of
+        true ->
+            {Name, FileCtx2} = case user_ctx:is_guest(UserCtx) andalso file_id:is_share_guid(FileGuid) of
+                true ->
+                    % Special case for guest user - get space name with provider auth
+                    get_space_name(FileCtx, user_ctx:new(?ROOT_SESS_ID));
+                false ->
+                    get_space_name(FileCtx, UserCtx)
+            end,
+            {Name, FileCtx2#file_ctx{file_name = Name}};
         false ->
             {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
-            {Name, FileCtx2};
-        true ->
-            {Name, FileCtx2} = get_space_name(FileCtx, UserCtx),
-            {Name, FileCtx2#file_ctx{file_name = Name}}
+            {Name, FileCtx2}
     end;
 get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
     {FileName, FileCtx}.

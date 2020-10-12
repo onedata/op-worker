@@ -58,12 +58,12 @@ get_file_instance_test(Config) ->
     } = FileDetails} = api_test_utils:create_file_in_space2_with_additional_metadata(
         <<"/", ?SPACE_2/binary>>, false, ?RANDOM_FILE_NAME(), Config
     ),
-    JsonFileDetails = file_details_to_gs_json(undefined, FileDetails),
+    ExpJsonFileDetails = file_details_to_gs_json(undefined, FileDetails),
 
     SpaceId = api_test_env:get_space_id(space2, Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     SpaceDetails = get_space_dir_details(P2Node, SpaceGuid, ?SPACE_2),
-    JsonSpaceDetails = file_details_to_gs_json(undefined, SpaceDetails),
+    ExpJsonSpaceDetails = file_details_to_gs_json(undefined, SpaceDetails),
 
     ClientSpec = #client_spec{
         correct = [
@@ -83,7 +83,7 @@ get_file_instance_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpec,
             prepare_args_fun = build_get_instance_prepare_gs_args_fun(FileGuid, private),
-            validate_result_fun = build_get_instance_validate_gs_call_fun(JsonFileDetails),
+            validate_result_fun = build_get_instance_validate_gs_call_fun(ExpJsonFileDetails),
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, undefined, undefined
             )
@@ -107,57 +107,86 @@ get_file_instance_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpec,
             prepare_args_fun = build_get_instance_prepare_gs_args_fun(SpaceGuid, private),
-            validate_result_fun = build_get_instance_validate_gs_call_fun(JsonSpaceDetails)
+            validate_result_fun = build_get_instance_validate_gs_call_fun(ExpJsonSpaceDetails)
         }
     ])).
 
 
 get_shared_file_instance_test(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    Providers = [P1Node, P2Node],
+    [P1] = api_test_env:get_provider_nodes(p1, Config),
+    [P2] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P1, P2],
+
+    SpaceOwnerSessId = api_test_env:get_user_session_id(user2, p1, Config),
 
     {FileType, _FilePath, FileGuid, #file_details{
         file_attr = FileAttr = #file_attr{
             guid = FileGuid,
             shares = OriginalShares
         }
-    } = FileDetails} = api_test_utils:create_file_in_space2_with_additional_metadata(
+    } = OriginalFileDetails} = api_test_utils:create_file_in_space2_with_additional_metadata(
         <<"/", ?SPACE_2/binary>>, false, ?RANDOM_FILE_NAME(), Config
     ),
 
-    SpaceOwnerSessId = api_test_env:get_user_session_id(user2, p1, Config),
-    ShareId1 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
-    ShareId2 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
+    FileShareId1 = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, FileGuid),
+    FileShareId2 = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, FileGuid),
 
-    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId1),
+    FileDetailsWithShares = OriginalFileDetails#file_details{
+        file_attr = FileAttr#file_attr{shares = [FileShareId2, FileShareId1 | OriginalShares]}
+    },
 
-    JsonFileDetails = file_details_to_gs_json(ShareId1, FileDetails#file_details{
-        file_attr = FileAttr#file_attr{shares = [ShareId2, ShareId1 | OriginalShares]}
-    }),
+    ShareRootFileGuid = file_id:guid_to_share_guid(FileGuid, FileShareId1),
+    ExpJsonShareRootFileDetails = file_details_to_gs_json(FileShareId1, FileDetailsWithShares),
+
+    SpaceId = api_test_env:get_space_id(space2, Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceShareId = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, SpaceGuid),
+    ShareSpaceGuid = file_id:guid_to_share_guid(SpaceGuid, SpaceShareId),
+
+    ShareSpaceDetails = get_space_dir_details(P2, SpaceGuid, ?SPACE_2),
+    ExpJsonShareSpaceDetails = file_details_to_gs_json(SpaceShareId, ShareSpaceDetails),
+
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, SpaceShareId),
+    ExpJsonShareFileDetails = file_details_to_gs_json(SpaceShareId, FileDetailsWithShares),
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #scenario_spec{
-            name = str_utils:format("Get instance for shared ~s using gs public api", [FileType]),
+            name = str_utils:format("Get instance for directly shared ~s using gs public api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
-            prepare_args_fun = build_get_instance_prepare_gs_args_fun(ShareFileGuid, public),
-            validate_result_fun = build_get_instance_validate_gs_call_fun(JsonFileDetails),
+            prepare_args_fun = build_get_instance_prepare_gs_args_fun(ShareRootFileGuid, public),
+            validate_result_fun = build_get_instance_validate_gs_call_fun(ExpJsonShareRootFileDetails),
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                FileGuid, ShareId1, undefined
+                FileGuid, FileShareId1, undefined
             )
         },
         #scenario_spec{
-            name = str_utils:format("Get instance for shared ~s using gs private api", [FileType]),
+            name = str_utils:format("Get instance for directly shared ~s using gs private api", [FileType]),
             type = gs_with_shared_guid_and_aspect_private,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
-            prepare_args_fun = build_get_instance_prepare_gs_args_fun(ShareFileGuid, private),
+            prepare_args_fun = build_get_instance_prepare_gs_args_fun(ShareRootFileGuid, private),
             validate_result_fun = fun(_, Result) ->
                 ?assertEqual(?ERROR_UNAUTHORIZED, Result)
             end,
             data_spec = undefined
+        },
+        #scenario_spec{
+            name = str_utils:format("Get instance for indirectly shared ~s using gs public api", [FileType]),
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
+            prepare_args_fun = build_get_instance_prepare_gs_args_fun(ShareFileGuid, public),
+            validate_result_fun = build_get_instance_validate_gs_call_fun(ExpJsonShareFileDetails)
+        },
+        #scenario_spec{
+            name = str_utils:format("Get instance for shared ?SPACE_2 using gs public api"),
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
+            prepare_args_fun = build_get_instance_prepare_gs_args_fun(ShareSpaceGuid, public),
+            validate_result_fun = build_get_instance_validate_gs_call_fun(ExpJsonShareSpaceDetails)
         }
     ])).
 

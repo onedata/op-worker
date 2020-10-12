@@ -176,6 +176,7 @@ create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileNam
 create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName, Config) ->
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Nodes = [P1Node, P2Node],
 
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
     SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
@@ -198,15 +199,15 @@ create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileTyp
         _ ->
             0
     end,
-    HasDirectQos = randomly_add_qos(P1Node, FileGuid, <<"key=value2">>, 2),
-    HasMetadata = randomly_set_metadata(P1Node, FileGuid),
-    HasAcl = randomly_set_acl(P1Node, FileGuid),
-
     {ok, FileAttrs} = ?assertMatch(
         {ok, #file_attr{size = Size, shares = FileShares}},
         get_file_attrs(P2Node, FileGuid),
         ?ATTEMPTS
     ),
+
+    HasDirectQos = randomly_add_qos(Nodes, FileGuid, <<"key=value2">>, 2),
+    HasMetadata = randomly_set_metadata(Nodes, FileGuid),
+    HasAcl = randomly_set_acl(Nodes, FileGuid),
 
     FileDetails = #file_details{
         file_attr = FileAttrs,
@@ -364,40 +365,58 @@ get_xattrs(Node, FileGuid) ->
     end, #{}, Keys)}.
 
 
--spec randomly_add_qos(node(), file_id:file_guid(), qos_expression:expression(), qos_entry:replicas_num()) ->
+-spec randomly_add_qos([node()], file_id:file_guid(), qos_expression:expression(), qos_entry:replicas_num()) ->
     Added :: boolean().
-randomly_add_qos(Node, FileGuid, Expression, ReplicasNum) ->
+randomly_add_qos(Nodes, FileGuid, Expression, ReplicasNum) ->
     case rand:uniform(2) of
         1 ->
-            ?assertMatch({ok, _}, lfm_proxy:add_qos_entry(
-                Node, ?ROOT_SESS_ID, {guid, FileGuid}, Expression, ReplicasNum
+            RandNode = lists_utils:random_element(Nodes),
+            {ok, QosEntryId} = ?assertMatch({ok, _}, lfm_proxy:add_qos_entry(
+                RandNode, ?ROOT_SESS_ID, {guid, FileGuid}, Expression, ReplicasNum
             ), ?ATTEMPTS),
+            lists:foreach(fun(Node) ->
+                ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(Node, ?ROOT_SESS_ID, QosEntryId), ?ATTEMPTS)
+            end, Nodes),
             true;
         2 ->
             false
     end.
 
 
--spec randomly_set_metadata(node(), file_id:file_guid()) -> Set :: boolean().
-randomly_set_metadata(Node, FileGuid) ->
+-spec randomly_set_metadata([node()], file_id:file_guid()) -> Set :: boolean().
+randomly_set_metadata(Nodes, FileGuid) ->
     case rand:uniform(2) of
         1 ->
+            FileKey = {guid, FileGuid},
+            RandNode = lists_utils:random_element(Nodes),
             ?assertMatch(ok, lfm_proxy:set_metadata(
-                Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []
+                RandNode, ?ROOT_SESS_ID, FileKey, rdf, ?RDF_METADATA_1, []
             ), ?ATTEMPTS),
+            lists:foreach(fun(Node) ->
+                ?assertMatch(
+                    {ok, _},
+                    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, FileKey, rdf, [], false),
+                    ?ATTEMPTS
+                )
+            end, Nodes),
             true;
         2 ->
             false
     end.
 
 
--spec randomly_set_acl(node(), file_id:file_guid()) -> Set ::boolean().
-randomly_set_acl(Node, FileGuid) ->
+-spec randomly_set_acl([node()], file_id:file_guid()) -> Set ::boolean().
+randomly_set_acl(Nodes, FileGuid) ->
     case rand:uniform(2) of
         1 ->
+            FileKey = {guid, FileGuid},
+            RandNode = lists_utils:random_element(Nodes),
             ?assertMatch(ok, lfm_proxy:set_acl(
-                Node, ?ROOT_SESS_ID, {guid, FileGuid}, acl:from_json(?OWNER_ONLY_ALLOW_ACL, cdmi)
+                RandNode, ?ROOT_SESS_ID, {guid, FileGuid}, acl:from_json(?OWNER_ONLY_ALLOW_ACL, cdmi)
             ), ?ATTEMPTS),
+            lists:foreach(fun(Node) ->
+                ?assertMatch({ok, [_]}, lfm_proxy:get_acl(Node, ?ROOT_SESS_ID, FileKey), ?ATTEMPTS)
+            end, Nodes),
             true;
         2 ->
             false

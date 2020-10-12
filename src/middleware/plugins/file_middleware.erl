@@ -364,8 +364,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
 
 -spec get_operation_supported(gri:gri(), middleware:scope()) ->
     boolean().
-get_operation_supported(instance, private) -> true;
-get_operation_supported(instance, public) -> true;
+get_operation_supported(instance, private) -> true;             % gs only
+get_operation_supported(instance, public) -> true;              % gs only
 get_operation_supported(list, private) -> true;                 % REST only (deprecated)
 get_operation_supported(children, private) -> true;             % REST/gs
 get_operation_supported(children, public) -> true;              % REST/gs
