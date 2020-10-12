@@ -38,9 +38,7 @@
     get_stats/3,
     is_scan_in_progress/1,
     is_initial_scan_finished/1,
-    is_scan_finished/2, 
-    is_initial_scan_not_started_yet/1, 
-    is_scan_not_started_yet/2,
+    is_scan_finished/2,
     get_finished_scans_num/1,
     get_scan_stop_time/1]).
 
@@ -425,22 +423,6 @@ is_scan_finished(SpaceId, ScanNo) ->
         {ok, Doc} ->
             is_scan_finished(Doc, ScanNo)
     end.
-
-
--spec is_initial_scan_not_started_yet(doc() | record()) -> boolean().
-is_initial_scan_not_started_yet(SIM) ->
-    is_scan_not_started_yet(SIM, 1).
-
-
--spec is_scan_not_started_yet(doc() | record(), non_neg_integer()) -> boolean().
-is_scan_not_started_yet(#document{value = SIM = #storage_import_monitoring{}}, ScanNo) ->
-    is_scan_not_started_yet(SIM, ScanNo);
-is_scan_not_started_yet(SIM = #storage_import_monitoring{finished_scans = FinishedScans}, ScanNo)
-    when FinishedScans =:=  ScanNo - 1
-->
-    not is_scan_in_progress(SIM);
-is_scan_not_started_yet(#storage_import_monitoring{finished_scans = FinishedScans}, ScanNo) ->
-    FinishedScans < ScanNo.
 
 
 -spec get_finished_scans_num(key() | doc() | record()) -> {ok, non_neg_integer()}.

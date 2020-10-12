@@ -65,7 +65,7 @@
 -export_type([info/0, master_job/0, slave_job/0]).
 
 %% API
--export([init_pool/0, stop_pool/0, run_scan/1, run_scan/2, cancel/1]).
+-export([init_pool/0, stop_pool/0, run_scan/1, run_scan/2, cancel/1, fix_stalled_scans/1]).
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, get_job/1, update_job_progress/5, to_string/1,
@@ -141,7 +141,59 @@ cancel(SpaceId) ->
                 [SpaceId, StorageId]),
             {error, not_found}
     end.
-    
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% This function takes list of provider's spaces (SpaceIds) as an argument.
+%%
+%% First it lists ongoing storage_sync_traverse tasks and extracts ids of
+%% corresponding spaces. The resulting list of space ids is called
+%% CorrectSpacesWithStalledScans because scans for these spaces will be
+%% restarted by the traverse mechanism.
+%%
+%% Then it filters provider's SpaceIds according to the storage_import_monitoring
+%% data so that only auto imported spaces with stalled (in progress) scans
+%% are left. The resulting list is called SpacesWithStalledScans as these
+%% are ALL spaces for which scans are marked as "in progress".
+%%
+%% Next, spaces that exist ONLY in the SpacesWithStalledScans list
+%% and are MISSING in the CorrectSpacesWithStalledScans are extracted.
+%% The resulting list is called BrokenSpacesWithStalledScans as these
+%% are ids of spaces for which traverse_task links are missing and they
+%% won't be restarted by the traverse mechanism.
+%%
+%% Eventually, storage_import_monitoring docs are fixed for each space from
+%% BrokenSpacesWithStalledScans which means that their scans
+%% as marked as "finished".
+%% @end
+%%--------------------------------------------------------------------
+-spec fix_stalled_scans([od_space:id()]) -> ok | {error, term()}.
+fix_stalled_scans(SpaceIds) ->
+    case storage_traverse:list_ongoing_tasks(?POOL_BIN) of
+        {ok, StalledScanIds} ->
+            % correct below means that there exists a traverse_task link and document for given scan
+            % and that the scan will be restarted by traverse
+            CorrectSpacesWithStalledScans = lists:filtermap(fun(StalledScanId) ->
+                case traverse_task:get(?POOL_BIN, StalledScanId) of
+                    {ok, _} -> {true, element(1, decode_task_id(StalledScanId))};
+                    {error, not_found} -> false
+                end
+            end, StalledScanIds),
+            SpacesWithStalledScans = lists:filter(fun(SpaceId) ->
+                storage_import:is_auto_imported(SpaceId) andalso storage_import_monitoring:is_scan_in_progress(SpaceId)
+            end, SpaceIds),
+            BrokenSpacesWithStalledScans = SpacesWithStalledScans -- CorrectSpacesWithStalledScans,
+            ?alert("SpacesWithStalledScans: ~p", [SpacesWithStalledScans]),
+            ?alert("CorrectSpacesWithStalledScans: ~p", [CorrectSpacesWithStalledScans]),
+            ?alert("BrokenSpacesWithStalledScans: ~p", [BrokenSpacesWithStalledScans]),
+            lists:foreach(fun(SpaceId) ->
+                storage_import_monitoring:mark_finished_scan(SpaceId, true)
+            end, BrokenSpacesWithStalledScans);
+        {error, _} = Error ->
+            Error
+    end.
+
 
 %===================================================================
 % Pool callbacks
@@ -193,7 +245,7 @@ task_started(TaskId, _PoolName) ->
     {SpaceId, _StorageId, ScanNum} = decode_task_id(TaskId),
     storage_import_monitoring:mark_started_scan(SpaceId),
     storage_import_logger:log_scan_started(SpaceId, ScanNum, TaskId),
-    storage_import_worker:notify_started_scan(SpaceId).
+    auto_storage_import_worker:notify_started_scan(SpaceId).
 
 -spec task_finished(traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
@@ -787,7 +839,7 @@ scan_finished(SpaceId, StorageId, Aborted) ->
     SpaceStorageFileId = storage_file_id:space_dir_id(SpaceId, StorageId),
     ok = storage_sync_links:delete_recursive(SpaceStorageFileId, StorageId),
     storage_import_monitoring:mark_finished_scan(SpaceId, Aborted),
-    storage_import_worker:notify_finished_scan(SpaceId),
+    auto_storage_import_worker:notify_finished_scan(SpaceId),
     ok.
 
 

@@ -259,7 +259,7 @@ delete_local_documents_stage_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     ok = rpc:call(Worker, storage_import, set_or_configure_auto_mode, [?SPACE_ID,
         #{continuous_scan => true, max_depth => 5, sync_acl => true}]),
-    ok = rpc:call(Worker, storage_import_worker, schedule_spaces_check, [0]),
+    ok = rpc:call(Worker, auto_storage_import_worker, schedule_spaces_check, [0]),
     ok = rpc:call(Worker, file_popularity_api, enable, [?SPACE_ID]),
     ACConfig =  #{
         enabled => true,

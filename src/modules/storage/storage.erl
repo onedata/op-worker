@@ -519,7 +519,7 @@ on_space_supported(SpaceId, StorageId) ->
 -spec on_space_unsupported(od_space:id(), id()) -> ok.
 on_space_unsupported(SpaceId, StorageId) ->
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
-    storage_import_worker:notify_space_unsupported(SpaceId),
+    auto_storage_import_worker:notify_space_unsupported(SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
 

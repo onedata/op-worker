@@ -15,7 +15,7 @@
 %%% For more info on auto storage import please see storage_sync_traverse.erl.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_worker).
+-module(auto_storage_import_worker).
 -author("Jakub Kudzia").
 -behavior(worker_plugin_behaviour).
 
@@ -54,10 +54,15 @@
 %% Exported for tests
 -export([schedule_spaces_check/1]).
 
--define(STORAGE_IMPORT_WORKER, ?MODULE).
+-define(AUTO_STORAGE_IMPORT_WORKER, ?MODULE).
 
 -define(SCHEDULED_SCAN, scheduled_scan).
 -define(NOT_SCHEDULED_SCAN, not_scheduled_scan).
+
+-define(STALLED_SCAN_FIXED, stalled_scan_fixed).
+-define(POOL_INITIALIZED, pool_initialized).
+
+-define(STALLED_SCANS_NOT_FIXED_ERROR, {error, stalled_scan_not_fixed_error}).
 
 -type schedule_status() :: ?SCHEDULED_SCAN | ?NOT_SCHEDULED_SCAN.
 
@@ -73,7 +78,10 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    ok = storage_sync_traverse:init_pool(),
+    case gs_channel_service:is_connected() of
+        true -> notify_connection_to_oz();
+        false -> ok
+    end,
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -134,32 +142,77 @@ notify_connection_to_oz() ->
 
 -spec notify_space_with_auto_import_configured(od_space:id()) -> ok.
 notify_space_with_auto_import_configured(SpaceId) ->
-    worker_proxy:cast(?STORAGE_IMPORT_WORKER, ?SPACE_WITH_AUTO_IMPORT_CONFIGURED(SpaceId)),
+    worker_proxy:cast(?AUTO_STORAGE_IMPORT_WORKER, ?SPACE_WITH_AUTO_IMPORT_CONFIGURED(SpaceId)),
     ok.
 
 -spec notify_space_unsupported(od_space:id()) -> ok.
 notify_space_unsupported(SpaceId) ->
-    worker_proxy:cast(?STORAGE_IMPORT_WORKER, ?SPACE_UNSUPPORTED(SpaceId)),
+    worker_proxy:cast(?AUTO_STORAGE_IMPORT_WORKER, ?SPACE_UNSUPPORTED(SpaceId)),
     ok.
 
 -spec notify_space_deleted(od_space:id()) -> ok.
 notify_space_deleted(SpaceId) ->
-    worker_proxy:cast(?STORAGE_IMPORT_WORKER, ?SPACE_DELETED(SpaceId)),
+    worker_proxy:cast(?AUTO_STORAGE_IMPORT_WORKER, ?SPACE_DELETED(SpaceId)),
     ok.
 
 -spec notify_started_scan(od_space:id()) -> ok.
 notify_started_scan(SpaceId) ->
-    worker_proxy:cast(?STORAGE_IMPORT_WORKER, ?SCAN_STARTED(SpaceId)),
+    worker_proxy:cast(?AUTO_STORAGE_IMPORT_WORKER, ?SCAN_STARTED(SpaceId)),
     ok.
 
 -spec notify_finished_scan(od_space:id()) -> ok.
 notify_finished_scan(SpaceId) ->
-    worker_proxy:cast(?STORAGE_IMPORT_WORKER, ?SCAN_FINISHED(SpaceId)),
+    worker_proxy:cast(?AUTO_STORAGE_IMPORT_WORKER, ?SCAN_FINISHED(SpaceId)),
     ok.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec ensure_pool_initialized() -> ok.
+ensure_pool_initialized() ->
+    case get(?POOL_INITIALIZED) of
+        true ->
+            ok;
+        undefined ->
+            ok = storage_sync_traverse:init_pool(),
+            put(?POOL_INITIALIZED, true),
+            ok
+    end.
+
+-spec ensure_stalled_scans_are_fixed() -> ok.
+ensure_stalled_scans_are_fixed() ->
+    case get(?STALLED_SCAN_FIXED) of
+        true ->
+            ok;
+        _ ->
+            case provider_logic:get_spaces() of
+                {ok, SpaceIds} ->
+                    fix_stalled_scans(SpaceIds);
+                ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                    ?debug("auto_storage_import_worker was unable to fix stalled scans due to no connection to oz."),
+                    throw(?STALLED_SCANS_NOT_FIXED_ERROR);
+                ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                    ?debug("auto_storage_import_worker was unable to fix stalled scans due to unregistered provider."),
+                    throw(?STALLED_SCANS_NOT_FIXED_ERROR);
+                {error, _} = Error ->
+                    ?error("auto_storage_import_worker was unable to fix stalled scans due to unexpected error: ~p", [Error]),
+                    throw(?STALLED_SCANS_NOT_FIXED_ERROR)
+            end
+    end.
+
+
+-spec fix_stalled_scans([od_space:id()]) -> ok.
+fix_stalled_scans(SpaceIds) ->
+    case storage_sync_traverse:fix_stalled_scans(SpaceIds) of
+        ok ->
+            put(?STALLED_SCAN_FIXED, true),
+            ok;
+        {error, _} = Error ->
+            ?error("auto_storage_import_worker was unable to fix stalled scans due to unexpected error: ~p", [Error]),
+            throw(?STALLED_SCANS_NOT_FIXED_ERROR)
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -171,6 +224,8 @@ notify_finished_scan(SpaceId) ->
 -spec check_spaces() -> ok.
 check_spaces() ->
     try
+        ensure_pool_initialized(),
+        ensure_stalled_scans_are_fixed(),
         case auto_imported_spaces_registry:ensure_initialized() of
             ?INITIALIZED ->
                 iterate_spaces_and_maybe_schedule_scans();
@@ -178,8 +233,11 @@ check_spaces() ->
                 ok
         end
     catch
+        throw:?STALLED_SCANS_NOT_FIXED_ERROR ->
+            ok;
         Error2:Reason ->
-            ?error_stacktrace("storage_import_worker was unable to check spaces due to unexpected ~p:~p", [Error2, Reason])
+            ?error_stacktrace("~s was unable to check spaces due to unexpected ~p:~p",
+                [?AUTO_STORAGE_IMPORT_WORKER, Error2, Reason])
     end.
 
 
@@ -204,12 +262,12 @@ maybe_start_scan(SpaceId) ->
     case storage_import_config:get_auto_config(SpaceId) of
         {ok, AutoConfig} ->
             {ok, SIMDoc} = storage_import_monitoring:get_or_create(SpaceId),
-            case storage_import_monitoring:is_initial_scan_not_started_yet(SIMDoc) of
+            case storage_import_monitoring:is_scan_in_progress(SIMDoc) of
                 true ->
-                    schedule_scan(SpaceId, AutoConfig);
+                    ?NOT_SCHEDULED_SCAN;
                 false ->
                     case storage_import_monitoring:is_initial_scan_finished(SIMDoc) of
-                        false -> ?NOT_SCHEDULED_SCAN;
+                        false -> schedule_scan(SpaceId, AutoConfig);
                         true -> maybe_start_consecutive_scan(SpaceId, SIMDoc, AutoConfig)
                     end
             end;
@@ -261,5 +319,5 @@ schedule_registry_revision() ->
 
 -spec schedule(non_neg_integer(), term()) -> ok.
 schedule(IntervalSeconds, Request) ->
-    erlang:send_after(timer:seconds(IntervalSeconds), ?STORAGE_IMPORT_WORKER, {sync_timer, Request}),
+    erlang:send_after(timer:seconds(IntervalSeconds), ?AUTO_STORAGE_IMPORT_WORKER, {sync_timer, Request}),
     ok.

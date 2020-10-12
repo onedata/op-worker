@@ -27,7 +27,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/4, stop/1, run/5, run/6, get_iterator/1]).
+-export([init/4, stop/1, run/5, run/6, get_iterator/1, list_ongoing_tasks/1]).
 
 %% @formatter:off
 %% Traverse callbacks
@@ -109,8 +109,7 @@
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) when is_atom(Pool) ->
     init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit);
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) ->
-    traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit,
-        #{executor => oneprovider:get_id_or_undefined()}).
+    traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit).
 
 -spec stop(pool() | atom()) -> any().
 stop(Pool) when is_atom(Pool) ->
@@ -175,6 +174,16 @@ get_iterator(Storage) ->
         ?CEPHRADOS_HELPER_NAME -> ?FLAT_ITERATOR;
         ?S3_HELPER_NAME -> ?FLAT_ITERATOR;
         ?SWIFT_HELPER_NAME -> ?FLAT_ITERATOR
+    end.
+
+
+-spec list_ongoing_tasks(pool()) -> {ok, [traverse:id()]} | {error, term()}.
+list_ongoing_tasks(Pool) when is_atom(Pool) ->
+    list_ongoing_tasks(atom_to_binary(Pool, utf8));
+list_ongoing_tasks(Pool) when is_binary(Pool) ->
+    case traverse_task_list:list(Pool, ongoing) of
+        {ok, TaskIds, _} -> {ok, TaskIds};
+        {error, _} = Error -> Error
     end.
 
 %%%===================================================================

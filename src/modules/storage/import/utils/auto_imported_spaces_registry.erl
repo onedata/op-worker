@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper module for storage_import_worker.
+%%% Helper module for auto_storage_import_worker.
 %%% It implements a simple registry for tracking spaces with
 %%% enabled auto-import.
 %%%
@@ -56,7 +56,7 @@ ensure_initialized() ->
 %% stalled (no longer supported) spaces from it.
 %%
 %% In normal operation this function should do nothing as adding/removing
-%% spaces to/from the registry should be performed by storage_import_worker.
+%% spaces to/from the registry should be performed by auto_storage_import_worker.
 %% This function is meant to revise the registry in case of unexpected
 %% problems.
 %% @end
@@ -72,11 +72,11 @@ revise() ->
                     CurrentlyRegisteredSpaces = list(),
                     revise(lists:sort(Spaces), lists:sort(CurrentlyRegisteredSpaces));
                 ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-                    ?debug("storage_import_worker was unable to revise its registry due to no connection to oz.");
+                    ?debug("auto_storage_import_worker was unable to revise its registry due to no connection to oz.");
                 ?ERROR_UNREGISTERED_ONEPROVIDER ->
-                    ?debug("storage_import_worker was unable to revise its registry due to unregistered provider.");
+                    ?debug("auto_storage_import_worker was unable to revise its registry due to unregistered provider.");
                 {error, _} = Error ->
-                    ?error("storage_import_worker was unable to revise its registry due to unexpected ~p", [Error])
+                    ?error("auto_storage_import_worker was unable to revise its registry due to unexpected ~p", [Error])
             end
     end.
 
@@ -130,18 +130,18 @@ init() ->
                 register_auto_imported_spaces(Spaces),
                 ?INITIALIZED;
             ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-                ?debug("storage_import_worker was unable to collect auto imported spaces due to no connection to oz"),
+                ?debug("auto_storage_import_worker was unable to collect auto imported spaces due to no connection to oz"),
                 ?NOT_INITIALIZED;
             ?ERROR_UNREGISTERED_ONEPROVIDER ->
-                ?debug("storage_import_worker was unable to collect auto imported spaces due to unregistered provider"),
+                ?debug("auto_storage_import_worker was unable to collect auto imported spaces due to unregistered provider"),
                 ?NOT_INITIALIZED;
             {error, _} = Error ->
-                ?error("storage_import_worker was unable to collect auto imported spaces due to unexpected ~p", [Error]),
+                ?error("auto_storage_import_worker was unable to collect auto imported spaces due to unexpected ~p", [Error]),
                 ?NOT_INITIALIZED
         end
     catch
         Error2:Reason ->
-            ?error_stacktrace("storage_import_worker was unable to collect auto imported spaces due to unexpected ~p:~p", [Error2, Reason]),
+            ?error_stacktrace("auto_storage_import_worker was unable to collect auto imported spaces due to unexpected ~p:~p", [Error2, Reason]),
             catch ets:delete(?REGISTRY),
             ?NOT_INITIALIZED
     end.

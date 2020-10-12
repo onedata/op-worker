@@ -47,22 +47,24 @@ failure_test(Config) ->
 
 test_base(Config, InitialData, StopAppBeforeKill) ->
     [P1, _] = test_config:get_providers(Config),
-    [WorkerP1] = test_config:get_provider_nodes(Config, P1),
+    [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
+    ImportingProvider = provider_onenv_test_utils:find_importing_provider(Config, SpaceId),
+    [ImportingOpNode | _] = test_config:get_provider_nodes(Config, ImportingProvider),
 
     TestData = create_test_data(Config, InitialData),
     ct:pal("Test data created"),
 
     case StopAppBeforeKill of
         true ->
-            ?assertEqual(ok, rpc:call(WorkerP1, application, stop, [?APP_NAME])),
+            ?assertEqual(ok, rpc:call(ImportingOpNode, application, stop, [?APP_NAME])),
             ct:pal("Application stopped");
         false ->
             ok
     end,
 
-    failure_test_utils:kill_nodes(Config, WorkerP1),
+    failure_test_utils:kill_nodes(Config, ImportingOpNode),
     ct:pal("Node killed"),
-    UpdatedConfig = failure_test_utils:restart_nodes(Config, WorkerP1),
+    UpdatedConfig = failure_test_utils:restart_nodes(Config, ImportingOpNode),
     ct:pal("Node restarted"),
 
     verify(UpdatedConfig, InitialData, TestData, StopAppBeforeKill),
@@ -162,7 +164,16 @@ verify(Config, #{p1_dir := P1DirGuid, p2_dir := P2DirGuid} = _InitialData, TestD
     % get last finished scan
     Scans0 = maps:get(finished_scans, TestData),
     % wait till scan is finished
-    ?assertEqual(Scans0 + 1, storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId), ?ATTEMPTS).
+    try
+
+        ?assertEqual(Scans0 + 1, storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId), ?ATTEMPTS)
+
+    catch
+        E:R ->
+            ct:pal("TEST FAILED: ~p", [{E, R}]),
+            ct:timetrap({hours, 10}),
+            ct:sleep({hours, 10})
+    end.
 
 
 verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData, p1) ->
