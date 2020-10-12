@@ -177,25 +177,34 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
     {ok, DirUuid} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
-    {ok, _} = times:save(#document{
-        key = DirUuid,
-        value = #times{mtime = CTime, atime = CTime, ctime = CTime},
-        scope = SpaceId
-    }),
-    fslogic_times:update_mtime_ctime(ParentFileCtx2),
-
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
-    #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
-            allow_deleted_files => false,
-            include_size => false,
-            name_conflicts_resolution_policy => allow_name_conflicts
+
+    try
+        {ok, _} = times:save(#document{
+            key = DirUuid,
+            value = #times{mtime = CTime, atime = CTime, ctime = CTime},
+            scope = SpaceId
         }),
-    FileAttr2 = FileAttr#file_attr{size = 0},
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #dir{guid = file_id:pack_guid(DirUuid, SpaceId)}
-    }.
+        fslogic_times:update_mtime_ctime(ParentFileCtx2),
+
+        #fuse_response{fuse_response = FileAttr} =
+            attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
+                allow_deleted_files => false,
+                include_size => false,
+                name_conflicts_resolution_policy => allow_name_conflicts
+            }),
+        FileAttr2 = FileAttr#file_attr{size = 0},
+        ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
+        #fuse_response{status = #status{code = ?OK},
+            fuse_response = #dir{guid = file_id:pack_guid(DirUuid, SpaceId)}
+        }
+    catch
+        Error:Reason ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            file_meta:delete(FileUuid),
+            times:delete(FileUuid),
+            erlang:Error(Reason)
+    end.
 
 
 %%--------------------------------------------------------------------
