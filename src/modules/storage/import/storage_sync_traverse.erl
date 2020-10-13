@@ -184,11 +184,9 @@ fix_stalled_scans(SpaceIds) ->
                 storage_import:is_auto_imported(SpaceId) andalso storage_import_monitoring:is_scan_in_progress(SpaceId)
             end, SpaceIds),
             BrokenSpacesWithStalledScans = SpacesWithStalledScans -- CorrectSpacesWithStalledScans,
-            ?alert("SpacesWithStalledScans: ~p", [SpacesWithStalledScans]),
-            ?alert("CorrectSpacesWithStalledScans: ~p", [CorrectSpacesWithStalledScans]),
-            ?alert("BrokenSpacesWithStalledScans: ~p", [BrokenSpacesWithStalledScans]),
             lists:foreach(fun(SpaceId) ->
-                storage_import_monitoring:mark_finished_scan(SpaceId, true)
+                storage_import_monitoring:mark_finished_scan(SpaceId, true),
+                ?info("Aborted stalled scan of auto storage import in the space ~s", [SpaceId])
             end, BrokenSpacesWithStalledScans);
         {error, _} = Error ->
             Error

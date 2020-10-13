@@ -391,6 +391,7 @@ init_per_suite(Config) ->
         [W | _] = ?config(op_worker_nodes, NewConfig2),
         mock_storage_import_monitoring_update(W),
         rpc:call(W, auto_storage_import_worker, notify_connection_to_oz, []),
+        ?assertEqual(true, rpc:call(W, auto_storage_import_worker, is_ready, []), 10),
         NewConfig2
     end,
     {ok, _} = application:ensure_all_started(worker_pool),

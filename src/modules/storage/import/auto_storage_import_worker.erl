@@ -52,16 +52,21 @@
 ]).
 
 %% Exported for tests
--export([schedule_spaces_check/1]).
+-export([schedule_spaces_check/1, is_ready/0]).
 
 -define(AUTO_STORAGE_IMPORT_WORKER, ?MODULE).
 
+% messages
 -define(SCHEDULED_SCAN, scheduled_scan).
 -define(NOT_SCHEDULED_SCAN, not_scheduled_scan).
+-define(IS_POOL_INITIALIZED, is_pool_initialized).
 
+% worker ETS associated keys
+-define(ETS_STATE, auto_storage_import_worker_state).
 -define(STALLED_SCAN_FIXED, stalled_scan_fixed).
 -define(POOL_INITIALIZED, pool_initialized).
 
+% errors
 -define(STALLED_SCANS_NOT_FIXED_ERROR, {error, stalled_scan_not_fixed_error}).
 
 -type schedule_status() :: ?SCHEDULED_SCAN | ?NOT_SCHEDULED_SCAN.
@@ -82,6 +87,7 @@ init(_Args) ->
         true -> notify_connection_to_oz();
         false -> ok
     end,
+    state_init(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -115,6 +121,8 @@ handle(?SCAN_STARTED(SpaceId)) ->
     auto_imported_spaces_registry:mark_scanning(SpaceId);
 handle(?SCAN_FINISHED(SpaceId)) ->
     auto_imported_spaces_registry:mark_inactive(SpaceId);
+handle(?IS_POOL_INITIALIZED) ->
+    is_pool_initialized();
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -129,6 +137,7 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     storage_sync_traverse:stop_pool(),
+    state_cleanup(),
     ok.
 
 %%%===================================================================
@@ -166,26 +175,34 @@ notify_finished_scan(SpaceId) ->
     ok.
 
 %%%===================================================================
+%%% Functions used in tests
+%%%===================================================================
+
+-spec is_ready() -> boolean().
+is_ready() ->
+    worker_proxy:call(?AUTO_STORAGE_IMPORT_WORKER, ?IS_POOL_INITIALIZED).
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 -spec ensure_pool_initialized() -> ok.
 ensure_pool_initialized() ->
-    case get(?POOL_INITIALIZED) of
+    case is_pool_initialized() of
         true ->
             ok;
-        undefined ->
+        false ->
             ok = storage_sync_traverse:init_pool(),
-            put(?POOL_INITIALIZED, true),
+            mark_pool_initialized(),
             ok
     end.
 
 -spec ensure_stalled_scans_are_fixed() -> ok.
 ensure_stalled_scans_are_fixed() ->
-    case get(?STALLED_SCAN_FIXED) of
+    case are_stalled_scans_fixed() of
         true ->
             ok;
-        _ ->
+        false ->
             case provider_logic:get_spaces() of
                 {ok, SpaceIds} ->
                     fix_stalled_scans(SpaceIds);
@@ -206,7 +223,7 @@ ensure_stalled_scans_are_fixed() ->
 fix_stalled_scans(SpaceIds) ->
     case storage_sync_traverse:fix_stalled_scans(SpaceIds) of
         ok ->
-            put(?STALLED_SCAN_FIXED, true),
+            mark_stalled_scans_fixed(),
             ok;
         {error, _} = Error ->
             ?error("auto_storage_import_worker was unable to fix stalled scans due to unexpected error: ~p", [Error]),
@@ -320,4 +337,46 @@ schedule_registry_revision() ->
 -spec schedule(non_neg_integer(), term()) -> ok.
 schedule(IntervalSeconds, Request) ->
     erlang:send_after(timer:seconds(IntervalSeconds), ?AUTO_STORAGE_IMPORT_WORKER, {sync_timer, Request}),
+    ok.
+
+%%%===================================================================
+%%% Internal functions for operations on worker's state stored in ETS
+%%%===================================================================
+
+-spec is_pool_initialized() -> boolean().
+is_pool_initialized() ->
+    state_get(?POOL_INITIALIZED) =:= true.
+
+-spec mark_pool_initialized() -> ok.
+mark_pool_initialized() ->
+    state_put(?POOL_INITIALIZED, true).
+
+-spec are_stalled_scans_fixed() -> boolean().
+are_stalled_scans_fixed() ->
+    state_get(?STALLED_SCAN_FIXED) =:= true.
+
+-spec mark_stalled_scans_fixed() -> ok.
+mark_stalled_scans_fixed() ->
+    state_put(?STALLED_SCAN_FIXED, true).
+
+    -spec state_init() -> ok.
+state_init() ->
+    ?ETS_STATE = ets:new(?ETS_STATE, [public, named_table]),
+    ok.
+
+-spec state_cleanup() -> ok.
+state_cleanup() ->
+    ets:delete(?ETS_STATE),
+    ok.
+
+-spec state_get(term()) -> term().
+state_get(Key) ->
+    case ets:lookup(?ETS_STATE, Key) of
+        [{Key, Value}] -> Value;
+        [] -> undefined
+    end.
+
+-spec state_put(term(), term()) -> ok.
+state_put(Key, Value) ->
+    true = ets:insert(?ETS_STATE, {Key, Value}),
     ok.
