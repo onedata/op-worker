@@ -10,6 +10,9 @@ CHANGELOG
     access tokens (they are used behind the scenes by the Onedata web
     applications), which increases security.
 -   **VFS-6851** Fixed a security issue in Oneprovider share GUI.
+-   **VFS-6845** Prevent application from stopping until all documents
+    are correctly persisted in order to improve resistance to temporary
+    database errors.
 -   **VFS-6746** Added available QoS parameters suggestion box in QoS
     expression editor.
 -   **VFS-6732** New JSON and RDF metadata editor based on Ace Editor.
