@@ -34,9 +34,9 @@
 %%% storage_import_config module.
 %%%
 %%%
-%%% storage_import_worker is the process which is responsible for
+%%% auto_storage_import_worker is the process which is responsible for
 %%% scheduling auto scans of storages that support spaces with ?AUTO mode.
-%%% For more info go to storage_import_worker module.
+%%% For more info go to auto_storage_import_worker module.
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
@@ -53,7 +53,7 @@
 -export([set_manual_mode/1, set_or_configure_auto_mode/2]).
 -export([start_auto_scan/1, stop_auto_scan/1]).
 -export([get_mode/1, get_configuration/1]).
--export([get_info/1, get_stats/3]).
+-export([get_info/1, get_stats/3, is_auto_imported/1]).
 -export([get_manual_example/1]).
 -export([clean_up/1]).
 -export([assert_manual_import_mode/1]).
@@ -101,7 +101,7 @@ set_or_configure_auto_mode(SpaceId, ScanConfigMap) ->
         case storage_import_config:configure_auto_mode(SpaceId, ScanConfigMap) of
             ok ->
                 storage_import_monitoring:ensure_created(SpaceId),
-                storage_import_worker:notify_space_with_auto_import_configured(SpaceId),
+                auto_storage_import_worker:notify_space_with_auto_import_configured(SpaceId),
                 ok;
             {error, _} = Error -> Error
         end
@@ -193,6 +193,14 @@ get_manual_example(SpaceId) ->
             [StorageId, SpaceId, Domain]
         )}
     end).
+
+
+-spec is_auto_imported(od_space:id()) -> boolean().
+is_auto_imported(SpaceId) ->
+    case get_configuration(SpaceId) of
+        {ok, Config} -> maps:get(mode, Config) =:= ?AUTO_IMPORT;
+        {error, not_found} -> false
+    end.
 
 %%%===================================================================
 %%% Migrate from space_strategies

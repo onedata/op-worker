@@ -236,7 +236,7 @@ resupport_cleanup_test(Config) ->
         threshold => 100
     },
     ok = rpc:call(Node, autocleaning_api, configure, [SpaceId, ACConfig]),
-    ok = rpc:call(Node, storage_import_worker, schedule_spaces_check, [0]),
+    ok = rpc:call(Node, auto_storage_import_worker, schedule_spaces_check, [0]),
     
     ?assertMatch({ok, _}, rpc:call(Node, storage_import_config, get, [SpaceId])),
     ?assertMatch({ok, _}, rpc:call(Node, storage_import_monitoring, get, [SpaceId]), 10),
