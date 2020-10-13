@@ -70,8 +70,8 @@ add_names(Acl) ->
     lists:map(
         fun(#access_control_entity{identifier = Id, aceflags = Flags} = Ace) ->
             Name = case ?has_flag(Flags, ?identifier_group_mask) of
-                true -> gid_to_ace_name(Id);
-                false -> uid_to_ace_name(Id)
+                true -> group_id_to_ace_name(Id);
+                false -> user_id_to_ace_name(Id)
             end,
             Ace#access_control_entity{name = Name}
         end, Acl).
@@ -117,15 +117,15 @@ validate(Acl, FileType) ->
 
 
 %% @private
--spec uid_to_ace_name(od_user:id() | binary()) ->
+-spec user_id_to_ace_name(od_user:id() | binary()) ->
     undefined | od_user:full_name().
-uid_to_ace_name(?owner) ->
+user_id_to_ace_name(?owner) ->
     undefined;
-uid_to_ace_name(?group) ->
+user_id_to_ace_name(?group) ->
     undefined;
-uid_to_ace_name(?everyone) ->
+user_id_to_ace_name(?everyone) ->
     undefined;
-uid_to_ace_name(UserId) ->
+user_id_to_ace_name(UserId) ->
     case user_logic:get_full_name(UserId) of
         {ok, FullName} -> FullName;
         {error, _} -> undefined
@@ -133,8 +133,8 @@ uid_to_ace_name(UserId) ->
 
 
 %% @private
--spec gid_to_ace_name(od_group:id()) -> undefined | od_group:name().
-gid_to_ace_name(GroupId) ->
+-spec group_id_to_ace_name(od_group:id()) -> undefined | od_group:name().
+group_id_to_ace_name(GroupId) ->
     case group_logic:get_name(GroupId) of
         {ok, Name} -> Name;
         {error, _} -> undefined
