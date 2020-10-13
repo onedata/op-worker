@@ -56,7 +56,7 @@ assert_granted(UserCtx, FileCtx0, AccessRequirements0) ->
 
     case user_ctx:is_root(UserCtx) orelse space_logic:is_owner(SpaceId, UserId) of
         true ->
-            file_ctx:assert_file_exists(FileCtx0);
+            FileCtx0;
         false ->
             AccessRequirements1 = case user_ctx:is_guest(UserCtx) of
                 true ->

@@ -230,7 +230,7 @@ create_get_children_tests_env(Config, TestMode) ->
     DirName = ?RANDOM_FILE_NAME(),
     DirPath = filename:join(["/", ?SPACE_2, DirName]),
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirPath, 8#707),
-    HasParentQos = api_test_utils:randomly_add_qos(P1Node, DirGuid, <<"key=value1">>, 2),
+    HasParentQos = api_test_utils:randomly_add_qos([P1Node], DirGuid, <<"key=value1">>, 2),
 
     ShareId = case TestMode of
         normal_mode ->

@@ -1269,7 +1269,7 @@ assert_not_readonly_target_storage_const(FileCtx, TargetProviderId) ->
         false -> ok
     end.
 
--spec assert_file_exists(ctx()) -> ctx().
+-spec assert_file_exists(ctx()) -> ctx() | no_return().
 assert_file_exists(FileCtx0) ->
     % If file doesn't exists (or was deleted) fetching doc will fail,
     % {badmatch, {error, not_found}} will propagate up and fslogic_worker will
