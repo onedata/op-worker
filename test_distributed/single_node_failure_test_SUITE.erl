@@ -45,23 +45,25 @@ failure_test(Config) ->
 
     ok.
 
-test_base(Config, #{killed_provider := KilledProvider} = InitialData, StopAppBeforeKill) ->
-    [KilledOpNode | _] = test_config:get_provider_nodes(Config, KilledProvider),
+test_base(Config, InitialData, StopAppBeforeKill) ->
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+
 
     TestData = create_test_data(Config, InitialData),
     ct:pal("Test data created"),
 
     case StopAppBeforeKill of
         true ->
-            ?assertEqual(ok, rpc:call(KilledOpNode, application, stop, [?APP_NAME])),
+            ?assertEqual(ok, rpc:call(FailingNode, application, stop, [?APP_NAME])),
             ct:pal("Application stopped");
         false ->
             ok
     end,
 
-    failure_test_utils:kill_nodes(Config, KilledOpNode),
+    failure_test_utils:kill_nodes(Config, FailingNode),
     ct:pal("Node killed"),
-    UpdatedConfig = failure_test_utils:restart_nodes(Config, KilledOpNode),
+    UpdatedConfig = failure_test_utils:restart_nodes(Config, FailingNode),
     ct:pal("Node restarted"),
 
     verify(UpdatedConfig, InitialData, TestData, StopAppBeforeKill),
@@ -91,13 +93,13 @@ create_initial_data_structure(Config) ->
         end, [{WorkerP1, P1}, {WorkerP2, P2}])
     end, [P1DirGuid, P2DirGuid]),
 
-    KilledProvider = provider_onenv_test_utils:find_importing_provider(Config, SpaceId),
+    FailingProvider = provider_onenv_test_utils:find_importing_provider(Config, SpaceId),
     #{
         test_dirs => #{
             P1 => P1DirGuid,
             P2 => P2DirGuid
         },
-        killed_provider => KilledProvider
+        failing_provider => FailingProvider
     }.
 
 create_test_data(Config, InitialData) ->
@@ -110,8 +112,7 @@ create_test_data(Config, InitialData) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     P1DirGuid = kv_utils:get([test_dirs, P1], InitialData),
     P2DirGuid = kv_utils:get([test_dirs, P2], InitialData),
-
-    ImportingProvider = provider_onenv_test_utils:find_importing_provider(Config, SpaceId),
+    ImportingProvider = kv_utils:get(failing_provider, InitialData),
     [ImportingOpNode | _] = test_config:get_provider_nodes(Config, ImportingProvider),
 
 
@@ -121,6 +122,7 @@ create_test_data(Config, InitialData) ->
     FinishedScans = storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId),
 
     % wait for new files to occur on storage
+    % the storage supporting the space is a nulldevice storage with simulated filesystem that grows with the time
     timer:sleep(timer:seconds(1)),
     % mock importing process to block
     block_import(ImportingOpNode),
@@ -143,23 +145,24 @@ create_test_data(Config, InitialData) ->
         finished_scans => FinishedScans
     }.
 
-verify(Config, #{killed_provider := KilledProvider} = InitialData, TestData, StopAppBeforeKill) ->
+verify(Config, InitialData, TestData, StopAppBeforeKill) ->
     Providers = [P1, P2] = test_config:get_providers(Config),
     [User1] = test_config:get_provider_users(Config, P1),
     SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    [NotKilledProvider] = Providers -- [KilledProvider],
-    [KilledNode] = test_config:get_provider_nodes(Config, KilledProvider),
-    [NotKilledNode] = test_config:get_provider_nodes(Config, NotKilledProvider),
-    verify_all_files_and_dirs_created_by_provider(NotKilledNode, SessId(NotKilledProvider), TestData, NotKilledProvider),
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    [NotFailingProvider] = Providers -- [FailingProvider],
+    [FailingNode] = test_config:get_provider_nodes(Config, FailingProvider),
+    [NotFailingNode] = test_config:get_provider_nodes(Config, NotFailingProvider),
+    verify_all_files_and_dirs_created_by_provider(NotFailingNode, SessId(NotFailingProvider), TestData, NotFailingProvider),
 
     case StopAppBeforeKill of
         true ->
             % App was stopped before node killing - all data should be present
-            verify_all_files_and_dirs_created_by_provider(KilledNode, SessId(KilledProvider), TestData, NotKilledProvider),
-            verify_all_files_and_dirs_created_by_provider(KilledNode, SessId(KilledProvider), TestData, KilledProvider),
-            verify_all_files_and_dirs_created_by_provider(NotKilledNode, SessId(NotKilledProvider), TestData, KilledProvider);
+            verify_all_files_and_dirs_created_by_provider(FailingNode, SessId(FailingProvider), TestData, NotFailingProvider),
+            verify_all_files_and_dirs_created_by_provider(FailingNode, SessId(FailingProvider), TestData, FailingProvider),
+            verify_all_files_and_dirs_created_by_provider(NotFailingNode, SessId(NotFailingProvider), TestData, FailingProvider);
         false ->
             % App wasn't stopped before node killing - some data can be lost
             % but operations on dirs should be possible,
@@ -171,14 +174,11 @@ verify(Config, #{killed_provider := KilledProvider} = InitialData, TestData, Sto
     end,
 
     % verify import
-    ImportingProvider = provider_onenv_test_utils:find_importing_provider(Config, SpaceId),
-    [ImportingOpNode | _] = test_config:get_provider_nodes(Config, ImportingProvider),
-
-    % verify whether further scans is correctly restarted after node restart
+    % check whether scan is correctly restarted after node restart
     % get last finished scan
-    Scans0 = maps:get(finished_scans, TestData),
-    % wait till scan is finished
-    ?assertEqual(Scans0 + 1, storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId), ?ATTEMPTS).
+    Scans0 = kv_utils:get(finished_scans, TestData),
+    % wait till next scan is finished
+    ?assertEqual(Scans0 + 1, storage_import_test_base:get_finished_scans_num(FailingNode, SpaceId), ?ATTEMPTS).
 
 
 verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData, ProviderId) ->
