@@ -26,15 +26,15 @@ Operator    = [|&\\]
 
 Rules.
 
-{Operator}                              : {token, {operator, TokenLine, TokenChars}}.
-[=]                                     : {token, {eq, TokenLine, TokenChars}}.
-{Comparator}                            : {token, {comparator, TokenLine, TokenChars}}.
-anyStorage                              : {token, {any_storage, TokenLine, TokenChars}}.
-{Digit}+                                : {token, {integer, TokenLine, list_to_integer(TokenChars)}}.
-{Char}({Char}|{Middle})*{Char}|{Char}   : {token, {string, TokenLine, TokenChars}}.
-[()]                                    : {token, {list_to_atom(TokenChars), TokenLine}}.
-{Whitespace}+                           : skip_token.
-\"|\"                                   : skip_token.
+{Operator}                                      : {token, {operator, TokenLine, TokenChars}}.
+[=]                                             : {token, {eq, TokenLine, TokenChars}}.
+{Comparator}                                    : {token, {comparator, TokenLine, TokenChars}}.
+anyStorage                                      : {token, {any_storage, TokenLine, TokenChars}}.
+{Digit}+(\.{Digit}+)?((E|e)(\+|\-)?{Digit}+)?   : {token, {number, TokenLine, json_utils:decode(TokenChars)}}.
+{Char}({Char}|{Middle})*{Char}|{Char}           : {token, {string, TokenLine, TokenChars}}.
+[()]                                            : {token, {list_to_atom(TokenChars), TokenLine}}.
+{Whitespace}+                                   : skip_token.
+\"|\"                                           : skip_token.
 
 
 Erlang code.

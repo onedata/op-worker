@@ -83,6 +83,9 @@ valid_qos_expression_test() ->
         [<<"a">>, <<"b">>, <<"=">>, <<"anyStorage">>, <<"&">>, <<"anyStorage">>, <<"\\">>]
     ),
     check_valid_expression(<<"ąćóµńəłóəßœπążśźćð = _a_"/utf8>>, [<<"ąćóµńəłóəßœπążśźćð"/utf8>>, <<"_a_">>, <<"=">>]),
+    check_valid_expression(<<"a = 8.8">>, [<<"a">>, 8.8, <<"=">>]),
+    check_valid_expression(<<"a < 8.8">>, [<<"a">>, 8.8, <<"<">>]),
+    check_valid_expression(<<"a >= 8.8">>, [<<"a">>, 8.8, <<">=">>]),
     ok.
     
 
@@ -115,7 +118,7 @@ filter_storages_test() ->
         <<"0">> => #{<<"geo">> => <<"PL">>, <<"latency">> => 8},
         <<"1">> => #{<<"geo">> => <<"FR">>, <<"latency">> => 2131},
         <<"2">> => #{<<"geo">> => <<"PT">>, <<"latency">> => 0},
-        <<"3">> => #{<<"geo">> => <<"US">>, <<"latency">> => 123},
+        <<"3">> => #{<<"geo">> => <<"US">>, <<"latency">> => 123.4},
         <<"4">> => #{<<"geo">> => <<"DE">>, <<"latency">> => 321},
         <<"5">> => #{<<"latency">> => <<"not_integer">>}
     },
@@ -144,6 +147,17 @@ filter_storages_test() ->
         \\ ((geo=PL | geo=DE) | (latency > 320 \\ latency < 400) & latency <= 8) ">>, 
         [<<"1">>], StoragesMap
     ),
+    check_filter_storages(<<"latency = 123.4">>, [<<"3">>], StoragesMap),
+    check_filter_storages(<<"latency = 8.0">>, [<<"0">>], StoragesMap),
+    check_filter_storages(<<"latency = 12.34e1">>, [<<"3">>], StoragesMap),
+    check_filter_storages(<<"latency = 12.34E1">>, [<<"3">>], StoragesMap),
+    check_filter_storages(<<"latency = 12.34E+1">>, [<<"3">>], StoragesMap),
+    check_filter_storages(<<"latency = 1234.0e-1">>, [<<"3">>], StoragesMap),
+    check_filter_storages(<<"latency = 1234.0E-1">>, [<<"3">>], StoragesMap),
+    check_filter_storages(<<"latency = 1234e-1">>, [<<"3">>], StoragesMap),
+    check_filter_storages(<<"latency = 1234E-1">>, [<<"3">>], StoragesMap),
+    check_filter_storages(<<"latency < 8.0">>, [<<"2">>], StoragesMap),
+    check_filter_storages(<<"latency <= 8.0">>, [<<"0">>, <<"2">>], StoragesMap),
     ok.
 
 

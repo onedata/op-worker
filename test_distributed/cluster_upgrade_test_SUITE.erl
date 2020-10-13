@@ -71,7 +71,10 @@ upgrade_from_19_02_x_storages(Config) ->
         }, % args
         AdminCtx
     },
-    LumaConfig = luma_config:new_with_external_feed(<<"https://example.com">>, <<"api_key">>),
+    URL = <<"https://example.com">>,
+    ApiKey = <<"api_key">>,
+    LumaConfig = {luma_config, URL, ApiKey},
+    ExpectedLumaConfig = luma_config:new_with_external_feed(URL, ApiKey),
     Storage = #storage{
         name = St,
         helpers = [Helper],
@@ -80,7 +83,7 @@ upgrade_from_19_02_x_storages(Config) ->
     },
     ExpectedStorageConfig = #storage_config{
         helper = ExpectedHelper,
-        luma_config = LumaConfig,
+        luma_config = ExpectedLumaConfig,
         imported_storage = false
     },
     create_doc(Worker, storage:get_ctx(), #document{key = St, value = Storage}),
