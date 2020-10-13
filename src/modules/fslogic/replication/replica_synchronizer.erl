@@ -1428,11 +1428,17 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
         _ ->
             ok
     end,
-    #document{value = #file_location{size = Size}} = LocationDoc = fslogic_cache:get_local_location(),
-    case fslogic_location_cache:get_blocks(LocationDoc, #{count => 2}) of
-        [#file_block{offset = 0, size = Size}] ->
-            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, false, []);
+
+    case fslogic_cache:get_local_location() of
+        #document{value = #file_location{size = Size}} = LocationDoc ->
+            case fslogic_location_cache:get_blocks(LocationDoc, #{count => 2}) of
+                [#file_block{offset = 0, size = Size}] ->
+                    fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, false, []);
+                _ ->
+                    ok
+            end;
         _ ->
+            % There can be race with file deletion
             ok
     end,
 

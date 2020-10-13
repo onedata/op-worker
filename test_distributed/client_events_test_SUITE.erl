@@ -360,10 +360,14 @@ subscribe_on_replication_info_multiprovider_test(Config) ->
     ?assertMatch({ok, #file_attr{size = 9}}, lfm_proxy:stat(Worker2, SessionIdWorker2, {guid, FileGuid}), 30),
     ?assertEqual({ok, 3}, lfm_proxy:write(Worker2, Worker2Handle, 0, <<"xxx">>)),
     ?assertEqual(ok, lfm_proxy:fsync(Worker2, Worker2Handle)),
-    ?assertEqual({ok, false}, receive_replication_status()),
+    case receive_replication_status() of
+        % There is possible events emmision before flush
+        {ok, undefined} -> ?assertEqual({ok, false}, receive_replication_status());
+        {ok, false} -> ok
+    end,
 
     % Test status change after local read that does not change replication status
-    ?assertEqual({ok, <<"xxx">>}, lfm_proxy:read(Worker1, Worker1Handle, 5, 1)),
+    ?assertEqual({ok, <<"x">>}, lfm_proxy:read(Worker1, Worker1Handle, 5, 1)),
     ?assertEqual(ok, lfm_proxy:fsync(Worker1, Worker1Handle)),
     ?assertEqual({ok, undefined}, receive_replication_status()),
 
