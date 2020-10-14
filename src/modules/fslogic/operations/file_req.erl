@@ -215,7 +215,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             include_size => false,
             name_conflicts_resolution_policy => allow_name_conflicts
         }),
-        FileAttr2 = FileAttr#file_attr{size = 0},
+        FileAttr2 = FileAttr#file_attr{size = 0, fully_replicated = true},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         #fuse_response{
         status = #status{code = ?OK},
@@ -304,7 +304,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             include_size => false,
             name_conflicts_resolution_policy => allow_name_conflicts
         }),
-        FileAttr2 = FileAttr#file_attr{size = 0},
+        FileAttr2 = FileAttr#file_attr{size = 0, fully_replicated = true},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         Ans#fuse_response{fuse_response = FileAttr2}
     catch

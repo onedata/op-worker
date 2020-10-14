@@ -62,6 +62,21 @@
     time_threshold :: undefined | non_neg_integer()
 }).
 
+%% definition of a subscription for file attributes changes with replication status
+%% file_guid         - GUID of a file for which notifications should be sent
+%% counter_threshold - maximal number of aggregated events before emission
+%% time_threshold    - maximal delay in milliseconds between successive events
+%%                     emissions
+%% Warning: This message is used to subscribe on the same event as file_attr_changed_subscription.
+%% The difference is that clients that use this subscription get file_attr field fully_replicated set
+%% while clients that use file_attr_changed_subscription get this filed undefined
+%% It is only temporary solution as currently events framework does not allow parametrize subscriptions.
+-record(replica_status_changed_subscription, {
+    file_guid :: fslogic_worker:file_guid(),
+    counter_threshold :: undefined | non_neg_integer(),
+    time_threshold :: undefined | non_neg_integer()
+}).
+
 %% definition of a subscription for file location changes
 %% file_guid         - GUID of a file for which notifications should be sent
 %% counter_threshold - maximal number of aggregated events before emission
