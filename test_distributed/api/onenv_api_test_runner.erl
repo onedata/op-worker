@@ -460,7 +460,7 @@ run_expected_success_test_cases(Config, #suite_spec{
     teardown_fun = TeardownFun,
     verify_fun = VerifyFun,
 
-    scenario_templates = ScenarioTemplates,
+    scenario_templates = AvailableScenarios,
     randomly_select_scenarios = true,
 
     data_spec = DataSpec
@@ -468,37 +468,32 @@ run_expected_success_test_cases(Config, #suite_spec{
     CorrectDataSets = generate_correct_data_sets(DataSpec),
 
     lists:foldl(fun(Client, OuterAcc) ->
-        case filter_scenarios_available_for_client(Client, ScenarioTemplates) of
-            [] ->
-                OuterAcc;
-            AvailableScenarios ->
-                CorrectDataSetsNum = length(CorrectDataSets),
-                AvailableScenariosNum = length(AvailableScenarios),
-                ScenarioPerDataSet = case AvailableScenariosNum > CorrectDataSetsNum of
-                    true ->
-                        ct:fail("Not enough data sets compared to available scenarios");
-                    false ->
-                        RandomizedScenarios = lists:flatmap(
-                            fun(_) -> lists_utils:shuffle(AvailableScenarios) end,
-                            lists:seq(1, CorrectDataSetsNum div AvailableScenariosNum + 1)
-                        ),
-                        lists:zip(
-                            lists:sublist(RandomizedScenarios, CorrectDataSetsNum),
-                            CorrectDataSets
-                        )
-                end,
-                OuterAcc and lists:foldl(fun({Scenario, DataSet}, InnerAcc) ->
-                    TargetNode = lists_utils:random_element(TargetNodes),
+        CorrectDataSetsNum = length(CorrectDataSets),
+        AvailableScenariosNum = length(AvailableScenarios),
+        ScenarioPerDataSet = case AvailableScenariosNum > CorrectDataSetsNum of
+            true ->
+                ct:fail("Not enough data sets compared to available scenarios");
+            false ->
+                RandomizedScenarios = lists:flatmap(
+                    fun(_) -> lists_utils:shuffle(AvailableScenarios) end,
+                    lists:seq(1, CorrectDataSetsNum div AvailableScenariosNum + 1)
+                ),
+                lists:zip(
+                    lists:sublist(RandomizedScenarios, CorrectDataSetsNum),
+                    CorrectDataSets
+                )
+        end,
+        OuterAcc and lists:foldl(fun({Scenario, DataSet}, InnerAcc) ->
+            TargetNode = lists_utils:random_element(TargetNodes),
 
-                    SetupFun(),
-                    TestCasePassed = run_exp_success_testcase(
-                        TargetNode, Client, DataSet, VerifyFun, Scenario, Config
-                    ),
-                    TeardownFun(),
+            SetupFun(),
+            TestCasePassed = run_exp_success_testcase(
+                TargetNode, Client, DataSet, VerifyFun, Scenario, Config
+            ),
+            TeardownFun(),
 
-                    InnerAcc and TestCasePassed
-                end, true, ScenarioPerDataSet)
-        end
+            InnerAcc and TestCasePassed
+        end, true, ScenarioPerDataSet)
     end, true, CorrectClients);
 run_expected_success_test_cases(Config, #suite_spec{
     target_nodes = TargetNodes,
@@ -532,18 +527,6 @@ run_expected_success_test_cases(Config, #suite_spec{
     ).
 
 
-% TODO VFS-6201 rm when connecting via gs as nobody becomes possible
-%% @private
--spec filter_scenarios_available_for_client(aai:auth(), [scenario_template()]) ->
-    [scenario_template()].
-filter_scenarios_available_for_client(?NOBODY, ScenarioTemplates) ->
-    lists:filter(fun(#scenario_template{type = Type}) ->
-        not lists:member(Type, ?GS_SCENARIO_TYPES)
-    end, ScenarioTemplates);
-filter_scenarios_available_for_client(_, ScenarioTemplates) ->
-    ScenarioTemplates.
-
-
 %% @private
 -spec run_testcases(
     [scenario_template()],
@@ -556,7 +539,7 @@ filter_scenarios_available_for_client(_, ScenarioTemplates) ->
 ) ->
     AllTestCasesPassed :: boolean().
 run_testcases(ScenarioTemplates, TargetNodes, Clients, DataSets, TestCaseFun) ->
-    lists:foldl(fun(#scenario_template{type = ScenarioType} = ScenarioTemplate, PrevScenariosPassed) ->
+    lists:foldl(fun(ScenarioTemplate, PrevScenariosPassed) ->
         PrevScenariosPassed and lists:foldl(fun(Client, PrevClientsPassed) ->
             PrevClientsPassed and lists:foldl(fun(DataSet, PrevDataSetsPassed) ->
                 TargetNode = lists_utils:random_element(TargetNodes),
@@ -564,26 +547,8 @@ run_testcases(ScenarioTemplates, TargetNodes, Clients, DataSets, TestCaseFun) ->
                     TargetNode, Client, DataSet, ScenarioTemplate
                 )
             end, true, DataSets)
-        end, true, filter_available_clients(ScenarioType, Clients))
+        end, true, Clients)
     end, true, ScenarioTemplates).
-
-
-% TODO VFS-6201 rm when connecting via gs as nobody becomes possible
-%% @private
--spec filter_available_clients(scenario_type(), [aai:auth() | {aai:auth(), errors:error()}]) ->
-    [aai:auth() | {aai:auth(), errors:error()}].
-filter_available_clients(Type, Clients) when
-    Type == gs;
-    Type == gs_with_shared_guid_and_aspect_private;
-    Type == gs_not_supported
-    ->
-    lists:filter(fun
-        (?NOBODY) -> false;
-        ({?NOBODY, _}) -> false;
-        (_) -> true
-    end, Clients);
-filter_available_clients(_ScenarioType, Clients) ->
-    Clients.
 
 
 %% @private
@@ -997,34 +962,19 @@ make_gs_request(Config, Node, Client, #gs_args{
 %% @private
 -spec connect_via_gs(node(), aai:auth(), ct_config()) ->
     {ok, GsClient :: pid()} | errors:error().
-connect_via_gs(_Node, ?NOBODY, _Config) ->
-    % TODO VFS-6201 fix when connecting as nobody via gs becomes possible
-    throw(fail);
-connect_via_gs(Node, ?USER(UserId), Config) ->
-    connect_via_gs(
-        Node,
-        ?SUB(user, UserId),
-        {token, api_test_env:get_user_access_token(UserId, Config)},
-        [{cacerts, op_test_rpc:get_cert_chain_pems(Node)}]
-    ).
+connect_via_gs(Node, Client, Config) ->
+    {Auth, ExpIdentity} = case Client of
+        ?NOBODY ->
+            {undefined, ?SUB(nobody)};
+        ?USER(UserId) ->
+            TokenAuth = {token, api_test_env:get_user_access_token(UserId, Config)},
+            {TokenAuth, ?SUB(user, UserId)}
+    end,
+    GsEndpoint = gs_endpoint(Node),
+    GsSupportedVersions = op_test_rpc:gs_protocol_supported_versions(Node),
+    Opts = [{cacerts, op_test_rpc:get_cert_chain_pems(Node)}],
 
-
-%% @private
--spec connect_via_gs(
-    node(),
-    aai:subject(),
-    gs_protocol:client_auth(),
-    ConnectionOpts :: proplists:proplist()
-) ->
-    {ok, GsClient :: pid()} | errors:error().
-connect_via_gs(Node, ExpIdentity, Authorization, Opts) ->
-    case gs_client:start_link(
-        gs_endpoint(Node),
-        Authorization,
-        op_test_rpc:gs_protocol_supported_versions(Node),
-        fun(_) -> ok end,
-        Opts
-    ) of
+    case gs_client:start_link(GsEndpoint, Auth, GsSupportedVersions, fun(_) -> ok end, Opts) of
         {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} ->
             {ok, GsClient};
         {error, _} = Error ->
