@@ -123,7 +123,7 @@ stream_file(FileGuid, FileHandle, SessionId, Req) ->
     {ok, #file_attr{size = FileSize, name = FileName}} = lfm:stat(
         SessionId, {guid, FileGuid}
     ),
-    ReadBlockSize = file_download_utils:get_read_block_size(FileHandle),
+    ReadBlockSize = http_download_utils:get_read_block_size(FileHandle),
 
     % Reply with attachment headers and a streaming function
     AttachmentHeaders = attachment_headers(FileName),
@@ -131,7 +131,7 @@ stream_file(FileGuid, FileHandle, SessionId, Req) ->
     Req2 = cowboy_req:stream_reply(?HTTP_200_OK, AttachmentHeaders#{
         <<"content-length">> => integer_to_binary(FileSize)
     }, Req),
-    file_download_utils:stream_range(
+    http_download_utils:stream_range(
         FileHandle, {0, FileSize-1}, Req2, fun(Data) -> Data end, ReadBlockSize
     ),
     cowboy_req:stream_body(<<"">>, fin, Req2),
@@ -156,8 +156,7 @@ attachment_headers(FileName) ->
     MimeType = <<Type/binary, "/", Subtype/binary>>,
     #{
         <<"content-type">> => MimeType,
-        <<"content-disposition">> =>
-        <<"attachment; filename=\"", FileName/binary, "\"">>
+        <<"content-disposition">> => <<"attachment; filename=\"", FileName/binary, "\"">>
         %% @todo VFS-2073 - check if needed
         %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
     }.

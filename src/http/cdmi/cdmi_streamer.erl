@@ -22,7 +22,7 @@
 -include_lib("ctool/include/api_errors.hrl").
 
 %% API
--export([stream_binary/4, stream_cdmi/6]).
+-export([stream_cdmi/6]).
 
 -type range() :: {From :: non_neg_integer(), To :: non_neg_integer()}.
 
@@ -30,43 +30,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec stream_binary(
-    HttpStatus :: non_neg_integer(),
-    cowboy_req:req(),
-    cdmi_handler:cdmi_req(),
-    Ranges :: undefined | [range()]
-) ->
-    cowboy_req:req() | no_return().
-stream_binary(HttpStatus, Req, #cdmi_req{
-    auth = ?USER(_UserId, SessionId),
-    file_attrs = #file_attr{guid = Guid, size = FileSize}
-}, Ranges0) ->
-    Ranges = case Ranges0 of
-        undefined -> [{0, FileSize - 1}];
-        _ -> Ranges0
-    end,
-    StreamSize = binary_stream_size(Ranges, FileSize),
-
-    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, Guid}, read)),
-    try
-        ReadBlockSize = file_download_utils:get_read_block_size(FileHandle),
-
-        Req2 = cowboy_req:stream_reply(HttpStatus, #{
-            <<"content-length">> => integer_to_binary(StreamSize)
-        }, Req),
-        lists:foreach(fun(Range) ->
-            file_download_utils:stream_range(
-                FileHandle, Range, Req2, fun(Data) -> Data end, ReadBlockSize
-            )
-        end, Ranges),
-        cowboy_req:stream_body(<<"">>, fin, Req2),
-
-        Req2
-    after
-        lfm:release(FileHandle)
-    end.
 
 
 -spec stream_cdmi(
@@ -92,7 +55,7 @@ stream_cdmi(Req, #cdmi_req{
 
     {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, Guid}, read)),
     try
-        ReadBlockSize0 = file_download_utils:get_read_block_size(FileHandle),
+        ReadBlockSize0 = http_download_utils:get_read_block_size(FileHandle),
         ReadBlockSize = case Encoding of
             <<"base64">> ->
                 % Base64 translates every 3 bytes of original data into 4 base64
@@ -109,7 +72,7 @@ stream_cdmi(Req, #cdmi_req{
             <<"content-length">> => integer_to_binary(StreamSize)
         }, Req),
         cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
-        file_download_utils:stream_range(
+        http_download_utils:stream_range(
             FileHandle, Range1, Req2,
             fun(Data) -> cdmi_encoder:encode(Data, Encoding) end, ReadBlockSize
         ),
@@ -124,23 +87,6 @@ stream_cdmi(Req, #cdmi_req{
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets size of a stream, which is the size of streamed binary data of file.
-%% @end
-%%--------------------------------------------------------------------
--spec binary_stream_size([range()], FileSize :: non_neg_integer()) ->
-    non_neg_integer().
-binary_stream_size(Ranges, FileSize) ->
-    lists:foldl(fun
-        ({From, To}, Acc) when To >= From ->
-            max(0, Acc + min(FileSize - 1, To) - From + 1);
-        ({_, _}, Acc)  ->
-            Acc
-    end, 0, Ranges).
 
 
 %%--------------------------------------------------------------------
