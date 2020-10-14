@@ -21,7 +21,7 @@
 -export([
     mkdir/4,
     get_children/5, get_children/6,
-    get_children_attrs/5,
+    get_children_attrs/6,
     get_children_details/5
 ]).
 
@@ -99,7 +99,7 @@ get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
 
 
 %%--------------------------------------------------------------------
-%% @equiv get_children_attrs_insecure/6 with permission checks
+%% @equiv get_children_attrs_insecure/7 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs(
@@ -107,10 +107,11 @@ get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
     file_ctx:ctx(),
     Offset :: file_meta:offset(),
     Limit :: file_meta:limit(),
-    Token :: undefined | binary()
+    Token :: undefined | binary(),
+    IncludeReplicationStatus :: boolean()
 ) ->
     fslogic_worker:fuse_response().
-get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token) ->
+get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token, IncludeReplicationStatus) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     PermsToCheck = case IsDir of
         true -> [traverse_ancestors, ?traverse_container, ?list_container];
@@ -120,7 +121,7 @@ get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token) ->
         UserCtx, FileCtx1, PermsToCheck
     ),
     get_children_attrs_insecure(
-        UserCtx, FileCtx2, Offset, Limit, Token, ChildrenWhiteList
+        UserCtx, FileCtx2, Offset, Limit, Token, IncludeReplicationStatus, ChildrenWhiteList
     ).
 
 
@@ -279,17 +280,19 @@ get_children_insecure(UserCtx, FileCtx0, Offset, Limit, Token, StartId, Children
     Offset :: file_meta:offset(),
     Limit :: file_meta:limit(),
     Token :: undefined | binary(),
+    IncludeReplicationStatus :: boolean(),
     ChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
-get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhiteList) ->
+get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, IncludeReplicationStatus, ChildrenWhiteList) ->
     {Children, NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, Token, undefined, ChildrenWhiteList
     ),
     ChildrenAttrs = map_children(
         UserCtx,
         fun attr_req:get_file_attr_insecure/3,
-        Children
+        Children,
+        IncludeReplicationStatus
     ),
 
     fslogic_times:update_atime(FileCtx1),
@@ -327,7 +330,8 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
     ChildrenDetails = map_children(
         UserCtx,
         fun attr_req:get_file_details_insecure/3,
-        Children
+        Children,
+        false
     ),
 
     fslogic_times:update_atime(FileCtx1),
@@ -393,10 +397,11 @@ list_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, ChildrenWhiteList0) 
     UserCtx,
     MapFunInsecure :: fun((UserCtx, ChildCtx :: file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
         fslogic_worker:fuse_response()),
-    Children :: [file_ctx:ctx()]
+    Children :: [file_ctx:ctx()],
+    IncludeReplicationStatus :: boolean()
 ) ->
     [fuse_response_type()] when UserCtx :: user_ctx:ctx().
-map_children(UserCtx, MapFunInsecure, Children) ->
+map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus) ->
     ChildrenNum = length(Children),
     NumberedChildren = lists:zip(lists:seq(1, ChildrenNum), Children),
     ComputeFileAttrOpts = #{
@@ -411,14 +416,16 @@ map_children(UserCtx, MapFunInsecure, Children) ->
             } = case Num == 1 orelse Num == ChildrenNum of
                 true ->
                     MapFunInsecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
-                        name_conflicts_resolution_policy => resolve_name_conflicts
+                        name_conflicts_resolution_policy => resolve_name_conflicts,
+                        include_replication_status => IncludeReplicationStatus
                     });
                 false ->
                     % Other files than first and last don't need to resolve name
                     % conflicts (to check for collisions) as list_children
                     % (file_meta:tag_children to be precise) already did it
                     MapFunInsecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
-                        name_conflicts_resolution_policy => allow_name_conflicts
+                        name_conflicts_resolution_policy => allow_name_conflicts,
+                        include_replication_status => IncludeReplicationStatus
                     })
             end,
             Result

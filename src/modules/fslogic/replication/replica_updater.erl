@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update/4, rename/2]).
+-export([update/4, rename/2, has_replication_status_changed/4]).
 
 %%%===================================================================
 %%% API
@@ -34,7 +34,8 @@
 %%--------------------------------------------------------------------
 -spec update(file_ctx:ctx(), fslogic_blocks:blocks(),
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
-    {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
+    {ok, ignore | emit_size_change | {emit_replica_status_change, EmissionParam :: boolean()}} |
+    {error, Reason :: term()}.
 update(FileCtx, Blocks, FileSize, BumpVersion) ->
     replica_synchronizer:apply(FileCtx,
         fun() ->
@@ -44,18 +45,30 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                         size = OldSize
                     }
                 } ->
+                    FirstLocalBlocksBeforeAppend = fslogic_location_cache:get_blocks(Location, #{count => 2}),
                     UpdatedLocation = append(Location, Blocks, BumpVersion),
                     case FileSize of
                         undefined ->
                             fslogic_location_cache:save_location(UpdatedLocation),
-                            case fslogic_blocks:upper(Blocks) > OldSize of
-                                true -> {ok, size_changed};
-                                false -> {ok, size_not_changed}
+                            #document{value = #file_location{size = UpdatedSize}} = UpdatedLocation,
+                            FirstLocalBlocks = fslogic_location_cache:get_blocks(UpdatedLocation, #{count => 2}),
+                            ReplicationStatusChanged = has_replication_status_changed(
+                                FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, UpdatedSize),
+                            case {ReplicationStatusChanged, UpdatedSize > OldSize} of
+                                {true, SizeChanged} -> {ok, {emit_replica_status_change, SizeChanged}};
+                                {_, true} -> {ok, emit_size_change};
+                                _ -> {ok, ignore}
                             end;
                         _ ->
                             TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
                             fslogic_location_cache:save_location(TruncatedLocation),
-                            {ok, size_changed}
+                            FirstLocalBlocks = fslogic_location_cache:get_blocks(TruncatedLocation, #{count => 2}),
+                            ReplicationStatusChanged = has_replication_status_changed(
+                                FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, FileSize),
+                            case ReplicationStatusChanged of
+                                true -> {ok, {emit_replica_status_change, true}};
+                                false -> {ok, emit_size_change}
+                            end
                     end;
                 Error ->
                     Error
@@ -86,6 +99,11 @@ rename(FileCtx, TargetFileId) ->
             )
         %todo VFS-2813 support multi location, reconcile other local replicas according to this one
         end).
+
+-spec has_replication_status_changed(fslogic_blocks:blocks(), fslogic_blocks:blocks(),
+    non_neg_integer(), non_neg_integer()) -> boolean().
+has_replication_status_changed(FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize) ->
+    is_fully_replicated(FirstLocalBlocksBeforeUpdate, OldSize) =/= is_fully_replicated(FirstLocalBlocks, NewSize).
 
 %%%===================================================================
 %%% Internal functions
@@ -133,6 +151,7 @@ append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, Bu
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Inavlidates given blocks in given locations. File size is also updated.
 %% @end
@@ -148,3 +167,12 @@ shrink(Doc = #document{value = Loc}, Blocks, NewSize) ->
             fslogic_location_cache:update_blocks(Doc#document{value =
             Loc#file_location{size = NewSize}}, NewBlocks1),
             {shrink, NewSize})).
+
+%% @private
+-spec is_fully_replicated(fslogic_blocks:blocks(), non_neg_integer()) -> boolean().
+is_fully_replicated([], 0) ->
+    true;
+is_fully_replicated([#file_block{offset = 0, size = Size}], Size) ->
+    true;
+is_fully_replicated(_, _) ->
+    false.

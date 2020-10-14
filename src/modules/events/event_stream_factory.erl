@@ -61,6 +61,18 @@ create(#file_attr_changed_subscription{} = Sub) ->
         event_handler = make_send_events_handler()
     };
 
+create(#replica_status_changed_subscription{} = Sub) ->
+    #replica_status_changed_subscription{
+        counter_threshold = CtrThr,
+        time_threshold = TimeThr
+    } = Sub,
+    #event_stream{
+        aggregation_rule = fun fslogic_event_handler:aggregate_attr_changed_events/2,
+        emission_rule = make_counter_emission_rule(CtrThr),
+        emission_time = make_emission_time(TimeThr),
+        event_handler = make_send_events_handler()
+    };
+
 create(#file_location_changed_subscription{} = Sub) ->
     #file_location_changed_subscription{
         counter_threshold = CtrThr,

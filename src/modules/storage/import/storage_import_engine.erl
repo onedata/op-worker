@@ -701,7 +701,7 @@ create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid, #{iterator_type 
             {ok, FileMetaDoc}
     end,
     FileCtx = file_ctx:new_by_doc(FinalDoc, SpaceId, undefined),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
+    ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, true, []),
     {ok, FileCtx, StorageFileCtx2}.
 
 -spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->
@@ -845,7 +845,7 @@ maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
             {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
             FileUuid = file_ctx:get_uuid_const(FileCtx3),
             storage_import_logger:log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
-            fslogic_event_emitter:emit_file_attr_changed(FileCtx3, []),
+            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
             {?FILE_MODIFIED, FileCtx3, StorageFileCtx2}
     end.
 
