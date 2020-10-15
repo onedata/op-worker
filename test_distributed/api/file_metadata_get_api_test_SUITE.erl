@@ -203,7 +203,7 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
                 correct = [
                     user2, % space owner - doesn't need any perms
                     user3, % files owner
-                    user4  % space member, (depending on params combination may
+                    user4  % space member (depending on params combination may
                            % be forbidden but in general is permitted)
                 ],
                 unauthorized = [nobody],
@@ -847,7 +847,7 @@ get_metadata_test_base(
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
-                    name = str_utils:format("Get ~s metadata from ~s using gs api", [
+                    name = str_utils:format("Get ~s metadata from ~s using gs private api", [
                         MetadataType, FileType
                     ]),
                     type = gs,
@@ -859,6 +859,25 @@ get_metadata_test_base(
             ],
             randomly_select_scenarios = RandomlySelectScenario,
             data_spec = DataSpec
+        },
+
+        #scenario_spec{
+            name = str_utils:format("Get ~s metadata from ~s using gs public api", [
+                MetadataType, FileType
+            ]),
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
+            prepare_args_fun = build_get_metadata_prepare_gs_args_fun(
+                MetadataType, FileGuid, public
+            ),
+            validate_result_fun = fun(#api_test_ctx{client = Client}, Result) ->
+                ExpError = case Client of
+                    ?NOBODY -> ?ERROR_UNAUTHORIZED;
+                    _ -> ?ERROR_FORBIDDEN
+                end,
+                ?assertEqual(ExpError, Result)
+            end
         }
     ]));
 get_metadata_test_base(

@@ -128,6 +128,12 @@
 ]).
 
 
+-type rest_response() :: {
+    ok,
+    RespCode :: non_neg_integer(),
+    RespHeaders :: map(),
+    RespBody :: binary() | map()
+}.
 -type invalid_client_type() :: unauthorized | forbidden_not_in_space | forbidden_in_space.
 
 -define(NO_DATA, undefined).
@@ -148,13 +154,20 @@
 
 -spec run_tests(ct_config(), [scenario_spec() | suite_spec()]) ->
     HasAllTestsPassed :: boolean().
-run_tests(Config, Specs) ->
-    lists:foldl(fun
-        (#scenario_spec{} = ScenarioSpec, AllTestsPassed) ->
-            AllTestsPassed and run_suite(Config, scenario_spec_to_suite_spec(ScenarioSpec));
-        (#suite_spec{} = SuiteSpec, AllTestsPassed) ->
-            AllTestsPassed and run_suite(Config, SuiteSpec)
-    end, true, Specs).
+run_tests(Config, SpecTemplates) ->
+    lists:foldl(fun(SpecTemplate, AllPreviousTestsPassed) ->
+        AllPreviousTestsPassed and try
+            run_suite(Config, prepare_suite_spec(Config, SpecTemplate))
+        catch
+            throw:fail ->
+                false;
+            Type:Reason ->
+                ct:pal("Unexpected error while running test suite ~p:~p ~p", [
+                    Type, Reason, erlang:get_stacktrace()
+                ]),
+                false
+        end
+    end, true, SpecTemplates).
 
 
 %%%===================================================================
@@ -164,76 +177,13 @@ run_tests(Config, Specs) ->
 
 %% @private
 -spec run_suite(ct_config(), suite_spec()) -> HasAllTestsPassed :: boolean().
-run_suite(Config, #suite_spec{
-    client_spec = ClientSpecWithPlaceholders
-} = SuiteSpecWithClientPlaceholders) ->
-    try
-        SuiteSpec = SuiteSpecWithClientPlaceholders#suite_spec{
-            client_spec = prepare_client_spec(ClientSpecWithPlaceholders, Config)
-        },
-
-        run_invalid_clients_test_cases(Config, unauthorized, SuiteSpec)
-        and run_invalid_clients_test_cases(Config, forbidden_not_in_space, SuiteSpec)
-        and run_invalid_clients_test_cases(Config, forbidden_in_space, SuiteSpec)
-        and run_malformed_data_test_cases(Config, SuiteSpec)
-        and run_missing_required_data_test_cases(Config, SuiteSpec)
-        and run_expected_success_test_cases(Config, SuiteSpec)
-    catch
-        throw:fail ->
-            false;
-        Type:Reason ->
-            ct:pal("Unexpected error while running test suite ~p:~p ~p", [
-                Type, Reason, erlang:get_stacktrace()
-            ]),
-            false
-    end.
-
-
-%% @private
--spec prepare_client_spec(client_spec(), ct_config()) -> client_spec().
-prepare_client_spec(#client_spec{
-    correct = CorrectClientsAndPlaceholders,
-    unauthorized = UnauthorizedClientsAndPlaceholders,
-    forbidden_not_in_space = ForbiddenClientsNotInSpaceAndPlaceholders,
-    forbidden_in_space = ForbiddenClientsInSpaceAndPlaceholders
-}, Config) ->
-    #client_spec{
-        correct = prepare_clients(
-            CorrectClientsAndPlaceholders, Config
-        ),
-        unauthorized = prepare_clients(
-            UnauthorizedClientsAndPlaceholders, Config
-        ),
-        forbidden_not_in_space = prepare_clients(
-            ForbiddenClientsNotInSpaceAndPlaceholders, Config
-        ),
-        forbidden_in_space = prepare_clients(
-            ForbiddenClientsInSpaceAndPlaceholders, Config
-        )
-    }.
-
-
-%% @private
--spec prepare_clients(
-    [aai:auth() | client_placeholder() | {aai:auth() | client_placeholder(), errors:error()}],
-    ct_config()
-) ->
-    [aai:auth() | {aai:auth(), errors:error()}].
-prepare_clients(ClientsAndPlaceholders, Config) ->
-    lists:map(fun
-        ({ClientOrPlaceholder, {error, _} = Error}) ->
-            {prepare_client(ClientOrPlaceholder, Config), Error};
-        (ClientOrPlaceholder) ->
-            prepare_client(ClientOrPlaceholder, Config)
-    end, ClientsAndPlaceholders).
-
-
-%% @private
--spec prepare_client(aai:auth() | client_placeholder(), ct_config()) -> aai:auth().
-prepare_client(#auth{} = AaiClient, _Config) ->
-    AaiClient;
-prepare_client(Placeholder, Config) ->
-    placeholder_to_client(Placeholder, Config).
+run_suite(Config, SuiteSpec) ->
+    run_invalid_clients_test_cases(Config, unauthorized, SuiteSpec)
+    and run_invalid_clients_test_cases(Config, forbidden_not_in_space, SuiteSpec)
+    and run_invalid_clients_test_cases(Config, forbidden_in_space, SuiteSpec)
+    and run_malformed_data_test_cases(Config, SuiteSpec)
+    and run_missing_required_data_test_cases(Config, SuiteSpec)
+    and run_expected_success_test_cases(Config, SuiteSpec).
 
 
 %% @private
@@ -263,10 +213,11 @@ run_invalid_clients_test_cases(Config, InvalidClientsType, #suite_spec{
     end,
 
     SetupFun(),
-    TestsPassed = run_scenarios(
-        ScenarioTemplates, TargetNodes,
+    TestsPassed = run_testcases(
+        ScenarioTemplates,
+        TargetNodes,
         get_invalid_clients(InvalidClientsType, ClientSpec),
-        required_data_sets(DataSpec),
+        generate_required_data_sets(DataSpec),
         TestCaseFun
     ),
     TeardownFun(),
@@ -295,18 +246,18 @@ get_invalid_clients(forbidden_in_space, #client_spec{forbidden_in_space = Client
 get_scenario_specific_error_for_invalid_client(rest_not_supported, _ClientType, ClientAndError) ->
     % Error thrown by middleware when checking if operation is supported -
     % before auth checks could be performed
-    {get_client(ClientAndError), ?ERROR_NOT_SUPPORTED};
+    {extract_client(ClientAndError), ?ERROR_NOT_SUPPORTED};
 get_scenario_specific_error_for_invalid_client(gs_not_supported, _ClientType, ClientAndError) ->
     % Error thrown by middleware when checking if operation is supported -
     % before auth checks could be performed
-    {get_client(ClientAndError), ?ERROR_NOT_SUPPORTED};
+    {extract_client(ClientAndError), ?ERROR_NOT_SUPPORTED};
 get_scenario_specific_error_for_invalid_client(rest_with_file_path, ClientType, ClientAndError) when
     ClientType =:= unauthorized;
     ClientType =:= forbidden_not_in_space
 ->
     % Error thrown by rest_handler (before middleware auth checks could be performed)
     % as invalid clients who doesn't belong to space can't resolve file path to guid
-    {get_client(ClientAndError), ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>)};
+    {extract_client(ClientAndError), ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>)};
 get_scenario_specific_error_for_invalid_client(_ScenarioType, _, {_, {error, _}} = ClientAndError) ->
     ClientAndError;
 get_scenario_specific_error_for_invalid_client(_ScenarioType, unauthorized, Client) ->
@@ -318,9 +269,9 @@ get_scenario_specific_error_for_invalid_client(_ScenarioType, forbidden_in_space
 
 
 %% @private
--spec get_client(aai:auth() | {aai:auth(), errors:error()}) -> aai:auth().
-get_client({Client, {error, _}}) -> Client;
-get_client(Client) -> Client.
+-spec extract_client(aai:auth() | {aai:auth(), errors:error()}) -> aai:auth().
+extract_client({Client, {error, _}}) -> Client;
+extract_client(Client)               -> Client.
 
 
 %% @private
@@ -362,8 +313,11 @@ run_malformed_data_test_cases(Config, #suite_spec{
     end,
 
     SetupFun(),
-    TestsPassed = run_scenarios(
-        ScenarioTemplates, TargetNodes, CorrectClients, bad_data_sets(DataSpec),
+    TestsPassed = run_testcases(
+        ScenarioTemplates,
+        TargetNodes,
+        CorrectClients,
+        generate_bad_data_sets(DataSpec),
         TestCaseFun
     ),
     TeardownFun(),
@@ -439,7 +393,7 @@ run_missing_required_data_test_cases(Config, #suite_spec{
         at_least_one = AtLeastOneParams
     }
 }) ->
-    RequiredDataSet = hd(required_data_sets(DataSpec)),
+    RequiredDataSet = lists_utils:random_element(generate_required_data_sets(DataSpec)),
 
     MissingRequiredParamsDataSetsAndErrors = lists:map(fun(RequiredParam) ->
         {maps:remove(RequiredParam, RequiredDataSet), ?ERROR_MISSING_REQUIRED_VALUE(RequiredParam)}
@@ -469,8 +423,11 @@ run_missing_required_data_test_cases(Config, #suite_spec{
     end,
 
     SetupFun(),
-    TestsPassed = run_scenarios(
-        ScenarioTemplates, TargetNodes, CorrectClients, IncompleteDataSetsAndErrors,
+    TestsPassed = run_testcases(
+        ScenarioTemplates,
+        TargetNodes,
+        CorrectClients,
+        IncompleteDataSetsAndErrors,
         TestCaseFun
     ),
     TeardownFun(),
@@ -503,45 +460,40 @@ run_expected_success_test_cases(Config, #suite_spec{
     teardown_fun = TeardownFun,
     verify_fun = VerifyFun,
 
-    scenario_templates = ScenarioTemplates,
+    scenario_templates = AvailableScenarios,
     randomly_select_scenarios = true,
 
     data_spec = DataSpec
 }) ->
-    CorrectDataSets = correct_data_sets(DataSpec),
+    CorrectDataSets = generate_correct_data_sets(DataSpec),
 
     lists:foldl(fun(Client, OuterAcc) ->
-        case filter_scenarios_available_for_client(Client, ScenarioTemplates) of
-            [] ->
-                OuterAcc;
-            AvailableScenarios ->
-                CorrectDataSetsNum = length(CorrectDataSets),
-                AvailableScenariosNum = length(AvailableScenarios),
-                ScenarioPerDataSet = case AvailableScenariosNum > CorrectDataSetsNum of
-                    true ->
-                        ct:fail("Not enough data sets compared to available scenarios");
-                    false ->
-                        RandomizedScenarios = lists:flatmap(
-                            fun(_) -> lists_utils:shuffle(AvailableScenarios) end,
-                            lists:seq(1, CorrectDataSetsNum div AvailableScenariosNum + 1)
-                        ),
-                        lists:zip(
-                            lists:sublist(RandomizedScenarios, CorrectDataSetsNum),
-                            CorrectDataSets
-                        )
-                end,
-                OuterAcc and lists:foldl(fun({Scenario, DataSet}, InnerAcc) ->
-                    TargetNode = lists_utils:random_element(TargetNodes),
+        CorrectDataSetsNum = length(CorrectDataSets),
+        AvailableScenariosNum = length(AvailableScenarios),
+        ScenarioPerDataSet = case AvailableScenariosNum > CorrectDataSetsNum of
+            true ->
+                ct:fail("Not enough data sets compared to available scenarios");
+            false ->
+                RandomizedScenarios = lists:flatmap(
+                    fun(_) -> lists_utils:shuffle(AvailableScenarios) end,
+                    lists:seq(1, CorrectDataSetsNum div AvailableScenariosNum + 1)
+                ),
+                lists:zip(
+                    lists:sublist(RandomizedScenarios, CorrectDataSetsNum),
+                    CorrectDataSets
+                )
+        end,
+        OuterAcc and lists:foldl(fun({Scenario, DataSet}, InnerAcc) ->
+            TargetNode = lists_utils:random_element(TargetNodes),
 
-                    SetupFun(),
-                    TestCasePassed = run_exp_success_testcase(
-                        TargetNode, Client, DataSet, VerifyFun, Scenario, Config
-                    ),
-                    TeardownFun(),
+            SetupFun(),
+            TestCasePassed = run_exp_success_testcase(
+                TargetNode, Client, DataSet, VerifyFun, Scenario, Config
+            ),
+            TeardownFun(),
 
-                    InnerAcc and TestCasePassed
-                end, true, ScenarioPerDataSet)
-        end
+            InnerAcc and TestCasePassed
+        end, true, ScenarioPerDataSet)
     end, true, CorrectClients);
 run_expected_success_test_cases(Config, #suite_spec{
     target_nodes = TargetNodes,
@@ -566,15 +518,28 @@ run_expected_success_test_cases(Config, #suite_spec{
         TestCasePassed
     end,
 
-    run_scenarios(
-        ScenarioTemplates, TargetNodes, CorrectClients, correct_data_sets(DataSpec),
+    run_testcases(
+        ScenarioTemplates,
+        TargetNodes,
+        CorrectClients,
+        generate_correct_data_sets(DataSpec),
         TestCaseFun
     ).
 
 
 %% @private
-run_scenarios(ScenarioTemplates, TargetNodes, Clients, DataSets, TestCaseFun) ->
-    lists:foldl(fun(#scenario_template{type = ScenarioType} = ScenarioTemplate, PrevScenariosPassed) ->
+-spec run_testcases(
+    [scenario_template()],
+    [node()],
+    [aai:auth() | {aai:auth(), errors:error()}],
+    DataSets :: [undefined | map()],
+    fun((node(), aai:auth() | {aai:auth(), errors:error()}, undefined | map(), scenario_template()) ->
+        boolean()
+    )
+) ->
+    AllTestCasesPassed :: boolean().
+run_testcases(ScenarioTemplates, TargetNodes, Clients, DataSets, TestCaseFun) ->
+    lists:foldl(fun(ScenarioTemplate, PrevScenariosPassed) ->
         PrevScenariosPassed and lists:foldl(fun(Client, PrevClientsPassed) ->
             PrevClientsPassed and lists:foldl(fun(DataSet, PrevDataSetsPassed) ->
                 TargetNode = lists_utils:random_element(TargetNodes),
@@ -582,11 +547,13 @@ run_scenarios(ScenarioTemplates, TargetNodes, Clients, DataSets, TestCaseFun) ->
                     TargetNode, Client, DataSet, ScenarioTemplate
                 )
             end, true, DataSets)
-        end, true, filter_available_clients(ScenarioType, Clients))
+        end, true, Clients)
     end, true, ScenarioTemplates).
 
 
 %% @private
+-spec run_exp_error_testcase(node(), aai:auth(), undefined | map(), errors:error(), verify_fun(),
+    scenario_template(), ct_config()) -> TestCasePassed :: boolean().
 run_exp_error_testcase(TargetNode, Client, DataSet, ScenarioError, VerifyFun, #scenario_template{
     name = ScenarioName,
     type = ScenarioType,
@@ -614,6 +581,8 @@ run_exp_error_testcase(TargetNode, Client, DataSet, ScenarioError, VerifyFun, #s
 
 
 %% @private
+-spec run_exp_success_testcase(node(), aai:auth(), undefined | map(), verify_fun(),
+    scenario_template(), ct_config()) -> TestCasePassed :: boolean().
 run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_template{
     name = ScenarioName,
     type = ScenarioType,
@@ -644,29 +613,13 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_templ
     end.
 
 
-% TODO VFS-6201 rm when connecting via gs as nobody becomes possible
 %% @private
-filter_available_clients(Type, Clients) when
-    Type == gs;
-    Type == gs_with_shared_guid_and_aspect_private;
-    Type == gs_not_supported
-->
-    Clients -- [?NOBODY];
-filter_available_clients(_ScenarioType, Clients) ->
-    Clients.
-
-
-% TODO VFS-6201 rm when connecting via gs as nobody becomes possible
-%% @private
-filter_scenarios_available_for_client(?NOBODY, ScenarioTemplates) ->
-    lists:filter(fun(#scenario_template{type = Type}) ->
-        not lists:member(Type, ?GS_SCENARIO_TYPES)
-    end, ScenarioTemplates);
-filter_scenarios_available_for_client(_, ScenarioTemplates) ->
-    ScenarioTemplates.
-
-
-%% @private
+-spec validate_error_result(
+    scenario_type(),
+    errors:error(),
+    errors:error() | rest_response()  % gs | REST
+) ->
+    ok.
 validate_error_result(Type, ExpError, {ok, RespCode, _RespHeaders, RespBody}) when
     Type == rest;
     Type == rest_with_file_path;
@@ -686,6 +639,17 @@ validate_error_result(Type, ExpError, Result) when
 
 
 %% @private
+-spec log_failure(
+    ScenarioName :: binary(),
+    api_test_ctx(),
+    Args :: rest_args() | gs_args(),
+    Expected :: term(),
+    Got :: term(),
+    ErrType :: error | exit | throw,
+    ErrReason :: term(),
+    ct_config()
+) ->
+    ok.
 log_failure(
     ScenarioName,
     #api_test_ctx{node = TargetNode, client = Client},
@@ -720,40 +684,45 @@ log_failure(
 %%%===================================================================
 
 
-% Returns data sets that are correct
-correct_data_sets(undefined) ->
+%% @private
+-spec generate_correct_data_sets
+    (undefined) -> [?NO_DATA];
+    (data_spec()) -> [Data :: map()].
+generate_correct_data_sets(undefined) ->
     [?NO_DATA];
-correct_data_sets(DataSpec) ->
-    RequiredDataSets = required_data_sets(DataSpec),
+generate_correct_data_sets(DataSpec) ->
+    RequiredParamsDataSets = generate_required_data_sets(DataSpec),
 
-    AllRequiredParamsDataSet = case RequiredDataSets of
+    RequiredParamsDataSet = case RequiredParamsDataSets of
         [] -> #{};
-        _ -> hd(RequiredDataSets)
+        _ -> lists_utils:random_element(RequiredParamsDataSets)
     end,
-    AllRequiredWithOptionalDataSets = lists:map(fun(OptionalDataSet) ->
-        maps:merge(AllRequiredParamsDataSet, OptionalDataSet)
-    end, optional_data_sets(DataSpec)),
+    RequiredAndOptionalParamsDataSets = lists:map(fun(OptionalDataSet) ->
+        maps:merge(RequiredParamsDataSet, OptionalDataSet)
+    end, generate_optional_data_sets(DataSpec)),
 
-    RequiredDataSets ++ AllRequiredWithOptionalDataSets.
+    RequiredParamsDataSets ++ RequiredAndOptionalParamsDataSets.
 
 
-% Generates all combinations of "required" params and one "at_least_one" param
-required_data_sets(undefined) ->
+%% @private
+-spec generate_required_data_sets
+    (undefined) -> [?NO_DATA];
+    (data_spec()) -> [Data :: map()].
+generate_required_data_sets(undefined) ->
     [?NO_DATA];
-required_data_sets(DataSpec) ->
-    #data_spec{
-        required = Required,
-        at_least_one = AtLeastOne
-    } = DataSpec,
+generate_required_data_sets(#data_spec{
+    required = Required,
+    at_least_one = AtLeastOne
+} = DataSpec) ->
 
     AtLeastOneWithValues = lists:flatten(lists:map(
         fun(Key) ->
-            [#{Key => Val} || Val <- get_correct_value(Key, DataSpec)]
+            [#{Key => Val} || Val <- get_correct_values(Key, DataSpec)]
         end, AtLeastOne)
     ),
     RequiredWithValues = lists:map(
         fun(Key) ->
-            [#{Key => Val} || Val <- get_correct_value(Key, DataSpec)]
+            [#{Key => Val} || Val <- get_correct_values(Key, DataSpec)]
         end, Required
     ),
     RequiredCombinations = lists:foldl(
@@ -779,14 +748,17 @@ required_data_sets(DataSpec) ->
     end.
 
 
-% Generates all combinations for optional params
-optional_data_sets(undefined) ->
+%% @private
+-spec generate_optional_data_sets
+    (undefined) -> [?NO_DATA];
+    (data_spec()) -> [Data :: map()].
+generate_optional_data_sets(undefined) ->
     [?NO_DATA];
-optional_data_sets(#data_spec{optional = []}) ->
+generate_optional_data_sets(#data_spec{optional = []}) ->
     [];
-optional_data_sets(#data_spec{optional = Optional} = DataSpec) ->
+generate_optional_data_sets(#data_spec{optional = Optional} = DataSpec) ->
     OptionalParamsWithValues = lists:flatten(lists:map(fun(Key) ->
-        [#{Key => Val} || Val <- get_correct_value(Key, DataSpec)]
+        [#{Key => Val} || Val <- get_correct_values(Key, DataSpec)]
     end, Optional)),
 
     OptionalParamsCombinations = lists:usort(lists:foldl(fun(ParamWithValue, Acc) ->
@@ -796,28 +768,26 @@ optional_data_sets(#data_spec{optional = Optional} = DataSpec) ->
     lists:delete(#{}, OptionalParamsCombinations).
 
 
-% Generates combinations of bad data sets by adding wrong values to
-% correct data set (one set with correct values for all params).
-bad_data_sets(undefined) ->
+%% @private
+-spec generate_bad_data_sets
+    (undefined) -> [?NO_DATA];
+    (data_spec()) -> [{Data :: map(), InvalidParam :: binary(), ExpError :: errors:error()}].
+generate_bad_data_sets(undefined) ->
     [?NO_DATA];
-bad_data_sets(#data_spec{
-    required = Required,
-    at_least_one = AtLeastOne,
-    optional = Optional,
-    bad_values = BadValues
-} = DataSpec) ->
-    AllCorrect = lists:foldl(fun(Param, Acc) ->
-        Acc#{Param => hd(get_correct_value(Param, DataSpec))}
-    end, #{}, Required ++ AtLeastOne ++ Optional),
+generate_bad_data_sets(#data_spec{required = Required, bad_values = BadValues} = DataSpec) ->
+    CorrectDataSet = lists:foldl(fun(Param, Acc) ->
+        Acc#{Param => lists_utils:random_element(get_correct_values(Param, DataSpec))}
+    end, #{}, Required),
 
     lists:map(fun({Param, InvalidValue, ExpError}) ->
-        Data = AllCorrect#{Param => InvalidValue},
+        Data = CorrectDataSet#{Param => InvalidValue},
         {Data, Param, ExpError}
     end, BadValues).
 
 
-% Converts correct value spec into a value
-get_correct_value(Key, #data_spec{correct_values = CorrectValues}) ->
+%% @private
+-spec get_correct_values(Key :: binary(), data_spec()) -> CorrectValues :: [term()].
+get_correct_values(Key, #data_spec{correct_values = CorrectValues}) ->
     case maps:get(Key, CorrectValues) of
         Fun when is_function(Fun, 0) ->
             Fun();
@@ -829,6 +799,55 @@ get_correct_value(Key, #data_spec{correct_values = CorrectValues}) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec prepare_suite_spec(ct_config(), scenario_spec() | suite_spec()) -> suite_spec().
+prepare_suite_spec(Config, #suite_spec{client_spec = ClientSpecTemplate} = SuiteSpec) ->
+    SuiteSpec#suite_spec{
+        client_spec = prepare_client_spec(Config, ClientSpecTemplate)
+    };
+prepare_suite_spec(Config, #scenario_spec{} = ScenarioSpec) ->
+    prepare_suite_spec(Config, scenario_spec_to_suite_spec(ScenarioSpec)).
+
+
+%% @private
+-spec prepare_client_spec(ct_config(), client_spec()) -> client_spec().
+prepare_client_spec(Config, #client_spec{
+    correct = CorrectClients,
+    unauthorized = UnauthorizedClient,
+    forbidden_not_in_space = ForbiddenClientsNotInSpace,
+    forbidden_in_space = ForbiddenClientsInSpace
+}) ->
+    #client_spec{
+        correct = substitute_client_placeholders(CorrectClients, Config),
+        unauthorized = substitute_client_placeholders(UnauthorizedClient, Config),
+        forbidden_not_in_space = substitute_client_placeholders(ForbiddenClientsNotInSpace, Config),
+        forbidden_in_space = substitute_client_placeholders(ForbiddenClientsInSpace, Config)
+    }.
+
+
+%% @private
+-spec substitute_client_placeholders(
+    [aai:auth() | client_placeholder() | {aai:auth() | client_placeholder(), errors:error()}],
+    ct_config()
+) ->
+    [aai:auth() | {aai:auth(), errors:error()}].
+substitute_client_placeholders(ClientsAndPlaceholders, Config) ->
+    lists:map(fun
+        ({ClientOrPlaceholder, {error, _} = Error}) ->
+            {substitute_client_placeholder(ClientOrPlaceholder, Config), Error};
+        (ClientOrPlaceholder) ->
+            substitute_client_placeholder(ClientOrPlaceholder, Config)
+    end, ClientsAndPlaceholders).
+
+
+%% @private
+-spec substitute_client_placeholder(aai:auth() | client_placeholder(), ct_config()) -> aai:auth().
+substitute_client_placeholder(#auth{} = AaiClient, _Config) ->
+    AaiClient;
+substitute_client_placeholder(Placeholder, Config) ->
+    placeholder_to_client(Placeholder, Config).
 
 
 %% @private
@@ -943,34 +962,19 @@ make_gs_request(Config, Node, Client, #gs_args{
 %% @private
 -spec connect_via_gs(node(), aai:auth(), ct_config()) ->
     {ok, GsClient :: pid()} | errors:error().
-connect_via_gs(_Node, ?NOBODY, _Config) ->
-    % TODO VFS-6201 fix when connecting as nobody via gs becomes possible
-    throw(fail);
-connect_via_gs(Node, ?USER(UserId), Config) ->
-    connect_via_gs(
-        Node,
-        ?SUB(user, UserId),
-        {token, api_test_env:get_user_access_token(UserId, Config)},
-        [{cacerts, op_test_rpc:get_cert_chain_pems(Node)}]
-    ).
+connect_via_gs(Node, Client, Config) ->
+    {Auth, ExpIdentity} = case Client of
+        ?NOBODY ->
+            {undefined, ?SUB(nobody)};
+        ?USER(UserId) ->
+            TokenAuth = {token, api_test_env:get_user_access_token(UserId, Config)},
+            {TokenAuth, ?SUB(user, UserId)}
+    end,
+    GsEndpoint = gs_endpoint(Node),
+    GsSupportedVersions = op_test_rpc:gs_protocol_supported_versions(Node),
+    Opts = [{cacerts, op_test_rpc:get_cert_chain_pems(Node)}],
 
-
-%% @private
--spec connect_via_gs(
-    node(),
-    aai:subject(),
-    gs_protocol:client_auth(),
-    ConnectionOpts :: proplists:proplist()
-) ->
-    {ok, GsClient :: pid()} | errors:error().
-connect_via_gs(Node, ExpIdentity, Authorization, Opts) ->
-    case gs_client:start_link(
-        gs_endpoint(Node),
-        Authorization,
-        op_test_rpc:gs_protocol_supported_versions(Node),
-        fun(_) -> ok end,
-        Opts
-    ) of
+    case gs_client:start_link(GsEndpoint, Auth, GsSupportedVersions, fun(_) -> ok end, Opts) of
         {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} ->
             {ok, GsClient};
         {error, _} = Error ->
@@ -992,8 +996,7 @@ gs_endpoint(Node) ->
 
 %% @private
 -spec make_rest_request(ct_config(), node(), aai:auth(), rest_args()) ->
-    {ok, RespCode :: non_neg_integer(), RespHeaders :: map(), RespBody :: binary() | map()} |
-    {error, term()}.
+    rest_response() | {error, term()}.
 make_rest_request(Config, Node, Client, #rest_args{
     method = Method,
     path = Path,
