@@ -15,12 +15,11 @@
 
 -behaviour(dynamic_page_behaviour).
 
--include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
 -define(CONN_CLOSE_HEADERS, #{<<"connection">> => <<"close">>}).
 
@@ -72,7 +71,7 @@ handle(<<"GET">>, Req) ->
             OzUrl = oneprovider:get_oz_url(),
             Req2 = gui_cors:allow_origin(OzUrl, Req),
             Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
-            handle_http_download(Req3, SessionId, FileGuid)
+            handle_http_download(SessionId, FileGuid, Req3)
     end.
 
 
@@ -89,74 +88,21 @@ handle(<<"GET">>, Req) ->
 %% file body.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_http_download(cowboy_req:req(), session:id(), fslogic_worker:file_guid()) ->
+-spec handle_http_download(session:id(), fslogic_worker:file_guid(), cowboy_req:req()) ->
     cowboy_req:req().
-handle_http_download(Req, SessionId, FileGuid) ->
-    case lfm:open(SessionId, {guid, FileGuid}, read) of
-        {ok, FileHandle} ->
-            try
-                stream_file(FileGuid, FileHandle, SessionId, Req)
-            catch Type:Reason ->
-                {ok, UserId} = session:get_user_id(SessionId),
-                ?error_stacktrace("Error while processing file (~p) download "
-                                  "for user ~p - ~p:~p", [
-                    FileGuid, UserId, Type, Reason
-                ]),
-                cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req)
-            after
-                lfm:release(FileHandle)
-            end;
+handle_http_download(SessionId, FileGuid, Req0) ->
+    case lfm:stat(SessionId, {guid, FileGuid}) of
+        {ok, #file_attr{name = FileName} = FileAttrs} ->
+            %% @todo VFS-2073 - check if needed
+            %% FileNameUrlEncoded = http_utils:url_encode(FileName),
+            Req1 = cowboy_req:set_resp_header(
+                <<"content-disposition">>,
+                <<"attachment; filename=\"", FileName/binary, "\"">>,
+                %% @todo VFS-2073 - check if needed
+                %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
+                Req0
+            ),
+            http_download_utils:stream_file(SessionId, FileAttrs, Req1);
         {error, _} ->
-            cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req)
+            cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req0)
     end.
-
-
-%% @private
--spec stream_file(
-    file_id:file_guid(),
-    FileHandle :: lfm_context:ctx(),
-    session:id(),
-    cowboy_req:req()
-) ->
-    cowboy_req:req().
-stream_file(FileGuid, FileHandle, SessionId, Req) ->
-    {ok, #file_attr{size = FileSize, name = FileName}} = lfm:stat(
-        SessionId, {guid, FileGuid}
-    ),
-    ReadBlockSize = http_download_utils:get_read_block_size(FileHandle),
-
-    % Reply with attachment headers and a streaming function
-    AttachmentHeaders = attachment_headers(FileName),
-
-    Req2 = cowboy_req:stream_reply(?HTTP_200_OK, AttachmentHeaders#{
-        <<"content-length">> => integer_to_binary(FileSize)
-    }, Req),
-    http_download_utils:stream_range(
-        FileHandle, {0, FileSize-1}, Req2, fun(Data) -> Data end, ReadBlockSize
-    ),
-    cowboy_req:stream_body(<<"">>, fin, Req2),
-
-    Req2.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns attachment headers that will cause web browser to
-%% interpret received data as attachment (and save it to disk).
-%% Proper filename is set, both in utf8 encoding and legacy for older browsers,
-%% based on given filepath or filename.
-%% @end
-%%--------------------------------------------------------------------
--spec attachment_headers(FileName :: file_meta:name()) -> http_client:headers().
-attachment_headers(FileName) ->
-    %% @todo VFS-2073 - check if needed
-    %% FileNameUrlEncoded = http_utils:url_encode(FileName),
-    {Type, Subtype, _} = cow_mimetypes:all(FileName),
-    MimeType = <<Type/binary, "/", Subtype/binary>>,
-    #{
-        <<"content-type">> => MimeType,
-        <<"content-disposition">> => <<"attachment; filename=\"", FileName/binary, "\"">>
-        %% @todo VFS-2073 - check if needed
-        %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
-    }.

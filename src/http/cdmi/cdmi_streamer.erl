@@ -72,7 +72,7 @@ stream_cdmi(Req, #cdmi_req{
             <<"content-length">> => integer_to_binary(StreamSize)
         }, Req),
         cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
-        http_download_utils:stream_range(
+        http_download_utils:stream_bytes_range(
             FileHandle, Range1, Req2,
             fun(Data) -> cdmi_encoder:encode(Data, Encoding) end, ReadBlockSize
         ),

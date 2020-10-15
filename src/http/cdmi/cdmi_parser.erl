@@ -22,7 +22,7 @@
 
 %% API
 -export([
-    parse_range_header/2, parse_content_range_header/2,
+    parse_content_range_header/2,
     parse_content_type_header/1,
     parse_body/1
 ]).
@@ -39,23 +39,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc Parses byte ranges from 'range' http header.
-%%--------------------------------------------------------------------
--spec parse_range_header(cowboy_req:req(), Threshold :: non_neg_integer()) ->
-    undefined | [range()].
-parse_range_header(Req, Threshold) ->
-    case cowboy_req:header(<<"range">>, Req) of
-        undefined ->
-            undefined;
-        RawRange ->
-            case parse_byte_range(RawRange, Threshold) of
-                invalid -> throw(?ERROR_BAD_DATA(<<"range">>));
-                Ranges -> Ranges
-            end
-    end.
 
 
 %%--------------------------------------------------------------------
@@ -141,13 +124,6 @@ parse_body(Req) ->
 %%--------------------------------------------------------------------
 -spec parse_byte_range(binary() | list(), non_neg_integer()) ->
     invalid | [range()].
-parse_byte_range(RangeBin, Size) when is_binary(RangeBin) ->
-    case binary:split(RangeBin, <<"=">>, [global]) of
-        [<<"bytes">>, RawRange] ->
-            parse_byte_range(binary:split(RawRange, <<",">>, [global]), Size);
-        _ ->
-            invalid
-    end;
 parse_byte_range(RawRanges, Size) ->
     ParsedRanges = lists:map(fun(RangeBin) ->
         ParsedRange = case binary:split(RangeBin, <<"-">>, [global]) of

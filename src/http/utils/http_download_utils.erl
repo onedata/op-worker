@@ -21,7 +21,7 @@
 %% API
 -export([
     get_read_block_size/1,
-    stream_file/3, stream_range/5
+    stream_file/3, stream_bytes_range/5
 ]).
 
 -type read_block_size() :: non_neg_integer().
@@ -78,7 +78,7 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
             case lfm:open(SessionId, {guid, FileGuid}, read) of
                 {ok, FileHandle} ->
                     try
-                        ReadBlockSize = http_download_utils:get_read_block_size(FileHandle),
+                        ReadBlockSize = get_read_block_size(FileHandle),
                         stream_file_insecure(FileHandle, Ranges, FileSize, ReadBlockSize, Req1)
                     catch Type:Reason ->
                         {ok, UserId} = session:get_user_id(SessionId),
@@ -97,7 +97,7 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
     end.
 
 
--spec stream_range(
+-spec stream_bytes_range(
     lfm:handle(),
     http_parser:range(),
     cowboy_req:req(),
@@ -105,9 +105,9 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
     read_block_size()
 ) ->
     ok | no_return().
-stream_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize) ->
+stream_bytes_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize) ->
     MaxReadBlocks = max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize),
-    stream_range(
+    stream_bytes_range(
         FileHandle, Range, Req, EncodingFun,
         ReadBlockSize, MaxReadBlocks, ?MIN_SEND_RETRY_DELAY
     ).
@@ -128,6 +128,12 @@ ensure_content_type_header_set(FileName, Req) ->
         _ ->
             Req
     end.
+
+
+%% @private
+-spec build_content_range_header_value(http_parser:range(), file_meta:size()) -> binary().
+build_content_range_header_value({RangeStart, RangeEnd}, FileSize) ->
+    str_utils:format_bin("bytes ~B-~B/~B", [RangeStart, RangeEnd, FileSize]).
 
 
 %% @private
@@ -156,7 +162,7 @@ stream_whole_file(FileHandle, FileSize, ReadBlockSize, Req0) ->
         #{<<"content-length">> => integer_to_binary(FileSize)},
         Req0
     ),
-    stream_range(FileHandle, {0, FileSize - 1}, Req1, fun(Data) -> Data end, ReadBlockSize),
+    stream_bytes_range(FileHandle, {0, FileSize - 1}, Req1, fun(Data) -> Data end, ReadBlockSize),
     cowboy_req:stream_body(<<"">>, fin, Req1),
     Req1.
 
@@ -175,11 +181,11 @@ stream_one_ranged_body(FileHandle, {RangeStart, RangeEnd} = Range, FileSize, Rea
         ?HTTP_206_PARTIAL_CONTENT,
         #{
             <<"content-length">> => integer_to_binary(RangeEnd - RangeStart + 1),
-            <<"content-range">> => build_content_range(Range, FileSize)
+            <<"content-range">> => build_content_range_header_value(Range, FileSize)
         },
         Req0
     ),
-    stream_range(FileHandle, Range, Req1, fun(Data) -> Data end, ReadBlockSize),
+    stream_bytes_range(FileHandle, Range, Req1, fun(Data) -> Data end, ReadBlockSize),
     cowboy_req:stream_body(<<"">>, fin, Req1),
     Req1.
 
@@ -204,7 +210,7 @@ stream_multipart_ranged_body(FileHandle, Ranges, FileSize, ReadBlockSize, Req0) 
         },
         Req0
     ),
-    send_multipart_byteranges(
+    stream_multipart_byteranges(
         FileHandle, Ranges, FileSize, ReadBlockSize, Boundary, ContentType, Req1
     ),
     cowboy_req:stream_body(cow_multipart:close(Boundary), fin, Req1),
@@ -212,7 +218,7 @@ stream_multipart_ranged_body(FileHandle, Ranges, FileSize, ReadBlockSize, Req0) 
 
 
 %% @private
--spec send_multipart_byteranges(
+-spec stream_multipart_byteranges(
     lfm:handle(),
     [http_parser:range()],
     file_meta:size(),
@@ -222,27 +228,27 @@ stream_multipart_ranged_body(FileHandle, Ranges, FileSize, ReadBlockSize, Req0) 
     cowboy_req:req()
 ) ->
     ok.
-send_multipart_byteranges(_FileHandle, [], _FileSize, _ReadBlockSize, _Boundary, _ContentType, _Req) ->
+stream_multipart_byteranges(_Handle, [], _Size, _ReadBlockSize, _Boundary, _ContentType, _Req) ->
     ok;
-send_multipart_byteranges(
+stream_multipart_byteranges(
     FileHandle, [Range | RestRanges], FileSize, ReadBlockSize,
     Boundary, ContentType, Req
 ) ->
     NextPartHead = cow_multipart:first_part(Boundary, [
         {<<"content-type">>, ContentType},
-        {<<"content-range">>, build_content_range(Range, FileSize)}
+        {<<"content-range">>, build_content_range_header_value(Range, FileSize)}
     ]),
     cowboy_req:stream_body(NextPartHead, nofin, Req),
 
-    stream_range(FileHandle, Range, Req, fun(Data) -> Data end, ReadBlockSize),
+    stream_bytes_range(FileHandle, Range, Req, fun(Data) -> Data end, ReadBlockSize),
 
-    send_multipart_byteranges(
+    stream_multipart_byteranges(
         FileHandle, RestRanges, FileSize, ReadBlockSize, Boundary, ContentType, Req
     ).
 
 
 %% @private
--spec stream_range(
+-spec stream_bytes_range(
     lfm:handle(),
     http_parser:range(),
     cowboy_req:req(),
@@ -252,9 +258,9 @@ send_multipart_byteranges(
     SendRetryDelay :: non_neg_integer()
 ) ->
     ok | no_return().
-stream_range(_, {From, To}, _, _, _, _, _) when From > To ->
+stream_bytes_range(_, {From, To}, _, _, _, _, _) when From > To ->
     ok;
-stream_range(
+stream_bytes_range(
     FileHandle, {From, To}, Req, EncodingFun,
     ReadBlockSize, MaxReadBlocks, SendRetryDelay
 ) ->
@@ -266,9 +272,9 @@ stream_range(
             ok;
         DataSize ->
             EncodedData = EncodingFun(Data),
-            NextSendRetryDelay = send_data(EncodedData, Req, MaxReadBlocks, SendRetryDelay),
+            NextSendRetryDelay = send_data_chunk(EncodedData, Req, MaxReadBlocks, SendRetryDelay),
 
-            stream_range(
+            stream_bytes_range(
                 NewFileHandle, {From + DataSize, To}, Req, EncodingFun,
                 ReadBlockSize, MaxReadBlocks, NextSendRetryDelay
             )
@@ -280,7 +286,7 @@ stream_range(
 %% @doc
 %% TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
 %% Cowboy uses separate process to manage socket and all messages, including
-%% data to stream are sent to that process. However because it doesn't enforce
+%% data, to stream are sent to that process. However because it doesn't enforce
 %% any backpressure mechanism it is easy, on slow networks and fast storages,
 %% to read to memory entire file while sending process doesn't keep up with
 %% sending those data. To avoid this it is necessary to check message_queue_len
@@ -288,14 +294,14 @@ stream_range(
 %% read into memory.
 %% @end
 %%--------------------------------------------------------------------
--spec send_data(
+-spec send_data_chunk(
     Data :: binary(),
     cowboy_req:req(),
     MaxReadBlocks :: non_neg_integer(),
     RetryDelay :: non_neg_integer()
 ) ->
     NextRetryDelay :: non_neg_integer().
-send_data(Data, #{pid := ConnPid} = Req, MaxReadBlocks, RetryDelay) ->
+send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocks, RetryDelay) ->
     {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
 
     case MsgQueueLen < MaxReadBlocks of
@@ -304,11 +310,5 @@ send_data(Data, #{pid := ConnPid} = Req, MaxReadBlocks, RetryDelay) ->
             max(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY);
         false ->
             timer:sleep(RetryDelay),
-            send_data(Data, Req, MaxReadBlocks, min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY))
+            send_data_chunk(Data, Req, MaxReadBlocks, min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY))
     end.
-
-
-%% @private
--spec build_content_range(http_parser:range(), file_meta:size()) -> binary().
-build_content_range({RangeStart, RangeEnd}, FileSize) ->
-    str_utils:format_bin("bytes ~B-~B/~B", [RangeStart, RangeEnd, FileSize]).
