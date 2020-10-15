@@ -192,20 +192,22 @@ list_dir(Config) ->
 %%  parameters we need by listing then as ';' separated list after '?' in URL )
 get_file(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    FileName = filename:join([binary_to_list(SpaceName), "toRead.txt"]),
+    EmptyFileName = filename:join([binary_to_list(SpaceName), "empty.txt"]),
+    FilledFileName = filename:join([binary_to_list(SpaceName), "toRead.txt"]),
 
     FileContent = <<"Some content...">>,
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
-    {ok, _} = create_file(Config, FileName),
-    ?assert(object_exists(Config, FileName)),
+    {ok, _} = create_file(Config, EmptyFileName),
+    {ok, _} = create_file(Config, FilledFileName),
+    ?assert(object_exists(Config, FilledFileName)),
 
-    {ok, _} = write_to_file(Config, FileName, FileContent, ?FILE_BEGINNING),
-    ?assertEqual(FileContent, get_file_content(Config, FileName)),
+    {ok, _} = write_to_file(Config, FilledFileName, FileContent, ?FILE_BEGINNING),
+    ?assertEqual(FileContent, get_file_content(Config, FilledFileName)),
 
     %%-------- basic read ----------
     RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    {ok, Code1, _Headers1, Response1} = do_request(WorkerP2, FileName, get, RequestHeaders1, []),
+    {ok, Code1, _Headers1, Response1} = do_request(WorkerP2, FilledFileName, get, RequestHeaders1, []),
     ?assertEqual(200, Code1),
     CdmiResponse1 = json_utils:decode(Response1),
     FileContent1 = base64:encode(FileContent),
@@ -225,7 +227,7 @@ get_file(Config) ->
 
     %%-- selective params read -----
     RequestHeaders2 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    {ok, Code2, _Headers2, Response2} = do_request(Workers, FileName ++ "?parentURI;completionStatus", get, RequestHeaders2, []),
+    {ok, Code2, _Headers2, Response2} = do_request(Workers, FilledFileName ++ "?parentURI;completionStatus", get, RequestHeaders2, []),
     ?assertEqual(200, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
 
@@ -237,7 +239,7 @@ get_file(Config) ->
 
     %%--- selective value read -----
     RequestHeaders3 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    {ok, Code3, _Headers3, Response3} = do_request(Workers, FileName ++ "?value:1-3;valuerange", get, RequestHeaders3, []),
+    {ok, Code3, _Headers3, Response3} = do_request(Workers, FilledFileName ++ "?value:1-3;valuerange", get, RequestHeaders3, []),
     ?assertEqual(200, Code3),
     CdmiResponse3 = json_utils:decode(Response3),
 
@@ -247,7 +249,7 @@ get_file(Config) ->
 
     %%------- noncdmi read --------
     {ok, Code4, Headers4, Response4} =
-        do_request(WorkerP2, FileName, get, [user_1_token_header(Config)]),
+        do_request(WorkerP2, FilledFileName, get, [user_1_token_header(Config)]),
     ?assertEqual(200, Code4),
 
     ?assertMatch(#{<<"content-type">> := <<"application/octet-stream">>}, Headers4),
@@ -256,7 +258,7 @@ get_file(Config) ->
 
     %%------- objectid read --------
     RequestHeaders5 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    {ok, Code5, _Headers5, Response5} = do_request(Workers, FileName ++ "?objectID", get, RequestHeaders5, []),
+    {ok, Code5, _Headers5, Response5} = do_request(Workers, FilledFileName ++ "?objectID", get, RequestHeaders5, []),
     ?assertEqual(200, Code5),
 
     CdmiResponse5 = (json_utils:decode(Response5)),
@@ -273,21 +275,76 @@ get_file(Config) ->
     ?assertEqual(FileContent, base64:decode(maps:get(<<"value">>, CdmiResponse6))),
     %%------------------------------
 
-    %% selective value read non-cdmi
-    RequestHeaders7 = [{<<"Range">>, <<"bytes=1-3,5-5,-3">>}],
-    {ok, Code7, _Headers7, Response7} =
-        do_request(WorkerP2, FileName, get, [user_1_token_header(Config) | RequestHeaders7]),
-    ?assertEqual(206, Code7),
-    ?assertEqual(<<"omec...">>, Response7), % 1-3,5-5,12-14  from FileContent = <<"Some content...">>
+    %% selective value single range read non-cdmi
+    ?assertMatch(
+        {ok, 206, #{<<"content-range">> := <<"bytes 5-8/15">>}, <<"cont">>},
+        do_request(WorkerP2, FilledFileName, get, [
+            {<<"range">>, <<"bytes=5-8">>}, user_1_token_header(Config)
+        ])
+    ),
     %%------------------------------
 
-    %% selective value read non-cdmi error
-    RequestHeaders8 = [{<<"Range">>, <<"bytes=1-3,6-4,-3">>}],
-    {ok, Code8, _Headers8, Response8} =
-        do_request(WorkerP2, FileName, get, [user_1_token_header(Config) | RequestHeaders8]),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"range">>)),
-    ?assertMatch(ExpRestError, {Code8, json_utils:decode(Response8)}).
-%%------------------------------
+    %% selective value multi range read non-cdmi
+    {ok, _, #{
+        <<"content-type">> := <<"multipart/byteranges; boundary=", Boundary/binary>>
+    }, Response8} = ?assertMatch(
+        {ok, 206, #{<<"content-type">> := <<"multipart/byteranges", _/binary>>}, _},
+        do_request(WorkerP2, FilledFileName, get, [
+            {<<"range">>, <<"bytes=1-3,5-5,-3">>}, user_1_token_header(Config)
+        ])
+    ),
+    ExpResponse8 = <<
+        "--", Boundary/binary,
+        "\r\ncontent-type: application/octet-stream\r\ncontent-range: bytes 1-3/15",
+        "\r\n\r\nome",
+        "--", Boundary/binary,
+        "\r\ncontent-type: application/octet-stream\r\ncontent-range: bytes 5-5/15",
+        "\r\n\r\nc",
+        "--", Boundary/binary,
+        "\r\ncontent-type: application/octet-stream\r\ncontent-range: bytes 12-14/15",
+        "\r\n\r\n...\r\n",
+        "--", Boundary/binary, "--"
+    >>,
+    ?assertEqual(ExpResponse8, Response8),
+
+%%    ?assertEqual(<<"omec...">>, Response7), % 1-3,5-5,12-14  from FileContent = <<"Some content...">>
+    %%------------------------------
+
+    %% read file non-cdmi with invalid Range should fail
+    lists:foreach(fun(InvalidRange) ->
+        ?assertMatch(
+            {ok, 416, #{<<"content-range">> := <<"bytes */15">>}, <<>>},
+            do_request(WorkerP2, FilledFileName, get, [
+                {<<"range">>, InvalidRange}, user_1_token_header(Config)
+            ])
+        )
+    end, [
+        <<"unicorns">>,
+        <<"bytes:5-10">>,
+        <<"bytes=5=10">>,
+        <<"bytes=-15-10">>,
+        <<"bytes=100-150">>,
+        <<"bytes=10-5">>,
+        <<"bytes=-5-">>,
+        <<"bytes=10--5">>,
+        <<"bytes=10-15-">>
+    ]),
+    %%------------------------------
+
+    %% read empty file non-cdmi without Range
+    ?assertMatch(
+        {ok, 200, _, <<>>},
+        do_request(WorkerP2, EmptyFileName, get, [user_1_token_header(Config)])
+    ),
+    %%------------------------------
+
+    %% read empty file non-cdmi with Range should return 416
+    ?assertMatch(
+        {ok, 416, #{<<"content-range">> := <<"bytes */0">>}, <<>>},
+        do_request(WorkerP2, EmptyFileName, get, [
+            {<<"range">>, <<"bytes=10-15">>}, user_1_token_header(Config)
+        ])
+    ).
 
 % Tests cdmi metadata read on object GET request.
 metadata(Config) ->

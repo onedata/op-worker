@@ -103,6 +103,6 @@ handle_http_download(SessionId, FileGuid, Req0) ->
                 Req0
             ),
             http_download_utils:stream_file(SessionId, FileAttrs, Req1);
-        {error, _} ->
-            cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req0)
+        {error, Errno} ->
+            http_req_utils:send_error_response(?ERROR_POSIX(Errno), Req0)
     end.

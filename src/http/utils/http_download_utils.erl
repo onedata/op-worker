@@ -16,6 +16,7 @@
 -include("http/cdmi.hrl").
 -include("http/rest.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/api_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -86,13 +87,12 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
                                           "for user ~p - ~p:~p", [
                             FileGuid, UserId, Type, Reason
                         ]),
-                        cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req1)
+                        http_req_utils:send_error_response(Reason, Req1)
                     after
                         lfm:release(FileHandle)
                     end;
-                {error, _} ->
-                    % TODO proper error
-                    cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req1)
+                {error, Errno} ->
+                    http_req_utils:send_error_response(?ERROR_POSIX(Errno), Req1)
             end
     end.
 
