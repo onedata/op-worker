@@ -159,11 +159,13 @@ verify(Config, InitialData, TestData, StopAppBeforeKill) ->
 
     case StopAppBeforeKill of
         true ->
+            ?assertEqual(last_closing_procedure_succeded, get_application_closing_status(FailingNode)),
             % App was stopped before node killing - all data should be present
             verify_all_files_and_dirs_created_by_provider(FailingNode, SessId(FailingProvider), TestData, NotFailingProvider),
             verify_all_files_and_dirs_created_by_provider(FailingNode, SessId(FailingProvider), TestData, FailingProvider),
             verify_all_files_and_dirs_created_by_provider(NotFailingNode, SessId(NotFailingProvider), TestData, FailingProvider);
         false ->
+            ?assertEqual(last_closing_procedure_failed, get_application_closing_status(FailingNode)),
             % App wasn't stopped before node killing - some data can be lost
             % but operations on dirs should be possible,
             P1DirGuid = kv_utils:get([test_dirs, P1], InitialData),
@@ -205,6 +207,9 @@ verify_files_and_dirs(Worker, SessId, DirsAndFiles) ->
     % Verify with 90 attempts as additional time can be needed for
     % connection recreation after node restart
     file_ops_test_utils:verify_files_and_dirs(Worker, SessId, DirsAndFiles, 90).
+
+get_application_closing_status(Worker) ->
+    rpc:call(Worker, datastore_worker, get_application_closing_status, []).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
