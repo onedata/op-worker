@@ -66,17 +66,12 @@
     {stop, cowboy_req:req(), cdmi_handler:cdmi_req()}.
 get_binary(Req, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
-    file_attrs = #file_attr{guid = FileGuid, size = Size}
+    file_attrs = FileAttrs = #file_attr{guid = FileGuid}
 } = CdmiReq) ->
     % prepare response
-    Ranges = cdmi_parser:parse_range_header(Req, Size),
     MimeType = cdmi_metadata:get_mimetype(SessionId, {guid, FileGuid}),
     Req1 = cowboy_req:set_resp_header(<<"content-type">>, MimeType, Req),
-    HttpStatus = case Ranges of
-        undefined -> ?HTTP_200_OK;
-        _ -> ?HTTP_206_PARTIAL_CONTENT
-    end,
-    Req2 = cdmi_streamer:stream_binary(HttpStatus, Req1, CdmiReq, Ranges),
+    Req2 = http_download_utils:stream_file(SessionId, FileAttrs, Req1),
     {stop, Req2, CdmiReq}.
 
 

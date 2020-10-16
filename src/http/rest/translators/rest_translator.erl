@@ -338,6 +338,6 @@ translate_error(?ERROR_TRANSFER_NOT_ENDED) ->
     {?HTTP_400_BAD_REQUEST, <<"Specified transfer has not ended yet.">>};
 
 % Wildcard match
-translate_error({error, Reason}) ->
-    ?error("Unexpected error: {error, ~p} in rest error translator", [Reason]),
+translate_error(Error) ->
+    ?error("Unexpected error: in rest error translator", [Error]),
     translate_error(?ERROR_INTERNAL_SERVER_ERROR).
