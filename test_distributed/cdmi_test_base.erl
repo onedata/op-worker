@@ -306,8 +306,6 @@ get_file(Config) ->
         "--", Boundary/binary, "--"
     >>,
     ?assertEqual(ExpResponse8, Response8),
-
-%%    ?assertEqual(<<"omec...">>, Response7), % 1-3,5-5,12-14  from FileContent = <<"Some content...">>
     %%------------------------------
 
     %% read file non-cdmi with invalid Range should fail
