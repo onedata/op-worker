@@ -17,8 +17,9 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include("middleware/middleware.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% API
 -export([
@@ -79,7 +80,7 @@ parse_content_range_header(Req, Threshold) ->
     {Mimetype :: binary(), Encoding :: binary() | undefined}.
 parse_content_type_header(Req) ->
     Content = cowboy_req:header(
-        <<"content-type">>, Req,
+        ?HDR_CONTENT_TYPE, Req,
         <<"application/octet-stream">>
     ),
     case binary:split(Content, <<";">>) of

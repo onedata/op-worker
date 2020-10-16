@@ -16,7 +16,8 @@
 -include("http/cdmi.hrl").
 -include("http/rest.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -43,8 +44,6 @@
 -define(MIN_SEND_RETRY_DELAY, 100).
 -define(MAX_SEND_RETRY_DELAY, 1000).
 
--define(CONN_CLOSE_HEADERS, #{<<"connection">> => <<"close">>}).
-
 
 %%%===================================================================
 %%% API
@@ -69,14 +68,14 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
     case http_parser:parse_range_header(Req0, FileSize) of
         invalid ->
             cowboy_req:reply(
-                416,
-                #{<<"content-range">> => str_utils:format_bin("bytes */~B", [FileSize])},
+                ?HTTP_416_RANGE_NOT_SATISFIABLE,
+                #{?HDR_CONTENT_RANGE => str_utils:format_bin("bytes */~B", [FileSize])},
                 Req0
             );
         Ranges ->
             Req1 = ensure_content_type_header_set(FileName, Req0),
 
-            case lfm:open(SessionId, {guid, FileGuid}, read) of
+            case lfm:monitored_open(SessionId, {guid, FileGuid}, read) of
                 {ok, FileHandle} ->
                     try
                         ReadBlockSize = get_read_block_size(FileHandle),
@@ -89,7 +88,7 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
                         ]),
                         http_req_utils:send_error_response(Reason, Req1)
                     after
-                        lfm:release(FileHandle)
+                        lfm:monitored_release(FileHandle)
                     end;
                 {error, Errno} ->
                     http_req_utils:send_error_response(?ERROR_POSIX(Errno), Req1)
@@ -99,7 +98,7 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
 
 -spec stream_bytes_range(
     lfm:handle(),
-    http_parser:range(),
+    http_parser:bytes_range(),
     cowboy_req:req(),
     EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     read_block_size()
@@ -121,17 +120,17 @@ stream_bytes_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize) ->
 %% @private
 -spec ensure_content_type_header_set(file_meta:name(), cowboy_req:req()) -> cowboy_req:req().
 ensure_content_type_header_set(FileName, Req) ->
-    case cowboy_req:resp_header(<<"content-type">>, Req, undefined) of
+    case cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req, undefined) of
         undefined ->
             {Type, Subtype, _} = cow_mimetypes:all(FileName),
-            cowboy_req:set_resp_header(<<"content-type">>, [Type, "/", Subtype], Req);
+            cowboy_req:set_resp_header(?HDR_CONTENT_TYPE, [Type, "/", Subtype], Req);
         _ ->
             Req
     end.
 
 
 %% @private
--spec build_content_range_header_value(http_parser:range(), file_meta:size()) -> binary().
+-spec build_content_range_header_value(http_parser:bytes_range(), file_meta:size()) -> binary().
 build_content_range_header_value({RangeStart, RangeEnd}, FileSize) ->
     str_utils:format_bin("bytes ~B-~B/~B", [RangeStart, RangeEnd, FileSize]).
 
@@ -139,7 +138,7 @@ build_content_range_header_value({RangeStart, RangeEnd}, FileSize) ->
 %% @private
 -spec stream_file_insecure(
     lfm:handle(),
-    undefined | [http_parser:range()],
+    undefined | [http_parser:bytes_range()],
     file_meta:size(),
     read_block_size(),
     cowboy_req:req()
@@ -159,7 +158,7 @@ stream_file_insecure(FileHandle, Ranges, FileSize, ReadBlockSize, Req) ->
 stream_whole_file(FileHandle, FileSize, ReadBlockSize, Req0) ->
     Req1 = cowboy_req:stream_reply(
         ?HTTP_200_OK,
-        #{<<"content-length">> => integer_to_binary(FileSize)},
+        #{?HDR_CONTENT_LENGTH => integer_to_binary(FileSize)},
         Req0
     ),
     stream_bytes_range(FileHandle, {0, FileSize - 1}, Req1, fun(Data) -> Data end, ReadBlockSize),
@@ -170,7 +169,7 @@ stream_whole_file(FileHandle, FileSize, ReadBlockSize, Req0) ->
 %% @private
 -spec stream_one_ranged_body(
     lfm:handle(),
-    http_parser:range(),
+    http_parser:bytes_range(),
     file_meta:size(),
     read_block_size(),
     cowboy_req:req()
@@ -180,8 +179,8 @@ stream_one_ranged_body(FileHandle, {RangeStart, RangeEnd} = Range, FileSize, Rea
     Req1 = cowboy_req:stream_reply(
         ?HTTP_206_PARTIAL_CONTENT,
         #{
-            <<"content-length">> => integer_to_binary(RangeEnd - RangeStart + 1),
-            <<"content-range">> => build_content_range_header_value(Range, FileSize)
+            ?HDR_CONTENT_LENGTH => integer_to_binary(RangeEnd - RangeStart + 1),
+            ?HDR_CONTENT_RANGE => build_content_range_header_value(Range, FileSize)
         },
         Req0
     ),
@@ -193,7 +192,7 @@ stream_one_ranged_body(FileHandle, {RangeStart, RangeEnd} = Range, FileSize, Rea
 %% @private
 -spec stream_multipart_ranged_body(
     lfm:handle(),
-    [http_parser:range()],
+    [http_parser:bytes_range()],
     file_meta:size(),
     read_block_size(),
     cowboy_req:req()
@@ -201,13 +200,11 @@ stream_one_ranged_body(FileHandle, {RangeStart, RangeEnd} = Range, FileSize, Rea
     cowboy_req:req().
 stream_multipart_ranged_body(FileHandle, Ranges, FileSize, ReadBlockSize, Req0) ->
     Boundary = cow_multipart:boundary(),
-    ContentType = cowboy_req:resp_header(<<"content-type">>, Req0),
+    ContentType = cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req0),
 
     Req1 = cowboy_req:stream_reply(
         ?HTTP_206_PARTIAL_CONTENT,
-        #{
-            <<"content-type">> => <<"multipart/byteranges; boundary=", Boundary/binary>>
-        },
+        #{?HDR_CONTENT_TYPE => <<"multipart/byteranges; boundary=", Boundary/binary>>},
         Req0
     ),
     stream_multipart_byteranges(
@@ -220,7 +217,7 @@ stream_multipart_ranged_body(FileHandle, Ranges, FileSize, ReadBlockSize, Req0) 
 %% @private
 -spec stream_multipart_byteranges(
     lfm:handle(),
-    [http_parser:range()],
+    [http_parser:bytes_range()],
     file_meta:size(),
     read_block_size(),
     MultipartBoundary :: binary(),
@@ -235,8 +232,8 @@ stream_multipart_byteranges(
     Boundary, ContentType, Req
 ) ->
     NextPartHead = cow_multipart:first_part(Boundary, [
-        {<<"content-type">>, ContentType},
-        {<<"content-range">>, build_content_range_header_value(Range, FileSize)}
+        {?HDR_CONTENT_TYPE, ContentType},
+        {?HDR_CONTENT_RANGE, build_content_range_header_value(Range, FileSize)}
     ]),
     cowboy_req:stream_body(NextPartHead, nofin, Req),
 
@@ -250,7 +247,7 @@ stream_multipart_byteranges(
 %% @private
 -spec stream_bytes_range(
     lfm:handle(),
-    http_parser:range(),
+    http_parser:bytes_range(),
     cowboy_req:req(),
     EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     read_block_size(),

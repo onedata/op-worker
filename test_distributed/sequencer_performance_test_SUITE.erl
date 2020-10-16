@@ -14,12 +14,17 @@
 
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
@@ -64,17 +69,17 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 
 manager_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    StmId = 1,
+    StreamId = 1,
     {ok, SessId} = session_setup(Worker),
     MsgNum = 2000,
     ProcNum = 100,
 
-    InitMessage = client_message(SessId, StmId, 0),
+    InitMessage = client_message(SessId, StreamId, 0),
     ?assertEqual(ok, rpc:call(Worker, sequencer,
         communicate_with_sequencer_manager, [InitMessage, SessId, true])),
 
     Messages = lists:map(fun(SeqNum) ->
-        client_message(SessId, StmId, SeqNum)
+        client_message(SessId, StreamId, SeqNum)
     end, lists:seq(1, MsgNum)),
 
     {ok, Manager} = ?assertMatch({ok, _},
@@ -150,7 +155,7 @@ route_message_should_forward_messages_in_right_order_base(Config) ->
   SeqNums = case MsgOrd of
               normal -> lists:seq(0, MsgNum - 1);
               reverse -> lists:seq(MsgNum - 1, 0, -1);
-              random -> utils:random_shuffle(lists:seq(0, MsgNum - 1))
+              random -> lists_utils:shuffle(lists:seq(0, MsgNum - 1))
             end,
 
   initializer:remove_pending_messages(),
@@ -214,13 +219,13 @@ route_message_should_work_for_multiple_streams_base(Config) ->
     % Production of 'MsgNum' messages in random order belonging to 'StmsCount'
     % streams. Requests are routed through random workers.
     {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
-      utils:pforeach(fun(StmId) ->
+      lists_utils:pforeach(fun(StmId) ->
         lists:foreach(fun(Msg) ->
-          [Wrk | _] = utils:random_shuffle(Workers),
+          [Wrk | _] = lists_utils:shuffle(Workers),
           route_message(Wrk, #client_message{session_id = SessId,
             message_stream = Msg#message_stream{stream_id = StmId}
           })
-        end, utils:random_shuffle(Msgs))
+        end, lists_utils:shuffle(Msgs))
       end, lists:seq(1, StmNum))
     end),
 
@@ -254,7 +259,7 @@ route_message_should_work_for_multiple_streams_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    [{?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -262,10 +267,14 @@ init_per_testcase(_Case, Config) ->
     mock_communicator(Workers),
     Config.
 
+end_per_suite(_Config) ->
+    ok.
+
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator, event_router,
-        stream_router]).
+    test_utils:mock_validate_and_unload(Workers, [
+        communicator, event_router, stream_router
+    ]).
 
 %%%===================================================================
 %%% Internal functions
@@ -279,8 +288,8 @@ end_per_testcase(_Case, Config) ->
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
 session_setup(Worker) ->
-    SessId = base64:encode(crypto:strong_rand_bytes(20)),
-    session_setup(Worker, SessId).
+    Nonce = base64:encode(crypto:strong_rand_bytes(20)),
+    session_setup(Worker, Nonce).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -288,15 +297,11 @@ session_setup(Worker) ->
 %% Creates session document in datastore with given ID.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id()) ->
-    {ok, SessId :: session:id()}.
-session_setup(Worker, SessId) ->
-    Self = self(),
-    Iden = #user_identity{user_id = <<"user_id">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, undefined, Self]
-    )),
-    {ok, SessId}.
+-spec session_setup(Worker :: node(), Nonce :: binary()) -> {ok, session:id()}.
+session_setup(Worker, Nonce) ->
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, Nonce, ?SUB(user, <<"user_id">>), undefined, self()
+    ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -306,7 +311,7 @@ session_setup(Worker, SessId) ->
 %%--------------------------------------------------------------------
 -spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
 session_teardown(Worker, SessId) ->
-    rpc:call(Worker, session_manager, remove_session, [SessId]).
+    rpc:call(Worker, session_manager, terminate_session, [SessId]).
 
 %%--------------------------------------------------------------------
 %% @private

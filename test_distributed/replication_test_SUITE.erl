@@ -14,7 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -89,7 +89,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
     SpaceId = <<"space_id1">>,
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
-    CTime = erlang:monotonic_time(micro_seconds),
+    CTime = time_utils:timestamp_micros(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #document{value = #file_meta{
         mode = 8#777,
@@ -134,11 +134,12 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
 local_file_location_should_have_correct_uid_for_local_user(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
+    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(W1, SpaceId),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
-    CTime = erlang:monotonic_time(micro_seconds),
+    CTime = time_utils:timestamp_micros(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
@@ -181,12 +182,17 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     lfm_proxy:close(W1, Handle2),
 
     %then
-    {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [?ROOT_SESS_ID, UserId, SpaceId]),
+    {ok, #{<<"uid">> := UidBin, <<"gid">> := GidBin}} =
+        rpc:call(W1, luma, map_to_storage_credentials, [UserId, SpaceId, StorageId]),
+    Uid = binary_to_integer(UidBin),
+    Gid = binary_to_integer(GidBin),
     {ok, CorrectFileInfo} =
         rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileToCompareFID])]),
     {ok, FileInfo} =
         rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileFID])]),
     ?assertEqual(Uid, FileInfo#file_info.uid),
+    ?assertNotEqual(0, FileInfo#file_info.uid),
+    ?assertEqual(Gid, FileInfo#file_info.gid),
     ?assertNotEqual(0, FileInfo#file_info.uid),
     ?assertEqual(CorrectFileInfo#file_info.uid, FileInfo#file_info.uid),
     ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo#file_info.gid).
@@ -194,20 +200,15 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
 local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(W1, SpaceId),
     ExternalUser = <<"external_user_id">>,
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
-    CTime = erlang:monotonic_time(micro_seconds),
+    CTime = time_utils:timestamp_micros(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
         name = <<"local_file_location_should_be_chowned_when_missing_user_appears1">>,
-        type = ?REGULAR_FILE_TYPE,
-        owner = ExternalUser
-    },
-    FileMeta2 = #file_meta{
-        mode = 8#777,
-        name = <<"local_file_location_should_be_chowned_when_missing_user_appears2">>,
         type = ?REGULAR_FILE_TYPE,
         owner = ExternalUser
     },
@@ -226,20 +227,6 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
             }
         }])
     ),
-    {ok, FileUuid2} = ?assertMatch(
-        {ok, _},
-        rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, #document{value = FileMeta2}])),
-    ?assertMatch(
-        {ok, _},
-        rpc:call(W1, times, create, [#document{
-            key = FileUuid2,
-            value = #times{
-                atime = CTime,
-                ctime = CTime,
-                mtime = CTime
-            }
-        }])
-    ),
 
     {ok, FileToCompareGUID} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
@@ -251,39 +238,31 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     [$/ | FileToCompareFID] =
         binary_to_list(get_storage_file_id_by_uuid(W1, FileToCompareUUID)),
     [$/ | File1FID] = binary_to_list(get_storage_file_id_by_uuid(W1, FileUuid)),
-    [$/ | File2FID] = binary_to_list(get_storage_file_id_by_uuid(W1, FileUuid2)),
 
     %when
     rpc:call(W1, dbsync_events, change_replicated,
         [SpaceId, #document{key = FileUuid, value = FileMeta}]),
-    rpc:call(W1, dbsync_events, change_replicated,
-        [SpaceId, #document{key = FileUuid2, value = FileMeta2}]),
 
-    FileGuid1 = file_id:pack_guid(FileUuid, SpaceId), % create delayed storage files
+    FileGuid1 = file_id:pack_guid(FileUuid, SpaceId), % create deferred storage files
     {ok, Handle1} = lfm_proxy:open(W1, SessionId, {guid, FileGuid1}, read),
     lfm_proxy:close(W1, Handle1),
-
-    FileGuid2 = file_id:pack_guid(FileUuid2, SpaceId),
-    {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid2}, read),
-    lfm_proxy:close(W1, Handle2),
 
     % Simulate new user appearing
     rpc:call(W1, od_user, run_after, [create, [], {ok, #document{key = ExternalUser, value = #od_user{}}}]),
 
     %then
-    {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [?ROOT_SESS_ID, ExternalUser, SpaceId]),
+    {ok, #{<<"uid">> := UidBin, <<"gid">> := GidBin}} =
+        rpc:call(W1, luma, map_to_storage_credentials, [ExternalUser, SpaceId, StorageId]),
+    Uid = binary_to_integer(UidBin),
+    Gid = binary_to_integer(GidBin),
     {ok, CorrectFileInfo} =
         rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileToCompareFID])]),
     {ok, FileInfo1} =
         rpc:call(W1, file, read_file_info, [filename:join([StorageDir, File1FID])]),
-    {ok, FileInfo2} =
-        rpc:call(W1, file, read_file_info, [filename:join([StorageDir, File2FID])]),
-    ?assertEqual(Uid, FileInfo1#file_info.uid),
-    ?assertEqual(Uid, FileInfo2#file_info.uid),
+    ?assertEqual(Uid, FileInfo1#file_info.uid, 10),
+    ?assertEqual(Gid, FileInfo1#file_info.gid, 10),
     ?assertNotEqual(CorrectFileInfo#file_info.uid, FileInfo1#file_info.uid),
-    ?assertNotEqual(CorrectFileInfo#file_info.uid, FileInfo2#file_info.uid),
-    ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo1#file_info.gid),
-    ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo2#file_info.gid).
+    ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo1#file_info.gid, 10).
 
 write_should_add_blocks_to_file_location(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -512,7 +491,7 @@ read_should_synchronize_file(Config) ->
         end
     ),
 
-    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     % when
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
@@ -531,7 +510,7 @@ read_should_synchronize_file(Config) ->
         },
         _
     },
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)])
     ).
 
 
@@ -555,7 +534,7 @@ external_change_should_invalidate_blocks(Config) ->
         value = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [#file_block{offset = 2, size = 5}],
     RemoteLocation = #file_location{
         size = 10,
@@ -594,7 +573,7 @@ external_change_should_invalidate_blocks(Config) ->
             ]
         }
     }, _},
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])).
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)])).
 
 update_should_save_recent_changes(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -677,7 +656,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
         value = LocalLocation = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [#file_block{offset = 2, size = 5}],
     ExternalChanges = [
         [#file_block{offset = 2, size = 2}],
@@ -736,7 +715,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
                 ]
             }
         }, _},
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)])
     ).
 
 remote_change_without_history_should_invalidate_whole_data(Config) ->
@@ -760,7 +739,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
         value = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [
         #file_block{offset = 1, size = 1},
         #file_block{offset = 5, size = 1}
@@ -808,7 +787,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
                 ]
             }
         }, _},
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)])
     ).
 
 remote_change_of_size_should_notify_clients(Config) ->
@@ -831,7 +810,7 @@ remote_change_of_size_should_notify_clients(Config) ->
         value = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [],
     ExternalSize = 8,
     RemoteLocation = #file_location{
@@ -890,7 +869,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
         value = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [#file_block{offset = 1, size = 1}],
     ExternalSize = 10,
     RemoteLocation = #file_location{
@@ -945,7 +924,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         value = LocalLoc = #file_location{
             blocks = [Block]
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     rpc:call(W1, fslogic_location_cache, save_location, [LocalDoc#document{
         value = LocalLoc#file_location{
             blocks = [Block#file_block{offset = 0, size = 5}]
@@ -957,7 +936,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         value = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [#file_block{offset = 5, size = 5}],
     ExternalSize = 10,
     RemoteLocation = #file_location{
@@ -1016,7 +995,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
         value = LocalLocation = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [#file_block{offset = 2, size = 5}],
     ExternalChanges = [
         [#file_block{offset = 0, size = 2}],
@@ -1079,7 +1058,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
                 blocks = [#file_block{offset = 4, size = 4}]
             }
         }, _},
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)])
     ).
 
 replica_invalidate_should_migrate_unique_data(Config) ->
@@ -1120,7 +1099,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation]))
     ),
 
-    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     test_utils:mock_new(Workers, lfm, [passthrough]),
     test_utils:mock_expect(Workers, lfm, schedule_file_replication,
@@ -1157,7 +1136,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     {ok, 10} = lfm_proxy:write(W1, Handle, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    {SfmHandle, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx]),
+    {SDHandle, _} = rpc:call(W1, storage_driver, new_handle, [SessionId, FileCtx]),
     FileUuid = file_id:guid_to_uuid(FileGuid),
 
     % attach external location
@@ -1181,19 +1160,19 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation]))
     ),
 
-    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     test_utils:mock_new(Workers, lfm, [passthrough]),
     test_utils:mock_expect(Workers, lfm, schedule_file_replication,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
-    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle])),
+    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SDHandle])),
     ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, {guid, FileGuid}, LocalProviderId, ExternalProviderId),
 
     % then
     ?assertMatch({undefined, _}, rpc:call(W1, file_ctx, get_local_file_location_doc, [FileCtx])),
-    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle])),
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_driver, stat, [SDHandle])),
     test_utils:mock_validate_and_unload(W1, [lfm]).
 
 dir_replica_invalidate_should_invalidate_all_children(Config) ->
@@ -1221,8 +1200,8 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
 
     FileCtx1 = file_ctx:new_by_guid(FileGuid1),
     FileCtx2 = file_ctx:new_by_guid(FileGuid2),
-    {SfmHandle1, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx1]),
-    {SfmHandle2, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx2]),
+    {SDHandle1, _} = rpc:call(W1, storage_driver, new_handle, [SessionId, FileCtx1]),
+    {SDHandle2, _} = rpc:call(W1, storage_driver, new_handle, [SessionId, FileCtx2]),
     FileUuid1 = file_id:guid_to_uuid(FileGuid1),
     FileUuid2 = file_id:guid_to_uuid(FileGuid2),
 
@@ -1263,20 +1242,20 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation2]))
     ),
 
-    override_space_providers_mock(Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     test_utils:mock_new(Workers, lfm, [passthrough]),
     test_utils:mock_expect(Workers, lfm, schedule_file_replication,
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
-    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle1])),
-    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle2])),
+    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SDHandle1])),
+    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SDHandle2])),
     ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, {guid, DirGuid}, LocalProviderId, ExternalProviderId),
 
     % then
-    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle1])),
-    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle2])),
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_driver, stat, [SDHandle1])),
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_driver, stat, [SDHandle2])),
     test_utils:mock_validate_and_unload(W1, [lfm]).
 
 %%%===================================================================
@@ -1293,11 +1272,11 @@ end_per_suite(Config) ->
 init_per_testcase(local_file_location_should_be_chowned_when_missing_user_appears, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_new(W1, sfm_utils, [passthrough]),
-    test_utils:mock_expect(W1, sfm_utils, create_delayed_storage_file,
+    test_utils:mock_new(W1, sd_utils, [passthrough]),
+    test_utils:mock_expect(W1, sd_utils, create_deferred,
         fun(FileCtx, UserCtx, VerifyLink, CheckLocationExists) ->
             {Doc, FileCtx2} = meck:passthrough([FileCtx, UserCtx, VerifyLink, CheckLocationExists]),
-            {Doc, files_to_chown:chown_or_schedule_chowning(FileCtx2)}
+            {Doc, files_to_chown:chown_or_defer(FileCtx2)}
         end),
     init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
@@ -1309,7 +1288,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(local_file_location_should_be_chowned_when_missing_user_appears, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(W1, [sfm_utils]),
+    test_utils:mock_unload(W1, [sd_utils]),
     end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
@@ -1337,9 +1316,10 @@ get_storage_file_id_by_uuid(Worker, FileUuid) ->
 % setup, modify this mock so that user's space has more providers.
 % Given that this just overrides the mock from initializer, no need to unmock
 % (this will be done in test cleanup).
-override_space_providers_mock(Workers, SpaceId, Providers) ->
+override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
     test_utils:mock_unload(Workers, [space_logic]),
     test_utils:mock_new(Workers, space_logic, []),
+    test_utils:mock_expect(Workers, space_logic, is_owner, fun(_, _) -> false end),
     test_utils:mock_expect(Workers, space_logic, has_eff_user,
         fun(_Client, SpId, UsId) ->
             SpId =:= SpaceId andalso UsId =:= <<"user1">>
@@ -1355,4 +1335,14 @@ override_space_providers_mock(Workers, SpaceId, Providers) ->
     test_utils:mock_expect(Workers, space_logic, is_supported,
         fun(_Client, SpId, ProvId) when SpId =:= SpaceId ->
             lists:member(ProvId, Providers)
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_local_storage_ids,
+        fun(SpId) when SpId =:= SpaceId ->
+            {ok, lists:foldl(fun(Worker, Acc) ->
+                case ?config({storage_id, ?GET_DOMAIN(Worker)}, Config) of
+                    undefined -> Acc;
+                    StorageId -> [StorageId | Acc]
+                end
+            end, [], Workers)}
         end).
+

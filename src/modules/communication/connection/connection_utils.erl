@@ -17,10 +17,11 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% API
--export([maybe_create_proxied_session/2]).
+-export([maybe_create_proxied_session/3]).
 -export([
     protocol_upgrade_request/1,
     process_protocol_upgrade_request/1,
@@ -38,20 +39,27 @@
 %% Creates proxy session if requested by peer.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_create_proxied_session(od_provider:id(), #client_message{}) ->
-    ok | {error, term()}.
-maybe_create_proxied_session(ProviderId, #client_message{
+-spec maybe_create_proxied_session(od_provider:id(), inet:ip4_address(),
+    #client_message{}) -> ok | {error, term()}.
+maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
     effective_session_id = EffSessionId,
-    effective_session_auth = Auth
+    effective_client_tokens = #client_tokens{
+        access_token = AccessToken,
+        consumer_token = ConsumerToken
+    }
 }) when EffSessionId =/= undefined ->
+    TokenCredentials = auth_manager:build_token_credentials(
+        AccessToken, ConsumerToken,
+        ProviderIp, oneclient, allow_data_access_caveats
+    ),
     Res = session_manager:reuse_or_create_proxied_session(
-        EffSessionId, ProviderId, Auth, fuse
+        EffSessionId, ProviderId, TokenCredentials, fuse
     ),
     case Res of
         {ok, _} -> ok;
         Error -> Error
     end;
-maybe_create_proxied_session(_, _) ->
+maybe_create_proxied_session(_, _, _) ->
     ok.
 
 
@@ -80,12 +88,12 @@ protocol_upgrade_request(Hostname) -> <<
 -spec process_protocol_upgrade_request(cowboy_req:req()) ->
     ok | {error, update_required}.
 process_protocol_upgrade_request(Req) ->
-    ConnTokens = cowboy_req:parse_header(<<"connection">>, Req, []),
+    ConnTokens = cowboy_req:parse_header(?HDR_CONNECTION, Req, []),
     case lists:member(<<"upgrade">>, ConnTokens) of
         false ->
             {error, upgrade_required};
         true ->
-            case cowboy_req:parse_header(<<"upgrade">>, Req, []) of
+            case cowboy_req:parse_header(?HDR_UPGRADE, Req, []) of
                 [<<?CLIENT_PROTOCOL_UPGRADE_NAME>>] ->
                     ok;
                 _ ->

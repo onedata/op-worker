@@ -18,7 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit_file_attr_changed/2, emit_file_attr_changed/3, emit_sizeless_file_attrs_changed/1,
+-export([emit_file_attr_changed/2, emit_file_attr_changed/3,
+    emit_file_attr_changed_with_replication_status/3, emit_sizeless_file_attrs_changed/1,
     emit_file_location_changed/2, emit_file_location_changed/3,
     emit_file_location_changed/4, emit_file_locations_changed/2,
     emit_file_perm_changed/1, emit_file_removed/2,
@@ -33,6 +34,8 @@
 %% @doc
 %% Sends current file attributes to all subscribers except for the ones present
 %% in 'ExcludedSessions' list.
+%% Should be used when action that generated event does not result in changes of blocks.
+%% Otherwise emit_file_attr_changed_with_replication_status function should be used.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_attr_changed(file_ctx:ctx(), [session:id()]) ->
@@ -42,8 +45,14 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
         {error, not_found} ->
             ok;
         {#document{}, FileCtx2} ->
-            {#fuse_response{fuse_response = #file_attr{} = FileAttr}, OtherFiles, _} =
-                attr_req:get_file_attr_and_conflicts(user_ctx:new(?ROOT_SESS_ID), FileCtx2, true, true, true),
+            RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+            {#fuse_response{
+                fuse_response = #file_attr{} = FileAttr
+            }, OtherFiles, _} = attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx2, #{
+                allow_deleted_files => true,
+                include_size => true,
+                name_conflicts_resolution_policy => resolve_name_conflicts
+            }),
             emit_suffixes(OtherFiles, {ctx, FileCtx2}),
             emit_file_attr_changed(FileCtx2, FileAttr, ExcludedSessions);
         Other ->
@@ -64,6 +73,37 @@ emit_file_attr_changed(FileCtx, FileAttr, ExcludedSessions) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Sends current file attributes to all except for the ones present
+%% in 'ExcludedSessions' list.
+%% Includes replication status to those who request it.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_attr_changed_with_replication_status(file_ctx:ctx(), boolean(), [session:id()]) ->
+    ok | {error, Reason :: term()}.
+emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, ExcludedSessions) ->
+    case file_ctx:get_and_cache_file_doc_including_deleted(FileCtx) of
+        {error, not_found} ->
+            ok;
+        {#document{}, FileCtx2} ->
+            case subscription_manager:get_attr_event_subscribers(
+                file_ctx:get_guid_const(FileCtx2), #{file_ctx => FileCtx2}, SizeChanged) of
+                [{ok, WithoutStatusSessIds}, {ok, WithStatusSessIds}] ->
+                    emit_file_attr_changed_with_replication_status_internal(FileCtx2,
+                        WithoutStatusSessIds -- ExcludedSessions, WithStatusSessIds -- ExcludedSessions);
+                [{ok, WithStatusSessIds}] ->
+                    emit_file_attr_changed_with_replication_status_internal(FileCtx2, [],
+                        WithStatusSessIds -- ExcludedSessions);
+                [{error, Reason}, _] ->
+                    {error, Reason};
+                [_, {error, Reason2}] ->
+                    {error, Reason2}
+            end;
+        Other ->
+            Other
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Sends current file attributes excluding size to all subscribers.
 %% @end
 %%--------------------------------------------------------------------
@@ -74,9 +114,14 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
         {error, not_found} ->
             ok;
         {#document{}, FileCtx2} ->
-            #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-                attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID),
-                    FileCtx2, true, false),
+            RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+            #fuse_response{
+                fuse_response = #file_attr{} = FileAttr
+            } = attr_req:get_file_attr_insecure(RootUserCtx, FileCtx2, #{
+                allow_deleted_files => true,
+                include_size => false,
+                name_conflicts_resolution_policy => resolve_name_conflicts
+            }),
             event:emit_to_filtered_subscribers(#file_attr_changed_event{
                 file_attr = FileAttr
             }, #{file_ctx => FileCtx2}, []);
@@ -227,6 +272,30 @@ emit_helper_params_changed(StorageId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Helper function for sending current file attributes including replication status.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_attr_changed_with_replication_status_internal(file_ctx:ctx(), [session:id()], [session:id()]) ->
+    ok | {error, Reason :: term()}.
+emit_file_attr_changed_with_replication_status_internal(_FileCtx, [], []) ->
+    ok;
+emit_file_attr_changed_with_replication_status_internal(FileCtx, WithoutStatusSessIds, WithStatusSessIds) ->
+    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+    {#fuse_response{
+        fuse_response = #file_attr{} = FileAttr
+    }, OtherFiles, _} = attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx, #{
+        allow_deleted_files => true,
+        include_size => true,
+        name_conflicts_resolution_policy => resolve_name_conflicts,
+        include_replication_status => WithStatusSessIds =/= []
+    }),
+    emit_suffixes(OtherFiles, {ctx, FileCtx}),
+    event:emit(#file_attr_changed_event{file_attr = FileAttr}, WithStatusSessIds),
+    event:emit(#file_attr_changed_event{file_attr = FileAttr#file_attr{fully_replicated = undefined}},
+        WithoutStatusSessIds -- WithStatusSessIds).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible for removal
 %%% of incoming session (gui/rest/fuse/incoming provider) that has been
-%%% inactive longer that allowed period.
+%%% inactive longer that allowed grace period.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(incoming_session_watcher).
@@ -17,10 +17,11 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/2, update_credentials/3]).
 
 %% gen_server callbacks
 -export([
@@ -29,18 +30,40 @@
     terminate/2, code_change/3
 ]).
 
-%% session watcher state:
-%% session_id - ID of session associated with sequencer manager
 -record(state, {
     session_id :: session:id(),
-    session_ttl :: non_neg_integer()
+    session_grace_period :: session:grace_period(),
+    identity :: aai:subject(),
+    % Possible auth values:
+    % auth_manager:token_credentials() -> for user sessions (gui, rest, fuse).
+    %                                     It needs to be periodically verified
+    %                                     whether it's still valid (it could
+    %                                     be revoked)
+    % undefined  -> for provider_incoming sessions. No periodic peer
+    %               verification is needed.
+    credentials :: undefined | auth_manager:credentials(),
+    validity_checkup_timer :: undefined | reference()
 }).
 
--define(SESSION_REMOVAL_RETRY_DELAY, timer:seconds(15)).
+-define(REMOVE_SESSION, remove_session).
+-define(CHECK_SESSION_ACTIVITY, check_session_activity).
+-define(CHECK_SESSION_VALIDITY, check_session_validity).
+-define(UPDATE_CLIENT_TOKENS_REQ(__AccessToken, __ConsumerToken),
+    {update_credentials, __AccessToken, __ConsumerToken}
+).
+
+-define(SESSION_REMOVAL_RETRY_DELAY, 15).   % in seconds
+-define(SESSION_VALIDITY_CHECK_INTERVAL, application:get_env(
+    ?APP_NAME, session_validity_check_interval_seconds, 15
+)).
+
+-type state() :: #state{}.
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -52,9 +75,27 @@
 start_link(SessId, SessType) ->
     gen_server2:start_link(?MODULE, [SessId, SessType], []).
 
+
+-spec update_credentials(pid() | session:id(), auth_manager:access_token(),
+    auth_manager:consumer_token()) -> ok.
+update_credentials(SessionWatcher, AccessToken, ConsumerToken) when is_pid(SessionWatcher) ->
+    gen_server2:call(
+        SessionWatcher,
+        ?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken)
+    );
+update_credentials(SessionId, AccessToken, ConsumerToken) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{watcher = SessionWatcher}}} ->
+            update_credentials(SessionWatcher, AccessToken, ConsumerToken);
+        _ ->
+            ok
+    end.
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -63,20 +104,48 @@ start_link(SessId, SessType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
+    {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessId, SessType]) ->
     process_flag(trap_exit, true),
     Self = self(),
-    {ok, _} = session:update(SessId, fun(Session = #session{}) ->
-        {ok, Session#session{
+    {ok, #document{value = #session{
+        identity = Identity,
+        credentials = Credentials
+    }}} = session:update(SessId, fun(#session{} = Sess) ->
+        {ok, Sess#session{
             status = active,
             watcher = Self
         }}
     end),
-    TTL = get_session_ttl(SessType),
-    schedule_session_status_checkup(TTL),
-    {ok, #state{session_id = SessId, session_ttl = TTL}}.
+
+    GracePeriod = get_session_grace_period(SessType),
+    schedule_session_activity_checkup(GracePeriod),
+
+    ValidityCheckupTimer = case Credentials of
+        undefined ->
+            undefined;
+        TokenCredentials ->
+            AccessTokenBin = auth_manager:get_access_token(TokenCredentials),
+            {ok, AccessToken} = tokens:deserialize(AccessTokenBin),
+
+            NextCheckupDelay = case infer_ttl(tokens:get_caveats(AccessToken)) of
+                undefined ->
+                    ?SESSION_VALIDITY_CHECK_INTERVAL;
+                TokenTTL ->
+                    min(?SESSION_VALIDITY_CHECK_INTERVAL, TokenTTL)
+            end,
+            schedule_session_validity_checkup(NextCheckupDelay)
+    end,
+
+    {ok, #state{
+        session_id = SessId,
+        session_grace_period = GracePeriod,
+        identity = Identity,
+        credentials = Credentials,
+        validity_checkup_timer = ValidityCheckupTimer
+    }}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -85,16 +154,47 @@ init([SessId, SessType]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+    State :: state()) ->
+    {reply, Reply :: term(), NewState :: state()} |
+    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
+    {stop, Reason :: term(), NewState :: state()}.
+handle_call(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), _From, #state{
+    session_id = SessionId,
+    identity = Identity,
+    credentials = OldTokenCredentials,
+    validity_checkup_timer = OldTimer
+} = State) ->
+    cancel_validity_checkup_timer(OldTimer),
+    NewTokenCredentials = auth_manager:update_client_tokens(
+        OldTokenCredentials, AccessToken, ConsumerToken
+    ),
+    case check_auth_validity(NewTokenCredentials, Identity) of
+        {true, NewTimer} ->
+            {ok, TokenCaveats} = auth_manager:get_caveats(NewTokenCredentials),
+            {ok, DataConstraints} = data_constraints:get(TokenCaveats),
+            {ok, _} = session:update(SessionId, fun(Session) ->
+                {ok, Session#session{
+                    credentials = NewTokenCredentials,
+                    data_constraints = DataConstraints
+                }}
+            end),
+            NewState = State#state{
+                credentials = NewTokenCredentials,
+                validity_checkup_timer = NewTimer
+            },
+            {reply, ok, NewState, hibernate};
+        false ->
+            mark_inactive(SessionId),
+            schedule_session_removal(0),
+            {reply, ok, State}
+    end;
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
     {reply, ok, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -102,13 +202,14 @@ handle_call(Request, _From, State) ->
 %% Handles cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+-spec handle_cast(Request :: term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}.
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -116,49 +217,74 @@ handle_cast(Request, State) ->
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
-handle_info(remove_session, #state{session_id = SessId} = State) ->
+-spec handle_info(Info :: timeout() | term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}.
+handle_info(?REMOVE_SESSION, #state{session_id = SessionId} = State) ->
     spawn(fun() ->
-        session_manager:remove_session(SessId)
+        session_manager:terminate_session(SessionId)
     end),
     schedule_session_removal(?SESSION_REMOVAL_RETRY_DELAY),
     {noreply, State, hibernate};
 
-handle_info(check_session_status, #state{
-    session_id = SessId,
-    session_ttl = TTL
+handle_info(?CHECK_SESSION_ACTIVITY, #state{
+    session_id = SessionId,
+    session_grace_period = GracePeriod
 } = State) ->
-    RemoveSession = case session:get(SessId) of
+    IsSessionInactive = case session:get(SessionId) of
         {ok, #document{value = #session{status = inactive}}} ->
             true;
         {ok, #document{value = #session{connections = [_ | _]}}} ->
-            {false, TTL};
+            {false, GracePeriod};
         {ok, #document{value = #session{status = active}}} ->
-            is_session_ttl_exceeded(SessId, TTL);
+            mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod);
         {error, _} = Error ->
             {false, Error}
     end,
 
-    case RemoveSession of
+    case IsSessionInactive of
         true ->
             schedule_session_removal(0),
             {noreply, State};
+        {false, RemainingTime} when is_integer(RemainingTime) ->
+            schedule_session_activity_checkup(RemainingTime),
+            {noreply, State, hibernate};
         {false, {error, Reason}} ->
-            {stop, Reason, State};
-        {false, RemainingTime} ->
-            schedule_session_status_checkup(RemainingTime),
+            ?error("Checking session ~p activity error ~p", [SessionId, Reason]),
+            spawn(fun() ->
+                session_manager:terminate_session(SessionId)
+            end),
             {noreply, State, hibernate}
     end;
 
-handle_info({'EXIT', _, shutdown}, State) ->
-    {stop, shutdown, State};
+handle_info(?CHECK_SESSION_VALIDITY, #state{
+    session_id = SessionId,
+    identity = Identity,
+    credentials = Auth,
+    validity_checkup_timer = OldTimer
+} = State) ->
+    cancel_validity_checkup_timer(OldTimer),
+    case check_auth_validity(Auth, Identity) of
+        {true, NewTimer} ->
+            NewState = State#state{validity_checkup_timer = NewTimer},
+            {noreply, NewState, hibernate};
+        false ->
+            mark_inactive(SessionId),
+            schedule_session_removal(0),
+            {noreply, State}
+    end;
+
+handle_info({'EXIT', _, shutdown}, #state{session_id = SessionId} = State) ->
+    spawn(fun() ->
+        session_manager:terminate_session(SessionId)
+    end),
+    {noreply, State, hibernate};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -170,12 +296,11 @@ handle_info(Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term().
+    State :: state()) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    spawn(fun() ->
-        session_manager:remove_session(SessId)
-    end).
+    session_manager:clean_terminated_session(SessId).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -183,84 +308,140 @@ terminate(Reason, #state{session_id = SessId} = State) ->
 %% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
--spec code_change(OldVsn :: term() | {down, term()}, State :: #state{},
-    Extra :: term()) -> {ok, NewState :: #state{}} | {error, Reason :: term()}.
+-spec code_change(OldVsn :: term() | {down, term()}, State :: state(),
+    Extra :: term()) -> {ok, NewState :: state()} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
+
 %% @private
-%% @doc
-%% Returns session TTL for given session type.
-%% @end
-%%--------------------------------------------------------------------
--spec get_session_ttl(SessType :: session:type()) ->
-    Seconds :: non_neg_integer().
-get_session_ttl(gui) ->
-    {ok, Period} = application:get_env(?APP_NAME, gui_session_ttl_seconds),
+-spec get_session_grace_period(session:type()) -> session:grace_period().
+get_session_grace_period(gui) ->
+    {ok, Period} = application:get_env(?APP_NAME, gui_session_grace_period_seconds),
     Period;
-get_session_ttl(rest) ->
-    {ok, Period} = application:get_env(?APP_NAME, rest_session_ttl_seconds),
+get_session_grace_period(rest) ->
+    {ok, Period} = application:get_env(?APP_NAME, rest_session_grace_period_seconds),
     Period;
-get_session_ttl(provider_incoming) ->
-    {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
+get_session_grace_period(provider_incoming) ->
+    {ok, Period} = application:get_env(?APP_NAME, provider_session_grace_period_seconds),
     Period;
-get_session_ttl(_) ->
-    {ok, Period} = application:get_env(?APP_NAME, fuse_session_ttl_seconds),
+get_session_grace_period(_) ->
+    {ok, Period} = application:get_env(?APP_NAME, fuse_session_grace_period_seconds),
     Period.
+
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether session inactivity period exceeds TTL. If session TTL is
-%% exceeded, session is marked as 'inactive' for later removal. Returns false and
-%% remaining time to removal for session that does not exceed TTL
-%% and true for inactive session that exceeded TTL.
+%% Checks whether session inactivity period exceeds grace period. If
+%% session grace period is exceeded, session is marked as 'inactive'
+%% for later removal.
+%% Returns false and remaining time to removal for session that does not
+%% exceed grace period and true for inactive session that exceeded it.
 %% @end
 %%--------------------------------------------------------------------
--spec is_session_ttl_exceeded(SessId :: session:id(), TTL :: session:ttl()) ->
-    true | {false, RemainingTime :: non_neg_integer()}.
-is_session_ttl_exceeded(SessId, TTL) ->
+-spec mark_inactive_if_grace_period_has_passed(session:id(), session:grace_period()) ->
+    true | {false, RemainingTime :: time_utils:seconds()}.
+mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
     Diff = fun
         (#session{status = active, accessed = Accessed} = Sess) ->
-            InactivityPeriod = time_utils:cluster_time_seconds() - Accessed,
-            case InactivityPeriod >= TTL of
-                true -> {ok, Sess#session{status = inactive}};
-                false -> {error, {ttl_not_exceeded, TTL - InactivityPeriod}}
+            InactivityPeriod = time_utils:timestamp_seconds() - Accessed,
+            case InactivityPeriod >= GracePeriod of
+                true ->
+                    {ok, Sess#session{status = inactive}};
+                false ->
+                    {error, {grace_period_not_exceeded, GracePeriod - InactivityPeriod}}
             end;
         (#session{} = Sess) ->
             {ok, Sess#session{status = inactive}}
     end,
-    case session:update(SessId, Diff) of
-        {ok, SessId} -> true;
-        {error, {ttl_not_exceeded, RemainingTime}} -> {false, RemainingTime};
-        {error, _} -> true
+    case session:update(SessionId, Diff) of
+        {ok, _} ->
+            true;
+        {error, {grace_period_not_exceeded, RemainingTime}} ->
+            {false, RemainingTime};
+        {error, _} ->
+            true
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Schedules session status checkup that should take place after 'Delay'
-%% milliseconds.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_session_status_checkup(Delay :: non_neg_integer()) ->
-    TimeRef :: reference().
-schedule_session_status_checkup(Delay) ->
-    erlang:send_after(timer:seconds(Delay), self(), check_session_status).
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Schedules session removal that should take place after 'Delay'
-%% milliseconds.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_session_removal(Delay :: non_neg_integer()) ->
+-spec check_auth_validity(undefined | auth_manager:credentials(), aai:subject()) ->
+    {true, NewTimer :: undefined | reference()} | false.
+check_auth_validity(undefined, _Identity) ->
+    {true, undefined};
+check_auth_validity(TokenCredentials, Identity) ->
+    case auth_manager:verify_credentials(TokenCredentials) of
+        {ok, #auth{subject = Identity}, undefined} ->
+            {true, schedule_session_validity_checkup(?SESSION_VALIDITY_CHECK_INTERVAL)};
+        {ok, #auth{subject = Identity}, TokenValidUntil} ->
+            NextCheckupDelay = min(
+                max(0, TokenValidUntil - time_utils:timestamp_seconds()),
+                ?SESSION_VALIDITY_CHECK_INTERVAL
+            ),
+            {true, schedule_session_validity_checkup(NextCheckupDelay)};
+        {ok, #auth{subject = Subject}, _} ->
+            ?warning("Token identity verification failure.~nExpected ~p.~nGot: ~p", [
+                Identity, Subject
+            ]),
+            false;
+        {error, Reason} ->
+            ?debug("Token auth verification failure: ~p", [Reason]),
+            false
+    end.
+
+
+%% @private
+-spec mark_inactive(session:id()) -> ok.
+mark_inactive(SessionId) ->
+    {ok, _} = session:update(SessionId, fun(#session{} = Sess) ->
+        {ok, Sess#session{status = inactive}}
+    end),
+    ok.
+
+
+%% @private
+-spec schedule_session_activity_checkup(Delay :: time_utils:seconds()) ->
+    TimeRef :: reference().
+schedule_session_activity_checkup(Delay) ->
+    erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_ACTIVITY).
+
+
+%% @private
+-spec schedule_session_validity_checkup(Delay :: time_utils:seconds()) ->
+    TimeRef :: reference().
+schedule_session_validity_checkup(Delay) ->
+    erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_VALIDITY).
+
+
+%% @private
+-spec cancel_validity_checkup_timer(undefined | reference()) -> ok.
+cancel_validity_checkup_timer(undefined) ->
+    ok;
+cancel_validity_checkup_timer(ValidityCheckupTimer) ->
+    erlang:cancel_timer(ValidityCheckupTimer, [{async, true}, {info, false}]).
+
+
+%% @private
+-spec schedule_session_removal(Delay :: time_utils:seconds()) ->
     TimeRef :: reference().
 schedule_session_removal(Delay) ->
-    erlang:send_after(Delay, self(), remove_session).
+    erlang:send_after(timer:seconds(Delay), self(), ?REMOVE_SESSION).
+
+%% @private
+-spec infer_ttl([caveats:caveat()]) -> undefined | time_utils:seconds().
+infer_ttl(Caveats) ->
+    ValidUntil = lists:foldl(fun
+        (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
+        (#cv_time{valid_until = ValidUntil}, Acc) -> min(ValidUntil, Acc)
+    end, undefined, caveats:filter([cv_time], Caveats)),
+
+    case ValidUntil of
+        undefined -> undefined;
+        _ -> ValidUntil - time_utils:timestamp_seconds()
+    end.

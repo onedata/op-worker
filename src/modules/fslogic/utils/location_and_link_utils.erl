@@ -16,15 +16,19 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_new_file_location_doc/3, is_location_created/2,
     mark_location_created/3]).
--export([create_imported_file_location/6, update_imported_file_location/2]).
--export([get_cannonical_paths_cache_name/1, invalidate_cannonical_paths_cache/1,
-    init_cannonical_paths_cache_group/0, init_cannonical_paths_cache/1]).
+-export([create_imported_file_location/7, update_imported_file_location/2]).
+-export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1,
+    invalidate_paths_caches/1, init_paths_cache_group/0, init_paths_caches/1]).
+
+-define(PATH_CACHE_GROUP, <<"paths_cache_group">>).
+-define(CANONICAL_PATHS_CACHE_NAME(SpaceId), binary_to_atom(<<"canonical_paths_cache_", SpaceId/binary>>, utf8)).
+-define(UUID_BASED_PATHS_CACHE_NAME(SpaceId), binary_to_atom(<<"uuid_paths_cache_", SpaceId/binary>>, utf8)).
 
 %%%===================================================================
 %%% API
@@ -100,16 +104,17 @@ mark_location_created(FileUuid, FileLocationId, StorageFileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_imported_file_location(od_space:id(), storage:id(), file_meta:uuid(),
-    file_meta:path(), file_meta:size(), od_user:id()) -> ok.
-create_imported_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size, OwnerId) ->
+    helpers:file_id(), file_meta:size(), od_user:id(), luma:gid() | undefined) -> ok.
+create_imported_file_location(SpaceId, StorageId, FileUuid, StorageFileId, Size, OwnerId, SyncedGid) ->
     Location = #file_location{
         provider_id = oneprovider:get_id(),
-        file_id = CanonicalPath,
+        file_id = StorageFileId,
         storage_id = StorageId,
         uuid = FileUuid,
         space_id = SpaceId,
         size = Size,
-        storage_file_created = true
+        storage_file_created = true,
+        synced_gid = SyncedGid
     },
     LocationDoc = #document{
         key = file_location:local_id(FileUuid),
@@ -136,29 +141,39 @@ update_imported_file_location(FileCtx, StorageSize) ->
 %% Gets name of cache for particular space.
 %% @end
 %%-------------------------------------------------------------------
--spec get_cannonical_paths_cache_name(od_space:id()) -> atom().
-get_cannonical_paths_cache_name(Space) ->
-    binary_to_atom(<<"cannonical_paths_cache_", Space/binary>>, utf8).
+-spec get_canonical_paths_cache_name(od_space:id()) -> atom().
+get_canonical_paths_cache_name(Space) ->
+    ?CANONICAL_PATHS_CACHE_NAME(Space).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Gets name of cache for particular space.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_uuid_based_paths_cache_name(od_space:id()) -> atom().
+get_uuid_based_paths_cache_name(Space) ->
+    ?UUID_BASED_PATHS_CACHE_NAME(Space).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Invalidates cache for particular space.
 %% @end
 %%-------------------------------------------------------------------
--spec invalidate_cannonical_paths_cache(od_space:id()) -> ok.
-invalidate_cannonical_paths_cache(Space) ->
-    ok = bounded_cache:invalidate(get_cannonical_paths_cache_name(Space)).
+-spec invalidate_paths_caches(od_space:id()) -> ok.
+invalidate_paths_caches(Space) ->
+    ok = bounded_cache:invalidate(get_canonical_paths_cache_name(Space)),
+    ok = bounded_cache:invalidate(get_uuid_based_paths_cache_name(Space)).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Initializes caches' group.
 %% @end
 %%-------------------------------------------------------------------
--spec init_cannonical_paths_cache_group() -> ok.
-init_cannonical_paths_cache_group() ->
-    CheckFrequency = application:get_env(?APP_NAME, cannonical_paths_cache_frequency, 30000),
-    Size = application:get_env(?APP_NAME, cannonical_paths_cache_size, 20000),
-    ok = bounded_cache:init_group(<<"cannonical_paths_cache">>, #{
+-spec init_paths_cache_group() -> ok.
+init_paths_cache_group() ->
+    CheckFrequency = application:get_env(?APP_NAME, canonical_paths_cache_frequency, 30000),
+    Size = application:get_env(?APP_NAME, canonical_paths_cache_size, 20000),
+    ok = bounded_cache:init_group(?PATH_CACHE_GROUP, #{
         check_frequency => CheckFrequency,
         size => Size,
         worker => true
@@ -169,41 +184,43 @@ init_cannonical_paths_cache_group() ->
 %% Initializes cache for particular space or all spaces.
 %% @end
 %%-------------------------------------------------------------------
--spec init_cannonical_paths_cache(od_space:id() | all) -> ok.
-init_cannonical_paths_cache(all) ->
+-spec init_paths_caches(od_space:id() | all) -> ok.
+init_paths_caches(all) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            lists:foreach(fun(Space) ->
-                ok = init_cannonical_paths_cache(Space)
-            end, SpaceIds);
-        ?ERROR_NO_CONNECTION_TO_OZ ->
-            ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_OZ]);
-        ?ERROR_UNREGISTERED_PROVIDER ->
-            ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_PROVIDER]);
+            lists:foreach(fun init_paths_caches/1, SpaceIds);
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+            ?debug("Unable to initialize paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            ?debug("Unable to initialize paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
-            ?critical("Unable to initialize cannonical_paths bounded caches due to: ~p", [Error])
+            ?critical("Unable to initialize paths bounded caches due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize cannonical_paths bounded caches due to: ~p", [{Error2, Reason}])
+            ?critical_stacktrace("Unable to initialize paths bounded caches due to: ~p", [{Error2, Reason}])
     end;
-init_cannonical_paths_cache(Space) ->
+init_paths_caches(Space) ->
+    ok = init_paths_caches(Space, get_canonical_paths_cache_name(Space)),
+    ok = init_paths_caches(Space, get_uuid_based_paths_cache_name(Space)).
+
+-spec init_paths_caches(od_space:id(), bounded_cache:cache()) -> ok.
+init_paths_caches(Space, Name) ->
     try
-        Name = get_cannonical_paths_cache_name(Space),
         case bounded_cache:cache_exists(Name) of
             true ->
                 ok;
             _ ->
-                case bounded_cache:init_cache(Name, #{group => <<"cannonical_paths_cache">>}) of
+                case bounded_cache:init_cache(Name, #{group => ?PATH_CACHE_GROUP}) of
                     ok ->
                         ok;
                     Error = {error, _} ->
-                        ?critical("Unable to initialize cannonical_paths bounded cache for space ~p due to: ~p",
+                        ?critical("Unable to initialize paths bounded cache for space ~p due to: ~p",
                             [Space, Error])
                 end
         end
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize cannonical_paths bounded cache for space ~p due to: ~p",
+            ?critical_stacktrace("Unable to initialize paths bounded cache for space ~p due to: ~p",
                 [Space, {Error2, Reason}])
     end.
 

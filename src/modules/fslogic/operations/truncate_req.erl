@@ -19,9 +19,11 @@
 %% API
 -export([truncate/3, truncate_insecure/4]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv truncate_insecure/3 with permission checks
@@ -29,55 +31,56 @@
 %%--------------------------------------------------------------------
 -spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
-truncate(UserCtx, FileCtx, Size) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_object],
-        [UserCtx, FileCtx, Size, true],
-        fun truncate_insecure/4).
+truncate(UserCtx, FileCtx0, Size) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_object]
+    ),
+    FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx1),
+    truncate_insecure(UserCtx, FileCtx2, Size, true).
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Truncates file on storage and returns only if operation is complete.
-%% Does not change file size in #file_meta model. Model's size should be
+%% Model's size should be
 %% changed by write events.
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
     Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
-truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
-    FileCtx2 = update_quota(FileCtx, Size),
-
-    FileCtx4 = case file_ctx:get_extended_direct_io_const(FileCtx2) of
-        true ->
-            FileCtx2;
-        _ ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-            case storage_file_manager:open(SFMHandle, write) of
+truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes) ->
+    FileCtx1 = update_quota(FileCtx0, Size),
+    SessId = user_ctx:get_session_id(UserCtx),
+    {ok, FileCtx4} = case file_ctx:is_readonly_storage(FileCtx1) of
+        {true, FileCtx2} ->
+            {ok, FileCtx2};
+        {false, FileCtx2} ->
+            {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
+            case storage_driver:open(SDHandle, write) of
                 {ok, Handle} ->
                     {CurrentSize, _} = file_ctx:get_file_size(FileCtx3),
-                    case storage_file_manager:truncate(Handle, Size, CurrentSize) of
+                    case storage_driver:truncate(Handle, Size, CurrentSize) of
                         ok ->
                             ok;
                         Error = {error, ?EBUSY} ->
-                            log_warning(storage_file_manager, truncate, Error, FileCtx3)
+                            log_warning(storage_driver, truncate, Error, FileCtx3)
                     end,
-                    case storage_file_manager:release(Handle) of
+                    case storage_driver:release(Handle) of
                         ok -> ok;
                         Error2 = {error, ?EDOM} ->
-                            log_warning(storage_file_manager, release, Error2, FileCtx3)
-                    end,
-                    case file_popularity:update_size(FileCtx3, Size) of
-                        ok -> ok;
-                        {error, not_found} -> ok
+                            log_warning(storage_driver, release, Error2, FileCtx3)
                     end;
                 {error, ?ENOENT} ->
                     ok
             end,
-            FileCtx3
+            {ok, FileCtx3}
     end,
-
+    case file_popularity:update_size(FileCtx4, Size) of
+        ok -> ok;
+        {error, not_found} -> ok
+    end,
     case UpdateTimes of
         true ->
             fslogic_times:update_mtime_ctime(FileCtx4);
@@ -86,9 +89,11 @@ truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
     end,
     #fuse_response{status = #status{code = ?OK}}.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -102,6 +107,7 @@ update_quota(FileCtx, Size) ->
     {OldSize, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
     ok = space_quota:assert_write(SpaceId, Size - OldSize),
     FileCtx2.
+
 
 -spec log_warning(atom(), atom(), {error, term()}, file_ctx:ctx()) -> ok.
 log_warning(Module, Function, Error, FileCtx) ->

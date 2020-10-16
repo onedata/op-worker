@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type rule_setting() :: autocleaning_rule_setting:rule_setting().
@@ -149,8 +150,14 @@ update_setting(RuleName, CurrentSetting, UpdateRulesMap) ->
     try
         update_setting(CurrentSetting, get_update_setting_map(RuleName, UpdateRulesMap))
     catch
-        throw:Reason ->
-            throw({Reason, RuleName})
+        throw:(?ERROR_BAD_VALUE_INTEGER(Key)) ->
+            throw(?ERROR_BAD_VALUE_INTEGER(str_utils:join_as_binaries([RuleName, Key], <<".">>)));
+        throw:(?ERROR_BAD_VALUE_BOOLEAN(Key)) ->
+            throw(?ERROR_BAD_VALUE_BOOLEAN(str_utils:join_as_binaries([RuleName, Key], <<".">>)));
+        throw:(?ERROR_BAD_VALUE_TOO_LOW(Key, Minimum)) ->
+            throw(?ERROR_BAD_VALUE_TOO_LOW(str_utils:join_as_binaries([RuleName, Key], <<".">>), Minimum));
+        throw:(?ERROR_BAD_VALUE_TOO_HIGH(Key, Maximum)) ->
+            throw(?ERROR_BAD_VALUE_TOO_HIGH(str_utils:join_as_binaries([RuleName, Key], <<".">>), Maximum))
     end.
 
 -spec update_setting(rule_setting(), map()) -> rule_setting().
@@ -192,7 +199,7 @@ is_max_file_size_rule_satisfied(#file_popularity{size = Size},
 is_min_hours_since_last_open_rule_satisfied(#file_popularity{last_open = LastOpen},
     RuleSetting
 ) ->
-    CurrentTimeInHours = time_utils:cluster_time_seconds() div 3600,
+    CurrentTimeInHours = time_utils:timestamp_seconds() div 3600,
     autocleaning_rule_setting:is_greater_or_equal(CurrentTimeInHours - LastOpen,
         RuleSetting).
 

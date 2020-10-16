@@ -14,6 +14,11 @@
             "storages": [],
             "users": [],
             "groups": {}
+        },
+        "cfg2": {
+            "storages": [],
+            "users": [],
+            "groups": {}
         }
     },
     "provider_domains": {
@@ -23,7 +28,7 @@
             "cluster_manager": {
                 "cm": {
                     "vm.args": {
-                        "setcookie": "test_cookie"
+                        "setcookie": "test_cookie1"
                     },
                     "sys.config": {
                         "cm_nodes": [
@@ -36,7 +41,7 @@
             "op_worker": {
                 "worker1": {
                     "vm.args": {
-                        "setcookie": "test_cookie"
+                        "setcookie": "test_cookie1"
                     },
                     "sys.config": {
                         "cm_nodes": [
@@ -45,7 +50,99 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "graph_sync_healthcheck_interval": 999999999
+                        "graph_sync_reconnect_base_interval": 999999999
+                    }
+                }
+            }
+        },
+        "p2": {
+            "db_driver": "couchdb",
+            "os_config": "cfg2",
+            "cluster_manager": {
+                "cm": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 1
+                    }
+                }
+            },
+            "op_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49162"
+                        ],
+                        "graph_sync_reconnect_base_interval": 999999999
+                    }
+                }
+            }
+        }
+    },
+    "test_global_setup": {
+        "groups": {
+        },
+        "spaces": {
+            "space_id1": {
+                "displayed_name": "space_name1",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "supported_size": 1000000000
+                    },
+                    "p2": {
+                        "supported_size": 1000000000
+                    }
+                }
+            },
+            "space_id2": {
+                "displayed_name": "space_name2",
+                "users": [
+                    "user1",
+                    "user2",
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "supported_size": 1000000000
+                    },
+                    "p2": {
+                        "supported_size": 1000000000
+                    }
+                }
+            },
+            "space_id3": {
+                "displayed_name": "space_name3",
+                "users": [
+                    "user1",
+                    "user2",
+                    "user3",
+                    "user4"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "supported_size": 1000000000
+                    },
+                    "p2": {
+                        "supported_size": 1000000000
                     }
                 }
             }

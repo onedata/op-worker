@@ -20,6 +20,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -143,16 +144,17 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
         initializer:clear_subscriptions(Worker),
-        NewConfig
+        initializer:setup_storage(NewConfig)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 init_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
     Case =:= emit_file_written_event_should_execute_handler;
     Case =:= emit_file_attr_changed_event_should_execute_handler;
     Case =:= emit_file_location_changed_event_should_execute_handler;
-    Case =:= emit_helper_params_changed_event_should_execute_handler ->
+    Case =:= emit_helper_params_changed_event_should_execute_handler
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = create_subscription(Case, Worker),
     init_per_testcase(?DEFAULT_CASE(Case), [{subscription_id, SubId} | Config]);
@@ -167,7 +169,8 @@ init_per_testcase(Case, Config) when
     [{subscription_id, SubId} | NewConfig];
 
 init_per_testcase(Case, Config) when
-    Case =:= subscribe_should_notify_event_manager ->
+    Case =:= subscribe_should_notify_event_manager
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     SessId = ?config(session_id, NewConfig),
@@ -176,64 +179,76 @@ init_per_testcase(Case, Config) when
     [{subscription_id, SubId} | NewConfig];
 
 init_per_testcase(Case, Config) when
-    Case =:= subscribe_should_notify_all_event_managers ->
+    Case =:= subscribe_should_notify_all_event_managers
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
+    NewConfig = initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"), Config
+    ),
+    initializer:mock_auth_manager(Config),
     {ok, SubId} = create_subscription(Case, Worker),
     SessIds = lists:map(fun(N) ->
-        SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
-        session_setup(Worker, SessId),
+        Nonce = <<"nonce_", (integer_to_binary(N))/binary>>,
+        {ok, SessId} = session_setup(Worker, Nonce),
         SessId
     end, lists:seq(0, 4)),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
-        [{session_ids, SessIds}, {subscription_id, SubId} | Config]);
+    [{session_ids, SessIds}, {subscription_id, SubId} | NewConfig];
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
-    {ok, SessId} = session_setup(Worker),
     test_utils:mock_new(Workers, space_logic),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
-        [{session_id, SessId} | Config]).
+    NewConfig = initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"), Config
+    ),
+    initializer:mock_auth_manager(Config),
+    {ok, SessId} = session_setup(Worker),
+    [{session_id, SessId} | NewConfig].
 
 end_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
     Case =:= emit_file_written_event_should_execute_handler;
     Case =:= emit_file_attr_changed_event_should_execute_handler;
     Case =:= emit_file_location_changed_event_should_execute_handler;
-    Case =:= emit_helper_params_changed_event_should_execute_handler ->
+    Case =:= emit_helper_params_changed_event_should_execute_handler
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= flush_should_notify_awaiting_process;
-    Case =:= subscribe_should_notify_event_manager ->
+    Case =:= subscribe_should_notify_event_manager
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(session_id, Config), ?config(subscription_id, Config)),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
-    Case =:= subscribe_should_notify_all_event_managers ->
+    Case =:= subscribe_should_notify_all_event_managers
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, ?config(session_ids, Config)),
+    initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]);
 
 end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
+    initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_unload(Workers, space_logic),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
-end_per_suite(Config) ->
+end_per_suite(_Config) ->
     ok.
 
 %%%===================================================================
@@ -243,12 +258,12 @@ end_per_suite(Config) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv session_setup(Worker, <<"session_id">>
+%% @equiv session_setup(Worker, <<"nonce">>
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
+-spec session_setup(node()) -> {ok, session:id()}.
 session_setup(Worker) ->
-    session_setup(Worker, <<"session_id">>).
+    session_setup(Worker, <<"nonce">>).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -256,15 +271,17 @@ session_setup(Worker) ->
 %% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id()) ->
-    {ok, SessId :: session:id()}.
-session_setup(Worker, SessId) ->
-    Self = self(),
-    Iden = #user_identity{user_id = <<"user1">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, #macaroon_auth{}, Self]
-    )),
-    {ok, SessId}.
+-spec session_setup(node(), Nonce :: binary()) -> {ok, session:id()}.
+session_setup(Worker, Nonce) ->
+    UserId = <<"user1">>,
+    AccessToken = initializer:create_access_token(UserId),
+    TokenCredentials = auth_manager:build_token_credentials(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, Nonce, ?SUB(user, UserId), TokenCredentials, self()
+    ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -274,7 +291,7 @@ session_setup(Worker, SessId) ->
 %%--------------------------------------------------------------------
 -spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
 session_teardown(Worker, SessId) ->
-    rpc:call(Worker, session_manager, remove_session, [SessId]).
+    rpc:call(Worker, session_manager, terminate_session, [SessId]).
 
 subscription(Sub, Handler, EmRule, EmTime) ->
     Stm = subscription_type:get_stream(Sub),

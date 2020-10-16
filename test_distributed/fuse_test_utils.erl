@@ -23,20 +23,24 @@
 -include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("clproto/include/messages.hrl").
 
 -export([
+    reuse_or_create_fuse_session/4, reuse_or_create_fuse_session/5,
+
     connect_as_provider/3, connect_as_client/4,
 
-    connect_via_macaroon/1, connect_via_macaroon/2,
-    connect_via_macaroon/3, connect_via_macaroon/4,
-    connect_via_custom_macaroon/4,
+    connect_via_token/1, connect_via_token/2,
+    connect_via_token/3, connect_via_token/4,
+
+    connect_as_user/4,
 
     generate_msg_id/0
 ]).
@@ -44,13 +48,15 @@
 -export([receive_server_message/0, receive_server_message/1, receive_server_message/2]).
 
 %% Fuse request messages
--export([generate_create_file_message/3, generate_create_dir_message/3, generate_delete_file_message/2,
+-export([generate_create_file_message/3, generate_create_file_message/4,
+    generate_create_dir_message/3, generate_delete_file_message/2,
     generate_open_file_message/2, generate_open_file_message/3, generate_release_message/3,
     generate_get_children_attrs_message/2, generate_get_children_message/2, generate_fsync_message/2]).
 
 %% Subscription messages
 -export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4,
-    generate_file_attr_changed_subscription_message/5, generate_file_location_changed_subscription_message/5]).
+    generate_file_attr_changed_subscription_message/5, generate_replica_status_changed_subscription_message/5,
+    generate_file_location_changed_subscription_message/5]).
 -export([generate_subscription_cancellation_message/3, generate_quota_exceeded_subscription_message/3]).
 
 %% Misc messages
@@ -60,7 +66,7 @@
 -export([generate_write_message/5, generate_read_message/5]).
 
 -export([
-    create_file/3, create_file/4,
+    create_file/3, create_file/5, create_777_mode_file/3,
     create_directory/3, create_directory/4,
     open/2, open/3, open/4,
     close/3, close/4,
@@ -91,6 +97,45 @@
 %% API
 %% ====================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates FUSE session or if session exists reuses it
+%% and registers connection for it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_fuse_session(
+    Nonce :: binary(),
+    Identity :: aai:subject(),
+    undefined | auth_manager:credentials(),
+    pid()
+) ->
+    {ok, session:id()} | {error, term()}.
+reuse_or_create_fuse_session(Nonce, Identity, Credentials, Conn) ->
+    {ok, SessId} = session_manager:reuse_or_create_fuse_session(Nonce, Identity, Credentials),
+    session_connections:register(SessId, Conn),
+    {ok, SessId}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls reuse_or_create_fuse_session/4 on specified Worker.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_fuse_session(
+    node(),
+    Nonce :: binary(),
+    Identity :: aai:subject(),
+    undefined | auth_manager:credentials(),
+    pid()
+) ->
+    {ok, session:id()} | {error, term()}.
+reuse_or_create_fuse_session(Worker, Nonce, Identity, Credentials, Conn) ->
+    ?assertMatch({ok, _}, rpc:call(Worker, ?MODULE,
+        reuse_or_create_fuse_session, [Nonce, Identity, Credentials, Conn]
+    )).
+
+
 generate_msg_id() ->
     ID = case get(msg_id_generator) of
         undefined -> 1;
@@ -101,14 +146,14 @@ generate_msg_id() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using a providerId and nonce.
+%% Connect to given node using a providerId and token.
 %% @end
 %%--------------------------------------------------------------------
-connect_as_provider(Node, ProviderId, Nonce) ->
+connect_as_provider(Node, ProviderId, Token) ->
     HandshakeReqMsg = #'ClientMessage'{
         message_body = {provider_handshake_request, #'ProviderHandshakeRequest'{
             provider_id = ProviderId,
-            nonce = Nonce
+            token = Token
         }
         }},
     RawMsg = messages:encode_msg(HandshakeReqMsg),
@@ -138,18 +183,18 @@ connect_as_provider(Node, ProviderId, Nonce) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using a macaroon, sessionId and version.
+%% Connect to given node using a token, nonce and version.
 %% @end
 %%--------------------------------------------------------------------
-connect_as_client(Node, SessId, Macaroon, Version) ->
-    MacaroonAuthMessage = #'ClientMessage'{
+connect_as_client(Node, Nonce, Token, Version) ->
+    HandshakeMessage = #'ClientMessage'{
         message_body = {client_handshake_request, #'ClientHandshakeRequest'{
-            session_id = SessId,
-            macaroon = Macaroon,
+            session_id = Nonce,
+            macaroon = Token,
             version = Version
         }
         }},
-    RawMsg = messages:encode_msg(MacaroonAuthMessage),
+    RawMsg = messages:encode_msg(HandshakeMessage),
 
     % when
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
@@ -175,77 +220,71 @@ connect_as_client(Node, SessId, Macaroon, Version) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using macaroon, with default socket_opts
-%% @equiv connect_via_macaroon(Node, [{active, true}])
+%% Connect to given node using a token, with default socket_opts
+%% @equiv connect_via_token(Node, [{active, true}])
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_macaroon(Node :: node()) ->
+-spec connect_via_token(Node :: node()) ->
     {ok, {Sock :: ssl:sslsocket(), SessId :: session:id()}} | no_return().
-connect_via_macaroon(Node) ->
-    connect_via_macaroon(Node, [{active, true}]).
+connect_via_token(Node) ->
+    connect_via_token(Node, [{active, true}]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using macaroon, with custom socket opts
-%% @equiv connect_via_macaroon(Node, SocketOpts, crypto:strong_rand_bytes(10))
+%% Connect to given node using a token, with custom socket opts
+%% @equiv connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10))
 %% @end
 %%--------------------------------------------------------------------
-connect_via_macaroon(Node, SocketOpts) ->
-    connect_via_macaroon(Node, SocketOpts, crypto:strong_rand_bytes(10)).
+connect_via_token(Node, SocketOpts) ->
+    connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv connect_via_custom_macaroon(Node, SocketOpts, SessionId, 1)
+%% Connect to given node using a token, with custom socket opts
+%% @equiv connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10))
 %% @end
 %%--------------------------------------------------------------------
-connect_via_macaroon(Node, SocketOpts, SessionId) ->
-    connect_via_custom_macaroon(Node, SocketOpts, SessionId, 1).
+connect_via_token(Node, SocketOpts, Nonce) ->
+    UserId = <<"default_user">>,
+    AccessToken = initializer:create_access_token(UserId),
+    connect_via_token(Node, SocketOpts, Nonce, AccessToken).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using predefined macaroon, with custom socket opts
-%% @end
-connect_via_custom_macaroon(Node, SocketOpts, SessionId, MacaroonNum) ->
-    {Macaroon, DischMacaroon} = lists:nth(MacaroonNum, ?TEST_MACAROONS),
-    connect_via_macaroon(Node, SocketOpts, SessionId, #macaroon_auth{
-        macaroon = Macaroon,
-        disch_macaroons = DischMacaroon
-    }).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Connect to given node using a macaroon, with custom socket opts and session id.
+%% Connect to given node using a token, with custom socket opts and nonce.
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_macaroon(Node :: node(), SocketOpts :: list(), session:id(), #macaroon_auth{}) ->
-    {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_macaroon(Node, SocketOpts, SessId, #macaroon_auth{
-    macaroon = Macaroon,
-    disch_macaroons = DischMacaroons}
+-spec connect_via_token(
+    Node :: node(),
+    SocketOpts :: list(),
+    Nonce :: binary(),
+    AccessToken :: tokens:serialized()
 ) ->
+    {ok, {Sock :: term(), SessId :: session:id()}}.
+connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
     % given
     OpVersion = rpc:call(Node, oneprovider, get_version, []),
     {ok, [Version | _]} = rpc:call(
         Node, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
-    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+    HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
-            session_id = SessId,
-            macaroon = #'Macaroon'{macaroon = Macaroon, disch_macaroons = DischMacaroons},
+            session_id = Nonce,
+            macaroon = #'Macaroon'{macaroon = AccessToken},
             version = Version
         }
     }},
-    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
+    HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
     ActiveOpt = case proplists:get_value(active, SocketOpts) of
-                    undefined -> [];
-                    Other -> [{active, Other}]
-                end,
+        undefined -> [];
+        Other -> [{active, Other}]
+    end,
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
+    ok = ssl:send(Sock, HandshakeMessageRaw),
 
     % then
     RM = receive_server_message(),
@@ -254,6 +293,8 @@ connect_via_macaroon(Node, SocketOpts, SessId, #macaroon_auth{
     }}},
         RM
     ),
+
+    SessId = datastore_key:new_from_digest([<<"fuse">>, Nonce]),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.
 
@@ -271,6 +312,25 @@ connect_and_upgrade_proto(Hostname, Port) ->
         exit(timeout)
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node with specified user authorization.
+%% @end
+%%--------------------------------------------------------------------
+-spec connect_as_user(Config :: term(), node(), User :: binary(),  SocketOpts :: list()) ->
+    {ok, {Sock :: term(), SessId :: session:id()}}.
+connect_as_user(Config, Node, User, SocketOpts) ->
+    SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+    Nonce = ?config({session_nonce, {User, ?GET_DOMAIN(Node)}}, Config),
+    AccessToken = initializer:create_access_token(User),
+
+    ?assertMatch(
+        {ok, {_, SessId}},
+        fuse_test_utils:connect_via_token(Node, SocketOpts, Nonce, AccessToken)
+    ).
+
+
 receive_server_message() ->
     receive_server_message([message_stream_reset, subscription, message_request,
         message_acknowledgement, processing_status, events]). % ignore events about parent changes
@@ -279,7 +339,7 @@ receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).
 
 receive_server_message(IgnoredMsgList, Timeout) ->
-    Now = time_utils:system_time_millis(),
+    Now = time_utils:timestamp_millis(),
     receive
         {_, _, Data} ->
             % ignore listed messages
@@ -287,7 +347,7 @@ receive_server_message(IgnoredMsgList, Timeout) ->
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
                 true ->
-                    NewTimeout = max(0, Timeout - (time_utils:system_time_millis() - Now)),
+                    NewTimeout = max(0, Timeout - (time_utils:timestamp_millis() - Now)),
                     receive_server_message(IgnoredMsgList, NewTimeout);
                 false ->
                     Msg
@@ -299,11 +359,14 @@ receive_server_message(IgnoredMsgList, Timeout) ->
 
 %% Fuse request messages
 generate_create_file_message(RootGuid, MsgId, File) ->
+    generate_create_file_message(RootGuid, MsgId, File, 8#644).
+
+generate_create_file_message(RootGuid, MsgId, File, Mode) ->
     FuseRequest = {file_request, #'FileRequest'{
         context_guid = RootGuid,
         file_request = {create_file, #'CreateFile'{
             name = File,
-            mode = 8#644,
+            mode = Mode,
             flag = 'READ_WRITE'}
         }}
     },
@@ -387,6 +450,12 @@ generate_file_attr_changed_subscription_message(StreamId, SequenceNumber, SubId,
     },
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
 
+generate_replica_status_changed_subscription_message(StreamId, SequenceNumber, SubId, FileId, TimeThreshold) ->
+    Type = {replica_status_changed, #'ReplicaStatusChangedSubscription'{
+        file_uuid = FileId, time_threshold = TimeThreshold}
+    },
+    generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
+
 generate_file_renamed_subscription_message(StreamId, SequenceNumber, SubId, FileId) ->
     Type = {file_renamed, #'FileRenamedSubscription'{file_uuid = FileId}},
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
@@ -448,10 +517,10 @@ generate_proxyio_message(MsgId, Parameters, ProxyIORequest) ->
 
 
 create_file(Sock, RootGuid, Filename) ->
-    create_file(Sock, RootGuid, Filename, ?MSG_ID).
+    create_file(Sock, RootGuid, Filename, 8#644, ?MSG_ID).
 
-create_file(Sock, RootGuid, Filename, MsgId) ->
-    ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, MsgId, Filename)),
+create_file(Sock, RootGuid, Filename, Mode, MsgId) ->
+    ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, MsgId, Filename, Mode)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {file_created, #'FileCreated'{
             handle_id = HandleId,
@@ -462,6 +531,9 @@ create_file(Sock, RootGuid, Filename, MsgId) ->
         message_id = MsgId
     }, fuse_test_utils:receive_server_message()),
     {FileGuid, HandleId}.
+
+create_777_mode_file(Sock, RootGuid, Filename) ->
+    create_file(Sock, RootGuid, Filename, 8#777, ?MSG_ID).
 
 create_directory(Sock, RootGuid, Dirname) ->
     create_directory(Sock, RootGuid, Dirname, ?MSG_ID).
@@ -579,7 +651,7 @@ emit_file_read_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
         fun(#file_block{offset = O, size = S}, {AccBlocks, AccSize}) ->
             {[#'FileBlock'{offset = O, size = S} | AccBlocks], AccSize + S}
         end,
-    {[], 0}, Blocks),
+        {[], 0}, Blocks),
 
     Msg = #'ClientMessage'{
         message_stream = #'MessageStream'{
@@ -604,7 +676,7 @@ emit_file_written_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
         fun(#file_block{offset = O, size = S}, {AccBlocks, AccSize}) ->
             {[#'FileBlock'{offset = O, size = S} | AccBlocks], AccSize + S}
         end,
-    {[], 0}, Blocks),
+        {[], 0}, Blocks),
 
     Msg = #'ClientMessage'{
         message_stream = #'MessageStream'{

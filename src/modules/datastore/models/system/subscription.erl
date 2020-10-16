@@ -27,6 +27,7 @@
 -type id() :: binary().
 -type base() :: #subscription{}.
 -type type() :: #file_attr_changed_subscription{} |
+                #replica_status_changed_subscription{} |
                 #file_location_changed_subscription{} |
                 #file_read_subscription{} | #file_written_subscription{} |
                 #file_perm_changed_subscription{} |

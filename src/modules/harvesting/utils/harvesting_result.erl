@@ -40,12 +40,12 @@
 % possible keys in the summary() map
 %   * couchbase_changes:seq() - last sequence for which harvesting succeeded for
 %     Destination associated with given sequence
-%   * gs_protocol:error() - error returned from Graph Sync for
+%   * errors:error() - error returned from Graph Sync for
 %     Destination associated with given sequence
 %   * undefined - if sent batch was empty, and the call was successful
 %     whole Destination is associated with undefined key
--type summary_key() :: couchbase_changes:seq() | gs_protocol:error() | undefined.
--type summary() :: #{summary_key() => harvesting_destination:destination()} | gs_protocol:error().
+-type summary_key() :: couchbase_changes:seq() | errors:error() | undefined.
+-type summary() :: #{summary_key() => harvesting_destination:destination()} | errors:error().
 -type acc() :: #acc{}.
 
 -export_type([failure_map/0, result/0]).
@@ -62,7 +62,7 @@
 %% space_logic:harvest_metadata/5 function.
 %% @end
 %%--------------------------------------------------------------------
--spec process({ok, failure_map()} | gs_protocol:error(), harvesting_destination:destination(),
+-spec process({ok, failure_map()} | errors:error(), harvesting_destination:destination(),
     harvesting_batch:batch()) -> result().
 process(Error = {error, _}, _, Batch) ->
     Result = init_result(Batch),
@@ -121,7 +121,7 @@ process_internal(HarvesterId, Indices, Acc = #acc{
                 max_successful_seq = LastBatchSeq
             };
         #{<<"error">> := ErrorBinary} ->
-            Error = gs_protocol_errors:json_to_error(?GS_PROTOCOL_VERSION, ErrorBinary),
+            Error = errors:from_json(ErrorBinary),
             process_error(HarvesterId, Indices, Error, ResultIn);
         Error = {error, _} ->
             process_error(HarvesterId, Indices, Error, ResultIn);
@@ -151,7 +151,7 @@ process_internal(HarvesterId, Indices, Acc = #acc{
     Acc#acc{result = Result}.
 
 -spec process_error(od_harvester:id(), [od_harvester:index()],
-    gs_protocol:error(), result()) -> result().
+    errors:error(), result()) -> result().
 process_error(HarvesterId, Indices, Error, ResultIn = #result{summary = SummaryIn}) ->
     % harvesting failed with Error for all indices of Harvester
     Summary = maps:update_with(Error, fun(Destination) ->

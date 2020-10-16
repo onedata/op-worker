@@ -25,7 +25,7 @@ new_transfer_histograms_test() ->
     Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
     ExpTransferHist = #{?PROVIDER1 => Histogram},
     TransferHist = transfer_histograms:new(
-        #{?PROVIDER1 => Bytes}, ?MINUTE_STAT_TYPE
+        #{?PROVIDER1 => Bytes}, ?MINUTE_PERIOD
     ),
     ?assertEqual(ExpTransferHist, TransferHist).
 
@@ -34,10 +34,10 @@ update_with_nonexistent_test() ->
     Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
     ExpTransferHist = #{?PROVIDER1 => Histogram, ?PROVIDER2 => Histogram},
     TransferHist1 = transfer_histograms:new(
-        #{?PROVIDER1 => Bytes}, ?MINUTE_STAT_TYPE
+        #{?PROVIDER1 => Bytes}, ?MINUTE_PERIOD
     ),
     TransferHist2 = transfer_histograms:update(
-        #{?PROVIDER2 => Bytes}, TransferHist1, ?MINUTE_STAT_TYPE, #{}, 0, 0
+        #{?PROVIDER2 => Bytes}, TransferHist1, ?MINUTE_PERIOD, #{}, 0, 0
     ),
     assertEqualMaps(ExpTransferHist, TransferHist2).
 
@@ -49,7 +49,7 @@ update_with_existent_test() ->
     % Update within the same slot time as last_update and current_time
     % should increment only head slot.
     TransferHist2 = transfer_histograms:update(
-        #{?PROVIDER1 => Bytes}, TransferHist1, ?MINUTE_STAT_TYPE, #{}, 0, 0
+        #{?PROVIDER1 => Bytes}, TransferHist1, ?MINUTE_PERIOD, #{}, 0, 0
     ),
     Histogram2 = histogram:increment(Histogram1, Bytes),
     ExpTransferHist2 = #{?PROVIDER1 => Histogram2},
@@ -61,7 +61,7 @@ update_with_existent_test() ->
     CurrentTime = 10,
     Window = ?FIVE_SEC_TIME_WINDOW,
     TransferHist3 = transfer_histograms:update(#{?PROVIDER1 => Bytes},
-        TransferHist1, ?MINUTE_STAT_TYPE, #{}, StartTime, CurrentTime
+        TransferHist1, ?MINUTE_PERIOD, #{}, StartTime, CurrentTime
     ),
     ShiftSize = (CurrentTime div Window) - (StartTime div Window),
     Histogram3 = histogram:increment(histogram:shift(Histogram1, ShiftSize), Bytes),

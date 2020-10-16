@@ -64,7 +64,8 @@ change_replicated_internal(SpaceId, #document{
 } = FileDoc) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
+    ok = file_meta_posthooks:execute_hooks(FileUuid);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     deleted = false,
@@ -72,7 +73,8 @@ change_replicated_internal(SpaceId, #document{
 } = FileDoc) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
+    ok = file_meta_posthooks:execute_hooks(FileUuid);
 change_replicated_internal(SpaceId, #document{
     deleted = false,
     value = #file_location{uuid = FileUuid}
@@ -125,5 +127,11 @@ change_replicated_internal(_SpaceId, #document{key = JobID, value = #tree_traver
     % TODO VFS-6391 fix race with file_meta
     {ok, Job, PoolName, TaskID} = tree_traverse:get_job(Doc),
     traverse:on_job_change(Job, JobID, PoolName, TaskID, oneprovider:get_id_or_undefined());
+change_replicated_internal(SpaceId, QosEntry = #document{
+    key = QosEntryId,
+    value = #qos_entry{}
+}) ->
+    ?debug("change_replicated_internal: qos_entry ~p", [QosEntryId]),
+    qos_hooks:handle_qos_entry_change(SpaceId, QosEntry);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

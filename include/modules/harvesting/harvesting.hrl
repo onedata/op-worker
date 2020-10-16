@@ -31,6 +31,7 @@
 -define(TAKEOVER_REJECTED(NewUntil), {takeover_rejected, NewUntil}).
 -define(SPACE_REMOVED, space_removed).
 -define(SPACE_UNSUPPORTED, space_unsupported).
+-define(TERMINATE, terminate).
 -define(START_AUX_STREAMS(AuxDestination, Until),
     {start_aux_streams, AuxDestination, Until}).
 
@@ -66,12 +67,12 @@
     batch = harvesting_batch:new_accumulator() :: harvesting_batch:accumulator() | harvesting_batch:batch(),
     % Couchbase aggregates all deleted docs in the beginning of a stream,
     % so these changes can be safely ignored. The flag is set to false when
-    % meaningful changes have been reached (first non-deleted #custom_metadata{} doc).
+    % meaningful changes have been reached (first non-deleted #custom_metadata{} or #file_meta{} doc).
     ignoring_deleted = true :: boolean(),
 
     until :: couchbase_changes:until(),
 
-    last_harvest_timestamp = time_utils:system_time_seconds() :: non_neg_integer(),
+    last_harvest_timestamp = time_utils:timestamp_seconds() :: time_utils:seconds(),
 
     % fields used by main_harvesting_stream
     % destination with all indices, for which aux_harvesting_streams have been started

@@ -46,6 +46,7 @@
     mutator => oneprovider:get_id_or_undefined()
 }).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -145,7 +146,7 @@ update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
         LatestLastUpdate = lists:max(LastUpdates),
         % Due to race between processes updating stats it is possible
         % for LatestLastUpdate to be larger than CurrentTime, also because
-        % provider_logic:zone_time_seconds() caches zone time locally it is
+        % time_utils:timestamp_seconds() caches zone time locally it is
         % possible for time of various provider nodes to differ by several
         % seconds.
         % So if the CurrentTime is less than LatestLastUpdate by no more than
@@ -160,19 +161,19 @@ update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
                 {ok, SpaceTransfers#space_transfer_stats{
                     last_update = maps:merge(LastUpdateMap, NewTimestamps),
                     min_hist = transfer_histograms:update(
-                        BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                        BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
                         LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     ),
                     hr_hist = transfer_histograms:update(
-                        BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                        BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
                         LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     ),
                     dy_hist = transfer_histograms:update(
-                        BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                        BytesPerProvider, DyHistograms, ?DAY_PERIOD,
                         LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     ),
                     mth_hist = transfer_histograms:update(
-                        BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                        BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
                         LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     )
                 }}
@@ -183,10 +184,10 @@ update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
         key = Key,
         value = #space_transfer_stats{
             last_update = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
-            min_hist = transfer_histograms:new(BytesPerProvider, ?MINUTE_STAT_TYPE),
-            hr_hist = transfer_histograms:new(BytesPerProvider, ?HOUR_STAT_TYPE),
-            dy_hist = transfer_histograms:new(BytesPerProvider, ?DAY_STAT_TYPE),
-            mth_hist = transfer_histograms:new(BytesPerProvider, ?MONTH_STAT_TYPE)
+            min_hist = transfer_histograms:new(BytesPerProvider, ?MINUTE_PERIOD),
+            hr_hist = transfer_histograms:new(BytesPerProvider, ?HOUR_PERIOD),
+            dy_hist = transfer_histograms:new(BytesPerProvider, ?DAY_PERIOD),
+            mth_hist = transfer_histograms:new(BytesPerProvider, ?MONTH_PERIOD)
         }
     },
     case datastore_model:update(?CTX, Key, Diff, Default) of

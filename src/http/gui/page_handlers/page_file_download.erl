@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license 
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -17,11 +17,9 @@
 
 -include("http/gui_paths.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/http/codes.hrl").
--include_lib("ctool/include/logging.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/errors.hrl").
 
--define(CONN_CLOSE_HEADERS, #{<<"connection">> => <<"close">>}).
 
 -export([get_file_download_url/2, handle/2]).
 
@@ -39,19 +37,20 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_download_url(session:id(), fslogic_worker:file_guid()) ->
-    {ok, binary()} | {error, term()}.
+    {ok, binary()} | errors:error().
 get_file_download_url(SessionId, FileGuid) ->
-    case lfm:check_perms(SessionId, {guid, FileGuid}, read) of
-        {ok, true} ->
-            Hostname = oneprovider:get_domain(),
-            {ok, Code} = file_download_code:create(SessionId, FileGuid),
-            URL = str_utils:format_bin("https://~s~s/~s", [
-                Hostname, ?FILE_DOWNLOAD_PATH, Code
-            ]),
-            {ok, URL};
-        {ok, false} ->
+    try
+        maybe_sync_first_file_block(SessionId, FileGuid),
+        Hostname = oneprovider:get_domain(),
+        {ok, Code} = file_download_code:create(SessionId, FileGuid),
+        URL = str_utils:format_bin("https://~s~s/~s", [
+            Hostname, ?FILE_DOWNLOAD_PATH, Code
+        ]),
+        {ok, URL}
+    catch
+        throw:?ERROR_POSIX(Errno) when Errno == ?EACCES; Errno == ?EPERM ->
             ?ERROR_FORBIDDEN;
-        Error ->
+        throw:Error ->
             Error
     end.
 
@@ -65,19 +64,29 @@ get_file_download_url(SessionId, FileGuid) ->
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:consume(FileDownloadCode) of
-        false ->
-            cowboy_req:reply(?HTTP_401_UNAUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
         {true, SessionId, FileGuid} ->
             OzUrl = oneprovider:get_oz_url(),
             Req2 = gui_cors:allow_origin(OzUrl, Req),
             Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
-            handle_http_download(SessionId, FileGuid, Req3)
+            handle_http_download(SessionId, FileGuid, Req3);
+        false ->
+            http_req_utils:send_error_response(?ERROR_BAD_DATA(<<"code">>), Req)
     end.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec maybe_sync_first_file_block(session:id(), file_id:file_guid()) -> ok.
+maybe_sync_first_file_block(SessionId, FileGuid) ->
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, read)),
+    ReadBlockSize = http_download_utils:get_read_block_size(FileHandle),
+    ?check(lfm:read(FileHandle, 0, ReadBlockSize)),
+    lfm:monitored_release(FileHandle),
+    ok.
 
 
 %%--------------------------------------------------------------------

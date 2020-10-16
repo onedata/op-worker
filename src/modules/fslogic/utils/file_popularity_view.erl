@@ -17,11 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/4, example_query/1, query/3, delete/1, modify/4]).
-
--type  index_token() :: #index_token{}.
-
--export_type([index_token/0]).
+-export([create/4, example_query/1, delete/1, modify/4]).
 
 %%%===================================================================
 %%% API
@@ -56,13 +52,13 @@ create(SpaceId, TimestampWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay
 
     Ctx = datastore_model_default:get_ctx(file_popularity),
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    ok = couchbase_driver:save_view_doc(DiscCtx, ?VIEW_NAME(SpaceId), ViewFunction).
+    ok = couchbase_driver:save_view_doc(DiscCtx, ?FILE_POPULARITY_VIEW(SpaceId), ViewFunction).
 
 -spec delete(od_space:id()) -> ok | {error, term()}.
 delete(SpaceId) ->
     Ctx = datastore_model_default:get_ctx(file_popularity),
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    couchbase_driver:delete_design_doc(DiscCtx, ?VIEW_NAME(SpaceId)).
+    couchbase_driver:delete_design_doc(DiscCtx, ?FILE_POPULARITY_VIEW(SpaceId)).
 
 -spec modify(od_space:id(), number(), number(), number()) -> ok | {error, term()}.
 modify(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay) ->
@@ -72,33 +68,6 @@ modify(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay)
         {error, {<<"not_found">>, _}} ->
             create(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay);
         Error ->
-            Error
-    end.
-
--spec query(od_space:id(), undefined | index_token(), non_neg_integer()) ->
-    {[file_id:objectid()], undefined | index_token()} | {error, term()}.
-query(SpaceId, IndexToken, Limit) ->
-    Options = token_to_opts(IndexToken, Limit),
-    Ctx = datastore_model_default:get_ctx(file_popularity),
-    DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    ViewName = ?VIEW_NAME(SpaceId),
-    case couchbase_driver:query_view(DiscCtx, ViewName, ViewName, Options) of
-        {ok, #{<<"rows">> := []}} ->
-            {[], IndexToken};
-        {ok, #{<<"rows">> := Rows}} ->
-            TokenDefined = utils:ensure_defined(IndexToken, undefined, #index_token{}),
-            {RevertedFileIds, NewToken} = lists:foldl(fun(Row, {RevertedFileIdsIn, TokenIn}) ->
-                Key = maps:get(<<"key">>, Row),
-                FileId = maps:get(<<"value">>, Row),
-                DocId = maps:get(<<"id">>, Row),
-                {[FileId | RevertedFileIdsIn], TokenIn#index_token{
-                    start_key = Key,
-                    last_doc_id = DocId
-                }}
-            end, {[], TokenDefined}, Rows),
-            {lists:reverse(RevertedFileIds), NewToken};
-        Error = {error, Reason} ->
-            ?error("Querying file_popularity_view ~p failed due to ~p", [ViewName, Reason]),
             Error
     end.
 
@@ -119,31 +88,6 @@ example_query(SpaceId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec token_to_opts(undefined | index_token(), non_neg_integer()) -> [couchbase_driver:view_opt()].
-token_to_opts(undefined, Limit) ->
-    [
-        {stale, false},
-        {limit, Limit}
-    ];
-token_to_opts(#index_token{
-last_doc_id = undefined,
-    start_key = undefined
-}, Limit) -> [
-        {stale, false},
-        {limit, Limit}
-    ];
-token_to_opts(#index_token{
-    last_doc_id = LastDocId,
-    start_key = LastKey
-}, Limit) ->
-    [
-        {stale, false},
-        {startkey, LastKey},
-        {startkey_docid, LastDocId},
-        {limit, Limit},
-        {skip, 1}
-    ].
 
 %%-------------------------------------------------------------------
 %% @private

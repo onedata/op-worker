@@ -11,7 +11,7 @@
 -module(glusterfs_helper_test_SUITE).
 -author("Bartek Kryza").
 
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -397,11 +397,11 @@ new_helper(Config) ->
             <<"port">> => integer_to_binary(?GLUSTERFS_PORT),
             <<"transport">> => atom_to_binary(?config(transport, GlusterFSConfig), utf8),
             <<"mountPoint">> => atom_to_binary(?config(mountpoint, GlusterFSConfig), utf8),
-            <<"xlatorOptions">> => <<"cluster.write-freq-threshold=100;">>
+            <<"xlatorOptions">> => <<"cluster.write-freq-threshold=100;">>,
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
+            <<"skipStorageDetection">> => <<"false">>
         },
-        UserCtx,
-        true,
-        ?CANONICAL_STORAGE_PATH
+        UserCtx
     ),
     spawn_link(Node, fun() ->
         helper_loop(Helper, UserCtx)
@@ -455,7 +455,7 @@ receive_result(Helper) ->
     end.
 
 run(Fun, ThreadsNum) ->
-    Results = utils:pmap(fun(_) ->
+    Results = lists_utils:pmap(fun(_) ->
         Fun(),
         ok
     end, lists:seq(1, ThreadsNum)),

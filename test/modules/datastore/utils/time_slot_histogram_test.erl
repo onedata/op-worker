@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 new_histogram_should_have_last_update_set_to_zero_test() ->
     Histogram = time_slot_histogram:new(10, 10),
@@ -73,7 +73,7 @@ increment_after_long_time_should_strip_old_values_test() ->
 
 increment_by_more_than_one_test() ->
     Histogram = time_slot_histogram:new(0, 60, histogram:new(60)),
-    Timestamp = time_utils:system_time_seconds(),
+    Timestamp = time_utils:timestamp_seconds(),
 
     ?assertMatch(
         [5 | _],

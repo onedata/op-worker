@@ -18,9 +18,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete_file_locally/3, handle_remotely_deleted_file/1,
-    handle_release_of_deleted_file/2, handle_file_deleted_on_synced_storage/1,
-    cleanup_opened_files/0]).
+-export([
+    delete_file_locally/3,
+    handle_remotely_deleted_file/1,
+    handle_release_of_deleted_file/2,
+    handle_file_deleted_on_imported_storage/1]).
+-export([cleanup_opened_files/0]).
+-export([remove_local_associated_documents/1]).
 
 %% Test API
 -export([delete_parent_link/2, get_open_file_handling_method/1]).
@@ -64,8 +68,8 @@ handle_release_of_deleted_file(FileCtx, RemovalStatus) ->
     DocsDeletionScope = removal_status_to_docs_deletion_scope(RemovalStatus),
     ok = remove_file(FileCtx, UserCtx, true, ?TWO_STEP_DEL_FIN(DocsDeletionScope)).
 
-    -spec handle_file_deleted_on_synced_storage(file_ctx:ctx()) -> ok.
-handle_file_deleted_on_synced_storage(FileCtx) ->
+    -spec handle_file_deleted_on_imported_storage(file_ctx:ctx()) -> ok.
+handle_file_deleted_on_imported_storage(FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     ok = remove_file(FileCtx, UserCtx, false, ?SINGLE_STEP_DEL(?ALL_DOCS)),
     fslogic_event_emitter:emit_file_removed(FileCtx, []),
@@ -80,7 +84,7 @@ handle_file_deleted_on_synced_storage(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec cleanup_opened_files() -> ok.
 cleanup_opened_files() ->
-    case file_handles:list_local() of
+    case file_handles:list() of
         {ok, Docs} ->
             RemovedFiles = lists:filter(fun(Doc) -> file_handles:is_removed(Doc) end, Docs),
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
@@ -99,8 +103,16 @@ cleanup_opened_files() ->
                 ok = file_handles:delete(FileUuid)
             end, Docs);
         Error ->
-            ?error_stacktrace("Cannot clean open files descriptors - ~p", [Error])
+            ?error("Cannot clean open files descriptors - ~p", [Error])
     end.
+
+-spec remove_local_associated_documents(file_ctx:ctx()) -> ok.
+remove_local_associated_documents(FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    % TODO VFS-6114 delete storage_sync_info here?
+    ok = file_qos:clean_up(FileCtx),
+    ok = file_meta_posthooks:delete(FileUuid),
+    ok = file_popularity:delete(FileUuid).
 
 %%%===================================================================
 %%% Internal functions
@@ -117,7 +129,7 @@ cleanup_opened_files() ->
 check_if_opened_and_remove(UserCtx, FileCtx, Silent, DocsDeletionScope) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
-        case file_handles:exists(FileUuid) of
+        case file_handles:is_file_opened(FileUuid) of
             true ->
                 handle_opened_file(FileCtx, UserCtx, DocsDeletionScope);
             _ ->
@@ -138,7 +150,7 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
     ok = file_handles:mark_to_remove(FileCtx3, RemovalStatus),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     % Check once more to prevent race with last handle being closed
-    case file_handles:exists(FileUuid) of
+    case file_handles:is_file_opened(FileUuid) of
         true -> ok;
         false -> handle_release_of_deleted_file(FileCtx3, RemovalStatus)
     end.
@@ -180,26 +192,24 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 FileCtx4 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
                 FileCtx6 = delete_storage_sync_info(FileCtx5),
-                FileUuid = file_ctx:get_uuid_const(FileCtx6),
                 % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
-                ok = fslogic_location_cache:delete_local_location(FileUuid),
+                ok = delete_location(FileCtx),
                 ok = file_meta:delete(FileDoc),
-                remove_auxiliary_documents(FileCtx6),
+                remove_associated_documents(FileCtx6),
                 FileCtx7 = maybe_remove_deletion_link(FileCtx6, UserCtx, RemoveStorageFileResult),
                 maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult, ?ALL_DOCS);
             ?TWO_STEP_DEL_INIT ->
-                % TODO VFS-6114 maybe delete file_meta and auxiliary documents here?
+                % TODO VFS-6114 maybe delete file_meta and associated documents here?
                 FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 delete_storage_sync_info(FileCtx5),
                 ok;
             ?TWO_STEP_DEL_FIN(DocsDeletionScope) ->
                 {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
-                FileUuid = file_ctx:get_uuid_const(FileCtx4),
-                ok = fslogic_location_cache:delete_local_location(FileUuid),
+                ok = delete_location(FileCtx),
                 file_meta:delete_without_link(FileDoc), % do not match, document may not exist
                 case DocsDeletionScope of
-                    ?ALL_DOCS -> remove_auxiliary_documents(FileCtx4);
-                    ?LOCAL_DOCS-> remove_local_auxiliary_documents(FileCtx4)
+                    ?ALL_DOCS -> remove_associated_documents(FileCtx4);
+                    ?LOCAL_DOCS-> remove_local_associated_documents(FileCtx4)
                 end,
                 % remove deletion_link even if open_file_handling method is rename
                 % as deletion_link may have been created when error occurred on deleting file on storage
@@ -207,9 +217,8 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 maybe_try_to_delete_parent(FileCtx5, UserCtx, RemoveStorageFileResult, DocsDeletionScope);
             ?SINGLE_STEP_DEL(?LOCAL_DOCS) ->
                 FileCtx4 = delete_storage_sync_info(FileCtx3),
-                FileUuid = file_ctx:get_uuid_const(FileCtx4),
-                ok = fslogic_location_cache:delete_local_location(FileUuid),
-                remove_local_auxiliary_documents(FileCtx4),
+                ok = delete_location(FileCtx),
+                remove_local_associated_documents(FileCtx4),
                 maybe_try_to_delete_parent(FileCtx4, UserCtx, RemoveStorageFileResult, ?LOCAL_DOCS)
         end
     end).
@@ -306,13 +315,18 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
 %% Returns ok if file doesn't exist or if it was successfully deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
+-spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 maybe_remove_file_on_storage(FileCtx, UserCtx) ->
     try
-        case sfm_utils:delete(FileCtx, UserCtx) of
-            {ok, FileCtx2} -> {ok, FileCtx2};
-            {error, ?ENOENT} -> {ok, FileCtx};
-            {error, _} = OtherError -> OtherError
+        case file_ctx:is_readonly_storage(FileCtx) of
+            {true, FileCtx2} ->
+                {ok, FileCtx2};
+            {false, FileCtx2} ->
+                case sd_utils:delete(FileCtx2, UserCtx) of
+                    {ok, FileCtx3} -> {ok, FileCtx3};
+                    {error, ?ENOENT} -> {ok, FileCtx2};
+                    {error, _} = OtherError -> OtherError
+                end
         end
     catch
         Error:Reason ->
@@ -342,17 +356,22 @@ delete_shares_and_update_parent_timestamps(UserCtx, FileCtx) ->
 -spec delete_shares(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
 delete_shares(UserCtx, FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    {ok, Shares} = file_meta:get_shares(FileDoc),
+    Shares = file_meta:get_shares(FileDoc),
     SessionId = user_ctx:get_session_id(UserCtx),
     [ok = share_logic:delete(SessionId, ShareId) || ShareId <- Shares],
     FileCtx2.
 
 -spec delete_storage_sync_info(file_ctx:ctx()) -> file_ctx:ctx().
 delete_storage_sync_info(FileCtx) ->
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    storage_sync_info:delete(StorageFileId, SpaceId),
-    FileCtx2.
+    try
+        {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+        SpaceId = file_ctx:get_space_id_const(FileCtx2),
+        storage_sync_info:delete(StorageFileId, SpaceId),
+        FileCtx2
+    catch
+        error:{badmatch, {error, not_found}} ->
+            FileCtx
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -371,13 +390,9 @@ maybe_emit_event(_FileCtx, _UserCtx, _) ->
 
 -spec get_open_file_handling_method(file_ctx:ctx()) -> {opened_file_handling_method(), file_ctx:ctx()}.
 get_open_file_handling_method(FileCtx) ->
-    {#document{
-        value = #storage{helpers = [#helper{name = HelperName} | _]}
-    }, FileCtx2} =
-        file_ctx:get_storage_doc(FileCtx),
-    case lists:member(HelperName,
-        [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
-            ?WEBDAV_HELPER_NAME]) of
+    {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
+    Helper = storage:get_helper(Storage),
+    case helper:is_rename_supported(Helper) of
         true -> {?RENAME_HANDLING_METHOD, FileCtx2};
         _ -> {?LINK_HANDLING_METHOD, FileCtx2}
     end.
@@ -398,10 +413,9 @@ maybe_rename_storage_file(FileCtx) ->
 
 -spec ensure_dir_for_deleted_files_created(od_space:id()) -> ok.
 ensure_dir_for_deleted_files_created(SpaceId) ->
-    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    RootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, undefined, Storage,
-        ?DELETED_OPENED_FILES_DIR, undefined),
-    case storage_file_manager:mkdir(RootHandle, ?DELETED_OPENED_FILES_DIR_MODE, false) of
+    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+    RootHandle = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, ?DELETED_OPENED_FILES_DIR),
+    case storage_driver:mkdir(RootHandle, ?DELETED_OPENED_FILES_DIR_MODE, false) of
         ok -> ok;
         {error, ?EEXIST} -> ok
     end.
@@ -411,11 +425,11 @@ ensure_dir_for_deleted_files_created(SpaceId) ->
 rename_storage_file(FileCtx, SourceFileId, TargetFileId) ->
     % ensure SourceFileId is set in FileCtx
     FileCtx2 = file_ctx:set_file_id(FileCtx, SourceFileId),
-    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx2 ),
+    {SDHandle, FileCtx3} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx2 ),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     case init_file_location_rename(FileUuid, TargetFileId) of
         {ok, #document{value = NewFL}} ->
-            case storage_file_manager:mv(SFMHandle, TargetFileId) of
+            case storage_driver:mv(SDHandle, TargetFileId) of
                 ok ->
                     FinalFL = case finalize_file_location_rename(FileUuid) of
                         {ok, #document{value = NewFL2}} -> NewFL2;
@@ -452,27 +466,24 @@ finalize_file_location_rename(FileUuid) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes auxiliary documents connected with file.
+%% Removes associated documents connected with file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_auxiliary_documents(file_ctx:ctx()) -> ok.
-remove_auxiliary_documents(FileCtx) ->
-    remove_synced_auxiliary_documents(FileCtx),
-    remove_local_auxiliary_documents(FileCtx).
+-spec remove_associated_documents(file_ctx:ctx()) -> ok.
+remove_associated_documents(FileCtx) ->
+    remove_synced_associated_documents(FileCtx),
+    remove_local_associated_documents(FileCtx).
 
--spec remove_synced_auxiliary_documents(file_ctx:ctx()) -> ok.
-remove_synced_auxiliary_documents(FileCtx) ->
+
+-spec remove_synced_associated_documents(file_ctx:ctx()) -> ok.
+remove_synced_associated_documents(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
-    ok = transferred_file:clean_up(FileGuid).
+    ok = transferred_file:clean_up(FileGuid),
+    ok = file_qos:delete_associated_entries(FileUuid).
 
--spec remove_local_auxiliary_documents(file_ctx:ctx()) -> ok.
-remove_local_auxiliary_documents(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    % TODO VFS-6114 delete storage_sync_info here?
-    ok = file_popularity:delete(FileUuid).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -492,3 +503,16 @@ removal_status_to_docs_deletion_scope(?REMOTE_REMOVE) -> ?LOCAL_DOCS.
 -spec docs_deletion_scope_to_removal_status(docs_deletion_scope()) -> file_handles:removal_status().
 docs_deletion_scope_to_removal_status(?LOCAL_DOCS) -> ?REMOTE_REMOVE;
 docs_deletion_scope_to_removal_status(?ALL_DOCS) -> ?LOCAL_REMOVE.
+
+-spec delete_location(file_ctx:ctx()) -> ok.
+delete_location(FileCtx) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    case file_ctx:is_dir(FileCtx) of
+        {true, _} ->
+            case dir_location:delete(FileUuid) of
+                ok -> ok;
+                {error, not_found} -> ok
+            end;
+        {false, _} ->
+            ok = fslogic_location_cache:delete_local_location(FileUuid)
+    end.

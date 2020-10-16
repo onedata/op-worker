@@ -12,7 +12,8 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
+-include_lib("kernel/include/file.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -65,16 +66,11 @@ access_test(Config) ->
     ?assertMatch(ok, call(Config, access, [File, 0])).
 
 mknod_test(Config) ->
-    lists:foreach(fun({ExpectedType, Type}) ->
-        File = gen_filename(),
-        ?assertMatch(ok, call(Config, mknod, [File, 8#644, Type])),
-        {ok, FileInfo} =
-            ?assertMatch({ok, _},
-                call(Config, file, read_file_info, [?path(Config, File)])),
-        ?assertMatch(ExpectedType, element(3, FileInfo)),
-        ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)]))
-    end, [{regular, reg}, {device, chr}, {device, blk}, {other, fifo},
-        {other, sock}]).
+    File = gen_filename(),
+    ?assertMatch(ok, call(Config, mknod, [File, 8#664, reg])),
+    ?assertMatch({ok, #file_info{type = regular}},
+        call(Config, file, read_file_info, [?path(Config, File)])),
+    ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)])).
 
 mkdir_test(Config) ->
     File = gen_filename(),
@@ -280,10 +276,13 @@ helper_handle_server(Config) ->
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     {ok, Helper} = helper:new_helper(
         ?POSIX_HELPER_NAME,
-        #{<<"mountPoint">> => ?path(Config, "")},
-        UserCtx,
-        false,
-        ?CANONICAL_STORAGE_PATH),
+        #{
+            <<"mountPoint">> => ?path(Config, ""),
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
+            <<"skipStorageDetection">> => <<"false">>
+        },
+        UserCtx
+    ),
     Handle = helpers:get_helper_handle(Helper, UserCtx),
     helper_handle_server(Config, Handle).
 helper_handle_server(Config, Handle) ->

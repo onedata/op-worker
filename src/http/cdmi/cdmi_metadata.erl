@@ -17,9 +17,8 @@
 
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -export([get_user_metadata/2, update_user_metadata/3, update_user_metadata/4]).
@@ -106,9 +105,10 @@ update_user_metadata(SessionId, FileKey, UserMetadata, AllURIMetadataNames) ->
     end,
     ReplaceAttributeFunction = fun
         ({?ACL_XATTR_NAME, Value}) ->
-            ACL = try acl_logic:from_json_format_to_acl(Value)
+            ACL = try
+                acl:from_json(Value, cdmi)
             catch _:Error ->
-                ?warning_stacktrace("Acl conversion error ~p", [Error]),
+                ?debug_stacktrace("Acl conversion error ~p", [Error]),
                 throw(?ERROR_BAD_DATA(<<"acl">>))
             end,
             ?check(lfm:set_acl(SessionId, FileKey, ACL));
@@ -341,19 +341,17 @@ fill_cdmi_metadata(<<"cdmi_size">>, Metadata, _SessionId, _FileKey, Attrs) ->
     % todo clarify what should be written to cdmi_size for directories
     Metadata#{<<"cdmi_size">> => integer_to_binary(Attrs#file_attr.size)};
 fill_cdmi_metadata(<<"cdmi_atime">>, Metadata, _SessionId, _FileKey, Attrs) ->
-    Metadata#{<<"cdmi_atime">> => time_utils:epoch_to_iso8601(Attrs#file_attr.atime)};
+    Metadata#{<<"cdmi_atime">> => time_utils:seconds_to_iso8601(Attrs#file_attr.atime)};
 fill_cdmi_metadata(<<"cdmi_mtime">>, Metadata, _SessionId, _FileKey, Attrs) ->
-    Metadata#{<<"cdmi_mtime">> => time_utils:epoch_to_iso8601(Attrs#file_attr.mtime)};
+    Metadata#{<<"cdmi_mtime">> => time_utils:seconds_to_iso8601(Attrs#file_attr.mtime)};
 fill_cdmi_metadata(<<"cdmi_ctime">>, Metadata, _SessionId, _FileKey, Attrs) ->
-    Metadata#{<<"cdmi_ctime">> => time_utils:epoch_to_iso8601(Attrs#file_attr.ctime)};
+    Metadata#{<<"cdmi_ctime">> => time_utils:seconds_to_iso8601(Attrs#file_attr.ctime)};
 fill_cdmi_metadata(<<"cdmi_owner">>, Metadata, _SessionId, _FileKey, Attrs) ->
     Metadata#{<<"cdmi_owner">> => Attrs#file_attr.owner_id};
 fill_cdmi_metadata(?ACL_XATTR_NAME, Metadata, SessionId, FileKey, _Attrs) ->
-    case lfm:get_acl(SessionId, FileKey) of
-        {ok, Acl} ->
-            Metadata#{
-                ?ACL_XATTR_NAME => acl_logic:from_acl_to_json_format(Acl)
-            };
+    case lfm:get_xattr(SessionId, FileKey, ?ACL_XATTR_NAME, false) of
+        {ok, #xattr{name = ?ACL_XATTR_NAME, value = Acl}} ->
+            Metadata#{?ACL_XATTR_NAME => Acl};
         {error, ?ENOATTR} ->
             Metadata;
         {error, Errno} ->

@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([mark_aborting/2, mark_completed/1, mark_failed/1, mark_cancelled/1]).
+-export([mark_aborting/3, mark_completed/2, mark_failed/2, mark_cancelled/2]).
 
 %% gen_server callbacks
 -export([
@@ -37,7 +37,7 @@
     file_guid :: fslogic_worker:file_guid(),
     callback :: transfer:callback(),
     space_id :: od_space:id(),
-    status :: transfer:status(),
+    status :: transfer:subtask_status(),
     supporting_provider_id :: od_provider:id(),
     view_name :: transfer:view_name(),
     query_view_params :: transfer:query_view_params()
@@ -52,36 +52,36 @@
 %% Informs replica_eviction_controller process about aborting replica eviction.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_aborting(pid(), term()) -> ok.
-mark_aborting(Pid, Reason) ->
-    gen_server2:cast(Pid, {replica_eviction_aborting, Reason}).
+-spec mark_aborting(pid(), transfer:id(), term()) -> ok.
+mark_aborting(Pid, TransferId, Reason) ->
+    gen_server2:cast(Pid, {replica_eviction_aborting, TransferId, Reason}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks replica eviction as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_completed(pid()) -> ok.
-mark_completed(Pid) ->
-    gen_server2:cast(Pid, replica_eviction_completed).
+-spec mark_completed(pid(), transfer:id()) -> ok.
+mark_completed(Pid, TransferId) ->
+    gen_server2:cast(Pid, {replica_eviction_completed, TransferId}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks transfer as failed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed(pid()) -> ok.
-mark_failed(Pid) ->
-    gen_server2:cast(Pid, replica_eviction_failed).
+-spec mark_failed(pid(), transfer:id()) -> ok.
+mark_failed(Pid, TransferId) ->
+    gen_server2:cast(Pid, {replica_eviction_failed, TransferId}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks transfer as cancelled.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_cancelled(pid()) -> ok.
-mark_cancelled(Pid) ->
-    gen_server2:cast(Pid, replica_eviction_cancelled).
+-spec mark_cancelled(pid(), transfer:id()) -> ok.
+mark_cancelled(Pid, TransferId) ->
+    gen_server2:cast(Pid, {replica_eviction_cancelled, TransferId}).
 
 
 %%%===================================================================
@@ -107,7 +107,7 @@ init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId,
         file_guid = FileGuid,
         callback = Callback,
         space_id = file_id:guid_to_space_id(FileGuid),
-        status = enqueued,
+        status = ?ENQUEUED_STATUS,
         supporting_provider_id = SupportingProviderId,
         view_name = ViewName,
         query_view_params = QueryViewParams
@@ -161,63 +161,73 @@ handle_cast(start_replica_eviction, State = #state{
                 supporting_provider = SupportingProviderId
             },
             replica_eviction_worker:enqueue_data_transfer(FileCtx, TransferParams),
-            {noreply, State#state{status = active}};
-        {error, active} ->
+            {noreply, State#state{status = ?ACTIVE_STATUS}};
+        {error, ?ACTIVE_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
-            {noreply, State#state{status = active}};
-        {error, aborting} ->
+            {noreply, State#state{status = ?ACTIVE_STATUS}};
+        {error, ?ABORTING_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
-            {noreply, State#state{status = aborting}};
-        {error, S} when S == completed orelse S == cancelled orelse S == failed ->
+            {noreply, State#state{status = ?ABORTING_STATUS}};
+        {error, S} when S == ?COMPLETED_STATUS orelse S == ?CANCELLED_STATUS orelse S == ?FAILED_STATUS ->
             {stop, normal, S}
     end;
 
-handle_cast(replica_eviction_completed, State = #state{
+handle_cast({replica_eviction_completed, TransferId}, State = #state{
     transfer_id = TransferId,
     callback = Callback,
-    status = active
+    status = ?ACTIVE_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_completed(TransferId),
-    notify_callback(Callback),
+    notify_callback(Callback, TransferId),
     {stop, normal, State};
 
-handle_cast({replica_eviction_aborting, Reason}, State = #state{
+handle_cast({replica_eviction_aborting, TransferId, Reason}, State = #state{
     transfer_id = TransferId,
     file_guid = FileGuid,
-    status = active
+    status = ?ACTIVE_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_aborting(TransferId),
-    ?error_stacktrace("Could not evict file replica ~p due to ~p", [
-        FileGuid, Reason
-    ]),
-    {noreply, State#state{status = aborting}};
+    ?error("Could not evict file replica ~p due to ~p", [FileGuid, Reason]),
+    {noreply, State#state{status = ?ABORTING_STATUS}};
 
 % Due to asynchronous nature of transfer_changes, aborting msg can be
 % sent several times. In case the controller is already in aborting
 % state, it can be safely ignored.
-handle_cast({replica_eviction_aborting, _Reason}, State = #state{
-    status = aborting
+handle_cast({replica_eviction_aborting, TransferId, _Reason}, State = #state{
+    transfer_id = TransferId,
+    status = ?ABORTING_STATUS
 }) ->
     {noreply, State};
 
-handle_cast(replica_eviction_cancelled, State = #state{
+handle_cast({replica_eviction_cancelled, TransferId}, State = #state{
     transfer_id = TransferId,
-    status = aborting
+    status = ?ABORTING_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_cancelled(TransferId),
     {stop, normal, State};
 
-handle_cast(replica_eviction_failed, State = #state{
+handle_cast({replica_eviction_failed, TransferId}, State = #state{
     transfer_id = TransferId,
-    status = aborting
+    status = ?ABORTING_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_failed(TransferId, false),
     {stop, normal, State};
 
 handle_cast(Request, State = #state{status = Status}) ->
-    ?warning("~p:~p - bad request ~p while in status ~p", [
-        ?MODULE, ?LINE, Request, Status
-    ]),
+    case Request of
+        {replica_eviction_completed, TransferId} ->
+            ?debug("Eviction completed message ignored for transfer ~p", TransferId);
+        {replica_eviction_aborting, TransferId, _Reason} ->
+            ?debug("Eviction aborting message ignored for transfer ~p", TransferId);
+        {replica_eviction_failed, TransferId} ->
+            ?debug("Eviction failed message ignored for transfer ~p", TransferId);
+        {replica_eviction_cancelled, TransferId} ->
+            ?debug("Eviction cancelled message ignored for transfer ~p", TransferId);
+        _ ->
+            ?warning("~p:~p - bad request ~p while in status ~p", [
+                ?MODULE, ?LINE, Request, Status
+            ])
+    end,
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -269,11 +279,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% Notifies callback about successful replica eviction
 %% @end
 %%--------------------------------------------------------------------
--spec notify_callback(transfer:callback()) -> ok.
-notify_callback(undefined) -> ok;
-notify_callback(<<>>) -> ok;
-notify_callback(Callback) ->
-    {ok, _, _, _} = http_client:get(Callback).
+-spec notify_callback(transfer:callback(), transfer:id()) -> ok.
+notify_callback(undefined, _TransferId) -> ok;
+notify_callback(<<>>, _TransferId) -> ok;
+notify_callback(Callback, TransferId) ->
+    {ok, _, _, _} = http_client:post(Callback, #{}, json_utils:encode(#{
+        <<"transferId">> => TransferId
+    })).
 
 
 %%--------------------------------------------------------------------

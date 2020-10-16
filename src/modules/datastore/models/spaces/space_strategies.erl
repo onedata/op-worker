@@ -1,35 +1,57 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
+%%% @author Jakub Kudzia
 %%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing strategies for operations related to storage <-> space sync
-%%% process.
+%%% Model for storing storage import configurations.
+%%% Each document stores map of configurations of storage import on each
+%%% storage supporting given space.
+%%%
+%%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_strategies).
 -author("Rafal Slota").
+-author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
--export([new/1, add_storage/2]).
--export([set_strategy/4, set_strategy/5,
-    get_storage_import_details/2, get_storage_update_details/2, is_import_on/1]).
--export([save/1, get/1, exists/1, delete/1, update/2, create/1]).
+-export([get/1, delete/1]).
 
 %% datastore_model callbacks
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2, get_ctx/0]).
+-export([decode/1, encode/1]).
 
 -type key() :: datastore:key().
 -type record() :: #space_strategies{}.
 -type doc() :: datastore_doc:doc(record()).
--type diff() :: datastore_doc:diff(record()).
+-type sync_config() :: #storage_sync_config{}.
+-type sync_configs() :: #{storage:id() => sync_config()}.
+
+%% @formatter:off
+-type import_config() :: #{
+    max_depth => non_neg_integer(),
+    sync_acl => boolean()
+}.
+
+-type update_config() :: #{
+    max_depth => non_neg_integer(),
+    sync_acl => boolean(),
+    scan_interval => non_neg_integer(),
+    write_once => boolean(),
+    delete_enable => boolean()
+}.
+%% @formatter:on
+
+-type config() :: import_config() | update_config().
+
+-export_type([record/0, import_config/0, update_config/0, config/0, sync_config/0, sync_configs/0]).
 
 -define(CTX, #{model => ?MODULE, memory_copies => all}).
 
@@ -37,38 +59,6 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves space strategies.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, key()} | {error, term()}.
-save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates space strategies.
-%% @end
-%%--------------------------------------------------------------------
--spec update(key(), diff()) -> {ok, key()} | {error, term()}.
-update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates space strategies.
-%% @end
-%%--------------------------------------------------------------------
--spec create(doc()) -> {ok, key()} | {error, term()}.
-create(Doc) ->
-    ?extract_key(datastore_model:create(?CTX, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns space strategies.
-%% @end
-%%--------------------------------------------------------------------
 -spec get(key()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
@@ -80,163 +70,20 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    StorageIds = space_storage:get_storage_ids(Key),
-    lists:foreach(fun(StorageId) ->
-        storage_sync_monitoring:delete(Key, StorageId)
-    end, StorageIds),
     datastore_model:delete(?CTX, Key).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether space strategies exists.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(key()) -> boolean().
-exists(Key) ->
-    {ok, Exists} = datastore_model:exists(?CTX, Key),
-    Exists.
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if any storage is imported for a space.
-%% @end
-%%--------------------------------------------------------------------
--spec is_import_on(od_space:id()) -> boolean().
-is_import_on(SpaceId) ->
-    {ok, Doc} = space_storage:get(SpaceId),
-    StorageIds = space_storage:get_storage_ids(Doc),
-    lists:foldl(fun
-        (_StorageId, true) ->
-            true;
-        (StorageId, _) ->
-            case get_storage_import_details(SpaceId, StorageId) of
-                {no_import, _} -> false;
-                _ -> true
-            end
-    end, false, StorageIds).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns datastore document for space-strategies mapping.
-%% @end
-%%--------------------------------------------------------------------
--spec new(od_space:id()) -> Doc :: #document{}.
-new(SpaceId) ->
-    #document{key = SpaceId, value = #space_strategies{}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds default strategies for new storage in this space.
-%% @end
-%%--------------------------------------------------------------------
--spec add_storage(od_space:id(), storage:id()) -> ok | no_return().
-add_storage(SpaceId, StorageId) ->
-    #document{value = Value = #space_strategies{
-        storage_strategies = StorageStrategies
-    }} = Doc = case space_strategies:get(SpaceId) of
-        {error, not_found} ->
-            new(SpaceId);
-        {ok, Doc0} ->
-            Doc0
-    end,
-    {ok, _} = save(Doc#document{
-        value = Value#space_strategies{
-            storage_strategies = StorageStrategies#{StorageId => #storage_strategies{}}
-    }}),
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets strategy of given type in this space.
-%% @end
-%%--------------------------------------------------------------------
--spec set_strategy(od_space:id(), space_strategy:type(), space_strategy:name(),
-    space_strategy:arguments()) -> {ok, key()} | {error, term()}.
-set_strategy(SpaceId, _StrategyType, StrategyName, StrategyArgs) ->
-    update(SpaceId, fun(SpaceStrategy = #space_strategies{}) ->
-        {ok, SpaceStrategy#space_strategies{
-            enoent_handling = {StrategyName, StrategyArgs}
-        }}
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets strategy of given type for the storage in this space.
-%% @end
-%%--------------------------------------------------------------------
--spec set_strategy(od_space:id(), storage:id(), space_strategy:type(),
-    space_strategy:name(), space_strategy:arguments()) ->
-    {ok, key()} | {error, term()}.
-set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
-    update(SpaceId, fun(#space_strategies{storage_strategies = Strategies} = OldValue) ->
-        OldSS = #storage_strategies{} = maps:get(StorageId, Strategies, #storage_strategies{}),
-
-        NewSS = case StrategyType of
-            storage_import ->
-                OldSS#storage_strategies{storage_import = {StrategyName, StrategyArgs}};
-            storage_update ->
-                OldSS#storage_strategies{storage_update = {StrategyName, StrategyArgs}}
-        end,
-
-        {ok, OldValue#space_strategies{storage_strategies = maps:put(StorageId, NewSS, Strategies)}}
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns current configuration of storage_ import.
-%% @end
-%%--------------------------------------------------------------------
--spec get_storage_import_details(od_space:id(), storage:id()) -> space_strategy:config().
-get_storage_import_details(SpaceId, StorageId) ->
-    {ok, Doc} = space_strategies:get(SpaceId),
-    get_storage_strategy_config(Doc, storage_import, StorageId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns current configuration of storage_update.
-%% @end
-%%--------------------------------------------------------------------
--spec get_storage_update_details(od_space:id(), storage:id()) -> space_strategy:config().
-get_storage_update_details(SpaceId, StorageId) ->
-    {ok, Doc} = space_strategies:get(SpaceId),
-    get_storage_strategy_config(Doc, storage_update, StorageId).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%%-------------------------------------------------------------------
-%%% @private
-%%% @doc
-%%% Returns space_strategy:config() for given StrategyType.
-%%% @end
-%%%-------------------------------------------------------------------
--spec get_storage_strategy_config(#space_strategies{} | doc(),
-    space_strategy:type(), storage:id()) -> space_strategy:config().
-get_storage_strategy_config(#space_strategies{
-    storage_strategies = Strategies
-}, storage_import, StorageId
-) ->
-    #storage_strategies{storage_import = Import} =
-        maps:get(StorageId, Strategies, #storage_strategies{}),
-    Import;
-get_storage_strategy_config(#space_strategies{
-    storage_strategies = Strategies
-}, storage_update, StorageId
-) ->
-    #storage_strategies{storage_update = Update} =
-        maps:get(StorageId, Strategies, #storage_strategies{}),
-    Update;
-get_storage_strategy_config(#document{value = Value}, StrategyType, StorageId) ->
-    get_storage_strategy_config(Value, StrategyType, StorageId).
 
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -245,7 +92,7 @@ get_storage_strategy_config(#document{value = Value}, StrategyType, StorageId) -
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    5.
+    6.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -316,6 +163,15 @@ get_record_struct(5) ->
         {file_conflict_resolution, {atom, #{atom => term}}},
         {file_caching, {atom, #{atom => term}}},
         {enoent_handling, {atom, #{atom => term}}}
+    ]};
+get_record_struct(6) ->
+    {record, [
+        {sync_configs, #{string => {record, [
+            {import_enabled, boolean},
+            {update_enabled, boolean},
+            {import_config, {custom, json, {?MODULE, encode, decode}}},
+            {update_config, {custom, json, {?MODULE, encode, decode}}}
+        ]}}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -325,8 +181,8 @@ get_record_struct(5) ->
 %%--------------------------------------------------------------------
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, R = {?MODULE, StorageStrategies, _, _, _}) ->
-    NewStorageStrategies = maps:map(fun(_, {storage_strategies,
+upgrade_record(1, {?MODULE, SyncConfigs, FileConflictResolution, FileCaching, EnoentHandling}) ->
+    NewSyncConfigs = maps:map(fun(_, {storage_strategies,
         {filename_mapping, FilenameMappingStrategy},
         {storage_import, StorageImportStrategy},
         {storage_update, StorageUpdateStrategies},
@@ -338,10 +194,10 @@ upgrade_record(1, R = {?MODULE, StorageStrategies, _, _, _}) ->
             {storage_update, hd(StorageUpdateStrategies)},
             {last_import_time, LastImportTime}
         }
-    end, StorageStrategies),
-    {2, R#space_strategies{storage_strategies = NewStorageStrategies}};
-upgrade_record(2, R = {?MODULE, StorageStrategies, _, _, _}) ->
-    NewStorageStrategies = maps:map(fun(_, {storage_strategies,
+    end, SyncConfigs),
+    {2, {?MODULE, NewSyncConfigs, FileConflictResolution, FileCaching, EnoentHandling}};
+upgrade_record(2, {?MODULE, SyncConfigs, FileConflictResolution, FileCaching, EnoentHandling}) ->
+    NewSyncConfigs = maps:map(fun(_, {storage_strategies,
         {filename_mapping, FilenameMappingStrategy},
         {storage_import, StorageImportStrategy},
         {storage_update, StorageUpdateStrategy},
@@ -356,10 +212,10 @@ upgrade_record(2, R = {?MODULE, StorageStrategies, _, _, _}) ->
             undefined,
             undefined
         }
-    end, StorageStrategies),
-    {3, R#space_strategies{storage_strategies = NewStorageStrategies}};
-upgrade_record(3, R = {?MODULE, StorageStrategies, _, _, _}) ->
-    NewStorageStrategies = maps:map(fun(_, {storage_strategies,
+    end, SyncConfigs),
+    {3, {?MODULE, NewSyncConfigs, FileConflictResolution, FileCaching, EnoentHandling}};
+upgrade_record(3, {?MODULE, SyncConfigs, FileConflictResolution, FileCaching, EnoentHandling}) ->
+    NewSyncConfigs = maps:map(fun(_, {storage_strategies,
         {filename_mapping, _FilenameMappingStrategy},
         {storage_import, StorageImportStrategy},
         {storage_update, StorageUpdateStrategy},
@@ -376,10 +232,10 @@ upgrade_record(3, R = {?MODULE, StorageStrategies, _, _, _}) ->
             LastUpdateStartTime,
             LastImportFinishTime
         }
-    end, StorageStrategies),
-    {4, R#space_strategies{storage_strategies = NewStorageStrategies}};
-upgrade_record(5, R = {?MODULE, StorageStrategies, _, _, _}) ->
-    NewStorageStrategies = maps:map(fun(_, {storage_strategies,
+    end, SyncConfigs),
+    {4, {?MODULE, NewSyncConfigs, FileConflictResolution, FileCaching, EnoentHandling}};
+upgrade_record(4, {?MODULE, SyncConfigs, FileConflictResolution, FileCaching, EnoentHandling}) ->
+    NewSyncConfigs = maps:map(fun(_, {storage_strategies,
         {storage_import, StorageImportStrategy},
         {storage_update, StorageUpdateStrategy},
         {import_start_time, _ImportStartTime},
@@ -391,5 +247,32 @@ upgrade_record(5, R = {?MODULE, StorageStrategies, _, _, _}) ->
             StorageImportStrategy,
             StorageUpdateStrategy
         }
-    end, StorageStrategies),
-    {5, R#space_strategies{storage_strategies = NewStorageStrategies}}.
+    end, SyncConfigs),
+    {5, {?MODULE, NewSyncConfigs, FileConflictResolution, FileCaching, EnoentHandling}};
+upgrade_record(5, {?MODULE, SyncConfigs, _, _, _}) ->
+    NewSyncConfigs = maps:map(fun(_StorageId, StorageStrategy) ->
+        {storage_strategies,
+            {ImportStrategyName, ImportConfig},
+            {UpdateStrategyName, UpdateConfig}
+        } = StorageStrategy,
+        ImportEnabled = ImportStrategyName =:= simple_scan,
+        UpdateEnabled = UpdateStrategyName =:= simple_scan,
+        {storage_sync_config,
+            ImportEnabled,
+            ImportConfig,
+            UpdateEnabled,
+            UpdateConfig
+        }
+    end, SyncConfigs),
+    {6, {space_strategies, NewSyncConfigs}}.
+
+-spec encode(config()) -> binary().
+encode(Config) ->
+    json_utils:encode(Config).
+
+-spec decode(binary()) -> config().
+decode(Config) ->
+    DecodedConfig = json_utils:decode(Config),
+    maps:fold(fun(K, V, AccIn) ->
+        AccIn#{binary_to_atom(K, utf8) => V}
+    end, #{}, DecodedConfig).

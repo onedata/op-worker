@@ -11,7 +11,7 @@
 -module(cephrados_helper_test_SUITE).
 -author("Bartek Kryza").
 
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -259,11 +259,11 @@ new_helper(Config) ->
         #{
             <<"monitorHostname">> => atom_to_binary(?config(host_name, CephConfig), utf8),
             <<"clusterName">> => ?CEPH_CLUSTER_NAME,
-            <<"poolName">> => ?CEPH_POOL_NAME
+            <<"poolName">> => ?CEPH_POOL_NAME,
+            <<"storagePathType">> => ?FLAT_STORAGE_PATH,
+            <<"skipStorageDetection">> => <<"false">>
         },
-        UserCtx,
-        false,
-        ?FLAT_STORAGE_PATH
+        UserCtx
     ),
 
     spawn_link(Node, fun() ->
@@ -318,7 +318,7 @@ receive_result(Helper) ->
     end.
 
 run(Fun, ThreadsNum) ->
-    Results = utils:pmap(fun(_) ->
+    Results = lists_utils:pmap(fun(_) ->
         Fun(),
         ok
     end, lists:seq(1, ThreadsNum)),

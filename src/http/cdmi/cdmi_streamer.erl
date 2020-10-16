@@ -14,12 +14,14 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/cdmi.hrl").
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([stream_cdmi/6]).
@@ -53,7 +55,7 @@ stream_cdmi(Req, #cdmi_req{
         Range1, Size, Encoding, JsonBodyPrefix, JsonBodySuffix
     ),
 
-    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, Guid}, read)),
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, Guid}, read)),
     try
         ReadBlockSize0 = http_download_utils:get_read_block_size(FileHandle),
         ReadBlockSize = case Encoding of
@@ -69,7 +71,7 @@ stream_cdmi(Req, #cdmi_req{
         end,
 
         Req2 = cowboy_req:stream_reply(?HTTP_200_OK, #{
-            <<"content-length">> => integer_to_binary(StreamSize)
+            ?HDR_CONTENT_LENGTH => integer_to_binary(StreamSize)
         }, Req),
         cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
         http_download_utils:stream_bytes_range(
@@ -80,7 +82,7 @@ stream_cdmi(Req, #cdmi_req{
 
         Req2
     after
-        lfm:release(FileHandle)
+        lfm:monitored_release(FileHandle)
     end.
 
 
@@ -99,6 +101,9 @@ stream_cdmi(Req, #cdmi_req{
 -spec cdmi_stream_size(range(), FileSize :: non_neg_integer(),
     Encoding :: binary(), DataPrefix :: binary(), DataSuffix :: binary()) ->
     non_neg_integer().
+cdmi_stream_size({0, -1}, _FileSize, _Encoding, _DataPrefix, _DataSuffix) ->
+    % Empty file
+    0;
 cdmi_stream_size({From, To}, FileSize, Encoding, DataPrefix, DataSuffix) when To >= From ->
     DataSize = min(FileSize - 1, To) - From + 1,
     EncodedDataSize = case Encoding of

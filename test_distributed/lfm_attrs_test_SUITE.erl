@@ -12,6 +12,8 @@
 -module(lfm_attrs_test_SUITE).
 -author("Tomasz Lichon").
 
+-behaviour(traverse_behaviour).
+
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -612,7 +614,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_traverse_job_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual(ok, rpc:call(Worker, traverse, stop_pool, [atom_to_binary(?MODULE, utf8)])),
+    ?assertEqual(ok, rpc:call(Worker, tree_traverse, stop, [?MODULE])),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(effective_value_test = Case, Config) ->
     CachePid = ?config(cache_pid, Config),

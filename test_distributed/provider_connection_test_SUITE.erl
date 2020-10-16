@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([
@@ -253,6 +253,8 @@ init_per_suite(Config) ->
         test_utils:mock_new(Nodes, oneprovider),
         % Set op version to old one, that for sure is not compatible with current one
         test_utils:mock_expect(Nodes, oneprovider, get_version, fun() -> <<"16.04-rc5">> end),
+        % Make sure provider identity token is not regenerated between requests
+        rpc:multicall(Nodes, application, set_env, [?APP_NAME, provider_token_ttl_sec, 999999999]),
         % do not attempt fetching new compatibility registry during the tests
         test_utils:set_env(Nodes, ctool, compatibility_registry_mirrors, []),
         NewConfig
@@ -344,7 +346,10 @@ session_exists(Provider, SessId) ->
 
 
 list_session_connections(Provider, SessId) ->
-    rpc:call(Provider, session_connections, list, [SessId]).
+    case rpc:call(Provider, session_connections, list, [SessId]) of
+        {ok, _EffSessId, Cons} -> {ok, Cons};
+        Error -> Error
+    end.
 
 
 get_outgoing_connection_manager(Provider, SessId) ->

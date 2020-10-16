@@ -74,6 +74,9 @@ struct HelpersNIF {
         webDAVExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
             std::stoul(args["webdav_helper_threads_number"].toStdString()));
 
+        xrootdExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
+            std::stoul(args["xrootd_helper_threads_number"].toStdString()));
+
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
             services[CEPH_HELPER_NAME]->service,
             services[CEPHRADOS_HELPER_NAME]->service,
@@ -81,7 +84,7 @@ struct HelpersNIF {
             services[S3_HELPER_NAME]->service,
             services[SWIFT_HELPER_NAME]->service,
             services[GLUSTERFS_HELPER_NAME]->service, webDAVExecutor,
-            services[NULL_DEVICE_HELPER_NAME]->service,
+            xrootdExecutor, services[NULL_DEVICE_HELPER_NAME]->service,
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
             buffering::BufferLimits{
                 std::stoul(args["read_buffer_min_size"].toStdString()),
@@ -105,12 +108,14 @@ struct HelpersNIF {
             }
         }
         webDAVExecutor->stop();
+        xrootdExecutor->stop();
     }
 
     bool bufferingEnabled = false;
     std::unordered_map<folly::fbstring, std::unique_ptr<HelperIOService>>
         services;
     std::shared_ptr<folly::IOThreadPoolExecutor> webDAVExecutor;
+    std::shared_ptr<folly::IOThreadPoolExecutor> xrootdExecutor;
     std::unique_ptr<one::helpers::StorageHelperCreator> SHCreator;
 };
 
@@ -550,6 +555,13 @@ ERL_NIF_TERM readdir(NifCTX ctx, helper_ptr helper, folly::fbstring file,
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
+ERL_NIF_TERM listobjects(NifCTX ctx, helper_ptr helper, folly::fbstring prefix,
+    folly::fbstring marker, const off_t offset, const size_t count)
+{
+    handle_result(ctx, helper->listobjects(prefix, marker, offset, count));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
 ERL_NIF_TERM access(
     NifCTX ctx, helper_ptr helper, folly::fbstring file, const int mask)
 {
@@ -745,6 +757,12 @@ static ERL_NIF_TERM sh_refresh_params(
     return wrap(refresh_params, env, argv);
 }
 
+static ERL_NIF_TERM sh_listobjects(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(listobjects, env, argv);
+}
+
 static ERL_NIF_TERM sh_readdir(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -892,7 +910,8 @@ static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
     {"refresh_params", 2, sh_refresh_params},
     {"refresh_helper_params", 2, sh_refresh_helper_params},
     {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
-    {"readdir", 4, sh_readdir}, {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
+    {"readdir", 4, sh_readdir}, {"listobjects", 5, sh_listobjects},
+    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
     {"unlink", 3, sh_unlink}, {"rmdir", 2, sh_rmdir},
     {"symlink", 3, sh_symlink}, {"rename", 3, sh_rename}, {"link", 3, sh_link},
     {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},

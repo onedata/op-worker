@@ -28,8 +28,6 @@
 -define(ATTEMPTS, 60).
 -define(DEFAULT_TIMETRAP, timer:minutes(2)).
 
--define(TEST_TIMEOUT(Function), {test_timeout, Function}).
-
 -define(FILE_PREFIX, <<"file_">>).
 -define(DIR_PREFIX, <<"dir_">>).
 
@@ -101,11 +99,14 @@ end).
 
 -define(HIST_ASSERT(DomainsAndBytes, Length),
     fun(HistMap) ->
-        maps:fold(fun(Domain,  TransferredBytes, AccIn) ->
-            case TransferredBytes > 0 of
+        maps:fold(fun(Domain, TransferredBytes, AccIn) ->
+            case is_integer(TransferredBytes) andalso TransferredBytes > 0 of
                 true ->
                     Hist = maps:get(Domain, HistMap),
                     AccIn and (lists:sum(Hist) =:= TransferredBytes) and (length(Hist) =:= Length);
+                false when is_function(TransferredBytes) ->
+                    Hist = maps:get(Domain, HistMap),
+                    AccIn and TransferredBytes(lists:sum(Hist));
                 false ->
                     AccIn
             end

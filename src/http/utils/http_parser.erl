@@ -18,9 +18,9 @@
     parse_range_header/2
 ]).
 
--type range() :: {RangeStart :: non_neg_integer(), RangeEnd :: non_neg_integer()}.
+-type bytes_range() :: {RangeStart :: non_neg_integer(), RangeEnd :: non_neg_integer()}.
 
--export_type([range/0]).
+-export_type([bytes_range/0]).
 
 -type threshold() :: non_neg_integer().
 
@@ -31,7 +31,7 @@
 
 
 -spec parse_range_header(cowboy_req:req(), threshold()) ->
-    undefined | invalid | [range()].
+    undefined | invalid | [bytes_range()].
 parse_range_header(Req, Threshold) ->
     case cowboy_req:header(<<"range">>, Req) of
         undefined -> undefined;
@@ -54,7 +54,7 @@ parse_range_header(Req, Threshold) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec parse_bytes_ranges(binary() | list(), threshold()) -> invalid | [range()].
+-spec parse_bytes_ranges(binary() | list(), threshold()) -> invalid | [bytes_range()].
 parse_bytes_ranges(RangesBin, Threshold) when is_binary(RangesBin) ->
     case binary:split(RangesBin, <<"=">>, [global]) of
         [<<"bytes">>, RawRanges] ->
@@ -71,7 +71,7 @@ parse_bytes_ranges(RawRanges, Threshold) ->
 
 
 %% @private
--spec parse_bytes_range(binary() | [binary()], threshold()) -> range() | no_return().
+-spec parse_bytes_range(binary() | [binary()], threshold()) -> bytes_range() | no_return().
 parse_bytes_range(RangeBin, Threshold) when is_binary(RangeBin) ->
     parse_bytes_range(binary:split(RangeBin, <<"-">>, [global]), Threshold);
 parse_bytes_range([<<>>, FromEndBin], Threshold) ->
@@ -94,7 +94,7 @@ parse_bytes_range(_InvalidRange, _Threshold) ->
 
 
 %% @private
--spec validate_bytes_range(range(), threshold()) -> range() | no_return().
+-spec validate_bytes_range(bytes_range(), threshold()) -> bytes_range() | no_return().
 validate_bytes_range({RangeStart, RangeEnd}, Threshold) when
     RangeStart < 0;
     RangeStart > RangeEnd;

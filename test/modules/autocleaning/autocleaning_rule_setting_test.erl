@@ -11,8 +11,9 @@
 -module(autocleaning_rule_setting_test).
 -author("Jakub Kudzia").
 
--include_lib("eunit/include/eunit.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -define(DEFAULT, #autocleaning_rule_setting{enabled =  false, value = 0}).
 -define(DEFAULT2, #autocleaning_rule_setting{enabled =  true, value = 0}).
@@ -55,13 +56,13 @@ change_auto_cleaning_rule_setting_value_test() ->
     }, autocleaning_rule_setting:update(?DEFAULT, #{value => 123})).
 
 setting_enabled_field_to_not_boolean_should_fail_test() ->
-    ?assertException(throw, illegal_type,
+    ?assertException(throw, ?ERROR_BAD_VALUE_BOOLEAN(<<"enabled">>),
         autocleaning_rule_setting:update(?DEFAULT, #{enabled => not_boolean})).
 
 setting_value_field_to_not_integer_should_fail_test() ->
-    ?assertException(throw, illegal_type,
+    ?assertException(throw, ?ERROR_BAD_VALUE_INTEGER(<<"value">>),
         autocleaning_rule_setting:update(?DEFAULT, #{value => not_integer})).
 
 setting_value_field_to_negative_integer_should_fail_test() ->
-    ?assertException(throw, negative_value,
+    ?assertException(throw, ?ERROR_BAD_VALUE_TOO_LOW(<<"value">>, 0),
         autocleaning_rule_setting:update(?DEFAULT, #{value => -1})).

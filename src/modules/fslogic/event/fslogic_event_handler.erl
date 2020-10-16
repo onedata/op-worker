@@ -14,6 +14,7 @@
 
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API Handling
 -export([handle_file_written_events/2, handle_file_read_events/2]).
@@ -110,6 +111,10 @@ aggregate_attr_changed_events(OldEvent, NewEvent) ->
             size = case NewAttr#file_attr.size of
                 undefined -> OldAttr#file_attr.size;
                 X -> X
+            end,
+            fully_replicated = case NewAttr#file_attr.fully_replicated of
+                undefined -> OldAttr#file_attr.fully_replicated;
+                FR -> FR
             end
         }
     }.
@@ -139,13 +144,21 @@ handle_file_written_event(#file_written_event{
 
     replica_synchronizer:force_flush_events(file_ctx:get_uuid_const(FileCtx)),
     case replica_synchronizer:update_replica(FileCtx, Blocks, FileSize, true) of
-        {ok, size_changed} ->
+        {ok, {emit_replica_status_change, EmissionParam}} ->
+            fslogic_times:update_mtime_ctime(FileCtx),
+            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, EmissionParam, [SessId]),
+            fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks);
+        {ok, emit_size_change} ->
             fslogic_times:update_mtime_ctime(FileCtx),
             fslogic_event_emitter:emit_file_attr_changed(FileCtx, [SessId]),
             fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks);
-        {ok, size_not_changed} ->
+        {ok, ignore} ->
             fslogic_times:update_mtime_ctime(FileCtx),
-            fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks)
+            fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks);
+        {error, not_found} ->
+            ?debug("Handling file_written_event for file ~p failed because file_location was not found.",
+                [FileGuid]),
+            ok
     end.
 
 %%--------------------------------------------------------------------

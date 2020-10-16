@@ -142,10 +142,12 @@ copy_file_content(SourceHandle, TargetHandle, Offset) ->
 -spec copy_children(session:id(), fslogic_worker:file_guid(), file_meta:path(),
     non_neg_integer()) -> {ok, [child_entry()]} | {error, term()}.
 copy_children(SessId, ParentGuid, TargetParentGuid, Offset) ->
-    case lfm:ls(SessId, {guid, ParentGuid}, Offset, ?COPY_LS_SIZE) of
+    case lfm:get_children(SessId, {guid, ParentGuid}, Offset, ?COPY_LS_SIZE) of
         {ok, []} ->
             {ok, []};
         {ok, Children} ->
+            % TODO VFS-6265 fix usage of file names from lfm:get_children as they contain
+            % collision suffix which normally shouldn't be there
             ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
                 {ok, NewChildGuid, NewChildrenEntries} =
                     copy(SessId, ChildGuid, TargetParentGuid, ChildName),
@@ -168,8 +170,9 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Offset) ->
 -spec copy_metadata(session:id(), fslogic_worker:file_guid(),
     fslogic_worker:file_guid(), file_meta:posix_permissions()) -> ok.
 copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
-    {ok, Xattrs} =
-        lfm:list_xattr(SessId, {guid, SourceGuid}, false, true),
+    {ok, Xattrs} = lfm:list_xattr(
+        SessId, {guid, SourceGuid}, false, true
+    ),
     lists:foreach(fun
         (?ACL_KEY) ->
             ok;
@@ -180,11 +183,7 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
                 SessId, {guid, SourceGuid}, XattrName, false),
             ok = lfm:set_xattr(SessId, {guid, TargetGuid}, Xattr)
     end, Xattrs),
-    case lists:member(?ACL_KEY, Xattrs) of
-        true ->
-            {ok, Xattr} = lfm:get_xattr(
-                SessId, {guid, SourceGuid}, ?ACL_KEY, false),
-            ok = lfm:set_xattr(SessId, {guid, TargetGuid}, Xattr);
-        false ->
-            ok = lfm:set_perms(SessId, {guid, TargetGuid}, Mode)
-    end.
+
+    {ok, Acl} = lfm:get_acl(SessId, {guid, SourceGuid}),
+    lfm:set_acl(SessId, {guid, TargetGuid}, Acl),
+    lfm:set_perms(SessId, {guid, TargetGuid}, Mode).

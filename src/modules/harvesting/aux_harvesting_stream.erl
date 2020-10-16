@@ -21,13 +21,13 @@
 
 -include("modules/harvesting/harvesting.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([reject_takeover/2, space_removed/1, space_unsupported/1]).
 
 %% harvesting_stream callbacks
--export([init/1, name/1, handle_call/3, handle_cast/2, custom_error_handling/2,
+-export([init/1, name/1, handle_call/3, handle_cast/2, terminate/2, custom_error_handling/2,
     on_end_of_stream/1, on_harvesting_doc_not_found/1
 ]).
 
@@ -110,6 +110,11 @@ handle_cast(?SPACE_UNSUPPORTED, State) ->
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
+
+-spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+    State :: harvesting_stream:state()) -> ok.
+terminate(_Reason, _State) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc

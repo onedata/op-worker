@@ -13,6 +13,8 @@
 -module(empty_files_stress_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-behaviour(traverse_behaviour).
+
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
@@ -22,7 +24,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([stress_test/1, stress_test_base/1, many_files_creation_tree_test/1,
     many_files_creation_tree_test_base/1]).
 
@@ -60,9 +62,9 @@ stress_test_base(Config) ->
 many_files_creation_tree_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, spawn_beg_level}, {value, 4}, {description, "Level of tree to start spawning processes"}],
-            [{name, spawn_end_level}, {value, 5}, {description, "Level of tree to stop spawning processes"}],
-            [{name, dir_level}, {value, 6}, {description, "Level of last test directory"}],
+            [{name, spawn_beg_level}, {value, 2}, {description, "Level of tree to start spawning processes"}],
+            [{name, spawn_end_level}, {value, 3}, {description, "Level of tree to stop spawning processes"}],
+            [{name, dir_level}, {value, 3}, {description, "Level of last test directory"}],
             [{name, dirs_per_parent}, {value, 6}, {description, "Child directories in single dir"}],
             [{name, files_per_dir}, {value, 40}, {description, "Number of files in single directory"}]
         ]},
@@ -104,6 +106,9 @@ many_files_creation_tree_test_base(Config) ->
 init_per_suite(Config) ->
     files_stress_test_base:init_per_suite(Config).
 
+end_per_suite(Config) ->
+    files_stress_test_base:end_per_suite(Config).
+
 init_per_testcase(stress_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 5, 30, 10])),
@@ -116,6 +121,8 @@ init_per_testcase(_Case, Config) ->
     Config.
 
 end_per_testcase(stress_test = Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, rpc:call(Worker, tree_traverse, stop, [?MODULE])),
     CachePid = ?config(cache_pid, Config),
     CachePid ! {finish, self()},
     ok = receive
@@ -226,5 +233,5 @@ process_traverse_info(Config, Type, ID) ->
         _ -> ok
     end,
 
-    Ans = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0),
+    Ans = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0, 0),
     {All == DirsDone + Failed, Ans}.

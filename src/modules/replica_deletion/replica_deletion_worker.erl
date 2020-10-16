@@ -6,7 +6,9 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% gen_server started as a worker of replica_deletion_workers_pool
-%%% This processes are used to delete file_replicas from storage
+%%% This processes are used to delete file_replicas from storage after
+%%% request for deleting file replica has been granted by a remote
+%%% provider.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_deletion_worker).
@@ -17,6 +19,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -32,10 +35,12 @@
     terminate/2,
     code_change/3]).
 
+% exported for tests
+-export([custom_predicate/3]).
+
 -define(SERVER, ?MODULE).
--define(DELETE_REPLICA, delete_replica).
--define(DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id),
-    {?DELETE_REPLICA, FileUuid, SpaceId, Blocks, VV, RDId, Type, Id}).
+-define(DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId),
+    {delete_replica, FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId}).
 
 -record(state, {}).
 
@@ -59,11 +64,11 @@ start_link() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec cast(file_meta:uuid(), od_space:id(), fslogic_blocks:blocks(),
-    version_vector:version_vector(), replica_deletion:id(), replica_deletion:type(),
-    replica_deletion:report_id()) -> ok.
-cast(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id) ->
+    version_vector:version_vector(), replica_deletion:id(), replica_deletion:job_type(),
+    replica_deletion:job_id()) -> ok.
+cast(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId) ->
     worker_pool:cast(?REPLICA_DELETION_WORKERS_POOL,
-        ?DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id)).
+        ?DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId)).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -106,31 +111,12 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast(?DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id), State) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    FileCtx = file_ctx:new_by_guid(FileGuid),
-    case custom_precondition(Type, Id) of
+handle_cast(?DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId), State) ->
+    case replica_deletion_worker:custom_predicate(SpaceId, JobType, JobId) of
         true ->
-            Result = case replica_deletion_lock:acquire_write_lock(FileUuid) of
-                ok ->
-                    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-                    FileCtx = file_ctx:new_by_guid(FileGuid),
-                    DeletionResult = case replica_deletion_req:delete_blocks(FileCtx, Blocks, VV) of
-                        ok ->
-                            {ok, fslogic_blocks:size(Blocks)};
-                        Error ->
-                            Error
-                    end,
-                    replica_deletion_lock:release_write_lock(FileUuid),
-                    DeletionResult;
-                Error ->
-                    Error
-            end,
-            replica_deletion:release_supporting_lock(RDId),
-            replica_deletion_master:process_result(Type, SpaceId, FileUuid, Result, Id);
+            delete_if_not_opened(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId);
         false ->
-            replica_deletion_master:process_result(Type, SpaceId, FileUuid,
-                {error, precondition_not_satisfied}, Id)
+            replica_deletion_master:process_result(SpaceId, FileUuid, {error, precondition_not_satisfied}, JobId, JobType)
     end,
     {noreply, State};
 handle_cast(Request, State) ->
@@ -184,13 +170,42 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% This function allows each replica_deletion:type() to define
+%% This function allows each replica_deletion:job_type() to define
 %% its custom, additional precondition that must be satisfied
 %% to delete the file replica.
 %% @end
 %%-------------------------------------------------------------------
--spec custom_precondition(replica_deletion:type(), autocleaning:run_id()) -> boolean().
-custom_precondition(autocleaning, ARId) ->
-    autocleaning_controller:replica_deletion_predicate(ARId);
-custom_precondition(eviction, _) ->
-    true.
+-spec custom_predicate(od_space:id(), replica_deletion:job_type(), replica_deletion:job_id()) -> true | false.
+custom_predicate(SpaceId, JobType, JobId) ->
+    Module = replica_deletion_master:job_type_to_module(JobType),
+    case erlang:function_exported(Module, replica_deletion_predicate, 2) of
+        true -> Module:replica_deletion_predicate(SpaceId, JobId);
+        false -> true
+    end.
+
+-spec delete_if_not_opened(file_meta:uuid(), od_space:id(), [fslogic_blocks:blocks()], version_vector:version_vector(),
+    replica_deletion:id(), replica_deletion:job_type(), replica_deletion:job_id()) -> any().
+delete_if_not_opened(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId) ->
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    case file_handles:is_file_opened(FileUuid) of
+        false ->
+            % file is not opened, we can delete it
+            Result = case replica_deletion_lock:acquire_write_lock(FileUuid) of
+                ok ->
+                    DeletionResult = case replica_deletion_req:delete_blocks(FileCtx, Blocks, VV) of
+                        ok ->
+                            {ok, fslogic_blocks:size(Blocks)};
+                        Error ->
+                            Error
+                    end,
+                    replica_deletion_lock:release_write_lock(FileUuid),
+                    DeletionResult;
+                Error ->
+                    Error
+            end,
+            replica_deletion:release_supporting_lock(RDId),
+            replica_deletion_master:process_result(SpaceId, FileUuid, Result, JobId, JobType);
+        true ->
+            replica_deletion_master:process_result(SpaceId, FileUuid, {error, file_opened}, JobId, JobType)
+    end.

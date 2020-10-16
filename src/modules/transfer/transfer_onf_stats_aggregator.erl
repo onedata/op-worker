@@ -228,7 +228,7 @@ flush_stats(SpaceId, #state{cached_stats = StatsPerSpace} = State) ->
         error ->
             cancel_caching_timer(SpaceId, State);
         {Stats, RestStatsPerSpace} ->
-            CurrentTime = provider_logic:zone_time_seconds(),
+            CurrentTime = time_utils:timestamp_seconds(),
             case space_transfer_stats:update(
                 ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, Stats, CurrentTime
             ) of

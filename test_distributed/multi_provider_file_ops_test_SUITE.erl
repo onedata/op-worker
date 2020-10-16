@@ -6,23 +6,19 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of db_sync and proxy
+%%% Tests of file operations in multi provider environment.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(multi_provider_file_ops_test_SUITE).
 -author("Michal Wrzeszcz").
 
--include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
+-include("transfers_test_mechanism.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include_lib("cluster_worker/include/global_definitions.hrl").
 
--include("transfers_test_mechanism.hrl").
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
@@ -30,18 +26,6 @@
 
 -export([
     create_on_different_providers_test/1,
-    db_sync_basic_opts_test/1,
-    db_sync_many_ops_test/1,
-    db_sync_many_ops_test_base/1,
-    db_sync_distributed_modification_test/1,
-    proxy_basic_opts_test1/1,
-    proxy_many_ops_test1/1,
-    proxy_distributed_modification_test1/1,
-    proxy_basic_opts_test2/1,
-    proxy_many_ops_test2/1,
-    proxy_distributed_modification_test2/1,
-    proxy_many_ops_test1_base/1,
-    proxy_many_ops_test2_base/1,
     file_consistency_test/1,
     file_consistency_test_base/1,
     concurrent_create_test/1,
@@ -54,29 +38,23 @@
     echo_and_delete_file_loop_test_base/1,
     distributed_delete_test/1,
     remote_driver_test/1,
-    db_sync_with_delays_test/1,
-    db_sync_create_after_del_test/1,
-    db_sync_create_after_deletion_links_test/1,
     rtransfer_fetch_test/1,
     rtransfer_cancel_for_session_test/1,
     remove_file_during_transfers_test/1,
     remove_file_on_remote_provider_ceph/1,
     evict_on_ceph/1,
+    read_dir_collisions_test/1,
+    check_fs_stats_on_different_providers/1,
     remote_driver_internal_call_test/1,
-    db_sync_basic_opts_with_errors_test/1
+    list_children_recreated_remotely/1,
+    registered_user_opens_remotely_created_file_test/1,
+    registered_user_opens_remotely_created_share_test/1,
+    guest_user_opens_remotely_created_file_test/1,
+    guest_user_opens_remotely_created_share_test/1
 ]).
 
 -define(TEST_CASES, [
     create_on_different_providers_test,
-    db_sync_basic_opts_test,
-    db_sync_many_ops_test,
-    db_sync_distributed_modification_test,
-    proxy_basic_opts_test1,
-    proxy_many_ops_test1,
-    proxy_distributed_modification_test1,
-    proxy_basic_opts_test2,
-    proxy_many_ops_test2,
-    proxy_distributed_modification_test2,
     file_consistency_test,
     concurrent_create_test,
     multi_space_test,
@@ -85,26 +63,27 @@
     echo_and_delete_file_loop_test,
     distributed_delete_test,
     remote_driver_test,
-    db_sync_create_after_del_test,
-    db_sync_create_after_deletion_links_test,
     rtransfer_fetch_test,
     rtransfer_cancel_for_session_test,
-    remove_file_during_transfers_test,
+    % TODO VFS-6618 Fix handling of file being removed during transfer and uncomment this test
+    % remove_file_during_transfers_test,
     remove_file_on_remote_provider_ceph,
     evict_on_ceph,
+    read_dir_collisions_test,
+    check_fs_stats_on_different_providers,
     remote_driver_internal_call_test,
-    db_sync_basic_opts_with_errors_test
+    list_children_recreated_remotely,
+    registered_user_opens_remotely_created_file_test,
+    registered_user_opens_remotely_created_share_test,
+    guest_user_opens_remotely_created_file_test,
+    guest_user_opens_remotely_created_share_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
-    db_sync_many_ops_test,
-    proxy_many_ops_test1,
-    proxy_many_ops_test2,
     mkdir_and_rmdir_loop_test,
     file_consistency_test,
     create_and_delete_file_loop_test,
-    echo_and_delete_file_loop_test,
-    db_sync_with_delays_test
+    echo_and_delete_file_loop_test
 ]).
 
 all() ->
@@ -135,57 +114,8 @@ all() ->
 create_on_different_providers_test(Config) ->
     multi_provider_file_ops_test_base:create_on_different_providers_test_base(Config).
 
-db_sync_basic_opts_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-db_sync_create_after_del_test(Config) ->
-    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-db_sync_create_after_deletion_links_test(Config) ->
-    % The same test as db_sync_create_after_del_test but with mock (see init_per_testcase)
-    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
 distributed_delete_test(Config) ->
     multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-db_sync_many_ops_test(Config) ->
-    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
-db_sync_many_ops_test_base(Config) ->
-    DirsNum = ?config(dirs_num, Config),
-    FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 180, DirsNum, FilesNum).
-
-db_sync_distributed_modification_test(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-proxy_basic_opts_test1(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user2">>, {0,4,1,2}, 0).
-
-proxy_many_ops_test1(Config) ->
-    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
-proxy_many_ops_test1_base(Config) ->
-    DirsNum = ?config(dirs_num, Config),
-    FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user2">>, {0,4,1,2}, 0, DirsNum, FilesNum).
-
-proxy_distributed_modification_test1(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user2">>, {0,4,1,2}, 0).
-
-proxy_basic_opts_test2(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
-
-proxy_many_ops_test2(Config) ->
-    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
-proxy_many_ops_test2_base(Config) ->
-    DirsNum = ?config(dirs_num, Config),
-    FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user3">>, {0,4,1,2}, 0, DirsNum, FilesNum).
-
-proxy_distributed_modification_test2(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
 
 remote_driver_internal_call_test(Config0) ->
     User = <<"user1">>,
@@ -295,9 +225,9 @@ concurrent_create_test(Config) ->
             maps:put(ProvId, [Worker | maps:get(ProvId, Acc, [])], Acc)
         end, #{}, ProvIDs),
 
-    W = fun(N) ->
-        [Worker | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
-        Worker
+    Worker = fun(N) ->
+        [W | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
+        W
     end,
 
     User = <<"user1">>,
@@ -333,13 +263,13 @@ concurrent_create_test(Config) ->
                 (_, _) ->
                     lists:foreach(
                         fun(WId) ->
-                            lfm_proxy:unlink(W(WId), SessId(W(WId)), {path, DirName(N)})
+                            lfm_proxy:unlink(Worker(WId), SessId(Worker(WId)), {path, DirName(N)})
                         end, lists:seq(1, ProvIdCount)),
 
                     lists:foreach(
                         fun(WId) ->
                             spawn(fun() ->
-                                TestMaster ! {WId, lfm_proxy:mkdir(W(WId), SessId(W(WId)), DirName(N), 8#755)}
+                                TestMaster ! {WId, lfm_proxy:mkdir(Worker(WId), SessId(Worker(WId)), DirName(N), 8#755)}
                             end)
                         end, lists:seq(1, ProvIdCount)),
 
@@ -371,10 +301,10 @@ concurrent_create_test(Config) ->
     lists:foreach(
         fun(WId) ->
             Check = fun() ->
-                {ok, CL} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
-                _ExpectedChildCount = ProvIdCount * FileCount,
+                {ok, CL} = lfm_proxy:get_children(Worker(WId), SessId(Worker(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
                 {FetchedIds, FetchedNames} = lists:unzip(CL),
 
+%%                ExpectedChildCount = ProvIdCount * FileCount,
 %%                ct:print("Check ~p", [{lists:usort(Ids), lists:usort(FetchedIds)}]),
 %%                ct:print("Check ~p", [{ExpectedChildCount, CL}]),
 
@@ -382,7 +312,7 @@ concurrent_create_test(Config) ->
             end,
             ?assertMatch({ExpectedChildCount, ExpectedChildCount, ExpectedIds}, Check(), 15),
 
-            {ok, ChildList} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
+            {ok, ChildList} = lfm_proxy:get_children(Worker(WId), SessId(Worker(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
             lists:foreach(
                 fun(FileNo) ->
                     LocalIdsPerWorker = proplists:get_value(FileNo, AllFiles),
@@ -539,9 +469,6 @@ remote_driver_test(Config) ->
         Ctx2, Key, TreeId1, LinkName
     ])).
 
-db_sync_with_delays_test(Config) ->
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 300, 50, 50).
-
 rtransfer_fetch_test(Config) ->
     [Worker1a, Worker1b, Worker2 | _] = ?config(op_worker_nodes, Config),
     Workers1 = [Worker1a, Worker1b],
@@ -675,13 +602,14 @@ rtransfer_cancel_for_session_test(Config) ->
     ok = test_utils:mock_unload(Workers1, rtransfer_config).
 
 remove_file_during_transfers_test(Config0) ->
+    % TODO VFS-6618 Fix handling of file being removed during transfer and uncomment this test
     User = <<"user2">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {0, 0, 0, 0}, 0),
     [Worker1 | _] = ?config(workers1, Config),
     [Worker2 | _] = ?config(workers_not1, Config),
     % Create file
-    SessId = fun(User, W) ->
-        ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)
+    SessId = fun(U, W) ->
+        ?config({session_id, {U, ?GET_DOMAIN(W)}}, Config)
     end,
     SpaceName = <<"space6">>,
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>, 
@@ -736,13 +664,13 @@ remove_file_on_remote_provider_ceph(Config0) ->
     {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker1, Handle),
 
-    ?assertMatch({ok, _}, lfm_proxy:ls(Worker2, SessionId(Worker2), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({ok, _}, lfm_proxy:get_children(Worker2, SessionId(Worker2), {guid, Guid}, 0, 0), 60),
     L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
     ?assertEqual(true, length(L) > 0),
        
     lfm_proxy:unlink(Worker2, SessionId(Worker2), {guid, Guid}),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
 evict_on_ceph(Config0) ->
@@ -799,6 +727,286 @@ evict_on_ceph(Config0) ->
     [{_, Ceph} | _] = proplists:get_value(cephrados, ?config(storages, Config)),
     ContainerId = proplists:get_value(container_id, Ceph),
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
+
+read_dir_collisions_test(Config0) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
+    User = <<"user2">>,
+    SessionId = fun(Node) -> ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config) end,
+
+    [Worker1 | _] = ?config(workers1, Config),
+    Domain1 = ?GET_DOMAIN_BIN(Worker1),
+
+    [Worker2 | _] = ?config(workers_not1, Config),
+    Domain2 = ?GET_DOMAIN_BIN(Worker2),
+
+    SpaceName = <<"space7">>,
+    RootDirPath = <<"/", SpaceName/binary, "/read_dir_collisions_test">>,
+    {ok, RootDirGuid} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), RootDirPath, 8#755)),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, RootDirGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, RootDirGuid}, lfm_proxy:resolve_guid(Worker2, SessionId(Worker2), RootDirPath), ?ATTEMPTS),
+
+    GetNamesFromGetChildrenFun = fun(Node, Offset, Limit) ->
+        {ok, Children} = ?assertMatch(
+            {ok, _},
+            lfm_proxy:get_children(Node, SessionId(Node), {guid, RootDirGuid}, Offset, Limit)
+        ),
+        lists:map(fun({_Guid, Name}) -> Name end, Children)
+    end,
+    GetNamesFromGetChildrenAttrsFun = fun(Node, Offset, Limit) ->
+        {ok, ChildrenAttrs} = ?assertMatch(
+            {ok, _},
+            lfm_proxy:get_children_attrs(Node, SessionId(Node), {guid, RootDirGuid}, Offset, Limit)
+        ),
+        lists:map(fun(#file_attr{name = Name}) -> Name end, ChildrenAttrs)
+    end,
+    GetNamesFromGetChildrenDetailsFun = fun(Node, Offset, Limit) ->
+        {ok, ChildrenDetails, _} = ?assertMatch(
+            {ok, _, _},
+            lfm_proxy:get_children_details(Node, SessionId(Node), {guid, RootDirGuid}, Offset, Limit, undefined)
+        ),
+        lists:map(fun(#file_details{file_attr = #file_attr{name = Name}}) ->
+            Name
+        end, ChildrenDetails)
+    end,
+
+    FileNames = lists:map(fun(Num) ->
+        FileName = <<"file_", (integer_to_binary(Num))/binary>>,
+        FilePath = <<RootDirPath/binary, "/", FileName/binary>>,
+        {ok, Guid1} = ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessionId(Worker1), FilePath, 8#755)),
+        {ok, Guid2} = ?assertMatch({ok, _} , lfm_proxy:create(Worker2, SessionId(Worker2), FilePath, 8#755)),
+
+        % Wait for providers to synchronize state
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker1, SessionId(Worker1), {guid, Guid2}), ?ATTEMPTS),
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, Guid1}), ?ATTEMPTS),
+
+        FileName
+    end, lists:seq(0, 9)),
+
+    FilesSeenOnWorker1 = lists:flatmap(fun(Name) ->
+        [Name, <<Name/binary, "@", Domain2/binary>>]
+    end, FileNames),
+    FilesSeenOnWorker2 = lists:flatmap(fun(Name) ->
+        [<<Name/binary, "@", Domain1/binary>>, Name]
+    end, FileNames),
+
+    % Assert proper listing when only one file from all conflicted is listed in batch
+    % (it should still has suffix)
+    lists:foreach(fun({Offset, Limit}) ->
+        ExpBatchOnWorker1 = lists:sublist(FilesSeenOnWorker1, Offset+1, Limit),
+        ?assertMatch(ExpBatchOnWorker1, GetNamesFromGetChildrenFun(Worker1, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker1, GetNamesFromGetChildrenAttrsFun(Worker1, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker1, GetNamesFromGetChildrenDetailsFun(Worker1, Offset, Limit)),
+
+        ExpBatchOnWorker2 = lists:sublist(FilesSeenOnWorker2, Offset+1, Limit),
+        ?assertMatch(ExpBatchOnWorker2, GetNamesFromGetChildrenFun(Worker2, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker2, GetNamesFromGetChildrenAttrsFun(Worker2, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker2, GetNamesFromGetChildrenDetailsFun(Worker2, Offset, Limit))
+    end, [
+        % Check listing all files
+        {0, 100},
+
+        % Check listing on batches containing only one of two conflicting files
+        % (it should be suffixed nonetheless)
+        {0, 3}, {1, 3},
+        {2, 3}, {3, 3},
+        {4, 3}, {5, 3},
+        {6, 3}, {7, 3},
+        {8, 3}, {9, 3},
+        {10, 3}, {11, 3},
+        {12, 3}, {13, 3},
+        {14, 3}, {15, 3},
+        {16, 3}, {17, 3},
+
+        {0, 5}, {1, 5},
+        {4, 5}, {5, 5},
+        {8, 5}, {9, 5},
+        {12, 5}, {13, 5},
+        {16, 5}, {17, 5},
+
+        {0, 7}, {1, 7},
+        {6, 7}, {7, 7},
+        {12, 7}, {13, 7},
+
+        {0, 9}, {1, 9},
+        {8, 9}, {9, 9},
+        {16, 9}, {17, 9},
+
+        {0, 11}, {1, 11},
+        {10, 11}, {11, 11},
+
+        {0, 13}, {1, 13},
+        {12, 13}, {13, 13},
+
+        {0, 15}, {1, 15},
+        {14, 15}, {15, 15}
+    ]).
+
+check_fs_stats_on_different_providers(Config) ->
+    [P2, _, P1 | _] = ?config(op_worker_nodes, Config),
+
+    UserId = <<"user3">>,
+    GetSessId = fun(W) -> ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config) end,
+
+    SpaceId = <<"space9">>,
+    SpaceRootDir = <<"/space9/">>,
+
+    % Values set and taken from env_desc.json
+    P1StorageId = <<"cephrados">>,
+    P1SupportSize = 10000,
+    P2StorageId = <<"mntst2">>,
+    P2SupportSize = 50000,
+    ProviderToStorage = #{
+        P1 => {P1StorageId, P1SupportSize},
+        P2 => {P2StorageId, P2SupportSize}
+    },
+
+    % create file on provider1
+    [F1, F2] = Files = lists:map(fun(Node) ->
+        SessId = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(Node)}}, Config),
+        FileName = generator:gen_name(),
+        FilePath = <<SpaceRootDir/binary, FileName/binary>>,
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath, 8#755)),
+        FileGuid
+    end, [P1, P2]),
+
+    AssertEqualFSSTatsFun = fun(Node, Occupied) ->
+        SessId = GetSessId(Node),
+        {StorageId, SupportSize} = maps:get(Node, ProviderToStorage),
+
+        lists:foreach(fun(FileGuid) ->
+            ?assertEqual(
+                {ok, #fs_stats{space_id = SpaceId, storage_stats = [
+                    #storage_stats{
+                        storage_id = StorageId,
+                        size = SupportSize,
+                        occupied = Occupied
+                    }
+                ]}},
+                lfm_proxy:get_fs_stats(Node, SessId, {guid, FileGuid}),
+                ?ATTEMPTS
+            )
+        end, Files)
+    end,
+    WriteToFileFun = fun({Node, FileGuid, Offset, BytesNum}) ->
+        Content = crypto:strong_rand_bytes(BytesNum),
+        {ok, Handle} = lfm_proxy:open(Node, GetSessId(Node), {guid, FileGuid}, write),
+        {ok, _} = lfm_proxy:write(Node, Handle, Offset, Content),
+        ok = lfm_proxy:close(Node, Handle),
+        Content
+    end,
+
+    % Assert empty storages at the beginning of test
+    AssertEqualFSSTatsFun(P1, 0),
+    AssertEqualFSSTatsFun(P2, 0),
+
+    % Write to files and assert that quota was updated
+    lists:foreach(WriteToFileFun, [{P1, F1, 0, 50}, {P2, F2, 0, 80}]),
+    AssertEqualFSSTatsFun(P1, 50),
+    AssertEqualFSSTatsFun(P2, 80),
+
+    % Write to file on P2 and assert that only its quota was updated
+    WrittenContent = WriteToFileFun({P2, F1, 100, 40}),
+    AssertEqualFSSTatsFun(P1, 50),
+    AssertEqualFSSTatsFun(P2, 120),
+
+    % Read file on P1 (force rtransfer) and assert that its quota was updated
+    ExpReadContent = binary:part(WrittenContent, 0, 20),
+    {ok, ReadHandle} = lfm_proxy:open(P1, GetSessId(P1), {guid, F1}, read),
+    ?assertMatch({ok, ExpReadContent}, lfm_proxy:read(P1, ReadHandle, 100, 20), ?ATTEMPTS),
+    ok = lfm_proxy:close(P1, ReadHandle),
+
+    % Quota should be updated not by read 20 bytes but by 40. That is due to
+    % rtransfer fetching larger blocks at once (not only requested bytes)
+    AssertEqualFSSTatsFun(P1, 90),
+    AssertEqualFSSTatsFun(P2, 120).
+
+% This test reproduces bug that appeared in Web GUI.
+% Functions' arguments are the same as arguments generated by GUI as a result of user's activity.
+list_children_recreated_remotely(Config0) ->
+    User = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+    Worker1 = ?config(worker1, Config),
+    [Worker2 | _] = ?config(workers2, Config),
+    SessId = ?config(session, Config),
+    SpaceId = <<"space1">>,
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+
+    % Upload file on worker1
+    {ok, G} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"file_name">>, undefined),
+    {ok, _} = lfm_proxy:get_details(Worker1, SessId(Worker1), {guid, G}),
+    {ok, _, _} = lfm_proxy:get_children_details(Worker1, SessId(Worker1), {guid, SpaceGuid}, 0, 24, undefined),
+    {ok, _} = lfm_proxy:stat(Worker1, SessId(Worker1), {guid, G}),
+    {ok, _, _} = lfm_proxy:get_children_details(Worker1, SessId(Worker1), {guid, SpaceGuid}, -24, 24, <<"file_name">>),
+    {ok, H} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, G}, write),
+    {ok, _} = lfm_proxy:write(Worker1, H, 0, <<>>),
+    ok = lfm_proxy:close(Worker1, H),
+    {ok, _} = lfm_proxy:get_details(Worker1, SessId(Worker1), {guid, G}),
+
+    % Check on worker2
+    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, -24, 24, <<"file_name">>),
+
+    % Delete file on worker2
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), {guid, G}), 30),
+    ok = lfm_proxy:rm_recursive(Worker2, SessId(Worker2), {guid, G}),
+    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, -24, 24, undefined),
+    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, 0, 24, undefined),
+
+    % Recreate file on worker2
+    {ok, NewG} = lfm_proxy:create(Worker2, SessId(Worker2), SpaceGuid, <<"file_name">>, undefined),
+    {ok, _} = lfm_proxy:get_details(Worker2, SessId(Worker2), {guid, NewG}),
+    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, 0, 24, undefined),
+    {ok, _} = lfm_proxy:stat(Worker2, SessId(Worker2), {guid, NewG}),
+
+    % Another check on worker2
+    % The bug appeared here (badmatch)
+    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, -24, 24, <<"file_name">>),
+
+    {ok, H2} = lfm_proxy:open(Worker2, SessId(Worker2), {guid, NewG}, write),
+    {ok, _} = lfm_proxy:write(Worker2, H2, 0, <<>>),
+    ok = lfm_proxy:close(Worker2, H2),
+    {ok, _} = lfm_proxy:get_details(Worker2, SessId(Worker2), {guid, NewG}).
+
+
+registered_user_opens_remotely_created_file_test(Config) ->
+    user_opens_file_test_base(Config, true, false, ?FUNCTION_NAME).
+
+registered_user_opens_remotely_created_share_test(Config) ->
+    user_opens_file_test_base(Config, true, true, ?FUNCTION_NAME).
+
+guest_user_opens_remotely_created_file_test(Config) ->
+    user_opens_file_test_base(Config, false, false, ?FUNCTION_NAME).
+
+guest_user_opens_remotely_created_share_test(Config) ->
+    user_opens_file_test_base(Config, false, true, ?FUNCTION_NAME).
+
+user_opens_file_test_base(Config0, IsRegisteredUser, UseShareGuid, TestCase) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
+    User = <<"user2">>,
+    SessionId = fun(Node) -> ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config) end,
+    [Worker1 | _] = ?config(workers1, Config),
+    [Worker2 | _] = ?config(workers_not1, Config),
+
+    % create file on 1st provider
+    SpaceName = <<"space7">>,
+    DirPath = fslogic_path:join([<<"/">>, SpaceName, atom_to_binary(TestCase, utf8)]),
+    FilePath = fslogic_path:join([DirPath, <<"file">>]),
+    {ok, _} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), DirPath, 8#704)),
+    {ok, FileGuid} = ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessionId(Worker1), FilePath, 8#704)),
+    {ok, ShareId} = lfm_proxy:create_share(Worker1, SessionId(Worker1), {guid, FileGuid}, <<"share">>),
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+
+    % verify share on 2nd provider
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, ?ROOT_SESS_ID, {guid, ShareFileGuid}), ?ATTEMPTS),
+    case {IsRegisteredUser, UseShareGuid} of
+        {true, false} ->
+             ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionId(Worker2), {guid, FileGuid}, read), ?ATTEMPTS);
+        {true, true} ->
+            ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionId(Worker2), {guid, ShareFileGuid}, read), ?ATTEMPTS);
+        {false, false} ->
+            ?assertMatch({error, ?ENOENT}, lfm_proxy:open(Worker2, ?GUEST_SESS_ID, {guid, FileGuid}, read), ?ATTEMPTS);
+        {false, true} ->
+            ?assertMatch({ok, _}, lfm_proxy:open(Worker2, ?GUEST_SESS_ID, {guid, ShareFileGuid}, read), ?ATTEMPTS)
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -911,46 +1119,11 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).
 
-init_per_testcase(db_sync_create_after_deletion_links_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, fslogic_delete, [passthrough]),
-    test_utils:mock_expect(Workers, fslogic_delete, get_open_file_handling_method,
-        fun(Ctx) -> {deletion_link, Ctx} end),
-    init_per_testcase(?DEFAULT_CASE(db_sync_create_after_deletion_links_test), Config);
+
 init_per_testcase(file_consistency_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, file_meta, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
-init_per_testcase(db_sync_with_delays_test, Config) ->
-    ct:timetrap({hours, 3}),
-    Config2 = init_per_testcase(?DEFAULT_CASE(db_sync_with_delays_test), Config),
-
-    Workers = ?config(op_worker_nodes, Config),
-    {_Workers1, WorkersNot1} = lists:foldl(fun(W, {Acc2, Acc3}) ->
-        case string:str(atom_to_list(W), "p1") of
-            0 -> {Acc2, [W | Acc3]};
-            _ -> {[W | Acc2], Acc3}
-        end
-    end, {[], []}, Workers),
-
-    test_utils:mock_new(WorkersNot1, [
-        datastore_throttling
-    ]),
-    test_utils:mock_expect(WorkersNot1, datastore_throttling, configure_throttling,
-        fun() ->
-            ok
-        end
-    ),
-    test_utils:mock_expect(WorkersNot1, datastore_throttling, throttle_model, fun
-        (file_meta) ->
-            timer:sleep(50),
-            ok;
-        (_) ->
-            ok
-    end
-    ),
-
-    Config2;
 init_per_testcase(rtransfer_fetch_test, Config) ->
     Config2 = init_per_testcase(?DEFAULT_CASE(rtransfer_fetch_test), Config),
 
@@ -963,34 +1136,35 @@ init_per_testcase(rtransfer_fetch_test, Config) ->
     ]),
 
     [{default_min_hole_size, HoleSize} | Config2];
-init_per_testcase(evict_on_ceph, Config) ->
+init_per_testcase(TestCase, Config) when
+    TestCase == evict_on_ceph;
+    TestCase == read_dir_collisions_test
+->
     init_per_testcase(all, [{?SPACE_ID_KEY, <<"space7">>} | Config]);
+init_per_testcase(check_fs_stats_on_different_providers, Config) ->
+    initializer:unload_quota_mocks(Config),
+    init_per_testcase(all, Config);
 init_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [datastore_doc, datastore_remote_driver], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
-init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
-    MockedConfig = multi_provider_file_ops_test_base:mock_sync_errors(Config),
-    init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
+init_per_testcase(Case, Config) when
+    Case =:= registered_user_opens_remotely_created_file_test;
+    Case =:= registered_user_opens_remotely_created_share_test;
+    Case =:= guest_user_opens_remotely_created_file_test;
+    Case =:= guest_user_opens_remotely_created_share_test
+->
+    initializer:mock_share_logic(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
 
-end_per_testcase(db_sync_create_after_deletion_links_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, fslogic_delete),
-    end_per_testcase(?DEFAULT_CASE(db_sync_create_after_deletion_links_test), Config);
+
 end_per_testcase(file_consistency_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, file_meta),
     end_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
-end_per_testcase(db_sync_with_delays_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [
-        datastore_throttling
-    ]),
-
-    end_per_testcase(?DEFAULT_CASE(db_sync_with_delays_test), Config);
 end_per_testcase(rtransfer_fetch_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     MinHoleSize = ?config(default_min_hole_size, Config),
@@ -998,15 +1172,20 @@ end_per_testcase(rtransfer_fetch_test, Config) ->
         ?APP_NAME, rtransfer_min_hole_size, MinHoleSize
     ]),
     end_per_testcase(?DEFAULT_CASE(rtransfer_fetch_test), Config);
+end_per_testcase(check_fs_stats_on_different_providers, Config) ->
+    initializer:disable_quota_limit(Config),
+    end_per_testcase(all, Config);
 end_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [datastore_doc, datastore_remote_driver]),
     end_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
-end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator]),
-    RequestDelay = ?config(request_delay, Config),
-    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay),
+end_per_testcase(Case, Config) when
+    Case =:= registered_user_opens_remotely_created_file_test;
+    Case =:= registered_user_opens_remotely_created_share_test;
+    Case =:= guest_user_opens_remotely_created_file_test;
+    Case =:= guest_user_opens_remotely_created_share_test
+->
+    initializer:unmock_share_logic(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

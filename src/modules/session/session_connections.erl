@@ -14,6 +14,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -34,7 +35,7 @@ register(SessId, Conn) ->
     Diff = fun(#session{connections = Cons} = Sess) ->
         {ok, Sess#session{connections = [Conn | Cons]}}
     end,
-    ?extract_ok(session:update(SessId, Diff)).
+    ?extract_ok(session:update_doc_and_time(SessId, Diff)).
 
 
 -spec deregister(session:id(), Conn :: pid()) -> ok | error().
@@ -43,7 +44,7 @@ deregister(SessId, Conn) ->
         NewCons = lists:filter(fun(C) -> C =/= Conn end, Cons),
         {ok, Sess#session{connections = NewCons}}
     end,
-    ?extract_ok(session:update(SessId, Diff)).
+    ?extract_ok(session:update_doc_and_time(SessId, Diff)).
 
 
 %%--------------------------------------------------------------------
@@ -51,13 +52,13 @@ deregister(SessId, Conn) ->
 %% Returns list of effective connections for specified session.
 %% @end
 %%--------------------------------------------------------------------
--spec list(session:id()) -> {ok, [Conn :: pid()]} | error().
+-spec list(session:id()) -> {ok, session:id(), [Conn :: pid()]} | error().
 list(SessId) ->
     case get_proxy_session(SessId) of
-        {ok, #session{status = initializing}} ->
+        {ok, _, #session{status = initializing}} ->
             {error, uninitialized_session};
-        {ok, #session{connections = Cons}} ->
-            {ok, Cons};
+        {ok, EffSessId, #session{connections = Cons}} ->
+            {ok, EffSessId, Cons};
         Error ->
             Error
     end.
@@ -78,9 +79,9 @@ set_async_request_manager(SessionId, AsyncReqManager) ->
 -spec get_async_req_manager(session:id()) -> {ok, pid()} | error().
 get_async_req_manager(SessId) ->
     case get_proxy_session(SessId) of
-        {ok, #session{async_request_manager = undefined}} ->
+        {ok, _, #session{async_request_manager = undefined}} ->
             {error, no_async_req_manager};
-        {ok, #session{async_request_manager = AsyncReqManager}} ->
+        {ok, _, #session{async_request_manager = AsyncReqManager}} ->
             {ok, AsyncReqManager};
         Error ->
             Error
@@ -113,7 +114,7 @@ ensure_connected(SessId) ->
     end,
 
     session_manager:reuse_or_create_outgoing_provider_session(
-        SessId, #user_identity{provider_id = ProviderId}
+        SessId, ?SUB(?ONEPROVIDER, ProviderId)
     ).
 
 
@@ -125,17 +126,18 @@ ensure_connected(SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% TODO VFS-6364 refactor proxy
 %% Returns effective session, that is session, which is not proxied.
 %% @end
 %%--------------------------------------------------------------------
--spec get_proxy_session(session:id()) -> {ok, #session{}} | error().
+-spec get_proxy_session(session:id()) -> {ok, session:id(), #session{}} | error().
 get_proxy_session(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
             ProxyViaSession = session_utils:get_provider_session_id(outgoing, ProxyVia),
             get_proxy_session(ProxyViaSession);
         {ok, #document{value = Sess}} ->
-            {ok, Sess};
+            {ok, SessId, Sess};
         Error ->
             Error
     end.

@@ -16,6 +16,7 @@
 -behaviour(dynamic_page_behaviour).
 
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([handle/2]).
 
@@ -30,13 +31,13 @@
 %%--------------------------------------------------------------------
 -spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
 handle(<<"GET">>, Req) ->
-    Status = case oneprovider:is_connected_to_oz() of
+    Status = case gs_channel_service:is_connected() of
         true -> <<"ok">>;
         false -> <<"error">>
     end,
     cowboy_req:reply(
         ?HTTP_200_OK,
-        #{<<"content-type">> => <<"application/json">>},
+        #{?HDR_CONTENT_TYPE => <<"application/json">>},
         json_utils:encode(#{<<"status">> => Status}),
         Req
     ).
