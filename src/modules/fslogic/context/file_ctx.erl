@@ -540,6 +540,12 @@ get_space_name(FileCtx = #file_ctx{space_name = undefined}, UserCtx) ->
     case space_logic:get_name(SessionId, SpaceId) of
         {ok, SpaceName} ->
             {SpaceName, FileCtx#file_ctx{space_name = SpaceName}};
+        ?ERROR_FORBIDDEN when SessionId == ?ROOT_SESS_ID ->
+            % Fetching space name from oz as provider is forbidden if provider
+            % doesn't support space. Such requests are made e.g. when executing
+            % file_meta:setup_onedata_user (all user space dirs, supported or not,
+            % are created). To handle this special case SpaceId is returned instead.
+            {SpaceId, FileCtx#file_ctx{space_name = SpaceId}};
         {error, _} ->
             throw(?ENOENT)
     end;
@@ -554,15 +560,21 @@ get_space_name(FileCtx = #file_ctx{space_name = SpaceName}, _Ctx) ->
 -spec get_aliased_name(ctx(), user_ctx:ctx() | undefined) ->
     {file_meta:name(), ctx()} | no_return().
 get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, UserCtx) ->
-    case is_space_dir_const(FileCtx)
-        andalso UserCtx =/= undefined
-        andalso (not session_utils:is_special(user_ctx:get_session_id(UserCtx))) of
+    FileGuid = get_guid_const(FileCtx),
+
+    case is_space_dir_const(FileCtx) andalso UserCtx =/= undefined of
+        true ->
+            {Name, FileCtx2} = case user_ctx:is_guest(UserCtx) andalso file_id:is_share_guid(FileGuid) of
+                true ->
+                    % Special case for guest user - get space name with provider auth
+                    get_space_name(FileCtx, user_ctx:new(?ROOT_SESS_ID));
+                false ->
+                    get_space_name(FileCtx, UserCtx)
+            end,
+            {Name, FileCtx2#file_ctx{file_name = Name}};
         false ->
             {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
-            {Name, FileCtx2};
-        true ->
-            {Name, FileCtx2} = get_space_name(FileCtx, UserCtx),
-            {Name, FileCtx2#file_ctx{file_name = Name}}
+            {Name, FileCtx2}
     end;
 get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
     {FileName, FileCtx}.
@@ -1285,7 +1297,7 @@ assert_not_readonly_target_storage_const(FileCtx, TargetProviderId) ->
         false -> ok
     end.
 
--spec assert_file_exists(ctx()) -> ctx().
+-spec assert_file_exists(ctx()) -> ctx() | no_return().
 assert_file_exists(FileCtx0) ->
     % If file doesn't exists (or was deleted) fetching doc will fail,
     % {badmatch, {error, not_found}} will propagate up and fslogic_worker will
