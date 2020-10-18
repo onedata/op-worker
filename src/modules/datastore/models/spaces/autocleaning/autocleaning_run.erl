@@ -275,10 +275,10 @@ get_record_struct(2) ->
 %%--------------------------------------------------------------------
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {?MODULE, SpaceId, StartedAt, StoppedAt, _Status,
+upgrade_record(1, {?MODULE, SpaceId, StartedAt, StoppedAt, Status,
     ReleasedBytes, BytesToRelease, ReleasedFiles, _IndexToken
 }) ->
-    {2, {?MODULE, SpaceId, StartedAt, StoppedAt, ReleasedBytes,
+    {2, {?MODULE, SpaceId, StartedAt, StoppedAt, Status, ReleasedBytes,
         BytesToRelease, ReleasedFiles,
         % index token was wrongly persisted, therefore we can ignore it
         #view_traverse_token{}
