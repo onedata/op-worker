@@ -14,19 +14,14 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
 -include("http/cdmi.hrl").
 -include("http/rest.hrl").
--include("global_definitions.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([stream_cdmi/6]).
-
--type range() :: {From :: non_neg_integer(), To :: non_neg_integer()}.
 
 
 %%%===================================================================
@@ -37,7 +32,7 @@
 -spec stream_cdmi(
     cowboy_req:req(),
     cdmi_handler:cdmi_req(),
-    Range :: default | range(),
+    Range :: default | http_parser:bytes_range(),
     ValueTransferEncoding :: binary(),
     JsonBodyPrefix :: binary(),
     JsonBodySuffix :: binary()
@@ -98,7 +93,7 @@ stream_cdmi(Req, #cdmi_req{
 %% cdmi_object.
 %% @end
 %%--------------------------------------------------------------------
--spec cdmi_stream_size(range(), FileSize :: non_neg_integer(),
+-spec cdmi_stream_size(http_parser:bytes_range(), FileSize :: non_neg_integer(),
     Encoding :: binary(), DataPrefix :: binary(), DataSuffix :: binary()) ->
     non_neg_integer().
 cdmi_stream_size({0, -1}, _FileSize, _Encoding, _DataPrefix, _DataSuffix) ->

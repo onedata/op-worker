@@ -374,9 +374,11 @@ code_change(_OldVsn, State, _Extra) ->
 delegate_request_insecure(proc, HandlerFun, ReqId, RespondVia) ->
     delegate_proc_request_insecure(node(), HandlerFun, ReqId, RespondVia);
 
+
 delegate_request_insecure({proc, Key}, HandlerFun, ReqId, RespondVia) ->
     Node = datastore_key:any_responsible_node(Key),
     delegate_proc_request_insecure(Node, HandlerFun, ReqId, RespondVia);
+
 
 delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
     ReplyFun =
@@ -396,6 +398,7 @@ delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
             Error
     end.
 
+
 %% @private
 -spec delegate_proc_request_insecure(node(), term(), req_id(), respond_via()) ->
     ok | error().
@@ -413,6 +416,7 @@ delegate_proc_request_insecure(Node, HandlerFun, ReqId, RespondVia) ->
         respond(RespondVia, ReqId, Response)
     end),
     report_pending_request(RespondVia, Pid, ReqId).
+
 
 %% @private
 -spec report_pending_request(respond_via(), pid(), req_id()) -> ok.

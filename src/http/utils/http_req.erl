@@ -9,7 +9,7 @@
 %%% This module provides various utilities for handling http requests.
 %%% @end
 %%%--------------------------------------------------------------------
--module(http_req_utils).
+-module(http_req).
 -author("Bartosz Walkowicz").
 
 -include("http/rest.hrl").
@@ -17,7 +17,7 @@
 %% API
 -export([
     send_response/2,
-    send_error_response/2
+    send_error/2
 ]).
 
 
@@ -35,7 +35,7 @@ send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
     cowboy_req:reply(Code, Headers, RespBody, Req).
 
 
--spec send_error_response({error, term()}, cowboy_req:req()) ->
+-spec send_error({error, term()}, cowboy_req:req()) ->
     cowboy_req:req().
-send_error_response(Error, Req) ->
+send_error(Error, Req) ->
     send_response(rest_translator:error_response(Error), Req).

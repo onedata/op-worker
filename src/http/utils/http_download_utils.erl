@@ -86,12 +86,12 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
                                           "for user ~p - ~p:~p", [
                             FileGuid, UserId, Type, Reason
                         ]),
-                        http_req_utils:send_error_response(Reason, Req1)
+                        http_req:send_error(Reason, Req1)
                     after
                         lfm:monitored_release(FileHandle)
                     end;
                 {error, Errno} ->
-                    http_req_utils:send_error_response(?ERROR_POSIX(Errno), Req1)
+                    http_req:send_error(?ERROR_POSIX(Errno), Req1)
             end
     end.
 
@@ -105,10 +105,10 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
 ) ->
     ok | no_return().
 stream_bytes_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize) ->
-    MaxReadBlocks = max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize),
+    MaxReadBlocksNum = max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize),
     stream_bytes_range(
         FileHandle, Range, Req, EncodingFun,
-        ReadBlockSize, MaxReadBlocks, ?MIN_SEND_RETRY_DELAY
+        ReadBlockSize, MaxReadBlocksNum, ?MIN_SEND_RETRY_DELAY
     ).
 
 
@@ -251,15 +251,15 @@ stream_multipart_byteranges(
     cowboy_req:req(),
     EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     read_block_size(),
-    MaxReadBlocks :: non_neg_integer(),
-    SendRetryDelay :: non_neg_integer()
+    MaxReadBlocksNum :: non_neg_integer(),
+    SendRetryDelay :: time_utils:millis()
 ) ->
     ok | no_return().
 stream_bytes_range(_, {From, To}, _, _, _, _, _) when From > To ->
     ok;
 stream_bytes_range(
     FileHandle, {From, To}, Req, EncodingFun,
-    ReadBlockSize, MaxReadBlocks, SendRetryDelay
+    ReadBlockSize, MaxReadBlocksNum, SendRetryDelay
 ) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
     {ok, NewFileHandle, Data} = ?check(lfm:read(FileHandle, From, ToRead)),
@@ -268,12 +268,12 @@ stream_bytes_range(
         0 ->
             ok;
         DataSize ->
-            EncodedData = EncodingFun(Data),
-            NextSendRetryDelay = send_data_chunk(EncodedData, Req, MaxReadBlocks, SendRetryDelay),
-
+            NextSendRetryDelay = send_data_chunk(
+                EncodingFun(Data), Req, MaxReadBlocksNum, SendRetryDelay
+            ),
             stream_bytes_range(
                 NewFileHandle, {From + DataSize, To}, Req, EncodingFun,
-                ReadBlockSize, MaxReadBlocks, NextSendRetryDelay
+                ReadBlockSize, MaxReadBlocksNum, NextSendRetryDelay
             )
     end.
 
@@ -294,18 +294,21 @@ stream_bytes_range(
 -spec send_data_chunk(
     Data :: binary(),
     cowboy_req:req(),
-    MaxReadBlocks :: non_neg_integer(),
-    RetryDelay :: non_neg_integer()
+    MaxReadBlocksNum :: non_neg_integer(),
+    RetryDelay :: time_utils:millis()
 ) ->
-    NextRetryDelay :: non_neg_integer().
-send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocks, RetryDelay) ->
+    NextRetryDelay :: time_utils:millis().
+send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksNum, RetryDelay) ->
     {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
 
-    case MsgQueueLen < MaxReadBlocks of
+    case MsgQueueLen < MaxReadBlocksNum of
         true ->
             cowboy_req:stream_body(Data, nofin, Req),
             max(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY);
         false ->
             timer:sleep(RetryDelay),
-            send_data_chunk(Data, Req, MaxReadBlocks, min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY))
+            send_data_chunk(
+                Data, Req, MaxReadBlocksNum,
+                min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY)
+            )
     end.

@@ -70,7 +70,7 @@ handle(<<"GET">>, Req) ->
             Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
             handle_http_download(SessionId, FileGuid, Req3);
         false ->
-            http_req_utils:send_error_response(?ERROR_BAD_DATA(<<"code">>), Req)
+            http_req:send_error(?ERROR_BAD_DATA(<<"code">>), Req)
     end.
 
 
@@ -113,5 +113,5 @@ handle_http_download(SessionId, FileGuid, Req0) ->
             ),
             http_download_utils:stream_file(SessionId, FileAttrs, Req1);
         {error, Errno} ->
-            http_req_utils:send_error_response(?ERROR_POSIX(Errno), Req0)
+            http_req:send_error(?ERROR_POSIX(Errno), Req0)
     end.

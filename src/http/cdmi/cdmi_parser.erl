@@ -28,7 +28,6 @@
     parse_body/1
 ]).
 
--type range() :: {From :: non_neg_integer(), To :: non_neg_integer()}.
 
 % keys that are forbidden to appear simultaneously in a request's body
 -define(KEYS_REQUIRED_TO_BE_EXCLUSIVE, [
@@ -44,14 +43,14 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Parses byte range from 'content-range' http header format to erlang
+%% Parses byte range from ?HDR_CONTENT_RANGE http header format to erlang
 %% range tuple, i. e. <<"bytes 1-5/10">> will produce -> {1,5}.
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_content_range_header(cowboy_req:req(), Threshold :: non_neg_integer()) ->
-    undefined | {range(), ExpectedSize :: integer() | undefined}.
+    undefined | {http_parser:bytes_range(), ExpectedSize :: integer() | undefined}.
 parse_content_range_header(Req, Threshold) ->
-    case cowboy_req:header(<<"content-range">>, Req) of
+    case cowboy_req:header(?HDR_CONTENT_RANGE, Req) of
         undefined ->
             undefined;
         RangeHeader ->
@@ -64,7 +63,7 @@ parse_content_range_header(Req, Threshold) ->
                     _ -> {Range, binary_to_integer(ExpectedSize)}
                 end
             catch _:_ ->
-                throw(?ERROR_BAD_DATA(<<"content-range">>))
+                throw(?ERROR_BAD_DATA(?HDR_CONTENT_RANGE))
             end
     end.
 
@@ -124,7 +123,7 @@ parse_body(Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_byte_range(binary() | list(), non_neg_integer()) ->
-    invalid | [range()].
+    invalid | [http_parser:bytes_range()].
 parse_byte_range(RawRanges, Size) ->
     ParsedRanges = lists:map(fun(RangeBin) ->
         ParsedRange = case binary:split(RangeBin, <<"-">>, [global]) of

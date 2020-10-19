@@ -18,11 +18,17 @@
     parse_range_header/2
 ]).
 
--type bytes_range() :: {RangeStart :: non_neg_integer(), RangeEnd :: non_neg_integer()}.
+% Range of bytes (inclusive at both ends), e.g.:
+% - {0, 99} means 100 bytes beginning at offset 0,
+% - {10, 10} means 1 byte beginning at offset 10.
+-type bytes_range() :: {
+    InclusiveRangeStart :: non_neg_integer(),
+    InclusiveRangeEnd :: non_neg_integer()
+}.
 
 -export_type([bytes_range/0]).
 
--type threshold() :: non_neg_integer().
+-type content_size() :: non_neg_integer().
 
 
 %%%===================================================================
@@ -30,7 +36,7 @@
 %%%===================================================================
 
 
--spec parse_range_header(cowboy_req:req(), threshold()) ->
+-spec parse_range_header(cowboy_req:req(), content_size()) ->
     undefined | invalid | [bytes_range()].
 parse_range_header(Req, Threshold) ->
     case cowboy_req:header(<<"range">>, Req) of
@@ -54,7 +60,7 @@ parse_range_header(Req, Threshold) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec parse_bytes_ranges(binary() | list(), threshold()) -> invalid | [bytes_range()].
+-spec parse_bytes_ranges(binary() | list(), content_size()) -> invalid | [bytes_range()].
 parse_bytes_ranges(RangesBin, Threshold) when is_binary(RangesBin) ->
     case binary:split(RangesBin, <<"=">>, [global]) of
         [<<"bytes">>, RawRanges] ->
@@ -71,7 +77,7 @@ parse_bytes_ranges(RawRanges, Threshold) ->
 
 
 %% @private
--spec parse_bytes_range(binary() | [binary()], threshold()) -> bytes_range() | no_return().
+-spec parse_bytes_range(binary() | [binary()], content_size()) -> bytes_range() | no_return().
 parse_bytes_range(RangeBin, Threshold) when is_binary(RangeBin) ->
     parse_bytes_range(binary:split(RangeBin, <<"-">>, [global]), Threshold);
 parse_bytes_range([<<>>, FromEndBin], Threshold) ->
@@ -94,7 +100,7 @@ parse_bytes_range(_InvalidRange, _Threshold) ->
 
 
 %% @private
--spec validate_bytes_range(bytes_range(), threshold()) -> bytes_range() | no_return().
+-spec validate_bytes_range(bytes_range(), content_size()) -> bytes_range() | no_return().
 validate_bytes_range({RangeStart, RangeEnd}, Threshold) when
     RangeStart < 0;
     RangeStart > RangeEnd;

@@ -121,7 +121,7 @@ get_cdmi(Req, #cdmi_req{
 %%--------------------------------------------------------------------
 %% @doc
 %% Writes given content (request body) to file starting from specified
-%% offset (content-range header) or if it is not specified completely
+%% offset (?HDR_CONTENT_RANGE) or if it is not specified completely
 %% overwriting it.
 %% If file doesn't exist then creates it first.
 %% @end
@@ -148,7 +148,7 @@ put_binary(Req, #cdmi_req{
                 {{From, To}, _ExpectedSize} when Length =:= undefined; Length =:= To - From + 1 ->
                     {Guid, false, From};
                 _ ->
-                    throw(?ERROR_BAD_DATA(<<"content-range">>))
+                    throw(?ERROR_BAD_DATA(?HDR_CONTENT_RANGE))
             end
     end,
 
