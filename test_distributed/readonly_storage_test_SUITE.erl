@@ -215,12 +215,16 @@ mv_should_fail(Config) ->
     {Guid, SDHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     % create directory in W2
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId2, ?PATH(TargetDir))),
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId2, ?PATH(TargetDir))),
     % wait for the directory to be synchronized to W1
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?PATH(TargetDir)}), ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, TargetDir}, {Guid, FileName}]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % wait for the file to be synchronized to W2
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {path, ?PATH(FileName)}), ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, TargetDir}, {Guid, FileName}]},
+        lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % mv should fail
     ?assertMatch({error, ?EROFS}, lfm_proxy:mv(W1, SessId, {guid, Guid}, ?PATH(TargetPath))),
@@ -321,6 +325,7 @@ remote_rename_should_not_rename_file_on_storage(Config) ->
 
     % wait for file to be synchronized to W2
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, [{Guid, FileName}]}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, read), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, 100), ?ATTEMPTS),
@@ -364,12 +369,16 @@ remote_move_should_not_rename_file_on_storage(Config) ->
 
 
     % create directory in W2
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId2, ?PATH(TargetDir))),
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId2, ?PATH(TargetDir))),
     % wait for the directory to be synchronized to W1
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?PATH(TargetDir)}), ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, TargetDir}, {Guid, FileName}]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % wait for file to be synchronized to W2
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, TargetDir}, {Guid, FileName}]},
+        lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % move file
     ?assertEqual({ok, Guid}, lfm_proxy:mv(W2, SessId2, {guid, Guid}, ?PATH(TargetPath))),
@@ -411,6 +420,8 @@ remote_unlink_should_not_trigger_unlinking_files_on_local_storage(Config) ->
 
     % wait for file to be synchronized to W2
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, [{_, DirName}]}, lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, [{Guid, FileName}]}, lfm_proxy:get_children(W2, SessId2, {path, ?PATH(DirName)}, 0, 10), ?ATTEMPTS),
 
     ?assertEqual(ok, lfm_proxy:unlink(W2, SessId2, {guid, Guid})),
 
@@ -421,12 +432,17 @@ remote_unlink_should_not_trigger_unlinking_files_on_local_storage(Config) ->
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDFileHandle)),
 
     % wait for dir to be synchronized to W2
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {path, ?PATH(DirName)}), ?ATTEMPTS),
+    {ok, #file_attr{guid = DirGuid}} =
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {path, ?PATH(DirName)}), ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, DirName}]}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
     % it should be possible to remove the directory (only its metadata)
     ?assertEqual(ok, lfm_proxy:unlink(W2, SessId2, {path, ?PATH(DirName)})),
 
     % wait for dir to be unlinked
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, DirGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(W1, SessId, {guid, DirGuid}, 0, 10), ?ATTEMPTS),
 
     StorageDirId = fslogic_path:join([<<"/">>, DirName]),
     SDDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageDirId),

@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_pool/0, stop_pool/0, run/5, cancel/2, task_canceled/1]).
+-export([init_pool/0, stop_pool/0, run/5, cancel/1, task_canceled/1]).
 
 %% view_traverse callbacks
 -export([process_row/3, batch_prehook/4, on_batch_canceled/4, task_finished/1]).
@@ -76,9 +76,11 @@ run(SpaceId, AutocleaningRunId, AutocleaningRules, BatchSize, Token) ->
         token => Token
     }).
 
--spec cancel(od_space:id(), autocleaning:run_id()) -> ok.
-cancel(SpaceId, AutocleaningRunId) ->
-    ok = view_traverse:cancel(?MODULE, pack_task_id(SpaceId, AutocleaningRunId)).
+
+-spec cancel(task_id()) -> ok.
+cancel(TaskId) ->
+    ok = view_traverse:cancel(?MODULE, TaskId).
+
 
 %%%===================================================================
 %%% view_traverse callbacks
@@ -171,11 +173,11 @@ task_canceled(TaskId) ->
 
 -spec pack_task_id(od_space:id(), autocleaning:run_id()) -> task_id().
 pack_task_id(SpaceId, AutocleaningRunId) ->
-    str_utils:join_binary([SpaceId, AutocleaningRunId], ?TASK_ID_SEPARATOR).
+    str_utils:join_binary([SpaceId, AutocleaningRunId, datastore_key:new()], ?TASK_ID_SEPARATOR).
 
 -spec unpack_task_id(task_id()) -> {od_space:id(), autocleaning:run_id()}.
 unpack_task_id(TaskId) ->
-    [SpaceId, AutocleaningId] = binary:split(TaskId, ?TASK_ID_SEPARATOR),
+    [SpaceId, AutocleaningId, _RandSuffix] = binary:split(TaskId, ?TASK_ID_SEPARATOR, [global]),
     {SpaceId, AutocleaningId}.
 
 -spec maybe_schedule_replica_deletion_task(file_ctx:ctx(), autocleaning_run:id(), od_space:id(), non_neg_integer()) -> ok.
