@@ -211,12 +211,12 @@ is_authorized(Req, State) ->
                 ok ->
                     {true, Req, State#{user_id => UserId, auth => SessionId}};
                 {error, _} = Error ->
-                    {stop, send_error_response(Req, Error), State}
+                    {stop, http_req:send_error(Error, Req), State}
             end;
         {ok, ?GUEST} ->
-            {stop, send_error_response(Req, ?ERROR_UNAUTHORIZED), State};
+            {stop, http_req:send_error(?ERROR_UNAUTHORIZED, Req), State};
         {error, _} = Error ->
-            {stop, send_error_response(Req, Error), Req}
+            {stop, http_req:send_error(Error, Req), Req}
     end.
 
 
@@ -262,7 +262,7 @@ stream_space_changes(Req, State) ->
             {stop, Req3, State3}
     catch
         throw:Error ->
-            {stop, send_error_response(Req, Error), State};
+            {stop, http_req:send_error(Error, Req), State};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:process_request - ~p:~p", [
                 ?MODULE, Type, Message
@@ -294,17 +294,6 @@ authorize(Req, ?USER(UserId) = Auth) ->
         false ->
             ?ERROR_FORBIDDEN
     end.
-
-
-%% @private
--spec send_error_response(cowboy_req:req(), errors:error()) -> cowboy_req:req().
-send_error_response(Req, Error) ->
-    #rest_resp{
-        code = Code,
-        headers = Headers,
-        body = Body
-    } = rest_translator:error_response(Error),
-    cowboy_req:reply(Code, Headers, json_utils:encode(Body), Req).
 
 
 %% @private
