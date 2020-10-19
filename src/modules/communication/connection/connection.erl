@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -139,11 +139,10 @@
 %% API
 -export([
     start_link/5, start_link/7,
-    close/1,
-
-    send_msg/2,
-    send_keepalive/1
+    close/1
 ]).
+-export([send_msg/2, send_keepalive/1]).
+-export([rebuild_rib/1]).
 
 %% Private API
 -export([connect_with_provider/8]).
@@ -157,6 +156,8 @@
     handle_call/3, handle_cast/2, handle_info/2,
     terminate/2, code_change/3
 ]).
+
+-define(REBUILD_RIB_MSG, rebuild_rib).
 
 
 %%%===================================================================
@@ -211,31 +212,7 @@ close(Pid) ->
 %%-------------------------------------------------------------------
 -spec send_msg(pid(), communicator:message()) -> ok | error().
 send_msg(Pid, Msg) ->
-    try
-        gen_server2:call(Pid, {send_msg, Msg}, ?DEFAULT_REQUEST_TIMEOUT)
-    catch
-        exit:{noproc, _} ->
-            ?debug("Connection process ~p does not exist", [Pid]),
-            {error, no_connection};
-        exit:{{nodedown, Node}, _} ->
-            ?debug("Node ~p with connection process ~p is down", [Node, Pid]),
-            {error, no_connection};
-        exit:{normal, _} ->
-            ?debug("Exit of connection process ~p for message ~s", [
-                Pid, clproto_utils:msg_to_string(Msg)
-            ]),
-            {error, no_connection};
-        exit:{timeout, _} ->
-            ?debug("Timeout of connection process ~p for message ~s", [
-                Pid, clproto_utils:msg_to_string(Msg)
-            ]),
-            ?ERROR_TIMEOUT;
-        Type:Reason ->
-            ?error("Connection ~p cannot send msg ~s due to ~p:~p", [
-                Pid, clproto_utils:msg_to_string(Msg), Type, Reason
-            ]),
-            {error, Reason}
-    end.
+    call_connection_process(Pid, {send_msg, Msg}).
 
 
 %%-------------------------------------------------------------------
@@ -246,6 +223,17 @@ send_msg(Pid, Msg) ->
 -spec send_keepalive(pid()) -> ok.
 send_keepalive(Pid) ->
     gen_server2:cast(Pid, send_keepalive).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Tries to send a message and provides feedback about success or
+%% eventual errors while serializing/sending.
+%% @end
+%%-------------------------------------------------------------------
+-spec rebuild_rib(pid()) -> ok | error().
+rebuild_rib(Pid) ->
+    call_connection_process(Pid, ?REBUILD_RIB_MSG).
 
 
 %%%===================================================================
@@ -292,6 +280,8 @@ handle_call({send_msg, Msg}, _From, #state{status = ready} = State) ->
 handle_call({send_msg, _Msg}, _From, #state{status = Status, socket = Socket} = State) ->
     ?warning("Attempt to send msg via not ready connection ~p", [Socket]),
     {reply, {error, Status}, State, ?PROTO_CONNECTION_TIMEOUT};
+handle_call(?REBUILD_RIB_MSG, _From, #state{session_id = SessionId} = State) ->
+    {reply, ok, State#state{rib = router:build_rib(SessionId)}, ?PROTO_CONNECTION_TIMEOUT};
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, {error, wrong_request}, State, ?PROTO_CONNECTION_TIMEOUT}.
@@ -901,3 +891,42 @@ activate_socket(#state{socket_mode = active_always}, false) ->
     ok;
 activate_socket(#state{transport = Transport, socket = Socket}, _) ->
     ok = Transport:setopts(Socket, [{active, once}]).
+
+
+%% @private
+-spec call_connection_process(ConnPid :: pid(), term()) ->
+    ok | error().
+call_connection_process(ConnPid, Msg) ->
+    try
+        gen_server2:call(ConnPid, Msg, ?DEFAULT_REQUEST_TIMEOUT)
+    catch
+        exit:{noproc, _} ->
+            ?debug("Connection process ~p does not exist", [ConnPid]),
+            {error, no_connection};
+        exit:{{nodedown, Node}, _} ->
+            ?debug("Node ~p with connection process ~p is down", [Node, ConnPid]),
+            {error, no_connection};
+        exit:{normal, _} ->
+            ?debug("Exit of connection process ~p for message ~s", [
+                ConnPid, maybe_stringify_msg(Msg)
+            ]),
+            {error, no_connection};
+        exit:{timeout, _} ->
+            ?debug("Timeout of connection process ~p for message ~s", [
+                ConnPid, maybe_stringify_msg(Msg)
+            ]),
+            ?ERROR_TIMEOUT;
+        Type:Reason ->
+            ?error("Connection ~p cannot send msg ~s due to ~p:~p", [
+                ConnPid, maybe_stringify_msg(Msg), Type, Reason
+            ]),
+            {error, Reason}
+    end.
+
+
+%% @private
+-spec maybe_stringify_msg(term()) -> term() | string().
+maybe_stringify_msg({send_msg, Msg}) ->
+    clproto_utils:msg_to_string(Msg);
+maybe_stringify_msg(Msg) ->
+    Msg.
