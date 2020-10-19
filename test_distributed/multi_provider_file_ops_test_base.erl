@@ -1816,7 +1816,7 @@ mock_sync_errors(Config) ->
     RequestDelay = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
     test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(1)),
 
-    test_utils:mock_new(Workers, [dbsync_in_stream_worker, dbsync_communicator], [passthrough]),
+    test_utils:mock_new(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config], [passthrough]),
 
     test_utils:mock_expect(Workers, dbsync_in_stream_worker, handle_info, fun
         ({batch_applied, {Since, Until}, Timestamp, Ans} = Info, State) ->
@@ -1845,6 +1845,21 @@ mock_sync_errors(Config) ->
         fun(ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs) ->
             timer:sleep(2000),
             meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs])
+        end),
+
+    test_utils:mock_expect(Workers, rtransfer_config, get_connection_secret,
+        fun(ProviderId, HostAndPort) ->
+            Counter = case get(test_counter) of
+                undefined -> 1;
+                Val -> Val
+            end,
+            case Counter < 4 of
+                true ->
+                    put(test_counter, Counter + 1),
+                    throw(connection_error);
+                _ ->
+                    meck:passthrough([ProviderId, HostAndPort])
+            end
         end),
 
     [{request_delay, RequestDelay} | Config].

@@ -607,7 +607,7 @@ end_per_testcase(rtransfer_blocking_test, Config) ->
     lfm_proxy:teardown(Config);
 end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator]),
+    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config]),
     RequestDelay = ?config(request_delay, Config),
     test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
