@@ -585,7 +585,7 @@ init_per_testcase(Case, Config) when
     end, Workers),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
-    MockedConfig = multi_provider_file_ops_test_base:mock_sync_errors(Config),
+    MockedConfig = multi_provider_file_ops_test_base:mock_sync_and_rtransfer_errors(Config),
     init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
@@ -606,10 +606,7 @@ end_per_testcase(rtransfer_blocking_test, Config) ->
     multi_provider_file_ops_test_base:rtransfer_blocking_test_cleanup(Config),
     lfm_proxy:teardown(Config);
 end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator]),
-    RequestDelay = ?config(request_delay, Config),
-    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay),
+    multi_provider_file_ops_test_base:unmock_sync_and_rtransfer_errors(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

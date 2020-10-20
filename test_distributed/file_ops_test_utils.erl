@@ -30,7 +30,7 @@
 %%% API
 %%%===================================================================
 
-create_files_and_dirs(Worker, SessId, ParentUuid, DirsNum, _FilesNum) ->
+create_files_and_dirs(Worker, SessId, ParentUuid, DirsNum, FilesNum) ->
     DirGuids = lists:map(fun(_) ->
         Dir = generator:gen_name(),
         {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, Dir, 8#755)),
@@ -45,7 +45,7 @@ create_files_and_dirs(Worker, SessId, ParentUuid, DirsNum, _FilesNum) ->
         ?assertMatch({ok, FileDataSize}, lfm_proxy:write(Worker, Handle, 0, ?FILE_DATA)),
         ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
         FileGuid
-    end, lists:seq(1, 0)), % TODO VFS-6873 - create `FilesNum` files when rtransfer problems are fixed
+    end, lists:seq(1, FilesNum)),
 
     #test_data{dir_guids = DirGuids, file_guids = FileGuids}.
 
