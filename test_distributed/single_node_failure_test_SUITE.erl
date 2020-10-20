@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
@@ -265,13 +266,13 @@ verify_files(Config, InitialData, TestData) ->
 
     case StopAppBeforeKill of
         true ->
-            ?assertEqual(last_closing_procedure_succeded, get_application_closing_status(FailingNode)),
+            ?assertEqual(?CLOSING_PROCEDURE_SUCCEEDED, get_application_closing_status(FailingNode)),
             % App was stopped before node killing - all data should be present
             verify_all_files_and_dirs_created_by_provider(FailingNode, SessIdFailingProvider, TestData, HealthyProvider),
             verify_all_files_and_dirs_created_by_provider(FailingNode, SessIdFailingProvider, TestData, FailingProvider),
             verify_all_files_and_dirs_created_by_provider(HealthyNode, SessIdHealthyProvider, TestData, FailingProvider);
         false ->
-            ?assertEqual(last_closing_procedure_failed, get_application_closing_status(FailingNode)),
+            ?assertEqual(?CLOSING_PROCEDURE_FAILED, get_application_closing_status(FailingNode)),
             % App wasn't stopped before node killing - some data can be lost
             % but operations on dirs should be possible,
             P1DirGuid = kv_utils:get([test_dirs, FailingProvider], InitialData),
