@@ -724,27 +724,29 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) -
 %% @private
 -spec update_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
-update_operation_supported(instance, private) -> true;
+update_operation_supported(instance, private) -> true;              % gs only
 update_operation_supported(acl, private) -> true;
 update_operation_supported(_, _) -> false.
 
 
 %% @private
 -spec data_spec_update(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
-data_spec_update(#gri{aspect = instance}) -> #{
-    required => #{id => {binary, guid}},
-    optional => #{
-        <<"posixPermissions">> => {binary,
-            fun(Mode) ->
-                try
-                    {true, binary_to_integer(Mode, 8)}
-                catch _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>))
-                end
+data_spec_update(#gri{aspect = instance}) ->
+    ModeParam = <<"posixPermissions">>,
+
+    #{required => #{
+        id => {binary, guid},
+        ModeParam => {binary, fun(Mode) ->
+            try binary_to_integer(Mode, 8) of
+                ValidMode when ValidMode >= 0 andalso ValidMode =< 8#777 ->
+                    {true, ValidMode};
+                _ ->
+                    throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(ModeParam, 0, 8#777))
+            catch _:_ ->
+                throw(?ERROR_BAD_VALUE_INTEGER(ModeParam))
             end
-        }
-    }
-};
+        end}
+    }};
 
 data_spec_update(#gri{aspect = acl}) -> #{
     required => #{
@@ -807,7 +809,7 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 %% @private
 -spec delete_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
-delete_operation_supported(instance, private) -> true;
+delete_operation_supported(instance, private) -> true;              % gs only
 delete_operation_supported(xattrs, private) -> true;                % REST/gs
 delete_operation_supported(json_metadata, private) -> true;         % REST/gs
 delete_operation_supported(rdf_metadata, private) -> true;          % REST/gs
