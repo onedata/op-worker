@@ -53,7 +53,7 @@
     transfer_files_to_source_provider/1,
     proxy_session_token_update_test_base/3
 ]).
--export([init_env/1, teardown_env/1, mock_sync_errors/1]).
+-export([init_env/1, teardown_env/1, mock_sync_and_rtransfer_errors/1, unmock_sync_and_rtransfer_errors/1]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, create_location/4]).
@@ -1810,7 +1810,9 @@ teardown_env(Config) ->
     hackney:stop(),
     ssl:stop().
 
-mock_sync_errors(Config) ->
+mock_sync_and_rtransfer_errors(Config) ->
+    % TODO - consider creation of separate tests mocking sync and rtransfer errors
+    % limit test with rtransfer errors to single file check
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     RequestDelay = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
@@ -1863,6 +1865,12 @@ mock_sync_errors(Config) ->
         end),
 
     [{request_delay, RequestDelay} | Config].
+
+unmock_sync_and_rtransfer_errors(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config]),
+    RequestDelay = ?config(request_delay, Config),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay).
 
 %%%===================================================================
 %%% Internal functions
