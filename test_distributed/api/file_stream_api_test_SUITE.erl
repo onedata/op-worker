@@ -25,11 +25,13 @@
 ]).
 
 -export([
-    gui_download_file_test/1
+    gui_download_file_test/1,
+    rest_download_file_test/1
 ]).
 
 all() -> [
-    gui_download_file_test
+    gui_download_file_test,
+    rest_download_file_test
 ].
 
 
@@ -39,7 +41,7 @@ all() -> [
 
 
 %%%===================================================================
-%%% Get attrs test functions
+%%% File download test functions
 %%%===================================================================
 
 
@@ -197,6 +199,108 @@ download_file_with_gui_endpoint(Node, FileDownloadUrl) ->
             errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody)));
         {error, _} = Error ->
             Error
+    end.
+
+
+rest_download_file_test(Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P2Node, P1Node],
+
+    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+
+    DirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    {ok, DirGuid} = api_test_utils:create_file(<<"dir">>, P1Node, UserSessIdP1, DirPath, 8#704),
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+
+    {ok, DirShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, DirGuid}, <<"share">>),
+    DirShareGuid = file_id:guid_to_share_guid(DirGuid, DirShareId),
+
+    ?assertMatch(
+        {ok, #file_attr{shares = [DirShareId]}},
+        api_test_utils:get_file_attrs(P2Node, DirGuid),
+        ?ATTEMPTS
+    ),
+
+    FileSize = 4 * 1024,
+    Content = crypto:strong_rand_bytes(FileSize),
+
+    MemRef = api_test_memory:init(),
+
+    SetupFun = build_download_file_setup_fun(MemRef, Content, Config),
+    ValidateCallResultFun = build_rest_download_file_validate_rest_call_fun(MemRef, Content, Config),
+    VerifyFun = build_download_file_verify_fun(MemRef, Content, Config),
+
+    ?assert(onenv_api_test_runner:run_tests(Config, [
+        #scenario_spec{
+            name = <<"Download file using rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = [
+%%                    user2,  % space owner - doesn't need any perms
+                    user3   % files owner
+                ]
+%%                unauthorized = [nobody],
+%%                forbidden_not_in_space = [user1],
+%%                forbidden_in_space = [user4]
+            },
+
+            setup_fun = SetupFun,
+            prepare_args_fun = build_rest_download_file_prepare_rest_args_fun(MemRef, normal_mode),
+            validate_result_fun = ValidateCallResultFun,
+            verify_fun = VerifyFun,
+
+            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+                DirGuid, undefined, #data_spec{
+                    bad_values = [{bad_id, DirObjectId, {rest, ?ERROR_POSIX(?EISDIR)}}]
+                }
+            )
+        }
+    ])).
+
+
+%% @private
+-spec build_rest_download_file_prepare_rest_args_fun(
+    api_test_memory:mem_ref(),
+    TestMode :: normal_mode | share_mode
+) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_rest_download_file_prepare_rest_args_fun(MemRef, TestMode) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        BareGuid = api_test_memory:get(MemRef, file_guid),
+        FileGuid = case TestMode of
+            normal_mode ->
+                BareGuid;
+            share_mode ->
+                ShareId = api_test_memory:get(MemRef, share_id),
+                file_id:guid_to_share_guid(BareGuid, ShareId)
+        end,
+        {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+        {FileId, Data1} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
+
+        #rest_args{
+            method = get,
+            path = <<"data/", FileId/binary, "/content">>,
+            headers = utils:ensure_defined(Data1, #{})
+        }
+    end.
+
+
+%% @private
+-spec build_rest_download_file_validate_rest_call_fun(
+    api_test_memory:mem_ref(),
+    FileContent :: binary(),
+    onenv_api_test_runner:ct_config()
+) ->
+    onenv_api_test_runner:setup_fun().
+build_rest_download_file_validate_rest_call_fun(_MemRef, ExpContent, _Config) ->
+    FileSize = size(ExpContent),
+
+    fun(#api_test_ctx{node = _DownloadNode}, {ok, ?HTTP_200_OK, _, Content}) ->
+        ?assertEqual(FileSize, byte_size(Content))
     end.
 
 
