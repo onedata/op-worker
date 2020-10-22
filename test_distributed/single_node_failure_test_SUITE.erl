@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
@@ -265,11 +266,13 @@ verify_files(Config, InitialData, TestData) ->
 
     case StopAppBeforeKill of
         true ->
+            ?assertEqual(?CLOSING_PROCEDURE_SUCCEEDED, get_application_closing_status(FailingNode)),
             % App was stopped before node killing - all data should be present
             verify_all_files_and_dirs_created_by_provider(FailingNode, SessIdFailingProvider, TestData, HealthyProvider),
             verify_all_files_and_dirs_created_by_provider(FailingNode, SessIdFailingProvider, TestData, FailingProvider),
             verify_all_files_and_dirs_created_by_provider(HealthyNode, SessIdHealthyProvider, TestData, FailingProvider);
         false ->
+            ?assertEqual(?CLOSING_PROCEDURE_FAILED, get_application_closing_status(FailingNode)),
             % App wasn't stopped before node killing - some data can be lost
             % but operations on dirs should be possible,
             P1DirGuid = kv_utils:get([test_dirs, FailingProvider], InitialData),
@@ -307,6 +310,9 @@ verify_auto_cleaning(Config, InitialData, TestData) ->
     ?assertMatch({ok, #{status := <<"failed">>}}, get_auto_cleaning_run_report(FailingNode, ARId2), ?ATTEMPTS).
 
 
+
+get_application_closing_status(Worker) ->
+    rpc:call(Worker, datastore_worker, get_application_closing_status, []).
 
 %%%===================================================================
 %%% Internal functions

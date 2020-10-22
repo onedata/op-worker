@@ -142,8 +142,7 @@ is_authorized(Req, State) ->
             % Always return true - authorization is checked by internal logic later.
             {true, Req, State#state{auth = Auth}};
         {error, _} = Error ->
-            RestResp = rest_translator:error_response(Error),
-            {stop, send_response(RestResp, Req), State}
+            {stop, http_req:send_error(Error, Req), State}
     end.
 
 
@@ -212,11 +211,10 @@ process_request(Req, State) ->
             data = Data
         },
         RestResp = handle_request(OpReq),
-        {stop, send_response(RestResp, Req2), State}
+        {stop, http_req:send_response(RestResp, Req2), State}
     catch
         throw:Error ->
-            ErrorResp = rest_translator:error_response(Error),
-            {stop, send_response(ErrorResp, Req), State};
+            {stop, http_req:send_error(Error, Req), State};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:process_request - ~p:~p", [
                 ?MODULE, Type, Message
@@ -250,24 +248,6 @@ handle_request(#op_req{operation = Operation, gri = GRI} = ElReq) ->
             ]),
             rest_translator:error_response(?ERROR_INTERNAL_SERVER_ERROR)
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends given response (#rest_resp{}) and returns modified cowboy_req record.
-%% @end
-%%--------------------------------------------------------------------
--spec send_response(RestResp :: #rest_resp{}, cowboy_req:req()) ->
-    cowboy_req:req().
-send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
-    RespBody = case Body of
-        {binary, Bin} ->
-            Bin;
-        Map ->
-            json_utils:encode(Map)
-    end,
-    cowboy_req:reply(Code, Headers, RespBody, Req).
 
 
 %%--------------------------------------------------------------------
