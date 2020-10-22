@@ -16,6 +16,7 @@
 -include("file_api_test_utils.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include("test_utils/initializer.hrl").
 
 
@@ -26,6 +27,7 @@
 
     create_shared_file_in_space1/1,
     create_and_sync_shared_file_in_space2/2,
+    create_and_sync_shared_file_in_space2/3,
     create_file_in_space2_with_additional_metadata/4,
     create_file_in_space2_with_additional_metadata/5,
 
@@ -38,6 +40,7 @@
     fill_file_with_dummy_data/5,
     write_file/5,
     read_file/4,
+    assert_distribution/3,
 
     share_file_and_sync_file_attrs/4,
 
@@ -136,6 +139,13 @@ create_shared_file_in_space1(Config) ->
 -spec create_and_sync_shared_file_in_space2(file_meta:mode(), api_test_runner:config()) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
 create_and_sync_shared_file_in_space2(Mode, Config) ->
+    FileType = randomly_choose_file_type_for_test(),
+    create_and_sync_shared_file_in_space2(FileType, Mode, Config).
+
+
+-spec create_and_sync_shared_file_in_space2(file_type(), file_meta:mode(), api_test_runner:config()) ->
+    {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
+create_and_sync_shared_file_in_space2(FileType, Mode, Config) ->
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
 
@@ -143,7 +153,6 @@ create_and_sync_shared_file_in_space2(Mode, Config) ->
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
     UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
-    FileType = randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
@@ -286,6 +295,51 @@ read_file(Node, SessId, FileGuid, Size) ->
     {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, Size),
     ok = lfm_proxy:close(Node, ReadHandle),
     Content.
+
+
+-spec assert_distribution([node()], file_id:file_guid(), [{node(), non_neg_integer()}]) ->
+    true | no_return().
+assert_distribution(Nodes, Files, ExpSizePerProvider) ->
+    ExpDistribution = lists:sort(lists:map(fun
+        ({Node, Blocks}) when is_list(Blocks) ->
+            #{
+                <<"blocks">> => lists:map(fun(#file_block{offset = Offset, size = Size}) ->
+                    [Offset, Size]
+                end, Blocks),
+                <<"providerId">> => op_test_rpc:get_provider_id(Node),
+                <<"totalBlocksSize">> => lists:sum(lists:map(fun(#file_block{size = Size}) ->
+                    Size
+                end, Blocks))
+            };
+        ({Node, ExpSize}) ->
+            #{
+                <<"blocks">> => case ExpSize of
+                    0 -> [];
+                    _ -> [[0, ExpSize]]
+                end,
+                <<"providerId">> => op_test_rpc:get_provider_id(Node),
+                <<"totalBlocksSize">> => ExpSize
+            };
+        ({Node, ExpOffset, ExpSize}) ->
+            #{
+                <<"blocks">> => [[ExpOffset, ExpSize]],
+                <<"providerId">> => op_test_rpc:get_provider_id(Node),
+                <<"totalBlocksSize">> => ExpSize
+            }
+    end, ExpSizePerProvider)),
+
+    FetchDistributionFun = fun(Node, Guid) ->
+        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, ?ROOT_SESS_ID, {guid, Guid}),
+        lists:sort(Distribution)
+    end,
+
+    lists:foreach(fun(FileGuid) ->
+        lists:foreach(fun(Node) ->
+            ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), ?ATTEMPTS)
+        end, Nodes)
+    end, Files),
+
+    true.
 
 
 -spec share_file_and_sync_file_attrs(node(), session:id(), [node()], file_id:file_guid()) ->
