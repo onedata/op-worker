@@ -416,7 +416,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(events_on_conflicts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, file_meta),
+    test_utils:mock_validate_and_unload(Workers, file_meta),
     end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
