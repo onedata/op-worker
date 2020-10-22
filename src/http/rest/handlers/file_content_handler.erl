@@ -57,14 +57,14 @@ init(Req, State) ->
 -spec handle_request(cowboy_req:req(), scope_policy()) -> cowboy_req:req().
 handle_request(Req, ScopePolicy) ->
     try
+        OriginalAuth = authenticate_client(Req),
         FileObjectId = cowboy_req:binding(id, Req),
         FileGuid = middleware_utils:decode_object_id(FileObjectId, id),
-        ensure_operation_supported(FileGuid, ScopePolicy),
 
-        Auth = authenticate_client(Req),
+        Auth = ensure_proper_context(OriginalAuth, FileGuid, ScopePolicy),
         ensure_authorized(Auth, FileGuid, ScopePolicy),
-
         middleware_utils:assert_file_managed_locally(FileGuid),
+
         process_request(Auth, FileGuid, Req)
     catch
         throw:Error ->
@@ -74,18 +74,6 @@ handle_request(Req, ScopePolicy) ->
                 ?MODULE, ?FUNCTION_NAME, Type, Reason
             ]),
             cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req)
-    end.
-
-
-%% @private
--spec ensure_operation_supported(file_id:file_guid(), scope_policy()) ->
-    ok | no_return().
-ensure_operation_supported(FileGuid, ScopePolicy) ->
-    case ScopePolicy of
-        allow_share_mode ->
-            ok;
-        disallow_share_mode ->
-            file_id:is_share_guid(FileGuid) andalso throw(?ERROR_NOT_SUPPORTED)
     end.
 
 
@@ -101,19 +89,35 @@ authenticate_client(Req) ->
 
 
 %% @private
+-spec ensure_proper_context(aai:auth(), file_id:file_guid(), scope_policy()) ->
+    aai:auth() | no_return().
+ensure_proper_context(Auth, FileGuid, ScopePolicy) ->
+    case {file_id:is_share_guid(FileGuid), ScopePolicy} of
+        {true, allow_share_mode} ->
+            ?GUEST;
+        {true, disallow_share_mode} ->
+            throw(?ERROR_NOT_SUPPORTED);
+        {false, _} ->
+            Auth
+    end.
+
+
+%% @private
 -spec ensure_authorized(aai:auth(), file_id:file_guid(), scope_policy()) ->
     true | no_return().
 ensure_authorized(?GUEST, _FileGuid, disallow_share_mode) ->
     throw(?ERROR_UNAUTHORIZED);
-ensure_authorized(Auth, FileGuid, _ScopePolicy) ->
-    IsAuthorized = case file_id:is_share_guid(FileGuid) of
+ensure_authorized(Auth, FileGuid, disallow_share_mode) ->
+    middleware_utils:has_access_to_file(Auth, FileGuid) orelse throw(?ERROR_FORBIDDEN);
+ensure_authorized(?GUEST, FileGuid, allow_share_mode) ->
+    file_id:is_share_guid(FileGuid) orelse throw(?ERROR_UNAUTHORIZED);
+ensure_authorized(Auth, FileGuid, allow_share_mode) ->
+    case file_id:is_share_guid(FileGuid) of
         true ->
             true;
         false ->
-            middleware_utils:has_access_to_file(Auth, FileGuid)
-    end,
-
-    IsAuthorized orelse throw(?ERROR_FORBIDDEN).
+            middleware_utils:has_access_to_file(Auth, FileGuid) orelse throw(?ERROR_FORBIDDEN)
+    end.
 
 
 %% @private
