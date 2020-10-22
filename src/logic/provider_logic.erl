@@ -391,7 +391,7 @@ get_nodes(ProviderId) ->
                 Error
         end
     end,
-    simple_cache:get({provider_nodes, ProviderId}, ResolveNodes).
+    node_cache:get({provider_nodes, ProviderId}, ResolveNodes).
 
 -spec get_nodes(od_provider:id(), od_provider:domain()) -> [binary()].
 get_nodes(ProviderId, Domain) ->
@@ -444,7 +444,7 @@ get_rtransfer_port(ProviderId) ->
         end,
         {true, Port, ?PROVIDER_NODES_CACHE_TTL}
     end,
-    simple_cache:get({rtransfer_port, ProviderId}, ResolvePort).
+    node_cache:get({rtransfer_port, ProviderId}, ResolvePort).
 
 
 %%--------------------------------------------------------------------

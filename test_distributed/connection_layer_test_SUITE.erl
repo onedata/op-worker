@@ -652,11 +652,11 @@ mock_ranch_ssl_to_fail_once(Workers) ->
     test_utils:mock_new(Workers, ranch_ssl, [passthrough]),
     test_utils:mock_expect(Workers, ranch_ssl, send,
         fun(Msg, VerifyMsg) ->
-            case simple_cache:get(Ref) of
+            case node_cache:get(Ref) of
                 {ok, _} ->
                     meck:passthrough([Msg, VerifyMsg]);
                 {error, not_found} ->
-                    simple_cache:put(Ref, true),
+                    node_cache:put(Ref, true),
                     {error, you_shall_not_send}
             end
         end

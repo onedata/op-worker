@@ -71,13 +71,15 @@ increment_after_long_time_should_strip_old_values_test() ->
     ?assertMatch([1, 1, 0, 0, 0, 0], time_slot_histogram:get_histogram_values(IncrementHistogram2)),
     ?assertMatch([1, 0, 0, 0, 0, 1], time_slot_histogram:get_histogram_values(IncrementHistogram3)).
 
-increment_by_more_than_one_test() ->
-    Histogram = time_slot_histogram:new(0, 60, histogram:new(60)),
-    Timestamp = time_utils:timestamp_seconds(),
+increment_by_more_than_one_test_() ->
+    {setup, fun node_cache:init/0, fun(_) -> ets:delete(node_cache) end, fun() ->
+        Histogram = time_slot_histogram:new(0, 60, histogram:new(60)),
+        Timestamp = time_utils:timestamp_seconds(),
 
-    ?assertMatch(
-        [5 | _],
-        time_slot_histogram:get_histogram_values(
-            time_slot_histogram:increment(Histogram, Timestamp, 5)
+        ?assertMatch(
+            [5 | _],
+            time_slot_histogram:get_histogram_values(
+                time_slot_histogram:increment(Histogram, Timestamp, 5)
+            )
         )
-    ).
+    end}.

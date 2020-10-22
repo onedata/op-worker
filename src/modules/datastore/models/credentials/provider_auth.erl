@@ -97,7 +97,7 @@ save(ProviderId, RootToken) ->
 %%--------------------------------------------------------------------
 -spec get_provider_id() -> {ok, od_provider:id()} | {error, term()}.
 get_provider_id() ->
-    simple_cache:get(?PROVIDER_ID_CACHE_KEY, fun() ->
+    node_cache:get(?PROVIDER_ID_CACHE_KEY, fun() ->
         case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
             {error, not_found} ->
                 ?ERROR_UNREGISTERED_ONEPROVIDER;
@@ -116,7 +116,7 @@ get_provider_id() ->
 %%--------------------------------------------------------------------
 -spec clear_provider_id_cache() -> ok.
 clear_provider_id_cache() ->
-    simple_cache:clear(?PROVIDER_ID_CACHE_KEY).
+    node_cache:clear(?PROVIDER_ID_CACHE_KEY).
 
 
 %%--------------------------------------------------------------------

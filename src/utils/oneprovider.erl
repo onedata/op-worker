@@ -212,7 +212,7 @@ get_oz_version() ->
         {ok, OzVersion} = provider_logic:fetch_peer_version(onezone),
         {true, OzVersion, ?OZ_VERSION_CACHE_TTL}
     end,
-    {ok, OzVersion} = simple_cache:get(cached_oz_version, GetOzVersion),
+    {ok, OzVersion} = node_cache:get(cached_oz_version, GetOzVersion),
     OzVersion.
 
 

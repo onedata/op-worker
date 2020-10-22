@@ -387,7 +387,7 @@ get_read_chunks(Chunks) ->
 mock_storage_get_block_size(Workers) ->
     test_utils:mock_new(Workers, [storage], [passthrough]),
     test_utils:mock_expect(Workers, storage, get_block_size, fun(_) ->
-        {ok, BlockSize} = simple_cache:get(
+        {ok, BlockSize} = node_cache:get(
             storage_block_size,
             fun() -> {true, ?DEFAULT_STORAGE_BLOCK_SIZE} end
         ),
@@ -402,5 +402,5 @@ unmock_storage_get_block_size(Workers) ->
 set_storage_block_size(Workers, BlockSize) ->
     ?assertMatch(
         {_, []},
-        rpc:multicall(Workers, simple_cache, put, [storage_block_size, BlockSize])
+        rpc:multicall(Workers, node_cache, put, [storage_block_size, BlockSize])
     ).
