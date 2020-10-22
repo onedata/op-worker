@@ -617,7 +617,7 @@ set_local_change(false) ->
 set_local_change(Value) ->
     put(?LOCAL_CHANGES, Value),
     UpdatedDoc = file_location:set_last_replication_timestamp(
-        get_local_location(), time_utils:timestamp_seconds()),
+        get_local_location(), clock:timestamp_seconds()),
     save_doc(UpdatedDoc),
     ok.
 

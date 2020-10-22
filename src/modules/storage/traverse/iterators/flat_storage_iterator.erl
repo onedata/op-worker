@@ -100,7 +100,7 @@ should_generate_master_job(StorageFileCtx) ->
 
 -spec get_virtual_directory_ctx(helpers:file_id(), od_space:id(), storage:id()) -> storage_file_ctx:ctx().
 get_virtual_directory_ctx(StorageFileId, SpaceId, StorageId) ->
-    CurrentTime = time_utils:timestamp_seconds(),
+    CurrentTime = clock:timestamp_seconds(),
     Stat = #statbuf{
         st_uid = ?ROOT_UID,
         st_gid = ?ROOT_GID,

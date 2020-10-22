@@ -272,7 +272,7 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     ImportedSum = 1000,
     UpdatedSum = 2000,
     DeletedSum = 3000,
-    Timestamp = time_utils:timestamp_seconds(),
+    Timestamp = clock:timestamp_seconds(),
     HistLength = 12,
     EmptyMinHist = time_slot_histogram:new(Timestamp, 60 div HistLength , HistLength),
     EmptyHourHist = time_slot_histogram:new(Timestamp, 3600 div HistLength, HistLength),

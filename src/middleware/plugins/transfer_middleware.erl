@@ -355,7 +355,7 @@ get(#op_req{data = Data, gri = #gri{aspect = throughput_charts}}, Transfer) ->
             {RequestedHistograms, get_last_update(Transfer), Window};
         true ->
             LastUpdates = Transfer#transfer.last_update,
-            CurrentTime = time_utils:timestamp_seconds(),
+            CurrentTime = clock:timestamp_seconds(),
             transfer_histograms:prepare(
                 Transfer, ChartsType, CurrentTime, LastUpdates
             )

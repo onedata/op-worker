@@ -156,7 +156,7 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
         undefined -> ?SKIPPED_STATUS;
         _ -> ?SCHEDULED_STATUS
     end,
-    ScheduleTime = time_utils:timestamp_seconds(),
+    ScheduleTime = clock:timestamp_seconds(),
     SpaceId = file_id:guid_to_space_id(FileGuid),
     ToCreate = #document{
         scope = SpaceId,
@@ -551,7 +551,7 @@ mark_data_replication_finished(undefined, SpaceId, BytesPerProvider) ->
     ),
     {ok, undefined};
 mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
-    CurrentTime = time_utils:timestamp_seconds(),
+    CurrentTime = clock:timestamp_seconds(),
     ok = space_transfer_stats:update(
         ?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
     ),
@@ -574,7 +574,7 @@ mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
         LatestLastUpdate = lists:max(LastUpdates),
         % Due to race between processes updating stats it is possible
         % for LatestLastUpdate to be larger than CurrentTime, also because
-        % time_utils:timestamp_seconds() caches zone time locally it is
+        % clock:timestamp_seconds() caches zone time locally it is
         % possible for time of various provider nodes to differ by several
         % seconds.
         % So if the CurrentTime is less than LatestLastUpdate by no more than

@@ -479,7 +479,7 @@ delete_files(Worker, SessId, GuidsAndPaths) ->
     end, GuidsAndPaths).
 
 current_timestamp_hours(Worker) ->
-    rpc:call(Worker, time_utils, timestamp_seconds, []) div 3600.
+    rpc:call(Worker, clock, timestamp_seconds, []) div 3600.
 
 open_and_close_file(Worker, SessId, Guid, Times) ->
     lists:foreach(fun(_) ->

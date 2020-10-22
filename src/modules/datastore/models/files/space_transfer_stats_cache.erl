@@ -98,7 +98,7 @@ save(TargetProvider, SpaceId, TransferType, StatsType, Stats) ->
 ) ->
     space_transfer_stats_cache() | {error, term()}.
 get(TargetProvider, SpaceId, TransferType, StatsType) ->
-    Now = time_utils:timestamp_millis(),
+    Now = clock:timestamp_millis(),
     Key = key(TargetProvider, SpaceId, TransferType, StatsType),
     Fetched = case datastore_model:get(?CTX, Key) of
         {ok, #document{value = Stats}} ->
@@ -112,7 +112,7 @@ get(TargetProvider, SpaceId, TransferType, StatsType) ->
     case Fetched of
         {error, not_found} ->
             TransferStatsPerType = get_transfer_stats(TransferType, SpaceId),
-            CurrentTime = time_utils:timestamp_seconds(),
+            CurrentTime = clock:timestamp_seconds(),
             prepare_aggregated_stats(TargetProvider, SpaceId,
                 TransferType, StatsType, TransferStatsPerType, CurrentTime
             );
@@ -159,7 +159,7 @@ get_active_channels(SpaceId) ->
 update(TargetProvider, SpaceId, TransferType, StatsType, Stats) ->
     Key = key(TargetProvider, SpaceId, TransferType, StatsType),
     Diff = fun(OldStats) ->
-        Now = time_utils:timestamp_millis(),
+        Now = clock:timestamp_millis(),
         NewStats = case Now < OldStats#space_transfer_stats_cache.expires of
             true -> OldStats;
             false -> Stats
@@ -328,7 +328,7 @@ prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
 ) ->
     [space_transfer_stats_cache()].
 aggregate_stats(TargetProvider, TransferStats, RequestedStatsTypes, CurrentTime) ->
-    LocalTime = time_utils:timestamp_millis(),
+    LocalTime = clock:timestamp_millis(),
     EmptyStats = [
         #space_transfer_stats_cache{
             expires = LocalTime + stats_type_to_expiration_timeout(StatsType),

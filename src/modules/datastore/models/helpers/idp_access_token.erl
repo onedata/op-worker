@@ -96,7 +96,7 @@ cache(Id, Token, TTL) ->
         key = Id,
         value = #idp_access_token{
             token = Token,
-            expiration_time = time_utils:timestamp_seconds() + TTL
+            expiration_time = clock:timestamp_seconds() + TTL
         }
     })).
 
@@ -108,7 +108,7 @@ should_refresh(Doc) ->
 get_current_ttl(#document{value = IdPAccessToken}) ->
     get_current_ttl(IdPAccessToken);
 get_current_ttl(#idp_access_token{expiration_time = ExpirationTime })  ->
-    ExpirationTime - time_utils:timestamp_seconds().
+    ExpirationTime - clock:timestamp_seconds().
 
 %%%===================================================================
 %%% datastore_model callbacks

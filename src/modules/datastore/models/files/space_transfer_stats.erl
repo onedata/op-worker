@@ -146,7 +146,7 @@ update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
         LatestLastUpdate = lists:max(LastUpdates),
         % Due to race between processes updating stats it is possible
         % for LatestLastUpdate to be larger than CurrentTime, also because
-        % time_utils:timestamp_seconds() caches zone time locally it is
+        % clock:timestamp_seconds() caches zone time locally it is
         % possible for time of various provider nodes to differ by several
         % seconds.
         % So if the CurrentTime is less than LatestLastUpdate by no more than

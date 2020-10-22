@@ -224,8 +224,8 @@
 -record(provider_auth, {
     provider_id :: od_provider:id(),
     root_token :: tokens:serialized(),
-    cached_access_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()},
-    cached_identity_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()}
+    cached_access_token = {0, <<"">>} :: {ValidUntil :: clock:seconds(), tokens:serialized()},
+    cached_identity_token = {0, <<"">>} :: {ValidUntil :: clock:seconds(), tokens:serialized()}
 }).
 
 -record(file_download_code, {
@@ -240,7 +240,7 @@
 %% User session
 -record(session, {
     status :: undefined | session:status(),
-    accessed :: undefined | time_utils:seconds(),
+    accessed :: undefined | clock:seconds(),
     type :: undefined | session:type(),
     identity :: aai:subject(),
     credentials :: undefined | auth_manager:credentials(),
@@ -629,8 +629,8 @@
     status :: storage_import_monitoring:status(),
 
     % start/stop timestamps of last scan in millis
-    scan_start_time :: undefined | time_utils:millis(),
-    scan_stop_time :: undefined | time_utils:millis(),
+    scan_start_time :: undefined | clock:millis(),
+    scan_stop_time :: undefined | clock:millis(),
 
     % counters used for scan management, they're reset on the beginning of each scan
     to_process = 0 :: non_neg_integer(),
