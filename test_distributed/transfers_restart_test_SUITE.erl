@@ -28,7 +28,7 @@
 ]).
 
 % For RPC
--export([count_transfer_links_in_db/1]).
+-export([count_missing_transfer_links_in_db/2]).
 
 all() -> [
     rtransfer_restart_test,
@@ -134,7 +134,7 @@ restart_test_base(Config, RestartFun, Restart) ->
                 ?assertMatch({ok, _}, rpc:call(WorkerP2, datastore_model, get,
                     [#{model => transfer, memory_driver => undefined}, TransferId]), FlushCheckAttempts)
             end, TransferIds),
-            ?assertEqual(FilesCount, count_transfer_links_in_db(WorkerP2, SpaceId), FlushCheckAttempts);
+            ?assertEqual(0, count_missing_transfer_links_in_db(WorkerP2, SpaceId, TransferIds), FlushCheckAttempts);
         _ ->
             ok
     end,
@@ -194,15 +194,16 @@ end_per_suite(_Config) ->
 %%% Internal functions
 %%%===================================================================
 
-count_transfer_links_in_db(Worker, SpaceId) ->
+count_missing_transfer_links_in_db(Worker, SpaceId, TransferIds) ->
     test_node_starter:load_modules([Worker], [?MODULE]),
-    rpc:call(Worker, ?MODULE, count_transfer_links_in_db, [SpaceId]).
+    rpc:call(Worker, ?MODULE, count_missing_transfer_links_in_db, [SpaceId, TransferIds]).
 
-count_transfer_links_in_db(SpaceId) ->
+count_missing_transfer_links_in_db(SpaceId, TransferIds) ->
     {ok, Acc} = get_transfer_links_from_db(<<"SCHEDULED_TRANSFERS_KEY">>, SpaceId, sets:new()),
     {ok, Acc2} = get_transfer_links_from_db(<<"CURRENT_TRANSFERS_KEY">>, SpaceId, Acc),
-    {ok, Acc3} = get_transfer_links_from_db(<<"PAST_TRANSFERS_KEY">>, SpaceId, Acc2),
-    sets:size(Acc3).
+    {ok, TransferIdsInDb} = get_transfer_links_from_db(<<"PAST_TRANSFERS_KEY">>, SpaceId, Acc2),
+
+    length(lists:filter(fun(TransferId) -> not sets:is_element(TransferId, TransferIdsInDb) end, TransferIds)).
 
 get_transfer_links_from_db(Prefix, SpaceId, Acc0) ->
     Ctx = #{model => transfer, memory_driver => undefined},
