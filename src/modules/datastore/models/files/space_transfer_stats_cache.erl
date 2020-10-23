@@ -29,7 +29,7 @@
 %% datastore_model callbacks
 -export([get_ctx/0]).
 
--type timestamp() :: non_neg_integer().
+-type timestamp() :: clock:seconds().
 -type transfer_stats() :: #{od_provider:id() => #space_transfer_stats{}}.
 -type space_transfer_stats_cache() :: #space_transfer_stats_cache{}.
 -type doc() :: datastore_doc:doc(space_transfer_stats_cache()).

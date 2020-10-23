@@ -139,7 +139,7 @@ flush(Type) ->
     NewKBM = KBM -- Saved,
     put(?KEYS_MODIFIED, NewKM),
     put(?KEYS_BLOCKS_MODIFIED, NewKBM),
-    put(?FLUSH_TIME, os:timestamp()),
+    put(?FLUSH_TIME, os:timestamp()), % @TODO VFS-6841 switch to the clock module
     erase(?IS_FLUSH_PLANNED),
     case length(NewKM) + length(NewKBM) of
         0 ->
