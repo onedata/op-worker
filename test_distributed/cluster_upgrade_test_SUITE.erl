@@ -355,7 +355,7 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     SIMDoc2 = #document{
         key = SpaceId2,
         value = SIMBase#storage_import_monitoring{
-            scan_start_time = ImportStartTime,
+            scan_start_time = ImportStartTime * 1000,
             status = ?RUNNING
         }
     },
@@ -371,8 +371,8 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     SIMDoc3 = #document{
         key = SpaceId3,
         value = SIMBase#storage_import_monitoring{
-            scan_start_time = ImportStartTime,
-            scan_stop_time = ImportFinishTime,
+            scan_start_time = ImportStartTime * 1000,
+            scan_stop_time = ImportFinishTime * 1000,
             status = ?COMPLETED
         }
     },
@@ -389,8 +389,8 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     SIMDoc4 = #document{
         key = SpaceId4,
         value = SIMBase#storage_import_monitoring{
-            scan_start_time = LastUpdateStartTime,
-            scan_stop_time = ImportFinishTime,
+            scan_start_time = LastUpdateStartTime * 1000,
+            scan_stop_time = ImportFinishTime * 1000,
             status = ?RUNNING
         }
     },
@@ -408,8 +408,8 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     SIMDoc5 = #document{
         key = SpaceId5,
         value = SIMBase#storage_import_monitoring{
-            scan_start_time = LastUpdateStartTime,
-            scan_stop_time = LastUpdateStopTime,
+            scan_start_time = LastUpdateStartTime * 1000,
+            scan_stop_time = LastUpdateStopTime * 1000,
             status = ?COMPLETED
         }
     },

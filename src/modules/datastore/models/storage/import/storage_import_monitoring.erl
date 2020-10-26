@@ -854,10 +854,10 @@ maybe_proceed_to_running_status(SIM) ->
 migrate_to_v1({storage_sync_monitoring,
     FinishedScans,
 
-    ImportStartTime,
-    ImportFinishTime,
-    LastUpdateStartTime,
-    LastUpdateFinishTime,
+    ImportStartTime0,
+    ImportFinishTime0,
+    LastUpdateStartTime0,
+    LastUpdateFinishTime0,
 
     ToProcess,
     Imported,
@@ -886,6 +886,12 @@ migrate_to_v1({storage_sync_monitoring,
     QueueLengthHourHist,
     QueueLengthDayHist
 }) ->
+    % recalculate timestamps to millis as start/stop timestamps are now stored in millis
+    ImportStartTime = timestamp_to_millis(ImportStartTime0),
+    ImportFinishTime = timestamp_to_millis(ImportFinishTime0),
+    LastUpdateStartTime = timestamp_to_millis(LastUpdateStartTime0),
+    LastUpdateFinishTime = timestamp_to_millis(LastUpdateFinishTime0),
+
     InProgressStatus = case ToProcess > 1 of
         true ->
             ?RUNNING;
@@ -956,7 +962,11 @@ migrate_to_v1({storage_sync_monitoring,
         queue_length_hour_hist = QueueLengthHourHist,
         queue_length_day_hist = QueueLengthDayHist
     }.
-    
+
+
+-spec timestamp_to_millis(clock:seconds() | undefined) -> clock:millis() | undefined.
+timestamp_to_millis(undefined) -> undefined;
+timestamp_to_millis(TimestampSecs) -> TimestampSecs * 1000.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -1004,9 +1014,9 @@ get_record_struct(1) ->
         %  - last_update_finish_time
         % were removed in this version.
 
-        % field scan_start_time was added in this version
+        % field scan_start_time was added in this version and is currently stored in millis
         {scan_start_time, integer},
-        % field scan_stop_time was added in this version
+        % field scan_stop_time was added in this version and is currently stored in millis
         {scan_stop_time, integer},
 
         {to_process, integer},
