@@ -28,8 +28,10 @@
 -type location_or_record() :: location() | file_location:record().
 -type get_doc_opts() :: boolean() | skip_local_blocks |
     {blocks_num, non_neg_integer()}.
--type get_blocks_opts() :: #{overlapping_blocks => blocks(),
-    count => non_neg_integer(), skip_local => boolean()}.
+-type get_blocks_opts() :: #{
+    overlapping_blocks => blocks(),
+    count => non_neg_integer(),
+    skip_local => boolean()}.
 
 -export_type([block/0, blocks/0, blocks_tree/0, stored_blocks/0, get_doc_opts/0]).
 
@@ -39,8 +41,8 @@
     delete_local_location/1, delete_location/2, force_flush/1,
     get_local_location/1, get_local_location/2]).
 %% Blocks getters/setters
--export([get_blocks/1, get_blocks/2, set_blocks/2, set_final_blocks/2,
-    update_blocks/2, clear_blocks/2]).
+-export([get_blocks/1, get_blocks/2, get_overlapping_blocks_sequence/2,
+    set_blocks/2, set_final_blocks/2, update_blocks/2, clear_blocks/2]).
 %% Blocks API
 -export([get_location_size/2, get_blocks_range/1, get_blocks_range/2]).
 
@@ -304,6 +306,44 @@ get_blocks(Key, #{skip_local := true}) ->
     fslogic_cache:get_public_blocks(Key);
 get_blocks(Key, _Options) ->
     fslogic_cache:get_blocks(Key).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Function returning sequence of overlapping blocks where each element of returned list is tuple
+%% consisted of two blocks' lists. First element of the tuple is list of input blocks and second
+%% element is list of blocks overlapping with blocks returned in the first element of the tuple.
+%% The lists from first elements of the tuple sum to input list. The input list is split using algorithm
+%% that finds sequences of blocks that are close one to another that means that there are no more
+%% than ?MAX_BLOCKS_BETWEEN existing blocks between two adjacent blocks in request.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_overlapping_blocks_sequence(file_location:id(), blocks()) ->
+    [{ConsistentBlocksRange :: blocks(), OverlappingBlocks :: blocks()}].
+get_overlapping_blocks_sequence(Key, OverlappingBlocks) ->
+    case OverlappingBlocks of
+        [] ->
+            [];
+        [#file_block{offset = Offset1, size = Size1} | OverlappingBlocksTail] ->
+            Blocks = fslogic_cache:get_blocks_tree(Key),
+            {Start, Stop} = lists:foldl(fun(#file_block{offset = Offset, size = Size},
+                {#file_block{offset = TmpO} = TmpStart, TmpStop}) ->
+                Start2 = case Offset < TmpO of
+                    true -> #file_block{offset = Offset, size = 0};
+                    _ -> TmpStart
+                end,
+                End = Offset + Size,
+                Stop2 = case End > TmpStop of
+                    true -> End;
+                    _ -> TmpStop
+                end,
+                {Start2, Stop2}
+            end, {#file_block{offset = Offset1, size = 0}, Offset1 + Size1}, OverlappingBlocksTail),
+            Iter = gb_sets:iterator_from(Start, Blocks),
+            Ans = get_block_while(Iter, Stop),
+            Ans2 = [{OverlappingBlocks, Ans}],
+            fslogic_cache:use_blocks(Key, Ans),
+            Ans2
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc

@@ -19,11 +19,16 @@
 %% API
 -export([update/4, rename/2, has_replication_status_changed/4]).
 
+% Description of update containing information required to produce events that describe update
 -type update_description() :: #{
     size_changed => boolean(),
     replica_status_changed => boolean(),
     location_changes => fslogic_event_emitter:location_changes_description()
 }.
+% Description of blocks changes. Each tuple contain information about block that triggered change
+% and information about final block that has been saved as a result.
+-type blocks_changes_description() :: [{BlocksTriggeringChange :: fslogic_blocks:blocks(),
+    BlocksSaved :: fslogic_blocks:blocks()}].
 
 -export_type([update_description/0]).
 
@@ -53,9 +58,10 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                     }
                 } ->
                     FirstLocalBlocksBeforeAppend = fslogic_location_cache:get_blocks(Location, #{count => 2}),
-                    UpdatedLocation = append(Location, Blocks, BumpVersion),
+                    {UpdatedLocation, LocationChangedEvents} = append(Location, Blocks, BumpVersion),
                     case FileSize of
                         undefined ->
+                            UpdateDescription = #{location_changes => LocationChangedEvents},
                             fslogic_location_cache:save_location(UpdatedLocation),
                             #document{value = #file_location{size = UpdatedSize}} = UpdatedLocation,
                             FirstLocalBlocks = fslogic_location_cache:get_blocks(UpdatedLocation, #{count => 2}),
@@ -63,15 +69,16 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                                 FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, UpdatedSize),
                             case {ReplicationStatusChanged, UpdatedSize > OldSize} of
                                 {true, SizeChanged} -> 
-                                    {ok, #{size_changed => SizeChanged, replica_status_changed => true}};
+                                    {ok, UpdateDescription#{size_changed => SizeChanged, replica_status_changed => true}};
                                 {_, true} ->
-                                    {ok, #{size_changed => true}};
+                                    {ok, UpdateDescription#{size_changed => true}};
                                 _ -> 
-                                    {ok, #{}}
+                                    {ok, UpdateDescription}
                             end;
                         _ ->
-                            UpdateDescription = #{size_changed => true},
-                            TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
+                            {TruncatedLocation, LocationChangedEvents2} = do_local_truncate(FileSize, UpdatedLocation),
+                            UpdateDescription = #{size_changed => true,
+                                location_changes => LocationChangedEvents ++ LocationChangedEvents2},
                             fslogic_location_cache:save_location(TruncatedLocation),
                             FirstLocalBlocks = fslogic_location_cache:get_blocks(TruncatedLocation, #{count => 2}),
                             ReplicationStatusChanged = has_replication_status_changed(
@@ -126,9 +133,10 @@ has_replication_status_changed(FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, O
 %% Truncates blocks from given location. Works for both shrinking and growing file.
 %% @end
 %%--------------------------------------------------------------------
--spec do_local_truncate(FileSize :: non_neg_integer(), file_location:doc()) -> file_location:doc().
+-spec do_local_truncate(FileSize :: non_neg_integer(), file_location:doc()) ->
+    {file_location:doc(), fslogic_event_emitter:location_changes_description()}.
 do_local_truncate(FileSize, Doc = #document{value = #file_location{size = FileSize}}) ->
-    Doc;
+    {Doc, []};
 do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{size = LocalSize}}) when LocalSize < FileSize ->
     append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize}], true);
 do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{size = LocalSize}}) when LocalSize > FileSize ->
@@ -140,26 +148,27 @@ do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{siz
 %% Appends given blocks to given locations and updates file size for those locations.
 %% @end
 %%--------------------------------------------------------------------
--spec append(file_location:doc(), fslogic_blocks:blocks(), boolean()) -> file_location:doc().
+-spec append(file_location:doc(), fslogic_blocks:blocks(), boolean()) ->
+    {file_location:doc(), fslogic_event_emitter:location_changes_description()}.
 append(Doc, [], _) ->
-    Doc;
-append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
+    {Doc, []};
+append(#document{key = Key, value = #file_location{size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
     % TODO VFS-4743 - some changes are published but blocks does not appear (blocks are private)
-    OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),
-    NewBlocks = fslogic_blocks:merge(Blocks, OldBlocks),
+    OverlappingBlocksSequence = fslogic_location_cache:get_overlapping_blocks_sequence(Key, Blocks),
     NewSize = fslogic_blocks:upper(Blocks),
 
-    case BumpVersion of
-        true ->
-            version_vector:bump_version(
-                replica_changes:add_change(
-                    fslogic_location_cache:update_blocks(Doc#document{value =
-                    Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks),
-                    Blocks));
-        false ->
-            fslogic_location_cache:update_blocks(Doc#document{value =
-                Loc#file_location{size = max(OldSize, NewSize)}}, NewBlocks)
-    end.
+    DocWithUpdatedSize = Doc#document{value = Loc#file_location{size = max(OldSize, NewSize)}},
+    {FinalDoc, BlocksChanges} = lists:foldl(fun({NewBlocks, OverlappingBlocks}, {TmpDoc, TmpBlocksChanges}) ->
+        BlocksToSave = fslogic_blocks:merge(NewBlocks, OverlappingBlocks),
+        {fslogic_location_cache:update_blocks(TmpDoc, BlocksToSave), [{NewBlocks, BlocksToSave} | TmpBlocksChanges]}
+    end, {DocWithUpdatedSize, []}, OverlappingBlocksSequence),
+
+    #document{value = FinalRecord} = BumpedFinalDoc = case BumpVersion of
+        true -> version_vector:bump_version(replica_changes:add_change(FinalDoc, Blocks));
+        false -> FinalDoc
+    end,
+
+    {BumpedFinalDoc, blocks_changes_to_location_changes_description(FinalRecord, lists:reverse(BlocksChanges))}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -168,16 +177,20 @@ append(#document{value = #file_location{size = OldSize} = Loc} = Doc, Blocks, Bu
 %% @end
 %%--------------------------------------------------------------------
 -spec shrink(#document{value :: #file_location{}}, [#file_block{}], non_neg_integer()) ->
-    file_location:doc().
-shrink(Doc = #document{value = Loc}, Blocks, NewSize) ->
-    OldBlocks = fslogic_location_cache:get_blocks(Doc, #{overlapping_blocks => Blocks}),
-    NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
-    NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
-    version_vector:bump_version(
-        replica_changes:add_change(
-            fslogic_location_cache:update_blocks(Doc#document{value =
-            Loc#file_location{size = NewSize}}, NewBlocks1),
-            {shrink, NewSize})).
+    {file_location:doc(), fslogic_event_emitter:location_changes_description()}.
+shrink(Doc = #document{key = Key, value = Loc}, Blocks, NewSize) ->
+    OverlappingBlocksSequence = fslogic_location_cache:get_overlapping_blocks_sequence(Key, Blocks),
+
+    DocWithUpdatedSize = Doc#document{value = Loc#file_location{size = NewSize}},
+    {FinalDoc, BlocksChanges} = lists:foldl(fun({NewBlocks, OverlappingBlocks}, {TmpDoc, TmpBlocksChanges}) ->
+        InvalidatedNewBlocks = fslogic_blocks:invalidate(OverlappingBlocks, NewBlocks),
+        BlocksToSave = fslogic_blocks:consolidate(InvalidatedNewBlocks),
+        {fslogic_location_cache:update_blocks(TmpDoc, BlocksToSave), [{NewBlocks, BlocksToSave} | TmpBlocksChanges]}
+    end, {DocWithUpdatedSize, []}, OverlappingBlocksSequence),
+
+    #document{value = FinalRecord} = BumpedFinalDoc =
+        version_vector:bump_version(replica_changes:add_change(FinalDoc, {shrink, NewSize})),
+    {BumpedFinalDoc, blocks_changes_to_location_changes_description(FinalRecord, lists:reverse(BlocksChanges))}.
 
 %% @private
 -spec is_fully_replicated(fslogic_blocks:blocks(), non_neg_integer()) -> boolean().
@@ -187,3 +200,14 @@ is_fully_replicated([#file_block{offset = 0, size = Size}], Size) ->
     true;
 is_fully_replicated(_, _) ->
     false.
+
+%% @private
+-spec blocks_changes_to_location_changes_description(file_location:record(), blocks_changes_description()) ->
+    fslogic_event_emitter:location_changes_description().
+blocks_changes_to_location_changes_description(FileLocation, ChangeDescription) ->
+    lists:map(fun({BlocksTriggeringChange, BlocksSaved}) ->
+        Location = file_ctx:fill_location_gaps(BlocksTriggeringChange, FileLocation, BlocksSaved,
+            fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
+        {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, BlocksTriggeringChange),
+        {Location, EventOffset, EventSize}
+    end, ChangeDescription).

@@ -80,7 +80,7 @@
     get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
     get_logical_path/2,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
-    get_file_location_with_filled_gaps/2, fill_location_gaps/4,
+    get_file_location_with_filled_gaps/2, fill_location_gaps/4, fill_location_gaps/5,
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,

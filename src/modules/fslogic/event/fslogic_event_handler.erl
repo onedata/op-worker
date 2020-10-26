@@ -144,15 +144,17 @@ handle_file_written_event(#file_written_event{
 
     replica_synchronizer:force_flush_events(file_ctx:get_uuid_const(FileCtx)),
     case replica_synchronizer:update_replica(FileCtx, Blocks, FileSize, true) of
-        {ok, UpdateDescription} ->
+        {ok, #{location_changes := LocationChangedEvents} = UpdateDescription} ->
             fslogic_times:update_mtime_ctime(FileCtx),
             case UpdateDescription of
                 #{replica_status_changed := true, size_changed := SizeChanged} ->
                     fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, [SessId]);
                 #{size_changed := true} ->
-                    fslogic_event_emitter:emit_file_attr_changed(FileCtx, [SessId])
+                    fslogic_event_emitter:emit_file_attr_changed(FileCtx, [SessId]);
+                _ ->
+                    ok
             end,
-            fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId], Blocks);
+            fslogic_event_emitter:emit_file_locations_changed(LocationChangedEvents, [SessId]);
         {error, not_found} ->
             ?debug("Handling file_written_event for file ~p failed because file_location was not found.",
                 [FileGuid]),
