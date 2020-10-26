@@ -72,7 +72,7 @@ increment_after_long_time_should_strip_old_values_test() ->
     ?assertMatch([1, 0, 0, 0, 0, 1], time_slot_histogram:get_histogram_values(IncrementHistogram3)).
 
 increment_by_more_than_one_test_() ->
-    {setup, fun node_cache:init/0, fun(_) -> ets:delete(node_cache) end, fun() ->
+    {setup, fun node_cache:init/0, fun(_) -> node_cache:destroy() end, fun() ->
         Histogram = time_slot_histogram:new(0, 60, histogram:new(60)),
         Timestamp = time_utils:timestamp_seconds(),
 
