@@ -845,8 +845,7 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns location that can be understood by client. It has gaps filled, and
-%% stores guid instead of uuid.
+%% @equiv fill_location_gaps/5 but checks requested range and gets local blocks first.
 %% @end
 %%--------------------------------------------------------------------
 -spec fill_location_gaps(fslogic_blocks:blocks() | undefined, file_location:doc(),
@@ -857,23 +856,27 @@ fill_location_gaps(ReqRange0, #document{value = FileLocation = #file_location{
     Blocks = fslogic_location_cache:get_blocks(FileLocationDoc,
         #{overlapping_blocks => ReqRange}),
 
+    fill_location_gaps(ReqRange, FileLocation, Blocks, Locations, Uuid).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns location that can be understood by client. It has gaps filled, and
+%% stores guid instead of uuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec fill_location_gaps(fslogic_blocks:blocks(), file_location:record(), fslogic_blocks:blocks(),
+    [file_location:doc()], file_location:id()) -> #file_location{}.
+fill_location_gaps(ReqRange, FileLocation, LocalBlocks, Locations, Uuid) ->
     % find gaps
     AllRanges = lists:foldl(
         fun(Doc, Acc) ->
             fslogic_blocks:merge(Acc, fslogic_location_cache:get_blocks(Doc,
                 #{overlapping_blocks => ReqRange}))
         end, [], Locations),
-    ExtendedRequestedRange = lists:map(fun(RequestedRange) ->
-        case RequestedRange of
-            #file_block{offset = O, size = S} when O + S < Size ->
-                RequestedRange#file_block{size = Size - O};
-            _ -> RequestedRange
-        end
-    end, ReqRange),
     Gaps = fslogic_blocks:consolidate(
-        fslogic_blocks:invalidate(ExtendedRequestedRange, AllRanges)
+        fslogic_blocks:invalidate(ReqRange, AllRanges)
     ),
-    BlocksWithFilledGaps = fslogic_blocks:merge(Blocks, Gaps),
+    BlocksWithFilledGaps = fslogic_blocks:merge(LocalBlocks, Gaps),
 
     % fill gaps transform uid and emit
     fslogic_location_cache:set_final_blocks(FileLocation#file_location{

@@ -532,7 +532,7 @@ check_blocks(LocationDoc = #document{
 %% Marks blocks as "blocks in use".
 %% @end
 %%-------------------------------------------------------------------
--spec use_blocks(file_location:id(), fslogic_blocks:blocks()) -> ok.
+-spec use_blocks(file_location:id(), fslogic_blocks:blocks() | [fslogic_blocks:blocks()]) -> ok.
 use_blocks(Key, Blocks) ->
     put({?BLOCKS_IN_USE, Key}, Blocks),
     ok.
@@ -545,13 +545,20 @@ use_blocks(Key, Blocks) ->
 -spec finish_blocks_usage(file_location:id()) -> fslogic_blocks:blocks().
 finish_blocks_usage(Key) ->
     Ans = get({?BLOCKS_IN_USE, Key}),
-    erase({?BLOCKS_IN_USE, Key}),
     case Ans of
         undefined ->
+            erase({?BLOCKS_IN_USE, Key}),
             ?warning("Attepmted to finish usage of blocks that were not previously "
-                "declared for the key ~p", [Key]),
+            "declared for the key ~p", [Key]),
             [];
+        [Head] when is_list(Head) ->
+            erase({?BLOCKS_IN_USE, Key}),
+            Head;
+        [Head | Tail] when is_list(Head) ->
+            use_blocks(Key, Tail),
+            Head;
         _ ->
+            erase({?BLOCKS_IN_USE, Key}),
             Ans
     end.
 

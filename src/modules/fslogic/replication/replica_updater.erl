@@ -19,6 +19,14 @@
 %% API
 -export([update/4, rename/2, has_replication_status_changed/4]).
 
+-type update_description() :: #{
+    size_changed => boolean(),
+    replica_status_changed => boolean(),
+    location_changes => fslogic_event_emitter:location_changes_description()
+}.
+
+-export_type([update_description/0]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -34,8 +42,7 @@
 %%--------------------------------------------------------------------
 -spec update(file_ctx:ctx(), fslogic_blocks:blocks(),
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
-    {ok, ignore | emit_size_change | {emit_replica_status_change, EmissionParam :: boolean()}} |
-    {error, Reason :: term()}.
+    {ok, update_description()} | {error, Reason :: term()}.
 update(FileCtx, Blocks, FileSize, BumpVersion) ->
     replica_synchronizer:apply(FileCtx,
         fun() ->
@@ -55,19 +62,23 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                             ReplicationStatusChanged = has_replication_status_changed(
                                 FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, UpdatedSize),
                             case {ReplicationStatusChanged, UpdatedSize > OldSize} of
-                                {true, SizeChanged} -> {ok, {emit_replica_status_change, SizeChanged}};
-                                {_, true} -> {ok, emit_size_change};
-                                _ -> {ok, ignore}
+                                {true, SizeChanged} -> 
+                                    {ok, #{size_changed => SizeChanged, replica_status_changed => true}};
+                                {_, true} ->
+                                    {ok, #{size_changed => true}};
+                                _ -> 
+                                    {ok, #{}}
                             end;
                         _ ->
+                            UpdateDescription = #{size_changed => true},
                             TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
                             fslogic_location_cache:save_location(TruncatedLocation),
                             FirstLocalBlocks = fslogic_location_cache:get_blocks(TruncatedLocation, #{count => 2}),
                             ReplicationStatusChanged = has_replication_status_changed(
                                 FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, FileSize),
                             case ReplicationStatusChanged of
-                                true -> {ok, {emit_replica_status_change, true}};
-                                false -> {ok, emit_size_change}
+                                true -> {ok, UpdateDescription#{replica_status_changed => true}};
+                                false -> {ok, UpdateDescription}
                             end
                     end;
                 Error ->
