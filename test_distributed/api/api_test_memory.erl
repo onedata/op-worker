@@ -36,18 +36,11 @@ set(MemRef, Key, Value) ->
 
 
 -spec get(mem_ref(), Key :: term()) -> Value :: term() | no_return().
-get(MemRef, Key) ->
-    case node_cache:get({MemRef, Key}) of
-        {ok, Value} -> Value;
-        {error, _} = Error -> throw(Error)
-    end.
+get(MemRef, Key) ->     
+    node_cache:get({MemRef, Key}).
 
 
 -spec get(mem_ref(), Key :: term(), Default :: term()) ->
     Value :: term() | no_return().
 get(MemRef, Key, Default) ->
-    case node_cache:get({MemRef, Key}) of
-        {ok, Value} -> Value;
-        {error, not_found} -> Default;
-        {error, _} = Error -> throw(Error)
-    end.
+    node_cache:get({MemRef, Key}, Default).

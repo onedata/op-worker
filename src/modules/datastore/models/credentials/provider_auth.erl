@@ -97,14 +97,14 @@ save(ProviderId, RootToken) ->
 %%--------------------------------------------------------------------
 -spec get_provider_id() -> {ok, od_provider:id()} | {error, term()}.
 get_provider_id() ->
-    node_cache:get(?PROVIDER_ID_CACHE_KEY, fun() ->
+    node_cache:acquire(?PROVIDER_ID_CACHE_KEY, fun() ->
         case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
             {error, not_found} ->
                 ?ERROR_UNREGISTERED_ONEPROVIDER;
             {error, _} = Error ->
                 Error;
             {ok, #document{value = #provider_auth{provider_id = Id}}} ->
-                {true, Id}
+                {ok, Id, infinity}
         end
     end).
 
