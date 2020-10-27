@@ -13,6 +13,8 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/datastore/transfer.hrl").
+-include("distribution_assert.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -29,7 +31,6 @@ all() -> [
     failure_test
 ].
 
--define(FILE_TEST_CONTENT, <<"1234567890abcd">>).
 -define(ATTEMPTS, 30).
 
 %%%===================================================================
@@ -83,8 +84,11 @@ create_initial_data_structure(Config) ->
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
-    {ok, P1DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP1, SessId(P1), SpaceGuid, <<"P1_dir">>, 8#755)),
-    {ok, P2DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP2, SessId(P2), SpaceGuid, <<"P1_dir">>, 8#755)),
+    ConflictingDirName = generator:gen_name(),
+    {ok, P1DirGuid} =
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP1, SessId(P1), SpaceGuid, ConflictingDirName, 8#755)),
+    {ok, P2DirGuid} =
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP2, SessId(P2), SpaceGuid, ConflictingDirName, 8#755)),
 
     lists:foreach(fun(Dir) ->
         lists:foreach(fun({Worker, ProvId}) ->
@@ -114,7 +118,11 @@ prepare(Config, InitialData, StopAppBeforeKill) ->
     end, TestData, [
         fun prepare_files/3,
         fun prepare_import/3,
-        fun prepare_auto_cleaning/3
+        fun prepare_auto_cleaning/3,
+        fun prepare_replication_transfer/3,
+        fun prepare_eviction_transfer/3,
+        fun prepare_outgoing_migration_transfer/3,
+        fun prepare_incoming_migration_transfer/3
     ]).
 
 
@@ -126,7 +134,11 @@ verify(Config, InitialData, TestData) ->
     end, [
         fun verify_files/3,
         fun verify_import/3,
-        fun verify_auto_cleaning/3
+        fun verify_auto_cleaning/3,
+        fun verify_replication_transfer/3,
+        fun verify_eviction_transfer/3,
+        fun verify_outgoing_migration_transfer/3,
+        fun verify_incoming_migration_transfer/3
     ]).
 
 
@@ -150,8 +162,8 @@ test_new_files_and_dirs_creation(Config, InitialData, Dir) ->
     verify_files_and_dirs(FailingNode, SessId1, TestData),
     verify_files_and_dirs(HealthyNode, SessId2, TestData).
 
-create_files_and_dirs(Worker, SessId, ParentUuid) ->
-    file_ops_test_utils:create_files_and_dirs(Worker, SessId, ParentUuid, 20, 50).
+create_files_and_dirs(Worker, SessId, ParentGuid) ->
+    file_ops_test_utils:create_files_and_dirs(Worker, SessId, ParentGuid, 20, 50).
 
 verify_files_and_dirs(Worker, SessId, DirsAndFiles) ->
     % Verify with 90 attempts as additional time can be needed for
@@ -232,21 +244,144 @@ prepare_auto_cleaning(Config, InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
     SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    FileSize = 5,
 
     enable_file_popularity(FailingNode, SpaceId),
     block_auto_cleaning(FailingNode),
-    configure_auto_cleaning(FailingNode, SpaceId, #{enabled => true, target => 0}),
-
-    {ok, {_, Handle}} = lfm_proxy:create_and_open(FailingNode, SessId, SpaceGuid,
-        generator:gen_name(), 8#664),
-    {ok, _} = lfm_proxy:write(FailingNode, Handle, 0, ?FILE_TEST_CONTENT),
-    lfm_proxy:close(FailingNode, Handle),
-    ?assertEqual(true, get_current_space_quota(FailingNode, SpaceId) > 0 , ?ATTEMPTS),
+    % set high threshold so that auto-cleaning won't start automatically as it may impact other tests
+    % set max_file_size = FileSize so that auto-cleaning won't clean bigger files created in other tests
+    configure_auto_cleaning(FailingNode, SpaceId, #{
+        enabled => true,
+        target => 0,
+        threshold => 1000000000,
+        rules => #{
+            enabled => true,
+            max_file_size => #{enabled => true, value => FileSize}
+        }
+    }),
+    file_ops_test_utils:create_file(FailingNode, SessId, SpaceGuid, generator:gen_name(), 5),
+    ?assertEqual(true, get_current_space_quota(FailingNode, SpaceId) > 0, ?ATTEMPTS),
 
     {ok, ARId} = force_auto_cleaning_run(FailingNode, SpaceId),
-
     TestData#{autocleaning_run_id => ARId}.
 
+
+prepare_replication_transfer(Config, InitialData, TestData) ->
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    HealthyProvider = kv_utils:get(healthy_provider, InitialData),
+    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
+    SpaceId = kv_utils:get(space_id, InitialData),
+    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
+    SessId2 = kv_utils:get([session_ids, HealthyProvider], InitialData),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    FileSize = 10,
+
+    FileGuid = file_ops_test_utils:create_file(HealthyNode, SessId2, SpaceGuid, generator:gen_name(), FileSize),
+    ?assertDistribution(FailingNode, SessId, ?DISTS([HealthyProvider], [FileSize]), FileGuid, ?ATTEMPTS),
+
+    block_replication_transfer(FailingNode),
+    {ok, TransferId} = lfm_proxy:schedule_file_replication(FailingNode, SessId, {guid, FileGuid}, FailingProvider),
+    TestData#{
+        replication => #{
+            transfer_id => TransferId,
+            guid => FileGuid,
+            size => FileSize
+        }
+    }.
+
+prepare_eviction_transfer(Config, InitialData, TestData) ->
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    HealthyProvider = kv_utils:get(healthy_provider, InitialData),
+    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
+    SpaceId = kv_utils:get(space_id, InitialData),
+    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
+    SessId2 = kv_utils:get([session_ids, HealthyProvider], InitialData),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    FileSize = 10,
+
+    FileGuid = file_ops_test_utils:create_file(HealthyNode, SessId2, SpaceGuid, generator:gen_name(), FileSize),
+
+    % read file to replicate it to FailingProvider
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(FailingNode, SessId, {guid, FileGuid}, read), ?ATTEMPTS),
+    ?assertEqual({ok, FileSize}, try
+        {ok, Content} = lfm_proxy:check_size_and_read(FailingNode, Handle, 0, 100),
+        {ok, byte_size(Content)}
+    catch
+        _:_ -> error
+    end, ?ATTEMPTS),
+
+    block_eviction_transfer(FailingNode),
+    {ok, TransferId} =
+        lfm_proxy:schedule_file_replica_eviction(FailingNode, SessId, {guid, FileGuid}, FailingProvider, undefined),
+    TestData#{
+        eviction => #{
+            transfer_id => TransferId,
+            guid => FileGuid,
+            size => FileSize
+        }
+    }.
+
+prepare_outgoing_migration_transfer(Config, InitialData, TestData) ->
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    HealthyProvider = kv_utils:get(healthy_provider, InitialData),
+    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
+    SpaceId = kv_utils:get(space_id, InitialData),
+    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
+    SessId2 = kv_utils:get([session_ids, HealthyProvider], InitialData),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    FileSize = 10,
+
+    FileGuid = file_ops_test_utils:create_file(FailingNode, SessId, SpaceGuid, generator:gen_name(), FileSize),
+    ?assertDistribution(HealthyNode, SessId2, ?DISTS([FailingProvider], [FileSize]), FileGuid, ?ATTEMPTS),
+
+    block_eviction_transfer(FailingNode),
+    {ok, TransferId} = lfm_proxy:schedule_file_replica_eviction(FailingNode, SessId, {guid, FileGuid}, FailingProvider,
+        HealthyProvider),
+
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = ?COMPLETED_STATUS
+    }}}, transfer_get(FailingNode, TransferId), 2 * ?ATTEMPTS),
+
+    TestData#{
+        outgoing_migration => #{
+            transfer_id => TransferId,
+            guid => FileGuid,
+            size => FileSize
+        }
+    }.
+
+prepare_incoming_migration_transfer(Config, InitialData, TestData) ->
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    HealthyProvider = kv_utils:get(healthy_provider, InitialData),
+    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
+    SpaceId = kv_utils:get(space_id, InitialData),
+    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
+    SessId2 = kv_utils:get([session_ids, HealthyProvider], InitialData),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    FileSize = 10,
+
+    FileGuid = file_ops_test_utils:create_file(HealthyNode, SessId2, SpaceGuid, generator:gen_name(), FileSize),
+    ?assertDistribution(FailingNode, SessId, ?DISTS([HealthyProvider], [FileSize]), FileGuid, ?ATTEMPTS),
+
+    block_replication_transfer(FailingNode),
+    {ok, TransferId} = lfm_proxy:schedule_file_replica_eviction(FailingNode, SessId, {guid, FileGuid}, HealthyProvider,
+        FailingProvider),
+
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = ?ENQUEUED_STATUS
+    }}}, transfer_get(FailingNode, TransferId), ?ATTEMPTS),
+
+    TestData#{
+        incoming_migration => #{
+            transfer_id => TransferId,
+            guid => FileGuid,
+            size => FileSize
+        }
+    }.
 
 %%%===================================================================
 %%% Verification functions
@@ -268,9 +403,12 @@ verify_files(Config, InitialData, TestData) ->
         true ->
             ?assertEqual(?CLOSING_PROCEDURE_SUCCEEDED, get_application_closing_status(FailingNode)),
             % App was stopped before node killing - all data should be present
-            verify_all_files_and_dirs_created_by_provider(FailingNode, SessIdFailingProvider, TestData, HealthyProvider),
-            verify_all_files_and_dirs_created_by_provider(FailingNode, SessIdFailingProvider, TestData, FailingProvider),
-            verify_all_files_and_dirs_created_by_provider(HealthyNode, SessIdHealthyProvider, TestData, FailingProvider);
+            verify_all_files_and_dirs_created_by_provider(FailingNode, SessIdFailingProvider, TestData,
+                HealthyProvider),
+            verify_all_files_and_dirs_created_by_provider(FailingNode, SessIdFailingProvider, TestData,
+                FailingProvider),
+            verify_all_files_and_dirs_created_by_provider(HealthyNode, SessIdHealthyProvider, TestData,
+                FailingProvider);
         false ->
             ?assertEqual(?CLOSING_PROCEDURE_FAILED, get_application_closing_status(FailingNode)),
             % App wasn't stopped before node killing - some data can be lost
@@ -302,7 +440,7 @@ verify_auto_cleaning(Config, InitialData, TestData) ->
     ARId1 = kv_utils:get(autocleaning_run_id, TestData),
     % check whether run started before provider was stopped/killed was restarted and finished
     % it will be marked as failed because file was not replicated so it couldn't be cleaned
-    ?assertMatch({ok, #{status := <<"failed">>}}, get_auto_cleaning_run_report(FailingNode, ARId1), ?ATTEMPTS),
+    ?assertMatch({ok, #{status := <<"failed">>}}, get_auto_cleaning_run_report(FailingNode, ARId1), 2 * ?ATTEMPTS),
 
     %check whether next run will be started and finished
     % it will be marked as failed because file was not replicated so it couldn't be cleaned
@@ -310,13 +448,103 @@ verify_auto_cleaning(Config, InitialData, TestData) ->
     ?assertMatch({ok, #{status := <<"failed">>}}, get_auto_cleaning_run_report(FailingNode, ARId2), ?ATTEMPTS).
 
 
+verify_replication_transfer(Config, InitialData, TestData) ->
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    HealthyProvider = kv_utils:get(healthy_provider, InitialData),
+    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
+    TransferId = kv_utils:get([replication, transfer_id], TestData),
+    Guid = kv_utils:get([replication, guid], TestData),
+    Size = kv_utils:get([replication, size], TestData),
 
-get_application_closing_status(Worker) ->
-    rpc:call(Worker, datastore_worker, get_application_closing_status, []).
+    ?assertMatch({ok, #document{value = #transfer{replication_status = ?FAILED_STATUS}}},
+        transfer_get(FailingNode, TransferId), ?ATTEMPTS),
+
+    ?assertMatch({ok, #document{value = #transfer{replication_status = ?COMPLETED_STATUS}}},
+        transfer_get_effective(FailingNode, TransferId), ?ATTEMPTS),
+
+    ?assertDistribution(FailingNode, SessId, ?DISTS([FailingProvider, HealthyProvider], [Size, Size]), Guid, ?ATTEMPTS),
+    ok.
+
+verify_eviction_transfer(Config, InitialData, TestData) ->
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    HealthyProvider = kv_utils:get(healthy_provider, InitialData),
+    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
+    TransferId = kv_utils:get([eviction, transfer_id], TestData),
+    Guid = kv_utils:get([eviction, guid], TestData),
+    Size = kv_utils:get([eviction, size], TestData),
+
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = ?SKIPPED_STATUS,
+        eviction_status = ?FAILED_STATUS
+    }}}, transfer_get(FailingNode, TransferId), ?ATTEMPTS),
+
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = ?SKIPPED_STATUS,
+        eviction_status = ?COMPLETED_STATUS
+    }}}, transfer_get_effective(FailingNode, TransferId), 2 * ?ATTEMPTS),
+
+    ?assertDistribution(FailingNode, SessId, ?DISTS([FailingProvider, HealthyProvider], [0, Size]), Guid, ?ATTEMPTS),
+    ok.
+
+verify_outgoing_migration_transfer(Config, InitialData, TestData) ->
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    HealthyProvider = kv_utils:get(healthy_provider, InitialData),
+    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
+    TransferId = kv_utils:get([outgoing_migration, transfer_id], TestData),
+    Guid = kv_utils:get([outgoing_migration, guid], TestData),
+    Size = kv_utils:get([outgoing_migration, size], TestData),
+
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = ?COMPLETED_STATUS,
+        eviction_status = ?FAILED_STATUS
+    }}}, transfer_get(FailingNode, TransferId), ?ATTEMPTS),
+
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = ?COMPLETED_STATUS,
+        eviction_status = ?COMPLETED_STATUS
+    }}}, transfer_get_effective(FailingNode, TransferId), 2 * ?ATTEMPTS),
+
+    ?assertDistribution(FailingNode, SessId, ?DISTS([FailingProvider, HealthyProvider], [0, Size]), Guid, ?ATTEMPTS),
+    ok.
+
+
+verify_incoming_migration_transfer(Config, InitialData, TestData) ->
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    HealthyProvider = kv_utils:get(healthy_provider, InitialData),
+    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    FailingProvider = kv_utils:get(failing_provider, InitialData),
+    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
+    TransferId = kv_utils:get([incoming_migration, transfer_id], TestData),
+    Guid = kv_utils:get([incoming_migration, guid], TestData),
+    Size = kv_utils:get([incoming_migration, size], TestData),
+
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = ?FAILED_STATUS,
+        eviction_status = ?FAILED_STATUS
+    }}}, transfer_get(FailingNode, TransferId), ?ATTEMPTS),
+
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = ?COMPLETED_STATUS,
+        eviction_status = ?COMPLETED_STATUS
+    }}}, transfer_get_effective(FailingNode, TransferId), 2 * ?ATTEMPTS),
+
+    ?assertDistribution(FailingNode, SessId, ?DISTS([HealthyProvider, FailingProvider], [0, Size]), Guid, ?ATTEMPTS),
+    ok.
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+get_application_closing_status(Worker) ->
+    rpc:call(Worker, datastore_worker, get_application_closing_status, []).
+
 
 block_import(OpwNode) ->
     test_node_starter:load_modules([OpwNode], [?MODULE]),
@@ -333,6 +561,23 @@ block_auto_cleaning(OpwNode) ->
         timer:sleep(timer:minutes(10))
     end).
 
+block_replication_transfer(OpwNode) ->
+    test_node_starter:load_modules([OpwNode], [?MODULE]),
+    ok = test_utils:mock_new(OpwNode, replication_worker),
+    ok = test_utils:mock_expect(OpwNode, replication_worker, transfer_regular_file, fun(_FileCtx, _TransferParams) ->
+        timer:sleep(timer:minutes(10))
+    end).
+
+
+block_eviction_transfer(OpwNode) ->
+    test_node_starter:load_modules([OpwNode], [?MODULE]),
+    ok = test_utils:mock_new(OpwNode, replica_eviction_worker),
+    ok = test_utils:mock_expect(OpwNode, replica_eviction_worker, transfer_regular_file,
+        fun(_FileCtx, _TransferParams) ->
+            timer:sleep(timer:minutes(10))
+        end).
+
+
 get_current_space_quota(Node, SpaceId) ->
     rpc:call(Node, space_quota, current_size, [SpaceId]).
 
@@ -347,6 +592,12 @@ force_auto_cleaning_run(Node, SpaceId) ->
 
 get_auto_cleaning_run_report(Node, ARId) ->
     rpc:call(Node, autocleaning_api, get_run_report, [ARId]).
+
+transfer_get(Node, TransferId) ->
+    rpc:call(Node, transfer, get, [TransferId]).
+
+transfer_get_effective(Node, TransferId) ->
+    rpc:call(Node, transfer, get_effective, [TransferId]).
 
 add_session_ids(Config, InitialData) ->
     [P1, P2] = test_config:get_providers(Config),

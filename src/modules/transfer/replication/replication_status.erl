@@ -282,6 +282,8 @@ mark_cancelled(Transfer = #transfer{replication_status = ?ABORTING_STATUS}) ->
 mark_cancelled(#transfer{replication_status = Status}) ->
     {error, Status}.
 
+
+%% @private
 -spec add_rerun_id(transfer:id(), transfer:id()) -> {ok, transfer:doc()} | error().
 add_rerun_id(TransferId, NewTransferId) ->
     transfer:update(TransferId, fun(OldTransfer) ->

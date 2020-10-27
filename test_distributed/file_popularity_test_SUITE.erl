@@ -94,12 +94,12 @@ all() -> [
 
 query_should_return_error_when_file_popularity_is_disabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ?assertMatch({error, not_found}, query2(W, ?SPACE_ID, #{})).
+    ?assertMatch({error, not_found}, query(W, ?SPACE_ID, #{})).
 
 query_should_return_empty_list_when_file_popularity_is_enabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     ok = enable_file_popularity(W, ?SPACE_ID),
-    ?assertMatch([], query2(W, ?SPACE_ID, #{})).
+    ?assertMatch([], query(W, ?SPACE_ID, #{})).
 
 query_should_return_empty_list_when_file_has_not_been_opened(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -107,7 +107,7 @@ query_should_return_empty_list_when_file_has_not_been_opened(Config) ->
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
     {ok, _} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
-    ?assertMatch([], query2(W, ?SPACE_ID, #{})).
+    ?assertMatch([], query(W, ?SPACE_ID, #{})).
 
 query_should_return_file_when_file_has_been_opened(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -118,7 +118,7 @@ query_should_return_file_when_file_has_been_opened(Config) ->
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
     ok = lfm_proxy:close(W, H),
     {ok, FileId} = file_id:guid_to_objectid(G),
-    ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
+    ?assertMatch([{FileId, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 file_should_have_correct_popularity_value(Config) ->
     file_should_have_correct_popularity_value_base(Config, 1.123, 0).
@@ -150,7 +150,7 @@ avg_open_count_per_day_parameter_should_be_bounded_by_100_by_default(Config) ->
     open_and_close_file(W, ?SESSION(W, Config), G1, OpenCountPerMonth1),
     open_and_close_file(W, ?SESSION(W, Config), G2, OpenCountPerMonth2),
 
-    ?assertMatch([{_, _Popularity}, {_, _Popularity}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
+    ?assertMatch([{_, _Popularity}, {_, _Popularity}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 avg_open_count_per_day_parameter_should_be_bounded_by_custom_value(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -174,7 +174,7 @@ avg_open_count_per_day_parameter_should_be_bounded_by_custom_value(Config) ->
     open_and_close_file(W, ?SESSION(W, Config), G1, OpenCountPerMonth1),
     open_and_close_file(W, ?SESSION(W, Config), G2, OpenCountPerMonth2),
 
-    ?assertMatch([{_, _Popularity}, {_, _Popularity}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
+    ?assertMatch([{_, _Popularity}, {_, _Popularity}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 changing_max_avg_open_count_per_day_limit_should_reindex_the_file(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -190,11 +190,11 @@ changing_max_avg_open_count_per_day_limit_should_reindex_the_file(Config) ->
     {ok, FileId} = file_id:guid_to_objectid(G),
     open_and_close_file(W, ?SESSION(W, Config), G, OpenCountPerMonth),
 
-    [{_, Popularity}] = ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS),
+    [{_, Popularity}] = ?assertMatch([{FileId, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS),
     ok = configure_file_popularity(W, ?SPACE_ID, undefined, undefined, undefined, MaxOpenCount2),
 
-    ?assertNotMatch([{_, Popularity}], query2(W, ?SPACE_ID, #{})),
-    ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{})).
+    ?assertNotMatch([{_, Popularity}], query(W, ?SPACE_ID, #{})),
+    ?assertMatch([{FileId, _}], query(W, ?SPACE_ID, #{})).
 
 changing_last_open_weight_should_reindex_the_file(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -210,11 +210,11 @@ changing_last_open_weight_should_reindex_the_file(Config) ->
     {ok, FileId} = file_id:guid_to_objectid(G),
     open_and_close_file(W, ?SESSION(W, Config), G, 1),
 
-    [{_, Popularity}] = ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS),
+    [{_, Popularity}] = ?assertMatch([{FileId, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS),
     ok = configure_file_popularity(W, ?SPACE_ID, undefined, LastOpenWeight2, undefined, undefined),
 
-    ?assertNotMatch([{_, Popularity}], query2(W, ?SPACE_ID, #{})),
-    ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{})).
+    ?assertNotMatch([{_, Popularity}], query(W, ?SPACE_ID, #{})),
+    ?assertMatch([{FileId, _}], query(W, ?SPACE_ID, #{})).
 
 changing_avg_open_count_weight_should_reindex_the_file(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -230,11 +230,11 @@ changing_avg_open_count_weight_should_reindex_the_file(Config) ->
     {ok, FileId} = file_id:guid_to_objectid(G),
     open_and_close_file(W, ?SESSION(W, Config), G, 1),
 
-    [{_, Popularity}] = ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS),
+    [{_, Popularity}] = ?assertMatch([{FileId, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS),
     ok = configure_file_popularity(W, ?SPACE_ID, undefined, undefined, AvgOpenCountPerDayWeight2, undefined),
 
-    ?assertNotMatch([{_, Popularity}], query2(W, ?SPACE_ID, #{})),
-    ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{})).
+    ?assertNotMatch([{_, Popularity}], query(W, ?SPACE_ID, #{})),
+    ?assertMatch([{FileId, _}], query(W, ?SPACE_ID, #{})).
 
 query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -271,7 +271,7 @@ query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     {ok, FileId2} = file_id:guid_to_objectid(G2),
     {ok, FileId3} = file_id:guid_to_objectid(G3),
 
-    ?assertMatch([{FileId1, _}, {FileId2, _}, {FileId3, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
+    ?assertMatch([{FileId1, _}, {FileId2, _}, {FileId3, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -307,7 +307,7 @@ query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
     {ok, FileId2} = file_id:guid_to_objectid(G2),
     {ok, FileId3} = file_id:guid_to_objectid(G3),
 
-    ?assertMatch([{FileId1, _}, {FileId2, _}, {FileId3, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
+    ?assertMatch([{FileId1, _}, {FileId2, _}, {FileId3, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 %%%===================================================================
 %%% Test base functions
@@ -325,7 +325,7 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
     open_and_close_file(W, ?SESSION(W, Config), G),
     {ok, FileId} = file_id:guid_to_objectid(G),
-    ?assertMatch([{FileId, Popularity}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
+    ?assertMatch([{FileId, Popularity}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -419,7 +419,7 @@ collector_loop(TestMaster, RowsMap) ->
             collector_loop(TestMaster, RowsMap#{RowNum => {FileId, Popularity}})
     end.
 
-query2(Worker, SpaceId, Opts) ->
+query(Worker, SpaceId, Opts) ->
     start_collector_remote(Worker),
     case run(Worker, SpaceId, Opts) of
         {ok, _} ->
