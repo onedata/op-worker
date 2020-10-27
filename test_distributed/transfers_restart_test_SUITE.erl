@@ -23,17 +23,17 @@
 
 -export([
     rtransfer_restart_test/1,
-    node_stop_test/1,
-    node_restart_test/1
+    node_gentle_restart_test/1,
+    node_kill_test/1
 ]).
 
 % For RPC
--export([count_missing_transfer_links_in_db/2]).
+-export([count_missing_transfer_links_in_db/2, get_transfer_links/4]).
 
 all() -> [
     rtransfer_restart_test,
-    node_stop_test,
-    node_restart_test
+    node_gentle_restart_test,
+    node_kill_test
 ].
 
 -define(FILE_DATA, <<"1234567890abcd">>).
@@ -51,7 +51,7 @@ rtransfer_restart_test(Config) ->
 
     restart_test_base(Config, RestartFun, link).
 
-node_stop_test(Config) ->
+node_gentle_restart_test(Config) ->
     RestartFun = fun(Worker) ->
         ?assertEqual(ok, rpc:call(Worker, application, stop, [?APP_NAME])),
         ct:pal("Application stopped"),
@@ -62,9 +62,9 @@ node_stop_test(Config) ->
         UpdatedConfig
     end,
 
-    restart_test_base(Config, RestartFun, stop).
+    restart_test_base(Config, RestartFun, gentle_stop).
 
-node_restart_test(Config) ->
+node_kill_test(Config) ->
     RestartFun = fun(Worker) ->
         failure_test_utils:kill_nodes(Config, Worker),
         ct:pal("Node killed"),
@@ -75,7 +75,7 @@ node_restart_test(Config) ->
 
     restart_test_base(Config, RestartFun, kill).
 
-restart_test_base(Config, RestartFun, Restart) ->
+restart_test_base(Config, RestartFun, RestartType) ->
     [P1, P2] = test_config:get_providers(Config),
     [WorkerP1] = test_config:get_provider_nodes(Config, P1),
     [WorkerP2] = test_config:get_provider_nodes(Config, P2),
@@ -95,15 +95,18 @@ restart_test_base(Config, RestartFun, Restart) ->
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
     onenv_test_utils:disable_panel_healthcheck(Config),
 
+    % Create test files
     Files1 = file_ops_test_utils:create_files(WorkerP1, SessIdP1, SpaceGuid, FilesCount),
     Files2 = file_ops_test_utils:create_files(WorkerP1, SessIdP1, SpaceGuid, FilesCount),
     AllFiles = Files1 ++ Files2,
 
+    % Wait until dbsync synchronizes all files
     lists:foreach(fun(File) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileSize}},
             lfm_proxy:stat(WorkerP2, SessIdP2, {guid, File}), Attempts)
     end, AllFiles),
 
+    % Schedule on_the_fly blocks replications
     lists_utils:pforeach(fun(File) ->
         FileCtx = file_ctx:new_by_guid(File),
         lists:foreach(fun(Offset) ->
@@ -113,6 +116,7 @@ restart_test_base(Config, RestartFun, Restart) ->
         end, lists:seq(0, FileSize))
     end, Files1),
 
+    % Schedule transfers
     PMapAns = lists_utils:pmap(fun(File) ->
         FileCtx = file_ctx:new_by_guid(File),
         lists:foreach(fun(Offset) ->
@@ -123,12 +127,14 @@ restart_test_base(Config, RestartFun, Restart) ->
         lfm_proxy:schedule_file_replication(WorkerP2, SessIdP2, {guid, File}, P2)
     end, Files2),
 
+    % Verify transfers scheduling
     TransferIds = lists:map(fun(Ans) ->
         {ok, TransferId} = ?assertMatch({ok, _}, Ans),
         TransferId
     end, PMapAns),
 
-    case Restart of
+    % If node is to be killed, check if information about transfers is persisted in couchbase
+    case RestartType of
         kill ->
             lists:foreach(fun(TransferId) ->
                 ?assertMatch({ok, _}, rpc:call(WorkerP2, datastore_model, get,
@@ -139,16 +145,27 @@ restart_test_base(Config, RestartFun, Restart) ->
             ok
     end,
 
+    % Restart node
     UpdatedConfig = RestartFun(WorkerP2),
     UpdatedSessIdP2 = test_config:get_user_session_id_on_provider(UpdatedConfig, User1, P2),
 
+    % Verify transfers
+    TransferIdsToVerify = case RestartType of
+        kill ->
+            % After node killing, it is possible that status in document is not updated
+            % if its link is already in past tree
+            TransferIds -- get_past_transfer_links(WorkerP2, SpaceId);
+        _ ->
+            TransferIds
+    end,
     lists:foreach(fun(TransferId) ->
         multi_provider_file_ops_test_base:await_replication_end(WorkerP2, TransferId, Attempts, get_effective)
-    end, TransferIds),
+    end, TransferIdsToVerify),
 
-    FilesToCheckDistribution = case Restart of
+    % Verify if data has been replicated
+    FilesToCheckDistribution = case RestartType of
         kill -> []; % documents with transferred blocks could be lost
-        stop -> Files2; % on demand transfers could be lost
+        gentle_stop -> Files2; % on demand transfers could be lost
         link -> AllFiles
     end,
     lists:foreach(fun(File) ->
@@ -207,7 +224,16 @@ count_missing_transfer_links_in_db(SpaceId, TransferIds) ->
 
 get_transfer_links_from_db(Prefix, SpaceId, Acc0) ->
     Ctx = #{model => transfer, memory_driver => undefined},
+    get_transfer_links(Ctx, Prefix, SpaceId, Acc0).
+
+get_transfer_links(Ctx, Prefix, SpaceId, Acc0) ->
     datastore_model:fold_links(Ctx, <<Prefix/binary, "_", SpaceId/binary>>, all, fun
         (#link{target = TransferId}, Acc) ->
             {ok, sets:add_element(TransferId, Acc)}
     end, Acc0, #{}).
+
+get_past_transfer_links(Worker, SpaceId) ->
+    test_node_starter:load_modules([Worker], [?MODULE]),
+    Ctx = #{model => transfer},
+    {ok, Acc} = rpc:call(Worker, ?MODULE, get_transfer_links, [Ctx, <<"PAST_TRANSFERS_KEY">>, SpaceId, sets:new()]),
+    sets:to_list(Acc).
