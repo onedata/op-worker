@@ -29,7 +29,7 @@
 %% Definitions of file REST paths.
 %% @end
 %%--------------------------------------------------------------------
--spec routes() -> [{binary(), module(), map()}].
+-spec routes() -> [{Path :: binary(), Handler :: module(), RoutesForPath :: map()}].
 routes() ->
     AllRoutes = lists:flatten([
         basic_file_operations_rest_routes:routes(),
@@ -60,6 +60,7 @@ routes() ->
 
     % Convert all routes to cowboy-compliant routes
     % - prepend REST prefix to every route
+    % - rest handler module must be added as second element to the tuples
     % - RoutesForPath will serve as Opts to rest handler init.
     {ok, PrefixStr} = application:get_env(?APP_NAME, op_rest_api_prefix),
     Prefix = str_utils:to_binary(PrefixStr),
@@ -76,8 +77,8 @@ routes() ->
 %% Otherwise it would be impossible to make requests for such routes.
 %% @end
 %%--------------------------------------------------------------------
--spec sort_routes({binary(), module(), #rest_req{}}) ->
-    [{binary(), module(), #rest_req{}}].
+-spec sort_routes([{Path :: binary(), Handler :: module(), #rest_req{}}]) ->
+    [{Path :: binary(), Handler :: module(), #rest_req{}}].
 sort_routes(AllRoutes) ->
     % Replace ':' (ASCII 58) with `}` (ASCII 125) as this makes routes properly sortable
     SortableYetInvalidRoutes = lists:map(fun({Path, Handler, RestReq}) ->

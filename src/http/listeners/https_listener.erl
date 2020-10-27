@@ -70,7 +70,6 @@ start() ->
         {?GUI_GRAPH_SYNC_WS_PATH, gs_ws_handler, [gui_gs_translator]},
         {?CDMI_ID_PATH, cdmi_handler, by_id},
         {?CDMI_PATH, cdmi_handler, by_path},
-        {"/api/v3/oneprovider/data/:id/content", file_content_handler, no_state},  %% TODO rm
         rest_routes:routes()
     ]),
 
