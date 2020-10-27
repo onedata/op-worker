@@ -5718,8 +5718,7 @@ clean_storage(Worker, Storage, ImportedStorage) ->
 clean_space(Config) ->
     [W, W2 | _] = ?config(op_worker_nodes, Config),
     SpaceGuid = rpc:call(W, fslogic_uuid, spaceid_to_space_dir_guid, [?SPACE_ID]),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W)}}, Config),
-    close_opened_files(W, SessId),
+    lfm_proxy:close_all(W),
     {ok, Children} = lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000),
     Attempts = 5 * ?ATTEMPTS,
     Self = self(),
@@ -5731,14 +5730,6 @@ clean_space(Config) ->
     verify_deletions(Guids, Attempts),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS).
-
-close_opened_files(Worker, SessionId) ->
-    {ok, Handles} = rpc:call(Worker, file_handles, list, []),
-    lists:foreach(fun(#document{key = Uuid}) ->
-        Guid = file_id:pack_guid(Uuid, ?SPACE_ID),
-        FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [Guid]),
-        ok = rpc:call(Worker, file_handles, register_release, [FileCtx, SessionId, infinity])
-    end, Handles).
 
 
 verify_deletions(Guids, Timeout) ->

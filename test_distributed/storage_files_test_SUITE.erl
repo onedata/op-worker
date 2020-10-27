@@ -1346,32 +1346,8 @@ get_supported_spaces(Worker) ->
 clean_spaces(Workers = [W1 | _]) ->
     {ok, SpaceIds} = rpc:call(W1, provider_logic, get_spaces, []),
     lists:foreach(fun(SpaceId) ->
-        clean_space(W1, SpaceId),
-        check_if_space_cleaned(Workers, SpaceId)
+        lfm_test_utils:clean_space(Workers, SpaceId, 30)
     end, SpaceIds).
-
-check_if_space_cleaned(Workers, SpaceId) ->
-    lists:foreach(fun(W) ->
-        case rpc:call(W, provider_logic, supports_space, [SpaceId]) of
-            true ->
-                ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, ?SPACE_GUID(SpaceId)}, 0, 1), ?ATTEMPTS);
-            false ->
-                ok
-        end
-    end, Workers).
-
-clean_space(Worker, SpaceId) ->
-    BatchSize = 1000,
-    {ok, Children} = lfm_proxy:get_children(Worker, ?ROOT_SESS_ID, {guid, ?SPACE_GUID(SpaceId)}, 0, BatchSize),
-    lists:foreach(fun({G, _}) ->
-        ok = lfm_proxy:rm_recursive(Worker, ?ROOT_SESS_ID, {guid, G})
-    end, Children),
-    case length(Children) < BatchSize of
-        true ->
-            ?assertMatch({ok, []}, lfm_proxy:get_children(Worker, ?ROOT_SESS_ID, {guid, ?SPACE_GUID(SpaceId)}, 0, 1));
-        false ->
-            clean_space(Worker, SpaceId)
-    end.
 
 clean_posix_storage_mountpoints(Worker) ->
     {ok, SpaceIds} = get_supported_spaces(Worker),

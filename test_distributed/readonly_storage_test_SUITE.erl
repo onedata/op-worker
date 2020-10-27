@@ -31,6 +31,7 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("distribution_assert.hrl").
+-include("lfm_test_utils.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -71,8 +72,7 @@
 -define(RW_STORAGE_ID, <<"mntst1_rdwr">>).
 -define(SPACE_NAME, <<"space_name1">>).
 -define(SPACE_PATH, ?PATH(<<"">>)).
--define(SESS_ID(W, Config), ?SESS_ID(W, ?USER1, Config)).
--define(SESS_ID(W, User, Config), ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)).
+-define(SESS_ID(W, Config), ?SESS_ID(?USER1, W, Config)).
 -define(PATH(FileRelativePath), filepath_utils:join([<<"/">>, ?SPACE_NAME, FileRelativePath])).
 -define(FILE_NAME, <<"file_", (?RAND_NAME)/binary>>).
 -define(DIR_NAME, <<"dir_", (?RAND_NAME)/binary>>).
@@ -660,7 +660,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_Case, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    clean_space(W1, ?SPACE_ID, Config),
+    lfm_test_utils:clean_space(W1, ?SPACE_ID, ?ATTEMPTS),
     clean_storage(W1, ?SPACE_ID, ?RW_STORAGE_ID),
     lfm_proxy:teardown(Config).
 
@@ -705,36 +705,6 @@ ensure_parent_dirs_created_on_storage(Worker, SpaceId, StorageFileId) ->
 
 provider_id(Worker) ->
     rpc:call(Worker, oneprovider, get_id, []).
-
-clean_space(Worker, SpaceId, Config) ->
-    SessId = ?SESS_ID(Worker, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    BatchSize = 1000,
-    clean_space(Worker, SessId, SpaceGuid, 0, BatchSize),
-    ensure_space_empty(SpaceId, Config).
-
-clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
-    {ok, GuidsAndPaths} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
-    FilesNum = length(GuidsAndPaths),
-    delete_files(Worker, SessId, GuidsAndPaths),
-    case FilesNum < BatchSize of
-        true ->
-            ok;
-        false ->
-            clean_space(Worker, SessId, SpaceGuid, Offset + BatchSize, BatchSize)
-    end.
-
-delete_files(Worker, SessId, GuidsAndPaths) ->
-    lists:foreach(fun({G, _P}) ->
-        lfm_proxy:rm_recursive(Worker, SessId, {guid, G})
-    end, GuidsAndPaths).
-
-ensure_space_empty(SpaceId, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    lists:foreach(fun(W) ->
-        ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?SESS_ID(W, Config), {guid, Guid}, 0, 1), ?ATTEMPTS)
-    end, Workers).
 
 clean_storage(Worker, SpaceId, StorageId) ->
     SDHandle = sd_test_utils:new_handle(Worker, SpaceId, <<"/">>, StorageId),
