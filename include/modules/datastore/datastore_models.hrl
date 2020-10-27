@@ -781,7 +781,7 @@
     space_id :: undefined  | od_space:id(),
     size = 0 :: non_neg_integer(),
     open_count = 0 :: non_neg_integer(),
-    last_open = 0 :: clock:seconds(),
+    last_open = 0 :: clock:hours(),
     hr_hist = [] :: list(),
     dy_hist = [] :: list(),
     mth_hist = [] :: list(),

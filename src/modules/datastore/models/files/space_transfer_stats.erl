@@ -28,7 +28,7 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
--type timestamp() :: non_neg_integer().
+-type timestamp() :: clock:seconds().
 -type size() :: pos_integer().
 -type space_transfer_stats() :: #space_transfer_stats{}.
 -type doc() :: datastore_doc:doc(space_transfer_stats()).

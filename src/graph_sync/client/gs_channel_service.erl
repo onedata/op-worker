@@ -78,7 +78,7 @@ is_connected() ->
 %%--------------------------------------------------------------------
 -spec force_start_connection() -> boolean().
 force_start_connection() ->
-    case {oneprovider:is_registered(), is_clock_synchronized(), is_connected()} of
+    case {oneprovider:is_registered(), is_clock_sync_satisfied(), is_connected()} of
         {false, _, _} ->
             ?warning("Ignoring attempt to force start Onezone connection - Oneprovider is not registered."),
             false;
@@ -171,14 +171,14 @@ takeover_service() ->
 
 -spec healthcheck(clock:millis()) -> {ok, clock:millis()}.
 healthcheck(LastInterval) ->
-    case {oneprovider:is_registered(), is_clock_synchronized(), is_connected()} of
+    case {oneprovider:is_registered(), is_clock_sync_satisfied(), is_connected()} of
         {false, _, _} ->
             ?debug("The provider is not registered - next Onezone connection attempt in ~B seconds.", [
                 ?GS_RECONNECT_BASE_INTERVAL div 1000
             ]),
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
         {true, false, _} ->
-            NewInterval = apply_backoff(LastInterval),
+            NewInterval = calculate_backoff(LastInterval),
             ?info(
                 "Deferring Onezone connection as the clock has not been yet synchronized with Onepanel "
                 "(see op_panel logs for details). Next check in ~B seconds.", [NewInterval div 1000]
@@ -191,7 +191,7 @@ healthcheck(LastInterval) ->
                 ok ->
                     {ok, ?GS_RECONNECT_BASE_INTERVAL};
                 error ->
-                    NewInterval = apply_backoff(LastInterval),
+                    NewInterval = calculate_backoff(LastInterval),
                     % specific errors are logged in gs_client_worker
                     ?warning("Next Onezone connection attempt in ~B seconds.", [NewInterval div 1000]),
                     {ok, NewInterval}
@@ -203,15 +203,26 @@ healthcheck(LastInterval) ->
 %%%===================================================================
 
 %% @private
--spec apply_backoff(clock:millis()) -> clock:millis().
-apply_backoff(LastInterval) ->
+-spec calculate_backoff(clock:millis()) -> clock:millis().
+calculate_backoff(LastInterval) ->
     min(?GS_RECONNECT_MAX_BACKOFF, round(LastInterval * ?GS_RECONNECT_BACKOFF_RATE)).
 
 
 %% @private
--spec is_clock_synchronized() -> boolean().
-is_clock_synchronized() ->
-    clock:is_synchronized() orelse ?REQUIRE_CLOCK_SYNC_FOR_CONNECTION =:= false.
+-spec is_clock_sync_satisfied() -> boolean().
+is_clock_sync_satisfied() ->
+    case clock:is_synchronized() of
+        true ->
+            true;
+        false ->
+            case ?REQUIRE_CLOCK_SYNC_FOR_CONNECTION of
+                false ->
+                    ?notice("Ignoring unsynchronized clock for Onezone GS connection (forced in config)"),
+                    true;
+                _ ->
+                    false
+            end
+    end.
 
 
 %% @private

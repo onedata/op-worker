@@ -80,7 +80,7 @@
 -type type() :: replication | eviction | migration.
 -type data_source_type() :: file | view.
 -type doc() :: datastore_doc:doc(transfer()).
--type timestamp() :: non_neg_integer().
+-type timestamp() :: clock:seconds().
 -type list_limit() :: non_neg_integer() | all.
 -type view_name() :: undefined | index:key().
 -type query_view_params() :: undefined | index:query_options() .

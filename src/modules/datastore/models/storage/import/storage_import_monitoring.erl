@@ -67,7 +67,7 @@
 -type record() :: #storage_import_monitoring{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type timestamp() :: non_neg_integer().
+-type timestamp() :: clock:seconds().
 -type status() :: undefined | ?ENQUEUED | ?RUNNING | ?ABORTING | ?FAILED | ?COMPLETED | ?ABORTED.
 
 -type window() :: day | hour | minute.
@@ -701,8 +701,7 @@ mark_finished_scan_internal(SIM = #storage_import_monitoring{
 %% Returns list of values of given histogram.
 %% @end
 %%-------------------------------------------------------------------
--spec get_histogram_values(time_slot_histogram:histogram())
-        -> histogram:histogram().
+-spec get_histogram_values(time_slot_histogram:histogram()) -> histogram:histogram().
 get_histogram_values(Histogram) ->
     time_slot_histogram:get_histogram_values(Histogram).
 
@@ -712,8 +711,7 @@ get_histogram_values(Histogram) ->
 %% Returns last update timestamp of given histogram.
 %% @end
 %%-------------------------------------------------------------------
--spec get_histogram_timestamp(time_slot_histogram:histogram())
-        -> timestamp().
+-spec get_histogram_timestamp(time_slot_histogram:histogram()) -> timestamp().
 get_histogram_timestamp(Histogram) ->
     time_slot_histogram:get_last_update(Histogram).
 
