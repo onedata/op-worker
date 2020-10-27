@@ -210,8 +210,7 @@ process_request(Req, State) ->
             gri = GRI,
             data = Data
         },
-        RestResp = handle_request(OpReq),
-        {stop, http_req:send_response(RestResp, Req2), State}
+        {stop, handle_request(OpReq, Req2), State}
     catch
         throw:Error ->
             {stop, http_req:send_error(Error, Req), State};
@@ -231,23 +230,34 @@ process_request(Req, State) ->
 %% using TranslatorModule.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request(#op_req{}) -> #rest_resp{}.
-handle_request(#op_req{operation = Operation, gri = GRI} = ElReq) ->
-    Result = middleware:handle(ElReq),
-    try
-        rest_translator:response(ElReq, Result)
-    catch
-        Type:Message ->
-            ?error_stacktrace("Cannot translate REST result for:~n"
-            "Operation: ~p~n"
-            "GRI: ~p~n"
-            "Result: ~p~n"
-            "---------~n"
-            "Error was: ~w:~p", [
-                Operation, GRI, Result, Type, Message
-            ]),
-            rest_translator:error_response(?ERROR_INTERNAL_SERVER_ERROR)
-    end.
+-spec handle_request(#op_req{}, cowboy_req:req()) -> cowboy_req:req().
+handle_request(#op_req{operation = Operation, gri = #gri{
+    type = op_file,
+    aspect = As
+}} = OpReq, Req) when
+    (Operation == create andalso As == child);
+    (Operation == create andalso As == content);
+    (Operation == get andalso As == content)
+->
+    file_content_handler:handle_request(OpReq, Req);
+handle_request(#op_req{operation = Operation, gri = GRI} = OpReq, Req) ->
+    Result = middleware:handle(OpReq),
+
+    RestResponse = try
+        rest_translator:response(OpReq, Result)
+    catch Type:Message ->
+        ?error_stacktrace("Cannot translate REST result for:~n"
+                          "Operation: ~p~n"
+                          "GRI: ~p~n"
+                          "Result: ~p~n"
+                          "---------~n"
+                          "Error was: ~w:~p", [
+            Operation, GRI, Result, Type, Message
+        ]),
+        rest_translator:error_response(?ERROR_INTERNAL_SERVER_ERROR)
+    end,
+
+    http_req:send_response(RestResponse, Req).
 
 
 %%--------------------------------------------------------------------
@@ -317,9 +327,9 @@ resolve_bindings(_SessionId, Other, _Req) ->
 -spec get_data(cowboy_req:req(), parse_body(), Consumes :: [term()]) ->
     {Data :: middleware:data(), cowboy_req:req()}.
 get_data(Req, ignore, _Consumes) ->
-    {parse_query_string(Req), Req};
+    {http_parser:parse_query_string(Req), Req};
 get_data(Req, as_json_params, _Consumes) ->
-    QueryParams = parse_query_string(Req),
+    QueryParams = http_parser:parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ParsedBody = try
         case Body of
@@ -332,7 +342,7 @@ get_data(Req, as_json_params, _Consumes) ->
     is_map(ParsedBody) orelse throw(?ERROR_MALFORMED_DATA),
     {maps:merge(ParsedBody, QueryParams), Req2};
 get_data(Req, {as_is, KeyName}, Consumes) ->
-    QueryParams = parse_query_string(Req),
+    QueryParams = http_parser:parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ContentType = case Consumes of
         [ConsumedType] ->
@@ -352,35 +362,6 @@ get_data(Req, {as_is, KeyName}, Consumes) ->
             Body
     end,
     {QueryParams#{KeyName => ParsedBody}, Req2}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Parses and returns query string parameters. For every parameter
-%% specified multiple times it's values are merged into list.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_query_string(cowboy_req:req()) -> map().
-parse_query_string(Req) ->
-    Params = lists:foldl(fun({Key, Val}, AccMap) ->
-        maps:update_with(Key, fun(OldVal) ->
-            [Val | ensure_list(OldVal)]
-        end, Val, AccMap)
-    end, #{}, cowboy_req:parse_qs(Req)),
-
-    maps:fold(fun
-        (K, V, AccIn) when is_list(V) ->
-            AccIn#{K => lists:reverse(V)};
-        (_K, _V, AccIn) ->
-            AccIn
-    end, Params, Params).
-
-
-%% @private
--spec ensure_list(Val | [Val]) -> [Val] when Val :: true | binary().
-ensure_list(Val) when is_list(Val) -> Val;
-ensure_list(Val) -> [Val].
 
 
 %%--------------------------------------------------------------------

@@ -12,17 +12,14 @@
 -module(file_content_handler).
 -author("Bartosz Walkowicz").
 
--behaviour(cowboy_rest).
-
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% cowboy rest handler API
--export([init/2]).
+-export([handle_request/2]).
 
 -type scope_policy() :: allow_share_mode | disallow_share_mode.
 
@@ -32,40 +29,22 @@
 %%%===================================================================
 
 
--spec init(cowboy_req:req(), term()) -> {ok, cowboy_req:req(), term()}.
-init(#{method := <<"GET">>} = Req, State) ->
-    {ok, handle_request(Req, allow_share_mode), State};
-
-init(#{method := <<"PATCH">>} = Req, State) ->
-    {ok, handle_request(Req, disallow_share_mode), State};
-
-init(Req, State) ->
-    NewReq = cowboy_req:reply(
-        ?HTTP_405_METHOD_NOT_ALLOWED,
-        #{?HDR_ALLOW => str_utils:join_binary([<<"GET">>, <<"PATCH">>], <<", ">>)},
-        Req
-    ),
-    {ok, NewReq, State}.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec handle_request(cowboy_req:req(), scope_policy()) -> cowboy_req:req().
-handle_request(Req, ScopePolicy) ->
+-spec handle_request(#op_req{}, cowboy_req:req()) -> cowboy_req:req().
+handle_request(#op_req{operation = Operation, auth = OriginalAuth, gri = #gri{
+    type = op_file,
+    id = FileGuid,
+    aspect = Aspect
+}, data = RawParams}, Req) ->
     try
-        OriginalAuth = authenticate_client(Req),
-        FileObjectId = cowboy_req:binding(id, Req),
-        FileGuid = middleware_utils:decode_object_id(FileObjectId, id),
+        RawParams = http_parser:parse_query_string(Req),
+        SanitizedParams = sanitize_params(RawParams, Req),
+        ScopePolicy = get_scope_policy(Operation, Aspect),
 
         Auth = ensure_proper_context(OriginalAuth, FileGuid, ScopePolicy),
         ensure_authorized(Auth, FileGuid, ScopePolicy),
         middleware_utils:assert_file_managed_locally(FileGuid),
 
-        process_request(Auth, FileGuid, Req)
+        process_request(Auth, FileGuid, SanitizedParams, Req)
     catch
         throw:Error ->
             http_req:send_error(Error, Req);
@@ -77,15 +56,49 @@ handle_request(Req, ScopePolicy) ->
     end.
 
 
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
 %% @private
--spec authenticate_client(cowboy_req:req()) -> aai:auth() | no_return().
-authenticate_client(Req) ->
-    case http_auth:authenticate(Req, rest, allow_data_access_caveats) of
-        {ok, Auth} ->
-            Auth;
-        {error, _} = Error ->
-            throw(Error)
-    end.
+-spec get_scope_policy(middleware:operation(), gri:aspect()) -> scope_policy().
+get_scope_policy(create, child) -> disallow_share_mode;
+get_scope_policy(create, content) -> disallow_share_mode;
+get_scope_policy(get, content) -> allow_share_mode.
+
+
+%% @private
+-spec sanitize_params(RawParams :: map(), cowboy_req:req()) -> map() | no_return().
+sanitize_params(_RawParams, #{method := <<"GET">>}) ->
+    #{};
+sanitize_params(RawParams, #{method := <<"PUT">>}) ->
+    middleware_sanitizer:sanitize_data(RawParams, #{
+        optional => #{<<"offset">> => {integer, {not_lower_than, 0}}}
+    });
+sanitize_params(RawParams, #{method := <<"POST">>}) ->
+    ModeParam = <<"mode">>,
+
+    middleware_sanitizer:sanitize_data(RawParams, #{
+        required => #{
+            <<"name">> => {binary, non_empty}
+        },
+        optional => #{
+            <<"type">> => {binary, [<<"file">>, <<"dir">>]},
+            ModeParam => {binary, fun(Mode) ->
+                try binary_to_integer(Mode, 8) of
+                    ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
+                        {true, ValidMode};
+                    _ ->
+                        throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(ModeParam, 0, 8#1777))
+                catch _:_ ->
+                    throw(?ERROR_BAD_VALUE_INTEGER(ModeParam))
+                end
+            end},
+            <<"offset">> => {integer, {not_lower_than, 0}}
+        }
+    }).
 
 
 %% @private
@@ -121,9 +134,9 @@ ensure_authorized(Auth, FileGuid, allow_share_mode) ->
 
 
 %% @private
--spec process_request(aai:auth(), file_id:file_guid(), cowboy_req:req()) ->
-    cowboy_req:req().
-process_request(#auth{session_id = SessionId}, FileGuid, #{method := <<"GET">>} = Req) ->
+-spec process_request(aai:auth(), file_id:file_guid(), Params :: map(), cowboy_req:req()) ->
+    cowboy_req:req() | no_return().
+process_request(#auth{session_id = SessionId}, FileGuid, _, #{method := <<"GET">>} = Req) ->
     case lfm:stat(SessionId, {guid, FileGuid}) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             http_download_utils:stream_file(SessionId, FileAttrs, Req);
@@ -133,6 +146,66 @@ process_request(#auth{session_id = SessionId}, FileGuid, #{method := <<"GET">>} 
             throw(?ERROR_POSIX(Errno))
     end;
 
-process_request(#auth{session_id = SessionId}, FileGuid, #{method := <<"PATCH">>} = Req) ->
-    % TODO handle patch
-    Req.
+process_request(#auth{session_id = SessionId}, FileGuid, Params, #{method := <<"PUT">>} = Req) ->
+    FileKey = {guid, FileGuid},
+
+    Offset = case maps:get(<<"offset">>, Params, undefined) of
+        undefined ->
+            ?check(lfm:truncate(SessionId, FileKey, 0)),
+            0;
+        Num ->
+            Num
+    end,
+
+    Req2 = write_req_body_to_file(SessionId, FileKey, Offset, Req),
+    http_req:send_response(?NO_CONTENT_REPLY, Req2);
+
+process_request(#auth{session_id = SessionId}, ParentGuid, Params, #{method := <<"POST">>} = Req) ->
+    Name = maps:get(<<"name">>, Params),
+    Mode = maps:get(<<"mode">>, Params, undefined),
+
+    {Guid, Req3} = case maps:get(<<"type">>, Params, <<"reg">>) of
+        <<"reg">> ->
+            {ok, FileGuid} = ?check(lfm:create(SessionId, ParentGuid, Name, Mode)),
+
+            case cowboy_req:has_body(Req) of
+                true ->
+                    Offset = maps:get(<<"offset">>, Params, 0),
+
+                    Req2 = write_req_body_to_file(SessionId, {guid, FileGuid}, Offset, Req),
+                    {FileGuid, Req2};
+                false ->
+                    {FileGuid, Req}
+            end;
+        <<"dir">> ->
+            {ok, DirGuid} = ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),
+            {DirGuid, Req}
+    end,
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+
+    http_req:send_response(
+        ?CREATED_REPLY([<<"data">>, ObjectId], #{<<"fileId">> => ObjectId}),
+        Req3
+    ).
+
+
+%% @private
+-spec write_req_body_to_file(
+    session:id(),
+    lfm:file_key(),
+    Offset :: non_neg_integer(),
+    cowboy_req:req()
+) ->
+    cowboy_req:req() | no_return().
+write_req_body_to_file(SessionId, FileKey, Offset, Req) ->
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileKey, write)),
+
+    {ok, Req2} = file_upload_utils:upload_file(
+        FileHandle, Offset, Req,
+        fun cowboy_req:read_body/2, #{}
+    ),
+
+    ?check(lfm:fsync(FileHandle)),
+    ?check(lfm:monitored_release(FileHandle)),
+
+    Req2.
