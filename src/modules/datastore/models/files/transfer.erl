@@ -31,7 +31,7 @@
 ]).
 
 -export([
-    mark_dequeued/1, set_controller_process/1,
+    mark_dequeued/1, set_controller_process/1, set_rerun_id/2,
 
     is_replication/1, is_eviction/1, is_migration/1,
     type/1, data_source_type/1,
@@ -266,10 +266,11 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}, MarkTransferF
                 {true, _} ->    % replication or first phase of migration
                     replication_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed);
                 {false, true} -> % eviction or second phase of migration
-                    replica_eviction_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed)
+                    replica_eviction_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed);
+                {false, false} ->
+                    set_rerun_id(TransferId, NewTransferId)
             end,
 
-            replication_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed),
             {ok, NewTransferId}
     end;
 rerun_ended(UserId, TransferId, MarkTransferFailed) ->
@@ -359,6 +360,13 @@ set_controller_process(TransferId) ->
     EncodedPid = transfer_utils:encode_pid(self()),
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{pid = EncodedPid}}
+    end).
+
+
+-spec set_rerun_id(transfer:id(), transfer:id()) -> {ok, transfer:doc()} | {error, term()}.
+set_rerun_id(TransferId, NewTransferId) ->
+    transfer:update(TransferId, fun(OldTransfer) ->
+        {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
     end).
 
 
@@ -803,7 +811,7 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
     } of
         {true, _, _, _, TargetProviderId} ->
             % it is replication of first step of migration
-            rerun_ended(undefined, TransferId, true);
+            rerun_ended(undefined, Doc, true);
         {_, true, _, _, TargetProviderId} ->
             replication_status:handle_failed(TransferId, true),
             skip;
@@ -814,7 +822,7 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
             % it is migration and first step hasn't been finished yet
             skip;
         {_, _, true, _, SourceProviderId} ->
-            rerun_ended(undefined, TransferId, true);
+            rerun_ended(undefined, Doc, true);
         {_, _, _, true, SourceProviderId} ->
             replica_eviction_status:handle_failed(TransferId, true),
             skip;

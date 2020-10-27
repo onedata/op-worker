@@ -186,10 +186,10 @@ handle_restart(TransferId, NewTransferId, MarkTransferFailed) ->
             % In such a case add retry adding rerun id only
             case UpdateAns of
                 {ok, _} -> UpdateAns;
-                _ -> add_rerun_id(TransferId, NewTransferId)
+                _ -> transfer:set_rerun_id(TransferId, NewTransferId)
             end;
         false ->
-            add_rerun_id(TransferId, NewTransferId)
+            transfer:set_rerun_id(TransferId, NewTransferId)
     end.
 
 
@@ -269,11 +269,3 @@ mark_cancelled(Transfer) ->
         Status ->
             {error, Status}
     end.
-
-
-%% @private
--spec add_rerun_id(transfer:id(), transfer:id()) -> {ok, transfer:doc()} | error().
-add_rerun_id(TransferId, NewTransferId) ->
-    transfer:update(TransferId, fun(OldTransfer) ->
-        {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
-    end).
