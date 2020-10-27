@@ -861,8 +861,17 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
-delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
-    ?check(lfm:rm_recursive(Auth#auth.session_id, {guid, FileGuid}));
+delete(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{id = FileGuid, aspect = instance}}) ->
+    FileKey = {guid, FileGuid},
+
+    case lfm:stat(SessionId, {guid, FileGuid}) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+            ?check(lfm:rm_recursive(SessionId, FileKey));
+        {ok, _} ->
+            ?check(lfm:unlink(SessionId, FileKey, false));
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
     lists:foreach(fun(XattrName) ->

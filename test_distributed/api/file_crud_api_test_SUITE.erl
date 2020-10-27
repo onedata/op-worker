@@ -421,7 +421,8 @@ delete_file_instance_test(Config) ->
     SpaceOwnerSessId = api_test_env:get_user_session_id(user2, p1, Config),
 
     TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, TopDirGuid} = lfm_proxy:mkdir(P1, UserSessIdP1, TopDirPath, 8#704),
+    % TODO VFS-6932 - change to 704 when space owner will start to work on posix storage
+    {ok, TopDirGuid} = lfm_proxy:mkdir(P1, UserSessIdP1, TopDirPath, 8#777),
     TopDirShareId = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, TopDirGuid),
     TopDirShareGuid = file_id:guid_to_share_guid(TopDirGuid, TopDirShareId),
 
@@ -430,41 +431,67 @@ delete_file_instance_test(Config) ->
     MemRef = api_test_memory:init(),
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
-        #scenario_spec{
-            name = str_utils:format("Delete ~s instance using gs private api", [FileType]),
-            type = gs,
+        #suite_spec{
             target_nodes = Providers,
             client_spec = #client_spec{
                 correct = [
                     user2  % space owner - doesn't need any perms
-%%                    user3  TODO fix rm shared file
+%%                    user3  TODO VFS-6933 - fix rm shared file
                 ],
                 unauthorized = [nobody],
-                forbidden_not_in_space = [user1],
-                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+                forbidden_not_in_space = [user1]
+                % TODO VFS-6932 - enable after changing file mode to 704
+%%                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
             setup_fun = build_delete_instance_setup_fun(MemRef, TopDirPath, FileType, Config),
-            prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({mem_ref, MemRef}, private),
-            validate_result_fun = fun(_, Result) ->
-                ?assertEqual({ok, undefined}, Result)
-            end,
-            verify_fun = build_delete_instance_verify_fun(MemRef, FileType, Config)
+            verify_fun = build_delete_instance_verify_fun(MemRef, FileType, Config),
 
-            % TODO
-%%            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-%%                TopDirGuid, TopDirShareId, undefined
-%%            )
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Delete ~s instance using rest api", [FileType]),
+                    type = rest,
+                    prepare_args_fun = build_delete_instance_test_prepare_rest_args_fun({mem_ref, MemRef}),
+                    validate_result_fun = fun(_, {ok, RespCode, _RespHeaders, _RespBody}) ->
+                        ?assertEqual(?HTTP_204_NO_CONTENT, RespCode)
+                    end
+                },
+                #scenario_template{
+                    name = str_utils:format("Delete ~s instance using gs private api", [FileType]),
+                    type = gs,
+                    prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({mem_ref, MemRef}, private),
+                    validate_result_fun = fun(_, Result) ->
+                        ?assertEqual({ok, undefined}, Result)
+                    end
+                }
+            ],
+
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                TopDirGuid, TopDirShareId, undefined
+            )
         },
-        #scenario_spec{
-            name = str_utils:format("Delete ~s instance using gs public api", [FileType]),
-            type = gs_not_supported,
+        #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
-            prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({guid, TopDirShareGuid}, public),
-            validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
-            end
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Delete shared ~s instance using rest api", [FileType]),
+                    type = rest_not_supported,
+                    prepare_args_fun = build_delete_instance_test_prepare_rest_args_fun({guid, TopDirShareGuid}),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+                        ?assertEqual(errors:to_http_code(?ERROR_NOT_SUPPORTED), RespCode),
+                        ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), RespBody)
+                    end
+                }
+                #scenario_template{
+                    name = str_utils:format("Delete shared ~s instance using gs public api", [FileType]),
+                    type = gs_not_supported,
+                    prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({guid, TopDirShareGuid}, public),
+                    validate_result_fun = fun(_TestCaseCtx, Result) ->
+                        ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
+                    end
+                }
+            ]
         }
     ])).
 
@@ -511,21 +538,24 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType, Config) ->
 
     fun() ->
         Path = filename:join([TopDirPath, ?RANDOM_FILE_NAME()]),
-        {ok, Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
+        % TODO VFS-6932 - change to 704 when space owner will start to work on posix storage
+        {ok, Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#777),
         ?assertMatch({ok, _}, api_test_utils:get_file_attrs(P2Node, Guid), ?ATTEMPTS),
 
         api_test_memory:set(MemRef, file_guid, Guid),
 
         case FileType of
             <<"dir">> ->
-                Files = lists_utils:pmap(fun(Num) ->
-                    {_, _, FileGuid, _} = api_test_utils:create_file_in_space2_with_additional_metadata(
-                        Path, false, <<"file_or_dir_", Num>>, Config
-                    ),
-                    FileGuid
-                end, [$0, $1, $2, $3, $4]),
-
-                api_test_memory:set(MemRef, files_in_dir, Files);
+                % TODO VFS-6932 - uncomment when space owner will start to work on posix storage
+%%                Files = lists_utils:pmap(fun(Num) ->
+%%                    {_, _, FileGuid, _} = api_test_utils:create_file_in_space2_with_additional_metadata(
+%%                        Path, false, <<"file_or_dir_", Num>>, Config
+%%                    ),
+%%                    FileGuid
+%%                end, [$0, $1, $2, $3, $4]),
+%%
+%%                api_test_memory:set(MemRef, files_in_dir, Files);
+                api_test_memory:set(MemRef, files_in_dir, []);
             _ ->
                 ok
         end
@@ -577,25 +607,46 @@ build_delete_instance_verify_fun(MemRef, FileType, Config) ->
 
 
 %% @private
+-spec build_delete_instance_test_prepare_rest_args_fun(
+    {guid, file_id:file_guid()} | {mem_ref, api_test_memory:mem_ref()}
+) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_delete_instance_test_prepare_rest_args_fun(MemRefOrGuid) ->
+    fun(#api_test_ctx{data = Data}) ->
+        BareGuid = ensure_guid(MemRefOrGuid),
+        {ok, ObjectId} = file_id:guid_to_objectid(BareGuid),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(ObjectId, Data),
+
+        #rest_args{
+            method = delete,
+            path = <<"data/", Id/binary>>
+        }
+    end.
+
+
+%% @private
 -spec build_delete_instance_test_prepare_gs_args_fun(
     {guid, file_id:file_guid()} | {mem_ref, api_test_memory:mem_ref()},
     gri:scope()
 ) ->
     onenv_api_test_runner:prepare_args_fun().
 build_delete_instance_test_prepare_gs_args_fun(MemRefOrGuid, Scope) ->
-    GetGuidFun = case MemRefOrGuid of
-        {guid, Guid} -> fun() -> Guid end;
-        {mem_ref, MemRef} -> fun() -> api_test_memory:get(MemRef, file_guid) end
-    end,
-
     fun(#api_test_ctx{data = Data}) ->
-        {GriId, _} = api_test_utils:maybe_substitute_bad_id(GetGuidFun(), Data),
+        BareGuid = ensure_guid(MemRefOrGuid),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(BareGuid, Data),
 
         #gs_args{
             operation = delete,
-            gri = #gri{type = op_file, id = GriId, aspect = instance, scope = Scope}
+            gri = #gri{type = op_file, id = Id, aspect = instance, scope = Scope}
         }
     end.
+
+
+%% @private
+-spec ensure_guid({guid, file_id:file_guid()} | {mem_ref, api_test_memory:mem_ref()}) ->
+    file_if:file_guid().
+ensure_guid({guid, Guid}) -> Guid;
+ensure_guid({mem_ref, MemRef}) -> api_test_memory:get(MemRef, file_guid).
 
 
 %%%===================================================================

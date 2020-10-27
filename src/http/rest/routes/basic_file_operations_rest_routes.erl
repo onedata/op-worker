@@ -58,7 +58,7 @@ routes() -> [
         method = 'DELETE',
         b_gri = #b_gri{
             type = op_file, 
-            id = ?BINDING(id), 
+            id = ?OBJECTID_BINDING(id), 
             aspect = instance, 
             scope = private
         }
