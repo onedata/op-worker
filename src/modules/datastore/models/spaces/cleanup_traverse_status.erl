@@ -66,8 +66,8 @@ report_child_traversed(TaskId, FileUuid) ->
 
 -spec report_children_listed(unsupport_cleanup_traverse:id(), file_meta:uuid(), non_neg_integer()) -> 
     ok.
-report_children_listed(TaskId, FileId, ChildrenCount) ->
-    add_children(TaskId, FileId, ChildrenCount),
+report_children_listed(TaskId, FileUUid, ChildrenCount) ->
+    add_children(TaskId, FileUUid, ChildrenCount),
     ok.
 
 -spec report_last_batch(unsupport_cleanup_traverse:id(), file_meta:uuid()) ->

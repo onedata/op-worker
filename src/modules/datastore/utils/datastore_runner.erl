@@ -37,7 +37,7 @@ run_and_normalize_error(Fun, Module) ->
             Reason2 = normalize_error(Reason),
             case Reason2 of
                 not_found ->
-                    ?debug_stacktrace("~p error: ~p", [Module, Reason2]);
+                    ?critical_stacktrace("~p error: ~p", [Module, Reason2]);
                 _ ->
                     ?error_stacktrace("~p error: ~p", [Module, Reason2])
             end,

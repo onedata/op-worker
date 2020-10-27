@@ -108,7 +108,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                 false -> {false, undefined, FileName}
             end,
 
-            case link_utils:try_to_resolve_child_link(FileBaseName, ParentCtx) of
+            case fslogic_path:to_uuid(ParentUuid, FileBaseName) of
                 {error, not_found} ->
                     % Link from Parent to FileBaseName is missing.
                     % We must check deletion marker to ensure that file may be synced.

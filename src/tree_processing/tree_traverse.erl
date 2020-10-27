@@ -26,6 +26,7 @@
 -include("tree_traverse.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% Main API
@@ -286,6 +287,9 @@ do_master_job_internal(#tree_traverse{
         _ ->
             file_meta:list_children(Doc, 0, BatchSize, Token, LN, LT)
     end,
+
+    ?alert("CHILDREN NUM: ~p", [length(Children)]),
+
     #{token := Token2, last_name := LN2, last_tree := LT2} = maps:merge(#{token => undefined}, ExtendedInfo),
     
     {SlaveJobs, MasterJobs} = lists:foldl(fun(#child_link_uuid{
@@ -303,7 +307,10 @@ do_master_job_internal(#tree_traverse{
     end, {[], []}, Children),
     
     ok = MasterJobFinishedCallback(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, LN2),
-    
+
+    ?alert("Token2: ~p", [Token2]),
+    ?alert("Children: ~p", [length(Children)]),
+
     FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
         true ->
             ok = LastBatchCallback(TaskId, Uuid, SpaceId),

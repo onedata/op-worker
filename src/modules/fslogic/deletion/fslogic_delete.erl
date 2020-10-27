@@ -22,7 +22,7 @@
     delete_file_locally/3,
     handle_remotely_deleted_file/1,
     handle_release_of_deleted_file/2,
-    handle_file_deleted_on_imported_storage/1]).
+    handle_file_deleted_on_imported_storage/1, delete_dir_async_init/2]).
 -export([cleanup_opened_files/0]).
 -export([remove_local_associated_documents/1]).
 
@@ -74,6 +74,10 @@ handle_file_deleted_on_imported_storage(FileCtx) ->
     ok = remove_file(FileCtx, UserCtx, false, ?SINGLE_STEP_DEL(?ALL_DOCS)),
     fslogic_event_emitter:emit_file_removed(FileCtx, []),
     remove_file_handles(FileCtx).
+
+% todo rename
+delete_dir_async_init(UserCtx, FileCtx) ->
+    ok = remove_file(FileCtx, UserCtx, false, ?TWO_STEP_DEL_INIT).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -167,6 +171,8 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
 -spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(), docs_deletion_mode()) -> ok.
 remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
     % TODO VFS-5270
+    {C, _} = file_ctx:get_canonical_path(FileCtx),
+%%    ?alert("RemoveFile: ~p", [C]),
     replica_synchronizer:apply(FileCtx, fun() ->
         {RemoveStorageFileResult, FileCtx3} = case RemoveStorageFile of
             true ->
@@ -194,7 +200,17 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 FileCtx6 = delete_storage_sync_info(FileCtx5),
                 % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
                 ok = delete_location(FileCtx),
-                ok = file_meta:delete(FileDoc),
+                try
+                    {C, _} = file_ctx:get_canonical_path(FileCtx),
+%%                    ?alert("WILL DELETE FILE META OF: ~p", [C]),
+                    ok = file_meta:delete(FileDoc)
+%%                    ?alert("DELETED FILE META OF: ~p", [C])
+                catch
+                    E:R ->
+                        {C, _} = file_ctx:get_canonical_path(FileCtx),
+%%                        ?alert_stacktrace("ERROR on deleting ~p: ~p", [C, {E, R}]),
+                        erlang:E(R)
+                end,
                 remove_associated_documents(FileCtx6),
                 FileCtx7 = maybe_remove_deletion_marker(FileCtx6, UserCtx, RemoveStorageFileResult),
                 maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult, ?ALL_DOCS);
@@ -202,11 +218,18 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 % TODO VFS-6114 maybe delete file_meta and associated documents here?
                 FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 delete_storage_sync_info(FileCtx5),
-                ok;
-            ?TWO_STEP_DEL_FIN(DocsDeletionScope) ->
                 {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
                 ok = delete_location(FileCtx),
-                file_meta:delete_without_link(FileDoc), % do not match, document may not exist
+                {C, _} = file_ctx:get_canonical_path(FileCtx),
+                ?alert("2WILL DELETE FILE META OF: ~p", [C]),
+                file_meta:delete(FileDoc), % do not match, document may not exist
+                ?alert("2DELETED FILE META OF: ~p", [C]),
+                ok;
+            ?TWO_STEP_DEL_FIN(DocsDeletionScope) ->
+%%                {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
+%%                ok = delete_location(FileCtx),
+%%                file_meta:delete_without_link(FileDoc), % do not match, document may not exist
+                FileCtx4 = FileCtx3,
                 case DocsDeletionScope of
                     ?ALL_DOCS -> remove_associated_documents(FileCtx4);
                     ?LOCAL_DOCS-> remove_local_associated_documents(FileCtx4)
@@ -250,11 +273,14 @@ custom_handle_opened_file(FileCtx, UserCtx, _DocsDeletionScope, ?MARKER_HANDLING
 -spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(),
     RemoveStorageFileResult :: ok | ignored | {error, term()}, docs_deletion_scope()) -> ok.
 maybe_try_to_delete_parent(FileCtx, UserCtx, ok, DocsDeletionScope) ->
+    {C, _} = file_ctx:get_canonical_path(FileCtx),
+%%    ?alert("Maybe try do delete parent of ~p", [C]),
     {ParentCtx, _FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
     try
         {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             case file_meta:is_deleted(ParentDoc) of
                 true ->
+%%                    ?alert("Will delete parent of ~p", [C]),
                     % use ?TWO_STEP_DEL_FIN mode because it handles case when file_meta is already deleted
                     remove_file(ParentCtx2, UserCtx, true, ?TWO_STEP_DEL_FIN(DocsDeletionScope));
                 false ->

@@ -16,7 +16,7 @@
 -include("modules/fslogic/fslogic_suffix.hrl").
 
 %% API
--export([try_to_resolve_child_link/2, try_to_resolve_child_deletion_link/2,
+-export([try_to_resolve_child_deletion_link/2,
     add_deletion_link/2, remove_deletion_link/2]).
 
 % TODO Get rid of this module?
@@ -24,18 +24,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @doc
-%% This function tries to resolve child with name FileName of
-%% directory associated with ParentCtx.
-%% @end
-%%-------------------------------------------------------------------
--spec try_to_resolve_child_link(file_meta:name(), file_ctx:ctx()) ->
-    {ok, file_meta:uuid()} | {error, term()}.
-try_to_resolve_child_link(FileName, ParentCtx) ->
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    canonical_path:to_uuid(ParentUuid, FileName).
 
 %%-------------------------------------------------------------------
 %% @doc

@@ -18,17 +18,16 @@
 
 %% API
 -export([clean_space/3, ensure_space_empty/3]).
+-export([create_files_tree/4]).
 
+% TODO merge this module with file_ops_test_utils
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-%%create_files_tree(Worker, SessId, Structure, RootGuid, RootPath) ->
-%%    create_files_tree(Worker, SessId, Structure, RootGuid, RootPath, <<"dir">>, <<"file">>).
-%%
-%%create_files_tree(Worker, SessId, Structure, RootGuid, DirPrefix, FilePrefix) ->
-%%    create_files_tree(Worker, SessId, Structure, RootGuid, DirPrefix, FilePrefix, []).
+create_files_tree(Worker, SessId, Structure, RootGuid) ->
+    create_files_tree(Worker, SessId, Structure, RootGuid, <<"dir">>, <<"file">>, [], []).
 
 clean_space(Worker, SpaceId, Attempts) when is_atom(Worker) ->
     clean_space([Worker], SpaceId, Attempts);
@@ -43,7 +42,7 @@ clean_space(Workers, SpaceId, Attempts) when is_list(Workers) ->
 ensure_space_empty(Workers, SpaceId, Attempts) ->
     Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     lists:foreach(fun(W) ->
-        ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, Guid}, 0, 1), Attempts),
+        ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, Guid}, 0, 100), Attempts),
         ?assertEqual(0, space_occupation(W, SpaceId), Attempts)
     end, Workers).
 
@@ -56,6 +55,7 @@ space_occupation(Worker, SpaceId) ->
 
 clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
     {ok, GuidsAndPaths} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
+    ct:pal("GuidsAndPaths: ~p", [GuidsAndPaths]),
     FilesNum = length(GuidsAndPaths),
     delete_files(Worker, SessId, GuidsAndPaths),
     case FilesNum < BatchSize of
@@ -71,31 +71,38 @@ delete_files(Worker, SessId, GuidsAndPaths) ->
     end, GuidsAndPaths).
 
 
-%%create_files_tree(_Worker, _SessId, [], _RootGuid, _DirPrefix, _FilePrefix, Guids) ->
-%%    Guids;
-%%create_files_tree(Worker, SessId, [{DirsCount, FilesCount} | Rest], RootGuid, DirPrefix, FilePrefix,
-%%    CreatedStructure, DirGuids, FileGuids
-%%) ->
-%%    FileGuids = create_files(Worker, SessId, RootGuid, FilePrefix, FilesCount),
-%%    DirGuids = create_dirs(Worker, SessId, RootGuid, FilePrefix, FilesCount),
-%%
-%%
-%%
-%%
-%%
-%%create_files(Worker, SessId, ParentGuid, FilePrefix, FilesCount) ->
-%%    lists:map(fun(N) ->
-%%        FileName = str_utils:format_bin("~s_~d", [FilePrefix, N]),
-%%        {ok, {Guid, Handle}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, FileName, ?DEFAULT_FILE_MODE),
-%%        lfm_proxy:close(Worker, Handle),
-%%        {FileName, Guid}
-%%    end, lists:seq(1, FilesCount)).
-%%
-%%create_subdirs(Worker, SessId, TreeStructure, ParentGuid, DirPrefix, FilePrefix, DirsCount) ->
-%%    lists:map(fun(N) ->
-%%        DirName = str_utils:format_bin("~s_~d", [DirPrefix, N]),
-%%        {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, ParentGuid, DirName, ?DEFAULT_DIR_MODE),
-%%        {Subtree, DirGuids, FileGuids} =
-%%            create_files_tree(Worker, SessId, TreeStructure, Guid, DirName, DirPrefix, FilePrefix),
-%%        Guid
-%%    end, lists:seq(1, DirsCount)).
+create_files_tree(_Worker, _SessId, [], _RootGuid, _DirPrefix, _FilePrefix, DirGuids, FileGuids) ->
+    {DirGuids, FileGuids};
+create_files_tree(Worker, SessId, [{DirsCount, FilesCount} | Rest], RootGuid, DirPrefix, FilePrefix,
+    DirGuids, FileGuids
+) ->
+    NewDirGuids = create_dirs(Worker, SessId, RootGuid, DirPrefix, DirsCount),
+    NewFileGuids = create_files(Worker, SessId, RootGuid, FilePrefix, FilesCount),
+    lists:foldl(fun(ChildDirGuid, {DirGuidsAcc, FileGuidsAcc}) ->
+        create_files_tree(Worker, SessId, Rest, ChildDirGuid, DirPrefix, FilePrefix, DirGuidsAcc, FileGuidsAcc)
+    end, {DirGuids ++ NewDirGuids, FileGuids ++ NewFileGuids}, NewDirGuids).
+
+
+create_dirs(Worker, SessId, ParentGuid, DirPrefix, DirsCount) ->
+    create_children(DirPrefix, DirsCount, fun(ChildDirName) ->
+        {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, ParentGuid, ChildDirName, ?DEFAULT_DIR_PERMS),
+        Guid
+    end).
+
+
+create_files(Worker, SessId, ParentGuid, FilePrefix, FilesCount) ->
+    create_children(FilePrefix, FilesCount, fun(ChildFileName) ->
+        {ok, {Guid, Handle}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, ChildFileName, ?DEFAULT_FILE_MODE),
+        ok = lfm_proxy:close(Worker, Handle),
+        Guid
+    end).
+
+
+create_children(ChildPrefix, ChildCount, CreateFun) ->
+    lists:map(fun(N) ->
+        ChildName = str_utils:format_bin("~s_~p", [ChildPrefix, N]),
+        CreateFun(ChildName)
+    end, lists:seq(1, ChildCount)).
+
+
+
