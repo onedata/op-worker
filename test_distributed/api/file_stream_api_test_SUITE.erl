@@ -66,7 +66,7 @@ gui_download_file_test(Config) ->
 
     SetupFun = build_download_file_setup_fun(MemRef, Content, Config),
     ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef, Content, Config),
-    VerifyFun = build_download_file_verify_fun(MemRef, Content, Config),
+    VerifyFun = build_download_file_verify_fun(MemRef, FileSize, Config),
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #scenario_spec{
@@ -216,30 +216,42 @@ rest_download_file_test(Config) ->
 
     SetupFun = build_download_file_setup_fun(MemRef, Content, Config),
     ValidateCallResultFun = build_rest_download_file_validate_call_fun(MemRef, Content, Config),
-    VerifyFun = build_rest_download_file_verify_fun(MemRef, FileSize, Config),
+    VerifyFun = build_download_file_verify_fun(MemRef, FileSize, Config),
 
-    DataSpec = #data_spec{
-        optional = [<<"range">>],
-        correct_values = #{
-            <<"range">> => [
-                {<<"bytes=10-20">>, ?HTTP_206_PARTIAL_CONTENT, [{10, 11}]},
-                {<<"bytes=100-300,500-500,-300">>, ?HTTP_206_PARTIAL_CONTENT, [
-                    {100, 201}, {500, 1}, {FileSize-300, 300}
-                ]},
+    AllRangesToTest = [
+        {<<"bytes=10-20">>, ?HTTP_206_PARTIAL_CONTENT, [{10, 11}]},
+        {
+            <<
+                "bytes=",
+                (integer_to_binary(FileSize - 100))/binary,
+                "-",
+                (integer_to_binary(FileSize + 100))/binary
+            >>,
+            ?HTTP_206_PARTIAL_CONTENT, [{FileSize - 100, 100}]
+        },
+        {<<"bytes=100-300,500-500,-300">>, ?HTTP_206_PARTIAL_CONTENT, [
+            {100, 201}, {500, 1}, {FileSize-300, 300}
+        ]},
 
-                {<<"unicorns">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
-                {<<"bytes:5-10">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
-                {<<"bytes=5=10">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
-                {<<"bytes=-15-10">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
-                {<<"bytes=10-5">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
-                {<<"bytes=-5-">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
-                {<<"bytes=10--5">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
-                {<<"bytes=10-15-">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
+        {<<"unicorns">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
+        {<<"bytes:5-10">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
+        {<<"bytes=5=10">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
+        {<<"bytes=-15-10">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
+        {<<"bytes=10-5">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
+        {<<"bytes=-5-">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
+        {<<"bytes=10--5">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
+        {<<"bytes=10-15-">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
 
-                {<<"bytes=5000000=5100000">>, ?HTTP_416_RANGE_NOT_SATISFIABLE}
-            ]
-        }
-    },
+        {<<"bytes=5000000=5100000">>, ?HTTP_416_RANGE_NOT_SATISFIABLE}
+    ],
+    AllRangesToTestNum = length(AllRangesToTest),
+
+    % Randomly split range to test so to shorten test execution time by not
+    % repeating every combination several times
+    RangesToTestPart1 = lists_utils:random_sublist(
+        AllRangesToTest, AllRangesToTestNum div 2, AllRangesToTestNum div 2
+    ),
+    RangesToTestPart2 = AllRangesToTest -- RangesToTestPart1,
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #scenario_spec{
@@ -254,7 +266,9 @@ rest_download_file_test(Config) ->
             verify_fun = VerifyFun,
 
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, undefined, DataSpec#data_spec{
+                DirGuid, undefined, #data_spec{
+                    optional = [<<"range">>],
+                    correct_values = #{<<"range">> => RangesToTestPart1},
                     bad_values = [{bad_id, DirObjectId, {rest, ?ERROR_POSIX(?EISDIR)}}]
                 }
             )
@@ -271,7 +285,9 @@ rest_download_file_test(Config) ->
             verify_fun = VerifyFun,
 
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, DirShareId, DataSpec#data_spec{
+                DirGuid, DirShareId, #data_spec{
+                    optional = [<<"range">>],
+                    correct_values = #{<<"range">> => RangesToTestPart2},
                     bad_values = [{bad_id, DirShareObjectId, {rest, ?ERROR_POSIX(?EISDIR)}}]
                 }
             )
@@ -372,62 +388,6 @@ build_rest_download_file_validate_call_fun(_MemRef, ExpContent, _Config) ->
 
 
 %% @private
--spec build_rest_download_file_verify_fun(
-    api_test_memory:mem_ref(),
-    file_meta:size(),
-    onenv_api_test_runner:ct_config()
-) ->
-    onenv_api_test_runner:verify_fun().
-build_rest_download_file_verify_fun(MemRef, FileSize, Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    Providers = [P1Node, P2Node],
-
-    fun
-        (expected_failure, _) ->
-            FileGuid = api_test_memory:get(MemRef, file_guid),
-            api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}]);
-        (expected_success, #api_test_ctx{node = DownloadNode, data = Data}) ->
-            FileGuid = api_test_memory:get(MemRef, file_guid),
-
-            case P1Node == DownloadNode of
-                true ->
-                    api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}]);
-                false ->
-                    case maps:get(<<"range">>, Data, undefined) of
-                        undefined ->
-                            api_test_utils:assert_distribution(Providers, [FileGuid], [
-                                {P1Node, FileSize}, {DownloadNode, FileSize}
-                            ]);
-
-                        {_, ?HTTP_206_PARTIAL_CONTENT, [{RangeStart, _RangeLen} = Range]} ->
-                            api_test_utils:assert_distribution(Providers, [FileGuid], [
-                                {P1Node, FileSize},
-                                {DownloadNode, RangeStart, get_fetched_block_size(Range, FileSize)}
-                            ]);
-
-                        {_, ?HTTP_206_PARTIAL_CONTENT, Ranges} ->
-                            Blocks = fslogic_blocks:consolidate(lists:sort(lists:map(
-                                fun({RangeStart, _RangeLen} = Range) ->
-                                    #file_block{
-                                        offset = RangeStart,
-                                        size = get_fetched_block_size(Range, FileSize)
-                                    }
-                                end, Ranges
-                            ))),
-                            api_test_utils:assert_distribution(Providers, [FileGuid], [
-                                {P1Node, FileSize},
-                                {DownloadNode, Blocks}
-                            ]);
-
-                        {_, ?HTTP_416_RANGE_NOT_SATISFIABLE} ->
-                            api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}])
-                    end
-            end
-    end.
-
-
-%% @private
 -spec get_fetched_block_size({offset(), size()}, file_meta:size()) -> size().
 get_fetched_block_size({RangeStart, RangeLen}, FileSize) ->
     % posix storage has no block size so fetched blocks will not be tailored to
@@ -484,30 +444,55 @@ build_download_file_setup_fun(MemRef, Content, Config) ->
 %% @private
 -spec build_download_file_verify_fun(
     api_test_memory:mem_ref(),
-    FileContent :: binary(),
+    file_meta:size(),
     onenv_api_test_runner:ct_config()
 ) ->
     onenv_api_test_runner:verify_fun().
-build_download_file_verify_fun(MemRef, Content, Config) ->
+build_download_file_verify_fun(MemRef, FileSize, Config) ->
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
     Providers = [P1Node, P2Node],
-
-    FileSize = size(Content),
 
     fun
         (expected_failure, _) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
             api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}]);
-        (expected_success, #api_test_ctx{node = DownloadNode}) ->
+        (expected_success, #api_test_ctx{node = DownloadNode, data = Data}) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
+
             case P1Node == DownloadNode of
                 true ->
                     api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}]);
                 false ->
-                    api_test_utils:assert_distribution(Providers, [FileGuid], [
-                        {P1Node, FileSize}, {DownloadNode, FileSize}
-                    ])
+                    case maps:get(<<"range">>, utils:ensure_defined(Data, #{}), undefined) of
+                        undefined ->
+                            api_test_utils:assert_distribution(Providers, [FileGuid], [
+                                {P1Node, FileSize}, {DownloadNode, FileSize}
+                            ]);
+
+                        {_, ?HTTP_206_PARTIAL_CONTENT, [{RangeStart, _RangeLen} = Range]} ->
+                            api_test_utils:assert_distribution(Providers, [FileGuid], [
+                                {P1Node, FileSize},
+                                {DownloadNode, RangeStart, get_fetched_block_size(Range, FileSize)}
+                            ]);
+
+                        {_, ?HTTP_206_PARTIAL_CONTENT, Ranges} ->
+                            Blocks = fslogic_blocks:consolidate(lists:sort(lists:map(
+                                fun({RangeStart, _RangeLen} = Range) ->
+                                    #file_block{
+                                        offset = RangeStart,
+                                        size = get_fetched_block_size(Range, FileSize)
+                                    }
+                                end, Ranges
+                            ))),
+                            api_test_utils:assert_distribution(Providers, [FileGuid], [
+                                {P1Node, FileSize},
+                                {DownloadNode, Blocks}
+                            ]);
+
+                        {_, ?HTTP_416_RANGE_NOT_SATISFIABLE} ->
+                            api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}])
+                    end
             end
     end.
 
