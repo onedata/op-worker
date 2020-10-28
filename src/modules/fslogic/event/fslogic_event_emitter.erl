@@ -182,6 +182,8 @@ emit_file_location_changed(Location, ExcludedSessions, Offset, OffsetEnd) ->
 %%--------------------------------------------------------------------
 -spec emit_file_locations_changed(location_changes_description(), [session:id()]) ->
     ok | {error, Reason :: term()}.
+emit_file_locations_changed([], _ExcludedSessions) ->
+    ok;
 emit_file_locations_changed(EventsList, ExcludedSessions) ->
     EventsList2 = lists:map(fun({Location, Offset, OffsetEnd}) ->
         create_file_location_changed(Location, Offset, OffsetEnd)
