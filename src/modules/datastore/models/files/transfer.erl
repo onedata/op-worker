@@ -422,6 +422,7 @@ is_replication_ongoing(#transfer{replication_status = ?ENQUEUED_STATUS}) -> true
 is_replication_ongoing(#transfer{replication_status = ?ACTIVE_STATUS}) -> true;
 is_replication_ongoing(#transfer{replication_status = _}) -> false.
 
+
 -spec is_eviction_ongoing(transfer()) -> boolean().
 is_eviction_ongoing(#transfer{eviction_status = ?SCHEDULED_STATUS}) -> true;
 is_eviction_ongoing(#transfer{eviction_status = ?ENQUEUED_STATUS}) -> true;
@@ -810,9 +811,10 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
         IsEvictionOngoing, IsEvictionAborting, SelfId
     } of
         {true, _, _, _, TargetProviderId} ->
-            % it is replication of first step of migration
+            % it is replication or first step of migration
             rerun_ended(undefined, Doc, true);
         {_, true, _, _, TargetProviderId} ->
+            % replication being aborted
             replication_status:handle_failed(TransferId, true),
             skip;
         {true, _, true, _, SourceProviderId} ->
@@ -822,8 +824,10 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
             % it is migration and first step hasn't been finished yet
             skip;
         {_, _, true, _, SourceProviderId} ->
+            % it is eviction or second step of migration
             rerun_ended(undefined, Doc, true);
         {_, _, _, true, SourceProviderId} ->
+            % eviction being aborted
             replica_eviction_status:handle_failed(TransferId, true),
             skip;
         {false, false, false, false, _} ->
@@ -851,7 +855,7 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
                     skip
             end;
         {_, _, _, _, _} ->
-            {ok, non_participating_provider}
+            skip
     end;
 maybe_rerun(TransferId) ->
     case ?MODULE:get(TransferId) of

@@ -32,6 +32,15 @@ all() -> [
 ].
 
 -define(ATTEMPTS, 30).
+-define(assertInEndedList(Node, SpaceId, ExpectedEndedTransferIds),
+    ?assertEqual([], ExpectedEndedTransferIds -- list_ended_transfers(Node, SpaceId), ?ATTEMPTS)
+).
+-define(assertNotInScheduledList(Node, SpaceId, NotExpectedTransferIds),
+    begin
+        ScheduledTransfers = list_scheduled_transfers(Node, SpaceId),
+        ?assertEqual(ScheduledTransfers, ScheduledTransfers -- NotExpectedTransferIds, ?ATTEMPTS)
+    end
+).
 
 %%%===================================================================
 %%% API
@@ -155,12 +164,12 @@ test_new_files_and_dirs_creation(Config, InitialData, Dir) ->
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
     [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
 
-    SessId1 = kv_utils:get([session_ids, FailingProvider], InitialData),
-    SessId2 = kv_utils:get([session_ids, HealthyProvider], InitialData),
+    SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
+    SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
 
-    TestData = create_files_and_dirs(FailingNode, SessId1, Dir),
-    verify_files_and_dirs(FailingNode, SessId1, TestData),
-    verify_files_and_dirs(HealthyNode, SessId2, TestData).
+    TestData = create_files_and_dirs(FailingNode, SessIdFailingProvider, Dir),
+    verify_files_and_dirs(FailingNode, SessIdFailingProvider, TestData),
+    verify_files_and_dirs(HealthyNode, SessIdHealthyProvider, TestData).
 
 create_files_and_dirs(Worker, SessId, ParentGuid) ->
     file_ops_test_utils:create_files_and_dirs(Worker, SessId, ParentGuid, 20, 50).
@@ -272,16 +281,16 @@ prepare_replication_transfer(Config, InitialData, TestData) ->
     [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
     [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
-    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
-    SessId2 = kv_utils:get([session_ids, HealthyProvider], InitialData),
+    SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
+    SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
-    FileGuid = file_ops_test_utils:create_file(HealthyNode, SessId2, SpaceGuid, generator:gen_name(), FileSize),
-    ?assertDistribution(FailingNode, SessId, ?DISTS([HealthyProvider], [FileSize]), FileGuid, ?ATTEMPTS),
+    FileGuid = file_ops_test_utils:create_file(HealthyNode, SessIdHealthyProvider, SpaceGuid, generator:gen_name(), FileSize),
+    ?assertDistribution(FailingNode, SessIdFailingProvider, ?DISTS([HealthyProvider], [FileSize]), FileGuid, ?ATTEMPTS),
 
     block_replication_transfer(FailingNode),
-    {ok, TransferId} = lfm_proxy:schedule_file_replication(FailingNode, SessId, {guid, FileGuid}, FailingProvider),
+    {ok, TransferId} = lfm_proxy:schedule_file_replication(FailingNode, SessIdFailingProvider, {guid, FileGuid}, FailingProvider),
     TestData#{
         replication => #{
             transfer_id => TransferId,
@@ -296,15 +305,15 @@ prepare_eviction_transfer(Config, InitialData, TestData) ->
     [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
     [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
-    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
-    SessId2 = kv_utils:get([session_ids, HealthyProvider], InitialData),
+    SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
+    SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
-    FileGuid = file_ops_test_utils:create_file(HealthyNode, SessId2, SpaceGuid, generator:gen_name(), FileSize),
+    FileGuid = file_ops_test_utils:create_file(HealthyNode, SessIdHealthyProvider, SpaceGuid, generator:gen_name(), FileSize),
 
     % read file to replicate it to FailingProvider
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(FailingNode, SessId, {guid, FileGuid}, read), ?ATTEMPTS),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(FailingNode, SessIdFailingProvider, {guid, FileGuid}, read), ?ATTEMPTS),
     ?assertEqual({ok, FileSize}, try
         {ok, Content} = lfm_proxy:check_size_and_read(FailingNode, Handle, 0, 100),
         {ok, byte_size(Content)}
@@ -314,7 +323,7 @@ prepare_eviction_transfer(Config, InitialData, TestData) ->
 
     block_eviction_transfer(FailingNode),
     {ok, TransferId} =
-        lfm_proxy:schedule_file_replica_eviction(FailingNode, SessId, {guid, FileGuid}, FailingProvider, undefined),
+        lfm_proxy:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, {guid, FileGuid}, FailingProvider, undefined),
     TestData#{
         eviction => #{
             transfer_id => TransferId,
@@ -329,16 +338,16 @@ prepare_outgoing_migration_transfer(Config, InitialData, TestData) ->
     [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
     [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
-    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
-    SessId2 = kv_utils:get([session_ids, HealthyProvider], InitialData),
+    SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
+    SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
-    FileGuid = file_ops_test_utils:create_file(FailingNode, SessId, SpaceGuid, generator:gen_name(), FileSize),
-    ?assertDistribution(HealthyNode, SessId2, ?DISTS([FailingProvider], [FileSize]), FileGuid, ?ATTEMPTS),
+    FileGuid = file_ops_test_utils:create_file(FailingNode, SessIdFailingProvider, SpaceGuid, generator:gen_name(), FileSize),
+    ?assertDistribution(HealthyNode, SessIdHealthyProvider, ?DISTS([FailingProvider], [FileSize]), FileGuid, ?ATTEMPTS),
 
     block_eviction_transfer(FailingNode),
-    {ok, TransferId} = lfm_proxy:schedule_file_replica_eviction(FailingNode, SessId, {guid, FileGuid}, FailingProvider,
+    {ok, TransferId} = lfm_proxy:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, {guid, FileGuid}, FailingProvider,
         HealthyProvider),
 
     ?assertMatch({ok, #document{value = #transfer{
@@ -359,16 +368,16 @@ prepare_incoming_migration_transfer(Config, InitialData, TestData) ->
     [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
     [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
-    SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
-    SessId2 = kv_utils:get([session_ids, HealthyProvider], InitialData),
+    SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
+    SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
-    FileGuid = file_ops_test_utils:create_file(HealthyNode, SessId2, SpaceGuid, generator:gen_name(), FileSize),
-    ?assertDistribution(FailingNode, SessId, ?DISTS([HealthyProvider], [FileSize]), FileGuid, ?ATTEMPTS),
+    FileGuid = file_ops_test_utils:create_file(HealthyNode, SessIdHealthyProvider, SpaceGuid, generator:gen_name(), FileSize),
+    ?assertDistribution(FailingNode, SessIdFailingProvider, ?DISTS([HealthyProvider], [FileSize]), FileGuid, ?ATTEMPTS),
 
     block_replication_transfer(FailingNode),
-    {ok, TransferId} = lfm_proxy:schedule_file_replica_eviction(FailingNode, SessId, {guid, FileGuid}, HealthyProvider,
+    {ok, TransferId} = lfm_proxy:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, {guid, FileGuid}, HealthyProvider,
         FailingProvider),
 
     ?assertMatch({ok, #document{value = #transfer{
@@ -457,15 +466,18 @@ verify_replication_transfer(Config, InitialData, TestData) ->
     TransferId = kv_utils:get([replication, transfer_id], TestData),
     Guid = kv_utils:get([replication, guid], TestData),
     Size = kv_utils:get([replication, size], TestData),
+    SpaceId = kv_utils:get(space_id, InitialData),
 
     ?assertMatch({ok, #document{value = #transfer{replication_status = ?FAILED_STATUS}}},
         transfer_get(FailingNode, TransferId), ?ATTEMPTS),
 
-    ?assertMatch({ok, #document{value = #transfer{replication_status = ?COMPLETED_STATUS}}},
-        transfer_get_effective(FailingNode, TransferId), ?ATTEMPTS),
+    {ok, #document{key = RerunId}} = ?assertMatch({ok, #document{value = #transfer{
+        replication_status = ?COMPLETED_STATUS
+    }}}, transfer_get_effective(FailingNode, TransferId), ?ATTEMPTS),
 
     ?assertDistribution(FailingNode, SessId, ?DISTS([FailingProvider, HealthyProvider], [Size, Size]), Guid, ?ATTEMPTS),
-    ok.
+    ?assertNotInScheduledList(FailingNode, SpaceId, [TransferId, RerunId]),
+    ?assertInEndedList(FailingNode, SpaceId, [TransferId, RerunId]).
 
 verify_eviction_transfer(Config, InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
@@ -476,19 +488,21 @@ verify_eviction_transfer(Config, InitialData, TestData) ->
     TransferId = kv_utils:get([eviction, transfer_id], TestData),
     Guid = kv_utils:get([eviction, guid], TestData),
     Size = kv_utils:get([eviction, size], TestData),
+    SpaceId = kv_utils:get(space_id, InitialData),
 
     ?assertMatch({ok, #document{value = #transfer{
         replication_status = ?SKIPPED_STATUS,
         eviction_status = ?FAILED_STATUS
     }}}, transfer_get(FailingNode, TransferId), ?ATTEMPTS),
 
-    ?assertMatch({ok, #document{value = #transfer{
+    {ok, #document{key = RerunId}} = ?assertMatch({ok, #document{value = #transfer{
         replication_status = ?SKIPPED_STATUS,
         eviction_status = ?COMPLETED_STATUS
     }}}, transfer_get_effective(FailingNode, TransferId), 2 * ?ATTEMPTS),
 
     ?assertDistribution(FailingNode, SessId, ?DISTS([FailingProvider, HealthyProvider], [0, Size]), Guid, ?ATTEMPTS),
-    ok.
+    ?assertNotInScheduledList(FailingNode, SpaceId, [TransferId, RerunId]),
+    ?assertInEndedList(FailingNode, SpaceId, [TransferId, RerunId]).
 
 verify_outgoing_migration_transfer(Config, InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
@@ -499,19 +513,21 @@ verify_outgoing_migration_transfer(Config, InitialData, TestData) ->
     TransferId = kv_utils:get([outgoing_migration, transfer_id], TestData),
     Guid = kv_utils:get([outgoing_migration, guid], TestData),
     Size = kv_utils:get([outgoing_migration, size], TestData),
+    SpaceId = kv_utils:get(space_id, InitialData),
 
     ?assertMatch({ok, #document{value = #transfer{
         replication_status = ?COMPLETED_STATUS,
         eviction_status = ?FAILED_STATUS
     }}}, transfer_get(FailingNode, TransferId), ?ATTEMPTS),
 
-    ?assertMatch({ok, #document{value = #transfer{
+    {ok, #document{key = RerunId}} = ?assertMatch({ok, #document{value = #transfer{
         replication_status = ?COMPLETED_STATUS,
         eviction_status = ?COMPLETED_STATUS
     }}}, transfer_get_effective(FailingNode, TransferId), 2 * ?ATTEMPTS),
 
     ?assertDistribution(FailingNode, SessId, ?DISTS([FailingProvider, HealthyProvider], [0, Size]), Guid, ?ATTEMPTS),
-    ok.
+    ?assertNotInScheduledList(FailingNode, SpaceId, [TransferId, RerunId]),
+    ?assertInEndedList(FailingNode, SpaceId, [TransferId, RerunId]).
 
 
 verify_incoming_migration_transfer(Config, InitialData, TestData) ->
@@ -523,19 +539,21 @@ verify_incoming_migration_transfer(Config, InitialData, TestData) ->
     TransferId = kv_utils:get([incoming_migration, transfer_id], TestData),
     Guid = kv_utils:get([incoming_migration, guid], TestData),
     Size = kv_utils:get([incoming_migration, size], TestData),
+    SpaceId = kv_utils:get(space_id, InitialData),
 
     ?assertMatch({ok, #document{value = #transfer{
         replication_status = ?FAILED_STATUS,
         eviction_status = ?FAILED_STATUS
     }}}, transfer_get(FailingNode, TransferId), ?ATTEMPTS),
 
-    ?assertMatch({ok, #document{value = #transfer{
+    {ok, #document{key = RerunId}} = ?assertMatch({ok, #document{value = #transfer{
         replication_status = ?COMPLETED_STATUS,
         eviction_status = ?COMPLETED_STATUS
     }}}, transfer_get_effective(FailingNode, TransferId), 2 * ?ATTEMPTS),
 
     ?assertDistribution(FailingNode, SessId, ?DISTS([HealthyProvider, FailingProvider], [0, Size]), Guid, ?ATTEMPTS),
-    ok.
+    ?assertNotInScheduledList(FailingNode, SpaceId, [TransferId, RerunId]),
+    ?assertInEndedList(FailingNode, SpaceId, [TransferId, RerunId]).
 
 
 %%%===================================================================
@@ -598,6 +616,14 @@ transfer_get(Node, TransferId) ->
 
 transfer_get_effective(Node, TransferId) ->
     rpc:call(Node, transfer, get_effective, [TransferId]).
+
+list_ended_transfers(Node, SpaceId) ->
+    {ok, EndedTransfers} = rpc:call(Node, transfer, list_ended_transfers, [SpaceId]),
+    EndedTransfers.
+
+list_scheduled_transfers(Node, SpaceId) ->
+    {ok, ScheduledTransfers} = rpc:call(Node, transfer, list_waiting_transfers, [SpaceId]),
+    ScheduledTransfers.
 
 add_session_ids(Config, InitialData) ->
     [P1, P2] = test_config:get_providers(Config),
