@@ -343,32 +343,6 @@ get_overlapping_blocks_sequence(Key, [#file_block{offset = Offset} | _] = Blocks
     fslogic_cache:use_blocks(Key, BlocksToUse),
     Ans.
 
-%%verify(Key, OverlappingBlocks) ->
-%%    case OverlappingBlocks of
-%%        [] ->
-%%            [];
-%%        [#file_block{offset = Offset1, size = Size1} | OverlappingBlocksTail] ->
-%%            Blocks = fslogic_cache:get_blocks_tree(Key),
-%%            {Start, Stop} = lists:foldl(fun(#file_block{offset = Offset, size = Size},
-%%                {#file_block{offset = TmpO} = TmpStart, TmpStop}) ->
-%%                Start2 = case Offset < TmpO of
-%%                    true -> #file_block{offset = Offset, size = 0};
-%%                    _ -> TmpStart
-%%                end,
-%%                End = Offset + Size,
-%%                Stop2 = case End > TmpStop of
-%%                    true -> End;
-%%                    _ -> TmpStop
-%%                end,
-%%                {Start2, Stop2}
-%%            end, {#file_block{offset = Offset1, size = 0}, Offset1 + Size1}, OverlappingBlocksTail),
-%%            Iter = gb_sets:iterator_from(Start, Blocks),
-%%            Ans = get_block_while(Iter, Stop),
-%%            Ans2 = [{OverlappingBlocks, Ans}],
-%%            fslogic_cache:use_blocks(Key, [Ans]),
-%%            Ans2
-%%    end.
-
 %%-------------------------------------------------------------------
 %% @doc
 %% Sets blocks in location document.
@@ -651,12 +625,12 @@ get_single_blocks_sequence([], BlocksInCurrentSequence, % arguments connected wi
     #{action => finish, remaining_blocks_to_split => [],
         blocks_to_split_sequence => lists:reverse(BlocksInCurrentSequence),
         existing_blocks_overlapping_with_sequenc => ExistingBlocksOverlappingWithCurrentSequence};
-get_single_blocks_sequence([Block | BlocksToSplitIntoSequencesTail], BlocksInCurrentSequence, % arguments connected with input sequence
+get_single_blocks_sequence(BlocksToSplitIntoSequences, BlocksInCurrentSequence, % arguments connected with input sequence
     _ExistingBlocksIterator, ExistingBlocksOverlappingWithCurrentSequence, _SkippedExistingBlocks, % arguments connected with existing blocks
     HoleSizeLimit, HoleSizeLimit % arguments connected with whole size control
 ) ->
-    #{action => start_new_sequence, remaining_blocks_to_split => BlocksToSplitIntoSequencesTail,
-        blocks_to_split_sequence => lists:reverse([Block | BlocksInCurrentSequence]),
+    #{action => start_new_sequence, remaining_blocks_to_split => BlocksToSplitIntoSequences,
+        blocks_to_split_sequence => lists:reverse(BlocksInCurrentSequence),
         existing_blocks_overlapping_with_sequenc => ExistingBlocksOverlappingWithCurrentSequence};
 get_single_blocks_sequence([Block | BlocksToSplitIntoSequencesTail] = BlocksToSplitIntoSequences, BlocksInCurrentSequence, % arguments connected with input sequence
     ExistingBlocksIterator, ExistingBlocksOverlappingWithCurrentSequence, SkippedExistingBlocks, % arguments connected with existing blocks
