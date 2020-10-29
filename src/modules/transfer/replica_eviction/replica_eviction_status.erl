@@ -73,7 +73,8 @@
 -export([
     handle_enqueued/1, handle_active/1,
     handle_aborting/1, handle_completed/1,
-    handle_failed/2, handle_cancelled/1
+    handle_failed/2, handle_cancelled/1,
+    handle_restart/3
 ]).
 
 -type error() :: {error, term()}.
@@ -162,6 +163,34 @@ handle_cancelled(TransferId) ->
         fun mark_cancelled/1,
         fun transfer_links:move_to_ended_if_not_migration/1
     ).
+
+
+-spec handle_restart(transfer:id(), transfer:id(), boolean()) -> {ok, transfer:doc()} | error().
+handle_restart(TransferId, NewTransferId, MarkTransferFailed) ->
+    case MarkTransferFailed of
+        true ->
+            UpdateFun = fun(Transfer) ->
+                case mark_failed_forced(Transfer) of
+                    {ok, UpdatedTransfer} -> {ok, UpdatedTransfer#transfer{rerun_id = NewTransferId}};
+                    Other -> Other
+                end
+            end,
+
+            UpdateAns = transfer:update_and_run(
+                TransferId,
+                UpdateFun,
+                fun transfer_links:move_to_ended_if_not_migration/1
+            ),
+
+            % Marking transfer can fail if transfer is already ended.
+            % In such case set only rerun_id.
+            case UpdateAns of
+                {ok, _} -> UpdateAns;
+                _ -> transfer:set_rerun_id(TransferId, NewTransferId)
+            end;
+        false ->
+            transfer:set_rerun_id(TransferId, NewTransferId)
+    end.
 
 
 %%%===================================================================

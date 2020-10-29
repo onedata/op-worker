@@ -179,14 +179,14 @@ handle_restart(TransferId, NewTransferId, MarkTransferFailed) ->
                 fun transfer_links:move_from_ongoing_to_ended/1
             ),
 
-            % Marking transfer can fail if transfer is already ended
-            % In such a case add retry adding rerun id only
+            % Marking transfer can fail if transfer is already ended.
+            % In such case set only rerun_id.
             case UpdateAns of
                 {ok, _} -> UpdateAns;
-                _ -> add_rerun_id(TransferId, NewTransferId)
+                _ -> transfer:set_rerun_id(TransferId, NewTransferId)
             end;
         false ->
-            add_rerun_id(TransferId, NewTransferId)
+            transfer:set_rerun_id(TransferId, NewTransferId)
     end.
 
 %%%===================================================================
@@ -281,9 +281,3 @@ mark_cancelled(Transfer = #transfer{replication_status = ?ABORTING_STATUS}) ->
     }};
 mark_cancelled(#transfer{replication_status = Status}) ->
     {error, Status}.
-
--spec add_rerun_id(transfer:id(), transfer:id()) -> {ok, transfer:doc()} | error().
-add_rerun_id(TransferId, NewTransferId) ->
-    transfer:update(TransferId, fun(OldTransfer) ->
-        {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
-    end).
