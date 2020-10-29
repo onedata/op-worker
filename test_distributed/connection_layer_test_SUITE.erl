@@ -652,8 +652,8 @@ mock_ranch_ssl_to_fail_once(Workers) ->
     test_utils:mock_new(Workers, ranch_ssl, [passthrough]),
     test_utils:mock_expect(Workers, ranch_ssl, send,
         fun(Msg, VerifyMsg) ->
-            case node_cache:get(Ref, {error, not_found}) of
-                {error, not_found} ->
+            case node_cache:get(Ref, undefined) of
+                undefined ->
                     node_cache:put(Ref, true),
                     {error, you_shall_not_send};
                 _ ->

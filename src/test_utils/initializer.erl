@@ -665,8 +665,7 @@ testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, Privileges) ->
 
 -spec node_get_mocked_space_user_privileges(od_space:id(), od_user:id()) -> [privileges:space_privilege()].
 node_get_mocked_space_user_privileges(SpaceId, UserId) ->
-    {ok, Privileges} = node_cache:acquire({privileges, {SpaceId, UserId}}, fun() ->
-        {ok, privileges:space_admin(), 0} end),
+    {ok, Privileges} = node_cache:get({privileges, {SpaceId, UserId}}, privileges:space_admin()),
     Privileges.
 
 -spec mock_share_logic(proplists:proplist()) -> ok.
