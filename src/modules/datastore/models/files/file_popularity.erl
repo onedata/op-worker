@@ -235,7 +235,7 @@ file_popularity_to_histograms(#file_popularity{
 
 -spec timestamp_hours() -> non_neg_integer().
 timestamp_hours() ->
-    time_utils:timestamp_seconds() div 3600.
+    clock:timestamp_seconds() div 3600.
 
 %%%===================================================================
 %%% datastore_model callbacks

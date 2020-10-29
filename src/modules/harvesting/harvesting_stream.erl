@@ -620,7 +620,7 @@ on_successful_result(State = #hs_state{
         ok ->
             State2 = State#hs_state{
                 batch = harvesting_batch:new_accumulator(),
-                last_harvest_timestamp = time_utils:timestamp_seconds(),
+                last_harvest_timestamp = clock:timestamp_seconds(),
                 last_persisted_seq = LastSeenSeq,
                 last_sent_max_stream_seq = LastSeenSeq
             },
@@ -754,7 +754,7 @@ should_flush(#hs_state{
     last_seen_seq = LastSeenSeq,
     last_sent_max_stream_seq = LastSentMaxStreamSeq
 }) ->
-    CurrentTimestamp = time_utils:timestamp_seconds(),
+    CurrentTimestamp = clock:timestamp_seconds(),
     ((CurrentTimestamp - Timestamp) >= ?FLUSH_TIMEOUT_SECONDS)
         andalso
         ((not harvesting_batch:is_empty(Batch)) orelse LastSeenSeq =/= LastSentMaxStreamSeq).

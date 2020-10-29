@@ -120,7 +120,7 @@ single_dir_creation_test_base(Config, Clear) ->
                     case NewSum - LastLS >= 20000 of
                         true ->
                             put(last_ls, NewSum),
-                            T0 = os:timestamp(),
+                            T0 = os:timestamp(), % @TODO VFS-6841 switch to the clock module in all CT tests
                             ls(Worker, SessId, Dir, undefined, false),
                             ct:print("Save num ~p, sum ~p, ls time ~p",
                                 [SaveOk, NewSum, timer:now_diff(os:timestamp(), T0)]);
