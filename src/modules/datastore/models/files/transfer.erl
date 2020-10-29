@@ -263,11 +263,14 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}, MarkTransferF
             IsReplicationOngoing = is_replication_ongoing(Transfer),
             IsEvictionOngoing = is_eviction_ongoing(Transfer),
             case {IsReplicationOngoing, IsEvictionOngoing} of
-                {true, _} ->    % replication or first phase of migration
+                {true, _} ->
+                    % replication or first phase of migration
                     replication_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed);
-                {false, true} -> % eviction or second phase of migration
+                {false, true} ->
+                    % eviction or second phase of migration
                     replica_eviction_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed);
                 {false, false} ->
+                    % transfer has been ended, rerun must have been scheduled by user
                     set_rerun_id(TransferId, NewTransferId)
             end,
 

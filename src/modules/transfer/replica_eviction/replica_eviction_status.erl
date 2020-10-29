@@ -182,8 +182,8 @@ handle_restart(TransferId, NewTransferId, MarkTransferFailed) ->
                 fun transfer_links:move_to_ended_if_not_migration/1
             ),
 
-            % Marking transfer can fail if transfer is already ended
-            % In such a case add retry adding rerun id only
+            % Marking transfer can fail if transfer is already ended.
+            % In such case set only rerun_id.
             case UpdateAns of
                 {ok, _} -> UpdateAns;
                 _ -> transfer:set_rerun_id(TransferId, NewTransferId)
