@@ -34,6 +34,7 @@ all() -> [
 
 
 -define(DEFAULT_READ_BLOCK_SIZE, 1024).
+-define(GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS, 20).
 
 -define(ATTEMPTS, 30).
 
@@ -174,13 +175,44 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, Config) ->
         end,
         assert_distribution([FileCreationNode, P2Node], FileGuid, ExpDist),
 
-        % Downloading file using received url should succeed without any auth with the first use.
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
-        ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+        [_, DownloadCode] = binary:split(FileDownloadUrl, [<<"/download/">>]),
 
-        % But second try should fail as file download url is only one time use thing
-        ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl))
+        Ctx = rpc:call(DownloadNode, file_download_code, get_ctx, []),
+
+        case rand:uniform(2) of
+            1 ->
+                % File download code should be unusable after one successful download
+                ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+
+                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, Ctx, DownloadCode), ?ATTEMPTS),
+                ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+
+                api_test_memory:set(MemRef, download_succeeded, true);
+            2 ->
+                % File download code should be unusable after expiration period
+                timer:sleep(timer:seconds(?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS)),
+
+                % File download code should be deleted from db but stay in memory as couch
+                % unfortunately doesn't remove expired docs from memory
+                ?assertMatch(
+                    ?ERROR_NOT_FOUND,
+                    get_file_download_code_doc(DownloadNode, Ctx#{memory_driver => undefined}, DownloadCode),
+                    ?ATTEMPTS
+                ),
+                ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, Ctx, DownloadCode)),
+
+                % Still after request, which will fail, it should be deleted also from memory
+                ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, Ctx, DownloadCode)),
+
+                api_test_memory:set(MemRef, download_succeeded, false)
+        end
     end.
+
+
+get_file_download_code_doc(Node, Ctx, DownloadCode) ->
+    rpc:call(Node, datastore_model, get, [Ctx, DownloadCode]).
 
 
 %% @private
@@ -253,6 +285,7 @@ build_download_file_verify_fun(MemRef, Content, Config) ->
     Providers = [P1Node, P2Node],
 
     FileSize = size(Content),
+    FirstBlockFetchedSize = min(FileSize, ?DEFAULT_READ_BLOCK_SIZE),
 
     fun
         (expected_failure, _) ->
@@ -264,9 +297,11 @@ build_download_file_verify_fun(MemRef, Content, Config) ->
                 true ->
                     assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
                 false ->
-                    assert_distribution(Providers, FileGuid, [
-                        {P1Node, FileSize}, {DownloadNode, FileSize}
-                    ])
+                    ExpDist = case api_test_memory:get(MemRef, download_succeeded) of
+                        true -> [{P1Node, FileSize}, {DownloadNode, FileSize}];
+                        false -> [{P1Node, FileSize}, {DownloadNode, FirstBlockFetchedSize}]
+                    end,
+                    assert_distribution(Providers, FileGuid, ExpDist)
             end
     end.
 
@@ -307,9 +342,12 @@ init_per_suite(Config) ->
         {op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60},
             {default_download_read_block_size, ?DEFAULT_READ_BLOCK_SIZE},
+
             % Ensure replica_synchronizer will not fetch more data than requested
             {minimal_sync_request, ?DEFAULT_READ_BLOCK_SIZE},
-            {synchronizer_prefetch, false}
+            {synchronizer_prefetch, false},
+
+            {download_code_expiration_interval_seconds, ?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS}
         ]}
     ]}).
 

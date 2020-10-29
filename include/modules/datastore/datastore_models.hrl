@@ -229,6 +229,7 @@
 }).
 
 -record(file_download_code, {
+    expires :: non_neg_integer(),
     session_id :: session:id(),
     file_guid :: fslogic_worker:file_guid()
 }).

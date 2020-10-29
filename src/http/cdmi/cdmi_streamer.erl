@@ -70,7 +70,7 @@ stream_cdmi(Req, #cdmi_req{
         }, Req),
         cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
         http_download_utils:stream_bytes_range(
-            FileHandle, Range1, Req2,
+            FileHandle, Size, Range1, Req2,
             fun(Data) -> cdmi_encoder:encode(Data, Encoding) end, ReadBlockSize
         ),
         cowboy_req:stream_body(JsonBodySuffix, fin, Req2),
