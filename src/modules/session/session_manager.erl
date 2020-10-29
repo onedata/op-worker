@@ -217,8 +217,8 @@ restore_session_on_slave_node(SessId, NewSup, NewSupNode) ->
                 % All session processes but connection ones are on the same
                 % node as supervisor. If supervisor is dead so they are.
                 {ok, Sess#session{
-                    node = NewSup,
-                    supervisor = NewSupNode,
+                    node = NewSupNode,
+                    supervisor = NewSup,
                     event_manager = undefined,
                     watcher = undefined,
                     sequencer_manager = undefined,

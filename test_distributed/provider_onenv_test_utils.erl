@@ -18,7 +18,9 @@
 -export([
     initialize/1,
     setup_sessions/1,
-    find_importing_provider/2]).
+    find_importing_provider/2,
+    create_oz_temp_access_token/2
+]).
 
 %%%===================================================================
 %%% API
@@ -63,6 +65,20 @@ find_importing_provider(Config, SpaceId) ->
     end, undefined, Providers).
 
 
+-spec create_oz_temp_access_token(node(), UserId :: binary()) -> tokens:serialized().
+create_oz_temp_access_token(OzwNode, UserId) ->
+    TimeCaveat = #cv_time{
+        valid_until = rpc:call(OzwNode, time_utils, timestamp_seconds, []) + 100000
+    },
+
+    {ok, AccessToken} = rpc:call(OzwNode, token_logic, create_user_temporary_token, [
+        ?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}
+    ]),
+    {ok, SerializedAccessToken} = tokens:serialize(AccessToken),
+
+    SerializedAccessToken.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -71,15 +87,11 @@ find_importing_provider(Config, SpaceId) ->
 -spec setup_user_session(UserId :: binary(), OzwNode :: node(), OpwNode :: node()) ->
     {ok, SessId :: binary()}.
 setup_user_session(UserId, OzwNode, OpwNode) ->
-    TimeCaveat = #cv_time{valid_until = rpc:call(OzwNode, time_utils, timestamp_seconds, []) + 100000},
-    {ok, AccessToken} =
-        rpc:call(OzwNode, token_logic, create_user_temporary_token,
-            [?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}]),
-    {ok, SerializedAccessToken} = rpc:call(OzwNode, tokens, serialize, [AccessToken]),
+    AccessToken = create_oz_temp_access_token(OzwNode, UserId),
     Nonce = base64:encode(crypto:strong_rand_bytes(8)),
     Identity = ?SUB(user, UserId),
     Credentials =
         rpc:call(OpwNode, auth_manager, build_token_credentials,
-            [SerializedAccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
+            [AccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
     
     rpc:call(OpwNode, session_manager, reuse_or_create_fuse_session, [Nonce, Identity, Credentials]).
