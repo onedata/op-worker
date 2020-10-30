@@ -74,7 +74,7 @@ handle(<<"GET">>, Req) ->
                 Req3
             );
         false ->
-            http_req:send_error(?ERROR_BAD_DATA(<<"code">>), Req)
+            http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
     end.
 
 

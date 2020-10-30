@@ -49,7 +49,7 @@
 
     file_handle :: lfm:handle(),
     read_block_size :: read_block_size(),
-    max_read_blocks_num :: non_neg_integer(),
+    max_read_blocks_count :: non_neg_integer(),
     encoding_fun :: fun((Data :: binary()) -> EncodedData :: binary()),
 
     on_success_callback :: fun(() -> ok)
@@ -111,7 +111,7 @@ stream_file(SessionId, #file_attr{
                             file_size = FileSize,
                             file_handle = FileHandle,
                             read_block_size = ReadBlockSize,
-                            max_read_blocks_num = get_max_read_blocks_num(ReadBlockSize),
+                            max_read_blocks_count = calculate_max_read_blocks_count(ReadBlockSize),
                             encoding_fun = fun(Data) -> Data end,
                             on_success_callback = OnSuccessCallback
                         }, Req1)
@@ -145,7 +145,7 @@ stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize)
         file_size = FileSize,
         file_handle = FileHandle,
         read_block_size = ReadBlockSize,
-        max_read_blocks_num = get_max_read_blocks_num(ReadBlockSize),
+        max_read_blocks_count = calculate_max_read_blocks_count(ReadBlockSize),
         encoding_fun = EncodingFun,
         on_success_callback = fun() -> ok end
     }, Req, ?MIN_SEND_RETRY_DELAY).
@@ -157,8 +157,8 @@ stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize)
 
 
 %% @private
--spec get_max_read_blocks_num(read_block_size()) -> non_neg_integer().
-get_max_read_blocks_num(ReadBlockSize) ->
+-spec calculate_max_read_blocks_count(read_block_size()) -> non_neg_integer().
+calculate_max_read_blocks_count(ReadBlockSize) ->
     max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize).
 
 
@@ -195,6 +195,7 @@ stream_file_insecure(Ranges, DownloadCtx, Req) ->
 -spec stream_whole_file(download_ctx(), cowboy_req:req()) -> cowboy_req:req().
 stream_whole_file(#download_ctx{
     file_size = FileSize,
+    file_handle = FileHandle,
     on_success_callback = OnSuccessCallback
 } = DownloadCtx, Req0) ->
     Req1 = cowboy_req:stream_reply(
@@ -204,7 +205,7 @@ stream_whole_file(#download_ctx{
     ),
 
     stream_bytes_range({0, FileSize - 1}, DownloadCtx, Req1, ?MIN_SEND_RETRY_DELAY),
-    ok = OnSuccessCallback(),
+    execute_on_success_callback(FileHandle, OnSuccessCallback),
 
     cowboy_req:stream_body(<<"">>, fin, Req1),
     Req1.
@@ -215,6 +216,7 @@ stream_whole_file(#download_ctx{
     cowboy_req:req().
 stream_one_ranged_body({RangeStart, RangeEnd} = Range, #download_ctx{
     file_size = FileSize,
+    file_handle = FileHandle,
     on_success_callback = OnSuccessCallback
 } = DownloadCtx, Req0) ->
     Req1 = cowboy_req:stream_reply(
@@ -227,7 +229,7 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, #download_ctx{
     ),
 
     stream_bytes_range(Range, DownloadCtx, Req1, ?MIN_SEND_RETRY_DELAY),
-    ok = OnSuccessCallback(),
+    execute_on_success_callback(FileHandle, OnSuccessCallback),
 
     cowboy_req:stream_body(<<"">>, fin, Req1),
     Req1.
@@ -238,6 +240,7 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, #download_ctx{
     cowboy_req:req().
 stream_multipart_ranged_body(Ranges, #download_ctx{
     file_size = FileSize,
+    file_handle = FileHandle,
     on_success_callback = OnSuccessCallback
 } = DownloadCtx, Req0) ->
     Boundary = cow_multipart:boundary(),
@@ -258,7 +261,7 @@ stream_multipart_ranged_body(Ranges, #download_ctx{
 
         stream_bytes_range(Range, DownloadCtx, Req1, ?MIN_SEND_RETRY_DELAY)
     end, Ranges),
-    ok = OnSuccessCallback(),
+    execute_on_success_callback(FileHandle, OnSuccessCallback),
 
     cowboy_req:stream_body(cow_multipart:close(Boundary), fin, Req1),
     Req1.
@@ -277,7 +280,7 @@ stream_bytes_range({From, To}, _, _, _) when From > To ->
 stream_bytes_range({From, To}, #download_ctx{
     file_handle = FileHandle,
     read_block_size = ReadBlockSize,
-    max_read_blocks_num = MaxReadBlocksNum,
+    max_read_blocks_count = MaxReadBlocksCount,
     encoding_fun = EncodingFun
 } = DownloadCtx, Req, SendRetryDelay) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
@@ -288,7 +291,7 @@ stream_bytes_range({From, To}, #download_ctx{
             ok;
         DataSize ->
             NextSendRetryDelay = send_data_chunk(
-                EncodingFun(Data), Req, MaxReadBlocksNum, SendRetryDelay
+                EncodingFun(Data), Req, MaxReadBlocksCount, SendRetryDelay
             ),
             stream_bytes_range(
                 {From + DataSize, To}, DownloadCtx, Req, NextSendRetryDelay
@@ -312,21 +315,34 @@ stream_bytes_range({From, To}, #download_ctx{
 -spec send_data_chunk(
     Data :: binary(),
     cowboy_req:req(),
-    MaxReadBlocksNum :: non_neg_integer(),
+    MaxReadBlocksCount :: non_neg_integer(),
     RetryDelay :: clock:millis()
 ) ->
     NextRetryDelay :: clock:millis().
-send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksNum, RetryDelay) ->
+send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) ->
     {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
 
-    case MsgQueueLen < MaxReadBlocksNum of
+    case MsgQueueLen < MaxReadBlocksCount of
         true ->
             cowboy_req:stream_body(Data, nofin, Req),
             max(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY);
         false ->
             timer:sleep(RetryDelay),
             send_data_chunk(
-                Data, Req, MaxReadBlocksNum,
+                Data, Req, MaxReadBlocksCount,
                 min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY)
             )
+    end.
+
+
+%% @private
+-spec execute_on_success_callback(lfm:handle(), OnSuccessCallback :: fun(() -> ok)) -> ok.
+execute_on_success_callback(FileHandle, OnSuccessCallback) ->
+    try
+        ok = OnSuccessCallback()
+    catch Type:Reason ->
+        ?warning("Failed to execute file download successfully finished callback for file (~p) "
+                 "due to ~p:~p", [
+            lfm_context:get_guid(FileHandle), Type, Reason
+        ])
     end.

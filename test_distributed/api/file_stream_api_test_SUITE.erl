@@ -178,20 +178,18 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, Config) ->
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
         [_, DownloadCode] = binary:split(FileDownloadUrl, [<<"/download/">>]),
 
-        Ctx = rpc:call(DownloadNode, file_download_code, get_ctx, []),
-
         case rand:uniform(2) of
             1 ->
                 % File download code should be still usable after unsuccessful download
                 block_file_streaming(DownloadNode, ?ERROR_POSIX(?EAGAIN)),
                 ?assertEqual(?ERROR_POSIX(?EAGAIN), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
                 unblock_file_streaming(DownloadNode),
-                ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, Ctx, DownloadCode)),
+                ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
 
                 % But first successful download should make it unusable
                 ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
-                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, Ctx, DownloadCode), ?ATTEMPTS),
-                ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory), ?ATTEMPTS),
+                ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
 
                 api_test_memory:set(MemRef, download_succeeded, true);
             2 ->
@@ -202,14 +200,14 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, Config) ->
                 % unfortunately doesn't remove expired docs from memory
                 ?assertMatch(
                     ?ERROR_NOT_FOUND,
-                    get_file_download_code_doc(DownloadNode, Ctx#{memory_driver => undefined}, DownloadCode),
+                    get_file_download_code_doc(DownloadNode, DownloadCode, disc),
                     ?ATTEMPTS
                 ),
-                ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, Ctx, DownloadCode)),
+                ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
 
                 % Still after request, which will fail, it should be deleted also from memory
-                ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
-                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, Ctx, DownloadCode)),
+                ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
 
                 api_test_memory:set(MemRef, download_succeeded, false)
         end
@@ -233,10 +231,19 @@ unblock_file_streaming(OpNode) ->
 
 
 %% @private
--spec get_file_download_code_doc(node(), datastore:ctx(), file_download_code:code()) ->
+-spec get_file_download_code_doc(
+    node(),
+    file_download_code:code(),
+    Location :: memory | disc
+) ->
     {ok, file_download_code:doc()} | {error, term()}.
-get_file_download_code_doc(Node, Ctx, DownloadCode) ->
-    rpc:call(Node, datastore_model, get, [Ctx, DownloadCode]).
+get_file_download_code_doc(Node, DownloadCode, Location) ->
+    Ctx0 = rpc:call(Node, file_download_code, get_ctx, []),
+    Ctx1 = case Location of
+        memory -> Ctx0;
+        disc -> Ctx0#{memory_driver => undefined}
+    end,
+    rpc:call(Node, datastore_model, get, [Ctx1, DownloadCode]).
 
 
 %% @private
@@ -387,12 +394,17 @@ init_per_testcase(gui_download_file_test = Case, Config) ->
     % to known/existing atoms. Otherwise gs_ws_handler may fail to decode this request (gri)
     % if it is the first request made.
     rpc:multicall(Providers, file_middleware, operation_supported, [get, download_url, private]),
-    rpc:multicall(Providers, mock_manager, start, []),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 20}),
     lfm_proxy:init(Config).
 
 
+end_per_testcase(gui_download_file_test, Config) ->
+    lists:foreach(
+        fun(OpNode) -> unblock_file_streaming(OpNode) end,
+        ?config(op_worker_nodes, Config)
+    ),
+    end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

@@ -7,8 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% File download code record that holds a code for downloading a file via GUI.
-%%% Such code is valid for certain (configurable in app.config) amount of time
-%%% after which it expires and can no longer be used.
+%%% Download codes are intended to be deleted right after the first successful download.
+%%% In case of a download failure, the code can still be used until the end of
+%%% the expiration period, after which it becomes invalid.
+%%% This approach allows resuming failed downloads at any time within the code validity.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_download_code).
@@ -35,7 +37,7 @@
 }).
 
 -define(EXPIRATION_INTERVAL, application:get_env(
-    ?APP_NAME, download_code_expiration_interval_seconds, timer:hours(24)
+    ?APP_NAME, download_code_expiration_interval_seconds, 86400  %% 24 hours
 )).
 
 -define(NOW(), clock:timestamp_seconds()).
@@ -89,7 +91,7 @@ verify(Code) ->
 
 -spec remove(code()) -> ok.
 remove(Code) ->
-    ok = ?ok_if_not_found(datastore_model:delete(?CTX, Code)).
+    ok = datastore_model:delete(?CTX, Code).
 
 
 %%%===================================================================
