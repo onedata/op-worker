@@ -182,9 +182,14 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, Config) ->
 
         case rand:uniform(2) of
             1 ->
-                % File download code should be unusable after one successful download
-                ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                % File download code should be still usable after unsuccessful download
+                block_file_streaming(DownloadNode, ?ERROR_POSIX(?EAGAIN)),
+                ?assertEqual(?ERROR_POSIX(?EAGAIN), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                unblock_file_streaming(DownloadNode),
+                ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, Ctx, DownloadCode)),
 
+                % But first successful download should make it unusable
+                ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
                 ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, Ctx, DownloadCode), ?ATTEMPTS),
                 ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
 
@@ -211,6 +216,25 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, Config) ->
     end.
 
 
+%% @private
+-spec block_file_streaming(node(), errors:error()) -> ok.
+block_file_streaming(OpNode, ErrorReturned) ->
+    test_node_starter:load_modules([OpNode], [?MODULE]),
+    ok = test_utils:mock_new(OpNode, http_download_utils),
+    ok = test_utils:mock_expect(OpNode, http_download_utils, stream_file, fun(_, _, _, Req) ->
+        http_req:send_error(ErrorReturned, Req)
+    end).
+
+
+%% @private
+-spec unblock_file_streaming(node()) -> ok.
+unblock_file_streaming(OpNode) ->
+    ok = test_utils:mock_unload(OpNode).
+
+
+%% @private
+-spec get_file_download_code_doc(node(), datastore:ctx(), file_download_code:code()) ->
+    {ok, file_download_code:doc()} | {error, term()}.
 get_file_download_code_doc(Node, Ctx, DownloadCode) ->
     rpc:call(Node, datastore_model, get, [Ctx, DownloadCode]).
 
@@ -363,6 +387,7 @@ init_per_testcase(gui_download_file_test = Case, Config) ->
     % to known/existing atoms. Otherwise gs_ws_handler may fail to decode this request (gri)
     % if it is the first request made.
     rpc:multicall(Providers, file_middleware, operation_supported, [get, download_url, private]),
+    rpc:multicall(Providers, mock_manager, start, []),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 20}),

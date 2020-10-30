@@ -25,7 +25,10 @@
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
 -type code() :: binary().
--export_type([code/0]).
+-type record() :: #file_download_code{}.
+-type doc() :: datastore_doc:doc(record()).
+
+-export_type([code/0, record/0, doc/0]).
 
 -define(CTX, #{
     model => ?MODULE
