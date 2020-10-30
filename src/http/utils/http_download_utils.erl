@@ -269,7 +269,7 @@ stream_multipart_ranged_body(Ranges, #download_ctx{
     http_parser:bytes_range(),
     download_ctx(),
     cowboy_req:req(),
-    SendRetryDelay :: time_utils:millis()
+    SendRetryDelay :: clock:millis()
 ) ->
     ok | no_return().
 stream_bytes_range({From, To}, _, _, _) when From > To ->
@@ -313,9 +313,9 @@ stream_bytes_range({From, To}, #download_ctx{
     Data :: binary(),
     cowboy_req:req(),
     MaxReadBlocksNum :: non_neg_integer(),
-    RetryDelay :: time_utils:millis()
+    RetryDelay :: clock:millis()
 ) ->
-    NextRetryDelay :: time_utils:millis().
+    NextRetryDelay :: clock:millis().
 send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksNum, RetryDelay) ->
     {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
 

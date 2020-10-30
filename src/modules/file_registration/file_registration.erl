@@ -112,7 +112,7 @@ create_missing_directory(ParentCtx, DirName, UserId) ->
     FileUuid = datastore_key:new(),
     ok = dir_location:mark_dir_synced_from_storage(FileUuid, undefined),
     {ok, DirCtx} = create_missing_directory_file_meta(FileUuid, ParentCtx, DirName, SpaceId, UserId),
-    CurrentTime = time_utils:timestamp_seconds(),
+    CurrentTime = clock:timestamp_seconds(),
     times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime),
     {ok, DirCtx}.
 
@@ -349,7 +349,7 @@ ensure_stat_defined(Stat, DefaultStat) ->
 -spec get_default_file_stat(storage_file_ctx:ctx()) -> {helpers:stat(), storage_file_ctx:ctx()}.
 get_default_file_stat(StorageFileCtx) ->
     {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
-    CurrentTimestamp = time_utils:timestamp_seconds(),
+    CurrentTimestamp = clock:timestamp_seconds(),
     DefaultStat = #statbuf{
         % st_size is not set intentionally as we cannot assume default size
         st_mtime = CurrentTimestamp,

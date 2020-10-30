@@ -139,7 +139,7 @@ flush(Type) ->
     NewKBM = KBM -- Saved,
     put(?KEYS_MODIFIED, NewKM),
     put(?KEYS_BLOCKS_MODIFIED, NewKBM),
-    put(?FLUSH_TIME, os:timestamp()),
+    put(?FLUSH_TIME, os:timestamp()), % @TODO VFS-6841 switch to the clock module
     erase(?IS_FLUSH_PLANNED),
     case length(NewKM) + length(NewKBM) of
         0 ->
@@ -617,7 +617,7 @@ set_local_change(false) ->
 set_local_change(Value) ->
     put(?LOCAL_CHANGES, Value),
     UpdatedDoc = file_location:set_last_replication_timestamp(
-        get_local_location(), time_utils:timestamp_seconds()),
+        get_local_location(), clock:timestamp_seconds()),
     save_doc(UpdatedDoc),
     ok.
 

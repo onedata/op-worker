@@ -182,12 +182,12 @@ async_request_handling_test(Config) ->
     end, lists:seq(1, 5)),
 
     % Short requests are made in parallel and the results are collected (blocks the test process)
-    Start = time_utils:timestamp_millis(),
+    Start = clock:timestamp_millis(),
     lists_utils:pforeach(fun(_) ->
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     end, lists:seq(1, 20)),
     % Processing time should be shorter than for harvest requests
-    End = time_utils:timestamp_millis(),
+    End = clock:timestamp_millis(),
     ?assert(End - Start < 15000),
 
 

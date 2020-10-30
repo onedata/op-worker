@@ -721,7 +721,7 @@ setup_onedata_user(UserId, EffSpaces) ->
     ?debug("Setting up user: ~p", [UserId]),
     critical_section:run([od_user, UserId], fun() ->
         try
-            CTime = time_utils:timestamp_seconds(),
+            CTime = clock:timestamp_seconds(),
 
             lists:foreach(fun(SpaceId) ->
                 make_space_exist(SpaceId)
@@ -808,7 +808,7 @@ get_shares(#file_meta{shares = Shares}) ->
 %%--------------------------------------------------------------------
 -spec make_space_exist(SpaceId :: datastore:key()) -> ok | no_return().
 make_space_exist(SpaceId) ->
-    CTime = time_utils:timestamp_seconds(),
+    CTime = clock:timestamp_seconds(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileDoc = #document{
         key = SpaceDirUuid,

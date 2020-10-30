@@ -216,7 +216,7 @@ get_version_vector(#file_location{version_vector = VV}) ->
     VV.
 
 
--spec get_last_replication_timestamp(doc() | record()) -> non_neg_integer() | undefined.
+-spec get_last_replication_timestamp(doc() | record()) -> clock:seconds() | undefined.
 get_last_replication_timestamp(#document{value = FL}) ->
     get_last_replication_timestamp(FL);
 get_last_replication_timestamp(FL = #file_location{}) ->
@@ -230,7 +230,7 @@ get_synced_gid(#file_location{synced_gid = SyncedGid}) ->
     SyncedGid.
 
 
--spec set_last_replication_timestamp(doc(), non_neg_integer()) -> doc().
+-spec set_last_replication_timestamp(doc(), clock:seconds()) -> doc().
 set_last_replication_timestamp(Doc = #document{value = FL}, Timestamp) ->
     Doc#document{
         value = FL#file_location{

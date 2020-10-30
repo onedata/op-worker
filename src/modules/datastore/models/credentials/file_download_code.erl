@@ -35,7 +35,7 @@
     ?APP_NAME, download_code_expiration_interval_seconds, timer:hours(24)
 )).
 
--define(NOW(), time_utils:timestamp_seconds()).
+-define(NOW(), clock:timestamp_seconds()).
 
 
 %%%===================================================================

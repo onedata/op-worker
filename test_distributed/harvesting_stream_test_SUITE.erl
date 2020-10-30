@@ -148,7 +148,7 @@ all() -> ?ALL([
     ExpHarvestingStreamPid, Timeout
 ), (
     (fun AssertFun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout) ->
-        Start = time_utils:timestamp_seconds(),
+        Start = clock:timestamp_seconds(),
         __TimeoutInMillis = timer:seconds(__Timeout),
         receive
             __HM = ?HARVEST_METADATA_CALLED(
@@ -157,7 +157,7 @@ all() -> ?ALL([
                 __ReceivedBatch,
                 __HarvestingStreamPid
             ) ->
-                ElapsedTime = time_utils:timestamp_seconds() - Start,
+                ElapsedTime = clock:timestamp_seconds() - Start,
                 __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedBatch],
                 case sequential_subtract(__Seqs, __ReceivedSeqs) of
                     __Seqs ->
