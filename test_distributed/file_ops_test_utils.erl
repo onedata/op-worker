@@ -14,9 +14,11 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
+-export([create_dir/4, create_file/4, create_file/5]).
 -export([create_files_and_dirs/5, verify_files_and_dirs/4, test_read_operations_on_error/4]).
 
 -define(FILE_DATA, <<"1234567890abcd">>).
@@ -30,22 +32,14 @@
 %%% API
 %%%===================================================================
 
-create_files_and_dirs(Worker, SessId, ParentUuid, DirsNum, _FilesNum) ->
+create_files_and_dirs(Worker, SessId, ParentGuid, DirsNum, FilesNum) ->
     DirGuids = lists:map(fun(_) ->
-        Dir = generator:gen_name(),
-        {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, Dir, 8#755)),
-        DirGuid
+        create_dir(Worker, SessId, ParentGuid, generator:gen_name())
     end, lists:seq(1, DirsNum)),
 
-    FileDataSize = size(?FILE_DATA),
     FileGuids = lists:map(fun(_) ->
-        File = generator:gen_name(),
-        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, ParentUuid, File, 8#755)),
-        {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, rdwr)),
-        ?assertMatch({ok, FileDataSize}, lfm_proxy:write(Worker, Handle, 0, ?FILE_DATA)),
-        ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
-        FileGuid
-    end, lists:seq(1, 0)), % TODO VFS-6873 - create `FilesNum` files when rtransfer problems are fixed
+        create_file(Worker, SessId, ParentGuid, generator:gen_name())
+    end, lists:seq(1, FilesNum)),
 
     #test_data{dir_guids = DirGuids, file_guids = FileGuids}.
 
@@ -86,3 +80,21 @@ test_read_operations_on_error(Worker, SessId, #test_data{dir_guids = DirGuids, f
         ?assertMatch({error, ErrorType}, lfm_proxy:stat(Worker, SessId, {guid, File})),
         ?assertMatch({error, ErrorType}, lfm_proxy:open(Worker, SessId, {guid, File}, rdwr))
     end, FileGuids).
+
+
+create_dir(Worker, SessId, ParentGuid, DirName) ->
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, ParentGuid, DirName, ?DEFAULT_DIR_PERMS)),
+    DirGuid.
+
+create_file(Worker, SessId, ParentGuid, FileName) ->
+    create_file(Worker, SessId, ParentGuid, FileName, ?FILE_DATA).
+
+create_file(Worker, SessId, ParentGuid, FileName, FileContentSize) when is_integer(FileContentSize) ->
+    create_file(Worker, SessId, ParentGuid, FileName, crypto:strong_rand_bytes(FileContentSize));
+create_file(Worker, SessId, ParentGuid, FileName, FileContent) when is_binary(FileContent) ->
+    {ok, {FileGuid, Handle}} =
+        ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker, SessId, ParentGuid, FileName, ?DEFAULT_FILE_PERMS)),
+    FileContentSize = size(FileContent),
+    ?assertMatch({ok, FileContentSize}, lfm_proxy:write(Worker, Handle, 0, FileContent)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
+    FileGuid.

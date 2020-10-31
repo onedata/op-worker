@@ -698,7 +698,7 @@ maybe_update_doc_counters(State = #state{
     released_bytes = ReleasedBytes,
     released_files = ReleasedFiles
 }) ->
-    Timestamp = time_utils:timestamp_millis(),
+    Timestamp = clock:timestamp_millis(),
     case Timestamp - PreviousTimestamp > ?UPDATE_DOC_COUNTERS_MAX_INTERVAL of
         true ->
             autocleaning_run:update_counters(ARId, ReleasedFiles, ReleasedBytes),

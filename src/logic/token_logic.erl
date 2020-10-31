@@ -37,7 +37,7 @@
 %% Creates a new temporary identity token for this provider with given TTL.
 %% @end
 %%--------------------------------------------------------------------
--spec create_identity_token(ValidUntil :: time_utils:seconds()) ->
+-spec create_identity_token(ValidUntil :: clock:seconds()) ->
     {ok, tokens:serialized()} | errors:error().
 create_identity_token(ValidUntil) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
@@ -120,7 +120,7 @@ get_temporary_tokens_generation(UserId) ->
     Interface :: undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
-    {ok, aai:subject(), TTL :: undefined | time_utils:seconds()} | errors:error().
+    {ok, aai:subject(), TTL :: undefined | clock:seconds()} | errors:error().
 verify_access_token(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,

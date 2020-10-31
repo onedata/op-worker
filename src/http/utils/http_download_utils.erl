@@ -252,7 +252,7 @@ stream_multipart_byteranges(
     EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     read_block_size(),
     MaxReadBlocksNum :: non_neg_integer(),
-    SendRetryDelay :: time_utils:millis()
+    SendRetryDelay :: clock:millis()
 ) ->
     ok | no_return().
 stream_bytes_range(_, {From, To}, _, _, _, _, _) when From > To ->
@@ -295,9 +295,9 @@ stream_bytes_range(
     Data :: binary(),
     cowboy_req:req(),
     MaxReadBlocksNum :: non_neg_integer(),
-    RetryDelay :: time_utils:millis()
+    RetryDelay :: clock:millis()
 ) ->
-    NextRetryDelay :: time_utils:millis().
+    NextRetryDelay :: clock:millis().
 send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksNum, RetryDelay) ->
     {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
 
