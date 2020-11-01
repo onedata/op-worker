@@ -6,15 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests concerning file streaming (download/upload) API
-%%% (REST + gs).
+%%% This file contains tests concerning file streaming API (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_stream_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("file_api_test_utils.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -41,6 +39,8 @@ all() -> [
 
 -define(ATTEMPTS, 30).
 
+
+-type test_mode() :: normal_mode | share_mode.
 
 -type offset() :: non_neg_integer().
 -type size() :: non_neg_integer().
@@ -122,27 +122,16 @@ gui_download_file_test(Config) ->
 
 
 %% @private
--spec build_get_download_url_prepare_gs_args_fun(
-    api_test_memory:mem_ref(),
-    TestMode :: normal_mode | share_mode,
-    gri:scope()
-) ->
+-spec build_get_download_url_prepare_gs_args_fun(api_test_memory:mem_ref(), test_mode(), gri:scope()) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_download_url_prepare_gs_args_fun(MemRef, TestMode, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        BareGuid = api_test_memory:get(MemRef, file_guid),
-        FileGuid = case TestMode of
-            normal_mode ->
-                BareGuid;
-            share_mode ->
-                ShareId = api_test_memory:get(MemRef, share_id),
-                file_id:guid_to_share_guid(BareGuid, ShareId)
-        end,
-        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        FileGuid = get_file_guid(MemRef, TestMode),
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = GriId, aspect = download_url, scope = Scope},
+            gri = #gri{type = op_file, id = Id, aspect = download_url, scope = Scope},
             data = Data1
         }
     end.
@@ -154,7 +143,7 @@ build_get_download_url_prepare_gs_args_fun(MemRef, TestMode, Scope) ->
     FileContent :: binary(),
     onenv_api_test_runner:ct_config()
 ) ->
-    onenv_api_test_runner:setup_fun().
+    onenv_api_test_runner:validate_call_result_fun().
 build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, Config) ->
     FileSize = size(ExpContent),
     FirstBlockFetchedSize = min(FileSize, ?DEFAULT_READ_BLOCK_SIZE),
@@ -296,28 +285,17 @@ rest_download_file_test(Config) ->
 
 
 %% @private
--spec build_rest_download_file_prepare_args_fun(
-    api_test_memory:mem_ref(),
-    TestMode :: normal_mode | share_mode
-) ->
+-spec build_rest_download_file_prepare_args_fun(api_test_memory:mem_ref(), test_mode()) ->
     onenv_api_test_runner:prepare_args_fun().
 build_rest_download_file_prepare_args_fun(MemRef, TestMode) ->
     fun(#api_test_ctx{data = Data0}) ->
-        BareGuid = api_test_memory:get(MemRef, file_guid),
-        FileGuid = case TestMode of
-            normal_mode ->
-                BareGuid;
-            share_mode ->
-                ShareId = api_test_memory:get(MemRef, share_id),
-                file_id:guid_to_share_guid(BareGuid, ShareId)
-        end,
+        FileGuid = get_file_guid(MemRef, TestMode),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-
-        {FileId, Data1} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
 
         #rest_args{
             method = get,
-            path = <<"data/", FileId/binary, "/content">>,
+            path = <<"data/", Id/binary, "/content">>,
             headers = case maps:get(<<"range">>, Data1, undefined) of
                 undefined -> #{};
                 Range -> #{<<"range">> => element(1, Range)}
@@ -332,7 +310,7 @@ build_rest_download_file_prepare_args_fun(MemRef, TestMode) ->
     FileContent :: binary(),
     onenv_api_test_runner:ct_config()
 ) ->
-    onenv_api_test_runner:setup_fun().
+    onenv_api_test_runner:validate_call_result_fun().
 build_rest_download_file_validate_call_fun(_MemRef, ExpContent, _Config) ->
     FileSize = size(ExpContent),
     FileSizeBin = integer_to_binary(FileSize),
@@ -438,6 +416,19 @@ build_download_file_setup_fun(MemRef, Content, Config) ->
 
         api_test_memory:set(MemRef, file_guid, FileGuid),
         api_test_memory:set(MemRef, share_id, ShareId)
+    end.
+
+
+%% @private
+-spec get_file_guid(api_test_memory:mem_ref(), test_mode()) -> file_id:file_guid().
+get_file_guid(MemRef, TestMode) ->
+    BareGuid = api_test_memory:get(MemRef, file_guid),
+    case TestMode of
+        normal_mode ->
+            BareGuid;
+        share_mode ->
+            ShareId = api_test_memory:get(MemRef, share_id),
+            file_id:guid_to_share_guid(BareGuid, ShareId)
     end.
 
 
