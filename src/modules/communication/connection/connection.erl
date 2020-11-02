@@ -338,7 +338,7 @@ handle_info({upgrade_protocol, Hostname}, State) ->
         {ok, NewState} ->
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, _Reason} ->
-            {stop, normal, State}
+            {stop, connection_attempt_failed, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Socket, ok = Ok} = State) ->
@@ -350,12 +350,12 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_protocol_upgrade_response'
             % so terminate gracefully as to not spam more error logs
-            {stop, normal, State}
+            {stop, connection_attempt_failed, State}
     catch Type:Reason ->
         ?error_stacktrace("Unexpected error during protocol upgrade: ~p:~p", [
             Type, Reason
         ]),
-        {stop, normal, State}
+        {stop, connection_attempt_failed, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
@@ -368,12 +368,12 @@ handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = S
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_handshake' so
             % terminate gracefully as to not spam more error logs
-            {stop, normal, State}
+            {stop, connection_attempt_failed, State}
     catch Type:Reason ->
         ?error_stacktrace("Unexpected error while performing handshake: ~p:~p", [
             Type, Reason
         ]),
-        {stop, normal, State}
+        {stop, connection_attempt_failed, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State) ->
@@ -416,7 +416,7 @@ handle_info(Info, State) ->
     State :: state()) -> term().
 terminate(Reason, #state{session_id = SessionId, socket = Socket} = State) ->
     case Reason of
-        handshake_failed ->
+        connection_attempt_failed ->
             % Do not log terminate here as concrete errors were logged already
             ok;
         _ ->

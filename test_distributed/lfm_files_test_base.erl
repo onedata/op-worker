@@ -1680,7 +1680,7 @@ opening_file_should_increase_file_popularity(Config) ->
     ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
 
     % when
-    TimeBeforeFirstOpen = rpc:call(W, time_utils, timestamp_seconds, []) div 3600,
+    TimeBeforeFirstOpen = rpc:call(W, clock, timestamp_seconds, []) div 3600,
     {ok, Handle1} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
     lfm_proxy:close(W, Handle1),
 
@@ -1702,7 +1702,7 @@ opening_file_should_increase_file_popularity(Config) ->
     ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
     % when
-    TimeBeforeSecondOpen = rpc:call(W, time_utils, timestamp_seconds, []) div 3600,
+    TimeBeforeSecondOpen = rpc:call(W, clock, timestamp_seconds, []) div 3600,
     lists:foreach(fun(_) ->
         {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
         lfm_proxy:close(W, Handle2)

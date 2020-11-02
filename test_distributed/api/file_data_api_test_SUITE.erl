@@ -106,7 +106,7 @@ get_file_attrs_test(Config) ->
                     validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
                 },
                 #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " using gs api">>,
+                    name = <<"Get attrs from ", FileType/binary, " using gs private api">>,
                     type = gs,
                     prepare_args_fun = build_get_attrs_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = build_get_attrs_validate_gs_call_fun(JsonAttrs, undefined)
@@ -116,6 +116,23 @@ get_file_attrs_test(Config) ->
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, undefined, get_attrs_data_spec(normal_mode)
             )
+        },
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get attrs from ", FileType/binary, " using gs public api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_attrs_prepare_gs_args_fun(FileGuid, public),
+                    validate_result_fun = fun(#api_test_ctx{client = Client}, Result) ->
+                        case Client of
+                            ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
+                            _ -> ?assertEqual(?ERROR_FORBIDDEN, Result)
+                        end
+                    end
+                }
+            ]
         }
     ])).
 
@@ -132,8 +149,8 @@ get_shared_file_attrs_test(Config) ->
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
 
-    {ok, ShareId1} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, {guid, FileGuid}, <<"share1">>),
-    {ok, ShareId2} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, {guid, FileGuid}, <<"share2">>),
+    ShareId1 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
+    ShareId2 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
 
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId1),
     {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),

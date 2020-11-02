@@ -501,7 +501,7 @@ on_space_supported(SpaceId, StorageId) ->
 -spec on_space_unsupported(od_space:id(), id()) -> ok.
 on_space_unsupported(SpaceId, StorageId) ->
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
-    storage_import_worker:notify_space_unsupported(SpaceId),
+    auto_storage_import_worker:notify_space_unsupported(SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
 
@@ -856,7 +856,7 @@ upgrade_record(3, {_, Name, Helpers, Readonly, LumaConfig}) ->
         Readonly,
         LumaConfig
     }};
-upgrade_record(4, {_, Name, Helpers, Readonly, LumaConfig}) ->
+upgrade_record(4, {_, Name, Helpers, Readonly, {luma_config, Url, _CacheTimeout, ApiKey}}) ->
     {5, {storage,
         Name,
         [
@@ -871,5 +871,5 @@ upgrade_record(4, {_, Name, Helpers, Readonly, LumaConfig}) ->
             ExtendedDirectIO} <- Helpers
         ],
         Readonly,
-        LumaConfig
+        {luma_config, Url, ApiKey}
     }}.

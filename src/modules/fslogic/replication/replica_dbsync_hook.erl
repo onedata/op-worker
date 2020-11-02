@@ -46,7 +46,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                 FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
                 case file_ctx:get_local_file_location_doc(FileCtx3) of
                     {undefined, FileCtx4} ->
-                        fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []),
+                        fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
                         qos_hooks:reconcile_qos(FileCtx4);
                     {LocalLocation, FileCtx4} ->
                         update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
@@ -106,6 +106,7 @@ update_outdated_local_location_replica(FileCtx,
         size = NewSize
     }}
 ) ->
+    FirstLocalBlocks = fslogic_location_cache:get_blocks(LocalDoc, #{count => 2}),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     ?debug("Updating outdated replica of file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
@@ -119,7 +120,7 @@ update_outdated_local_location_replica(FileCtx,
             {Location, FileCtx4} = file_ctx:get_file_location_with_filled_gaps(FileCtx3, ChangedBlocks),
             {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, ChangedBlocks),
             ok = fslogic_cache:cache_event([], {Location, Offset, Size}), % to use notify_block_change_if_necessary when ready
-            notify_size_change_if_necessary(FileCtx4, LocationDocWithNewVersion, NewDoc)
+            notify_attrs_change_if_necessary(FileCtx4, LocationDocWithNewVersion, NewDoc, FirstLocalBlocks)
     end.
 
 %%--------------------------------------------------------------------
@@ -241,13 +242,13 @@ reconcile_replicas(FileCtx,
         {skipped, FileCtx2} ->
             {ok, _} = fslogic_location_cache:save_location(NewDoc2),
             notify_block_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2),
-            notify_size_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2);
+            notify_attrs_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2, LocalBlocks);
         {{renamed, RenamedDoc, Uuid, TargetSpaceId}, _} ->
             {ok, _} = fslogic_location_cache:save_location(RenamedDoc),
             RenamedFileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, TargetSpaceId)),
             files_to_chown:chown_or_defer(RenamedFileCtx),
             notify_block_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc),
-            notify_size_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc)
+            notify_attrs_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc, LocalBlocks)
     end.
 
 %%--------------------------------------------------------------------
@@ -273,15 +274,24 @@ notify_block_change_if_necessary(FileCtx, _, _) ->
 %% Notify clients if file size has changed.
 %% @end
 %%--------------------------------------------------------------------
--spec notify_size_change_if_necessary(file_ctx:ctx(), file_location:doc(),
-    file_location:doc()) -> ok.
-notify_size_change_if_necessary(_FileCtx,
-    #document{value = #file_location{size = SameSize}},
-    #document{value = #file_location{size = SameSize}}
+-spec notify_attrs_change_if_necessary(file_ctx:ctx(), file_location:doc(),
+    file_location:doc(), fslogic_blocks:blocks()) -> ok.
+notify_attrs_change_if_necessary(FileCtx,
+    #document{value = #file_location{size = OldSize}},
+    #document{value = #file_location{size = NewSize}} = NewDoc,
+    FirstLocalBlocksBeforeUpdate
 ) ->
-    ok;
-notify_size_change_if_necessary(FileCtx, _, _) ->
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []).
+    FirstLocalBlocks = fslogic_location_cache:get_blocks(NewDoc, #{count => 2}),
+    ReplicationStatusChanged = replica_updater:has_replication_status_changed(
+        FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize),
+    case {ReplicationStatusChanged, OldSize =/= NewSize} of
+        {true, SizeChanged} ->
+            ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []);
+        {false, true} ->
+            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
+        {false, false} ->
+            ok
+    end.
 
 %%-------------------------------------------------------------------
 %% @private

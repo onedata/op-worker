@@ -85,8 +85,8 @@
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
-    get_file_size_from_remote_locations/1, get_owner/1, get_local_storage_file_size/1,
-    get_and_cache_file_doc_including_deleted/1]).
+    get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
+    get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
 -export([assert_not_readonly_storage/1, assert_file_exists/1]).
 
@@ -540,6 +540,12 @@ get_space_name(FileCtx = #file_ctx{space_name = undefined}, UserCtx) ->
     case space_logic:get_name(SessionId, SpaceId) of
         {ok, SpaceName} ->
             {SpaceName, FileCtx#file_ctx{space_name = SpaceName}};
+        ?ERROR_FORBIDDEN when SessionId == ?ROOT_SESS_ID ->
+            % Fetching space name from oz as provider is forbidden if provider
+            % doesn't support space. Such requests are made e.g. when executing
+            % file_meta:setup_onedata_user (all user space dirs, supported or not,
+            % are created). To handle this special case SpaceId is returned instead.
+            {SpaceId, FileCtx#file_ctx{space_name = SpaceId}};
         {error, _} ->
             throw(?ENOENT)
     end;
@@ -554,15 +560,21 @@ get_space_name(FileCtx = #file_ctx{space_name = SpaceName}, _Ctx) ->
 -spec get_aliased_name(ctx(), user_ctx:ctx() | undefined) ->
     {file_meta:name(), ctx()} | no_return().
 get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, UserCtx) ->
-    case is_space_dir_const(FileCtx)
-        andalso UserCtx =/= undefined
-        andalso (not session_utils:is_special(user_ctx:get_session_id(UserCtx))) of
+    FileGuid = get_guid_const(FileCtx),
+
+    case is_space_dir_const(FileCtx) andalso UserCtx =/= undefined of
+        true ->
+            {Name, FileCtx2} = case user_ctx:is_guest(UserCtx) andalso file_id:is_share_guid(FileGuid) of
+                true ->
+                    % Special case for guest user - get space name with provider auth
+                    get_space_name(FileCtx, user_ctx:new(?ROOT_SESS_ID));
+                false ->
+                    get_space_name(FileCtx, UserCtx)
+            end,
+            {Name, FileCtx2#file_ctx{file_name = Name}};
         false ->
             {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
-            {Name, FileCtx2};
-        true ->
-            {Name, FileCtx2} = get_space_name(FileCtx, UserCtx),
-            {Name, FileCtx2#file_ctx{file_name = Name}}
+            {Name, FileCtx2}
     end;
 get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
     {FileName, FileCtx}.
@@ -1088,6 +1100,34 @@ get_file_size(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns information if file is fully replicated and size of file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_replication_status_and_size(ctx() | file_meta:uuid()) ->
+    {FullyReplicated :: boolean(), Size :: non_neg_integer(), ctx()}.
+get_replication_status_and_size(FileCtx) ->
+    case get_local_file_location_doc(FileCtx, {blocks_num, 2}) of
+        {#document{value = #file_location{size = SizeInDoc}} = FLDoc, FileCtx2} ->
+            Size = case SizeInDoc of
+                undefined ->
+                    {FLDocWithBlocks, _} = get_local_file_location_doc(FileCtx2, true),
+                    fslogic_blocks:upper(fslogic_location_cache:get_blocks(FLDocWithBlocks));
+                _ ->
+                    SizeInDoc
+            end,
+
+            case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
+                [#file_block{offset = 0, size = Size}] -> {true, Size, FileCtx2};
+                [] when Size =:= 0 -> {true, Size, FileCtx2};
+                _ -> {false, Size, FileCtx2}
+            end;
+        {undefined, FileCtx2} ->
+            {RemoteSize, FileCtx3} = get_file_size_from_remote_locations(FileCtx2),
+            {RemoteSize =:= 0, RemoteSize, FileCtx3}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns size of file on local storage
 %% @end
 %%--------------------------------------------------------------------
@@ -1257,7 +1297,7 @@ assert_not_readonly_target_storage_const(FileCtx, TargetProviderId) ->
         false -> ok
     end.
 
--spec assert_file_exists(ctx()) -> ctx().
+-spec assert_file_exists(ctx()) -> ctx() | no_return().
 assert_file_exists(FileCtx0) ->
     % If file doesn't exists (or was deleted) fetching doc will fail,
     % {badmatch, {error, not_found}} will propagate up and fslogic_worker will

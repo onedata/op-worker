@@ -41,7 +41,7 @@ create_and_update(SpaceId, MonitoringId) ->
 -spec create_and_update(datastore:key(), #monitoring_id{}, map()) -> ok.
 create_and_update(SpaceId, MonitoringId, UpdateValue) ->
     try
-        CurrentTime = time_utils:timestamp_seconds(),
+        CurrentTime = clock:timestamp_seconds(),
         {PreviousPDPTime, CurrentPDPTime, WaitingTime} =
             case CurrentTime rem ?STEP_IN_SECONDS of
                 0 ->

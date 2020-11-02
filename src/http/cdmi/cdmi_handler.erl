@@ -71,12 +71,12 @@
         __FunctionCall
     catch
         throw:__Err ->
-            {stop, send_error_response(__Err, __Req), __CdmiReq};
+            {stop, http_req:send_error(__Err, __Req), __CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            {stop, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, __Req), __CdmiReq}
+            {stop, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, __Req), __CdmiReq}
     end
 ).
 
@@ -108,12 +108,12 @@ init(Req, ReqTypeResolutionMethod) ->
         {cowboy_rest, Req, CdmiReq}
     catch
         throw:Err ->
-            {ok, send_error_response(Err, Req), undefined};
+            {ok, http_req:send_error(Err, Req), undefined};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            {ok, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, Req), undefined}
+            {ok, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, Req), undefined}
     end.
 
 
@@ -144,7 +144,7 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
     ReqVer = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
     try {get_supported_version(ReqVer), parse_qs(cowboy_req:qs(Req)), Type} of
         {undefined, _, {capabilities, _}} ->
-            {stop, send_error_response(
+            {stop, http_req:send_error(
                 ?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), Req
             ), CdmiReq};
         {Version, Options, _} ->
@@ -154,12 +154,12 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
             }}
     catch
         throw:Err ->
-            {stop, send_error_response(Err, Req), CdmiReq};
+            {stop, http_req:send_error(Err, Req), CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            {stop, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, Req), CdmiReq}
+            {stop, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, Req), CdmiReq}
     end.
 
 
@@ -182,9 +182,9 @@ is_authorized(Req, #cdmi_req{auth = undefined} = CdmiReq) ->
         {ok, ?USER = Auth} ->
             {true, Req, CdmiReq#cdmi_req{auth = Auth}};
         {ok, ?GUEST} ->
-            {stop, send_error_response(?ERROR_UNAUTHORIZED, Req), CdmiReq};
+            {stop, http_req:send_error(?ERROR_UNAUTHORIZED, Req), CdmiReq};
         {error, _} = Error ->
-            {stop, send_error_response(Error, Req), CdmiReq}
+            {stop, http_req:send_error(Error, Req), CdmiReq}
     end;
 is_authorized(Req, CdmiReq) ->
     {true, Req, CdmiReq}.
@@ -219,7 +219,7 @@ resource_exists(Req, #cdmi_req{
         {error, ?ENOENT} ->
             {false, Req, CdmiReq};
         {error, Errno} ->
-            {stop, send_error_response(?ERROR_POSIX(Errno), Req), CdmiReq}
+            {stop, http_req:send_error(?ERROR_POSIX(Errno), Req), CdmiReq}
     end.
 
 
@@ -301,7 +301,7 @@ content_types_provided(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
 -spec error_no_version(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
 error_no_version(Req, CdmiReq) ->
-    {stop, send_error_response(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>), Req), CdmiReq}.
+    {stop, http_req:send_error(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>), Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -313,7 +313,7 @@ error_no_version(Req, CdmiReq) ->
 -spec error_wrong_path(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
 error_wrong_path(Req, CdmiReq) ->
-    {stop, send_error_response(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>), Req), CdmiReq}.
+    {stop, http_req:send_error(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>), Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -610,13 +610,6 @@ redirect_to(Req, CdmiReq, Path) ->
         <<"cache-control">> => <<"max-age=3600">>
     }, Req),
     {stop, NewReq, CdmiReq}.
-
-
-%% @private
--spec send_error_response({error, term()}, cowboy_req:req()) -> cowboy_req:req().
-send_error_response({error, _} = Error, Req) ->
-    #rest_resp{code = Code, headers = Headers, body = Body} = rest_translator:error_response(Error),
-    cowboy_req:reply(Code, Headers, json_utils:encode(Body), Req).
 
 
 %%--------------------------------------------------------------------

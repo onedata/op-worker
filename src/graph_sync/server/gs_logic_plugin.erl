@@ -22,7 +22,7 @@
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 %% API
--export([verify_handshake_auth/2]).
+-export([verify_handshake_auth/3]).
 -export([client_connected/2, client_heartbeat/2, client_disconnected/2]).
 -export([verify_auth_override/2]).
 -export([is_authorized/5]).
@@ -38,16 +38,16 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link gs_logic_plugin_behaviour} callback verify_handshake_auth/2.
+%% {@link gs_logic_plugin_behaviour} callback verify_handshake_auth/3.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_handshake_auth(gs_protocol:client_auth(), ip_utils:ip()) ->
+-spec verify_handshake_auth(gs_protocol:client_auth(), ip_utils:ip(), gs_protocol:cookies()) ->
     {ok, aai:auth()} | errors:error().
-verify_handshake_auth(undefined, _) ->
+verify_handshake_auth(undefined, _, _) ->
     {ok, ?GUEST};
-verify_handshake_auth(nobody, _) ->
+verify_handshake_auth(nobody, _, _) ->
     {ok, ?GUEST};
-verify_handshake_auth({token, AccessToken}, PeerIp) ->
+verify_handshake_auth({token, AccessToken}, PeerIp, _) ->
     TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         PeerIp, graphsync, disallow_data_access_caveats

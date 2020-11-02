@@ -31,7 +31,7 @@
 ]).
 
 -export([
-    mark_dequeued/1, set_controller_process/1,
+    mark_dequeued/1, set_controller_process/1, set_rerun_id/2,
 
     is_replication/1, is_eviction/1, is_migration/1,
     type/1, data_source_type/1,
@@ -80,7 +80,7 @@
 -type type() :: replication | eviction | migration.
 -type data_source_type() :: file | view.
 -type doc() :: datastore_doc:doc(transfer()).
--type timestamp() :: non_neg_integer().
+-type timestamp() :: clock:seconds().
 -type list_limit() :: non_neg_integer() | all.
 -type view_name() :: undefined | index:key().
 -type query_view_params() :: undefined | index:query_options() .
@@ -156,7 +156,7 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
         undefined -> ?SKIPPED_STATUS;
         _ -> ?SCHEDULED_STATUS
     end,
-    ScheduleTime = time_utils:timestamp_seconds(),
+    ScheduleTime = clock:timestamp_seconds(),
     SpaceId = file_id:guid_to_space_id(FileGuid),
     ToCreate = #document{
         scope = SpaceId,
@@ -205,21 +205,17 @@ rerun_not_ended_transfers(SpaceId) ->
 
     Reruns = lists:foldl(fun(TransferId, CurrReruns) ->
         case maybe_rerun(TransferId) of
-            {error, non_participating_provider} ->
+            skip ->
                 CurrReruns;
+            {ok, NewTransferId} ->
+                CurrReruns#{TransferId => NewTransferId};
             {error, Reason} ->
                 ?error("Failed to rerun transfer ~p due to: ~p", [
                     TransferId, Reason
                 ]),
-                CurrReruns;
-            {ok, moved_to_ended} ->
-                CurrReruns;
-            {ok, marked_failed} ->
-                CurrReruns;
-            {ok, NewTransferId} ->
-                CurrReruns#{TransferId => NewTransferId}
+                CurrReruns
         end
-    end, #{}, WaitingTransferIds ++ OngoingTransferIds),
+    end, #{}, lists:usort(WaitingTransferIds ++ OngoingTransferIds)),
 
     case map_size(Reruns) of
         0 ->
@@ -263,7 +259,21 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}, MarkTransferF
                 EvictingProviderId, ReplicatingProviderId, Callback, IndexName,
                 QueryViewParams
             ),
-            replication_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed),
+
+            IsReplicationOngoing = is_replication_ongoing(Transfer),
+            IsEvictionOngoing = is_eviction_ongoing(Transfer),
+            case {IsReplicationOngoing, IsEvictionOngoing} of
+                {true, _} ->
+                    % replication or first phase of migration
+                    replication_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed);
+                {false, true} ->
+                    % eviction or second phase of migration
+                    replica_eviction_status:handle_restart(TransferId, NewTransferId, MarkTransferFailed);
+                {false, false} ->
+                    % transfer has been ended, rerun must have been scheduled by user
+                    set_rerun_id(TransferId, NewTransferId)
+            end,
+
             {ok, NewTransferId}
     end;
 rerun_ended(UserId, TransferId, MarkTransferFailed) ->
@@ -353,6 +363,13 @@ set_controller_process(TransferId) ->
     EncodedPid = transfer_utils:encode_pid(self()),
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{pid = EncodedPid}}
+    end).
+
+
+-spec set_rerun_id(transfer:id(), transfer:id()) -> {ok, transfer:doc()} | {error, term()}.
+set_rerun_id(TransferId, NewTransferId) ->
+    transfer:update(TransferId, fun(OldTransfer) ->
+        {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
     end).
 
 
@@ -453,7 +470,7 @@ eviction_status(#transfer{eviction_status = Status}) -> Status.
 %% finished, but source replica eviction is still in progress.
 %% @end
 %%--------------------------------------------------------------------
--spec status(transfer:transfer()) -> transfer_status().
+-spec status(transfer()) -> transfer_status().
 status(T = #transfer{
     replication_status = ?COMPLETED_STATUS,
     replicating_provider = P1,
@@ -551,7 +568,7 @@ mark_data_replication_finished(undefined, SpaceId, BytesPerProvider) ->
     ),
     {ok, undefined};
 mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
-    CurrentTime = time_utils:timestamp_seconds(),
+    CurrentTime = clock:timestamp_seconds(),
     ok = space_transfer_stats:update(
         ?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
     ),
@@ -574,7 +591,7 @@ mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
         LatestLastUpdate = lists:max(LastUpdates),
         % Due to race between processes updating stats it is possible
         % for LatestLastUpdate to be larger than CurrentTime, also because
-        % time_utils:timestamp_seconds() caches zone time locally it is
+        % clock:timestamp_seconds() caches zone time locally it is
         % possible for time of various provider nodes to differ by several
         % seconds.
         % So if the CurrentTime is less than LatestLastUpdate by no more than
@@ -780,10 +797,11 @@ update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_rerun(doc()) ->
-    {ok, id() | marked_failed | moved_to_ended} | {error, term()}.
+    skip | {ok, id()} | {error, term()}.
 maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
     SourceProviderId = Transfer#transfer.evicting_provider,
     TargetProviderId = Transfer#transfer.replicating_provider,
+    SchedulingProviderId = Transfer#transfer.scheduling_provider,
     SelfId = oneprovider:get_id(),
 
     IsReplicationAborting = Transfer#transfer.replication_status =:= ?ABORTING_STATUS,
@@ -796,15 +814,25 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
         IsEvictionOngoing, IsEvictionAborting, SelfId
     } of
         {true, _, _, _, TargetProviderId} ->
-            rerun_ended(undefined, TransferId, true);
+            % it is replication or first step of migration
+            rerun_ended(undefined, Doc, true);
         {_, true, _, _, TargetProviderId} ->
+            % replication being aborted
             replication_status:handle_failed(TransferId, true),
-            {ok, marked_failed};
+            skip;
+        {true, _, true, _, SourceProviderId} ->
+            % it is migration and first step hasn't been finished yet
+            skip;
+        {_, true, true, _, SourceProviderId} ->
+            % it is migration and first step hasn't been finished yet
+            skip;
         {_, _, true, _, SourceProviderId} ->
-            rerun_ended(undefined, TransferId, true);
+            % it is eviction or second step of migration
+            rerun_ended(undefined, Doc, true);
         {_, _, _, true, SourceProviderId} ->
+            % eviction being aborted
             replica_eviction_status:handle_failed(TransferId, true),
-            {ok, marked_failed};
+            skip;
         {false, false, false, false, _} ->
             IsEviction = is_eviction(Transfer),
             IsReplication = is_replication(Transfer),
@@ -813,20 +841,24 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
                 % replica_eviction
                 {true, false, false, SourceProviderId} ->
                     transfer_links:move_from_ongoing_to_ended(Doc),
-                    {ok, moved_to_ended};
+                    skip;
                 % replication
                 {false, true, false, TargetProviderId} ->
                     transfer_links:move_from_ongoing_to_ended(Doc),
-                    {ok, moved_to_ended};
+                    skip;
                 % migration
                 {false, false, true, TargetProviderId} ->
                     transfer_links:move_from_ongoing_to_ended(Doc),
-                    {ok, moved_to_ended};
+                    skip;
+                {_, _, _, SchedulingProviderId} ->
+                    % ensure that ended transfer, that was scheduled by this provider is deleted from scheduled tree
+                    transfer_links:delete_waiting(Doc),
+                    skip;
                 {_, _, _, _} ->
-                    {error, non_participating_provider}
+                    skip
             end;
         {_, _, _, _, _} ->
-            {error, non_participating_provider}
+            skip
     end;
 maybe_rerun(TransferId) ->
     case ?MODULE:get(TransferId) of

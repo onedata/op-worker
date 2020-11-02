@@ -23,8 +23,7 @@
 -export([handle_connected_to_oz/0]).
 -export([handle_disconnected_from_oz/0]).
 -export([handle_deregistered_from_oz/0]).
-
--define(HOOK_TIMEOUT, 120000).  % 2 minutes
+-export([handle_entity_deleted/1]).
 
 %%%===================================================================
 %%% API
@@ -40,7 +39,7 @@ handle_connected_to_oz() ->
     try
         ?info("Executing on-connect-to-oz procedures..."),
         on_connect_to_oz(),
-        ?info("Successfully executed on-connect-to-oz procedures")
+        ?info("Finished executing on-connect-to-oz procedures")
     catch
         _:{_, ?ERROR_NO_CONNECTION_TO_ONEZONE} ->
             ?warning("Connection lost while running on-connect-to-oz procedures"),
@@ -88,6 +87,25 @@ handle_deregistered_from_oz() ->
         ])
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Called when the Oneprovider received a push info that an entity has been deleted in Onezone.
+%% Errors are logged, but ignored.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_entity_deleted(gri:gri()) -> ok.
+handle_entity_deleted(GRI) ->
+    try
+        on_entity_deleted(GRI),
+        ok
+    catch Class:Reason ->
+        ?error_stacktrace("Failed to run on-entity-deleted procedures for ~ts - ~w:~p", [
+            gri:serialize(GRI), Class, Reason
+        ])
+    end.
+
+
 %%%===================================================================
 %%% Callback implementations
 %%%===================================================================
@@ -95,8 +113,6 @@ handle_deregistered_from_oz() ->
 %% @private
 -spec on_connect_to_oz() -> ok | no_return().
 on_connect_to_oz() ->
-    ok = node_manager_plugin:synchronize_clock(),
-    ?info("Synchronized node's clock with global Onezone time"),
     ok = oneprovider:set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
     ok = auth_cache:report_oz_connection_start(),
@@ -104,7 +120,7 @@ on_connect_to_oz() ->
     ok = main_harvesting_stream:revise_all_spaces(),
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
     ok = rtransfer_config:add_storages(),
-    ok = storage_import_worker:notify_connection_to_oz(),
+    ok = auto_storage_import_worker:notify_connection_to_oz(),
     ok = dbsync_worker:start_streams(),
     ok = qos_worker:init_retry_failed_files().
 
@@ -123,3 +139,21 @@ on_deregister_from_oz() ->
     % kill the connection to prevent 'unauthorized' errors due
     % to older authorization when immediately registering anew
     ok = gs_client_worker:force_terminate().
+
+
+%% @private
+-spec on_entity_deleted(gri:gri()) -> ok | no_return().
+on_entity_deleted(#gri{type = od_provider, id = ProviderId, aspect = instance}) ->
+    case oneprovider:get_id_or_undefined() of
+        ProviderId -> handle_deregistered_from_oz();
+        _ -> ok
+    end;
+on_entity_deleted(#gri{type = od_space, id = SpaceId, aspect = instance}) ->
+    ok = main_harvesting_stream:space_removed(SpaceId),
+    ok = auto_storage_import_worker:notify_space_deleted(SpaceId);
+on_entity_deleted(#gri{type = od_token, id = TokenId, aspect = instance}) ->
+    ok = auth_cache:report_token_deletion(TokenId);
+on_entity_deleted(#gri{type = temporary_token_secret, id = UserId, aspect = user}) ->
+    ok = auth_cache:report_temporary_tokens_deletion(UserId);
+on_entity_deleted(_) ->
+    ok.

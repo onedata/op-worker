@@ -87,6 +87,7 @@
 
 -record(state, {
     run_id :: run_id(),
+    task_id :: view_traverse:task_id(),
     space_id :: od_space:id(),
     config :: autocleaning:config(),
     batch_size :: non_neg_integer(),
@@ -434,9 +435,10 @@ init([ARId, SpaceId, AutocleaningRun, Config]) ->
     ACRules = autocleaning_config:get_rules(Config),
     BatchSize = ?BATCH_SIZE,
     case autocleaning_view_traverse:run(SpaceId, ARId, ACRules, BatchSize, NextBatchToken) of
-        {ok, _} ->
+        {ok, TaskId} ->
             {ok, #state{
                 run_id = ARId,
+                task_id = TaskId,
                 space_id = SpaceId,
                 config = Config,
                 batch_size = BatchSize,
@@ -485,6 +487,7 @@ handle_call(_Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(#message{type = MessageType, run_id = ARId}, State = #state{
     run_id = ARId,
+    task_id = TaskId,
     space_id = SpaceId,
     batches_counters = BatchesCounters
 }) ->
@@ -495,7 +498,7 @@ handle_cast(#message{type = MessageType, run_id = ARId}, State = #state{
             lists:foreach(fun(BatchNo) ->
                 cancel_replica_deletion_request(SpaceId, ARId, BatchNo)
             end, maps:keys(BatchesCounters)),
-            autocleaning_view_traverse:cancel(SpaceId, ARId),
+            autocleaning_view_traverse:cancel(TaskId),
             {stop, {error, {E, R}}}
     end;
 handle_cast(#message{type = _MessageType, run_id = _OtherAutocleaningRunId},
@@ -664,6 +667,7 @@ maybe_stop_cleaning(State = #state{
     State;
 maybe_stop_cleaning(State = #state{
     run_id = ARId,
+    task_id = TaskId,
     space_id = SpaceId,
     bytes_to_release = BytesToRelease,
     released_bytes = ReleasedBytes,
@@ -676,7 +680,7 @@ maybe_stop_cleaning(State = #state{
         true ->
             ok;
         false ->
-            autocleaning_view_traverse:cancel(SpaceId, ARId)
+            autocleaning_view_traverse:cancel(TaskId)
     end,
     lists:foreach(fun(BatchNo) ->
         cancel_replica_deletion_request(SpaceId, ARId, BatchNo)
@@ -694,7 +698,7 @@ maybe_update_doc_counters(State = #state{
     released_bytes = ReleasedBytes,
     released_files = ReleasedFiles
 }) ->
-    Timestamp = time_utils:timestamp_millis(),
+    Timestamp = clock:timestamp_millis(),
     case Timestamp - PreviousTimestamp > ?UPDATE_DOC_COUNTERS_MAX_INTERVAL of
         true ->
             autocleaning_run:update_counters(ARId, ReleasedFiles, ReleasedBytes),

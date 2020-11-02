@@ -48,13 +48,15 @@
 -export([receive_server_message/0, receive_server_message/1, receive_server_message/2]).
 
 %% Fuse request messages
--export([generate_create_file_message/3, generate_create_dir_message/3, generate_delete_file_message/2,
+-export([generate_create_file_message/3, generate_create_file_message/4,
+    generate_create_dir_message/3, generate_delete_file_message/2,
     generate_open_file_message/2, generate_open_file_message/3, generate_release_message/3,
     generate_get_children_attrs_message/2, generate_get_children_message/2, generate_fsync_message/2]).
 
 %% Subscription messages
 -export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4,
-    generate_file_attr_changed_subscription_message/5, generate_file_location_changed_subscription_message/5]).
+    generate_file_attr_changed_subscription_message/5, generate_replica_status_changed_subscription_message/5,
+    generate_file_location_changed_subscription_message/5]).
 -export([generate_subscription_cancellation_message/3, generate_quota_exceeded_subscription_message/3]).
 
 %% Misc messages
@@ -64,7 +66,7 @@
 -export([generate_write_message/5, generate_read_message/5]).
 
 -export([
-    create_file/3, create_file/4,
+    create_file/3, create_file/5, create_777_mode_file/3,
     create_directory/3, create_directory/4,
     open/2, open/3, open/4,
     close/3, close/4,
@@ -337,7 +339,7 @@ receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).
 
 receive_server_message(IgnoredMsgList, Timeout) ->
-    Now = time_utils:timestamp_millis(),
+    Now = clock:timestamp_millis(),
     receive
         {_, _, Data} ->
             % ignore listed messages
@@ -345,7 +347,7 @@ receive_server_message(IgnoredMsgList, Timeout) ->
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
                 true ->
-                    NewTimeout = max(0, Timeout - (time_utils:timestamp_millis() - Now)),
+                    NewTimeout = max(0, Timeout - (clock:timestamp_millis() - Now)),
                     receive_server_message(IgnoredMsgList, NewTimeout);
                 false ->
                     Msg
@@ -357,11 +359,14 @@ receive_server_message(IgnoredMsgList, Timeout) ->
 
 %% Fuse request messages
 generate_create_file_message(RootGuid, MsgId, File) ->
+    generate_create_file_message(RootGuid, MsgId, File, 8#644).
+
+generate_create_file_message(RootGuid, MsgId, File, Mode) ->
     FuseRequest = {file_request, #'FileRequest'{
         context_guid = RootGuid,
         file_request = {create_file, #'CreateFile'{
             name = File,
-            mode = 8#644,
+            mode = Mode,
             flag = 'READ_WRITE'}
         }}
     },
@@ -445,6 +450,12 @@ generate_file_attr_changed_subscription_message(StreamId, SequenceNumber, SubId,
     },
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
 
+generate_replica_status_changed_subscription_message(StreamId, SequenceNumber, SubId, FileId, TimeThreshold) ->
+    Type = {replica_status_changed, #'ReplicaStatusChangedSubscription'{
+        file_uuid = FileId, time_threshold = TimeThreshold}
+    },
+    generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
+
 generate_file_renamed_subscription_message(StreamId, SequenceNumber, SubId, FileId) ->
     Type = {file_renamed, #'FileRenamedSubscription'{file_uuid = FileId}},
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
@@ -506,10 +517,10 @@ generate_proxyio_message(MsgId, Parameters, ProxyIORequest) ->
 
 
 create_file(Sock, RootGuid, Filename) ->
-    create_file(Sock, RootGuid, Filename, ?MSG_ID).
+    create_file(Sock, RootGuid, Filename, 8#644, ?MSG_ID).
 
-create_file(Sock, RootGuid, Filename, MsgId) ->
-    ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, MsgId, Filename)),
+create_file(Sock, RootGuid, Filename, Mode, MsgId) ->
+    ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, MsgId, Filename, Mode)),
     #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
         fuse_response = {file_created, #'FileCreated'{
             handle_id = HandleId,
@@ -520,6 +531,9 @@ create_file(Sock, RootGuid, Filename, MsgId) ->
         message_id = MsgId
     }, fuse_test_utils:receive_server_message()),
     {FileGuid, HandleId}.
+
+create_777_mode_file(Sock, RootGuid, Filename) ->
+    create_file(Sock, RootGuid, Filename, 8#777, ?MSG_ID).
 
 create_directory(Sock, RootGuid, Dirname) ->
     create_directory(Sock, RootGuid, Dirname, ?MSG_ID).

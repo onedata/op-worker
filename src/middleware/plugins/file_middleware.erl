@@ -364,13 +364,13 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
 
 -spec get_operation_supported(gri:gri(), middleware:scope()) ->
     boolean().
-get_operation_supported(instance, private) -> true;
-get_operation_supported(instance, public) -> true;
+get_operation_supported(instance, private) -> true;             % gs only
+get_operation_supported(instance, public) -> true;              % gs only
 get_operation_supported(list, private) -> true;                 % REST only (deprecated)
 get_operation_supported(children, private) -> true;             % REST/gs
 get_operation_supported(children, public) -> true;              % REST/gs
-get_operation_supported(children_details, private) -> true;
-get_operation_supported(children_details, public) -> true;
+get_operation_supported(children_details, private) -> true;     % gs only
+get_operation_supported(children_details, public) -> true;      % gs only
 get_operation_supported(attrs, private) -> true;                % REST/gs
 get_operation_supported(attrs, public) -> true;                 % REST/gs
 get_operation_supported(xattrs, private) -> true;               % REST/gs
@@ -477,7 +477,7 @@ data_spec_get(#gri{aspect = download_url}) -> #{
 
 %% @private
 -spec authorize_get(middleware:req(), middleware:entity()) -> boolean().
-authorize_get(#op_req{gri = #gri{aspect = As, scope = public}}, _) when
+authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _) when
     As =:= instance;
     As =:= children;
     As =:= children_details;
@@ -487,7 +487,7 @@ authorize_get(#op_req{gri = #gri{aspect = As, scope = public}}, _) when
     As =:= rdf_metadata;
     As =:= download_url
 ->
-    true;
+    file_id:is_share_guid(FileGuid);
 
 authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;

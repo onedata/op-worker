@@ -464,9 +464,9 @@ set_file_xattrs_test(Config) ->
                     % Only owner (?USER_IN_BOTH_SPACES) can set acl in posix mode
                     ?assertMatch({error, ?ENODATA}, get_xattr(TestNode, FileGuid, ?ACL_KEY), ?ATTEMPTS);
                 _ ->
-                    assert_all_xattrs_set(Providers, FileGuid, Xattrs),
-                    remove_xattrs(TestNode, Providers, FileGuid, Xattrs)
+                    assert_all_xattrs_set(Providers, FileGuid, Xattrs)
             end,
+            remove_xattrs(TestNode, Providers, FileGuid, Xattrs),
             true
     end,
 
