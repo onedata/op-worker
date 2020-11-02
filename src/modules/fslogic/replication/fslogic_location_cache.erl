@@ -601,47 +601,59 @@ get_block_seqences(ExistingBlocksTree, ExistingBlocksIterator, HoleSizeLimit, Bl
     #{
         blocks_to_split_sequence := BlocksToSplitSequence,
         existing_blocks_overlapping_with_sequenc := BlocksOverlappingWithSequence
-    } = Answer = get_single_blocks_sequence(BlocksToSplitIntoSequences, [], % arguments connected with input sequence
-    ExistingBlocksIterator, [], [], % arguments connected with existing blocks
-    0, HoleSizeLimit), % arguments connected with whole size control
+    } = Answer = get_single_blocks_sequence(
+        BlocksToSplitIntoSequences, [], % arguments connected with input sequence
+        ExistingBlocksIterator, [], [], % arguments connected with existing blocks
+        0, HoleSizeLimit % arguments connected with whole size control
+    ),
 
     SequenceDescription = {BlocksToSplitSequence, BlocksOverlappingWithSequence},
     case Answer of
         #{action := finish, remaining_blocks_to_split := []} ->
+            % all blocks has been processed
             [SequenceDescription];
         #{action := finish, remaining_blocks_to_split := RemainingBlocksToSplit} ->
+            % there are no existing blocks remaining - no blocks will overlap with remaining blocks to split
             [SequenceDescription, {RemainingBlocksToSplit, []}];
         #{action := start_new_sequence, remaining_blocks_to_split := [#file_block{offset = Offset} | _] = NewBlocksToSplitIntoSequences} ->
+            % to many existing blocks between blocks to split - skip them
             ExistingBlocksNextIterator = gb_sets:iterator_from(#file_block{offset = Offset, size = 0}, ExistingBlocksTree),
             [SequenceDescription | get_block_seqences(ExistingBlocksTree, ExistingBlocksNextIterator, HoleSizeLimit, NewBlocksToSplitIntoSequences)]
     end.
 
 -spec get_single_blocks_sequence(blocks(), blocks(), gb_sets:iter(), blocks(), blocks(),
     non_neg_integer(), non_neg_integer()) -> getting_sequence_block_result().
-get_single_blocks_sequence([], BlocksInCurrentSequence, % arguments connected with input sequence
+get_single_blocks_sequence(
+    [], BlocksInCurrentSequence, % arguments connected with input sequence
     _ExistingBlocksIterator, ExistingBlocksOverlappingWithCurrentSequence, _SkippedExistingBlocks, % arguments connected with existing blocks
     _CurrentHoleSize, _HoleSizeLimit % arguments connected with whole size control
 ) ->
+    % all blocks has been processed
     #{action => finish, remaining_blocks_to_split => [],
         blocks_to_split_sequence => lists:reverse(BlocksInCurrentSequence),
         existing_blocks_overlapping_with_sequenc => ExistingBlocksOverlappingWithCurrentSequence};
-get_single_blocks_sequence(BlocksToSplitIntoSequences, BlocksInCurrentSequence, % arguments connected with input sequence
+get_single_blocks_sequence(
+    BlocksToSplitIntoSequences, BlocksInCurrentSequence, % arguments connected with input sequence
     _ExistingBlocksIterator, ExistingBlocksOverlappingWithCurrentSequence, _SkippedExistingBlocks, % arguments connected with existing blocks
     HoleSizeLimit, HoleSizeLimit % arguments connected with whole size control
 ) ->
+    % to many existing blocks between blocks to split - skip them
     #{action => start_new_sequence, remaining_blocks_to_split => BlocksToSplitIntoSequences,
         blocks_to_split_sequence => lists:reverse(BlocksInCurrentSequence),
         existing_blocks_overlapping_with_sequenc => ExistingBlocksOverlappingWithCurrentSequence};
-get_single_blocks_sequence([Block | BlocksToSplitIntoSequencesTail] = BlocksToSplitIntoSequences, BlocksInCurrentSequence, % arguments connected with input sequence
+get_single_blocks_sequence(
+    [Block | BlocksToSplitIntoSequencesTail] = BlocksToSplitIntoSequences, BlocksInCurrentSequence, % arguments connected with input sequence
     ExistingBlocksIterator, ExistingBlocksOverlappingWithCurrentSequence, SkippedExistingBlocks, % arguments connected with existing blocks
     CurrentHoleSize, HoleSizeLimit % arguments connected with whole size control
 ) ->
     case gb_sets:next(ExistingBlocksIterator) of
         none ->
+            % there are no existing blocks remaining
             #{action => finish, remaining_blocks_to_split => BlocksToSplitIntoSequencesTail,
                 blocks_to_split_sequence => lists:reverse([Block | BlocksInCurrentSequence]),
                 existing_blocks_overlapping_with_sequenc => ExistingBlocksOverlappingWithCurrentSequence};
         {ExistingBlock, ExistingBlocksNextIterator} ->
+            % try to add existing block to sequence and repeat whole function
             {NewBlocksToSplitIntoSequences, NewBlocksInCurrentSequence,
                 NewExistingOverlappingBlocks, NewSkippedExistingBlocks,
                 NewCurrentHoleSize} =
@@ -655,12 +667,14 @@ get_single_blocks_sequence([Block | BlocksToSplitIntoSequencesTail] = BlocksToSp
 
 -spec add_blocks_to_sequence(blocks(), blocks(), block(), blocks(), non_neg_integer()) ->
     {blocks(), blocks(), blocks(), blocks(), non_neg_integer()}.
-add_blocks_to_sequence([], BlocksInCurrentSequence, % arguments connected with input sequence
+add_blocks_to_sequence(
+    [], BlocksInCurrentSequence, % arguments connected with input sequence
     _ExistingBlock, SkippedExistingBlocks, % arguments connected with existing blocks
     CurrentHoleSize % argument connected with whole size control
 ) ->
     {[], BlocksInCurrentSequence, [], SkippedExistingBlocks, CurrentHoleSize};
-add_blocks_to_sequence(BlocksToSplitIntoSequences, BlocksInCurrentSequence, % arguments connected with input sequence
+add_blocks_to_sequence(
+    BlocksToSplitIntoSequences, BlocksInCurrentSequence, % arguments connected with input sequence
     ExistingBlock, SkippedExistingBlocks, % arguments connected with existing blocks
     CurrentHoleSize % argument connected with whole size control
 ) ->
@@ -671,14 +685,17 @@ add_blocks_to_sequence(BlocksToSplitIntoSequences, BlocksInCurrentSequence, % ar
 
     case {ExistingBlockOffset =< End, ExistingBlockEnd < Offset} of
         {true, true} ->
+            % existing block is between input blocks - add to skipped blocks list and return
             {BlocksToSplitIntoSequences, BlocksInCurrentSequence,
                 [], SkippedExistingBlocks ++ [#file_block{offset = ExistingBlockOffset, size = ExistingBlockSize}],
                 CurrentHoleSize + 1};
         {true, false} ->
+            % existing block is overlapping with input blocks - add to sequence and return
             {BlocksToSplitIntoSequences, BlocksInCurrentSequence,
                     SkippedExistingBlocks ++ [#file_block{offset = ExistingBlockOffset, size = ExistingBlockSize}], [],
                 0};
         _ ->
+            % existing block offset is larger than input block ending - try next existing block
             add_blocks_to_sequence(BlocksToSplitIntoSequencesTail, [Block | BlocksInCurrentSequence],
                 ExistingBlock, SkippedExistingBlocks,
                 CurrentHoleSize)

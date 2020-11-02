@@ -21,12 +21,12 @@
 
 % Description of update containing information required to produce events that describe update
 -type update_description() :: #{
+    location_changes := fslogic_event_emitter:location_changes_description(),
     size_changed => boolean(),
-    replica_status_changed => boolean(),
-    location_changes => fslogic_event_emitter:location_changes_description()
+    replica_status_changed => boolean()
 }.
-% Description of blocks changes. Each tuple contain information about block that triggered change
-% and information about final block that has been saved as a result.
+% Description of blocks' changes. Each tuple contain information about blocks that triggered change
+% and information about final blocks that has been saved as a result.
 -type blocks_changes_description() :: [{BlocksTriggeringChange :: fslogic_blocks:blocks(),
     BlocksSaved :: fslogic_blocks:blocks()}].
 

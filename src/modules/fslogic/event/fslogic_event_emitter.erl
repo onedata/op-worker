@@ -26,8 +26,9 @@
     emit_file_renamed_no_exclude/5, emit_file_renamed_to_client/5, emit_quota_exceeded/0,
     emit_helper_params_changed/1]).
 
+% Type describing local changes required to produce file_location_changed event
 -type location_changes_description() :: [{file_location:record(),
-    non_neg_integer() | undefined, non_neg_integer() | undefined}].
+    ChangesOffset :: non_neg_integer() | undefined, ChangesEnd :: non_neg_integer() | undefined}].
 
 -export_type([location_changes_description/0]).
 

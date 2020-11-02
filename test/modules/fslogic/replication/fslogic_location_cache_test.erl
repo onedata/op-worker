@@ -301,89 +301,55 @@ get_overlapping_and_update_test() ->
     [_ | BlocksToMap] = BlocksToChange = lists:sublist(TestBlocks, 2, 5),
     InputBlocks = lists:map(fun(#file_block{offset = Offset}) -> ?BLOCK(Offset - 7, 7) end, BlocksToMap),
     verify_blocks_in_use(undefined),
-    ?assertEqual(BlocksToChange, fslogic_location_cache:get_blocks(?KEY, #{overlapping_blocks => InputBlocks})),
     verify_changed_blocks([], []),
-    verify_blocks_in_use(BlocksToChange),
 
     UpdatedBlock = ?BLOCK(20, 43),
-    ?assertMatch(#document{},
-        fslogic_location_cache:update_blocks(#document{key = ?KEY}, [UpdatedBlock])),
-    NewBlocks = [lists:nth(1, TestBlocks), UpdatedBlock, lists:nth(7, TestBlocks)],
-    ?assertEqual(NewBlocks, fslogic_location_cache:get_blocks(?KEY, #{})),
-    verify_changed_blocks([UpdatedBlock], BlocksToChange),
-    verify_blocks_in_use(undefined).
+    FinalBlocks = [lists:nth(1, TestBlocks), UpdatedBlock, lists:nth(7, TestBlocks)],
+    check_overlapping_blocks_update(InputBlocks, BlocksToChange, [UpdatedBlock], FinalBlocks).
 
 
 get_overlapping_and_double_update_test() ->
     TestBlocks = gen_test_blocks(8),
     [_ | BlocksToMap] = BlocksToChange = lists:sublist(TestBlocks, 2, 6),
     InputBlocks = lists:map(fun(#file_block{offset = Offset}) -> ?BLOCK(Offset - 7, 7) end, BlocksToMap),
-    Input1 = lists:sublist(InputBlocks, 2) ++ lists:sublist(InputBlocks, 4, 2),
-    Input2 = [lists:nth(3, InputBlocks)],
     verify_blocks_in_use(undefined),
     verify_changed_blocks([], []),
 
-    ?assertEqual(BlocksToChange, fslogic_location_cache:get_blocks(?KEY, #{overlapping_blocks => Input1})),
-    verify_blocks_in_use(BlocksToChange),
-    UpdatedBlock1 = ?BLOCK(20, 23),
-    UpdatedBlock2 = ?BLOCK(50, 23),
-    ?assertMatch(#document{},
-        fslogic_location_cache:update_blocks(#document{key = ?KEY}, [UpdatedBlock1, UpdatedBlock2])),
-    NewBlocks = [lists:nth(1, TestBlocks), UpdatedBlock1, UpdatedBlock2, lists:nth(8, TestBlocks)],
-    ?assertEqual(NewBlocks, fslogic_location_cache:get_blocks(?KEY, #{})),
-    verify_changed_blocks([UpdatedBlock1, UpdatedBlock2], BlocksToChange),
-    verify_blocks_in_use(undefined),
+    Input1 = lists:sublist(InputBlocks, 2) ++ lists:sublist(InputBlocks, 4, 2),
+    UpdatedBlocks = [?BLOCK(20, 23), ?BLOCK(50, 23)],
+    FinalBlocks = [lists:nth(1, TestBlocks)] ++ UpdatedBlocks ++ [lists:nth(8, TestBlocks)],
+    check_overlapping_blocks_update(Input1, BlocksToChange, UpdatedBlocks, FinalBlocks),
 
-    ?assertEqual([UpdatedBlock1, UpdatedBlock2], fslogic_location_cache:get_blocks(?KEY, #{overlapping_blocks => Input2})),
-    verify_blocks_in_use([UpdatedBlock1, UpdatedBlock2]),
-    UpdatedBlock3 = ?BLOCK(20, 53),
-    ?assertMatch(#document{},
-        fslogic_location_cache:update_blocks(#document{key = ?KEY}, [UpdatedBlock3])),
-    NewBlocks2 = [lists:nth(1, TestBlocks), UpdatedBlock3, lists:nth(8, TestBlocks)],
-    ?assertEqual(NewBlocks2, fslogic_location_cache:get_blocks(?KEY, #{})),
-    verify_changed_blocks([UpdatedBlock3], BlocksToChange),
-    verify_blocks_in_use(undefined).
+    Input2 = [lists:nth(3, InputBlocks)],
+    UpdatedBlock = ?BLOCK(20, 53),
+    FinalBlocks2 = [lists:nth(1, TestBlocks), UpdatedBlock, lists:nth(8, TestBlocks)],
+    check_overlapping_blocks_update(Input2, UpdatedBlocks, [UpdatedBlock],
+        FinalBlocks2, [UpdatedBlock], BlocksToChange).
 
 get_overlapping_and_triple_update_test() ->
     TestBlocks = gen_test_blocks(8),
     [_ | BlocksToMap] = BlocksToChange = lists:sublist(TestBlocks, 2, 6),
     InputBlocks = lists:map(fun(#file_block{offset = Offset}) -> ?BLOCK(Offset - 7, 7) end, BlocksToMap),
-    Input1 = lists:sublist(InputBlocks, 2),
-    Input2 = lists:sublist(InputBlocks, 4, 2),
-    Input3 = [lists:nth(3, InputBlocks)],
     verify_changed_blocks([], []),
     verify_blocks_in_use(undefined),
 
-    ?assertEqual(lists:sublist(BlocksToChange, 3), fslogic_location_cache:get_blocks(?KEY, #{overlapping_blocks => Input1})),
-    verify_blocks_in_use(lists:sublist(BlocksToChange, 3)),
+    Input1 = lists:sublist(InputBlocks, 2),
     UpdatedBlock1 = ?BLOCK(20, 23),
-    ?assertMatch(#document{},
-        fslogic_location_cache:update_blocks(#document{key = ?KEY}, [UpdatedBlock1])),
-    NewBlocks = [lists:nth(1, TestBlocks), UpdatedBlock1] ++ lists:sublist(TestBlocks, 5, 4),
-    ?assertEqual(NewBlocks, fslogic_location_cache:get_blocks(?KEY, #{})),
-    verify_changed_blocks([UpdatedBlock1], lists:sublist(BlocksToChange, 3)),
-    verify_blocks_in_use(undefined),
+    FinalBlocks = [lists:nth(1, TestBlocks), UpdatedBlock1] ++ lists:sublist(TestBlocks, 5, 4),
+    ExpectedGetResult = lists:sublist(BlocksToChange, 3),
+    check_overlapping_blocks_update(Input1, ExpectedGetResult, [UpdatedBlock1], FinalBlocks),
 
-    ?assertEqual(lists:sublist(BlocksToChange, 4, 3), fslogic_location_cache:get_blocks(?KEY, #{overlapping_blocks => Input2})),
-    verify_blocks_in_use(lists:sublist(BlocksToChange, 4, 3)),
+    Input2 = lists:sublist(InputBlocks, 4, 2),
     UpdatedBlock2 = ?BLOCK(50, 23),
-    ?assertMatch(#document{},
-        fslogic_location_cache:update_blocks(#document{key = ?KEY}, [UpdatedBlock2])),
-    NewBlocks2 = [lists:nth(1, TestBlocks), UpdatedBlock1, UpdatedBlock2, lists:nth(8, TestBlocks)],
-    ?assertEqual(NewBlocks2, fslogic_location_cache:get_blocks(?KEY, #{})),
-    verify_changed_blocks([UpdatedBlock1, UpdatedBlock2], BlocksToChange),
-    verify_blocks_in_use(undefined),
+    FinalBlocks2 = [lists:nth(1, TestBlocks), UpdatedBlock1, UpdatedBlock2, lists:nth(8, TestBlocks)],
+    check_overlapping_blocks_update(Input2, lists:sublist(BlocksToChange, 4, 3), [UpdatedBlock2],
+        FinalBlocks2, [UpdatedBlock1, UpdatedBlock2], BlocksToChange),
 
-
-    ?assertEqual([UpdatedBlock1, UpdatedBlock2], fslogic_location_cache:get_blocks(?KEY, #{overlapping_blocks => Input3})),
-    verify_blocks_in_use([UpdatedBlock1, UpdatedBlock2]),
+    Input3 = [lists:nth(3, InputBlocks)],
     UpdatedBlock3 = ?BLOCK(20, 53),
-    ?assertMatch(#document{},
-        fslogic_location_cache:update_blocks(#document{key = ?KEY}, [UpdatedBlock3])),
-    NewBlocks3 = [lists:nth(1, TestBlocks), UpdatedBlock3, lists:nth(8, TestBlocks)],
-    ?assertEqual(NewBlocks3, fslogic_location_cache:get_blocks(?KEY, #{})),
-    verify_changed_blocks([UpdatedBlock3], BlocksToChange),
-    verify_blocks_in_use(undefined).
+    FinalBlocks3 = [lists:nth(1, TestBlocks), UpdatedBlock3, lists:nth(8, TestBlocks)],
+    check_overlapping_blocks_update(Input3, [UpdatedBlock1, UpdatedBlock2], [UpdatedBlock3],
+        FinalBlocks3, [UpdatedBlock3], BlocksToChange).
 
 get_overlapping_sequences_and_update_test() ->
     TestBlocks = gen_test_blocks(25),
@@ -426,7 +392,6 @@ get_overlapping_sequences_and_update_test() ->
         [UpdatedBlock2 | lists:sublist(TestBlocks, 11, 4)] ++ [UpdatedBlock3])),
     NewBlocks2 = lists:sublist(TestBlocks, 1, 2) ++ [UpdatedBlock1 | lists:sublist(TestBlocks, 4, 6)]
         ++ [UpdatedBlock2 | lists:sublist(TestBlocks, 11, 4)] ++ [UpdatedBlock3 | lists:sublist(TestBlocks, 16, 10)],
-
     ?assertEqual(NewBlocks2, fslogic_location_cache:get_blocks(?KEY, #{})),
     verify_changed_blocks([UpdatedBlock1, UpdatedBlock2, UpdatedBlock3], [Block1, Block3, Block5]),
     verify_blocks_in_use([[Block6]]),
@@ -437,18 +402,16 @@ get_overlapping_sequences_and_update_test() ->
     verify_changed_blocks([UpdatedBlock1, UpdatedBlock2, UpdatedBlock3], [Block1, Block3, Block5]),
     verify_blocks_in_use(undefined).
 
-% TODO - moze sprawdzanie mergowa'nia invalidowania blokow przy okazji?
-
 %%%===================================================================
 %%% Helper functions
 %%%===================================================================
 
 gen_test_blocks(N) ->
-    put(fslogic_cache, ?KEY),
-    put(fslogic_cache_modified_blocks_keys, []),
     erase({fslogic_cache_saved_blocks, ?KEY}),
     erase({fslogic_cache_deleted_blocks, ?KEY}),
     erase({fslogic_cache_blocks_in_use, ?KEY}),
+    put(fslogic_cache, ?KEY),
+    put(fslogic_cache_modified_blocks_keys, []),
 
     ReversedBlocks = gen_blocks_reversted_list(N),
     Blocks = lists:reverse(ReversedBlocks),
@@ -459,6 +422,17 @@ gen_blocks_reversted_list(0) ->
     [];
 gen_blocks_reversted_list(N) ->
     [?BLOCK(10 * N) | gen_blocks_reversted_list(N - 1)].
+
+check_overlapping_blocks_update(InputBlocks, ExpectedGetResult, BlocksToUpdate, FinalBlocks) ->
+    check_overlapping_blocks_update(InputBlocks, ExpectedGetResult, BlocksToUpdate, FinalBlocks, BlocksToUpdate, ExpectedGetResult).
+
+check_overlapping_blocks_update(InputBlocks, ExpectedGetResult, BlocksToUpdate, FinalBlocks, ExpectedBlocksToSave, OverridenBlocks) ->
+    ?assertEqual(ExpectedGetResult, fslogic_location_cache:get_blocks(?KEY, #{overlapping_blocks => InputBlocks})),
+    verify_blocks_in_use(ExpectedGetResult),
+    ?assertMatch(#document{}, fslogic_location_cache:update_blocks(#document{key = ?KEY}, BlocksToUpdate)),
+    ?assertEqual(FinalBlocks, fslogic_location_cache:get_blocks(?KEY, #{})),
+    verify_changed_blocks(ExpectedBlocksToSave, OverridenBlocks),
+    verify_blocks_in_use(undefined).
 
 verify_changed_blocks(ExpectedSaved, ExpectedDeleted) ->
     ChangedBlocks = fslogic_cache:get_changed_blocks(?KEY),

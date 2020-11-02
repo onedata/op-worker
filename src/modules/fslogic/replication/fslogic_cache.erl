@@ -530,6 +530,9 @@ check_blocks(LocationDoc = #document{
 %%-------------------------------------------------------------------
 %% @doc
 %% Marks blocks as "blocks in use".
+%% There are two possible formats of Blocks arguments:
+%%    - typical list of blocks that marks blocks that will be used at once,
+%%    - list of blocks' lists - the blocks will be used in groups (each element of outer list at once).
 %% @end
 %%-------------------------------------------------------------------
 -spec use_blocks(file_location:id(), fslogic_blocks:blocks() | [fslogic_blocks:blocks()]) -> ok.
@@ -551,12 +554,16 @@ finish_blocks_usage(Key) ->
             ?warning("Attepmted to finish usage of blocks that were not previously "
             "declared for the key ~p", [Key]),
             [];
+
+        % list of blocks' lists has been marked - each element of outer list will be used at once
         [Head] when is_list(Head) ->
             erase({?BLOCKS_IN_USE, Key}),
             Head;
         [Head | Tail] when is_list(Head) ->
             use_blocks(Key, Tail),
             Head;
+
+        % typical list of blocks has been mark - use it
         _ ->
             erase({?BLOCKS_IN_USE, Key}),
             Ans

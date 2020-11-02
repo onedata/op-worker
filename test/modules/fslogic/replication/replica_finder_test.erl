@@ -81,7 +81,6 @@ get_blocks_for_sync_test_() ->
 %%%===================================================================
 
 finder_should_return_empty_list_for_empty_blocks(_) ->
-    erase(),
     Location1 = ?LOCATION(<<"1">>, [?BLOCK(0,1)]),
     Location2 = ?LOCATION(<<"2">>, [?BLOCK(1,5)]),
     Locations = [Location1, Location2],
@@ -310,6 +309,7 @@ start() ->
 stop(_) ->
     application:unset_env(?APP_NAME, synchronizer_block_suiting),
     ?assert(meck:validate([oneprovider])),
-    meck:unload().
+    meck:unload(),
+    erase().
 
 -endif.
