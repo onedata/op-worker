@@ -85,7 +85,7 @@ sanitize_params(RawParams, #{method := <<"POST">>}) ->
             <<"name">> => {binary, non_empty}
         },
         optional => #{
-            <<"type">> => {binary, [<<"file">>, <<"dir">>]},
+            <<"type">> => {binary, [<<"reg">>, <<"dir">>]},
             ModeParam => {binary, fun(Mode) ->
                 try binary_to_integer(Mode, 8) of
                     ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
@@ -168,14 +168,17 @@ process_request(#auth{session_id = SessionId}, ParentGuid, Params, #{method := <
         <<"reg">> ->
             {ok, FileGuid} = ?check(lfm:create(SessionId, ParentGuid, Name, Mode)),
 
-            case cowboy_req:has_body(Req) of
-                true ->
-                    Offset = maps:get(<<"offset">>, Params, 0),
-
-                    Req2 = write_req_body_to_file(SessionId, {guid, FileGuid}, Offset, Req),
-                    {FileGuid, Req2};
-                false ->
-                    {FileGuid, Req}
+            case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
+                {0, false} ->
+                    {FileGuid, Req};
+                {Offset, _} ->
+                    try
+                        Req2 = write_req_body_to_file(SessionId, {guid, FileGuid}, Offset, Req),
+                        {FileGuid, Req2}
+                    catch Type:Reason ->
+                        lfm:unlink(SessionId, {guid, FileGuid}, false),
+                        erlang:Type(Reason)
+                    end
             end;
         <<"dir">> ->
             {ok, DirGuid} = ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),

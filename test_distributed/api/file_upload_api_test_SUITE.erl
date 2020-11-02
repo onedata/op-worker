@@ -26,10 +26,12 @@
 ]).
 
 -export([
+    create_file_test/1,
     update_file_content_test/1
 ]).
 
 all() -> [
+    create_file_test,
     update_file_content_test
 ].
 
@@ -43,6 +45,209 @@ all() -> [
 %%%===================================================================
 %%% File download test functions
 %%%===================================================================
+
+
+create_file_test(Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P1Node, P2Node],
+
+    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
+
+    {_, DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
+        <<"dir">>, 8#704, Config
+    ),
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+
+    UsedFileName = ?RANDOM_FILE_NAME(),
+    FilePath = filename:join([DirPath, UsedFileName]),
+    {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#777),
+    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
+
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    WriteSize = 300,
+    Content = crypto:strong_rand_bytes(WriteSize),
+
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, files, [FileGuid]),
+
+    ?assert(onenv_api_test_runner:run_tests(Config, [
+        #scenario_spec{
+            name = <<"Upload file using rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = [
+                    % TODO unblock after making space owner work on posix storage
+%%                    user2, % space owner - doesn't need any perms
+                    user3  % files owner (see fun create_shared_file/1)
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1],
+                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+            },
+
+            prepare_args_fun = build_create_file_prepare_args_fun(MemRef, DirObjectId),
+            validate_result_fun = build_create_file_validate_call_fun(MemRef),
+            verify_fun = build_create_file_verify_fun(MemRef, DirGuid, Providers),
+
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                DirGuid, DirShareId, #data_spec{
+                    required = [<<"name">>],
+                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body],
+                    correct_values = #{
+                        <<"name">> => [name_placeholder],
+                        <<"type">> => [<<"reg">>, <<"dir">>],
+                        <<"mode">> => [<<"0544">>, <<"0707">>],
+                        <<"offset">> => [
+                            0,
+                            WriteSize,
+                            WriteSize * 1000000000 % > SUPPORT_SIZE
+                        ],
+                        body => [Content]
+                    },
+                    bad_values = [
+                        {bad_id, FileObjectId, {rest, ?ERROR_POSIX(?ENOTDIR)}},
+
+                        {<<"name">>, UsedFileName, ?ERROR_POSIX(?EEXIST)},
+
+                        {<<"type">>, <<"file">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [<<"reg">>, <<"dir">>])},
+
+                        {<<"mode">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"0888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"77777">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
+
+                        {<<"offset">>, <<"unicorns">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
+                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)}
+                    ]
+                }
+            )
+        }
+    ])).
+
+
+%% @private
+-spec build_create_file_prepare_args_fun(api_test_memory:mem_ref(), file_id:objectid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_create_file_prepare_args_fun(MemRef, ParentDirObjectId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {ParentId, Data1} = api_test_utils:maybe_substitute_bad_id(ParentDirObjectId, Data0),
+
+        Data2 = case maps:get(<<"name">>, Data1, undefined) of
+            name_placeholder ->
+                Name = str_utils:rand_hex(10),
+                api_test_memory:set(MemRef, name, Name),
+                Data1#{<<"name">> => Name};
+            _ ->
+                Data1
+        end,
+        {Body, Data3} = utils:ensure_defined(maps:take(body, Data2), error, {<<>>, Data2}),
+
+        #rest_args{
+            method = post,
+            path = http_utils:append_url_parameters(<<"data/", ParentId/binary, "/children">>, Data3),
+            body = Body
+        }
+    end.
+
+
+%% @private
+-spec build_create_file_validate_call_fun(api_test_memory:mem_ref()) ->
+    onenv_api_test_runner:validate_call_result_fun().
+build_create_file_validate_call_fun(MemRef) ->
+    fun(#api_test_ctx{node = TestNode, data = Data}, {ok, RespCode, RespHeaders, RespBody}) ->
+        DataSent = maps:get(body, Data, <<>>),
+        Offset = maps:get(<<"offset">>, Data, 0),
+        ShouldResultInWrite = Offset > 0 orelse byte_size(DataSent) > 0,
+
+        Type = maps:get(<<"type">>, Data, <<"reg">>),
+        Mode = maps:get(<<"mode">>, Data, undefined),
+
+        case {Type, Mode, ShouldResultInWrite} of
+            {<<"reg">>, <<"0544">>, true} ->
+                % It is possible to create file but setting perms forbidding write access
+                % and uploading some data at the same time should result in error
+                ?assertEqual(?HTTP_400_BAD_REQUEST, RespCode),
+                ?assertEqual(?REST_ERROR(?ERROR_POSIX(?EACCES)), RespBody),
+                api_test_memory:set(MemRef, success, false);
+            _ ->
+                ?assertEqual(?HTTP_201_CREATED, RespCode),
+
+                #{<<"fileId">> := FileObjectId} = ?assertMatch(#{<<"fileId">> := <<_/binary>>}, RespBody),
+
+                ExpLocation = api_test_utils:create_exp_url(TestNode, [<<"data">>, FileObjectId]),
+                ?assertEqual(ExpLocation, maps:get(<<"Location">>, RespHeaders)),
+
+                {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
+
+                api_test_memory:set(MemRef, file_guid, FileGuid),
+                api_test_memory:set(MemRef, success, true)
+        end
+    end.
+
+
+%% @private
+-spec build_create_file_verify_fun(api_test_memory:mem_ref(), file_id:file_guid(), [node()]) ->
+    boolean().
+build_create_file_verify_fun(MemRef, DirGuid, Providers) ->
+    fun
+        (expected_failure, #api_test_ctx{node = TestNode}) ->
+            ExpFilesInDir = api_test_memory:get(MemRef, files),
+            ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid)),
+            true;
+        (expected_success, #api_test_ctx{node = TestNode, data = Data}) ->
+            case api_test_memory:get(MemRef, success) of
+                true ->
+                    FileGuid = api_test_memory:get(MemRef, file_guid),
+                    OtherFilesInDir = api_test_memory:get(MemRef, files),
+                    AllFilesInDir = lists:sort([FileGuid | OtherFilesInDir]),
+
+                    ?assertEqual(AllFilesInDir, ls(TestNode, DirGuid)),
+                    api_test_memory:set(MemRef, files, AllFilesInDir),
+
+                    ExpName = api_test_memory:get(MemRef, name),
+                    {ExpType, DefaultMode} = case maps:get(<<"type">>, Data, <<"reg">>) of
+                        <<"reg">> -> {?REGULAR_FILE_TYPE, <<"0664">>};
+                        <<"dir">> -> {?DIRECTORY_TYPE, <<"0775">>}
+                    end,
+                    ExpMode = binary_to_integer(maps:get(<<"mode">>, Data, DefaultMode), 8),
+
+                    lists:foreach(fun(Provider) ->
+                        ?assertMatch(
+                            {ok, #file_attr{name = ExpName, type = ExpType, mode = ExpMode}},
+                            api_test_utils:get_file_attrs(Provider, FileGuid),
+                            ?ATTEMPTS
+                        )
+                    end, Providers),
+
+                    case ExpType of
+                        ?REGULAR_FILE_TYPE ->
+                            verify_file_content_update(
+                                FileGuid, TestNode, TestNode, Providers, <<>>,
+                                maps:get(<<"offset">>, Data, undefined), maps:get(body, Data, <<>>)
+                            );
+                        ?DIRECTORY_TYPE ->
+                            true
+                    end;
+                false ->
+                    ExpFilesInDir = api_test_memory:get(MemRef, files),
+                    ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid)),
+                    true
+            end
+    end.
+
+
+%% @private
+-spec ls(node(), file_id:file_guid()) -> [file_id:file_guid()].
+ls(Node, DirGuid) ->
+    {ok, Children} = ?assertMatch(
+        {ok, _}, lfm_proxy:get_children(Node, ?ROOT_SESS_ID, {guid, DirGuid}, 0, 10000), ?ATTEMPTS
+    ),
+    lists:sort(lists:map(fun({Guid, _Name}) -> Guid end, Children)).
 
 
 update_file_content_test(Config) ->
@@ -63,7 +268,7 @@ update_file_content_test(Config) ->
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #scenario_spec{
-            name = <<"Download file using rest endpoint">>,
+            name = <<"Update file content using rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = #client_spec{
@@ -80,7 +285,7 @@ update_file_content_test(Config) ->
             setup_fun = build_download_file_setup_fun(MemRef, OriginalFileContent, Config),
             prepare_args_fun = build_update_file_content_prepare_args_fun(MemRef, normal_mode),
             validate_result_fun = build_update_file_content_validate_call_fun(),
-            verify_fun = build_upload_file_content_verify_fun(MemRef, OriginalFileContent, Config),
+            verify_fun = build_update_file_content_verify_fun(MemRef, OriginalFileContent, Config),
 
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
@@ -96,7 +301,12 @@ update_file_content_test(Config) ->
                             OriginalFileSize * 1000000000 % > SUPPORT_SIZE
                         ]
                     },
-                    bad_values = [{bad_id, DirObjectId, {rest, ?ERROR_POSIX(?EISDIR)}}]
+                    bad_values = [
+                        {bad_id, DirObjectId, {rest, ?ERROR_POSIX(?EISDIR)}},
+
+                        {<<"offset">>, <<"unicorns">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
+                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)}
+                    ]
                 }
             )
         }
@@ -133,7 +343,13 @@ build_update_file_content_validate_call_fun() ->
 
 
 %% @private
-build_upload_file_content_verify_fun(MemRef, OriginalFileContent, Config) ->
+-spec build_update_file_content_verify_fun(
+    api_test_memory:mem_ref(),
+    OriginalFileContent :: binary(),
+    onenv_api_test_runner:ct_config()
+) ->
+    boolean().
+build_update_file_content_verify_fun(MemRef, OriginalFileContent, Config) ->
     [CreationNode = P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
     AllProviders = [P1Node, P2Node],
@@ -184,32 +400,35 @@ verify_file_content_update(
 
     case Offset of
         undefined ->
-            % File was overwritten completely
+            % File was truncated and new data written at offset 0
+            assert_file_size(AllProviders, FileGuid, DataSentSize),
             api_test_utils:assert_distribution(AllProviders, [FileGuid], [{UpdateNode, DataSentSize}]),
             assert_file_content(AllProviders, FileGuid, DataSent);
         Offset ->
+            assert_file_size(AllProviders, FileGuid, max(OriginalFileSize, Offset + DataSentSize)),
+
             ExpDist = case UpdateNode == CreationNode of
                 true ->
                     case Offset =< OriginalFileSize of
                         true ->
                             [{CreationNode, max(OriginalFileSize, Offset + DataSentSize)}];
                         false ->
-                            [{CreationNode, [
+                            [{CreationNode, fslogic_blocks:consolidate([
                                 #file_block{offset = 0, size = OriginalFileSize},
                                 #file_block{offset = Offset, size = DataSentSize}
-                            ]}]
+                            ])}]
                     end;
                 false ->
                     case Offset + DataSentSize < OriginalFileSize of
                         true ->
                             [
-                                {CreationNode, [
+                                {CreationNode, fslogic_blocks:consolidate([
                                     #file_block{offset = 0, size = Offset},
                                     #file_block{
                                         offset = Offset + DataSentSize,
                                         size = OriginalFileSize - Offset - DataSentSize
                                     }
-                                ]},
+                                ])},
                                 {UpdateNode, [#file_block{offset = Offset, size = DataSentSize}]}
                             ];
                         false ->
@@ -221,7 +440,7 @@ verify_file_content_update(
             end,
             api_test_utils:assert_distribution(AllProviders, [FileGuid], ExpDist),
 
-            case Offset > 1000 * OriginalFileSize of
+            case Offset > 1024*1024*1024 of  % 1 GB
                 true ->
                     % In case of too big files to verify entire content (it will not fit into memory
                     % and reading it chunk by chunk will take too much time as we are speaking about
@@ -265,6 +484,17 @@ slice_binary(Bin, Offset, _Len) when Offset >= byte_size(Bin) ->
 slice_binary(Bin, Offset, Len) ->
     binary:part(Bin, Offset, min(Len, byte_size(Bin) - Offset)).
 
+
+%% @private
+-spec assert_file_size([node()], file_id:file_guid(), non_neg_integer()) -> ok.
+assert_file_size(AllProviders, FileGuid, ExpFileSize) ->
+    lists:foreach(fun(Provider) ->
+        ?assertMatch(
+            {ok, #file_attr{size = ExpFileSize}},
+            api_test_utils:get_file_attrs(Provider, FileGuid),
+            ?ATTEMPTS
+        )
+    end, AllProviders).
 
 
 %% @private

@@ -132,6 +132,7 @@ translate_resource(#gri{aspect = file_qos_summary, scope = private}, QosSummaryR
 -spec translate_distribution(Distribution :: [file_distribution()]) ->
     distribution_per_provider().
 translate_distribution(Distribution) ->
+    % TODO get file_size from file_attr
     FileSize = lists:foldl(fun
         (#{<<"blocks">> := []}, Acc) ->
             Acc;

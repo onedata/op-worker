@@ -23,11 +23,14 @@
 -export([load_module_from_test_distributed_dir/2]).
 
 -export([
+    create_exp_url/2,
+
     get_file_attrs/2,
 
     create_shared_file_in_space1/1,
     create_and_sync_shared_file_in_space2/2,
     create_and_sync_shared_file_in_space2/3,
+    create_and_sync_shared_file_in_space2/4,
     create_file_in_space2_with_additional_metadata/4,
     create_file_in_space2_with_additional_metadata/5,
 
@@ -107,6 +110,13 @@ load_module_from_test_distributed_dir(Config, ModuleName) ->
     end.
 
 
+-spec create_exp_url(node(), [binary()]) -> binary().
+create_exp_url(Node, PathTokens) ->
+    list_to_binary(rpc:call(Node, oneprovider, get_rest_endpoint, [
+        string:trim(filename:join([<<"/">> | PathTokens]), leading, [$/])
+    ])).
+
+
 -spec get_file_attrs(node(), file_id:file_guid()) ->
     {ok, lfm_attrs:file_attributes()} | {error, times_not_synchronized}.
 get_file_attrs(Node, FileGuid) ->
@@ -146,6 +156,17 @@ create_and_sync_shared_file_in_space2(Mode, Config) ->
 -spec create_and_sync_shared_file_in_space2(file_type(), file_meta:mode(), api_test_runner:config()) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
 create_and_sync_shared_file_in_space2(FileType, Mode, Config) ->
+    create_and_sync_shared_file_in_space2(FileType, ?RANDOM_FILE_NAME(), Mode, Config).
+
+
+-spec create_and_sync_shared_file_in_space2(
+    file_type(),
+    file_meta:name(),
+    file_meta:mode(),
+    api_test_runner:config()
+) ->
+    {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
+create_and_sync_shared_file_in_space2(FileType, FileName, Mode, Config) ->
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
 
@@ -153,7 +174,7 @@ create_and_sync_shared_file_in_space2(FileType, Mode, Config) ->
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
     UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    FilePath = filename:join(["/", ?SPACE_2, FileName]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
@@ -303,9 +324,12 @@ assert_distribution(Nodes, Files, ExpSizePerProvider) ->
     ExpDistribution = lists:sort(lists:map(fun
         ({Node, Blocks}) when is_list(Blocks) ->
             #{
-                <<"blocks">> => lists:map(fun(#file_block{offset = Offset, size = Size}) ->
-                    [Offset, Size]
-                end, Blocks),
+                <<"blocks">> => lists:foldr(fun
+                    (#file_block{offset = _Offset, size = 0}, Acc) ->
+                        Acc;
+                    (#file_block{offset = Offset, size = Size}, Acc) ->
+                        [[Offset, Size] | Acc]
+                end, [], Blocks),
                 <<"providerId">> => op_test_rpc:get_provider_id(Node),
                 <<"totalBlocksSize">> => lists:sum(lists:map(fun(#file_block{size = Size}) ->
                     Size
