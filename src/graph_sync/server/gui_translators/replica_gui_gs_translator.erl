@@ -39,5 +39,5 @@ translate_value(#gri{aspect = As}, TransferId) when
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_resource(#gri{aspect = distribution, scope = private}, Distribution) ->
-    file_gui_gs_translator:translate_distribution(Distribution).
+translate_resource(#gri{aspect = distribution, id = FileGuid, scope = private}, Distribution) ->
+    file_gui_gs_translator:translate_distribution(FileGuid, Distribution).

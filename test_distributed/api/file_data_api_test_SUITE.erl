@@ -881,6 +881,7 @@ wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
 
 %% @private
 get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistribution, Config) ->
+    Providers = ?config(op_worker_nodes, Config),
     SortedExpDistribution = lists:usort(ExpDistribution),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -888,7 +889,12 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
         ?assertEqual({?HTTP_200_OK, SortedExpDistribution}, {RespCode, lists:usort(RespBody)})
     end,
 
-    ExpGsDistribution = file_gui_gs_translator:translate_distribution(SortedExpDistribution),
+    ExpGsDistribution = rpc:call(
+        lists_utils:random_element(Providers),
+        file_gui_gs_translator,
+        translate_distribution,
+        [FileGuid, SortedExpDistribution]
+    ),
 
     CreateValidateGsSuccessfulCallFun = fun(Type) ->
         ExpGsResponse = ExpGsDistribution#{
