@@ -167,7 +167,7 @@ request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
 %%--------------------------------------------------------------------
 -spec update_replica(file_ctx:ctx(), fslogic_blocks:blocks(),
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
-    {ok, replica_updater:update_description()} | {error, Reason :: term()}.
+    {ok, replica_updater:replica_update_result()} | {error, Reason :: term()}.
 update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
     replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion).
 
@@ -570,7 +570,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
         case ExistingRefs ++ NewRefs of
             [] ->
                 FileLocation =
-                    file_ctx:fill_location_gaps([Block], fslogic_cache:get_local_location(),
+                    location_and_link_utils:get_local_blocks_and_fill_location_gaps([Block], fslogic_cache:get_local_location(),
                         fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
                 {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
                 FLC = #file_location_changed{file_location = FileLocation,
@@ -1454,7 +1454,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
     | {threshold, non_neg_integer()}) -> #file_location_changed{}.
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
     #file_location{blocks = FinalBlocks} = Location =
-        file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
+        location_and_link_utils:get_local_blocks_and_fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
             fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
     {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 

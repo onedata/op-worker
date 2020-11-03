@@ -38,7 +38,7 @@
     action := finish | start_new_sequence,
     remaining_blocks_to_split := blocks(),
     blocks_to_split_sequence := blocks(),
-    existing_blocks_overlapping_with_sequenc := blocks()
+    existing_blocks_overlapping_with_sequence := blocks()
 }.
 
 -export_type([block/0, blocks/0, blocks_tree/0, stored_blocks/0, get_doc_opts/0]).
@@ -321,9 +321,9 @@ get_blocks(Key, _Options) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% Function returning sequence of overlapping blocks where each element of returned list is tuple
-%% consisted of two blocks' lists. First element of the tuple is list of input blocks and second
-%% element is list of blocks overlapping with blocks returned in the first element of the tuple.
-%% The lists from first elements of the tuple sum to input list. The input list is split using algorithm
+%% consisting of two blocks' lists. First element of the tuple is a list of input blocks and second
+%% element is a list of blocks overlapping with blocks returned in the first element of the tuple.
+%% The lists from first elements of tuples sum to input list. The input list is split using algorithm
 %% that finds sequences of blocks that are close one to another that means that there are no more
 %% than ?MAX_HOLE existing blocks between two adjacent blocks in request.
 %% @end
@@ -335,7 +335,7 @@ get_overlapping_blocks_sequence(Key, [#file_block{offset = Offset} | _] = Blocks
     HoleSizeLimit = ?MAX_HOLE + 1,
     ExistingBlocksTree = fslogic_cache:get_blocks_tree(Key),
     ExistingBlocksIterator = gb_sets:iterator_from(#file_block{offset = Offset, size = 0}, ExistingBlocksTree),
-    Ans = get_block_seqences(ExistingBlocksTree, ExistingBlocksIterator, HoleSizeLimit, BlocksToSplitIntoSequences),
+    Ans = get_block_sequences(ExistingBlocksTree, ExistingBlocksIterator, HoleSizeLimit, BlocksToSplitIntoSequences),
 
     BlocksToUse = lists:map(fun({_BlockSequence, BlocksOverlappingWithSequence}) ->
         BlocksOverlappingWithSequence
@@ -596,11 +596,11 @@ get_location_not_cached(LocId, {blocks_num, Num}) ->
             Error
     end.
 
--spec get_block_seqences(blocks_tree(), gb_sets:iter(), non_neg_integer(), blocks()) -> blocks_sequences().
-get_block_seqences(ExistingBlocksTree, ExistingBlocksIterator, HoleSizeLimit, BlocksToSplitIntoSequences) ->
+-spec get_block_sequences(blocks_tree(), gb_sets:iter(), non_neg_integer(), blocks()) -> blocks_sequences().
+get_block_sequences(ExistingBlocksTree, ExistingBlocksIterator, HoleSizeLimit, BlocksToSplitIntoSequences) ->
     #{
         blocks_to_split_sequence := BlocksToSplitSequence,
-        existing_blocks_overlapping_with_sequenc := BlocksOverlappingWithSequence
+        existing_blocks_overlapping_with_sequence := BlocksOverlappingWithSequence
     } = Answer = get_single_blocks_sequence(
         BlocksToSplitIntoSequences, [], % arguments connected with input sequence
         ExistingBlocksIterator, [], [], % arguments connected with existing blocks
@@ -618,7 +618,7 @@ get_block_seqences(ExistingBlocksTree, ExistingBlocksIterator, HoleSizeLimit, Bl
         #{action := start_new_sequence, remaining_blocks_to_split := [#file_block{offset = Offset} | _] = NewBlocksToSplitIntoSequences} ->
             % to many existing blocks between blocks to split - skip them
             ExistingBlocksNextIterator = gb_sets:iterator_from(#file_block{offset = Offset, size = 0}, ExistingBlocksTree),
-            [SequenceDescription | get_block_seqences(ExistingBlocksTree, ExistingBlocksNextIterator, HoleSizeLimit, NewBlocksToSplitIntoSequences)]
+            [SequenceDescription | get_block_sequences(ExistingBlocksTree, ExistingBlocksNextIterator, HoleSizeLimit, NewBlocksToSplitIntoSequences)]
     end.
 
 -spec get_single_blocks_sequence(blocks(), blocks(), gb_sets:iter(), blocks(), blocks(),
@@ -631,7 +631,7 @@ get_single_blocks_sequence(
     % all blocks has been processed
     #{action => finish, remaining_blocks_to_split => [],
         blocks_to_split_sequence => lists:reverse(BlocksInCurrentSequence),
-        existing_blocks_overlapping_with_sequenc => ExistingBlocksOverlappingWithCurrentSequence};
+        existing_blocks_overlapping_with_sequence => ExistingBlocksOverlappingWithCurrentSequence};
 get_single_blocks_sequence(
     BlocksToSplitIntoSequences, BlocksInCurrentSequence, % arguments connected with input sequence
     _ExistingBlocksIterator, ExistingBlocksOverlappingWithCurrentSequence, _SkippedExistingBlocks, % arguments connected with existing blocks
@@ -640,7 +640,7 @@ get_single_blocks_sequence(
     % to many existing blocks between blocks to split - skip them
     #{action => start_new_sequence, remaining_blocks_to_split => BlocksToSplitIntoSequences,
         blocks_to_split_sequence => lists:reverse(BlocksInCurrentSequence),
-        existing_blocks_overlapping_with_sequenc => ExistingBlocksOverlappingWithCurrentSequence};
+        existing_blocks_overlapping_with_sequence => ExistingBlocksOverlappingWithCurrentSequence};
 get_single_blocks_sequence(
     [Block | BlocksToSplitIntoSequencesTail] = BlocksToSplitIntoSequences, BlocksInCurrentSequence, % arguments connected with input sequence
     ExistingBlocksIterator, ExistingBlocksOverlappingWithCurrentSequence, SkippedExistingBlocks, % arguments connected with existing blocks
@@ -651,7 +651,7 @@ get_single_blocks_sequence(
             % there are no existing blocks remaining
             #{action => finish, remaining_blocks_to_split => BlocksToSplitIntoSequencesTail,
                 blocks_to_split_sequence => lists:reverse([Block | BlocksInCurrentSequence]),
-                existing_blocks_overlapping_with_sequenc => ExistingBlocksOverlappingWithCurrentSequence};
+                existing_blocks_overlapping_with_sequence => ExistingBlocksOverlappingWithCurrentSequence};
         {ExistingBlock, ExistingBlocksNextIterator} ->
             % try to add existing block to sequence and repeat whole function
             {NewBlocksToSplitIntoSequences, NewBlocksInCurrentSequence,

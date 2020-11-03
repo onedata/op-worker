@@ -552,7 +552,7 @@ finish_blocks_usage(Key) ->
         undefined ->
             erase({?BLOCKS_IN_USE, Key}),
             ?warning("Attepmted to finish usage of blocks that were not previously "
-            "declared for the key ~p", [Key]),
+                "declared for the key ~p", [Key]),
             [];
 
         % list of blocks' lists has been marked - each element of outer list will be used at once

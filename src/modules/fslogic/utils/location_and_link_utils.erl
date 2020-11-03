@@ -25,6 +25,7 @@
 -export([create_imported_file_location/7, update_imported_file_location/2]).
 -export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1,
     invalidate_paths_caches/1, init_paths_cache_group/0, init_paths_caches/1]).
+-export([get_local_blocks_and_fill_location_gaps/4, fill_location_gaps/5]).
 
 -define(PATH_CACHE_GROUP, <<"paths_cache_group">>).
 -define(CANONICAL_PATHS_CACHE_NAME(SpaceId), binary_to_atom(<<"canonical_paths_cache_", SpaceId/binary>>, utf8)).
@@ -224,6 +225,44 @@ init_paths_caches(Space, Name) ->
                 [Space, {Error2, Reason}])
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv fill_location_gaps/5 but checks requested range and gets local blocks first.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_blocks_and_fill_location_gaps(fslogic_blocks:blocks() | undefined, file_location:doc(),
+    [file_location:doc()], file_location:id()) -> #file_location{}.
+get_local_blocks_and_fill_location_gaps(ReqRange0, #document{value = FileLocation = #file_location{
+    size = Size}} = FileLocationDoc, Locations, Uuid) ->
+    ReqRange = utils:ensure_defined(ReqRange0, [#file_block{offset = 0, size = Size}]),
+    Blocks = fslogic_location_cache:get_blocks(FileLocationDoc,
+        #{overlapping_blocks => ReqRange}),
+
+    fill_location_gaps(ReqRange, FileLocation, Blocks, Locations, Uuid).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns location that can be understood by client. It has gaps filled, and
+%% stores guid instead of uuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec fill_location_gaps(fslogic_blocks:blocks(), file_location:record(), fslogic_blocks:blocks(),
+    [file_location:doc()], file_location:id()) -> #file_location{}.
+fill_location_gaps(ReqRange, FileLocation, LocalBlocks, Locations, Uuid) ->
+    % find gaps
+    AllRanges = lists:foldl(
+        fun(Doc, Acc) ->
+            fslogic_blocks:merge(Acc, fslogic_location_cache:get_blocks(Doc,
+                #{overlapping_blocks => ReqRange}))
+        end, [], Locations),
+    Gaps = fslogic_blocks:consolidate(
+        fslogic_blocks:invalidate(ReqRange, AllRanges)
+    ),
+    BlocksWithFilledGaps = fslogic_blocks:merge(LocalBlocks, Gaps),
+
+    % fill gaps transform uid and emit
+    fslogic_location_cache:set_final_blocks(FileLocation#file_location{
+        uuid = Uuid}, BlocksWithFilledGaps).
 
 %%%===================================================================
 %%% Internal functions

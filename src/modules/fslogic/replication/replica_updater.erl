@@ -16,11 +16,16 @@
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% API
--export([update/4, rename/2, has_replication_status_changed/4]).
+%% API - file location updates
+-export([update/4, rename/2]).
+%% API - blocks analysis
+-export([has_replication_status_changed/4]).
+%% API - replica update result analysis
+-export([get_location_changes/1, has_size_changed/1, has_replica_status_changed/1]).
 
-% Description of update containing information required to produce events that describe update
--type update_description() :: #{
+% Description of update result containing information required to produce events
+% describing changes of local file replica
+-type replica_update_result() :: #{
     location_changes := fslogic_event_emitter:location_changes_description(),
     size_changed => boolean(),
     replica_status_changed => boolean()
@@ -30,12 +35,11 @@
 -type blocks_changes_description() :: [{BlocksTriggeringChange :: fslogic_blocks:blocks(),
     BlocksSaved :: fslogic_blocks:blocks()}].
 
--export_type([update_description/0]).
+-export_type([replica_update_result/0]).
 
 %%%===================================================================
-%%% API
+%%% API - file location updates
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -47,7 +51,7 @@
 %%--------------------------------------------------------------------
 -spec update(file_ctx:ctx(), fslogic_blocks:blocks(),
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
-    {ok, update_description()} | {error, Reason :: term()}.
+    {ok, replica_update_result()} | {error, Reason :: term()}.
 update(FileCtx, Blocks, FileSize, BumpVersion) ->
     replica_synchronizer:apply(FileCtx,
         fun() ->
@@ -118,10 +122,30 @@ rename(FileCtx, TargetFileId) ->
         %todo VFS-2813 support multi location, reconcile other local replicas according to this one
         end).
 
+%%%===================================================================
+%%% API - blocks analysis
+%%%===================================================================
+
 -spec has_replication_status_changed(fslogic_blocks:blocks(), fslogic_blocks:blocks(),
     non_neg_integer(), non_neg_integer()) -> boolean().
 has_replication_status_changed(FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize) ->
     is_fully_replicated(FirstLocalBlocksBeforeUpdate, OldSize) =/= is_fully_replicated(FirstLocalBlocks, NewSize).
+
+%%%===================================================================
+%%% API - replica update result analysis
+%%%===================================================================
+
+-spec get_location_changes(replica_update_result()) -> fslogic_event_emitter:location_changes_description().
+get_location_changes(#{location_changes := LocationChanges} = _ReplicaUpdateResult) ->
+    LocationChanges.
+
+-spec has_size_changed(replica_update_result()) -> boolean().
+has_size_changed(ReplicaUpdateResult) ->
+    maps:get(size_changed, ReplicaUpdateResult, false).
+
+-spec has_replica_status_changed(replica_update_result()) -> boolean().
+has_replica_status_changed(ReplicaUpdateResult) ->
+    maps:get(replica_status_changed, ReplicaUpdateResult, false).
 
 %%%===================================================================
 %%% Internal functions
@@ -206,7 +230,7 @@ is_fully_replicated(_, _) ->
     fslogic_event_emitter:location_changes_description().
 blocks_changes_to_location_changes_description(FileLocation, ChangeDescription) ->
     lists:map(fun({BlocksTriggeringChange, BlocksSaved}) ->
-        Location = file_ctx:fill_location_gaps(BlocksTriggeringChange, FileLocation, BlocksSaved,
+        Location = location_and_link_utils:fill_location_gaps(BlocksTriggeringChange, FileLocation, BlocksSaved,
             fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
         {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, BlocksTriggeringChange),
         {Location, EventOffset, EventSize}

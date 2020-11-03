@@ -28,7 +28,7 @@
 
 % Type describing local changes required to produce file_location_changed event
 -type location_changes_description() :: [{file_location:record(),
-    ChangesOffset :: non_neg_integer() | undefined, ChangesEnd :: non_neg_integer() | undefined}].
+    ChangesOffset :: non_neg_integer(), ChangesEnd :: non_neg_integer()}].
 
 -export_type([location_changes_description/0]).
 
@@ -185,11 +185,11 @@ emit_file_location_changed(Location, ExcludedSessions, Offset, OffsetEnd) ->
     ok | {error, Reason :: term()}.
 emit_file_locations_changed([], _ExcludedSessions) ->
     ok;
-emit_file_locations_changed(EventsList, ExcludedSessions) ->
-    EventsList2 = lists:map(fun({Location, Offset, OffsetEnd}) ->
+emit_file_locations_changed(LocationChangesDescription, ExcludedSessions) ->
+    EventsList = lists:map(fun({Location, Offset, OffsetEnd}) ->
         create_file_location_changed(Location, Offset, OffsetEnd)
-    end, EventsList),
-    event:emit({aggregated, EventsList2}, {exclude, ExcludedSessions}).
+    end, LocationChangesDescription),
+    event:emit({aggregated, EventsList}, {exclude, ExcludedSessions}).
 
 %%--------------------------------------------------------------------
 %% @doc
