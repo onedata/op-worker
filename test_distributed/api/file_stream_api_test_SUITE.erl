@@ -505,7 +505,6 @@ init_per_suite(Config) ->
             {minimal_sync_request, ?DEFAULT_READ_BLOCK_SIZE},
             {synchronizer_prefetch, false},
 
-            % TODO comment?
             {public_block_percent_treshold, 1}
         ]}
     ]}).

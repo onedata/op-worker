@@ -34,7 +34,7 @@ handle_request(#op_req{operation = Operation, auth = OriginalAuth, gri = #gri{
     type = op_file,
     id = FileGuid,
     aspect = Aspect
-}, data = RawParams}, Req) ->
+}, data = RawParams} = OpReq, Req) ->
     try
         RawParams = http_parser:parse_query_string(Req),
         SanitizedParams = sanitize_params(RawParams, Req),
@@ -44,7 +44,7 @@ handle_request(#op_req{operation = Operation, auth = OriginalAuth, gri = #gri{
         ensure_authorized(Auth, FileGuid, ScopePolicy),
         middleware_utils:assert_file_managed_locally(FileGuid),
 
-        process_request(Auth, FileGuid, SanitizedParams, Req)
+        process_request(OpReq#op_req{auth = Auth, data = SanitizedParams}, Req)
     catch
         throw:Error ->
             http_req:send_error(Error, Req);
@@ -134,9 +134,12 @@ ensure_authorized(Auth, FileGuid, allow_share_mode) ->
 
 
 %% @private
--spec process_request(aai:auth(), file_id:file_guid(), Params :: map(), cowboy_req:req()) ->
-    cowboy_req:req() | no_return().
-process_request(#auth{session_id = SessionId}, FileGuid, _, #{method := <<"GET">>} = Req) ->
+-spec process_request(#op_req{}, cowboy_req:req()) -> cowboy_req:req() | no_return().
+process_request(#op_req{
+    operation = get,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{id = FileGuid, aspect = content}
+}, Req) ->
     case lfm:stat(SessionId, {guid, FileGuid}) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             http_download_utils:stream_file(SessionId, FileAttrs, Req);
@@ -146,7 +149,12 @@ process_request(#auth{session_id = SessionId}, FileGuid, _, #{method := <<"GET">
             throw(?ERROR_POSIX(Errno))
     end;
 
-process_request(#auth{session_id = SessionId}, FileGuid, Params, #{method := <<"PUT">>} = Req) ->
+process_request(#op_req{
+    operation = create,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{id = FileGuid, aspect = content},
+    data = Params
+}, Req) ->
     FileKey = {guid, FileGuid},
 
     Offset = case maps:get(<<"offset">>, Params, undefined) of
@@ -160,7 +168,12 @@ process_request(#auth{session_id = SessionId}, FileGuid, Params, #{method := <<"
     Req2 = write_req_body_to_file(SessionId, FileKey, Offset, Req),
     http_req:send_response(?NO_CONTENT_REPLY, Req2);
 
-process_request(#auth{session_id = SessionId}, ParentGuid, Params, #{method := <<"POST">>} = Req) ->
+process_request(#op_req{
+    operation = create,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{id = ParentGuid, aspect = child},
+    data = Params
+}, Req) ->
     Name = maps:get(<<"name">>, Params),
     Mode = maps:get(<<"mode">>, Params, undefined),
 

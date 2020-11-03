@@ -39,9 +39,6 @@ all() -> [
 -define(ATTEMPTS, 30).
 
 
--type test_mode() :: normal_mode | share_mode.
-
-
 %%%===================================================================
 %%% File download test functions
 %%%===================================================================
@@ -282,8 +279,8 @@ update_file_content_test(Config) ->
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
-            setup_fun = build_download_file_setup_fun(MemRef, OriginalFileContent, Config),
-            prepare_args_fun = build_update_file_content_prepare_args_fun(MemRef, normal_mode),
+            setup_fun = build_update_file_content_setup_fun(MemRef, OriginalFileContent, Config),
+            prepare_args_fun = build_update_file_content_prepare_args_fun(MemRef),
             validate_result_fun = build_update_file_content_validate_call_fun(),
             verify_fun = build_update_file_content_verify_fun(MemRef, OriginalFileContent, Config),
 
@@ -314,11 +311,38 @@ update_file_content_test(Config) ->
 
 
 %% @private
--spec build_update_file_content_prepare_args_fun(api_test_memory:mem_ref(), test_mode()) ->
+-spec build_update_file_content_setup_fun(
+    api_test_memory:mem_ref(),
+    FileContent :: binary(),
+    onenv_api_test_runner:ct_config()
+) ->
+    onenv_api_test_runner:setup_fun().
+build_update_file_content_setup_fun(MemRef, Content, Config) ->
+    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P1Node, P2Node],
+
+    FileSize = size(Content),
+
+    fun() ->
+        FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+        {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
+
+        api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
+        ?assertMatch({ok, #file_attr{size = FileSize}}, api_test_utils:get_file_attrs(P2Node, FileGuid), ?ATTEMPTS),
+        api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}]),
+
+        api_test_memory:set(MemRef, file_guid, FileGuid)
+    end.
+
+
+%% @private
+-spec build_update_file_content_prepare_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_update_file_content_prepare_args_fun(MemRef, TestMode) ->
+build_update_file_content_prepare_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
-        FileGuid = get_file_guid(MemRef, TestMode),
+        FileGuid = api_test_memory:get(MemRef, file_guid),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
 
@@ -363,20 +387,12 @@ build_update_file_content_verify_fun(MemRef, OriginalFileContent, Config) ->
         (expected_success, #api_test_ctx{node = UpdateNode, data = Data}) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
             Offset = maps:get(<<"offset">>, Data, undefined),
+            DataSent = maps:get(body, Data, <<>>),
 
-            case {Offset, maps:get(body, Data, <<>>)} of
-                {undefined, _} ->
-                    % TODO FIX TRUNCATE
-                    true;
-                {_, <<>>} ->
-                    % TODO EMPTY BODY
-                    true;
-                {_, DataSent} ->
-                    verify_file_content_update(
-                        FileGuid, CreationNode, UpdateNode, AllProviders,
-                        OriginalFileContent, Offset, DataSent
-                    )
-            end
+            verify_file_content_update(
+                FileGuid, CreationNode, UpdateNode, AllProviders,
+                OriginalFileContent, Offset, DataSent
+            )
     end.
 
 
@@ -525,60 +541,6 @@ get_file_content(Node, FileGuid, Offset) ->
     {ok, #file_attr{size = FileSize}} = lfm_proxy:stat(Node, ?ROOT_SESS_ID, FileKey),
     {ok, FileHandle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, FileKey, read),
     lfm_proxy:read(Node, FileHandle, Offset, FileSize).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% TODO rm redundancy with similar function in file_stream_api_test_SUITE
-%% @private
--spec build_download_file_setup_fun(
-    api_test_memory:mem_ref(),
-    FileContent :: binary(),
-    onenv_api_test_runner:ct_config()
-) ->
-    onenv_api_test_runner:setup_fun().
-build_download_file_setup_fun(MemRef, Content, Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    Providers = [P1Node, P2Node],
-
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
-
-    FileSize = size(Content),
-
-    fun() ->
-        FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-        {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
-        {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
-        api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
-
-        ?assertMatch(
-            {ok, #file_attr{size = FileSize, shares = [ShareId]}},
-            api_test_utils:get_file_attrs(P2Node, FileGuid),
-            ?ATTEMPTS
-        ),
-        api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}]),
-
-        api_test_memory:set(MemRef, file_guid, FileGuid),
-        api_test_memory:set(MemRef, share_id, ShareId)
-    end.
-
-
-%% @private
--spec get_file_guid(api_test_memory:mem_ref(), test_mode()) -> file_id:file_guid().
-get_file_guid(MemRef, TestMode) ->
-    BareGuid = api_test_memory:get(MemRef, file_guid),
-    case TestMode of
-        normal_mode ->
-            BareGuid;
-        share_mode ->
-            ShareId = api_test_memory:get(MemRef, share_id),
-            file_id:guid_to_share_guid(BareGuid, ShareId)
-    end.
 
 
 %%%===================================================================

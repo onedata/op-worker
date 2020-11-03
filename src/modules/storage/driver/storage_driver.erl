@@ -357,6 +357,8 @@ write(SDHandle = #sd_handle{
 }, Offset, Buffer) ->
     %% @todo: VFS-2086 handle sparse files
     ?RUN_WITH_FILE_HANDLE(SDHandle, fun(FileHandle) ->
+        % TODO handle sparse files bis
+%%        space_quota:assert_write(SpaceId, max(0, Offset + size(Buffer) - CSize)),
         space_quota:assert_write(SpaceId, max(0, size(Buffer))),
         helpers:write(FileHandle, Offset, Buffer)
     end, ?READWRITE_STORAGE).

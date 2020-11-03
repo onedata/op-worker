@@ -33,7 +33,7 @@
     % single provider tests
     write_bigger_then_quota_should_fail/1,
     write_smaller_then_quota_should_not_fail/1,
-    truncate_bigger_then_quota_should_fail/1,
+    truncate_bigger_then_quota_should_not_fail/1,
     truncate_smaller_then_quota_should_not_fail/1,
     incremental_write_bigger_then_quota_should_fail/1,
     incremental_write_smaller_then_quota_should_not_fail/1,
@@ -60,7 +60,7 @@ all() ->
     ?ALL([
         write_bigger_then_quota_should_fail,
         write_smaller_then_quota_should_not_fail,
-        truncate_bigger_then_quota_should_fail,
+        truncate_bigger_then_quota_should_not_fail,
         truncate_smaller_then_quota_should_not_fail,
         incremental_write_bigger_then_quota_should_fail,
         incremental_write_smaller_then_quota_should_not_fail,
@@ -151,7 +151,7 @@ write_smaller_then_quota_should_not_fail(Config) ->
 
     ok.
 
-truncate_bigger_then_quota_should_fail(Config) ->
+truncate_bigger_then_quota_should_not_fail(Config) ->
     #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2} =
         gen_test_env(Config),
 
@@ -160,18 +160,18 @@ truncate_bigger_then_quota_should_fail(Config) ->
     {ok, _} = create_file(P1, User1, f(<<"space2">>, File1)),
     {ok, _} = create_file(P1, User2, f(<<"space2">>, File2)),
 
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User1, f(<<"space1">>, File1), 31)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User1, f(<<"space1">>, File1), 38)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User1, f(<<"space1">>, File1), 3131)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User2, f(<<"space1">>, File2), 31)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User2, f(<<"space1">>, File2), 38)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User2, f(<<"space1">>, File2), 3131)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User1, f(<<"space2">>, File1), 51)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User1, f(<<"space2">>, File1), 58)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User1, f(<<"space2">>, File1), 3131)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User2, f(<<"space2">>, File2), 51)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User2, f(<<"space2">>, File2), 58)),
-    ?assertMatch({error, ?ENOSPC}, truncate(P1, User2, f(<<"space2">>, File2), 3131)),
+    ?assertMatch(ok, truncate(P1, User1, f(<<"space1">>, File1), 31)),
+    ?assertMatch(ok, truncate(P1, User1, f(<<"space1">>, File1), 38)),
+    ?assertMatch(ok, truncate(P1, User1, f(<<"space1">>, File1), 3131)),
+    ?assertMatch(ok, truncate(P1, User2, f(<<"space1">>, File2), 31)),
+    ?assertMatch(ok, truncate(P1, User2, f(<<"space1">>, File2), 38)),
+    ?assertMatch(ok, truncate(P1, User2, f(<<"space1">>, File2), 3131)),
+    ?assertMatch(ok, truncate(P1, User1, f(<<"space2">>, File1), 51)),
+    ?assertMatch(ok, truncate(P1, User1, f(<<"space2">>, File1), 58)),
+    ?assertMatch(ok, truncate(P1, User1, f(<<"space2">>, File1), 3131)),
+    ?assertMatch(ok, truncate(P1, User2, f(<<"space2">>, File2), 51)),
+    ?assertMatch(ok, truncate(P1, User2, f(<<"space2">>, File2), 58)),
+    ?assertMatch(ok, truncate(P1, User2, f(<<"space2">>, File2), 3131)),
 
     ok.
 
