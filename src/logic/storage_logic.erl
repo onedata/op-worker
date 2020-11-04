@@ -28,7 +28,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/storage/storage.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -255,9 +255,9 @@ is_local_storage_supporting_space(StorageId, SpaceId) ->
 
 -spec supports_access_type(storage:id(), od_space:id(), SufficientAccessType :: storage:access_type()) ->
     boolean().
-supports_access_type(_StorageId, _SpaceId, ?READONLY_STORAGE) ->
+supports_access_type(_StorageId, _SpaceId, ?READONLY) ->
     true;
-supports_access_type(StorageId, SpaceId, ?READWRITE_STORAGE) ->
+supports_access_type(StorageId, SpaceId, ?READWRITE) ->
     not storage:is_storage_readonly(StorageId, SpaceId).
 
 

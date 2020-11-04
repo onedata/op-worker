@@ -33,7 +33,7 @@
     storage_describe/1,
     storage_is_imported_storage/1,
     storage_get_luma_feed/1,
-    storage_verify_configuration/4,
+    storage_verify_configuration/3,
     luma_clear_db/1,
     luma_storage_users_get_and_describe/2,
     luma_storage_users_store/3,
@@ -216,10 +216,10 @@ storage_get_luma_feed(Storage) ->
     storage:get_luma_feed(Storage).
 
 
--spec storage_verify_configuration(storage:id() | storage:name(),
-    helper:name(), storage:imported(), storage:readonly()) -> ok | {error, term()}.
-storage_verify_configuration(IdOrName, HelperName, ImportedStorage, Readonly) ->
-    storage:verify_configuration(IdOrName, HelperName, ImportedStorage, Readonly).
+-spec storage_verify_configuration(storage:id() | storage:name(), storage:config(), helpers:helper()) ->
+    ok | {error, term()}.
+storage_verify_configuration(IdOrName, Configuration, Helper) ->
+    storage:verify_configuration(IdOrName, Configuration, Helper).
 
 
 -spec luma_clear_db(storage:id()) -> ok.

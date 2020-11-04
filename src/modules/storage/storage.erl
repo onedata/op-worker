@@ -23,7 +23,6 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
--include("modules/storage/storage.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -44,7 +43,7 @@
 -export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
--export([verify_configuration/4]).
+-export([verify_configuration/3]).
 
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
@@ -76,9 +75,18 @@
 -type qos_parameters() :: od_storage:qos_parameters().
 -type luma_feed() :: luma:feed().
 -type luma_config() :: luma_config:config().
--type access_type() :: ?READONLY_STORAGE | ?READWRITE_STORAGE.
+-type access_type() :: ?READONLY | ?READWRITE.
 -type imported() :: boolean().
 -type readonly() :: boolean().
+
+%% @formatter:off
+-type config() :: #{
+    type => helper:name(),
+    readonly => readonly(),
+    importedStorage => imported(),
+    skipStorageDetection => boolean()
+}.
+%% @formatter:on
 
 -export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0, access_type/0,
     imported/0, readonly/0]).
@@ -204,11 +212,12 @@ clear_storages() ->
     storage_config:delete_all().
 
 
--spec verify_configuration(id() | name(), helper:name(), imported(), readonly()) -> ok | {error, term()}.
-verify_configuration(IdOrName, HelperName, ImportedStorage, Readonly) ->
+-spec verify_configuration(id() | name(), config(), helpers:helper()) -> ok | {error, term()}.
+verify_configuration(IdOrName, Config, Helper) ->
     try
-        verify_if_readonly_mode_is_appropriate_for_helper(HelperName, Readonly),
-        verify_if_readonly_mode_is_relevant_to_imported_option(IdOrName, Readonly, ImportedStorage)
+        sanitize_readonly_option(IdOrName, Config),
+        check_helper_against_readonly_option(Config, Helper),
+        check_helper_against_imported_option(Config, Helper)
     catch
         throw:Error -> Error
     end.
@@ -561,26 +570,54 @@ create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParamete
 
 
 %% @private
--spec verify_if_readonly_mode_is_appropriate_for_helper(helper:name(), readonly()) -> ok.
-verify_if_readonly_mode_is_appropriate_for_helper(_HelperName, true) ->
+-spec check_helper_against_readonly_option(config(), helpers:helper()) -> ok.
+check_helper_against_readonly_option(#{readonly := true}, _Helper) ->
     ok;
-verify_if_readonly_mode_is_appropriate_for_helper(HelperName, false) ->
-    case helper:is_only_readonly_supported(HelperName) of
-        true ->
-            throw(?ERROR_REQUIRES_READONLY_STORAGE(HelperName));
+check_helper_against_readonly_option(#{readonly := false}, Helper) ->
+    case helper:supports_storage_access_type(Helper, ?READWRITE) of
         false ->
+            HelperName = helper:get_name(Helper),
+            throw(?ERROR_REQUIRES_READONLY_STORAGE(HelperName));
+        true ->
+            ok
+    end.
+
+%% @private
+-spec check_helper_against_imported_option(config(), helpers:helper()) -> ok.
+check_helper_against_imported_option(#{importedStorage := false}, _Helper) ->
+    ok;
+check_helper_against_imported_option(#{importedStorage := true}, Helper) ->
+    case helper:is_import_supported(Helper) of
+        false ->
+            HelperName = helper:get_name(Helper),
+            throw(?ERROR_STORAGE_IMPORT_NOT_SUPPORTED(HelperName, ?OBJECT_HELPERS)); % todo better error
+        true ->
             ok
     end.
 
 
 %% @private
--spec verify_if_readonly_mode_is_relevant_to_imported_option(id() | name(), readonly(), imported()) -> ok.
-verify_if_readonly_mode_is_relevant_to_imported_option(_IdOrName, false, _) ->
-    ok;
-verify_if_readonly_mode_is_relevant_to_imported_option(_IdOrName, true, true) ->
-    ok;
-verify_if_readonly_mode_is_relevant_to_imported_option(IdOrName, true, false) ->
-    throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName)).
+-spec sanitize_readonly_option(id() | name(), config()) -> ok.
+sanitize_readonly_option(IdOrName, #{
+    skipStorageDetection := SkipStorageDetection,
+    readonly := Readonly,
+    importedStorage := Imported
+}) ->
+
+    case {ensure_boolean(Readonly), ensure_boolean(SkipStorageDetection), ensure_boolean(Imported)} of
+        {false, _, _} -> ok;
+        {true, false, _} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(skipStorageDetection, [true]));
+        {true, true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
+        {true, true, true} -> ok
+    end.
+
+
+
+-spec ensure_boolean(binary()) -> boolean().
+ensure_boolean(<<"true">>) -> true;
+ensure_boolean(<<"false">>) -> false;
+ensure_boolean(Boolean) when is_boolean(Boolean) -> Boolean.
+
 
 %%%===================================================================
 %%% Upgrade from 19.02.*

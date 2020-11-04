@@ -30,9 +30,10 @@
     get_storage_path_type/1, get_block_size/1
 ]).
 -export([
-    is_posix_compatible/1, is_rename_supported/1, is_auto_import_supported/1,
-    is_file_registration_supported/1, is_nfs4_acl_supported/1, should_skip_storage_detection/1,
-    is_only_readonly_supported/1]).
+    is_posix_compatible/1, is_rename_supported/1,
+    is_import_supported/1, is_auto_import_supported/1, is_file_registration_supported/1,
+    is_nfs4_acl_supported/1, should_skip_storage_detection/1, supports_storage_access_type/2
+]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
 
@@ -42,8 +43,9 @@
 -type user_ctx() :: #{binary() => binary()}.
 -type params() :: #helper_params{}.
 -type type() :: object_storage | block_storage.
+-type access_type() :: ?READONLY | ?READWRITE.
 
--export_type([name/0, args/0, params/0, user_ctx/0, type/0]).
+-export_type([name/0, args/0, params/0, user_ctx/0, type/0, access_type/0]).
 
 -define(DEFAULT_CEPHRADOS_BLOCK_SIZE, 4194304).
 -define(DEFAULT_SWIFT_BLOCK_SIZE, 10485760).
@@ -236,6 +238,11 @@ is_posix_compatible(#helper{name = HelperName}) -> is_posix_compatible(HelperNam
 is_posix_compatible(_) -> false.
 
 
+-spec is_import_supported(helpers:helper()) -> boolean().
+is_import_supported(Helper) ->
+    is_auto_import_supported(Helper) orelse is_file_registration_supported(Helper).
+
+
 -spec is_auto_import_supported(helpers:helper()) -> boolean().
 is_auto_import_supported(Helper = #helper{name = HelperName})
     when HelperName =:= ?POSIX_HELPER_NAME
@@ -287,13 +294,13 @@ is_rename_supported(#helper{name = HelperName}) -> is_rename_supported(HelperNam
 is_rename_supported(_) -> false.
 
 
--spec is_only_readonly_supported(helpers:helper() | name()) -> boolean().
-is_only_readonly_supported(#helper{name = HelperName}) ->
-    is_only_readonly_supported(HelperName);
-is_only_readonly_supported(?HTTP_HELPER_NAME) ->
-    true;
-is_only_readonly_supported(_) ->
-    false.
+-spec supports_storage_access_type(helpers:helper() | name(), access_type()) -> boolean().
+supports_storage_access_type(#helper{name = HelperName}, AccessType) ->
+    supports_storage_access_type(HelperName, AccessType);
+supports_storage_access_type(?HTTP_HELPER_NAME, ?READWRITE) ->
+    false;
+supports_storage_access_type(_HelperName, _StorageAccessType) ->
+    true.
 
 
 -spec is_canonical_helper(helpers:helper()) -> boolean().
