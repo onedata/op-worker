@@ -32,10 +32,10 @@
     get_file_instance_on_provider_not_supporting_space_test/1,
 
     update_file_instance_test/1,
-    update_file_instance_test_on_provider_not_supporting_space_test/1,
+    update_file_instance_on_provider_not_supporting_space_test/1,
 
     delete_file_instance_test/1,
-    delete_file_instance_test_on_provider_not_supporting_space_test/1
+    delete_file_instance_on_provider_not_supporting_space_test/1
 ]).
 
 all() -> [
@@ -44,10 +44,10 @@ all() -> [
     get_file_instance_on_provider_not_supporting_space_test,
 
     update_file_instance_test,
-    update_file_instance_test_on_provider_not_supporting_space_test,
+    update_file_instance_on_provider_not_supporting_space_test,
 
     delete_file_instance_test,
-    delete_file_instance_test_on_provider_not_supporting_space_test
+    delete_file_instance_on_provider_not_supporting_space_test
 ].
 
 
@@ -342,7 +342,7 @@ update_file_instance_test(Config) ->
     ])).
 
 
-update_file_instance_test_on_provider_not_supporting_space_test(Config) ->
+update_file_instance_on_provider_not_supporting_space_test(Config) ->
     P2Id = api_test_env:get_provider_id(p2, Config),
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
@@ -496,7 +496,7 @@ delete_file_instance_test(Config) ->
     ])).
 
 
-delete_file_instance_test_on_provider_not_supporting_space_test(Config) ->
+delete_file_instance_on_provider_not_supporting_space_test(Config) ->
     P2Id = api_test_env:get_provider_id(p2, Config),
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),

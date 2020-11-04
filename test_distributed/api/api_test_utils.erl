@@ -23,7 +23,7 @@
 -export([load_module_from_test_distributed_dir/2]).
 
 -export([
-    create_exp_url/2,
+    build_rest_url/2,
 
     get_file_attrs/2,
 
@@ -110,8 +110,8 @@ load_module_from_test_distributed_dir(Config, ModuleName) ->
     end.
 
 
--spec create_exp_url(node(), [binary()]) -> binary().
-create_exp_url(Node, PathTokens) ->
+-spec build_rest_url(node(), [binary()]) -> binary().
+build_rest_url(Node, PathTokens) ->
     list_to_binary(rpc:call(Node, oneprovider, get_rest_endpoint, [
         string:trim(filename:join([<<"/">> | PathTokens]), leading, [$/])
     ])).
@@ -335,18 +335,12 @@ assert_distribution(Nodes, Files, ExpSizePerProvider) ->
                     Size
                 end, Blocks))
             };
-        ({Node, ExpSize}) ->
+        ({Node, ExpSize}) when is_integer(ExpSize) ->
             #{
                 <<"blocks">> => case ExpSize of
                     0 -> [];
                     _ -> [[0, ExpSize]]
                 end,
-                <<"providerId">> => op_test_rpc:get_provider_id(Node),
-                <<"totalBlocksSize">> => ExpSize
-            };
-        ({Node, ExpOffset, ExpSize}) ->
-            #{
-                <<"blocks">> => [[ExpOffset, ExpSize]],
                 <<"providerId">> => op_test_rpc:get_provider_id(Node),
                 <<"totalBlocksSize">> => ExpSize
             }

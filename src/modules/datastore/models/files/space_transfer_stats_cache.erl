@@ -37,7 +37,7 @@
 -export_type([space_transfer_stats_cache/0, doc/0]).
 
 -define(TRANSFER_INACTIVITY, application:get_env(
-    ?APP_NAME, gui_transfer_inactivity_treshold, 20)
+    ?APP_NAME, gui_transfer_inactivity_threshold, 20)
 ).
 -define(MINUTE_STAT_EXPIRATION, application:get_env(
     ?APP_NAME, gui_transfer_min_stat_expiration, timer:seconds(5))

@@ -43,7 +43,7 @@ is_shared_file_request(op_file, _, Id) when is_binary(Id) ->
 is_shared_file_request(op_replica, As, Id) when
     As =:= instance;
     As =:= distribution
-    ->
+->
     file_id:is_share_guid(Id);
 is_shared_file_request(_, _, _) ->
     false.

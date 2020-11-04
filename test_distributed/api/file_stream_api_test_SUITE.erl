@@ -231,7 +231,7 @@ rest_download_file_test(Config) ->
         {<<"bytes=10--5">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
         {<<"bytes=10-15-">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
 
-        {<<"bytes=5000000=5100000">>, ?HTTP_416_RANGE_NOT_SATISFIABLE}
+        {<<"bytes=5000000-5100000">>, ?HTTP_416_RANGE_NOT_SATISFIABLE}
     ],
     AllRangesToTestNum = length(AllRangesToTest),
 
@@ -464,7 +464,10 @@ build_download_file_verify_fun(MemRef, FileSize, Config) ->
                         {_, ?HTTP_206_PARTIAL_CONTENT, [{RangeStart, _RangeLen} = Range]} ->
                             api_test_utils:assert_distribution(Providers, [FileGuid], [
                                 {P1Node, FileSize},
-                                {DownloadNode, RangeStart, get_fetched_block_size(Range, FileSize)}
+                                {DownloadNode, [#file_block{
+                                    offset = RangeStart,
+                                    size = get_fetched_block_size(Range, FileSize)
+                                }]}
                             ]);
 
                         {_, ?HTTP_206_PARTIAL_CONTENT, Ranges} ->
@@ -505,7 +508,7 @@ init_per_suite(Config) ->
             {minimal_sync_request, ?DEFAULT_READ_BLOCK_SIZE},
             {synchronizer_prefetch, false},
 
-            {public_block_percent_treshold, 1}
+            {public_block_percent_threshold, 1}
         ]}
     ]}).
 

@@ -21,7 +21,7 @@
 %% cowboy rest handler API
 -export([handle_request/2]).
 
--type scope_policy() :: allow_share_mode | disallow_share_mode.
+-type share_mode_policy() :: allow_share_mode | disallow_share_mode.
 
 
 %%%===================================================================
@@ -36,12 +36,11 @@ handle_request(#op_req{operation = Operation, auth = OriginalAuth, gri = #gri{
     aspect = Aspect
 }, data = RawParams} = OpReq, Req) ->
     try
-        RawParams = http_parser:parse_query_string(Req),
         SanitizedParams = sanitize_params(RawParams, Req),
-        ScopePolicy = get_scope_policy(Operation, Aspect),
+        ShareModePolicy = share_mode_policy(Operation, Aspect),
 
-        Auth = ensure_proper_context(OriginalAuth, FileGuid, ScopePolicy),
-        ensure_authorized(Auth, FileGuid, ScopePolicy),
+        Auth = ensure_proper_context(OriginalAuth, FileGuid, ShareModePolicy),
+        ensure_authorized(Auth, FileGuid, ShareModePolicy),
         middleware_utils:assert_file_managed_locally(FileGuid),
 
         process_request(OpReq#op_req{auth = Auth, data = SanitizedParams}, Req)
@@ -63,10 +62,10 @@ handle_request(#op_req{operation = Operation, auth = OriginalAuth, gri = #gri{
 
 
 %% @private
--spec get_scope_policy(middleware:operation(), gri:aspect()) -> scope_policy().
-get_scope_policy(create, child) -> disallow_share_mode;
-get_scope_policy(create, content) -> disallow_share_mode;
-get_scope_policy(get, content) -> allow_share_mode.
+-spec share_mode_policy(middleware:operation(), gri:aspect()) -> share_mode_policy().
+share_mode_policy(create, child)   -> disallow_share_mode;
+share_mode_policy(create, content) -> disallow_share_mode;
+share_mode_policy(get, content)    -> allow_share_mode.
 
 
 %% @private
@@ -102,10 +101,10 @@ sanitize_params(RawParams, #{method := <<"POST">>}) ->
 
 
 %% @private
--spec ensure_proper_context(aai:auth(), file_id:file_guid(), scope_policy()) ->
+-spec ensure_proper_context(aai:auth(), file_id:file_guid(), share_mode_policy()) ->
     aai:auth() | no_return().
-ensure_proper_context(Auth, FileGuid, ScopePolicy) ->
-    case {file_id:is_share_guid(FileGuid), ScopePolicy} of
+ensure_proper_context(Auth, FileGuid, ShareModePolicy) ->
+    case {file_id:is_share_guid(FileGuid), ShareModePolicy} of
         {true, allow_share_mode} ->
             ?GUEST;
         {true, disallow_share_mode} ->
@@ -116,7 +115,7 @@ ensure_proper_context(Auth, FileGuid, ScopePolicy) ->
 
 
 %% @private
--spec ensure_authorized(aai:auth(), file_id:file_guid(), scope_policy()) ->
+-spec ensure_authorized(aai:auth(), file_id:file_guid(), share_mode_policy()) ->
     true | no_return().
 ensure_authorized(?GUEST, _FileGuid, disallow_share_mode) ->
     throw(?ERROR_UNAUTHORIZED);

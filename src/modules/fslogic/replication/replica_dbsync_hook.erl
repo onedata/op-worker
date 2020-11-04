@@ -296,7 +296,7 @@ notify_attrs_change_if_necessary(FileCtx,
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Truncates file on storage if its size has decreased and if storage
+%% Truncates file on storage if its size has changed and if storage
 %% is not synced.
 %% @end
 %%-------------------------------------------------------------------

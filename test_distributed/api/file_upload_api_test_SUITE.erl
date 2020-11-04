@@ -77,7 +77,7 @@ create_file_test(Config) ->
             target_nodes = Providers,
             client_spec = #client_spec{
                 correct = [
-                    % TODO unblock after making space owner work on posix storage
+                    % TODO VFS-6959 unblock after making space owner work on posix storage
 %%                    user2, % space owner - doesn't need any perms
                     user3  % files owner (see fun create_shared_file/1)
                 ],
@@ -176,7 +176,7 @@ build_create_file_validate_call_fun(MemRef) ->
 
                 #{<<"fileId">> := FileObjectId} = ?assertMatch(#{<<"fileId">> := <<_/binary>>}, RespBody),
 
-                ExpLocation = api_test_utils:create_exp_url(TestNode, [<<"data">>, FileObjectId]),
+                ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"data">>, FileObjectId]),
                 ?assertEqual(ExpLocation, maps:get(<<"Location">>, RespHeaders)),
 
                 {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
@@ -270,7 +270,7 @@ update_file_content_test(Config) ->
             target_nodes = Providers,
             client_spec = #client_spec{
                 correct = [
-                    % TODO unblock after making space owner work on posix storage
+                    % TODO VFS-6959 unblock after making space owner work on posix storage
 %%                    user2, % space owner - doesn't need any perms
                     user3  % files owner (see fun create_shared_file/1)
                 ],
