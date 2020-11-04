@@ -45,7 +45,6 @@
     get_share/1,
     update_share_name/1,
     delete_share/1,
-    download_file_test/1,
     list_transfers/1,
     track_transferred_files/1
 ]).
@@ -68,7 +67,6 @@ all() ->
         get_share,
         update_share_name,
         delete_share,
-        download_file_test,
         list_transfers,
         track_transferred_files
     ]).
@@ -288,16 +286,18 @@ list_spaces(Config) ->
         rest_test_utils:request(WorkerP1, <<"spaces">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
 
     % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        [
-            #{<<"name">> := <<"space1">>, <<"spaceId">> := <<"space1">>},
-            #{<<"name">> := <<"space2">>, <<"spaceId">> := <<"space2">>},
-            #{<<"name">> := <<"space3">>, <<"spaceId">> := <<"space3">>},
-            #{<<"name">> := <<"space4">>, <<"spaceId">> := <<"space4">>}
-        ],
-        lists:sort(DecodedBody)
-    ).
+    ExpSpaces = lists:sort(lists:map(fun(SpaceId) ->
+        SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+        {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
+
+        #{
+            <<"name">> => SpaceId,
+            <<"spaceId">> => SpaceId,
+            <<"fileId">> => SpaceDirObjectId
+        }
+    end, [<<"space1">>, <<"space2">>, <<"space3">>, <<"space4">>])),
+
+    ?assertEqual(ExpSpaces, lists:sort(json_utils:decode(Body))).
 
 get_space(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -306,11 +306,15 @@ get_space(Config) ->
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"spaces/space2">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
 
+    SpaceId = <<"space2">>,
+    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
+
     % then
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
-            <<"name">> := <<"space2">>,
+            <<"name">> := SpaceId,
             <<"providers">> := [
                 #{
                     <<"providerId">> := PID1,
@@ -321,7 +325,8 @@ get_space(Config) ->
                     <<"providerName">> := PID2
                 }
             ],
-            <<"spaceId">> := <<"space2">>
+            <<"spaceId">> := SpaceId,
+            <<"fileId">> := SpaceDirObjectId
         },
         DecodedBody
     ).
@@ -581,30 +586,6 @@ delete_share(Config) ->
         {ok, _},
         lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)
     ).
-
-download_file_test(Config) ->
-    {OpNode, _} = get_op_nodes(Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(OpNode)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-
-    % create regular file
-    FilePath = filename:join(["/", SpaceName, "download_file_test"]),
-    {ok, FileGuid} = lfm_proxy:create(OpNode, SessionId, FilePath, 8#777),
-
-    DummyData = <<"DATA">>,
-    {ok, WriteHandle} = lfm_proxy:open(OpNode, SessionId, {guid, FileGuid}, write),
-    {ok, _} = lfm_proxy:write(OpNode, WriteHandle, 0, DummyData),
-    ok = lfm_proxy:close(OpNode, WriteHandle),
-
-    % Assert file_download_url is one time use only
-    {ok, URL1} = rpc:call(OpNode, page_file_download, get_file_download_url, [SessionId, FileGuid]),
-    ?assertEqual({ok, <<"DATA">>}, download_file(OpNode, URL1, Config)),
-    ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file(OpNode, URL1, Config)),
-
-    % Assert that trying to download deleted file should result in ?ENOENT
-    {ok, URL2} = rpc:call(OpNode, page_file_download, get_file_download_url, [SessionId, FileGuid]),
-    lfm_proxy:unlink(OpNode, SessionId, {guid, FileGuid}),
-    ?assertEqual(?ERROR_POSIX(?ENOENT), download_file(OpNode, URL2, Config)).
 
 list_transfers(Config) ->
     ct:timetrap({hours, 1}),
@@ -1114,17 +1095,4 @@ get_op_nodes(Config) ->
             {Worker1, Worker2};
         false ->
             {Worker2, Worker1}
-    end.
-
-download_file(Node, DownloadUrl, Config) ->
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
-    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
-    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 15000}],
-
-    case http_client:request(get, DownloadUrl, maps:from_list(Headers), <<>>, Opts) of
-        {ok, ?HTTP_200_OK, _RespHeaders, Content} ->
-            {ok, Content};
-        {ok, _ErrorCode, _ErrorHeaders, ErrorResponse} ->
-            Error = maps:get(<<"error">>, json_utils:decode(ErrorResponse), #{}),
-            errors:from_json(Error)
     end.
