@@ -287,6 +287,7 @@ get_blocks(#document{key = Key, value = #file_location{blocks = Blocks}}, Option
 get_blocks(Key, #{overlapping_blocks := OverlappingBlocks}) ->
     case OverlappingBlocks of
         [] ->
+            fslogic_cache:use_blocks(Key, []),
             [];
         [#file_block{offset = Offset1, size = Size1} | OverlappingBlocksTail] ->
             Blocks = fslogic_cache:get_blocks_tree(Key),
