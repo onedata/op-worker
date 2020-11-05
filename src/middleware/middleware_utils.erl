@@ -17,6 +17,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([
+    switch_context_if_shared_file_request/1,
     is_shared_file_request/3,
 
     is_eff_space_member/2,
@@ -34,6 +35,18 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec switch_context_if_shared_file_request(middleware:req()) -> middleware:req().
+switch_context_if_shared_file_request(#op_req{gri = #gri{
+    type = Type,
+    id = Id,
+    aspect = Aspect
+}} = OpReq) ->
+    case is_shared_file_request(Type, Aspect, Id) of
+        true -> OpReq#op_req{auth = ?GUEST};
+        false -> OpReq
+    end.
 
 
 -spec is_shared_file_request(gri:entity_type(), gri:aspect(), gri:entity_id()) ->

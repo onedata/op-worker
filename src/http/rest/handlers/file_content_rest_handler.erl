@@ -9,7 +9,7 @@
 %%% The module handles streaming and uploading file content via REST API.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_content_handler).
+-module(file_content_rest_handler).
 -author("Bartosz Walkowicz").
 
 -include("http/rest.hrl").
@@ -18,10 +18,9 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% cowboy rest handler API
--export([handle_request/2]).
 
--type share_mode_policy() :: allow_share_mode | disallow_share_mode.
+%% API
+-export([handle_request/2]).
 
 
 %%%===================================================================
@@ -29,31 +28,29 @@
 %%%===================================================================
 
 
--spec handle_request(#op_req{}, cowboy_req:req()) -> cowboy_req:req().
-handle_request(#op_req{operation = Operation, auth = OriginalAuth, gri = #gri{
-    type = op_file,
-    id = FileGuid,
-    aspect = Aspect
-}, data = RawParams} = OpReq, Req) ->
-    try
-        SanitizedParams = sanitize_params(RawParams, Req),
-        ShareModePolicy = share_mode_policy(Operation, Aspect),
+-spec handle_request(middleware:req(), cowboy_req:req()) -> cowboy_req:req().
+handle_request(OpReq0, Req) ->
+    OpReq1 = #op_req{
+        auth = Auth,
+        operation = Operation,
+        gri = GRI = #gri{
+            type = op_file,
+            id = FileGuid,
+            aspect = Aspect,
+            scope = Scope
+        }
+    } = middleware_utils:switch_context_if_shared_file_request(OpReq0),
 
-        Auth = ensure_proper_context(OriginalAuth, FileGuid, ShareModePolicy),
-        ensure_authorized(Auth, FileGuid, ShareModePolicy),
-        middleware_utils:assert_file_managed_locally(FileGuid),
+    ensure_operation_supported(Operation, Aspect, Scope),
+    OpReq2 = sanitize_params(OpReq1),
 
-        process_request(OpReq#op_req{auth = Auth, data = SanitizedParams}, Req)
-    catch
-        throw:Error ->
-            http_req:send_error(Error, Req);
-        Type:Reason ->
-            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
-                ?MODULE, ?FUNCTION_NAME, Type, Reason
-            ]),
-            cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req)
-    end.
+    case api_auth:check_authorization(Auth, ?OP_WORKER, Operation, GRI) of
+        ok -> ensure_authorized(OpReq1);
+        {error, _} = Error -> throw(Error)
+    end,
+    middleware_utils:assert_file_managed_locally(FileGuid),
 
+    process_request(OpReq2, Req).
 
 
 %%%===================================================================
@@ -62,24 +59,35 @@ handle_request(#op_req{operation = Operation, auth = OriginalAuth, gri = #gri{
 
 
 %% @private
--spec share_mode_policy(middleware:operation(), gri:aspect()) -> share_mode_policy().
-share_mode_policy(create, child)   -> disallow_share_mode;
-share_mode_policy(create, content) -> disallow_share_mode;
-share_mode_policy(get, content)    -> allow_share_mode.
+-spec ensure_operation_supported(middleware:operation(), gri:aspect(), gri:scope()) ->
+    true | no_return().
+ensure_operation_supported(create, child, private) -> true;
+ensure_operation_supported(create, content, private) -> true;
+ensure_operation_supported(get, content, public) -> true;
+ensure_operation_supported(get, content, private) -> true;
+ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %% @private
--spec sanitize_params(RawParams :: map(), cowboy_req:req()) -> map() | no_return().
-sanitize_params(_RawParams, #{method := <<"GET">>}) ->
-    #{};
-sanitize_params(RawParams, #{method := <<"PUT">>}) ->
-    middleware_sanitizer:sanitize_data(RawParams, #{
+-spec sanitize_params(middleware:req()) -> middleware:req() | no_return().
+sanitize_params(#op_req{operation = get, gri = #gri{aspect = content}} = OpReq) ->
+    OpReq;
+sanitize_params(#op_req{
+    operation = create,
+    data = RawParams,
+    gri = #gri{aspect = content}
+} = OpReq) ->
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
         optional => #{<<"offset">> => {integer, {not_lower_than, 0}}}
-    });
-sanitize_params(RawParams, #{method := <<"POST">>}) ->
+    })};
+sanitize_params(#op_req{
+    operation = create,
+    data = RawParams,
+    gri = #gri{aspect = child}
+} = OpReq) ->
     ModeParam = <<"mode">>,
 
-    middleware_sanitizer:sanitize_data(RawParams, #{
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
         required => #{
             <<"name">> => {binary, non_empty}
         },
@@ -97,43 +105,22 @@ sanitize_params(RawParams, #{method := <<"POST">>}) ->
             end},
             <<"offset">> => {integer, {not_lower_than, 0}}
         }
-    }).
+    })}.
 
 
 %% @private
--spec ensure_proper_context(aai:auth(), file_id:file_guid(), share_mode_policy()) ->
-    aai:auth() | no_return().
-ensure_proper_context(Auth, FileGuid, ShareModePolicy) ->
-    case {file_id:is_share_guid(FileGuid), ShareModePolicy} of
-        {true, allow_share_mode} ->
-            ?GUEST;
-        {true, disallow_share_mode} ->
-            throw(?ERROR_NOT_SUPPORTED);
-        {false, _} ->
-            Auth
-    end.
-
-
-%% @private
--spec ensure_authorized(aai:auth(), file_id:file_guid(), share_mode_policy()) ->
-    true | no_return().
-ensure_authorized(?GUEST, _FileGuid, disallow_share_mode) ->
+-spec ensure_authorized(middleware:req()) -> true | no_return().
+ensure_authorized(#op_req{operation = get, auth = ?GUEST, gri = #gri{id = Guid, scope = public}}) ->
+    file_id:is_share_guid(Guid) orelse throw(?ERROR_UNAUTHORIZED);
+ensure_authorized(#op_req{auth = ?GUEST}) ->
     throw(?ERROR_UNAUTHORIZED);
-ensure_authorized(Auth, FileGuid, disallow_share_mode) ->
-    middleware_utils:has_access_to_file(Auth, FileGuid) orelse throw(?ERROR_FORBIDDEN);
-ensure_authorized(?GUEST, FileGuid, allow_share_mode) ->
-    file_id:is_share_guid(FileGuid) orelse throw(?ERROR_UNAUTHORIZED);
-ensure_authorized(Auth, FileGuid, allow_share_mode) ->
-    case file_id:is_share_guid(FileGuid) of
-        true ->
-            true;
-        false ->
-            middleware_utils:has_access_to_file(Auth, FileGuid) orelse throw(?ERROR_FORBIDDEN)
-    end.
+ensure_authorized(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
+    middleware_utils:has_access_to_file(Auth, Guid) orelse throw(?ERROR_FORBIDDEN).
 
 
 %% @private
--spec process_request(#op_req{}, cowboy_req:req()) -> cowboy_req:req() | no_return().
+-spec process_request(middleware:req(), cowboy_req:req()) ->
+    cowboy_req:req() | no_return().
 process_request(#op_req{
     operation = get,
     auth = #auth{session_id = SessionId},
