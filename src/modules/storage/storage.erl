@@ -81,7 +81,6 @@
 
 %% @formatter:off
 -type config() :: #{
-    type => helper:name(),
     readonly => readonly(),
     importedStorage => imported(),
     skipStorageDetection => boolean()
@@ -89,7 +88,7 @@
 %% @formatter:on
 
 -export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0, access_type/0,
-    imported/0, readonly/0]).
+    imported/0, readonly/0, config/0]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -613,7 +612,7 @@ sanitize_readonly_option(IdOrName, #{
 
 
 
--spec ensure_boolean(binary()) -> boolean().
+-spec ensure_boolean(binary() | boolean()) -> boolean().
 ensure_boolean(<<"true">>) -> true;
 ensure_boolean(<<"false">>) -> false;
 ensure_boolean(Boolean) when is_boolean(Boolean) -> Boolean.
