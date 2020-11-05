@@ -60,6 +60,8 @@
     verify_storage_on_all_nodes/2,
     prepare_helper_args/2,
     prepare_user_ctx_params/2,
+    get_helper_args/1,
+    get_helper_admin_ctx/1,
     space_logic_get_storage_ids/1,
     file_popularity_api_configure/2,
     file_popularity_api_get_configuration/1,
@@ -364,6 +366,16 @@ prepare_helper_args(HelperName, Params) ->
 -spec prepare_user_ctx_params(helper:name(), helper:user_ctx()) -> helper:user_ctx().
 prepare_user_ctx_params(HelperName, Params) ->
     helper_params:prepare_user_ctx_params(HelperName, Params).
+
+
+-spec get_helper_args(helpers:helper()) -> helper:args().
+get_helper_args(Helper) ->
+    helper:get_args(Helper).
+
+
+-spec get_helper_admin_ctx(helpers:helper()) -> helper:user_ctx().
+get_helper_admin_ctx(Helper) ->
+    helper:get_admin_ctx(Helper).
 
 
 -spec space_logic_get_storage_ids(od_space:id()) -> {ok, [storage:id()]}.
