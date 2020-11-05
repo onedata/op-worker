@@ -448,7 +448,7 @@ lfm_rmdir_test(Config) ->
     lfm_files_test_base:lfm_rmdir(Config).
 
 sparse_files_should_be_created(Config) ->
-    lfm_files_test_base:sparse_files_should_be_created(Config).
+    lfm_files_test_base:sparse_files_should_be_created(Config, read).
 
 rename_removed_opened_file_test(Config) ->
     SpaceID = <<"space_id1">>,

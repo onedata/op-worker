@@ -361,7 +361,7 @@ file_popularity_should_have_correct_file_size(Config) ->
     lfm_files_test_base:file_popularity_should_have_correct_file_size(Config).
 
 sparse_files_should_be_created(Config) ->
-    lfm_files_test_base:sparse_files_should_be_created(Config).
+    lfm_files_test_base:sparse_files_should_be_created(Config, check_size_and_read).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

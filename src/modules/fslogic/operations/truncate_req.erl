@@ -74,7 +74,7 @@ truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes) ->
                     end,
                     {continue, FileCtx3};
                 {error, ?ENOENT} ->
-                    case sd_utils:create_deferred(FileCtx3, UserCtx, false, true) of
+                    case sd_utils:create_deferred(FileCtx3, user_ctx:new(?ROOT_SESS_ID), false, true) of
                         {#document{}, FileCtx5} ->
                             FinalAns = truncate_insecure(UserCtx, FileCtx5, Size, UpdateTimes),
                             {return, FinalAns};

@@ -26,7 +26,7 @@
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
     get_child_handle/2, listobjects/4]).
 -export([stat/1, read/3, write/3, create/2, open/2, release/1,
-    truncate/3, truncate_insecure/3, unlink/2, fsync/2, rmdir/1, exists/1]).
+    truncate/3, unlink/2, fsync/2, rmdir/1, exists/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
 -export([open_at_creation/1]).
 
@@ -431,7 +431,8 @@ create(#sd_handle{file = FileId} = SDHandle, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv truncate_insecure/3 with open flag checking.
+%% Truncates a file on storage to Size. CurrentSize specifies the
+%% current size of the file known by the op-worker.
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(handle(), Size :: integer(), CurrentSize :: non_neg_integer())
@@ -439,19 +440,7 @@ create(#sd_handle{file = FileId} = SDHandle, Mode) ->
 truncate(#sd_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
 truncate(#sd_handle{open_flag = read}, _, _) -> throw(?EPERM);
-truncate(SDHandle, Size, CurrentSize) ->
-    truncate_insecure(SDHandle, Size, CurrentSize).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Truncates a file on storage to Size. CurrentSize specifies the
-%% current size of the file known by the op-worker.
-%% @end
-%%--------------------------------------------------------------------
--spec truncate_insecure(handle(), Size :: integer(), CurrentSize :: non_neg_integer())
-        -> ok | error_reply().
-truncate_insecure(SDHandle = #sd_handle{file = FileId}, Size, CurrentSize) ->
+truncate(SDHandle = #sd_handle{file = FileId}, Size, CurrentSize) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:truncate(HelperHandle, FileId, Size, CurrentSize)
     end, ?READWRITE_STORAGE).

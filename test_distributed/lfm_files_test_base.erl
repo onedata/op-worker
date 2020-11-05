@@ -89,7 +89,7 @@
     lfm_open_and_create_open_failure/1,
     lfm_copy_failure_multiple_users/1,
     lfm_rmdir/1,
-    sparse_files_should_be_created/1
+    sparse_files_should_be_created/2
 ]).
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -1764,7 +1764,7 @@ file_popularity_should_have_correct_file_size(Config) ->
         rpc:call(W, file_popularity, get, [FileUuid])
     ).
 
-sparse_files_should_be_created(Config) ->
+sparse_files_should_be_created(Config, ReadFun) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     ProviderId = rpc:call(W, oneprovider, get_id, []),
@@ -1774,26 +1774,26 @@ sparse_files_should_be_created(Config) ->
         <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
     write_byte_to_file(W, SessId1, FileGuid1, 0),
     write_byte_to_file(W, SessId1, FileGuid1, 10),
-    verify_sparse_file(W, SessId1, FileGuid1, 11, [[0, 1], [10, 1]]),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid1, 11, [[0, 1], [10, 1]]),
 
     % Hole before single block
     {ok, FileGuid2} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
         <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
     write_byte_to_file(W, SessId1, FileGuid2, 10),
-    verify_sparse_file(W, SessId1, FileGuid2, 11, [[10, 1]]),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid2, 11, [[10, 1]]),
 
     % Empty block write to not empty file
     {ok, FileGuid3} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
         <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
     write_byte_to_file(W, SessId1, FileGuid3, 0),
     empty_write_to_file(W, SessId1, FileGuid3, 10),
-    verify_sparse_file(W, SessId1, FileGuid3, 10, [[0, 1]]),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid3, 10, [[0, 1]]),
 
     % Empty block write to empty file
     {ok, FileGuid4} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
         <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
     empty_write_to_file(W, SessId1, FileGuid4, 10),
-    verify_sparse_file(W, SessId1, FileGuid4, 10, []),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid4, 10, []),
 
     % Creation of hole using truncate on not empty file
     {ok, FileGuid5} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
@@ -1801,16 +1801,16 @@ sparse_files_should_be_created(Config) ->
     write_byte_to_file(W, SessId1, FileGuid5, 0),
     ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid5}, 10)),
     ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid5}, ProviderId)),
-    verify_sparse_file(W, SessId1, FileGuid5, 10, [[0, 1]]),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid5, 10, [[0, 1]]),
 
     % Creation of hole using truncate on empty file
     {ok, FileGuid6} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
         <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
     ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid6}, 10)),
     ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid5}, ProviderId)),
-    verify_sparse_file(W, SessId1, FileGuid6, 10, []).
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid6, 10, []).
 
-verify_sparse_file(W, SessId, FileGuid, FileSize, ExpectedBlocks) ->
+verify_sparse_file(ReadFun, W, SessId, FileGuid, FileSize, ExpectedBlocks) ->
     BlocksSize = lists:foldl(fun([_, Size], Acc) -> Acc + Size end, 0, ExpectedBlocks),
     ?assertMatch({ok, [#{<<"blocks">> := ExpectedBlocks, <<"totalBlocksSize">> := BlocksSize}]},
         lfm_proxy:get_file_distribution(W, SessId, {guid, FileGuid})),
@@ -1819,7 +1819,7 @@ verify_sparse_file(W, SessId, FileGuid, FileSize, ExpectedBlocks) ->
 
     ExpectedFileContent = get_sparse_file_content(ExpectedBlocks, FileSize),
     {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
-    ?assertMatch({ok, ExpectedFileContent}, lfm_proxy:read(W, Handle, 0, 100)),
+    ?assertMatch({ok, ExpectedFileContent}, lfm_proxy:ReadFun(W, Handle, 0, 100)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
 %%%===================================================================
