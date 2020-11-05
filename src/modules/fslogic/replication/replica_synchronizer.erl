@@ -167,8 +167,7 @@ request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
 %%--------------------------------------------------------------------
 -spec update_replica(file_ctx:ctx(), fslogic_blocks:blocks(),
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
-    {ok, ignore | emit_size_change | {emit_replica_status_change, EmissionParam :: boolean()}} |
-    {error, Reason :: term()}.
+    {ok, replica_updater:report()} | {error, Reason :: term()}.
 update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
     replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion).
 
@@ -571,11 +570,11 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
         case ExistingRefs ++ NewRefs of
             [] ->
                 FileLocation =
-                    file_ctx:fill_location_gaps([Block], fslogic_cache:get_local_location(),
+                    location_and_link_utils:get_local_blocks_and_fill_location_gaps([Block], fslogic_cache:get_local_location(),
                         fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
-                {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
+                {ChangeOffset, ChangeEnd} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
                 FLC = #file_location_changed{file_location = FileLocation,
-                    change_beg_offset = EventOffset, change_end_offset = EventSize},
+                    change_beg_offset = ChangeOffset, change_end_offset = ChangeEnd},
                 case Type of
                     sync ->
                         {reply, {ok, FLC}, State, ?DIE_AFTER};
@@ -1455,29 +1454,29 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
     | {threshold, non_neg_integer()}) -> #file_location_changed{}.
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
     #file_location{blocks = FinalBlocks} = Location =
-        file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
+        location_and_link_utils:get_local_blocks_and_fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
             fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
-    {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
+    {ChangeOffset, ChangeSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 
     case Flush of
         off ->
             ok;
         all ->
-            fslogic_cache:cache_event(ExcludeSessions,
-                {Location, EventOffset, EventSize});
+            fslogic_cache:cache_location_change(ExcludeSessions,
+                {Location, ChangeOffset, ChangeSize});
         {threshold, Bytes} ->
             BlocksSize = fslogic_blocks:size(FinalBlocks),
             case BlocksSize >= Bytes of
                 true ->
-                    fslogic_cache:cache_event(ExcludeSessions,
-                        {Location, EventOffset, EventSize});
+                    fslogic_cache:cache_location_change(ExcludeSessions,
+                        {Location, ChangeOffset, ChangeSize});
                 _ ->
                     ok
             end
     end,
 
     #file_location_changed{file_location = Location,
-        change_beg_offset = EventOffset, change_end_offset = EventSize}.
+        change_beg_offset = ChangeOffset, change_end_offset = ChangeSize}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1533,11 +1532,11 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
 %%--------------------------------------------------------------------
 -spec flush_events(#state{}) -> #state{}.
 flush_events(State) ->
-    lists:foreach(fun({ExcludedSessions, Events}) ->
+    lists:foreach(fun({ExcludedSessions, LocationChanges}) ->
         % TODO - catch error and repeat
         ok = fslogic_event_emitter:emit_file_locations_changed(
-            lists:reverse(Events), ExcludedSessions)
-    end, lists:reverse(fslogic_cache:clear_events())),
+            lists:reverse(LocationChanges), ExcludedSessions)
+    end, lists:reverse(fslogic_cache:clear_location_changes())),
     cancel_events_timer(State).
 
 -spec set_caching_timers(#state{}) -> #state{}.
