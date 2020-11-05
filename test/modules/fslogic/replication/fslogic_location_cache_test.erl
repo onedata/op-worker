@@ -437,7 +437,7 @@ check_overlapping_blocks_update(InputBlocks, ExpectedGetResult, BlocksToUpdate, 
 
 check_overlapping_blocks_update(InputBlocks, ExpectedGetResult, BlocksToUpdate, FinalBlocks, ExpectedBlocksToSave, OverridenBlocks) ->
     ?assertEqual(ExpectedGetResult, fslogic_location_cache:get_blocks(?KEY, #{overlapping_blocks => InputBlocks})),
-    verify_blocks_in_use(ExpectedGetResult),
+    verify_blocks_in_use([ExpectedGetResult]),
     ?assertMatch(#document{}, fslogic_location_cache:update_blocks(#document{key = ?KEY}, BlocksToUpdate)),
     ?assertEqual(FinalBlocks, fslogic_location_cache:get_blocks(?KEY, #{})),
     verify_changed_blocks(ExpectedBlocksToSave, OverridenBlocks),
