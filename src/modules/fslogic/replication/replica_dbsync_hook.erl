@@ -282,7 +282,7 @@ notify_attrs_change_if_necessary(FileCtx,
     FirstLocalBlocksBeforeUpdate
 ) ->
     FirstLocalBlocks = fslogic_location_cache:get_blocks(NewDoc, #{count => 2}),
-    ReplicaStatusChanged = replica_updater:is_blocks_modification_changes_replica_status(
+    ReplicaStatusChanged = replica_updater:has_replica_status_changed(
         FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize),
     case {ReplicaStatusChanged, OldSize =/= NewSize} of
         {true, SizeChanged} ->

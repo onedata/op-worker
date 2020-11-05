@@ -19,7 +19,7 @@
 %% API - file location updates
 -export([update/4, rename/2]).
 %% API - blocks analysis
--export([is_blocks_modification_changes_replica_status/4]).
+-export([has_replica_status_changed/4]).
 %% API - replica update result analysis
 -export([get_location_changes/1, has_size_changed/1, has_replica_status_changed/1]).
 
@@ -78,7 +78,7 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                             fslogic_location_cache:save_location(UpdatedLocation),
                             #document{value = #file_location{size = UpdatedSize}} = UpdatedLocation,
                             FirstLocalBlocks = fslogic_location_cache:get_blocks(UpdatedLocation, #{count => 2}),
-                            ReplicaStatusChanged = is_blocks_modification_changes_replica_status(
+                            ReplicaStatusChanged = has_replica_status_changed(
                                 FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, UpdatedSize),
                             case {ReplicaStatusChanged, UpdatedSize > OldSize} of
                                 {true, SizeChanged} -> 
@@ -96,12 +96,9 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                             },
                             fslogic_location_cache:save_location(TruncatedLocation),
                             FirstLocalBlocks = fslogic_location_cache:get_blocks(TruncatedLocation, #{count => 2}),
-                            ReplicaStatusChanged = is_blocks_modification_changes_replica_status(
+                            ReplicaStatusChanged = has_replica_status_changed(
                                 FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, FileSize),
-                            case ReplicaStatusChanged of
-                                true -> {ok, UpdateDescription#{replica_status_changed => true}};
-                                false -> {ok, UpdateDescription}
-                            end
+                            {ok, UpdateDescription#{replica_status_changed => ReplicaStatusChanged}}
                     end;
                 Error ->
                     Error
@@ -137,9 +134,9 @@ rename(FileCtx, TargetFileId) ->
 %%% API - blocks analysis
 %%%===================================================================
 
--spec is_blocks_modification_changes_replica_status(fslogic_blocks:blocks(), fslogic_blocks:blocks(),
+-spec has_replica_status_changed(fslogic_blocks:blocks(), fslogic_blocks:blocks(),
     non_neg_integer(), non_neg_integer()) -> boolean().
-is_blocks_modification_changes_replica_status(FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize) ->
+has_replica_status_changed(FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize) ->
     is_fully_replicated(FirstLocalBlocksBeforeUpdate, OldSize) =/= is_fully_replicated(FirstLocalBlocks, NewSize).
 
 %%%===================================================================
