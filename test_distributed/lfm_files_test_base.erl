@@ -88,7 +88,8 @@
     lfm_open_failure_multiple_users/1,
     lfm_open_and_create_open_failure/1,
     lfm_copy_failure_multiple_users/1,
-    lfm_rmdir/1
+    lfm_rmdir/1,
+    sparse_files_should_be_created/1
 ]).
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -1763,6 +1764,63 @@ file_popularity_should_have_correct_file_size(Config) ->
         rpc:call(W, file_popularity, get, [FileUuid])
     ).
 
+sparse_files_should_be_created(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    ProviderId = rpc:call(W, oneprovider, get_id, []),
+
+    % Hole between not empty blocks
+    {ok, FileGuid1} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    write_byte_to_file(W, SessId1, FileGuid1, 0),
+    write_byte_to_file(W, SessId1, FileGuid1, 10),
+    verify_sparse_file(W, SessId1, FileGuid1, 11, [[0, 1], [10, 1]]),
+
+    % Hole before single block
+    {ok, FileGuid2} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    write_byte_to_file(W, SessId1, FileGuid2, 10),
+    verify_sparse_file(W, SessId1, FileGuid2, 11, [[10, 1]]),
+
+    % Empty block write to not empty file
+    {ok, FileGuid3} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    write_byte_to_file(W, SessId1, FileGuid3, 0),
+    empty_write_to_file(W, SessId1, FileGuid3, 10),
+    verify_sparse_file(W, SessId1, FileGuid3, 10, [[0, 1]]),
+
+    % Empty block write to empty file
+    {ok, FileGuid4} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    empty_write_to_file(W, SessId1, FileGuid4, 10),
+    verify_sparse_file(W, SessId1, FileGuid4, 10, []),
+
+    % Creation of hole using truncate on not empty file
+    {ok, FileGuid5} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    write_byte_to_file(W, SessId1, FileGuid5, 0),
+    ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid5}, 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid5}, ProviderId)),
+    verify_sparse_file(W, SessId1, FileGuid5, 10, [[0, 1]]),
+
+    % Creation of hole using truncate on empty file
+    {ok, FileGuid6} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid6}, 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid5}, ProviderId)),
+    verify_sparse_file(W, SessId1, FileGuid6, 10, []).
+
+verify_sparse_file(W, SessId, FileGuid, FileSize, ExpectedBlocks) ->
+    BlocksSize = lists:foldl(fun([_, Size], Acc) -> Acc + Size end, 0, ExpectedBlocks),
+    ?assertMatch({ok, [#{<<"blocks">> := ExpectedBlocks, <<"totalBlocksSize">> := BlocksSize}]},
+        lfm_proxy:get_file_distribution(W, SessId, {guid, FileGuid})),
+
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(W, SessId, {guid, FileGuid})),
+
+    ExpectedFileContent = get_sparse_file_content(ExpectedBlocks, FileSize),
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
+    ?assertMatch({ok, ExpectedFileContent}, lfm_proxy:read(W, Handle, 0, 100)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
 %%%===================================================================
 %%% Internal functions
@@ -1985,3 +2043,23 @@ verify_file_content(Config, Handle, FileContent) ->
 verify_file_content(Config, Handle, FileContent, From, To) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual({ok, FileContent}, lfm_proxy:read(Worker, Handle, From, To)).
+
+get_sparse_file_content(Blocks, FileSize) ->
+    get_sparse_file_content(Blocks, FileSize, 0).
+
+get_sparse_file_content([], FileSize, CurrentPos) ->
+    binary:copy(<<"\0">>, FileSize - CurrentPos);
+get_sparse_file_content([[Offset, Size] | Blocks], FileSize, Offset) ->
+    <<(binary:copy(<<"t">>, Size))/binary, (get_sparse_file_content(Blocks, FileSize, Offset + Size))/binary>>;
+get_sparse_file_content(Blocks, FileSize, CurrentPos) ->
+    <<"\0", (get_sparse_file_content(Blocks, FileSize, CurrentPos + 1))/binary>>.
+
+write_byte_to_file(W, SessId, FileGuid, Offset) ->
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
+    ?assertEqual({ok, 1}, lfm_proxy:write(W, Handle, Offset, <<"t">>)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
+
+empty_write_to_file(W, SessId, FileGuid, Offset) ->
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
+    ?assertEqual({ok, 0}, lfm_proxy:write(W, Handle, Offset, <<>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).

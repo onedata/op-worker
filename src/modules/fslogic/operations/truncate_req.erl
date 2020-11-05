@@ -53,9 +53,9 @@ truncate(UserCtx, FileCtx0, Size) ->
 truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes) ->
     FileCtx1 = update_quota(FileCtx0, Size),
     SessId = user_ctx:get_session_id(UserCtx),
-    {ok, FileCtx4} = case file_ctx:is_readonly_storage(FileCtx1) of
+    NextStep = case file_ctx:is_readonly_storage(FileCtx1) of
         {true, FileCtx2} ->
-            {ok, FileCtx2};
+            {continue, FileCtx2};
         {false, FileCtx2} ->
             {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
             case storage_driver:open(SDHandle, write) of
@@ -71,23 +71,36 @@ truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes) ->
                         ok -> ok;
                         Error2 = {error, ?EDOM} ->
                             log_warning(storage_driver, release, Error2, FileCtx3)
-                    end;
+                    end,
+                    {continue, FileCtx3};
                 {error, ?ENOENT} ->
+                    case sd_utils:create_deferred(FileCtx3, UserCtx, false, true) of
+                        {#document{}, FileCtx5} ->
+                            FinalAns = truncate_insecure(UserCtx, FileCtx5, Size, UpdateTimes),
+                            {return, FinalAns};
+                        Error3 = {error, _} ->
+                            log_warning(storage_driver, truncate, Error3, FileCtx3),
+                            {continue, FileCtx3}
+                    end
+            end
+    end,
+
+    case NextStep of
+        {continue, FileCtx4} ->
+            case file_popularity:update_size(FileCtx4, Size) of
+                ok -> ok;
+                {error, not_found} -> ok
+            end,
+            case UpdateTimes of
+                true ->
+                    fslogic_times:update_mtime_ctime(FileCtx4);
+                false ->
                     ok
             end,
-            {ok, FileCtx3}
-    end,
-    case file_popularity:update_size(FileCtx4, Size) of
-        ok -> ok;
-        {error, not_found} -> ok
-    end,
-    case UpdateTimes of
-        true ->
-            fslogic_times:update_mtime_ctime(FileCtx4);
-        false ->
-            ok
-    end,
-    #fuse_response{status = #status{code = ?OK}}.
+            #fuse_response{status = #status{code = ?OK}};
+        {return, Ans} ->
+            Ans
+    end.
 
 
 %%%===================================================================

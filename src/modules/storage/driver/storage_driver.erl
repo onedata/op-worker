@@ -21,11 +21,12 @@
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([new_handle/2, new_handle/3, new_handle/5, new_handle/6, set_size/1, increase_size/2, get_storage_file_id/1]).
+-export([new_handle/2, new_handle/3, new_handle/5, new_handle/6, set_size/1, calculate_size/1,
+    increase_size/2, get_storage_file_id/1]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
     get_child_handle/2, listobjects/4]).
 -export([stat/1, read/3, write/3, create/2, open/2, release/1,
-    truncate/3, unlink/2, fsync/2, rmdir/1, exists/1]).
+    truncate/3, truncate_insecure/3, unlink/2, fsync/2, rmdir/1, exists/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
 -export([open_at_creation/1]).
 
@@ -116,6 +117,18 @@ set_size(#sd_handle{
     Handle#sd_handle{
         file_size = FSize
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calculates size of file represented by handle but does not cache result in handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec calculate_size(handle()) -> non_neg_integer().
+calculate_size(#sd_handle{
+    space_id = SpaceId,
+    file_uuid = FileUuid
+}) ->
+    get_size(FileUuid, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -418,8 +431,7 @@ create(#sd_handle{file = FileId} = SDHandle, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Truncates a file on storage to Size. CurrentSize specifies the
-%% current size of the file known by the op-worker.
+%% @equiv truncate_insecure/3 with open flag checking.
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(handle(), Size :: integer(), CurrentSize :: non_neg_integer())
@@ -427,7 +439,19 @@ create(#sd_handle{file = FileId} = SDHandle, Mode) ->
 truncate(#sd_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
 truncate(#sd_handle{open_flag = read}, _, _) -> throw(?EPERM);
-truncate(SDHandle = #sd_handle{file = FileId}, Size, CurrentSize) ->
+truncate(SDHandle, Size, CurrentSize) ->
+    truncate_insecure(SDHandle, Size, CurrentSize).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Truncates a file on storage to Size. CurrentSize specifies the
+%% current size of the file known by the op-worker.
+%% @end
+%%--------------------------------------------------------------------
+-spec truncate_insecure(handle(), Size :: integer(), CurrentSize :: non_neg_integer())
+        -> ok | error_reply().
+truncate_insecure(SDHandle = #sd_handle{file = FileId}, Size, CurrentSize) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:truncate(HelperHandle, FileId, Size, CurrentSize)
     end, ?READWRITE_STORAGE).

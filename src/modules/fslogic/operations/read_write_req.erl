@@ -55,9 +55,13 @@ read(UserCtx, FileCtx, HandleId, Offset, Size) ->
 write(UserCtx, FileCtx, HandleId, ByteSequences) ->
     {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId, write),
     {Written, _} =
-        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
-            {WrittenNow, NewHandle} = write_all(Handle, Offset, Data, 0),
-            {Acc + WrittenNow, NewHandle}
+        lists:foldl(fun
+            (#byte_sequence{offset = Offset, data = <<>>}, {Acc, Handle}) ->
+                ok = storage_driver:truncate(Handle, Offset, storage_driver:calculate_size(Handle)),
+                {Acc, Handle};
+            (#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
+                {WrittenNow, NewHandle} = write_all(Handle, Offset, Data, 0),
+                {Acc + WrittenNow, NewHandle}
         end, {0, Handle0}, ByteSequences),
 
     #proxyio_response{

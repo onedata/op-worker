@@ -296,13 +296,12 @@ notify_attrs_change_if_necessary(FileCtx,
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Truncates file on storage if its size has decreased and if storage
-%% is not synced.
+%% Truncates file on storage if storage is not synced.
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_truncate_file_on_storage(file_ctx:ctx(), non_neg_integer(),
     non_neg_integer()) -> {ok, file_ctx:ctx()}.
-maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize > NewSize ->
+maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize =/= NewSize ->
     {IsImportedStorage, FileCtx2} = file_ctx:is_imported_storage(FileCtx),
     case IsImportedStorage of
         true ->

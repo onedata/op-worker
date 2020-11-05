@@ -329,15 +329,20 @@ create_storage_file(SDHandle, FileCtx) ->
     FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx),
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     Mode = file_meta:get_mode(FileDoc),
-    Result = case file_meta:get_type(FileDoc) of
+    case file_meta:get_type(FileDoc) of
         ?REGULAR_FILE_TYPE ->
-            storage_driver:create(SDHandle, Mode);
+            case storage_driver:create(SDHandle, Mode) of
+                ok ->
+                    {Size, FileCtx4} = file_ctx:get_file_size(FileCtx3),
+                    {storage_driver:truncate_insecure(SDHandle, Size, 0), FileCtx4};
+                Other ->
+                    Other
+            end;
         ?DIRECTORY_TYPE ->
-            storage_driver:mkdir(SDHandle, Mode)
-    end,
-    case Result of
-        ok -> {ok, FileCtx3};
-        Error -> Error
+            case storage_driver:mkdir(SDHandle, Mode) of
+                ok -> {ok, FileCtx3};
+                Error -> Error
+            end
     end.
 
 %%--------------------------------------------------------------------

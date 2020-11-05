@@ -90,6 +90,7 @@
     lfm_open_and_create_open_failure_test/1,
     lfm_copy_failure_multiple_users_test/1,
     lfm_rmdir_test/1,
+    sparse_files_should_be_created/1,
     rename_removed_opened_file_test/1,
     mkdir_removed_opened_file_test/1,
     rename_removed_opened_file_races_test/1,
@@ -164,6 +165,7 @@
     lfm_open_and_create_open_failure_test,
     lfm_copy_failure_multiple_users_test,
     lfm_rmdir_test,
+    sparse_files_should_be_created,
     rename_removed_opened_file_test,
     mkdir_removed_opened_file_test,
     rename_removed_opened_file_races_test,
@@ -445,6 +447,8 @@ lfm_copy_failure_multiple_users_test(Config) ->
 lfm_rmdir_test(Config) ->
     lfm_files_test_base:lfm_rmdir(Config).
 
+sparse_files_should_be_created(Config) ->
+    lfm_files_test_base:sparse_files_should_be_created(Config).
 
 rename_removed_opened_file_test(Config) ->
     SpaceID = <<"space_id1">>,
