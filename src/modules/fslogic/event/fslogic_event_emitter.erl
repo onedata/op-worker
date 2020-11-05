@@ -26,12 +26,6 @@
     emit_file_renamed_no_exclude/5, emit_file_renamed_to_client/5, emit_quota_exceeded/0,
     emit_helper_params_changed/1]).
 
-% Type describing local changes required to produce file_location_changed event
--type location_changes_description() :: [{file_location:record(),
-    ChangesOffset :: non_neg_integer(), ChangesEnd :: non_neg_integer()}].
-
--export_type([location_changes_description/0]).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -181,7 +175,7 @@ emit_file_location_changed(Location, ExcludedSessions, Offset, OffsetEnd) ->
 %% emit_file_location_changed on each change.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_locations_changed(location_changes_description(), [session:id()]) ->
+-spec emit_file_locations_changed(replica_updater:location_changes_description(), [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_locations_changed([], _ExcludedSessions) ->
     ok;

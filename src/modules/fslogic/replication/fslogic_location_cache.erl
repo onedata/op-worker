@@ -305,7 +305,7 @@ get_blocks(Key, #{overlapping_blocks := OverlappingBlocks}) ->
             end, {#file_block{offset = Offset1, size = 0}, Offset1 + Size1}, OverlappingBlocksTail),
             Iter = gb_sets:iterator_from(Start, Blocks),
             Ans = get_block_while(Iter, Stop),
-            fslogic_cache:use_blocks(Key, Ans),
+            fslogic_cache:use_blocks(Key, [Ans]),
             Ans
     end;
 get_blocks(Key, #{count := Num}) ->

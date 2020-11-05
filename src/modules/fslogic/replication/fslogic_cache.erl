@@ -22,7 +22,7 @@
     verify_flush_ans/3]).
 % File/UUID API
 -export([get_uuid/0, get_local_location/0, get_all_locations/0,
-    cache_event/2, clear_events/0]).
+    cache_location_change/2, clear_location_changes/0]).
 % Doc API
 -export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
     attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1]).
@@ -59,7 +59,7 @@
 -define(KEYS_BLOCKS_MODIFIED, fslogic_cache_modified_blocks_keys).
 -define(BLOCKS_IN_USE, fslogic_cache_blocks_in_use).
 
--define(EVENTS_CACHE, fslogic_cache_events).
+-define(LOCATION_CHANGES_CACHE, fslogic_location_changes).
 
 -define(SAVED_BLOCKS, fslogic_cache_saved_blocks).
 -define(DELETED_BLOCKS, fslogic_cache_deleted_blocks).
@@ -257,34 +257,34 @@ get_all_locations() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Caches events to be sent.
+%% Caches location change to be produce event in future.
 %% @end
 %%-------------------------------------------------------------------
--spec cache_event([session:id()], term()) -> ok.
-cache_event(SessionIds, Event) ->
-    case get(?EVENTS_CACHE) of
+-spec cache_location_change([session:id()], replica_updater:location_change_description()) -> ok.
+cache_location_change(SessionIds, LocationChange) ->
+    case get(?LOCATION_CHANGES_CACHE) of
         undefined ->
-            put(?EVENTS_CACHE, [{SessionIds, [Event]}]);
-        Events ->
-            TmpEvents = proplists:get_value(SessionIds, Events, []),
-            Events2 = proplists:delete(SessionIds, Events),
-            put(?EVENTS_CACHE, [{SessionIds, [Event | TmpEvents]} | Events2])
+            put(?LOCATION_CHANGES_CACHE, [{SessionIds, [LocationChange]}]);
+        CachedChanges ->
+            SessionCachedChanges = proplists:get_value(SessionIds, CachedChanges, []),
+            CachedChanges2 = proplists:delete(SessionIds, CachedChanges),
+            put(?LOCATION_CHANGES_CACHE, [{SessionIds, [LocationChange | SessionCachedChanges]} | CachedChanges2])
     end,
 
     ok.
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Clears events' cache and returns its content.
+%% Clears location changes' cache and returns its content.
 %% @end
 %%-------------------------------------------------------------------
--spec clear_events() -> list().
-clear_events() ->
-    Ans = case get(?EVENTS_CACHE) of
+-spec clear_location_changes() -> replica_updater:location_changes_description().
+clear_location_changes() ->
+    Ans = case get(?LOCATION_CHANGES_CACHE) of
         undefined -> [];
         Value -> Value
     end,
-    erase(?EVENTS_CACHE),
+    erase(?LOCATION_CHANGES_CACHE),
     Ans.
 
 %%%===================================================================
@@ -529,13 +529,11 @@ check_blocks(LocationDoc = #document{
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Marks blocks as "blocks in use".
-%% There are two possible formats of Blocks arguments:
-%%    - typical list of blocks that marks blocks that will be used at once,
-%%    - list of blocks' lists - the blocks will be used in groups (each element of outer list at once).
+%% Marks blocks as "blocks in use". Argument is a list of blocks' lists because
+%% the blocks will be used in groups (each element of outer list at once).
 %% @end
 %%-------------------------------------------------------------------
--spec use_blocks(file_location:id(), fslogic_blocks:blocks() | [fslogic_blocks:blocks()]) -> ok.
+-spec use_blocks(file_location:id(), [fslogic_blocks:blocks()]) -> ok.
 use_blocks(Key, Blocks) ->
     put({?BLOCKS_IN_USE, Key}, Blocks),
     ok.
@@ -550,23 +548,15 @@ finish_blocks_usage(Key) ->
     Ans = get({?BLOCKS_IN_USE, Key}),
     case Ans of
         undefined ->
-            erase({?BLOCKS_IN_USE, Key}),
             ?warning("Attepmted to finish usage of blocks that were not previously "
                 "declared for the key ~p", [Key]),
             [];
-
-        % list of blocks' lists has been marked - each element of outer list will be used at once
-        [Head] when is_list(Head) ->
+        [Head] ->
             erase({?BLOCKS_IN_USE, Key}),
             Head;
         [Head | Tail] when is_list(Head) ->
             use_blocks(Key, Tail),
-            Head;
-
-        % typical list of blocks has been mark - use it
-        _ ->
-            erase({?BLOCKS_IN_USE, Key}),
-            Ans
+            Head
     end.
 
 %%-------------------------------------------------------------------
