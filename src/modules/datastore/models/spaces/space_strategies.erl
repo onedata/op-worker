@@ -259,8 +259,8 @@ upgrade_record(5, {?MODULE, SyncConfigs, _, _, _}) ->
         UpdateEnabled = UpdateStrategyName =:= simple_scan,
         {storage_sync_config,
             ImportEnabled,
-            ImportConfig,
             UpdateEnabled,
+            ImportConfig,
             UpdateConfig
         }
     end, SyncConfigs),
