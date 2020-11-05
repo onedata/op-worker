@@ -311,7 +311,7 @@ update_file_instance_test(Config) ->
 
             prepare_args_fun = build_update_file_instance_test_prepare_gs_args_fun(FileGuid, private),
             validate_result_fun = fun(_, Result) ->
-                ?assertEqual({ok, undefined}, Result)
+                ?assertEqual(ok, Result)
             end,
             verify_fun = fun
                 (expected_failure, #api_test_ctx{node = TestNode}) ->
@@ -461,7 +461,7 @@ delete_file_instance_test(Config) ->
                     type = gs,
                     prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({mem_ref, MemRef}, private),
                     validate_result_fun = fun(_, Result) ->
-                        ?assertEqual({ok, undefined}, Result)
+                        ?assertEqual(ok, Result)
                     end
                 }
             ],

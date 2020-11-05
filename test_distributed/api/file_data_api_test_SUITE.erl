@@ -618,7 +618,7 @@ set_file_mode_test(Config) ->
                     validate_result_fun = fun(TestCtx, Result) ->
                         case GetExpectedResultFun(TestCtx) of
                             ok ->
-                                ?assertEqual({ok, undefined}, Result);
+                                ?assertEqual(ok, Result);
                             {error, _} = ExpError ->
                                 ?assertEqual(ExpError, Result)
                         end
