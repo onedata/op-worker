@@ -37,7 +37,8 @@
 -export([
     get_ctx/0, 
     get_record_struct/1, 
-    get_record_version/0
+    get_record_version/0,
+    upgrade_record/2
 ]).
 
 -type id() :: datastore_model:key().
@@ -121,7 +122,7 @@ get_ctx() ->
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -130,4 +131,22 @@ get_record_struct(1) ->
     {record, [
         {children_count, integer},
         {last_batch, boolean}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        % children_count was renamed to pending_children_count
+        {pending_children_count, integer},
+        % last_batch was renamed to all_batches_listed
+        {all_batches_listed, boolean}
     ]}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, ChildrenCount, LastBatch}) ->
+    {2, {?MODULE, ChildrenCount, LastBatch}}.

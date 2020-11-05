@@ -50,7 +50,7 @@
     get_local_location/1, get_local_location/2]).
 %% Blocks getters/setters
 -export([get_blocks/1, get_blocks/2, get_overlapping_blocks_sequence/2,
-    set_blocks/2, set_final_blocks/2, update_blocks/2, clear_blocks/2]).
+    set_blocks/2, set_final_blocks/2, update_blocks/2, clear_blocks/2, clear_local_blocks/1]).
 %% Blocks API
 -export([get_location_size/2, get_blocks_range/1, get_blocks_range/2]).
 
@@ -362,6 +362,14 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
             fslogic_cache:mark_changed_blocks(Key),
             Doc
     end.
+
+
+-spec clear_local_blocks(file_ctx:ctx()) -> location().
+clear_local_blocks(FileCtx) ->
+    Uuid = file_ctx:get_uuid_const(FileCtx),
+    LocId = file_location:local_id(Uuid),
+    clear_blocks(FileCtx, LocId).
+
 
 %%-------------------------------------------------------------------
 %% @doc

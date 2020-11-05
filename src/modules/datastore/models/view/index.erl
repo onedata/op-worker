@@ -6,8 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing aggregated statistics about transfers
-%%% featuring given space and target provider.
+%%% Model defining custom couchbase view created by user.
+%%% Name of the module (index) is deprecated and was abandoned so that
+%%% it's not confused with harvesters' indices.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(index).

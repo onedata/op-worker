@@ -149,19 +149,11 @@ do_master_job(#tree_traverse{traverse_info = TraverseInfo} = Job, MasterJobArgs)
 do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    #{remove_storage_files := RemoveStorageFiles} = TraverseInfo,
-    
-    fslogic_delete:remove_local_associated_documents(FileCtx),
+    RemoveStorageFiles = maps:get(remove_storage_files, TraverseInfo),
+    fslogic_delete:cleanup_file(FileCtx, RemoveStorageFiles),
+
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    LocationId = file_location:local_id(FileUuid),
-    
-    {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
-    
-    RemoveStorageFiles andalso sd_utils:unlink(FileCtx1, UserCtx),
-    fslogic_location_cache:force_flush(FileUuid),
-    fslogic_location_cache:clear_blocks(FileCtx1, LocationId),
-    fslogic_location_cache:delete_location(FileUuid, LocationId),
-    
+    {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
     file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles).
 
 %%%===================================================================
@@ -177,14 +169,12 @@ gen_id(SpaceId, StorageId) ->
 %% @private
 -spec cleanup_dir(id(), file_ctx:ctx(), boolean()) -> ok.
 cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
-
-    RemoveStorageFiles andalso sd_utils:rmdir(FileCtx, UserCtx),
-    dir_location:delete(file_ctx:get_uuid_const(FileCtx)),
+    fslogic_delete:cleanup_file(FileCtx, RemoveStorageFiles),
     cleanup_traverse_status:delete(TaskId, file_ctx:get_uuid_const(FileCtx)),
     case file_ctx:is_space_dir_const(FileCtx) of
         true -> ok;
         false ->
+            UserCtx = user_ctx:new(?ROOT_SESS_ID),
             {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
             file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles)
     end.
