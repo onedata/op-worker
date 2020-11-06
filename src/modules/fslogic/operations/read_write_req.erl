@@ -57,7 +57,7 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
     {Written, _} =
         lists:foldl(fun
             (#byte_sequence{offset = Offset, data = <<>>}, {Acc, Handle}) ->
-                ok = storage_driver:truncate(Handle, Offset, storage_driver:calculate_size(Handle)),
+                handle_empty_write(Handle, Offset),
                 {Acc, Handle};
             (#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
                 {WrittenNow, NewHandle} = write_all(Handle, Offset, Data, 0),
@@ -68,6 +68,20 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
         status = #status{code = ?OK},
         proxyio_response = #remote_write_result{wrote = Written}
     }.
+
+-spec handle_empty_write(storage_driver:handle_id(), non_neg_integer()) -> ok.
+handle_empty_write(Handle, Offset) ->
+    case helper:is_getting_size_supported(storage:get_helper(storage_driver:get_storage_id(Handle))) of
+        true ->
+            ok = case storage_driver:stat(Handle) of
+                {ok, #statbuf{st_size = Size}} when Size < Offset ->
+                    storage_driver:truncate(Handle, Offset, Size);
+                _ ->
+                    ok
+            end;
+        _ ->
+            ok % it is possible to read with offset larger than file size, truncate not needed
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -359,7 +359,7 @@ truncate_created_file(FileCtx) ->
         end
     catch
         Error:Reason ->
-            ?warning_stacktrace("Error truncating newly created storaage file ~p: ~p:~p",
+            ?warning_stacktrace("Error truncating newly created storage file ~p: ~p:~p",
                 [file_ctx:get_guid_const(FileCtx), Error, Reason]),
             {ok, FileCtx}
     end.

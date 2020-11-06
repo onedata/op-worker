@@ -551,6 +551,9 @@ finish_blocks_usage(Key) ->
             ?warning("Attepmted to finish usage of blocks that were not previously "
                 "declared for the key ~p", [Key]),
             [];
+        [] ->
+            ?warning("Empty list of blocks to use declared for the key ~p", [Key]),
+            [];
         [Head] ->
             erase({?BLOCKS_IN_USE, Key}),
             Head;
