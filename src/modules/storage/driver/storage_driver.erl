@@ -42,6 +42,20 @@
 -define(RUN(SDHandle, Fun, SufficientAccessType),
     helpers_runner:run_and_handle_error(SDHandle, Fun, SufficientAccessType)).
 
+-define(RUN_WITH_FALLBACK(SDHandle, Fun),
+    ?RUN_WITH_FALLBACK(SDHandle, Fun, ?READONLY)
+).
+-define(RUN_WITH_FALLBACK(SDHandle, Fun, SufficientAccessType),
+    run_with_fallback(SDHandle, Fun, SufficientAccessType, false)
+).
+
+-define(RUN_WITH_FALLBACK_AND_CHOWN(SDHandle, Fun),
+    ?RUN_WITH_FALLBACK_AND_CHOWN(SDHandle, Fun, ?READONLY)
+).
+-define(RUN_WITH_FALLBACK_AND_CHOWN(SDHandle, Fun, SufficientAccessType),
+    run_with_fallback(SDHandle, Fun, SufficientAccessType, true)
+).
+
 -define(RUN_WITH_FILE_HANDLE(SDHandle, Fun),
     ?RUN_WITH_FILE_HANDLE(SDHandle, Fun, ?READONLY)).
 -define(RUN_WITH_FILE_HANDLE(SDHandle, Fun, SufficientAccessType),
@@ -188,7 +202,7 @@ mkdir(Handle, Mode) ->
 -spec mkdir(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
     ok | error_reply().
 mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK_AND_CHOWN(SDHandle, fun(HelperHandle) ->
         Noop = fun(_) -> ok end,
         case helpers:mkdir(HelperHandle, FileId, Mode) of
             ok ->
@@ -229,7 +243,7 @@ mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
 -spec mv(FileHandleFrom :: handle(), FileTo :: helpers:file_id()) ->
     ok | error_reply().
 mv(SDHandle = #sd_handle{file = FileFrom}, FileTo) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK_AND_CHOWN(SDHandle, fun(HelperHandle) ->
         helpers:rename(HelperHandle, FileFrom, FileTo)
     end, ?READWRITE).
 
@@ -242,7 +256,7 @@ mv(SDHandle = #sd_handle{file = FileFrom}, FileTo) ->
 -spec chmod(handle(), NewMode :: file_meta:posix_permissions()) ->
     ok | error_reply().
 chmod(SDHandle = #sd_handle{file = FileId}, Mode) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:chmod(HelperHandle, FileId, Mode)
     end, ?READWRITE).
 
@@ -269,7 +283,7 @@ chown(_, _, _) ->
 -spec link(FileHandleFrom :: handle(), FileTo :: helpers:file_id()) ->
     ok | error_reply().
 link(SDHandle = #sd_handle{file = FileFrom}, FileTo) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:link(HelperHandle, FileFrom, FileTo)
     end, ?READWRITE).
 
@@ -280,7 +294,7 @@ link(SDHandle = #sd_handle{file = FileFrom}, FileTo) ->
 %%--------------------------------------------------------------------
 -spec stat(FileHandle :: handle()) -> {ok, helpers:stat()} | error_reply().
 stat(SDHandle = #sd_handle{file = FileId}) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:getattr(HelperHandle, FileId)
     end).
 
@@ -300,7 +314,7 @@ exists(SDHandle) ->
     Count :: non_neg_integer()) ->
     {ok, [helpers:file_id()]} | error_reply().
 readdir(SDHandle = #sd_handle{file = FileId}, Offset, Count) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:readdir(HelperHandle, FileId, Offset, Count)
     end).
 
@@ -312,7 +326,7 @@ readdir(SDHandle = #sd_handle{file = FileId}, Offset, Count) ->
 -spec listobjects(FileHandle :: handle(), Marker :: binary(), Offset :: non_neg_integer(),
     Count :: non_neg_integer()) -> {ok, [{helpers:file_id(), helpers:stat()}]} | error_reply().
 listobjects(SDHandle = #sd_handle{file = FileId}, Marker, Offset, Count) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:listobjects(HelperHandle, FileId, Marker, Offset, Count)
     end).
 
@@ -410,7 +424,7 @@ read(SDHandle, Offset, MaxSize) ->
 %%--------------------------------------------------------------------
 -spec create(handle(), Mode :: non_neg_integer()) -> ok | error_reply().
 create(#sd_handle{file = FileId} = SDHandle, Mode) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK_AND_CHOWN(SDHandle, fun(HelperHandle) ->
         helpers:mknod(HelperHandle, FileId, Mode, reg)
     end, ?READWRITE).
 
@@ -427,7 +441,7 @@ truncate(#sd_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
 truncate(#sd_handle{open_flag = read}, _, _) -> throw(?EPERM);
 truncate(SDHandle = #sd_handle{file = FileId}, Size, CurrentSize) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:truncate(HelperHandle, FileId, Size, CurrentSize)
     end, ?READWRITE).
 
@@ -439,7 +453,7 @@ truncate(SDHandle = #sd_handle{file = FileId}, Size, CurrentSize) ->
 -spec setxattr(handle(), Name :: binary(), Value :: binary(),
     Create :: boolean(), Replace :: boolean()) -> ok | error_reply().
 setxattr(SDHandle = #sd_handle{file = FileId}, Name, Value, Create, Replace) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:setxattr(HelperHandle, FileId, Name, Value, Create, Replace)
     end, ?READWRITE).
 
@@ -450,7 +464,7 @@ setxattr(SDHandle = #sd_handle{file = FileId}, Name, Value, Create, Replace) ->
 %%--------------------------------------------------------------------
 -spec getxattr(handle(), Name :: binary()) -> {ok, binary()} | error_reply().
 getxattr(SDHandle = #sd_handle{file = FileId}, Name) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:getxattr(HelperHandle, FileId, Name)
     end).
 
@@ -461,7 +475,7 @@ getxattr(SDHandle = #sd_handle{file = FileId}, Name) ->
 %%--------------------------------------------------------------------
 -spec removexattr(handle(), Name :: binary()) -> ok | error_reply().
 removexattr(SDHandle = #sd_handle{file = FileId}, Name) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:removexattr(HelperHandle, FileId, Name)
     end, ?READWRITE).
 
@@ -472,7 +486,7 @@ removexattr(SDHandle = #sd_handle{file = FileId}, Name) ->
 %%--------------------------------------------------------------------
 -spec listxattr(handle()) -> {ok, [binary()]} | error_reply().
 listxattr(SDHandle = #sd_handle{file = FileId}) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:listxattr(HelperHandle, FileId)
     end).
 
@@ -484,7 +498,7 @@ listxattr(SDHandle = #sd_handle{file = FileId}) ->
 %%--------------------------------------------------------------------
 -spec unlink(handle(), CurrentSize :: integer()) -> ok | error_reply().
 unlink(SDHandle = #sd_handle{file = FileId}, CurrentSize) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         case helpers:unlink(HelperHandle, FileId, CurrentSize) of
             ok -> ok;
             {error, ?ENOENT} -> ok;
@@ -499,7 +513,7 @@ unlink(SDHandle = #sd_handle{file = FileId}, CurrentSize) ->
 %%--------------------------------------------------------------------
 -spec rmdir(handle()) -> ok | error_reply().
 rmdir(SDHandle = #sd_handle{file = FileId}) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK(SDHandle, fun(HelperHandle) ->
         helpers:rmdir(HelperHandle, FileId)
     end, ?READWRITE).
 
@@ -592,7 +606,7 @@ open_with_permissions_check(#sd_handle{
 -spec open_insecure(handle(), OpenFlag :: helpers:open_flag()) ->
     {ok, handle()} | error_reply().
 open_insecure(#sd_handle{file = FileId} = SDHandle, OpenFlag) ->
-    ?RUN(SDHandle, fun(HelperHandle) ->
+    ?RUN_WITH_FALLBACK_AND_CHOWN(SDHandle, fun(HelperHandle) ->
         case helpers:open(HelperHandle, FileId, OpenFlag) of
             {ok, FileHandle} ->
                 {ok, SDHandle#sd_handle{
@@ -613,3 +627,40 @@ open_insecure(#sd_handle{file = FileId} = SDHandle, OpenFlag) ->
 -spec get_size(file_meta:uuid(), od_space:id()) -> non_neg_integer().
 get_size(FileUuid, _SpaceId) ->
     fslogic_location_cache:get_location_size(file_location:local_id(FileUuid), FileUuid).
+
+%% @private
+-spec run_with_fallback(
+    handle(),
+    fun((helpers:helper_handle()) -> Result),
+    storage:access_type(),
+    ChownOnFallback :: boolean()
+) ->
+    Result when Result :: ok | {ok, term()} | {error, term()}.
+run_with_fallback(#sd_handle{
+    session_id = SessionId,
+    file_uuid = FileUuid,
+    space_id = SpaceId
+} = SDHandle, Fun, SufficientAccessType, ChownOnFallback) ->
+    case helpers_runner:run_and_handle_error(SDHandle, Fun, SufficientAccessType) of
+        {error, Errno} = Error when Errno == ?EACCES orelse Errno == ?EPERM ->
+            {ok, UserId} = session:get_user_id(SessionId),
+            case space_logic:is_owner(SpaceId, UserId) of
+                true ->
+                    Result2 = helpers_runner:run_and_handle_error(
+                        SDHandle#sd_handle{session_id = ?ROOT_SESS_ID}, Fun, SufficientAccessType
+                    ),
+                    case ChownOnFallback of
+                        true ->
+                            FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+                            FileCtx = file_ctx:new_by_guid(FileGuid),
+                            files_to_chown:chown_or_defer(FileCtx);
+                        false ->
+                            ok
+                    end,
+                    Result2;
+                false ->
+                    Error
+            end;
+        Result ->
+            Result
+    end.
