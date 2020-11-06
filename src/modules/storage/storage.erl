@@ -589,7 +589,7 @@ check_helper_against_imported_option(#{importedStorage := true}, Helper) ->
     case helper:is_import_supported(Helper) of
         false ->
             HelperName = helper:get_name(Helper),
-            throw(?ERROR_STORAGE_IMPORT_NOT_SUPPORTED(HelperName, ?OBJECT_HELPERS)); % todo better error
+            throw(?ERROR_STORAGE_IMPORT_NOT_SUPPORTED(HelperName, ?OBJECT_HELPERS));
         true ->
             ok
     end.
