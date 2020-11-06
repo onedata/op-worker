@@ -37,7 +37,7 @@
 -export([do_master_job/2, do_master_job/5, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
 -type master_job() :: #tree_traverse{}.
--type slave_job() :: file_meta:doc().
+-type slave_job() :: #tree_traverse_slave{}.
 -type execute_slave_on_dir() :: boolean().
 -type batch_size() :: non_neg_integer().
 -type traverse_info() :: term().
@@ -57,8 +57,11 @@
 
 % This callback is executed when each master job is finished 
 % and lists of next master jobs and slave jobs are calculated.
--type master_job_finished_callback() :: fun((traverse:id(), [{slave_job(), traverse_info()}], 
-    [master_job()], od_space:id(), file_meta:uuid(), file_meta:name()) -> ok).
+-type master_job_finished_callback() :: fun((
+    traverse:id(), [slave_job()], [master_job()],
+    od_space:id(), file_meta:uuid(), file_meta:name()
+) -> ok).
+
 % This callback is executed when last batch for a directory have been evaluated.
 -type last_batch_finished_callback() :: fun((traverse:id(), file_meta:uuid(), od_space:id()) -> ok).
 
@@ -271,15 +274,14 @@ get_timestamp() ->
 
 
 -spec do_master_job_internal(master_job(), traverse:master_job_extended_args(), master_job_finished_callback(),
-    last_batch_finished_callback()) -> {[{slave_job(), traverse_info()}], [master_job()]}.
+    last_batch_finished_callback()) -> {[slave_job()], [master_job()]}.
 do_master_job_internal(#tree_traverse{
     doc = #document{key = Uuid, scope = SpaceId, value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
     token = Token,
     last_name = LN,
     last_tree = LT,
     execute_slave_on_dir = OnDir,
-    batch_size = BatchSize,
-    traverse_info = TraverseInfo
+    batch_size = BatchSize
 } = TT, #{task_id := TaskId} = _MasterJobArgs, MasterJobFinishedCallback, LastBatchCallback) ->
     {ok, Children, ExtendedInfo} = case {Token, LN} of
         {undefined, <<>>} ->
@@ -296,11 +298,11 @@ do_master_job_internal(#tree_traverse{
         uuid = UUID}, {Slaves, Masters} = Acc) ->
         case {file_meta:get({uuid, UUID}), OnDir} of
             {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, true} ->
-                {[{ChildDoc, TraverseInfo} | Slaves], [get_child_job(TT, ChildDoc) | Masters]};
+                {[get_child_slave_job(TT, ChildDoc) | Slaves], [get_child_master_job(TT, ChildDoc) | Masters]};
             {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, _} ->
-                {Slaves, [get_child_job(TT, ChildDoc) | Masters]};
+                {Slaves, [get_child_master_job(TT, ChildDoc) | Masters]};
             {{ok, ChildDoc}, _} ->
-                {[{ChildDoc, TraverseInfo} | Slaves], Masters};
+                {[get_child_slave_job(TT, ChildDoc) | Slaves], Masters};
             {{error, not_found}, _} ->
                 Acc
         end
@@ -329,8 +331,8 @@ do_master_job_internal(#tree_traverse{
     {[{Doc, TraverseInfo}], []}.
 
 
--spec get_child_job(master_job(), file_meta:doc()) -> master_job().
-get_child_job(#tree_traverse{
+-spec get_child_master_job(master_job(), file_meta:doc()) -> master_job().
+get_child_master_job(#tree_traverse{
     execute_slave_on_dir = OnDir,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
@@ -339,5 +341,14 @@ get_child_job(#tree_traverse{
         doc = ChildDoc,
         execute_slave_on_dir = OnDir,
         batch_size = BatchSize,
+        traverse_info = TraverseInfo
+    }.
+
+
+
+-spec get_child_slave_job(master_job(), file_meta:doc()) -> slave_job().
+get_child_slave_job(#tree_traverse{traverse_info = TraverseInfo}, ChildDoc) ->
+    #tree_traverse_slave{
+        doc = ChildDoc,
         traverse_info = TraverseInfo
     }.

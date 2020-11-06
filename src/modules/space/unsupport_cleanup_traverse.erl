@@ -146,7 +146,10 @@ do_master_job(#tree_traverse{traverse_info = TraverseInfo} = Job, MasterJobArgs)
         Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchFinishedCallback, async).
 
 -spec do_slave_job(traverse:job(), id()) -> ok.
-do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId) ->
+do_slave_job(#tree_traverse_slave{
+    doc = #document{key = FileUuid, scope = SpaceId},
+    traverse_info = TraverseInfo
+}, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     RemoveStorageFiles = maps:get(remove_storage_files, TraverseInfo),

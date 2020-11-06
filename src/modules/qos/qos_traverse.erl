@@ -181,8 +181,10 @@ do_master_job(Job, MasterJobArgs) ->
 %% to fulfill QoS requirements.
 %% @end
 %%--------------------------------------------------------------------
--spec do_slave_job(traverse:job(), traverse:id()) -> ok.
-do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInfo}, TaskId) ->
+-spec do_slave_job(tree_traverse:slave_job(), traverse:id()) -> ok.
+do_slave_job(#tree_traverse_slave{
+    doc = #document{key = FileUuid, scope = SpaceId} = FileDoc
+}, TaskId) ->
     % TODO VFS-6137: add space check and optionally choose other storage
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),

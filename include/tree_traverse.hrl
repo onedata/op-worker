@@ -26,4 +26,9 @@
     traverse_info :: tree_traverse:traverse_info() % info passed to every slave job
 }).
 
+-record(tree_traverse_slave, {
+    doc :: file_meta:doc(),
+    traverse_info :: tree_traverse:traverse_info()
+}).
+
 -endif.

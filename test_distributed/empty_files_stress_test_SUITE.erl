@@ -16,6 +16,7 @@
 -behaviour(traverse_behaviour).
 
 -include("global_definitions.hrl").
+-include("tree_traverse.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -157,7 +158,7 @@ do_master_job(Job, TaskID) ->
             tree_traverse:do_master_job(Job, TaskID)
     end.
 
-do_slave_job({Doc, _TraverseInfo}, _TaskID) ->
+do_slave_job(#tree_traverse_slave{doc = Doc}, _TaskID) ->
     Callback = fun(Args) -> get_file_level(Args) end,
     {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, 0, []),
     case CalculationInfo of
