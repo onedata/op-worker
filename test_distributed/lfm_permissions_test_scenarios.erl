@@ -886,10 +886,6 @@ get_complementary_perms(Node, PermsPerFile)->
 %% be given any special treatment compared to any other space user.
 %% @end
 %%--------------------------------------------------------------------
-run_space_owner_test_scenarios(_ScenariosRootDirPath, #perms_test_spec{
-    applicable_to_space_owner = false
-}, _Config) ->
-    ok;
 run_space_owner_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
     test_node = Node,
     space_id = SpaceId,
@@ -970,6 +966,11 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #file{
         {ok, _},
         lfm_proxy:create(Node, FileOwnerSessId, FilePath, 8#777)
     ),
+
+    % Open and close file to force it's creation on storage
+    {ok, Handle} = lfm_proxy:open(Node, FileOwnerSessId, {guid, FileGuid}, write),
+    ok = lfm_proxy:close(Node, Handle),
+
     ExtraData = case HookFun of
         undefined ->
             #{FilePath => {guid, FileGuid}};
@@ -988,6 +989,8 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #dir{
         {ok, _},
         lfm_proxy:mkdir(Node, FileOwnerSessId, DirPath)
     ),
+    ensure_dir_create_on_storage(Node, FileOwnerSessId, DirGuid),
+
     {PermsPerFile0, ExtraData0} = lists:foldl(fun(Child, {PermsPerFileAcc, ExtraDataAcc}) ->
         {ChildPerms, ChildExtraData} = create_files(Node, FileOwnerSessId, DirPath, Child),
         {maps:merge(PermsPerFileAcc, ChildPerms), maps:merge(ExtraDataAcc, ChildExtraData)}
@@ -1000,6 +1003,20 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #dir{
             ExtraData0#{DirPath => HookFun(FileOwnerSessId, DirGuid)}
     end,
     {PermsPerFile0#{DirGuid => DirPerms}, ExtraData1}.
+
+
+-spec ensure_dir_create_on_storage(node(), session:id(), file_id:file_guid()) ->
+    ok.
+ensure_dir_create_on_storage(Node, FileOwnerSessId, DirGuid) ->
+    % Create and open file in dir to ensure it is created on storage.
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
+        Node, FileOwnerSessId, DirGuid, <<"__tmp_file">>, 8#777
+    )),
+    {ok, Handle} = lfm_proxy:open(Node, FileOwnerSessId, {guid, FileGuid}, write),
+    ok = lfm_proxy:close(Node, Handle),
+
+    % Remove file to ensure it will not disturb tests
+    ok = lfm_proxy:unlink(Node, FileOwnerSessId, {guid, FileGuid}).
 
 
 -spec get_file_path(node(), session:id(), file_id:file_guid()) ->

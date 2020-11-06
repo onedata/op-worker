@@ -10,7 +10,7 @@
 %%% permissions with corresponding lfm (logical_file_manager) functions
 %%% @end
 %%%-------------------------------------------------------------------
--module(lfm_permissions_test_SUITE).
+-module(lfm_permissions_test_base).
 -author("Bartosz Walkowicz").
 
 -include("lfm_permissions_test.hrl").
@@ -166,7 +166,7 @@ all() ->
         check_qos_fulfillment_test,
 
         permission_cache_test,
-        multi_provider_permission_cache_test,
+%%        multi_provider_permission_cache_test,
         expired_session_test
     ]).
 
@@ -986,7 +986,6 @@ create_and_open_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        applicable_to_space_owner = false,
         operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
@@ -2162,7 +2161,7 @@ init_per_suite(Config) ->
         initializer:mock_auth_manager(NewConfig3),
         NewConfig3
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
 
 
 end_per_suite(Config) ->
