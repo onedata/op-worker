@@ -10,10 +10,10 @@
 %%% permissions with corresponding lfm (logical_file_manager) functions
 %%% @end
 %%%-------------------------------------------------------------------
--module(lfm_permissions_test_base).
+-module(permissions_test_base).
 -author("Bartosz Walkowicz").
 
--include("lfm_permissions_test.hrl").
+-include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -226,7 +226,7 @@ data_access_caveats_test(Config) ->
 
     LsWithConfinedToken = fun(Guid, Caveats) ->
         LsToken = tokens:confine(MainToken, Caveats),
-        LsSessId = lfm_permissions_test_utils:create_session(W, UserId, LsToken),
+        LsSessId = permissions_test_utils:create_session(W, UserId, LsToken),
         lfm_proxy:get_children(W, LsSessId, {guid, Guid}, 0, 100)
     end,
 
@@ -342,7 +342,7 @@ data_access_caveats_test(Config) ->
     ),
 
     % With no caveats listing space dir should list all space directories
-    SessId12 = lfm_permissions_test_utils:create_session(W, UserId, MainToken),
+    SessId12 = permissions_test_utils:create_session(W, UserId, MainToken),
     ?assertMatch(
         {ok, [_ | _]},
         lfm_proxy:get_children(W, SessId12, {guid, Space1RootDir}, 0, 100)
@@ -358,7 +358,7 @@ data_access_caveats_test(Config) ->
     ),
     % But with caveats space ls should show only dirs leading to allowed files.
     Token13 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1]}),
-    SessId13 = lfm_permissions_test_utils:create_session(W, UserId, Token13),
+    SessId13 = permissions_test_utils:create_session(W, UserId, Token13),
     ?assertMatch(
         {ok, [{DirGuid, DirName}]},
         lfm_proxy:get_children(W, SessId13, {guid, Space1RootDir}, 0, 100)
@@ -398,7 +398,7 @@ data_access_caveats_test(Config) ->
     Token14 = tokens:confine(MainToken, #cv_data_path{whitelist = [
         Path1, Path2, <<DirPath/binary, "/i_do_not_exist">>, Path4, Path5
     ]}),
-    SessId14 = lfm_permissions_test_utils:create_session(W, UserId, Token14),
+    SessId14 = permissions_test_utils:create_session(W, UserId, Token14),
     ?assertMatch(
         {ok, [F1, F2, F4]},
         lfm_proxy:get_children(W, SessId14, {guid, DirGuid}, 0, 3)
@@ -438,7 +438,7 @@ data_access_caveats_ancestors_test(Config) ->
     Token = initializer:create_access_token(UserId, [
         #cv_data_objectid{whitelist = [FileInDeepestDirObjectId]}
     ]),
-    SessId = lfm_permissions_test_utils:create_session(W, UserId, Token),
+    SessId = permissions_test_utils:create_session(W, UserId, Token),
 
     lists:foldl(
         fun({{DirGuid, DirName}, Child}, {ParentPath, ParentGuid}) ->
@@ -530,7 +530,7 @@ data_access_caveats_ancestors_test2(Config) ->
     Token1 = tokens:confine(MainToken, #cv_data_objectid{
         whitelist = [LeftFileObjectId, RightFileObjectId]
     }),
-    SessId1 = lfm_permissions_test_utils:create_session(W, UserId, Token1),
+    SessId1 = permissions_test_utils:create_session(W, UserId, Token1),
     ?assertMatch(
         {ok, [{SpaceRootDirGuid, SpaceName}]},
         lfm_proxy:get_children(W, SessId1, {guid, UserRootDir}, 0, 100)
@@ -557,7 +557,7 @@ data_access_caveats_ancestors_test2(Config) ->
         #cv_data_objectid{whitelist = [LeftFileObjectId]},
         #cv_data_objectid{whitelist = [RightFileObjectId]}
     ]),
-    SessId2 = lfm_permissions_test_utils:create_session(W, UserId, Token2),
+    SessId2 = permissions_test_utils:create_session(W, UserId, Token2),
     ?assertMatch(
         {ok, [{SpaceRootDirGuid, SpaceName}]},
         lfm_proxy:get_children(W, SessId2, {guid, UserRootDir}, 0, 100)
@@ -595,7 +595,7 @@ data_access_caveats_cache_test(Config) ->
         #cv_data_objectid{whitelist = [DirObjectId]},
         #cv_data_objectid{whitelist = [FileObjectId]}
     ]),
-    SessId = lfm_permissions_test_utils:create_session(W, UserId, Token),
+    SessId = permissions_test_utils:create_session(W, UserId, Token),
 
 
     %% CHECK guid_constraint CACHE
@@ -688,7 +688,7 @@ data_access_caveats_cache_test(Config) ->
 mkdir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#dir{
@@ -710,7 +710,7 @@ mkdir_test(Config) ->
 get_children_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#dir{
@@ -732,7 +732,7 @@ get_children_test(Config) ->
 get_children_attrs_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#dir{
@@ -754,7 +754,7 @@ get_children_attrs_test(Config) ->
 get_children_details_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#dir{
@@ -776,7 +776,7 @@ get_children_details_test(Config) ->
 get_child_attr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#dir{
@@ -797,7 +797,7 @@ get_child_attr_test(Config) ->
 mv_dir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [
@@ -833,7 +833,7 @@ mv_dir_test(Config) ->
 rm_dir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [
@@ -863,7 +863,7 @@ rm_dir_test(Config) ->
 create_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#dir{
@@ -885,7 +885,7 @@ create_file_test(Config) ->
 open_for_read_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -913,7 +913,7 @@ open_for_read_test(Config) ->
 open_for_write_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -941,7 +941,7 @@ open_for_write_test(Config) ->
 open_for_rdwr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -969,7 +969,7 @@ open_for_rdwr_test(Config) ->
 create_and_open_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#dir{
@@ -997,7 +997,7 @@ create_and_open_test(Config) ->
 truncate_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1019,7 +1019,7 @@ truncate_test(Config) ->
 mv_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [
@@ -1055,7 +1055,7 @@ mv_file_test(Config) ->
 rm_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [
@@ -1085,7 +1085,7 @@ rm_file_test(Config) ->
 get_parent_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
@@ -1102,7 +1102,7 @@ get_parent_test(Config) ->
 get_file_path_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
@@ -1119,7 +1119,7 @@ get_file_path_test(Config) ->
 get_file_guid_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
@@ -1135,7 +1135,7 @@ get_file_guid_test(Config) ->
 get_file_attr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
@@ -1152,7 +1152,7 @@ get_file_attr_test(Config) ->
 get_file_details_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
@@ -1169,7 +1169,7 @@ get_file_details_test(Config) ->
 get_file_distribution_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1214,30 +1214,30 @@ set_perms_test(Config) ->
     %% POSIX
 
     % file owner can always change file perms if he has access to it
-    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#677, FileGuid => 8#777}),
+    permissions_test_utils:set_modes(W, #{DirGuid => 8#677, FileGuid => 8#777}),
     ?assertMatch(
         {error, ?EACCES},
         lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, FileGuid}, 8#000)
     ),
-    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#100, FileGuid => 8#000}),
+    permissions_test_utils:set_modes(W, #{DirGuid => 8#100, FileGuid => 8#000}),
     ?assertMatch(ok, lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, FileGuid}, 8#000)),
 
     % but not if that access is via shared guid
-    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
+    permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
     ?assertMatch(
         {error, ?EACCES},
         lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, ShareFileGuid}, 8#000)
     ),
 
     % other users from space can't change perms no matter what
-    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
+    permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
     ?assertMatch(
         {error, ?EACCES},
         lfm_proxy:set_perms(W, GroupUserSessId, {guid, FileGuid}, 8#000)
     ),
 
     % users outside of space shouldn't even see the file
-    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
+    permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
     ?assertMatch(
         {error, ?ENOENT},
         lfm_proxy:set_perms(W, OtherUserSessId, {guid, FileGuid}, 8#000)
@@ -1246,7 +1246,7 @@ set_perms_test(Config) ->
     %% ACL
 
     % file owner can always change file perms if he has access to it
-    lfm_permissions_test_utils:set_acls(W, #{
+    permissions_test_utils:set_acls(W, #{
         DirGuid => ?ALL_DIR_PERMS -- [?traverse_container],
         FileGuid => ?ALL_FILE_PERMS
     }, #{}, ?everyone, ?no_flags_mask),
@@ -1255,7 +1255,7 @@ set_perms_test(Config) ->
         lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, FileGuid}, 8#000)
     ),
 
-    lfm_permissions_test_utils:set_acls(W, #{
+    permissions_test_utils:set_acls(W, #{
         DirGuid => [?traverse_container],
         FileGuid => []
     }, #{}, ?everyone, ?no_flags_mask),
@@ -1268,11 +1268,11 @@ set_perms_test(Config) ->
     ),
 
     % file owner cannot change acl after his access was denied by said acl
-    lfm_permissions_test_utils:set_acls(W, #{}, #{
+    permissions_test_utils:set_acls(W, #{}, #{
         FileGuid => ?ALL_FILE_PERMS
     }, ?everyone, ?no_flags_mask),
 
-    PermsBitmask = lfm_permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS),
+    PermsBitmask = permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS),
 
     ?assertMatch(
         {error, ?EACCES},
@@ -1290,7 +1290,7 @@ set_perms_test(Config) ->
     ),
 
     % other users from space can't change perms no matter what
-    lfm_permissions_test_utils:set_acls(W, #{
+    permissions_test_utils:set_acls(W, #{
         DirGuid => ?ALL_DIR_PERMS,
         FileGuid => ?ALL_FILE_PERMS
     }, #{}, ?everyone, ?no_flags_mask),
@@ -1300,7 +1300,7 @@ set_perms_test(Config) ->
     ),
 
     % users outside of space shouldn't even see the file
-    lfm_permissions_test_utils:set_acls(W, #{
+    permissions_test_utils:set_acls(W, #{
         DirGuid => ?ALL_DIR_PERMS,
         FileGuid => ?ALL_FILE_PERMS
     }, #{}, ?everyone, ?no_flags_mask),
@@ -1313,7 +1313,7 @@ set_perms_test(Config) ->
 check_read_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1335,7 +1335,7 @@ check_read_perms_test(Config) ->
 check_write_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1357,7 +1357,7 @@ check_write_perms_test(Config) ->
 check_rdwr_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1379,7 +1379,7 @@ check_rdwr_perms_test(Config) ->
 create_share_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#dir{name = <<"dir1">>}],
@@ -1398,7 +1398,7 @@ create_share_test(Config) ->
 remove_share_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#dir{
@@ -1468,7 +1468,7 @@ share_perms_test(Config) ->
 get_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1488,7 +1488,7 @@ get_acl_test(Config) ->
 set_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1506,7 +1506,7 @@ set_acl_test(Config) ->
                 ?ALLOW_ACE(
                     ?group,
                     ?no_flags_mask,
-                    lfm_permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
+                    permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
                 )
             ]))
         end
@@ -1516,7 +1516,7 @@ set_acl_test(Config) ->
 remove_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1538,7 +1538,7 @@ remove_acl_test(Config) ->
 get_transfer_encoding_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1562,7 +1562,7 @@ get_transfer_encoding_test(Config) ->
 set_transfer_encoding_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1584,7 +1584,7 @@ set_transfer_encoding_test(Config) ->
 get_cdmi_completion_status_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1608,7 +1608,7 @@ get_cdmi_completion_status_test(Config) ->
 set_cdmi_completion_status_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1630,7 +1630,7 @@ set_cdmi_completion_status_test(Config) ->
 get_mimetype_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1654,7 +1654,7 @@ get_mimetype_test(Config) ->
 set_mimetype_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1676,7 +1676,7 @@ set_mimetype_test(Config) ->
 get_metadata_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1702,7 +1702,7 @@ get_metadata_test(Config) ->
 set_metadata_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1724,7 +1724,7 @@ set_metadata_test(Config) ->
 remove_metadata_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1750,7 +1750,7 @@ remove_metadata_test(Config) ->
 get_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1777,7 +1777,7 @@ get_xattr_test(Config) ->
 list_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1801,7 +1801,7 @@ list_xattr_test(Config) ->
 set_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1823,7 +1823,7 @@ set_xattr_test(Config) ->
 remove_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1850,7 +1850,7 @@ remove_xattr_test(Config) ->
 add_qos_entry_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1872,7 +1872,7 @@ add_qos_entry_test(Config) ->
 get_qos_entry_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1900,7 +1900,7 @@ get_qos_entry_test(Config) ->
 remove_qos_entry_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1928,7 +1928,7 @@ remove_qos_entry_test(Config) ->
 get_effective_file_qos_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -1956,7 +1956,7 @@ get_effective_file_qos_test(Config) ->
 check_qos_fulfillment_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{
@@ -2062,12 +2062,12 @@ multi_provider_permission_cache_test(Config) ->
     lists:foreach(fun(_IterationNum) ->
         PosixPerms = lists_utils:random_sublist(?ALL_POSIX_PERMS),
         Mode = lists:foldl(fun(Perm, Acc) ->
-            Acc bor lfm_permissions_test_utils:posix_perm_to_mode(Perm, owner)
+            Acc bor permissions_test_utils:posix_perm_to_mode(Perm, owner)
         end, 0, PosixPerms),
-        lfm_permissions_test_utils:set_modes(P1W2, #{Guid => Mode}),
+        permissions_test_utils:set_modes(P1W2, #{Guid => Mode}),
 
         {AllowedPerms, DeniedPerms} = lists:foldl(fun(Perm, {AllowedPermsAcc, DeniedPermsAcc}) ->
-            case lfm_permissions_test_utils:perm_to_posix_perms(Perm) -- [owner, owner_if_parent_sticky | PosixPerms] of
+            case permissions_test_utils:perm_to_posix_perms(Perm) -- [owner, owner_if_parent_sticky | PosixPerms] of
                 [] -> {[Perm | AllowedPermsAcc], DeniedPermsAcc};
                 _ -> {AllowedPermsAcc, [Perm | DeniedPermsAcc]}
             end
@@ -2087,10 +2087,10 @@ multi_provider_permission_cache_test(Config) ->
     % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
     lists:foreach(fun(_IterationNum) ->
         SetPerms = lists_utils:random_sublist(AllPerms),
-        lfm_permissions_test_utils:set_acls(P1W2, #{Guid => SetPerms}, #{}, ?everyone, ?no_flags_mask),
+        permissions_test_utils:set_acls(P1W2, #{Guid => SetPerms}, #{}, ?everyone, ?no_flags_mask),
 
         run_multi_provider_perm_test(
-            Nodes, User, Guid, SetPerms, lfm_permissions_test_utils:complementary_perms(P1W2, Guid, SetPerms),
+            Nodes, User, Guid, SetPerms, permissions_test_utils:complementary_perms(P1W2, Guid, SetPerms),
             {error, ?EACCES}, <<"denied acl perm">>, Config
         ),
         run_multi_provider_perm_test(

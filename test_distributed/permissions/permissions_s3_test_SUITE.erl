@@ -10,7 +10,7 @@
 %%% with corresponding lfm (logical_file_manager) functions and s3 storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(lfm_permissions_s3_test_SUITE).
+-module(permissions_s3_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -export([
@@ -164,227 +164,227 @@ all() -> [
 
 
 data_access_caveats_test(Config) ->
-    lfm_permissions_test_base:data_access_caveats_test(Config).
+    permissions_test_base:data_access_caveats_test(Config).
 
 
 data_access_caveats_ancestors_test(Config) ->
-    lfm_permissions_test_base:data_access_caveats_ancestors_test(Config).
+    permissions_test_base:data_access_caveats_ancestors_test(Config).
 
 
 data_access_caveats_ancestors_test2(Config) ->
-    lfm_permissions_test_base:data_access_caveats_ancestors_test2(Config).
+    permissions_test_base:data_access_caveats_ancestors_test2(Config).
 
 
 data_access_caveats_cache_test(Config) ->
-    lfm_permissions_test_base:data_access_caveats_cache_test(Config).
+    permissions_test_base:data_access_caveats_cache_test(Config).
 
 
 mkdir_test(Config) ->
-    lfm_permissions_test_base:mkdir_test(Config).
+    permissions_test_base:mkdir_test(Config).
 
 
 get_children_test(Config) ->
-    lfm_permissions_test_base:get_children_test(Config).
+    permissions_test_base:get_children_test(Config).
 
 
 get_children_attrs_test(Config) ->
-    lfm_permissions_test_base:get_children_attrs_test(Config).
+    permissions_test_base:get_children_attrs_test(Config).
 
 
 get_children_details_test(Config) ->
-    lfm_permissions_test_base:get_children_details_test(Config).
+    permissions_test_base:get_children_details_test(Config).
 
 
 get_child_attr_test(Config) ->
-    lfm_permissions_test_base:get_child_attr_test(Config).
+    permissions_test_base:get_child_attr_test(Config).
 
 
 mv_dir_test(Config) ->
-    lfm_permissions_test_base:mv_dir_test(Config).
+    permissions_test_base:mv_dir_test(Config).
 
 
 rm_dir_test(Config) ->
-    lfm_permissions_test_base:rm_dir_test(Config).
+    permissions_test_base:rm_dir_test(Config).
 
 
 create_file_test(Config) ->
-    lfm_permissions_test_base:create_file_test(Config).
+    permissions_test_base:create_file_test(Config).
 
 
 open_for_read_test(Config) ->
-    lfm_permissions_test_base:open_for_read_test(Config).
+    permissions_test_base:open_for_read_test(Config).
 
 
 open_for_write_test(Config) ->
-    lfm_permissions_test_base:open_for_write_test(Config).
+    permissions_test_base:open_for_write_test(Config).
 
 
 open_for_rdwr_test(Config) ->
-    lfm_permissions_test_base:open_for_rdwr_test(Config).
+    permissions_test_base:open_for_rdwr_test(Config).
 
 
 create_and_open_test(Config) ->
-    lfm_permissions_test_base:create_and_open_test(Config).
+    permissions_test_base:create_and_open_test(Config).
 
 
 truncate_test(Config) ->
-    lfm_permissions_test_base:truncate_test(Config).
+    permissions_test_base:truncate_test(Config).
 
 
 mv_file_test(Config) ->
-    lfm_permissions_test_base:mv_file_test(Config).
+    permissions_test_base:mv_file_test(Config).
 
 
 rm_file_test(Config) ->
-    lfm_permissions_test_base:rm_file_test(Config).
+    permissions_test_base:rm_file_test(Config).
 
 
 get_parent_test(Config) ->
-    lfm_permissions_test_base:get_parent_test(Config).
+    permissions_test_base:get_parent_test(Config).
 
 
 get_file_path_test(Config) ->
-    lfm_permissions_test_base:get_file_path_test(Config).
+    permissions_test_base:get_file_path_test(Config).
 
 
 get_file_guid_test(Config) ->
-    lfm_permissions_test_base:get_file_guid_test(Config).
+    permissions_test_base:get_file_guid_test(Config).
 
 
 get_file_attr_test(Config) ->
-    lfm_permissions_test_base:get_file_attr_test(Config).
+    permissions_test_base:get_file_attr_test(Config).
 
 
 get_file_details_test(Config) ->
-    lfm_permissions_test_base:get_file_details_test(Config).
+    permissions_test_base:get_file_details_test(Config).
 
 
 get_file_distribution_test(Config) ->
-    lfm_permissions_test_base:get_file_distribution_test(Config).
+    permissions_test_base:get_file_distribution_test(Config).
 
 
 set_perms_test(Config) ->
-    lfm_permissions_test_base:set_perms_test(Config).
+    permissions_test_base:set_perms_test(Config).
 
 
 check_read_perms_test(Config) ->
-    lfm_permissions_test_base:check_read_perms_test(Config).
+    permissions_test_base:check_read_perms_test(Config).
 
 
 check_write_perms_test(Config) ->
-    lfm_permissions_test_base:check_write_perms_test(Config).
+    permissions_test_base:check_write_perms_test(Config).
 
 
 check_rdwr_perms_test(Config) ->
-    lfm_permissions_test_base:check_rdwr_perms_test(Config).
+    permissions_test_base:check_rdwr_perms_test(Config).
 
 
 create_share_test(Config) ->
-    lfm_permissions_test_base:create_share_test(Config).
+    permissions_test_base:create_share_test(Config).
 
 
 remove_share_test(Config) ->
-    lfm_permissions_test_base:remove_share_test(Config).
+    permissions_test_base:remove_share_test(Config).
 
 
 share_perms_test(Config) ->
-    lfm_permissions_test_base:share_perms_test(Config).
+    permissions_test_base:share_perms_test(Config).
 
 
 get_acl_test(Config) ->
-    lfm_permissions_test_base:get_acl_test(Config).
+    permissions_test_base:get_acl_test(Config).
 
 
 set_acl_test(Config) ->
-    lfm_permissions_test_base:set_acl_test(Config).
+    permissions_test_base:set_acl_test(Config).
 
 
 remove_acl_test(Config) ->
-    lfm_permissions_test_base:remove_acl_test(Config).
+    permissions_test_base:remove_acl_test(Config).
 
 
 get_transfer_encoding_test(Config) ->
-    lfm_permissions_test_base:get_transfer_encoding_test(Config).
+    permissions_test_base:get_transfer_encoding_test(Config).
 
 
 set_transfer_encoding_test(Config) ->
-    lfm_permissions_test_base:set_transfer_encoding_test(Config).
+    permissions_test_base:set_transfer_encoding_test(Config).
 
 
 get_cdmi_completion_status_test(Config) ->
-    lfm_permissions_test_base:get_cdmi_completion_status_test(Config).
+    permissions_test_base:get_cdmi_completion_status_test(Config).
 
 
 set_cdmi_completion_status_test(Config) ->
-    lfm_permissions_test_base:set_cdmi_completion_status_test(Config).
+    permissions_test_base:set_cdmi_completion_status_test(Config).
 
 
 get_mimetype_test(Config) ->
-    lfm_permissions_test_base:get_mimetype_test(Config).
+    permissions_test_base:get_mimetype_test(Config).
 
 
 set_mimetype_test(Config) ->
-    lfm_permissions_test_base:set_mimetype_test(Config).
+    permissions_test_base:set_mimetype_test(Config).
 
 
 get_metadata_test(Config) ->
-    lfm_permissions_test_base:get_metadata_test(Config).
+    permissions_test_base:get_metadata_test(Config).
 
 
 set_metadata_test(Config) ->
-    lfm_permissions_test_base:set_metadata_test(Config).
+    permissions_test_base:set_metadata_test(Config).
 
 
 remove_metadata_test(Config) ->
-    lfm_permissions_test_base:remove_metadata_test(Config).
+    permissions_test_base:remove_metadata_test(Config).
 
 
 get_xattr_test(Config) ->
-    lfm_permissions_test_base:get_xattr_test(Config).
+    permissions_test_base:get_xattr_test(Config).
 
 
 list_xattr_test(Config) ->
-    lfm_permissions_test_base:list_xattr_test(Config).
+    permissions_test_base:list_xattr_test(Config).
 
 
 set_xattr_test(Config) ->
-    lfm_permissions_test_base:set_xattr_test(Config).
+    permissions_test_base:set_xattr_test(Config).
 
 
 remove_xattr_test(Config) ->
-    lfm_permissions_test_base:remove_xattr_test(Config).
+    permissions_test_base:remove_xattr_test(Config).
 
 
 add_qos_entry_test(Config) ->
-    lfm_permissions_test_base:add_qos_entry_test(Config).
+    permissions_test_base:add_qos_entry_test(Config).
 
 
 get_qos_entry_test(Config) ->
-    lfm_permissions_test_base:get_qos_entry_test(Config).
+    permissions_test_base:get_qos_entry_test(Config).
 
 
 remove_qos_entry_test(Config) ->
-    lfm_permissions_test_base:remove_qos_entry_test(Config).
+    permissions_test_base:remove_qos_entry_test(Config).
 
 
 get_effective_file_qos_test(Config) ->
-    lfm_permissions_test_base:get_effective_file_qos_test(Config).
+    permissions_test_base:get_effective_file_qos_test(Config).
 
 
 check_qos_fulfillment_test(Config) ->
-    lfm_permissions_test_base:check_qos_fulfillment_test(Config).
+    permissions_test_base:check_qos_fulfillment_test(Config).
 
 
 permission_cache_test(Config) ->
-    lfm_permissions_test_base:permission_cache_test(Config).
+    permissions_test_base:permission_cache_test(Config).
 
 
 multi_provider_permission_cache_test(Config) ->
-    lfm_permissions_test_base:multi_provider_permission_cache_test(Config).
+    permissions_test_base:multi_provider_permission_cache_test(Config).
 
 
 expired_session_test(Config) ->
-    lfm_permissions_test_base:expired_session_test(Config).
+    permissions_test_base:expired_session_test(Config).
 
 
 %%%===================================================================
@@ -393,16 +393,16 @@ expired_session_test(Config) ->
 
 
 init_per_suite(Config) ->
-    lfm_permissions_test_base:init_per_suite(Config).
+    permissions_test_base:init_per_suite(Config).
 
 
 end_per_suite(Config) ->
-    lfm_permissions_test_base:end_per_suite(Config).
+    permissions_test_base:end_per_suite(Config).
 
 
 init_per_testcase(Case, Config) ->
-    lfm_permissions_test_base:init_per_testcase(Case, Config).
+    permissions_test_base:init_per_testcase(Case, Config).
 
 
 end_per_testcase(Case, Config) ->
-    lfm_permissions_test_base:end_per_testcase(Case, Config).
+    permissions_test_base:end_per_testcase(Case, Config).

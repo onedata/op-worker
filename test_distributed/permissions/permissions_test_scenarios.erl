@@ -13,10 +13,10 @@
 %%% consisting of only required perms succeeds.
 %%% @end
 %%%-------------------------------------------------------------------
--module(lfm_permissions_test_scenarios).
+-module(permissions_test_scenarios).
 -author("Bartosz Walkowicz").
 
--include("lfm_permissions_test.hrl").
+-include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -321,7 +321,7 @@ run_caveats_scenario(
     ScenarioRootDirPath, ExtraData, _IsReadonly
 ) ->
     Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}),
-    SessId1 = lfm_permissions_test_utils:create_session(Node, User, Token1),
+    SessId1 = permissions_test_utils:create_session(Node, User, Token1),
     ?assertMatch(
         {error, ?EACCES},
         Operation(FileOwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
@@ -330,7 +330,7 @@ run_caveats_scenario(
     Token2 = tokens:confine(MainToken, #cv_data_path{
         whitelist = [ScenarioRootDirPath]
     }),
-    SessId2 = lfm_permissions_test_utils:create_session(Node, User, Token2),
+    SessId2 = permissions_test_utils:create_session(Node, User, Token2),
     ?assertMatch(
         ok,
         Operation(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData)
@@ -346,7 +346,7 @@ run_caveats_scenario(
     {ok, DummyObjectId} = file_id:guid_to_objectid(DummyGuid),
 
     Token1 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [DummyObjectId]}),
-    SessId1 = lfm_permissions_test_utils:create_session(Node, User, Token1),
+    SessId1 = permissions_test_utils:create_session(Node, User, Token1),
     ?assertMatch(
         {error, ?EACCES},
         Operation(FileOwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
@@ -355,7 +355,7 @@ run_caveats_scenario(
     Token2 = tokens:confine(MainToken, #cv_data_objectid{
         whitelist = [ScenarioRootDirObjectId]
     }),
-    SessId2 = lfm_permissions_test_utils:create_session(Node, User, Token2),
+    SessId2 = permissions_test_utils:create_session(Node, User, Token2),
     ?assertMatch(
         ok,
         Operation(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData), 100
@@ -365,7 +365,7 @@ run_caveats_scenario(
     ScenarioRootDirPath, ExtraData, IsReadonly
 ) ->
     Token = tokens:confine(MainToken, #cv_data_readonly{}),
-    SessId = lfm_permissions_test_utils:create_session(Node, User, Token),
+    SessId = permissions_test_utils:create_session(Node, User, Token),
     case IsReadonly of
         true ->
             % Operation should succeed
@@ -606,7 +606,7 @@ run_posix_tests(
         [] ->
             % If operation requires only ownership then it should succeed
             % even if all files modes are set to 0
-            lfm_permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 0 end, ComplementaryPermsPerFile)),
+            permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 0 end, ComplementaryPermsPerFile)),
             ?assertMatch(
                 ok,
                 Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
@@ -631,7 +631,7 @@ run_posix_tests(
         true ->
             % If operation requires ownership then for group member it should fail
             % even if all files modes are set to 777
-            lfm_permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
+            permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
             ?assertMatch(
                 {error, ?EACCES},
                 Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
@@ -652,7 +652,7 @@ run_posix_tests(
     Node, FileOwnerSessId, SessId, TestCaseRootDirPath, _ScenarioName, Operation,
     ComplementaryPermsPerFile, _AllRequiredPerms, ExtraData, other
 ) ->
-    lfm_permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
+    permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
     ?assertMatch(
         {error, ?ENOENT},
         Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
@@ -670,11 +670,11 @@ run_standard_posix_tests(
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, Type
 ) ->
     AllRequiredModes = lists:map(fun({Guid, PosixPerm}) ->
-        {Guid, lfm_permissions_test_utils:posix_perm_to_mode(PosixPerm, Type)}
+        {Guid, permissions_test_utils:posix_perm_to_mode(PosixPerm, Type)}
     end, AllRequiredPerms),
     ComplementaryModesPerFile = maps:map(fun(_, Perms) ->
         lists:foldl(fun(Perm, Acc) ->
-            Acc bor lfm_permissions_test_utils:posix_perm_to_mode(Perm, Type)
+            Acc bor permissions_test_utils:posix_perm_to_mode(Perm, Type)
         end, 0, Perms)
     end, ComplementaryPermsPerFile),
 
@@ -686,7 +686,7 @@ run_standard_posix_tests(
             Acc#{Guid => Mode bor maps:get(Guid, Acc)}
         end, ComplementaryModesPerFile, EaccessModeComb),
 
-        lfm_permissions_test_utils:set_modes(Node, EaccesModesPerFile),
+        permissions_test_utils:set_modes(Node, EaccesModesPerFile),
 
         ?assertMatchWithPerms(
             {error, ?EACCES},
@@ -701,7 +701,7 @@ run_standard_posix_tests(
         Acc#{Guid => Mode bor maps:get(Guid, Acc, 0)}
     end, #{}, RequiredModesComb),
 
-    lfm_permissions_test_utils:set_modes(Node, RequiredModesPerFile),
+    permissions_test_utils:set_modes(Node, RequiredModesPerFile),
 
     ?assertMatchWithPerms(
         ok,
@@ -713,7 +713,7 @@ run_standard_posix_tests(
 
 perms_to_posix_perms(Perms) ->
     lists:usort(lists:flatmap(
-        fun lfm_permissions_test_utils:perm_to_posix_perms/1, Perms
+        fun permissions_test_utils:perm_to_posix_perms/1, Perms
     )).
 
 
@@ -800,7 +800,7 @@ run_acl_perms_scenario(
             Acc#{Guid => [Perm | maps:get(Guid, Acc)]}
         end, ComplementaryPermsPerFile, EaccesPermComb),
 
-        lfm_permissions_test_utils:set_acls(
+        permissions_test_utils:set_acls(
             Node, EaccesPermsPerFile, #{}, AceWho, AceFlags
         ),
         ?assertMatchWithPerms(
@@ -816,7 +816,7 @@ run_acl_perms_scenario(
         Acc#{Guid => [Perm | maps:get(Guid, Acc, [])]}
     end, #{}, AllRequiredPermsComb),
 
-    lfm_permissions_test_utils:set_acls(
+    permissions_test_utils:set_acls(
         Node, RequiredPermsPerFile, #{}, AceWho, AceFlags
     ),
     ?assertMatchWithPerms(
@@ -831,14 +831,14 @@ run_acl_perms_scenario(
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, deny
 ) ->
     AllPermsPerFile = maps:map(fun(Guid, _) ->
-        lfm_permissions_test_utils:all_perms(Node, Guid)
+        permissions_test_utils:all_perms(Node, Guid)
     end, ComplementaryPermsPerFile),
 
     % Denying only required perms and granting all others should result in eacces
     lists:foreach(fun({Guid, Perm}) ->
         EaccesPermsPerFile = #{Guid => [Perm]},
 
-        lfm_permissions_test_utils:set_acls(
+        permissions_test_utils:set_acls(
             Node, AllPermsPerFile, EaccesPermsPerFile, AceWho, AceFlags
         ),
         ?assertMatchWithPerms(
@@ -850,7 +850,7 @@ run_acl_perms_scenario(
     end, AllRequiredPerms),
 
     % Denying all perms but required ones should result in success
-    lfm_permissions_test_utils:set_acls(
+    permissions_test_utils:set_acls(
         Node, #{}, ComplementaryPermsPerFile, AceWho, AceFlags
     ),
     ?assertMatchWithPerms(
@@ -864,7 +864,7 @@ run_acl_perms_scenario(
 get_complementary_perms(Node, PermsPerFile)->
     maps:fold(fun(FileGuid, FileRequiredPerms, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
         {
-            BasePermsPerFileAcc#{FileGuid => lfm_permissions_test_utils:complementary_perms(
+            BasePermsPerFileAcc#{FileGuid => permissions_test_utils:complementary_perms(
                 Node, FileGuid, FileRequiredPerms
             )},
             [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
@@ -1037,12 +1037,12 @@ set_full_perms(posix, Node, Files) ->
     AllPosixPermsPerFile = lists:foldl(fun(Guid, Acc) ->
         Acc#{Guid => 8#777}
     end, #{}, Files),
-    lfm_permissions_test_utils:set_modes(Node, AllPosixPermsPerFile);
+    permissions_test_utils:set_modes(Node, AllPosixPermsPerFile);
 set_full_perms(acl, Node, Files) ->
     AllAclPermsPerFile = lists:foldl(fun(Guid, Acc) ->
-        Acc#{Guid => lfm_permissions_test_utils:all_perms(Node, Guid)}
+        Acc#{Guid => permissions_test_utils:all_perms(Node, Guid)}
     end, #{}, Files),
-    lfm_permissions_test_utils:set_acls(
+    permissions_test_utils:set_acls(
         Node, AllAclPermsPerFile, #{}, ?everyone, ?no_flags_mask
     ).
 
@@ -1052,12 +1052,12 @@ deny_full_perms(posix, Node, Files) ->
     AllPosixPermsPerFile = lists:foldl(fun(Guid, Acc) ->
         Acc#{Guid => 8#000}
     end, #{}, Files),
-    lfm_permissions_test_utils:set_modes(Node, AllPosixPermsPerFile);
+    permissions_test_utils:set_modes(Node, AllPosixPermsPerFile);
 deny_full_perms(acl, Node, Files) ->
     AllAclPermsPerFile = lists:foldl(fun(Guid, Acc) ->
-        Acc#{Guid => lfm_permissions_test_utils:all_perms(Node, Guid)}
+        Acc#{Guid => permissions_test_utils:all_perms(Node, Guid)}
     end, #{}, Files),
-    lfm_permissions_test_utils:set_acls(
+    permissions_test_utils:set_acls(
         Node, #{}, AllAclPermsPerFile, ?everyone, ?no_flags_mask
     ).
 

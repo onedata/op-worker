@@ -9,10 +9,10 @@
 %%% Utility functions used in lfm_permissions framework and tests.
 %%% @end
 %%%-------------------------------------------------------------------
--module(lfm_permissions_test_utils).
+-module(permissions_test_utils).
 -author("Bartosz Walkowicz").
 
--include("lfm_permissions_test.hrl").
+-include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
