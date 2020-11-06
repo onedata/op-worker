@@ -69,6 +69,7 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
         proxyio_response = #remote_write_result{wrote = Written}
     }.
 
+%% @private
 -spec handle_empty_write(storage_driver:handle_id(), non_neg_integer()) -> ok.
 handle_empty_write(Handle, Offset) ->
     case helper:is_getting_size_supported(storage:get_helper(storage_driver:get_storage_id(Handle))) of

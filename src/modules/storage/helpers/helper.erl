@@ -286,6 +286,8 @@ is_rename_supported(?XROOTD_HELPER_NAME) -> true;
 is_rename_supported(#helper{name = HelperName}) -> is_rename_supported(HelperName);
 is_rename_supported(_) -> false.
 
+%% @private
+-spec is_object(helpers:helper()) -> boolean().
 is_object(#helper{name = Name}) ->
     is_object(Name);
 is_object(HelperName) ->
