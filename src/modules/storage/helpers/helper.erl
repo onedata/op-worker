@@ -287,7 +287,7 @@ is_rename_supported(#helper{name = HelperName}) -> is_rename_supported(HelperNam
 is_rename_supported(_) -> false.
 
 %% @private
--spec is_object(helpers:helper()) -> boolean().
+-spec is_object(helpers:helper() | name()) -> boolean().
 is_object(#helper{name = Name}) ->
     is_object(Name);
 is_object(HelperName) ->
