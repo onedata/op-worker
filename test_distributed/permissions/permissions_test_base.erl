@@ -13,6 +13,7 @@
 -module(permissions_test_base).
 -author("Bartosz Walkowicz").
 
+-include("../storage_files_test_SUITE.hrl").
 -include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -24,7 +25,6 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 -export([
-    all/0,
     init_per_suite/1, end_per_suite/1,
     init_per_testcase/2, end_per_testcase/2
 ]).
@@ -99,76 +99,6 @@
 ]).
 % Export for use in rpc
 -export([check_perms/3]).
-
-all() ->
-    ?ALL([
-        data_access_caveats_test,
-        data_access_caveats_ancestors_test,
-        data_access_caveats_ancestors_test2,
-        data_access_caveats_cache_test,
-
-        mkdir_test,
-        get_children_test,
-        get_children_attrs_test,
-        get_children_details_test,
-        get_child_attr_test,
-        mv_dir_test,
-        rm_dir_test,
-
-        create_file_test,
-        open_for_read_test,
-        open_for_write_test,
-        open_for_rdwr_test,
-        create_and_open_test,
-        truncate_test,
-        mv_file_test,
-        rm_file_test,
-
-        get_parent_test,
-        get_file_path_test,
-        get_file_guid_test,
-        get_file_attr_test,
-        get_file_details_test,
-        get_file_distribution_test,
-
-        set_perms_test,
-        check_read_perms_test,
-        check_write_perms_test,
-        check_rdwr_perms_test,
-
-        create_share_test,
-        remove_share_test,
-        share_perms_test,
-
-        get_acl_test,
-        set_acl_test,
-        remove_acl_test,
-
-        get_transfer_encoding_test,
-        set_transfer_encoding_test,
-        get_cdmi_completion_status_test,
-        set_cdmi_completion_status_test,
-        get_mimetype_test,
-        set_mimetype_test,
-
-        get_metadata_test,
-        set_metadata_test,
-        remove_metadata_test,
-        get_xattr_test,
-        list_xattr_test,
-        set_xattr_test,
-        remove_xattr_test,
-
-        add_qos_entry_test,
-        get_qos_entry_test,
-        remove_qos_entry_test,
-        get_effective_file_qos_test,
-        check_qos_fulfillment_test,
-
-        permission_cache_test,
-%%        multi_provider_permission_cache_test,
-        expired_session_test
-    ]).
 
 
 -define(rpcCache(W, Function, Args), rpc:call(W, permissions_cache, Function, Args)).
@@ -1018,9 +948,11 @@ truncate_test(Config) ->
 
 mv_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space1">>,
 
     permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
+        space_id = SpaceId,
         root_dir = ?SCENARIO_NAME,
         files = [
             #dir{
@@ -1047,7 +979,16 @@ mv_file_test(Config) ->
             SrcFileKey = maps:get(SrcFilePath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
             DstDirKey = maps:get(DstDirPath, ExtraData),
-            extract_ok(lfm_proxy:mv(W, SessId, SrcFileKey, DstDirKey, <<"file21">>))
+            case lfm_proxy:mv(W, SessId, SrcFileKey, DstDirKey, <<"file21">>) of
+                {ok, _NewFileGuid} ->
+                    ?EXEC_IF_SUPPORTED_BY_POSIX(W, SpaceId, fun() ->
+                        StorageFilePath = storage_file_path(W, SpaceId, <<DstDirPath/binary, "/file21">>),
+                        ?assertFileInfo(#{uid => 6002, gid => 6000}, W, StorageFilePath)
+                    end),
+                    ok;
+                {error, _} = Error ->
+                    Error
+            end
         end
     }, Config).
 
@@ -2159,6 +2100,7 @@ init_per_suite(Config) ->
             [{spaces_owners, [<<"owner">>]} | NewConfig2]
         ),
         initializer:mock_auth_manager(NewConfig3),
+        load_module_from_test_distributed_dir(Config, storage_test_utils),
         NewConfig3
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
@@ -2188,6 +2130,44 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
+%%% TODO VFS-6385 Reorganize and fix includes and loading modules from other dirs in tests
+-spec load_module_from_test_distributed_dir(proplists:proplist(), module()) ->
+    ok.
+load_module_from_test_distributed_dir(Config, ModuleName) ->
+    DataDir = ?config(data_dir, Config),
+    ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
+        Token /= "test_distributed"
+    end, filename:split(DataDir))),
+    TestsRootDir = filename:join([ProjectRoot, "test_distributed"]),
+
+    code:add_pathz(TestsRootDir),
+
+    CompileOpts = [
+        verbose,report_errors,report_warnings,
+        {i, TestsRootDir},
+        {i, filename:join([TestsRootDir, "..", "include"])},
+        {i, filename:join([TestsRootDir, "..", "_build", "default", "lib"])}
+    ],
+    case compile:file(filename:join(TestsRootDir, ModuleName), CompileOpts) of
+        {ok, ModuleName} ->
+            code:purge(ModuleName),
+            code:load_file(ModuleName),
+            ok;
+        _ ->
+            ct:fail("Couldn't load module: ~p", [ModuleName])
+    end.
+
+
+%% @private
+-spec storage_file_path(node(), od_space:id(), file_meta:path()) -> binary().
+storage_file_path(W, SpaceId, LogicalPath) ->
+    [<<"/">>, <<"/", LogicalPathWithoutSpaceId/binary>>] = binary:split(
+        LogicalPath, SpaceId, [global]
+    ),
+    storage_test_utils:file_path(W, SpaceId, LogicalPathWithoutSpaceId).
+
+
+%% @private
 check_perms(Node, User, Guid, Perms, Config) ->
     SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
     UserCtx = rpc:call(Node, user_ctx, new, [SessId]),
@@ -2197,6 +2177,7 @@ check_perms(Node, User, Guid, Perms, Config) ->
     ]).
 
 
+%% @private
 check_perms(UserCtx, FileCtx, Perms) ->
     try
         fslogic_authz:ensure_authorized(UserCtx, FileCtx, Perms),
@@ -2206,6 +2187,7 @@ check_perms(UserCtx, FileCtx, Perms) ->
     end.
 
 
+%% @private
 -spec for(pos_integer(), term()) -> term().
 for(1, F) ->
     F();
@@ -2214,6 +2196,7 @@ for(N, F) ->
     for(N - 1, F).
 
 
+%% @private
 -spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid()) -> ok.
 fill_file_with_dummy_data(Node, SessId, Guid) ->
     {ok, FileHandle} = ?assertMatch(
@@ -2224,6 +2207,8 @@ fill_file_with_dummy_data(Node, SessId, Guid) ->
     ?assertMatch(ok, lfm_proxy:fsync(Node, FileHandle)),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
 
+
+%% @private
 -spec create_dummy_file(node(), session:id(), file_id:file_guid()) -> ok.
 create_dummy_file(Node, SessId, DirGuid) ->
     RandomFileName = <<"DUMMY_FILE_", (integer_to_binary(rand:uniform(1024)))/binary>>,
@@ -2231,6 +2216,8 @@ create_dummy_file(Node, SessId, DirGuid) ->
         lfm_proxy:create_and_open(Node, SessId, DirGuid, RandomFileName, 8#664),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
 
+
+%% @private
 -spec extract_ok
     (ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}) -> ok;
     ({error, term()}) -> {error, term()}.

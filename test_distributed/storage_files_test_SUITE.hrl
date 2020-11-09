@@ -84,9 +84,20 @@
 % Generated UID and GID, where UID=hash(UserId) and GID=hash(SpaceId)
 -define(GEN_OWNER(UserId, SpaceId), ?OWNER(?UID(UserId), ?GID(SpaceId))).
 
--define(MOUNT_DIR_OWNER(Worker, StorageId), storage_files_test_SUITE:mount_dir_owner(Worker, StorageId)).
--define(MOUNT_DIR_OWNER(Worker, StorageId, Uid), storage_files_test_SUITE:mount_dir_owner(Worker, StorageId, Uid)).
+-define(MOUNT_DIR_OWNER(Worker, StorageId), storage_test_utils:mount_dir_owner(Worker, StorageId)).
+-define(MOUNT_DIR_OWNER(Worker, StorageId, Uid), storage_test_utils:mount_dir_owner(Worker, StorageId, Uid)).
 
 -define(OWNER(Uid, Gid), #{uid => Uid, gid => Gid}).
+
+-define(assertFileInfo(Expected, Worker, FilePath),
+    storage_test_utils:assert_file_info(Expected, Worker, FilePath, ?LINE)
+).
+
+-define(EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, Fun),
+    case storage_test_utils:is_supporting_storage_posix_compatible(Worker, SpaceId) of
+        true -> Fun();
+        false -> ok
+    end
+).
 
 -endif.
