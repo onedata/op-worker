@@ -24,6 +24,8 @@
 }).
 
 -type type() :: normal | cumulative.
+% Time unit can be arbitrary, depending on the module that uses the histogram.
+% Note that the time window and consecutive update times must use the same unit.
 -type timestamp() :: non_neg_integer().
 -type time() :: pos_integer().
 -type histogram() :: #time_slot_histogram{}.

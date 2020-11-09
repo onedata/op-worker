@@ -657,7 +657,7 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
     })).
 
 
--spec get_zone_time() -> time_utils:millis() | no_return().
+-spec get_zone_time() -> clock:millis() | no_return().
 get_zone_time() ->
     {ok, Millis} = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,

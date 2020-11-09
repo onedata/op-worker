@@ -32,6 +32,13 @@
 %% Internal Service callbacks
 -export([start_service/0, stop_service/0, takeover_service/0, healthcheck/1]).
 
+%% By default, the channel waits for the node's clock to be synchronized, which
+%% is done by Onepanel. During that time, no connection is attempted. If
+%% needed, this mechanism can be turned off using this env variable.
+-define(REQUIRE_CLOCK_SYNC_FOR_CONNECTION, application:get_env(
+    ?APP_NAME, graph_sync_require_clock_sync_for_connection, true
+)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -65,36 +72,45 @@ is_connected() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Immediately triggers Onezone connection attempt if the Oneprovider is not connected.
+%% Immediately triggers Onezone connection attempt (if applicable).
 %% Returns boolean indicating if the connection is active after this operation.
 %% @end
 %%--------------------------------------------------------------------
 -spec force_start_connection() -> boolean().
 force_start_connection() ->
-    case is_connected() of
-        true ->
+    case {oneprovider:is_registered(), is_clock_sync_satisfied(), is_connected()} of
+        {false, _, _} ->
+            ?warning("Ignoring attempt to force start Onezone connection - Oneprovider is not registered."),
+            false;
+        {true, false, _} ->
+            ?warning(
+                "Ignoring attempt to force start Onezone connection - the clock has not been yet "
+                "synchronized by Onepanel (see op_panel logs for details)."
+            ),
+            false;
+        {true, true, true} ->
             ?info("Ignoring attempt to force start Onezone connection - already started."),
             true;
-        false ->
-            case oneprovider:is_registered() of
-                false ->
-                    ?warning(
-                        "Ignoring attempt to force start Onezone connection - "
-                        "Oneprovider is not registered."
-                    ),
-                    false;
-                true ->
-                    ResponsibleNode = responsible_node(),
-                    case node() of
-                        ResponsibleNode ->
-                            ?info("Attempting to start Onezone connection (forced)..."),
-                            ok == start_gs_client_worker();
-                        _OtherNode ->
-                            ?info("Attempting to start Onezone connection at node ~p (forced)...", [
-                                ResponsibleNode
-                            ]),
-                            rpc:call(ResponsibleNode, ?MODULE, force_start_connection, [])
-                    end
+        {true, true, false} ->
+            ResponsibleNode = responsible_node(),
+            case node() of
+                ResponsibleNode ->
+                    ?info("Attempting to start Onezone connection (forced)..."),
+                    case start_gs_client_worker() of
+                        ok ->
+                            internal_services_manager:reschedule_healthcheck(
+                                ?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME,
+                                ?GS_RECONNECT_BASE_INTERVAL
+                            ),
+                            true;
+                        error ->
+                            false
+                    end;
+                _OtherNode ->
+                    ?info("Attempting to start Onezone connection at node ~p (forced)...", [
+                        ResponsibleNode
+                    ]),
+                    rpc:call(ResponsibleNode, ?MODULE, force_start_connection, [])
             end
     end.
 
@@ -153,22 +169,29 @@ takeover_service() ->
     start_service().
 
 
--spec healthcheck(non_neg_integer()) -> {ok, non_neg_integer()}.
+-spec healthcheck(clock:millis()) -> {ok, clock:millis()}.
 healthcheck(LastInterval) ->
-    case {oneprovider:is_registered(), is_connected()} of
-        {false, _} ->
+    case {oneprovider:is_registered(), is_clock_sync_satisfied(), is_connected()} of
+        {false, _, _} ->
             ?debug("The provider is not registered - next Onezone connection attempt in ~B seconds.", [
                 ?GS_RECONNECT_BASE_INTERVAL div 1000
             ]),
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
-        {true, true} ->
+        {true, false, _} ->
+            NewInterval = calculate_backoff(LastInterval),
+            ?info(
+                "Deferring Onezone connection as the clock has not been yet synchronized with Onepanel "
+                "(see op_panel logs for details). Next check in ~B seconds.", [NewInterval div 1000]
+            ),
+            {ok, NewInterval};
+        {true, true, true} ->
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
-        {true, false} ->
+        {true, true, false} ->
             case start_gs_client_worker() of
                 ok ->
                     {ok, ?GS_RECONNECT_BASE_INTERVAL};
                 error ->
-                    NewInterval = min(?GS_RECONNECT_MAX_BACKOFF, round(LastInterval * ?GS_RECONNECT_BACKOFF_RATE)),
+                    NewInterval = calculate_backoff(LastInterval),
                     % specific errors are logged in gs_client_worker
                     ?warning("Next Onezone connection attempt in ~B seconds.", [NewInterval div 1000]),
                     {ok, NewInterval}
@@ -178,6 +201,29 @@ healthcheck(LastInterval) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec calculate_backoff(clock:millis()) -> clock:millis().
+calculate_backoff(LastInterval) ->
+    min(?GS_RECONNECT_MAX_BACKOFF, round(LastInterval * ?GS_RECONNECT_BACKOFF_RATE)).
+
+
+%% @private
+-spec is_clock_sync_satisfied() -> boolean().
+is_clock_sync_satisfied() ->
+    case clock:is_synchronized() of
+        true ->
+            true;
+        false ->
+            case ?REQUIRE_CLOCK_SYNC_FOR_CONNECTION of
+                false ->
+                    ?notice("Ignoring unsynchronized clock for Onezone GS connection (forced in config)"),
+                    true;
+                _ ->
+                    false
+            end
+    end.
+
 
 %% @private
 -spec responsible_node() -> node().

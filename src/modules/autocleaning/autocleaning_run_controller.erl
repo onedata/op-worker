@@ -495,11 +495,14 @@ handle_cast(#message{type = MessageType, run_id = ARId}, State = #state{
         handle_cast_internal(MessageType, State)
     catch
         E:R ->
+            ?error_stacktrace("autocleaning_run_controller of run ~p failed unexpectedly due to ~p:~p",
+                [ARId, E, R]
+            ),
             lists:foreach(fun(BatchNo) ->
                 cancel_replica_deletion_request(SpaceId, ARId, BatchNo)
             end, maps:keys(BatchesCounters)),
             autocleaning_view_traverse:cancel(TaskId),
-            {stop, {error, {E, R}}}
+            {stop, {error, {E, R}}, State}
     end;
 handle_cast(#message{type = _MessageType, run_id = _OtherAutocleaningRunId},
     State = #state{run_id = _AutocleaningRunId}
@@ -533,22 +536,13 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> ok.
-terminate(Reason, #state{
+terminate(_Reason, #state{
     run_id = ARId,
     released_files = ReleasedFiles,
     released_bytes = ReleasedBytes,
     space_id = SpaceId,
     report_terminate_to = ReportTo
 }) ->
-    case Reason of
-        normal ->
-            ok;
-        {error, Reason} ->
-            ?error_stacktrace("autocleaning_run_controller of run ~p failed unexpectedly due to ~p",
-                [ARId, Reason]
-            )
-    end,
-
     autocleaning_run:mark_finished(ARId, ReleasedFiles, ReleasedBytes),
     ok = internal_services_manager:report_service_stop(?MODULE, SpaceId, SpaceId),
 
@@ -698,7 +692,7 @@ maybe_update_doc_counters(State = #state{
     released_bytes = ReleasedBytes,
     released_files = ReleasedFiles
 }) ->
-    Timestamp = time_utils:timestamp_millis(),
+    Timestamp = clock:timestamp_millis(),
     case Timestamp - PreviousTimestamp > ?UPDATE_DOC_COUNTERS_MAX_INTERVAL of
         true ->
             autocleaning_run:update_counters(ARId, ReleasedFiles, ReleasedBytes),

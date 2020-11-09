@@ -224,8 +224,8 @@
 -record(provider_auth, {
     provider_id :: od_provider:id(),
     root_token :: tokens:serialized(),
-    cached_access_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()},
-    cached_identity_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()}
+    cached_access_token = {0, <<"">>} :: {ValidUntil :: clock:seconds(), tokens:serialized()},
+    cached_identity_token = {0, <<"">>} :: {ValidUntil :: clock:seconds(), tokens:serialized()}
 }).
 
 -record(file_download_code, {
@@ -240,7 +240,7 @@
 %% User session
 -record(session, {
     status :: undefined | session:status(),
-    accessed :: undefined | time_utils:seconds(),
+    accessed :: undefined | clock:seconds(),
     type :: undefined | session:type(),
     identity :: aai:subject(),
     credentials :: undefined | auth_manager:credentials(),
@@ -265,7 +265,7 @@
 % Model used to cache idp access tokens
 -record(idp_access_token, {
     token :: idp_access_token:token(),
-    expiration_time :: idp_access_token:expires()
+    expiration_time :: idp_access_token:expiration_time()
 }).
 
 %% File handle used by the storage_driver module
@@ -287,8 +287,8 @@
 
 -record(storage_sync_info, {
     children_hashes = #{} :: storage_sync_info:hashes(),
-    mtime :: undefined | non_neg_integer(),
-    last_stat :: undefined | non_neg_integer(),
+    mtime :: undefined | clock:seconds(),
+    last_stat :: undefined | clock:seconds(),
     % below counters are used to check whether all batches of given directory
     % were processed, as they are processed in parallel
     batches_to_process = 0 :: non_neg_integer(),
@@ -491,8 +491,8 @@
 %% Each record stores information about one specific run.
 -record(autocleaning_run, {
     space_id :: undefined | od_space:id(),
-    started_at = 0 :: non_neg_integer(),
-    stopped_at :: undefined | non_neg_integer(),
+    started_at = 0 :: clock:seconds(),
+    stopped_at :: undefined | clock:seconds(),
     status :: undefined | autocleaning_run:status(),
 
     released_bytes = 0 :: non_neg_integer(),
@@ -532,7 +532,7 @@
     },
     last_rename :: undefined | replica_changes:last_rename(),
     storage_file_created = false :: boolean(),
-    last_replication_timestamp :: non_neg_integer() | undefined,
+    last_replication_timestamp :: undefined | clock:seconds(),
     % synced_gid field is set by storage import, only on POSIX-compatible storages.
     % It is used to override display gid, only in
     % the syncing provider, with the gid that file
@@ -581,10 +581,10 @@
 %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 -record(storage_sync_monitoring, {
     scans = 0 :: non_neg_integer(), % overall number of finished scans,
-    import_start_time :: undefined | non_neg_integer(),
-    import_finish_time :: undefined | non_neg_integer(),
-    last_update_start_time :: undefined | non_neg_integer(),
-    last_update_finish_time :: undefined | non_neg_integer(),
+    import_start_time :: undefined | clock:seconds(),
+    import_finish_time :: undefined | clock:seconds(),
+    last_update_start_time :: undefined | clock:seconds(),
+    last_update_finish_time :: undefined | clock:seconds(),
 
     % counters used for scan management, they're reset on the beginning of each scan
     to_process = 0 :: non_neg_integer(),
@@ -629,8 +629,8 @@
     status :: storage_import_monitoring:status(),
 
     % start/stop timestamps of last scan in millis
-    scan_start_time :: undefined | time_utils:millis(),
-    scan_stop_time :: undefined | time_utils:millis(),
+    scan_start_time :: undefined | clock:millis(),
+    scan_stop_time :: undefined | clock:millis(),
 
     % counters used for scan management, they're reset on the beginning of each scan
     to_process = 0 :: non_neg_integer(),
@@ -734,7 +734,7 @@
     monitoring_id = #monitoring_id{} :: #monitoring_id{},
     rrd_guid :: undefined | binary(),
     state_buffer = #{} :: map(),
-    last_update_time :: undefined | non_neg_integer()
+    last_update_time :: undefined | clock:seconds()
 }).
 
 %% Model that stores file handles
@@ -781,7 +781,7 @@
     space_id :: undefined  | od_space:id(),
     size = 0 :: non_neg_integer(),
     open_count = 0 :: non_neg_integer(),
-    last_open = 0 :: non_neg_integer(),
+    last_open = 0 :: clock:hours(),
     hr_hist = [] :: list(),
     dy_hist = [] :: list(),
     mth_hist = [] :: list(),
@@ -820,15 +820,15 @@
     files_replicated = 0 :: non_neg_integer(),
     bytes_replicated = 0 :: non_neg_integer(),
     files_evicted = 0 :: non_neg_integer(),
-    schedule_time = 0 :: non_neg_integer(),
-    start_time = 0 :: non_neg_integer(),
-    finish_time = 0 :: non_neg_integer(),
+    schedule_time = 0 :: clock:seconds(),
+    start_time = 0 :: clock:seconds(),
+    finish_time = 0 :: clock:seconds(),
 
     % Histograms with different time spans (last minute, hour, day and month)
     % of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
     % Length of each histogram type is defined in transfer.hrl
-    last_update = #{} :: #{od_provider:id() => non_neg_integer()},
+    last_update = #{} :: #{od_provider:id() => clock:seconds()},
     min_hist = #{} :: #{od_provider:id() => histogram:histogram()},
     hr_hist = #{} :: #{od_provider:id() => histogram:histogram()},
     dy_hist = #{} :: #{od_provider:id() => histogram:histogram()},
@@ -861,7 +861,7 @@
     % of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
     % Length of each histogram type is defined in transfer.hrl
-    last_update = #{} :: #{od_provider:id() => non_neg_integer()},
+    last_update = #{} :: #{od_provider:id() => clock:seconds()},
     min_hist = #{} :: #{od_provider:id() => histogram:histogram()},
     hr_hist = #{} :: #{od_provider:id() => histogram:histogram()},
     dy_hist = #{} :: #{od_provider:id() => histogram:histogram()},
@@ -871,9 +871,9 @@
 %% Model that holds statistics about all transfers for given space.
 -record(space_transfer_stats_cache, {
     % Time at which the cache record will expire.
-    expires = 0 :: non_neg_integer(),
+    expires = 0 :: clock:millis(),
     % Time of last update for stats.
-    timestamp = 0 :: non_neg_integer(),
+    timestamp = 0 :: clock:seconds(),
     % Mapping of providers to their data input and sources
     stats_in = #{} :: #{od_provider:id() => histogram:histogram()},
     % Mapping of providers to their data output and destinations
