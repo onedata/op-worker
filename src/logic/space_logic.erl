@@ -21,7 +21,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("modules/storage/storage.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -298,7 +298,7 @@ has_readonly_support_from(SpaceOrId, ProviderId) ->
             false;
         {ok, ProviderStorages} ->
             lists:all(fun(AccessMode) ->
-                AccessMode =:= ?READONLY_STORAGE
+                AccessMode =:= ?READONLY
             end, maps:values(ProviderStorages));
         {error, _} = Error ->
             throw(Error)

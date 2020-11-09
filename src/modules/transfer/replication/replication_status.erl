@@ -97,7 +97,7 @@ handle_enqueued(TransferId) ->
             ?SCHEDULED_STATUS ->
                 {ok, Transfer#transfer{
                     replication_status = ?ENQUEUED_STATUS,
-                    start_time = time_utils:timestamp_seconds(),
+                    start_time = clock:timestamp_seconds(),
                     files_to_process = 1,
                     pid = EncodedPid
                 }};
@@ -179,14 +179,14 @@ handle_restart(TransferId, NewTransferId, MarkTransferFailed) ->
                 fun transfer_links:move_from_ongoing_to_ended/1
             ),
 
-            % Marking transfer can fail if transfer is already ended
-            % In such a case add retry adding rerun id only
+            % Marking transfer can fail if transfer is already ended.
+            % In such case set only rerun_id.
             case UpdateAns of
                 {ok, _} -> UpdateAns;
-                _ -> add_rerun_id(TransferId, NewTransferId)
+                _ -> transfer:set_rerun_id(TransferId, NewTransferId)
             end;
         false ->
-            add_rerun_id(TransferId, NewTransferId)
+            transfer:set_rerun_id(TransferId, NewTransferId)
     end.
 
 %%%===================================================================
@@ -226,7 +226,7 @@ mark_completed(Transfer = #transfer{replication_status = ?ACTIVE_STATUS}) ->
         replication_status = ?COMPLETED_STATUS,
         finish_time = case transfer:is_migration(Transfer) of
             true -> Transfer#transfer.finish_time;
-            false -> time_utils:timestamp_seconds()
+            false -> clock:timestamp_seconds()
         end
     }};
 mark_completed(#transfer{replication_status = Status}) ->
@@ -251,7 +251,7 @@ mark_failed_forced(Transfer) ->
             IsMigration = transfer:is_migration(Transfer),
             {ok, Transfer#transfer{
                 replication_status = failed,
-                finish_time = time_utils:timestamp_seconds(),
+                finish_time = clock:timestamp_seconds(),
                 eviction_status = case IsMigration of
                     true -> failed;
                     false -> Transfer#transfer.eviction_status
@@ -273,7 +273,7 @@ mark_cancelled(Transfer = #transfer{replication_status = ?SCHEDULED_STATUS}) ->
 mark_cancelled(Transfer = #transfer{replication_status = ?ABORTING_STATUS}) ->
     {ok, Transfer#transfer{
         replication_status = ?CANCELLED_STATUS,
-        finish_time = time_utils:timestamp_seconds(),
+        finish_time = clock:timestamp_seconds(),
         eviction_status = case transfer:is_migration(Transfer) of
             true -> ?CANCELLED_STATUS;
             false -> Transfer#transfer.eviction_status
@@ -281,9 +281,3 @@ mark_cancelled(Transfer = #transfer{replication_status = ?ABORTING_STATUS}) ->
     }};
 mark_cancelled(#transfer{replication_status = Status}) ->
     {error, Status}.
-
--spec add_rerun_id(transfer:id(), transfer:id()) -> {ok, transfer:doc()} | error().
-add_rerun_id(TransferId, NewTransferId) ->
-    transfer:update(TransferId, fun(OldTransfer) ->
-        {ok, OldTransfer#transfer{rerun_id = NewTransferId}}
-    end).

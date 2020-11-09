@@ -1241,7 +1241,9 @@ make_notify_fun(Self, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec make_complete_fun(Self :: pid()) -> rtransfer_link:on_complete_fun().
 make_complete_fun(Self) ->
-    fun(Ref, Status) -> Self ! {Ref, complete, Status} end.
+    fun(Ref, Status) ->
+        Self ! {Ref, complete, Status}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

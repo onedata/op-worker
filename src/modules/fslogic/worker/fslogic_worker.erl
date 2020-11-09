@@ -393,7 +393,7 @@ handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
     file_request = Req}}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
     ?update_counter(?EXOMETER_NAME(ReqName)),
-    Now = os:timestamp(),
+    Now = os:timestamp(), % @TODO VFS-6841 switch to the clock module
     Ans = handle_file_request(UserCtx, Req, FileCtx),
     Time = timer:now_diff(os:timestamp(), Now),
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), Time),
