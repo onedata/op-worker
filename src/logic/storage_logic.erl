@@ -323,7 +323,10 @@ update_readonly_and_imported(StorageId, Readonly, Imported) ->
 %%--------------------------------------------------------------------
 -spec upgrade_legacy_support(storage:id(), od_space:id()) -> ok | errors:error().
 upgrade_legacy_support(StorageId, SpaceId) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_legacy_support, SpaceId}}
-    }).
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_space, SpaceId)
+    end).
