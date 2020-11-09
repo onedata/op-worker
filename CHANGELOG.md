@@ -4,6 +4,44 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 20.02.3
+
+-   **VFS-6967** Fixed not visible JSON and RDF metadata editors in GUI
+    in Safari.
+-   **VFS-6927** Optimize file blocks management to decrease memory
+    usage.
+
+
+### 20.02.2
+
+-   **VFS-6925** Fixed inability to scroll down files list in Firefox on
+    macOS using HiDPI display.
+-   **VFS-6853** Matching session cookie is now required to verify a GUI
+    access tokens (they are used behind the scenes by the Onedata web
+    applications), which increases security.
+-   **VFS-6851** Fixed a security issue in Oneprovider share GUI.
+-   **VFS-6845** Prevent application from stopping until all documents
+    are correctly persisted in order to improve resistance to temporary
+    database errors.
+-   **VFS-6746** Added available QoS parameters suggestion box in QoS
+    expression editor.
+-   **VFS-6732** New JSON and RDF metadata editor based on Ace Editor.
+-   **VFS-6685** Added new REST API for removing custom file metadata
+    (xattrs, json and rdf).
+-   **VFS-6570** Showing loading indicator in file browser until file is
+    available for download.
+-   **VFS-6456** Show more details about lack of privileges when trying
+    to perform various actions in GUI.
+-   **VFS-6338** Enhanced API of the mechanism for importing existing
+    data into Onedata spaces without need for copying the data. The
+    mechanism is now called "storage import". Introduced modes of
+    storage import: "manual" which allows for manual registration of
+    files and "auto" which enables automatic detection and import of
+    files from the storage. Introduced possibility to forcefully
+    start/stop scans of auto storage import. Redesigned GUI related to
+    storage import, adjusted to the new features.
+
+
 ### 20.02.1
 
 -   **VFS-6668** Fix bug resulting in timeouts of workers after 30s.

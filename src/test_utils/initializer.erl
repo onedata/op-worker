@@ -16,7 +16,7 @@
 -include("http/gui_paths.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("modules/storage/storage.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
@@ -556,7 +556,7 @@ mock_auth_manager(Config, CheckIfUserIsSupported, NoHistory) ->
                                     Csm
                             end,
                             AuthCtx = #auth_ctx{
-                                current_timestamp = time_utils:timestamp_seconds(),
+                                current_timestamp = clock:timestamp_seconds(),
                                 ip = auth_manager:get_peer_ip(TokenCredentials),
                                 interface = auth_manager:get_interface(TokenCredentials),
                                 service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
@@ -628,7 +628,7 @@ mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
     ),
 
     % Mock cached auth and identity tokens with large TTL
-    ExpirationTime = time_utils:timestamp_seconds() + 999999999,
+    ExpirationTime = clock:timestamp_seconds() + 999999999,
     {RpcAns, []} = rpc:multicall(Workers, datastore_model, save, [#{model => provider_auth}, #document{
         key = <<"provider_auth">>,
         value = #provider_auth{
@@ -794,16 +794,16 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
         end, Providers0)
     end, SpacesSetup),
 
-    StoragesSetupMap = lists:foldl(fun({P, Storages}, Acc) ->
+    StoragesSetupMap = lists:foldl(fun({P, Storages}, OuterAcc) ->
         StoragesMap = json_utils:list_to_map(Storages),
-        StoragesMapNormalized = maps:fold(fun(StorageId, Desc, Acc) -> 
+        StoragesMapNormalized = maps:fold(fun(StorageId, Desc, InnerAcc) ->
             NewDesc = case Desc =:= [] of
                 true -> #{};
                 false -> Desc
             end,
-            Acc#{normalize_storage_name(StorageId) => NewDesc} 
+            InnerAcc#{normalize_storage_name(StorageId) => NewDesc}
         end, #{}, StoragesMap),
-        Acc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => StoragesMapNormalized}
+        OuterAcc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => StoragesMapNormalized}
     end, #{}, StoragesSetup),
 
     MasterWorkers = lists:map(fun(Domain) ->
@@ -1172,8 +1172,8 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
             StoragesByProvider = lists:foldl(fun({StorageId, ProviderId}, Acc) ->
                 StorageConfig = maps:get(StorageId, maps:get(ProviderId, StoragesSetupMap, #{}), #{}),
                 AccessType = case maps:get(<<"readonly">>, StorageConfig, false) of
-                    true -> ?READONLY_STORAGE;
-                    false -> ?READWRITE_STORAGE
+                    true -> ?READONLY;
+                    false -> ?READWRITE
                 end,
                 maps:update_with(ProviderId, fun(ProviderStorages) ->
                     ProviderStorages#{StorageId => AccessType}

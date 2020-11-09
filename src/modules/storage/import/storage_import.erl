@@ -312,7 +312,7 @@ assert_manual_storage_import_supported(SpaceId) ->
                 true ->
                     ok;
                 false ->
-                    throw(?ERROR_FILE_REGISTRATION_NOT_SUPPORTED(StorageId, ?OBJECT_HELPERS))
+                    throw(?ERROR_STORAGE_IMPORT_NOT_SUPPORTED(StorageId, ?OBJECT_HELPERS))
             end;
         Error ->
             throw(Error)

@@ -73,7 +73,7 @@ increment_after_long_time_should_strip_old_values_test() ->
 
 increment_by_more_than_one_test() ->
     Histogram = time_slot_histogram:new(0, 60, histogram:new(60)),
-    Timestamp = time_utils:timestamp_seconds(),
+    Timestamp = clock:timestamp_seconds(),
 
     ?assertMatch(
         [5 | _],

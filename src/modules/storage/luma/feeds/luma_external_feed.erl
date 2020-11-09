@@ -319,7 +319,7 @@ decode_body(EncodedBody) ->
     try
         {ok, json_utils:decode(EncodedBody)}
     catch
-        throw:invalid_json ->
+        _:invalid_json ->
             ?ERROR_MALFORMED_DATA
     end.
 

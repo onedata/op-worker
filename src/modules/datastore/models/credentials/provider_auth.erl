@@ -53,7 +53,7 @@
 % (they might expire before they are consumed), a new one will be generated.
 -define(MIN_TTL_FROM_CACHE, 15).
 
--define(NOW(), time_utils:timestamp_seconds()).
+-define(NOW(), clock:timestamp_seconds()).
 
 -define(FILE_COMMENT,
     <<"This file holds the Oneprovider root token "
@@ -326,7 +326,7 @@ get_token(Type) ->
 
 %% @private
 -spec get_cached_token(access | identity, record()) ->
-    {ValidUntil :: time_utils:seconds(), tokens:serialized()}.
+    {ValidUntil :: clock:seconds(), tokens:serialized()}.
 get_cached_token(access, ProviderAuth) ->
     ProviderAuth#provider_auth.cached_access_token;
 get_cached_token(identity, ProviderAuth) ->

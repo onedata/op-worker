@@ -10,6 +10,9 @@
 %%% maintaining Graph Sync connection to Onezone and handling incoming push
 %%% messages. Whenever the connection dies, this gen_server is killed and a new
 %%% one is instantiated by gs_channel_service.
+%%%
+%%% The GS cache is disabled upon startup, and then enabled after complete
+%%% Oneprovider cluster initialization - see enable_cache/0.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_client_worker).
@@ -61,6 +64,7 @@
 -export([is_connected/0]).
 -export([get_connection_pid/0]).
 -export([force_terminate/0]).
+-export([enable_cache/0]).
 -export([request/1, request/2, request/3]).
 -export([invalidate_cache/1, invalidate_cache/2]).
 -export([process_push_message/1]).
@@ -119,6 +123,27 @@ force_terminate() ->
             gen_server2:call(Pid, {terminate, normal}),
             ok
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% After startup, the GS cache is disabled to prevent writing to the datastore
+%% and triggering run_after procedures. This allows upgrading the Oneprovider
+%% before all machinery is functional without side effects that can be hard to
+%% predict. The downside is that every get request ends up fetching the record
+%% from Onezone. The cache should be enabled after complete Oneprovider's init.
+%% @end
+%%--------------------------------------------------------------------
+-spec enable_cache() -> ok.
+enable_cache() ->
+    simple_cache:put(gs_client_worker_cache_enabled, true).
+
+
+%% @private
+-spec is_cache_enabled() -> boolean().
+is_cache_enabled() ->
+    {ok, Enabled} = simple_cache:get(gs_client_worker_cache_enabled, fun() -> {false, false} end),
+    Enabled.
 
 
 %%--------------------------------------------------------------------
@@ -408,27 +433,14 @@ process_push_message_async(#gs_push_error{error = Error}) ->
     ?error("Unexpected graph sync error: ~p", [Error]);
 
 process_push_message_async(#gs_push_graph{gri = GRI, change_type = deleted}) ->
-    ProviderId = oneprovider:get_id_or_undefined(),
-    case GRI of
-        #gri{type = od_provider, id = ProviderId, aspect = instance} ->
-            gs_hooks:handle_deregistered_from_oz();
-        #gri{type = od_space, id = SpaceId, aspect = instance} ->
-            main_harvesting_stream:space_removed(SpaceId),
-            auto_storage_import_worker:notify_space_deleted(SpaceId);
-        #gri{type = od_token, id = TokenId, aspect = instance} ->
-            auth_cache:report_token_deletion(TokenId);
-        #gri{type = temporary_token_secret, id = UserId, aspect = user} ->
-            auth_cache:report_temporary_tokens_deletion(UserId);
-        _ ->
-            ok
-    end,
+    gs_hooks:handle_entity_deleted(GRI),
     invalidate_cache(GRI),
-    ?debug("Entity deleted in OZ: ~s", [gri:serialize(GRI)]);
+    ?debug("Entity deleted in OZ: ~ts", [gri:serialize(GRI)]);
 
 process_push_message_async(#gs_push_graph{gri = GRI, data = Resource, change_type = updated}) ->
     Revision = maps:get(<<"revision">>, Resource),
     Doc = gs_client_translator:translate(GRI, Resource),
-    coalesce_cache(get_connection_pid(), GRI, Doc, Revision),
+    maybe_coalesce_cache(get_connection_pid(), GRI, Doc, Revision),
     ok.
 
 
@@ -474,7 +486,7 @@ do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout) ->
                     Revision = maps:get(<<"revision">>, Resource),
                     NewGRI = gri:deserialize(GRIStr),
                     Doc = gs_client_translator:translate(NewGRI, Resource),
-                    case coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
+                    case maybe_coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
                         {ok, NewestDoc} -> {ok, NewestDoc};
                         % In case a stale record is detected, repeat the request
                         {error, stale_record} -> do_request(Client, GraphReq, Timeout)
@@ -495,7 +507,7 @@ do_request(Client, #gs_req_graph{operation = create} = GraphReq, Timeout) ->
                     NewGRI = gri:deserialize(GRIStr),
                     Revision = maps:get(<<"revision">>, Resource),
                     Doc = gs_client_translator:translate(NewGRI, Resource),
-                    case coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
+                    case maybe_coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
                         {ok, NewestDoc} -> {ok, {NewGRI, NewestDoc}};
                         % In case a stale record is detected, repeat the request
                         {error, stale_record} -> do_request(Client, GraphReq, Timeout)
@@ -604,13 +616,29 @@ maybe_serve_from_cache(_, _) ->
 
 
 %% @private
+-spec maybe_coalesce_cache(connection_ref(), gri:gri(), doc(), gs_protocol:revision()) ->
+    {ok, doc()} | {error, stale_record}.
+maybe_coalesce_cache(ConnRef, GRI, Doc, Revision) ->
+    case is_cache_enabled() of
+        false ->
+            {ok, Doc};
+        true ->
+            case GRI of
+                #gri{aspect = instance} ->
+                    coalesce_cache(ConnRef, GRI, Doc, Revision);
+                #gri{type = temporary_token_secret, aspect = user} ->
+                    coalesce_cache(ConnRef, GRI, Doc, Revision);
+                _ ->
+                    % other resources are not cached by Oneprovider
+                    {ok, Doc}
+            end
+    end.
+
+
+%% @private
 -spec coalesce_cache(connection_ref(), gri:gri(), doc(), gs_protocol:revision()) ->
     {ok, doc()} | {error, stale_record}.
-coalesce_cache(ConnRef, GRI = #gri{type = Type, aspect = As}, Doc = #document{value = Record}, Rev) when
-    As =:= instance;
-    (Type =:= temporary_token_secret andalso As =:= user)
-->
-    #gri{type = Type, id = Id, scope = Scope} = GRI,
+coalesce_cache(ConnRef, #gri{type = Type, id = Id, scope = Scope} = GRI, Doc = #document{value = Record}, Rev) ->
     CacheUpdateFun = fun(CachedRecord) ->
         #{scope := CachedScope} = CacheState = get_cache_state(CachedRecord),
         CachedRev = maps:get(revision, CacheState, 0),
@@ -654,10 +682,7 @@ coalesce_cache(ConnRef, GRI = #gri{type = Type, aspect = As}, Doc = #document{va
     end,
     Type:update_cache(Id, CacheUpdateFun, Doc#document{value = put_cache_state(Record, #{
         scope => Scope, connection_ref => ConnRef, revision => Rev
-    })});
-coalesce_cache(_ConnRef, _GRI, Doc, _Revision) ->
-    % Only 'instance' aspects are cached by provider.
-    {ok, Doc}.
+    })}).
 
 
 %% @private

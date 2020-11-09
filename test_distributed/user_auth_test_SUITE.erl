@@ -51,7 +51,7 @@ all() -> ?ALL([
 -define(USER_ID_2, <<"test_id_2">>).
 -define(USER_FULL_NAME, <<"test_name">>).
 
--define(NOW(), time_utils:timestamp_seconds()).
+-define(NOW(), clock:timestamp_seconds()).
 
 -define(ATTEMPTS, 60).
 
@@ -452,6 +452,8 @@ init_per_testcase(_Case, Config) ->
     mock_space_logic(Config),
     mock_user_logic(Config),
     mock_token_logic(Config),
+    % required to trigger auth cache events that are based on run_after procedures
+    rpc:multicall(?config(op_worker_nodes, Config), gs_client_worker, enable_cache, []),
     Config.
 
 
@@ -526,9 +528,7 @@ mock_user_logic(Config) ->
                     maps:get(UserId, Users, ?ERROR_UNAUTHORIZED);
                 _ ->
                     ?ERROR_UNAUTHORIZED
-            end;
-        (_, _) ->
-            {error, not_found}
+            end
     end).
 
 
@@ -578,7 +578,7 @@ clear_auth_cache(Worker) ->
     rpc:call(Worker, ets, delete_all_objects, [auth_cache]).
 
 
--spec infer_ttl([caveats:caveat()]) -> undefined | time_utils:seconds().
+-spec infer_ttl([caveats:caveat()]) -> undefined | clock:seconds().
 infer_ttl(Caveats) ->
     ValidUntil = lists:foldl(fun
         (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
@@ -690,14 +690,14 @@ set_auth_cache_size_limit(Node, SizeLimit) ->
     ])).
 
 
--spec set_auth_cache_purge_delay(node(), Delay :: time_utils:millis()) -> ok.
+-spec set_auth_cache_purge_delay(node(), Delay :: clock:millis()) -> ok.
 set_auth_cache_purge_delay(Node, Delay) ->
     ?assertMatch(ok, rpc:call(Node, application, set_env, [
         ?APP_NAME, auth_cache_purge_delay, Delay
     ])).
 
 
--spec set_auth_cache_default_ttl(node(), TTL :: time_utils:seconds()) -> ok.
+-spec set_auth_cache_default_ttl(node(), TTL :: clock:seconds()) -> ok.
 set_auth_cache_default_ttl(Node, TTL) ->
     ?assertMatch(ok, rpc:call(Node, application, set_env, [
         ?APP_NAME, auth_cache_item_default_ttl, TTL

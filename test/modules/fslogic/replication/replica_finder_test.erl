@@ -309,6 +309,7 @@ start() ->
 stop(_) ->
     application:unset_env(?APP_NAME, synchronizer_block_suiting),
     ?assert(meck:validate([oneprovider])),
-    meck:unload().
+    meck:unload(),
+    erase().
 
 -endif.

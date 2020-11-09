@@ -553,7 +553,7 @@ restart_autocleaning_run_test(Config) ->
         value = #autocleaning_run{
             status = binary_to_atom(?ACTIVE, utf8),
             space_id = ?SPACE_ID,
-            started_at = StartTime = rpc:call(W1, time_utils, timestamp_seconds, []),
+            started_at = StartTime = rpc:call(W1, clock, timestamp_seconds, []),
             bytes_to_release = Size - Target
         },
         scope = ?SPACE_ID
@@ -965,7 +965,7 @@ current_size(Worker, SpaceId) ->
     rpc:call(Worker, space_quota, current_size, [SpaceId]).
 
 current_timestamp_hours(Worker) ->
-    rpc:call(Worker, time_utils, timestamp_seconds, []) div 3600.
+    rpc:call(Worker, clock, timestamp_seconds, []) div 3600.
 
 change_last_open(Worker, FileGuid, NewLastOpen) ->
     Uuid = file_id:guid_to_uuid(FileGuid),
