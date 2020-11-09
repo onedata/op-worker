@@ -80,7 +80,7 @@
     get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
     get_logical_path/2,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
-    get_file_location_with_filled_gaps/2, fill_location_gaps/4,
+    get_file_location_with_filled_gaps/2,
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
@@ -838,46 +838,10 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange)
     {Locations, FileCtx2} = get_file_location_docs(FileCtx),
     {FileLocationDoc, FileCtx3} =
         get_or_create_local_file_location_doc(FileCtx2),
-    {fill_location_gaps(ReqRange, FileLocationDoc, Locations,
+    {location_and_link_utils:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
         get_uuid_const(FileCtx3)), FileCtx3};
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     get_file_location_with_filled_gaps(FileCtx, [ReqRange]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns location that can be understood by client. It has gaps filled, and
-%% stores guid instead of uuid.
-%% @end
-%%--------------------------------------------------------------------
--spec fill_location_gaps(fslogic_blocks:blocks() | undefined, file_location:doc(),
-    [file_location:doc()], file_location:id()) -> #file_location{}.
-fill_location_gaps(ReqRange0, #document{value = FileLocation = #file_location{
-    size = Size}} = FileLocationDoc, Locations, Uuid) ->
-    ReqRange = utils:ensure_defined(ReqRange0, [#file_block{offset = 0, size = Size}]),
-    Blocks = fslogic_location_cache:get_blocks(FileLocationDoc,
-        #{overlapping_blocks => ReqRange}),
-
-    % find gaps
-    AllRanges = lists:foldl(
-        fun(Doc, Acc) ->
-            fslogic_blocks:merge(Acc, fslogic_location_cache:get_blocks(Doc,
-                #{overlapping_blocks => ReqRange}))
-        end, [], Locations),
-    ExtendedRequestedRange = lists:map(fun(RequestedRange) ->
-        case RequestedRange of
-            #file_block{offset = O, size = S} when O + S < Size ->
-                RequestedRange#file_block{size = Size - O};
-            _ -> RequestedRange
-        end
-    end, ReqRange),
-    Gaps = fslogic_blocks:consolidate(
-        fslogic_blocks:invalidate(ExtendedRequestedRange, AllRanges)
-    ),
-    BlocksWithFilledGaps = fslogic_blocks:merge(Blocks, Gaps),
-
-    % fill gaps transform uid and emit
-    fslogic_location_cache:set_final_blocks(FileLocation#file_location{
-        uuid = Uuid}, BlocksWithFilledGaps).
 
 %%--------------------------------------------------------------------
 %% @doc
