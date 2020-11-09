@@ -906,13 +906,13 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 %%--------------------------------------------------------------------
 -spec add_qos_entry(session:id(), file_key(), qos_expression:infix() | qos_expression:expression(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
-add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
-    add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, user_defined).
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
+    add_qos_entry(SessId, FileKey, Expression, ReplicasNum, user_defined).
 
 -spec add_qos_entry(session:id(), file_key(), qos_expression:infix() | qos_expression:expression(),
     qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | error_reply().
-add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) ->
-    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) end).
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) ->
+    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) end).
 
 %%--------------------------------------------------------------------
 %% @doc

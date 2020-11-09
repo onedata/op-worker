@@ -267,11 +267,11 @@ add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
 %%--------------------------------------------------------------------
 -spec add_impossible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
-add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType) ->
+add_impossible_qos(FileCtx, QosExpression, ReplicasNum, EntryType) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    case qos_entry:create(SpaceId, FileUuid, QosExpressionInRPN, ReplicasNum, EntryType) of
+    case qos_entry:create(SpaceId, FileUuid, QosExpression, ReplicasNum, EntryType) of
         {ok, QosEntryId} ->
             ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
             #provider_response{

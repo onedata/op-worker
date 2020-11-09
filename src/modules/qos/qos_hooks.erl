@@ -25,6 +25,7 @@
     handle_entry_delete/1,
     reconcile_qos/1, reconcile_qos/2,
     try_assigning_storages/3,
+    get_storages_by_expression/2,
     reevaluate_all_impossible_qos_in_space/1,
     retry_failed_files/1
 ]).
@@ -125,12 +126,7 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
 -spec try_assigning_storages(od_space:id(), qos_expression:expression(), qos_entry:replicas_num()) ->
     {true, [storage:id()]} | false.
 try_assigning_storages(SpaceId, QosExpression, ReplicasNum) ->
-    {ok, SpaceStorages} = space_logic:get_all_storage_ids(SpaceId),
-    AllStoragesWithParams = lists:foldl(fun(StorageId, Acc) ->
-        Acc#{StorageId => storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId)}
-    end, #{}, SpaceStorages),
-    
-    MatchingStorages = qos_expression:filter_storages(QosExpression, AllStoragesWithParams),
+    MatchingStorages = get_storages_by_expression(SpaceId, QosExpression),
     CalculatedStorages = lists_utils:random_sublist(MatchingStorages, ReplicasNum, ReplicasNum),
     case CalculatedStorages of
         L when length(L) == ReplicasNum ->
@@ -138,6 +134,15 @@ try_assigning_storages(SpaceId, QosExpression, ReplicasNum) ->
         _ ->
             false
     end.
+
+
+-spec get_storages_by_expression(od_space:id(), qos_expression:expression()) -> [storage:id()].
+get_storages_by_expression(SpaceId, QosExpression) ->
+    {ok, SpaceStorages} = space_logic:get_all_storage_ids(SpaceId),
+    AllStoragesWithParams = lists:foldl(fun(StorageId, Acc) ->
+        Acc#{StorageId => storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId)}
+    end, #{}, SpaceStorages),
+    qos_expression:filter_storages(QosExpression, AllStoragesWithParams).
 
 
 %%--------------------------------------------------------------------
