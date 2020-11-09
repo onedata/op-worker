@@ -55,7 +55,8 @@
 -export([verify_provider_identity/1]).
 
 
--define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, 600)). % 10 minutes
+-define(PROVIDER_NODES_CACHE_TTL, 
+    application:get_env(?APP_NAME, provider_nodes_cache_ttl_seconds, 600)). % 10 minutes
 
 -compile([{no_auto_import, [get/0]}]).
 
