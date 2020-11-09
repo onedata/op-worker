@@ -989,7 +989,7 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #dir{
         {ok, _},
         lfm_proxy:mkdir(Node, FileOwnerSessId, DirPath)
     ),
-    ensure_dir_create_on_storage(Node, FileOwnerSessId, DirGuid),
+    permissions_test_utils:ensure_dir_create_on_storage(Node, DirGuid),
 
     {PermsPerFile0, ExtraData0} = lists:foldl(fun(Child, {PermsPerFileAcc, ExtraDataAcc}) ->
         {ChildPerms, ChildExtraData} = create_files(Node, FileOwnerSessId, DirPath, Child),
@@ -1003,20 +1003,6 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #dir{
             ExtraData0#{DirPath => HookFun(FileOwnerSessId, DirGuid)}
     end,
     {PermsPerFile0#{DirGuid => DirPerms}, ExtraData1}.
-
-
--spec ensure_dir_create_on_storage(node(), session:id(), file_id:file_guid()) ->
-    ok.
-ensure_dir_create_on_storage(Node, FileOwnerSessId, DirGuid) ->
-    % Create and open file in dir to ensure it is created on storage.
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
-        Node, FileOwnerSessId, DirGuid, <<"__tmp_file">>, 8#777
-    )),
-    {ok, Handle} = lfm_proxy:open(Node, FileOwnerSessId, {guid, FileGuid}, write),
-    ok = lfm_proxy:close(Node, Handle),
-
-    % Remove file to ensure it will not disturb tests
-    ok = lfm_proxy:unlink(Node, FileOwnerSessId, {guid, FileGuid}).
 
 
 -spec get_file_path(node(), session:id(), file_id:file_guid()) ->

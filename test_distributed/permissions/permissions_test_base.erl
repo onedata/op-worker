@@ -100,6 +100,21 @@
 % Export for use in rpc
 -export([check_perms/3]).
 
+% See p1/p2_local_feed_luma.json
+-define(EXP_POSIX_STORAGE_CONFIG, #{
+    p1 => #{
+        <<"owner">> => #{uid => 3001, gid => 3000},
+        <<"user1">> => #{uid => 3002, gid => 3000},
+        <<"user2">> => #{uid => 3003, gid => 3000},
+        <<"user3">> => #{uid => 3004, gid => 3000}
+    },
+    p2 => #{
+        <<"owner">> => #{uid => 6001, gid => 6000},
+        <<"user1">> => #{uid => 6002, gid => 6000},
+        <<"user2">> => #{uid => 6003, gid => 6000},
+        <<"user3">> => #{uid => 6004, gid => 6000}
+    }
+}).
 
 -define(rpcCache(W, Function, Args), rpc:call(W, permissions_cache, Function, Args)).
 
@@ -632,7 +647,13 @@ mkdir_test(Config) ->
         operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
-            extract_ok(lfm_proxy:mkdir(W, SessId, ParentDirGuid, <<"dir2">>, 8#777))
+            case lfm_proxy:mkdir(W, SessId, ParentDirGuid, <<"dir2">>, 8#777) of
+                {ok, DirGuid} ->
+                    permissions_test_utils:ensure_dir_create_on_storage(W, DirGuid),
+                    assert_storage_owner_on_success(ok, W, SessId, <<ParentDirPath/binary, "/dir2">>);
+                {error, _} = Error ->
+                    Error
+            end
         end
     }, Config).
 
@@ -651,10 +672,14 @@ get_children_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:get_children(W, SessId, DirKey, 0, 100))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_children(W, SessId, DirKey, 0, 100)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, DirPath
+            )
         end
     }, Config).
 
@@ -673,10 +698,14 @@ get_children_attrs_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:get_children_attrs(W, SessId, DirKey, 0, 100))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_children_attrs(W, SessId, DirKey, 0, 100)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, DirPath
+            )
         end
     }, Config).
 
@@ -695,10 +724,14 @@ get_children_details_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:get_children_details(W, SessId, DirKey, 0, 100, undefined))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_children_details(W, SessId, DirKey, 0, 100, undefined)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, DirPath
+            )
         end
     }, Config).
 
@@ -716,10 +749,14 @@ get_child_attr_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
-            extract_ok(lfm_proxy:get_child_attr(W, SessId, ParentDirGuid, <<"file1">>))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_child_attr(W, SessId, ParentDirGuid, <<"file1">>)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, <<ParentDirPath/binary, "/file1">>
+            )
         end
     }, Config).
 
@@ -750,12 +787,16 @@ mv_dir_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
             SrcDirKey = maps:get(SrcDirPath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
             DstDirKey = maps:get(DstDirPath, ExtraData),
-            extract_ok(lfm_proxy:mv(W, SessId, SrcDirKey, DstDirKey, <<"dir21">>))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:mv(W, SessId, SrcDirKey, DstDirKey, <<"dir21">>)),
+                % Regardless of who moved dir it should still be a possession of its creator
+                W, FileOwnerSessId, <<DstDirPath/binary, "/dir21">>
+            )
         end
     }, Config).
 
@@ -807,7 +848,15 @@ create_file_test(Config) ->
         operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
-            extract_ok(lfm_proxy:create(W, SessId, ParentDirGuid, <<"file1">>, 8#777))
+            case lfm_proxy:create(W, SessId, ParentDirGuid, <<"file1">>, 8#777) of
+                {ok, FileGuid} ->
+                    % Open file to enforce it's creation on storage
+                    {ok, Handle} = lfm_proxy:open(W, ?ROOT_SESS_ID, {guid, FileGuid}, read),
+                    ok = lfm_proxy:close(W, Handle),
+                    assert_storage_owner_on_success(ok, W, SessId, <<ParentDirPath/binary, "/file1">>);
+                {error, _} = Error ->
+                    Error
+            end
         end
     }, Config).
 
@@ -832,10 +881,14 @@ open_for_read_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:open(W, SessId, FileKey, read))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:open(W, SessId, FileKey, read)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -860,10 +913,14 @@ open_for_write_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:open(W, SessId, FileKey, write))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:open(W, SessId, FileKey, write)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -888,10 +945,14 @@ open_for_rdwr_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:open(W, SessId, FileKey, rdwr))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:open(W, SessId, FileKey, rdwr)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -919,7 +980,10 @@ create_and_open_test(Config) ->
         operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
-            extract_ok(lfm_proxy:create_and_open(W, SessId, ParentDirGuid, <<"file1">>, 8#777))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:create_and_open(W, SessId, ParentDirGuid, <<"file1">>, 8#777)),
+                W, SessId, <<ParentDirPath/binary, "/file1">>
+            )
         end
     }, Config).
 
@@ -938,21 +1002,22 @@ truncate_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:truncate(W, SessId, FileKey, 0))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:truncate(W, SessId, FileKey, 0)),
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
 
 mv_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space1">>,
 
     permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        space_id = SpaceId,
         root_dir = ?SCENARIO_NAME,
         files = [
             #dir{
@@ -974,21 +1039,16 @@ mv_file_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
             SrcFileKey = maps:get(SrcFilePath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
             DstDirKey = maps:get(DstDirPath, ExtraData),
-            case lfm_proxy:mv(W, SessId, SrcFileKey, DstDirKey, <<"file21">>) of
-                {ok, _NewFileGuid} ->
-                    ?EXEC_IF_SUPPORTED_BY_POSIX(W, SpaceId, fun() ->
-                        StorageFilePath = storage_file_path(W, SpaceId, <<DstDirPath/binary, "/file21">>),
-                        ?assertFileInfo(#{uid => 6002, gid => 6000}, W, StorageFilePath)
-                    end),
-                    ok;
-                {error, _} = Error ->
-                    Error
-            end
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:mv(W, SessId, SrcFileKey, DstDirKey, <<"file21">>)),
+                % Regardless of who moved file it should still be a possession of its creator
+                W, FileOwnerSessId, <<DstDirPath/binary, "/file21">>
+            )
         end
     }, Config).
 
@@ -1032,10 +1092,14 @@ get_parent_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_parent(W, SessId, FileKey))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_parent(W, SessId, FileKey)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1049,10 +1113,14 @@ get_file_path_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = false, % TODO VFS-6057
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             {guid, FileGuid} = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_file_path(W, SessId, FileGuid))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_file_path(W, SessId, FileGuid)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1066,9 +1134,13 @@ get_file_guid_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            extract_ok(lfm_proxy:resolve_guid(W, SessId, FilePath))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:resolve_guid(W, SessId, FilePath)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1082,10 +1154,14 @@ get_file_attr_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:stat(W, SessId, FileKey))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:stat(W, SessId, FileKey)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1099,10 +1175,14 @@ get_file_details_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_details(W, SessId, FileKey))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_details(W, SessId, FileKey)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1121,10 +1201,14 @@ get_file_distribution_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_file_distribution(W, SessId, FileKey))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_file_distribution(W, SessId, FileKey)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1152,6 +1236,21 @@ set_perms_test(Config) ->
     {ok, ShareId} = ?assertMatch({ok, _}, lfm_proxy:create_share(W, FileOwnerUserSessId, {guid, FileGuid}, <<"share">>)),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
+    % Open file to ensure it's creation on storage
+    {ok, Handle} = lfm_proxy:open(W, FileOwnerUserSessId, {guid, FileGuid}, write),
+    ok = lfm_proxy:close(W, Handle),
+
+    AssertProperStorageAttrsFun = fun(ExpMode) ->
+        ?EXEC_IF_SUPPORTED_BY_POSIX(W, ?SPACE_ID, fun() ->
+            ?assertFileInfo(
+                get_exp_owner_posix_attrs(W, FileOwnerUserSessId, #{mode => ?FILE_MODE(ExpMode)}),
+                W, storage_file_path(W, ?SPACE_ID, FilePath)
+            )
+        end)
+    end,
+
+    AssertProperStorageAttrsFun(8#777),
+
     %% POSIX
 
     % file owner can always change file perms if he has access to it
@@ -1162,6 +1261,7 @@ set_perms_test(Config) ->
     ),
     permissions_test_utils:set_modes(W, #{DirGuid => 8#100, FileGuid => 8#000}),
     ?assertMatch(ok, lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, FileGuid}, 8#000)),
+    AssertProperStorageAttrsFun(8#000),
 
     % but not if that access is via shared guid
     permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
@@ -1169,6 +1269,7 @@ set_perms_test(Config) ->
         {error, ?EACCES},
         lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, ShareFileGuid}, 8#000)
     ),
+    AssertProperStorageAttrsFun(8#777),
 
     % other users from space can't change perms no matter what
     permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
@@ -1176,6 +1277,12 @@ set_perms_test(Config) ->
         {error, ?EACCES},
         lfm_proxy:set_perms(W, GroupUserSessId, {guid, FileGuid}, 8#000)
     ),
+    AssertProperStorageAttrsFun(8#777),
+
+    % with exception being space owner who can always change perms no matter what
+    permissions_test_utils:set_modes(W, #{DirGuid => 8#000, FileGuid => 8#000}),
+    ?assertMatch(ok, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, FileGuid}, 8#555)),
+    AssertProperStorageAttrsFun(8#555),
 
     % users outside of space shouldn't even see the file
     permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
@@ -1183,6 +1290,7 @@ set_perms_test(Config) ->
         {error, ?ENOENT},
         lfm_proxy:set_perms(W, OtherUserSessId, {guid, FileGuid}, 8#000)
     ),
+    AssertProperStorageAttrsFun(8#777),
 
     %% ACL
 
@@ -1265,10 +1373,14 @@ check_read_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, read))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, read)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1287,10 +1399,14 @@ check_write_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, write))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, write)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1309,10 +1425,14 @@ check_rdwr_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, rdwr))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, rdwr)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1328,10 +1448,14 @@ create_share_test(Config) ->
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:create_share(W, SessId, DirKey, <<"create_share">>))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:create_share(W, SessId, DirKey, <<"create_share">>)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, DirPath
+            )
         end
     }, Config).
 
@@ -1355,10 +1479,14 @@ remove_share_test(Config) ->
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         available_in_readonly_mode = false,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:remove_share(W, SessId, ShareId))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:remove_share(W, SessId, ShareId)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, DirPath
+            )
         end
     }, Config).
 
@@ -1418,10 +1546,14 @@ get_acl_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_acl(W, SessId, FileKey))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_acl(W, SessId, FileKey)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1440,16 +1572,20 @@ set_acl_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_acl(W, SessId, FileKey, [
-                ?ALLOW_ACE(
-                    ?group,
-                    ?no_flags_mask,
-                    permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
-                )
-            ]))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:set_acl(W, SessId, FileKey, [
+                    ?ALLOW_ACE(
+                        ?group,
+                        ?no_flags_mask,
+                        permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
+                    )
+                ])),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1468,10 +1604,14 @@ remove_acl_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:remove_acl(W, SessId, FileKey))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:remove_acl(W, SessId, FileKey)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1492,10 +1632,14 @@ get_transfer_encoding_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_transfer_encoding(W, SessId, FileKey))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_transfer_encoding(W, SessId, FileKey)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1514,10 +1658,14 @@ set_transfer_encoding_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_transfer_encoding(W, SessId, FileKey, <<"base64">>))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:set_transfer_encoding(W, SessId, FileKey, <<"base64">>)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1538,10 +1686,14 @@ get_cdmi_completion_status_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_cdmi_completion_status(W, SessId, FileKey))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_cdmi_completion_status(W, SessId, FileKey)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1560,10 +1712,14 @@ set_cdmi_completion_status_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_cdmi_completion_status(W, SessId, FileKey, <<"Completed">>))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:set_cdmi_completion_status(W, SessId, FileKey, <<"Completed">>)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1584,10 +1740,14 @@ get_mimetype_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_mimetype(W, SessId, FileKey))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_mimetype(W, SessId, FileKey)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1606,10 +1766,14 @@ set_mimetype_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_mimetype(W, SessId, FileKey, <<"mimetype">>))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:set_mimetype(W, SessId, FileKey, <<"mimetype">>)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1632,10 +1796,14 @@ get_metadata_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_metadata(W, SessId, FileKey, json, [], false))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_metadata(W, SessId, FileKey, json, [], false)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1654,10 +1822,14 @@ set_metadata_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_metadata(W, SessId, FileKey, json, <<"VAL">>, []))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:set_metadata(W, SessId, FileKey, json, <<"VAL">>, [])),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1680,10 +1852,14 @@ remove_metadata_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:remove_metadata(W, SessId, FileKey, json))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:remove_metadata(W, SessId, FileKey, json)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1707,10 +1883,14 @@ get_xattr_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_xattr(W, SessId, FileKey, <<"myxattr">>))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_xattr(W, SessId, FileKey, <<"myxattr">>)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1731,10 +1911,14 @@ list_xattr_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:list_xattr(W, SessId, FileKey, false, false))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:list_xattr(W, SessId, FileKey, false, false)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1753,10 +1937,16 @@ set_xattr_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_xattr(W, SessId, FileKey, #xattr{name = <<"myxattr">>, value = <<"VAL">>}))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:set_xattr(W, SessId, FileKey, #xattr{
+                    name = <<"myxattr">>, value = <<"VAL">>
+                })),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1780,10 +1970,14 @@ remove_xattr_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:remove_xattr(W, SessId, FileKey, <<"myxattr">>))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:remove_xattr(W, SessId, FileKey, <<"myxattr">>)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1802,10 +1996,14 @@ add_qos_entry_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:add_qos_entry(W, SessId, FileKey, <<"country=FR">>, 1))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:add_qos_entry(W, SessId, FileKey, <<"country=FR">>, 1)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1830,10 +2028,14 @@ get_qos_entry_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_qos_entry(W, SessId, QosEntryId))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_qos_entry(W, SessId, QosEntryId)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1858,10 +2060,14 @@ remove_qos_entry_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:remove_qos_entry(W, SessId, QosEntryId))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:remove_qos_entry(W, SessId, QosEntryId)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1886,10 +2092,14 @@ get_effective_file_qos_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_effective_file_qos(W, SessId, FileKey))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:get_effective_file_qos(W, SessId, FileKey)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -1914,10 +2124,14 @@ check_qos_fulfillment_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:check_qos_status(W, SessId, QosEntryId))
+            assert_storage_owner_on_success(
+                extract_ok(lfm_proxy:check_qos_status(W, SessId, QosEntryId)),
+                % This operation shouldn't change file ownership
+                W, FileOwnerSessId, FilePath
+            )
         end
     }, Config).
 
@@ -2226,3 +2440,40 @@ extract_ok({ok, _}) -> ok;
 extract_ok({ok, _, _}) -> ok;
 extract_ok({ok, _, _, _}) -> ok;
 extract_ok({error, _} = Error) -> Error.
+
+
+%% @private
+-spec assert_storage_owner_on_success(Result, node(), session:id(), file_meta:path()) ->
+    Result when Result :: ok | {error, term()}.
+assert_storage_owner_on_success(ok, Worker, ExpOwnerSessId, LogicalFilePath) ->
+    ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, ?SPACE_ID, fun() ->
+        ?assertFileInfo(
+            get_exp_owner_posix_attrs(Worker, ExpOwnerSessId),
+            Worker,
+            storage_file_path(Worker, ?SPACE_ID, LogicalFilePath)
+        )
+    end),
+    ok;
+assert_storage_owner_on_success({error, _} = Error, _, _, _) ->
+    Error.
+
+
+%% @private
+-spec get_exp_owner_posix_attrs(node(), session:id()) ->
+    #{uid => integer(), gid => integer()}.
+get_exp_owner_posix_attrs(Worker, SessionId) ->
+    get_exp_owner_posix_attrs(Worker, SessionId, #{}).
+
+
+%% @private
+-spec get_exp_owner_posix_attrs(node(), session:id(), map()) ->
+    #{uid => integer(), gid => integer()}.
+get_exp_owner_posix_attrs(Worker, SessionId, AdditionalAttrs) ->
+    {ok, UserId} = rpc:call(Worker, session, get_user_id, [SessionId]),
+    ProviderName = list_to_atom(
+        lists:nth(2, string:tokens(atom_to_list(?GET_HOSTNAME(Worker)), "."))
+    ),
+    maps:merge(
+        AdditionalAttrs,
+        maps:get(UserId, maps:get(ProviderName, ?EXP_POSIX_STORAGE_CONFIG))
+    ).

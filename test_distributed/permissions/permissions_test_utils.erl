@@ -19,6 +19,8 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
+    ensure_dir_create_on_storage/2,
+
     create_session/3,
 
     all_perms/2, complementary_perms/3,
@@ -33,6 +35,19 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec ensure_dir_create_on_storage(node(), file_id:file_guid()) -> ok.
+ensure_dir_create_on_storage(Node, DirGuid) ->
+    % Create and open file in dir to ensure it is created on storage.
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
+        Node, ?ROOT_SESS_ID, DirGuid, <<"__tmp_file">>, 8#777
+    )),
+    {ok, Handle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, {guid, FileGuid}, write),
+    ok = lfm_proxy:close(Node, Handle),
+
+    % Remove file to ensure it will not disturb tests
+    ok = lfm_proxy:unlink(Node, ?ROOT_SESS_ID, {guid, FileGuid}).
 
 
 -spec create_session(node(), od_user:id(), tokens:serialized()) ->

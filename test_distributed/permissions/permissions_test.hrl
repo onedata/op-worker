@@ -86,11 +86,14 @@
     children = [] :: [#dir{} | #file{}]
 }).
 
+% Main space used in permissions tests
+-define(SPACE_ID, <<"space1">>).
+
 -record(perms_test_spec, {
     test_node :: node(),
 
     % Id of space within which test will be carried
-    space_id = <<"space1">> :: binary(),
+    space_id = ?SPACE_ID :: binary(),
 
     % Name of root dir for test
     root_dir :: binary(),
