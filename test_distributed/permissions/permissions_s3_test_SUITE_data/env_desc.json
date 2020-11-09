@@ -198,6 +198,26 @@
                     }
                 }
             }
+        },
+        "storages": {
+            "p1": {
+                "s3_1": {
+                    "luma": "local"
+                }
+            },
+            "p2": {
+                "s3_2": {
+                    "luma": "local"
+                }
+            }
+        },
+        "luma_configs": {
+            "p1": {
+                "local_feed_config_path": "p1_local_feed_luma.json"
+            },
+            "p2": {
+                "local_feed_config_path": "p2_local_feed_luma.json"
+            }
         }
     }
 }
