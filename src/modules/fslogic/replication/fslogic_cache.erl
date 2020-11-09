@@ -557,7 +557,7 @@ finish_blocks_usage(Key) ->
         [Head] ->
             erase({?BLOCKS_IN_USE, Key}),
             Head;
-        [Head | Tail] when is_list(Head) ->
+        [Head | Tail] ->
             use_blocks(Key, Tail),
             Head
     end.
