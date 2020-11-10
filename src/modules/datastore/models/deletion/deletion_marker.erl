@@ -50,7 +50,7 @@ remove(ParentUuid, ChildCtx) ->
     delete_link(ParentUuid, ChildStorageBasename),
     ChildCtx2.
 
--spec check(file_meta:uuid(), helpers:file_id()) -> file_ctx:ctx().
+-spec check(file_meta:uuid(), helpers:file_id()) -> {ok, link_target()} | error().
 check(ParentUuid, ChildStorageBasename) ->
     get_link(ParentUuid, ChildStorageBasename).
 

@@ -27,7 +27,7 @@
     split_local_and_remote/1
 ]).
 
--type id() :: traverse:id().
+-type id() :: datastore:key().
 -type traverse_req() :: #qos_traverse_req{}.
 -opaque traverse_reqs() :: #{id() => #qos_traverse_req{}}.
 

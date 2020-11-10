@@ -52,7 +52,7 @@
 -export_type([ctx/0]).
 
 %% Functions creating context and filling its data
--export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
+-export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/2, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, set_file_location/2, set_file_id/2,
     set_is_dir/2]).
 
@@ -77,7 +77,8 @@
     get_new_storage_file_id/1, get_aliased_name/2,
     get_display_credentials/1, get_times/1,
     get_parent_guid/2, get_child/3,
-    get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
+    get_file_children/4, get_file_children/5, get_file_children/6,
+    get_file_children/7, get_file_children_whitelisted/5,
     get_logical_path/2,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2,
@@ -123,9 +124,15 @@ new_by_canonical_path(UserCtx, Path) ->
 new_by_guid(Guid) ->
     #file_ctx{guid = Guid}.
 
+
+-spec new_by_doc(file_meta:doc(), od_space:id()) -> ctx().
+new_by_doc(Doc, SpaceId) ->
+    new_by_doc(Doc, SpaceId, undefined).
+
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new file context using file's GUID.
+%% Creates new file context using file's file_meta doc.
 %% @end
 %%--------------------------------------------------------------------
 -spec new_by_doc(file_meta:doc(), od_space:id(), undefined | od_share:id()) -> ctx().
@@ -148,7 +155,7 @@ new_by_partial_context(FilePartialCtx) ->
     {CanonicalPath, FilePartialCtx2} = file_partial_ctx:get_canonical_path(FilePartialCtx),
     {ok, FileDoc} = canonical_path:resolve(CanonicalPath),
     SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx2),
-    {new_by_doc(FileDoc, SpaceId, undefined), SpaceId}.
+    {new_by_doc(FileDoc, SpaceId), SpaceId}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -708,7 +715,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of directory children.
+%% @equiv get_file_children(FileCtx, UserCtx, Offset, Limit, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(),
@@ -717,9 +724,26 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
     Token :: undefined | datastore_links_iter:token(),
     StartId :: undefined | file_meta:name()
 ) ->
-    {Children :: [ctx()], NewToken :: datastore_links_iter:token(), NewFileCtx :: ctx()} |
+    {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()} |
     {Children :: [ctx()], NewFileCtx :: ctx()}.
 get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
+    get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of directory children.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_children(ctx(), user_ctx:ctx(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
+    Token :: undefined | datastore_links_iter:token(),
+    StartId :: undefined | file_meta:name(),
+    PrevTreeId :: undefined | oneprovider:id()
+) ->
+    {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()} |
+    {Children :: [ctx()], NewFileCtx :: ctx()}.
+get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, PrevTreeId) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             {list_user_spaces(UserCtx, Offset, Limit, undefined), FileCtx};
@@ -735,9 +759,9 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
                         new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
                     end,
 
-                    case file_meta:list_children(FileDoc, Offset, Limit, Token, StartId) of
-                        {ok, ChildrenLinks, #{token := Token2}} ->
-                            {lists:map(MapFun, ChildrenLinks), Token2, FileCtx2};
+                    case file_meta:list_children(FileDoc, Offset, Limit, Token, StartId, PrevTreeId) of
+                        {ok, ChildrenLinks, ListExtendedInfo = #{token := _}} ->
+                            {lists:map(MapFun, ChildrenLinks), ListExtendedInfo, FileCtx2};
                         {ok, ChildrenLinks, _} ->
                             {lists:map(MapFun, ChildrenLinks), FileCtx2}
                     end;

@@ -256,27 +256,31 @@ report_file_transfer_failure(FileCtx, QosEntries) ->
 
 -spec report_file_deleted(file_ctx:ctx(), qos_entry:id()) -> ok.
 report_file_deleted(FileCtx, QosEntryId) ->
-    {ok, QosDoc} = qos_entry:get(QosEntryId),
-    {ok, TraverseReqs} = qos_entry:get_traverse_reqs(QosDoc),
-    {LocalTraverseIds, _} = qos_traverse_req:split_local_and_remote(TraverseReqs),
-    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx),
-    
-    lists:foreach(fun(TraverseId) ->
-        case IsDir of
-            true ->
-                {ParentFileCtx, _} = file_ctx:get_parent(FileCtx1, undefined),
-                ok = report_child_dir_traversed(TraverseId, ParentFileCtx),
-                ok = handle_traverse_finished_for_dir(TraverseId, FileCtx1, no_link);
-            false ->
-                ok = report_traverse_finished_for_file(TraverseId, FileCtx)
-        end
-    end, LocalTraverseIds),
-    
-    {ok, SpaceId} = qos_entry:get_space_id(QosDoc),
-    {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx1),
-    % delete all reconcile links for given file
-    delete_all_links_with_prefix(
-        SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ?RECONCILE_LINK_NAME(UuidBasedPath, <<"">>)).
+    case qos_entry:get(QosEntryId) of
+        {ok, QosDoc} ->
+            {ok, TraverseReqs} = qos_entry:get_traverse_reqs(QosDoc),
+            {LocalTraverseIds, _} = qos_traverse_req:split_local_and_remote(TraverseReqs),
+            {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx),
+
+            lists:foreach(fun(TraverseId) ->
+                case IsDir of
+                    true ->
+                        {ParentFileCtx, _} = file_ctx:get_parent(FileCtx1, undefined),
+                        ok = report_child_dir_traversed(TraverseId, ParentFileCtx),
+                        ok = handle_traverse_finished_for_dir(TraverseId, FileCtx1, no_link);
+                    false ->
+                        ok = report_traverse_finished_for_file(TraverseId, FileCtx)
+                end
+            end, LocalTraverseIds),
+
+            {ok, SpaceId} = qos_entry:get_space_id(QosDoc),
+            {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx1),
+            % delete all reconcile links for given file
+            delete_all_links_with_prefix(
+                SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ?RECONCILE_LINK_NAME(UuidBasedPath, <<"">>));
+        {error, not_found} ->
+            ok
+    end.
 
 
 -spec report_entry_deleted(od_space:id(), qos_entry:id()) -> ok.

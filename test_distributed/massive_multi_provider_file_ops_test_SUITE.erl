@@ -657,17 +657,24 @@ build_traverse_tree(Worker, SessId, Dir, Num) ->
 do_master_job(Job, TaskID) ->
     tree_traverse:do_master_job(Job, TaskID).
 
-do_slave_job(#tree_traverse_slave{
-    doc = #document{value = #file_meta{name = <<"2">>}} = Doc,
-    traverse_info = {Pid, cancel, DirName}
+do_slave_job(Job = #tree_traverse_slave{
+    traverse_info = {Pid, cancel, DirName},
+    file_ctx = FileCtx
 }, TaskID) ->
-    timer:sleep(500),
-    Pid ! {cancel, DirName},
-    timer:sleep(15000),
-    do_slave_job({Doc, Pid}, TaskID);
-do_slave_job({Doc, {Pid, cancel, _DirName}}, TaskID) ->
-    do_slave_job({Doc, Pid}, TaskID);
-do_slave_job({#document{value = #file_meta{name = Name}}, TraverseInfo}, _TaskID) ->
+    {#document{value = #file_meta{name = Name}}, _} = file_ctx:get_file_doc(FileCtx),
+    case Name of
+        <<"2">> ->
+            timer:sleep(500),
+            Pid ! {cancel, DirName},
+            timer:sleep(15000);
+        _ -> ok
+    end,
+    do_slave_job(Job#tree_traverse_slave{traverse_info = Pid}, TaskID);
+do_slave_job(#tree_traverse_slave{
+    traverse_info = TraverseInfo,
+    file_ctx = FileCtx
+}, _TaskID) ->
+    {#document{value = #file_meta{name = Name}}, _} = file_ctx:get_file_doc(FileCtx),
     TraverseInfo ! {slave, binary_to_integer(Name)},
     ok.
 

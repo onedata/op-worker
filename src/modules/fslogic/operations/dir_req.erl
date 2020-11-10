@@ -366,7 +366,7 @@ list_children(UserCtx, FileCtx, Offset, Limit, Token, StartId, undefined) ->
     case file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit, Token2, StartId) of
         {C, FC}  ->
             {C, <<"">>, length(C) < Limit, FC};
-        {C, NT, FC} ->
+        {C, #{token := NT}, FC} ->
             IL = NT#link_token.is_last,
             NT2 = case IL of
                 true -> <<"">>;

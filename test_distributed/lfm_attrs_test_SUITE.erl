@@ -702,9 +702,10 @@ do_master_job(Job, TaskID) ->
     tree_traverse:do_master_job(Job, TaskID).
 
 do_slave_job(#tree_traverse_slave{
-    doc = #document{value = #file_meta{name = Name}},
+    file_ctx = FileCtx,
     traverse_info = TraverseInfo
 }, _TaskID) ->
+    {#document{value = #file_meta{name = Name}}, _} = file_ctx:get_file_doc(FileCtx),
     TraverseInfo ! {slave, binary_to_integer(Name)},
     ok.
 

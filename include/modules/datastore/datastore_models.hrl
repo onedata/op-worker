@@ -419,15 +419,6 @@
     slave_job_pid  = undefined :: pid() | undefined
 }).
 
-%% Model that holds information necessary to tell whether whole subtree
-%% of a directory was traversed so this directory can be cleaned up.
--record(cleanup_traverse_status, {
-    % number of children listed but not yet traversed
-    pending_children_count = 0 :: non_neg_integer(),
-    % flag that informs whether all batches of children have been listed
-    all_batches_listed = false :: boolean()
-}).
-
 %% Model that stores config of file-popularity mechanism per given space.
 -record(file_popularity_config, {
     enabled = false :: boolean(),
@@ -938,8 +929,21 @@
     last_tree :: od_provider:id(),
     % Traverse task specific info
     execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
+    children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
+    track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),
     traverse_info :: binary()
+}).
+
+%% Model that holds information necessary to tell whether whole subtree
+%% of a directory was traversed so this directory can be cleaned up.
+-record(tree_traverse_progress, {
+    % number of children jobs listed but not yet processed
+    to_process = 0 :: non_neg_integer(),
+    % number of children jobs processed
+    processed = 0 :: non_neg_integer(),
+    % flag that informs whether all batches of children have been listed
+    all_batches_listed = false :: boolean()
 }).
 
 -endif.

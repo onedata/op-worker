@@ -180,8 +180,6 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
 -spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(), docs_deletion_mode()) -> ok.
 remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
     % TODO VFS-5270
-    {C, _} = file_ctx:get_canonical_path(FileCtx),
-%%    ?alert("RemoveFile: ~p", [C]),
     replica_synchronizer:apply(FileCtx, fun() ->
         {RemoveStorageFileResult, FileCtx3} = case RemoveStorageFile of
             true ->
@@ -266,14 +264,11 @@ custom_handle_opened_file(FileCtx, UserCtx, _DocsDeletionScope, ?MARKER_HANDLING
 -spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(),
     RemoveStorageFileResult :: ok | ignored | {error, term()}, docs_deletion_scope()) -> ok.
 maybe_try_to_delete_parent(FileCtx, UserCtx, ok, DocsDeletionScope) ->
-    {C, _} = file_ctx:get_canonical_path(FileCtx),
-%%    ?alert("Maybe try do delete parent of ~p", [C]),
     {ParentCtx, _FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
     try
         {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             case file_meta:is_deleted(ParentDoc) of
                 true ->
-%%                    ?alert("Will delete parent of ~p", [C]),
                     % use ?TWO_STEP_DEL_FIN mode because it handles case when file_meta is already deleted
                     remove_file(ParentCtx2, UserCtx, true, ?TWO_STEP_DEL_FIN(DocsDeletionScope));
                 false ->

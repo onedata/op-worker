@@ -778,7 +778,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
     end,
     case CreationResult of
         {ok, FinalDoc2} ->
-            FileCtx = file_ctx:new_by_doc(FinalDoc2, SpaceId, undefined),
+            FileCtx = file_ctx:new_by_doc(FinalDoc2, SpaceId),
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, true, []),
             {ok, FileCtx};
         stalled_link ->
@@ -810,7 +810,6 @@ create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber) ->
 prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
     Type = file_meta:type(Mode),
     file_meta:new_doc(FileUuid, FileName, Type, Mode band 8#1777, OwnerId, ParentUuid, SpaceId).
-
 
 -spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->
     {ok, storage_file_ctx:ctx()}.

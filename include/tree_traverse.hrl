@@ -12,23 +12,45 @@
 -ifndef(TREE_TRAVERSE_HRL).
 -define(TREE_TRAVERSE_HRL, 1).
 
+-include("modules/datastore/datastore_models.hrl").
+
+
+-define(BATCH_PROCESSING_PREHOOK_NOOP, fun(_, _, _, _) -> ok end).
+-define(DEFAULT_BATCH_SIZE, 1000).
+-define(DEFAULT_EXECS_SLAVE_ON_DIR, false).
+-define(DEFAULT_CHILDREN_MASTER_JOBS_MODE, sync).
+-define(DEFAULT_TRACK_SUBTREE_STATUS, false).
+
 % Record that defines master job
 -record(tree_traverse, {
     % File or directory processed by job
-    doc :: file_meta:doc(),
+    file_ctx :: file_ctx:ctx(),
+
     % Fields used for directory listing
-    token :: datastore_links_iter:token() | undefined,
+    token = #link_token{} :: datastore_links_iter:token(),
     last_name = <<>> :: file_meta:name(),
     last_tree = <<>> :: od_provider:id(),
     batch_size :: tree_traverse:batch_size(),
+
     % Traverse config
-    execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(), % generate slave jobs also for directories
-    traverse_info :: tree_traverse:traverse_info() % info passed to every slave job
+    % generate slave jobs also for directories
+    execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
+    % flag determining whether children master jobs are scheduled before slave jobs are processed
+    children_master_jobs_mode = ?DEFAULT_CHILDREN_MASTER_JOBS_MODE :: tree_traverse:children_master_jobs_mode(),
+    track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean(),
+
+    % info passed to every slave job
+    traverse_info :: tree_traverse:traverse_info()
 }).
 
 -record(tree_traverse_slave, {
-    doc :: file_meta:doc(),
-    traverse_info :: tree_traverse:traverse_info()
+    file_ctx :: file_ctx:ctx(),
+    traverse_info :: tree_traverse:traverse_info(),
+    track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean()
 }).
+
+
+-define(SUBTREE_PROCESSED, subtree_processed).
+-define(SUBTREE_NOT_PROCESSED, subtree_not_processed).
 
 -endif.
