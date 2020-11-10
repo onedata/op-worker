@@ -153,8 +153,9 @@ restart_test_base(Config, RestartFun, RestartType) ->
     TransferIdsToVerify = case RestartType of
         kill ->
             % After node killing, it is possible that status in document is not updated
-            % if its link is already in past tree
-            TransferIds -- get_past_transfer_links(WorkerP2, SpaceId);
+            % if node killing has been executed when link was moving from one tree to another
+            sets:to_list(sets:union(sets:from_list(TransferIds),
+                get_scheduled_and_current_transfer_links_set(WorkerP2, SpaceId)));
         _ ->
             TransferIds
     end,
@@ -232,8 +233,9 @@ get_transfer_links(Ctx, Prefix, SpaceId, Acc0) ->
             {ok, sets:add_element(TransferId, Acc)}
     end, Acc0, #{}).
 
-get_past_transfer_links(Worker, SpaceId) ->
+get_scheduled_and_current_transfer_links_set(Worker, SpaceId) ->
     test_node_starter:load_modules([Worker], [?MODULE]),
     Ctx = #{model => transfer},
-    {ok, Acc} = rpc:call(Worker, ?MODULE, get_transfer_links, [Ctx, <<"PAST_TRANSFERS_KEY">>, SpaceId, sets:new()]),
-    sets:to_list(Acc).
+    {ok, Acc} = rpc:call(Worker, ?MODULE, get_transfer_links, [Ctx, <<"SCHEDULED_TRANSFERS_KEY">>, SpaceId, sets:new()]),
+    {ok, Acc2} = rpc:call(Worker, ?MODULE, get_transfer_links, [Ctx, <<"CURRENT_TRANSFERS_KEY">>, SpaceId, Acc]),
+    Acc2.
