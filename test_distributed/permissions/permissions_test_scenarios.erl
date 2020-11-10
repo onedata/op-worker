@@ -989,7 +989,7 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #dir{
         {ok, _},
         lfm_proxy:mkdir(Node, FileOwnerSessId, DirPath)
     ),
-    permissions_test_utils:ensure_dir_create_on_storage(Node, DirGuid),
+    permissions_test_utils:ensure_dir_created_on_storage(Node, DirGuid),
 
     {PermsPerFile0, ExtraData0} = lists:foldl(fun(Child, {PermsPerFileAcc, ExtraDataAcc}) ->
         {ChildPerms, ChildExtraData} = create_files(Node, FileOwnerSessId, DirPath, Child),

@@ -649,7 +649,7 @@ mkdir_test(Config) ->
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
             case lfm_proxy:mkdir(W, SessId, ParentDirGuid, <<"dir2">>, 8#777) of
                 {ok, DirGuid} ->
-                    permissions_test_utils:ensure_dir_create_on_storage(W, DirGuid),
+                    permissions_test_utils:ensure_dir_created_on_storage(W, DirGuid),
                     assert_storage_owner_on_success(ok, W, SessId, <<ParentDirPath/binary, "/dir2">>);
                 {error, _} = Error ->
                     Error

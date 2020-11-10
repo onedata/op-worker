@@ -19,7 +19,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
-    ensure_dir_create_on_storage/2,
+    ensure_dir_created_on_storage/2,
 
     create_session/3,
 
@@ -37,8 +37,8 @@
 %%%===================================================================
 
 
--spec ensure_dir_create_on_storage(node(), file_id:file_guid()) -> ok.
-ensure_dir_create_on_storage(Node, DirGuid) ->
+-spec ensure_dir_created_on_storage(node(), file_id:file_guid()) -> ok.
+ensure_dir_created_on_storage(Node, DirGuid) ->
     % Create and open file in dir to ensure it is created on storage.
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
         Node, ?ROOT_SESS_ID, DirGuid, <<"__tmp_file">>, 8#777
