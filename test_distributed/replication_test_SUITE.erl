@@ -895,13 +895,13 @@ remote_change_of_blocks_should_notify_clients(Config) ->
 
     % mock events
     test_utils:mock_new(W1, [fslogic_cache], [passthrough]),
-    test_utils:mock_expect(W1, fslogic_cache, cache_event, fun(_, _) -> ok end),
+    test_utils:mock_expect(W1, fslogic_cache, cache_location_change, fun(_, _) -> ok end),
 
     % when
     rpc:call(W1, dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
 
     % then
-    ?assert(rpc:call(W1, meck, called, [fslogic_cache, cache_event, 2])),
+    ?assert(rpc:call(W1, meck, called, [fslogic_cache, cache_location_change, 2])),
     test_utils:mock_validate_and_unload(W1, fslogic_cache).
 
 remote_irrelevant_change_should_not_notify_clients(Config) ->
