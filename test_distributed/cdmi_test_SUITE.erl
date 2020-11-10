@@ -387,8 +387,7 @@ get_read_chunks(Chunks) ->
 mock_storage_get_block_size(Workers) ->
     test_utils:mock_new(Workers, [storage], [passthrough]),
     test_utils:mock_expect(Workers, storage, get_block_size, fun(_) ->
-        {ok, BlockSize} = node_cache:get(storage_block_size, ?DEFAULT_STORAGE_BLOCK_SIZE),
-        BlockSize
+        node_cache:get(storage_block_size, ?DEFAULT_STORAGE_BLOCK_SIZE)
     end).
 
 
