@@ -163,24 +163,22 @@ sparse_files_should_be_created(Config0) ->
     ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, {guid, FileGuid5}, Provider1Id)),
     verify_sparse_file(Worker2, SessId2, FileGuid6, 10, {Provider1Id, []}),
 
+    % Truncate on empty file and read by other provider
+    {ok, FileGuid7} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
+        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+    verify_sparse_file(Worker2, SessId2, FileGuid7, 0, {Provider1Id, []}, false),
+    ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, {guid, FileGuid7}, 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, {guid, FileGuid7}, Provider2Id)),
+    verify_sparse_file(Worker1, SessId1, FileGuid7, 10, {Provider2Id, []}),
 
-    % TODO VFS-6971 - fix sizes update without blocks
-%%    % Truncate on empty file and read by other provider
-%%    {ok, FileGuid7} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-%%        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
-%%    verify_sparse_file(Worker2, SessId2, FileGuid7, 0, {Provider1Id, []}, false),
-%%    ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, {guid, FileGuid7}, 10)),
-%%    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, {guid, FileGuid7}, Provider2Id)),
-%%    verify_sparse_file(Worker1, SessId1, FileGuid7, 10, {Provider2Id, []}),
-
-%%    % Truncate on not empty file and read by other provider
-%%    {ok, FileGuid8} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-%%        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
-%%    file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid8, 0),
-%%    verify_sparse_file(Worker2, SessId2, FileGuid8, 1, {Provider1Id, [[0, 1]]}, false),
-%%    ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, {guid, FileGuid8}, 10)),
-%%    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, {guid, FileGuid8}, Provider2Id)),
-%%    verify_sparse_file(Worker1, SessId1, FileGuid8, 10, {Provider1Id, [[0, 1]]}),
+    % Truncate on not empty file and read by other provider
+    {ok, FileGuid8} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
+        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+    file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid8, 0),
+    verify_sparse_file(Worker2, SessId2, FileGuid8, 1, {Provider1Id, [[0, 1]]}, false),
+    ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, {guid, FileGuid8}, 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, {guid, FileGuid8}, Provider2Id)),
+    verify_sparse_file(Worker1, SessId1, FileGuid8, 10, {Provider1Id, [[0, 1]]}),
 
     % Write to empty file and read by other provider
     {ok, FileGuid9} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
