@@ -34,9 +34,9 @@
 assert_file_info(ExpectedValues, Worker, FilePath, Line) ->
     try
         {ok, FI} = storage_test_utils:read_file_info(Worker, FilePath),
-        maps:fold(fun(Field, ExpectedValue, _) ->
+        maps:map(fun(Field, ExpectedValue) ->
             assert_field(Field, ExpectedValue, FI)
-        end, undefined, ExpectedValues)
+        end, ExpectedValues)
     catch
         throw:(Error = {assertion_error, Field, ExpectedValue, Value}) ->
             ct:pal(

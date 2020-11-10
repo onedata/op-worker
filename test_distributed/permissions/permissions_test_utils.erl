@@ -12,6 +12,7 @@
 -module(permissions_test_utils).
 -author("Bartosz Walkowicz").
 
+-include("../storage_files_test_SUITE.hrl").
 -include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -19,6 +20,10 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
+    assert_user_is_file_owner_on_storage/4,
+    assert_user_is_file_owner_on_storage/5,
+
+    ensure_file_created_on_storage/2,
     ensure_dir_created_on_storage/2,
 
     create_session/3,
@@ -32,9 +37,57 @@
 ]).
 
 
+% See p1/p2_local_feed_luma.json
+-define(EXP_POSIX_STORAGE_CONFIG, #{
+    p1 => #{
+        <<"owner">> => #{uid => 3001, gid => 3000},
+        <<"user1">> => #{uid => 3002, gid => 3000},
+        <<"user2">> => #{uid => 3003, gid => 3000},
+        <<"user3">> => #{uid => 3004, gid => 3000}
+    },
+    p2 => #{
+        <<"owner">> => #{uid => 6001, gid => 6000},
+        <<"user1">> => #{uid => 6002, gid => 6000},
+        <<"user2">> => #{uid => 6003, gid => 6000},
+        <<"user3">> => #{uid => 6004, gid => 6000}
+    }
+}).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec assert_user_is_file_owner_on_storage(node(), od_space:id(), file_meta:path(), session:id()) ->
+    ok | no_return().
+assert_user_is_file_owner_on_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessId) ->
+    assert_user_is_file_owner_on_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessId, #{}).
+
+
+-spec assert_user_is_file_owner_on_storage(
+    node(),
+    od_space:id(),
+    file_meta:path(),
+    session:id(),
+    AdditionalAttrs :: map()
+) ->
+    ok | no_return().
+assert_user_is_file_owner_on_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessId, AdditionalAttrs) ->
+    ?EXEC_IF_SUPPORTED_BY_POSIX(Node, SpaceId, fun() ->
+        ?ASSERT_FILE_INFO(
+            get_exp_owner_posix_attrs(Node, ExpOwnerSessId, AdditionalAttrs),
+            Node,
+            storage_file_path(Node, SpaceId, LogicalFilePath)
+        )
+    end).
+
+
+-spec ensure_file_created_on_storage(node(), file_id:file_guid()) -> ok.
+ensure_file_created_on_storage(Node, FileGuid) ->
+    % Open and close file in dir to ensure it is created on storage.
+    {ok, Handle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, {guid, FileGuid}, write),
+    ok = lfm_proxy:close(Node, Handle).
 
 
 -spec ensure_dir_created_on_storage(node(), file_id:file_guid()) -> ok.
@@ -198,3 +251,26 @@ is_dir(Node, Guid) ->
         rpc:call(Node, file_meta, get, [Uuid])
     ),
     FileType == ?DIRECTORY_TYPE.
+
+
+%% @private
+-spec get_exp_owner_posix_attrs(node(), session:id(), map()) ->
+    #{uid => integer(), gid => integer()}.
+get_exp_owner_posix_attrs(Worker, SessionId, AdditionalAttrs) ->
+    {ok, UserId} = rpc:call(Worker, session, get_user_id, [SessionId]),
+    ProviderName = list_to_atom(
+        lists:nth(2, string:tokens(atom_to_list(?GET_HOSTNAME(Worker)), "."))
+    ),
+    maps:merge(
+        AdditionalAttrs,
+        maps:get(UserId, maps:get(ProviderName, ?EXP_POSIX_STORAGE_CONFIG))
+    ).
+
+
+%% @private
+-spec storage_file_path(node(), od_space:id(), file_meta:path()) -> binary().
+storage_file_path(W, SpaceId, LogicalPath) ->
+    [<<"/">>, <<"/", LogicalPathWithoutSpaceId/binary>>] = binary:split(
+        LogicalPath, SpaceId, [global]
+    ),
+    storage_test_utils:file_path(W, SpaceId, LogicalPathWithoutSpaceId).

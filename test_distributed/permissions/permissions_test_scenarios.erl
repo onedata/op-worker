@@ -16,6 +16,7 @@
 -module(permissions_test_scenarios).
 -author("Bartosz Walkowicz").
 
+-include("../storage_files_test_SUITE.hrl").
 -include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -113,7 +114,7 @@ run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
     acl_requires_space_privs = AclSpacePrivs,
     files = Files,
     operation = Operation
-}, Config) ->
+} = TestSpec, Config) ->
     FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
 
     lists:foreach(fun({ScenarioType, RequiredPrivs}) ->
@@ -139,7 +140,7 @@ run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
         % without space privileges
         run_space_privs_scenario(
             Node, SpaceId, FileOwner, User, Operation, ScenarioName,
-            ScenarioRootDirPath, ExtraData, RequiredPrivs, Config
+            ScenarioRootDirPath, ExtraData, RequiredPrivs, Config, TestSpec
         )
     end, [
         {posix, PosixSpacePrivs},
@@ -149,13 +150,13 @@ run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
 run_space_privs_scenario(
     Node, SpaceId, FileOwner, SpaceUser, Operation, ScenarioName,
-    ScenarioRootDirPath, ExtraData, RequiredPrivs, Config
+    ScenarioRootDirPath, ExtraData, RequiredPrivs, Config, TestSpec
 ) ->
     try
         space_privs_test(
             Node, SpaceId, FileOwner, SpaceUser,
             Operation, ScenarioRootDirPath, ExtraData,
-            RequiredPrivs, Config
+            RequiredPrivs, Config, TestSpec
         )
     catch _:Reason ->
         ct:pal(
@@ -188,7 +189,7 @@ run_space_privs_scenario(
 % Some operations can be performed only by who which doesn't need any space privs.
 space_privs_test(
     Node, SpaceId, FileOwnerId, UserId, Operation,
-    RootDirPath, ExtraData, owner, Config
+    RootDirPath, ExtraData, owner, Config, TestSpec
 ) ->
     % invalidate permission cache as it is not done due to initializer mocks
     invalidate_perms_cache(Node),
@@ -208,13 +209,14 @@ space_privs_test(
     ?assertMatch(
         ok,
         Operation(FileOwnerSessId, FileOwnerSessId, RootDirPath, ExtraData)
-    );
+    ),
+    assert_user_is_file_owner_on_storage(FileOwnerSessId, FileOwnerSessId, RootDirPath, TestSpec);
 
 % When no space privs are required operation should succeed even with
 % no space privs set for user.
 space_privs_test(
     Node, SpaceId, FileOwnerId, UserId, Operation,
-    RootDirPath, ExtraData, [], Config
+    RootDirPath, ExtraData, [], Config, TestSpec
 ) ->
     % invalidate permission cache as it is not done due to initializer mocks
     invalidate_perms_cache(Node),
@@ -225,13 +227,14 @@ space_privs_test(
     ?assertMatch(
         ok,
         Operation(FileOwnerSessId, UserSessId, RootDirPath, ExtraData)
-    );
+    ),
+    assert_user_is_file_owner_on_storage(FileOwnerSessId, UserSessId, RootDirPath, TestSpec);
 
 % When specific space privs are required, the operation should fail if
 % all privs but them are set and will succeed only with them.
 space_privs_test(
     Node, SpaceId, FileOwnerId, UserId, Operation,
-    RootDirPath, ExtraData, RequiredPrivs, Config
+    RootDirPath, ExtraData, RequiredPrivs, Config, TestSpec
 ) ->
     AllSpacePrivs = privileges:space_admin(),
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(Node)}}, Config),
@@ -257,6 +260,9 @@ space_privs_test(
     ?assertMatch(
         ok,
         Operation(FileOwnerSessId, UserSessId, RootDirPath, ExtraData)
+    ),
+    assert_user_is_file_owner_on_storage(
+        FileOwnerSessId, UserSessId, RootDirPath, TestSpec
     ).
 
 
@@ -282,7 +288,7 @@ run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     files = Files,
     available_in_readonly_mode = IsReadonly,
     operation = Operation
-}, Config) ->
+} = TestSpec, Config) ->
     FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
     MainToken = initializer:create_access_token(User),
     initializer:testmaster_mock_space_user_privileges(
@@ -311,14 +317,14 @@ run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
         % only when caveats allows it
         run_caveats_scenario(
             Node, MainToken, FileOwnerUserSessId, User, Operation, ScenarioType,
-            ScenarioRootDirPath, ExtraData, IsReadonly
+            ScenarioRootDirPath, ExtraData, IsReadonly, TestSpec
         )
     end, [data_path, data_objectid, data_readonly]).
 
 
 run_caveats_scenario(
     Node, MainToken, FileOwnerUserSessId, User, Operation, data_path,
-    ScenarioRootDirPath, ExtraData, _IsReadonly
+    ScenarioRootDirPath, ExtraData, _IsReadonly, TestSpec
 ) ->
     Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}),
     SessId1 = permissions_test_utils:create_session(Node, User, Token1),
@@ -334,10 +340,13 @@ run_caveats_scenario(
     ?assertMatch(
         ok,
         Operation(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData)
+    ),
+    assert_user_is_file_owner_on_storage(
+        FileOwnerUserSessId, SessId2, ScenarioRootDirPath, TestSpec
     );
 run_caveats_scenario(
     Node, MainToken, FileOwnerUserSessId, User, Operation, data_objectid,
-    ScenarioRootDirPath, ExtraData, _IsReadonly
+    ScenarioRootDirPath, ExtraData, _IsReadonly, TestSpec
 ) ->
     {guid, ScenarioRootDirGuid} = maps:get(ScenarioRootDirPath, ExtraData),
     {ok, ScenarioRootDirObjectId} = file_id:guid_to_objectid(ScenarioRootDirGuid),
@@ -359,10 +368,13 @@ run_caveats_scenario(
     ?assertMatch(
         ok,
         Operation(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData), 100
+    ),
+    assert_user_is_file_owner_on_storage(
+        FileOwnerUserSessId, SessId2, ScenarioRootDirPath, TestSpec
     );
 run_caveats_scenario(
     Node, MainToken, FileOwnerUserSessId, User, Operation, data_readonly,
-    ScenarioRootDirPath, ExtraData, IsReadonly
+    ScenarioRootDirPath, ExtraData, IsReadonly, TestSpec
 ) ->
     Token = tokens:confine(MainToken, #cv_data_readonly{}),
     SessId = permissions_test_utils:create_session(Node, User, Token),
@@ -372,6 +384,9 @@ run_caveats_scenario(
             ?assertMatch(
                 ok,
                 Operation(FileOwnerUserSessId, SessId, ScenarioRootDirPath, ExtraData)
+            ),
+            assert_user_is_file_owner_on_storage(
+                FileOwnerUserSessId, SessId, ScenarioRootDirPath, TestSpec
             );
         false ->
             % Operation should fail
@@ -407,7 +422,7 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
     requires_traverse_ancestors = RequiresTraverseAncestors,
     files = Files,
     operation = Operation
-}, Config) ->
+} = TestSpec, Config) ->
     FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
     SpaceUserSessId = ?config({session_id, {SpaceUser, ?GET_DOMAIN(Node)}}, Config),
     OtherUserSessId = ?config({session_id, {OtherUser, ?GET_DOMAIN(Node)}}, Config),
@@ -440,7 +455,7 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
         run_share_test_scenario(
             Node, FileOwnerUserSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-            PermsPerFile, ExtraData1, PermsType, IsAvailableInShareMode
+            PermsPerFile, ExtraData1, PermsType, IsAvailableInShareMode, TestSpec
         )
     end, [
         {FileOwnerUserSessId, posix, <<"owner_posix_share">>},
@@ -460,7 +475,7 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
 run_share_test_scenario(
     Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    PermsPerFile, ExtraData, PermsType0, _IsAvailableInShareMode = false
+    PermsPerFile, ExtraData, PermsType0, _IsAvailableInShareMode = false, _TestSpec
 ) ->
     % Set all posix or acl (depending on scenario) perms to files
     PermsType1 = case PermsType0 of
@@ -478,7 +493,7 @@ run_share_test_scenario(
     );
 run_share_test_scenario(
     Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    PermsPerFile, ExtraData, posix, _IsAvailableInShareMode = true
+    PermsPerFile, ExtraData, posix, _IsAvailableInShareMode = true, TestSpec
 ) ->
     {ComplementaryPosixPermsPerFile, RequiredPosixPerms} = get_complementary_posix_perms(
         maps:map(fun(_, Perms) -> perms_to_posix_perms(Perms) end, PermsPerFile)
@@ -486,19 +501,19 @@ run_share_test_scenario(
     run_standard_posix_tests(
         Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
         Operation, ComplementaryPosixPermsPerFile, RequiredPosixPerms,
-        ExtraData, other
+        ExtraData, other, TestSpec
     );
 run_share_test_scenario(
-    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    PermsPerFile, ExtraData, {acl, AllowOrDeny}, _IsAvailableInShareMode = true
+    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, _Operation,
+    PermsPerFile, ExtraData, {acl, AllowOrDeny}, _IsAvailableInShareMode = true, TestSpec
 ) ->
     {ComplementaryPermsPerFile, AllRequiredPerms} = get_complementary_perms(
         Node, PermsPerFile
     ),
     run_acl_perms_scenario(
-        Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
+        Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
         ComplementaryPermsPerFile, AllRequiredPerms, ExtraData,
-        ?everyone, ?no_flags_mask, AllowOrDeny
+        ?everyone, ?no_flags_mask, AllowOrDeny, TestSpec
     ).
 
 
@@ -524,7 +539,7 @@ run_posix_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
     requires_traverse_ancestors = RequiresTraverseAncestors,
     files = Files,
     operation = Operation
-}, Config) ->
+} = TestSpec, Config) ->
     FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
     GroupUserSessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
     OtherUserSessId = ?config({session_id, {OtherUser, ?GET_DOMAIN(Node)}}, Config),
@@ -550,7 +565,7 @@ run_posix_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
         run_posix_perms_scenario(
             Node, FileOwnerUserSessId, SessId, TestCaseRootDirPath, ScenarioName,
-            Operation, PosixPermsPerFile, ExtraData, ScenarioType
+            Operation, PosixPermsPerFile, ExtraData, ScenarioType, TestSpec
         )
     end, [
         {owner, FileOwnerUserSessId},
@@ -561,7 +576,7 @@ run_posix_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
 run_posix_perms_scenario(
     Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
-    Operation, PosixPermsPerFile, ExtraData, Type
+    Operation, PosixPermsPerFile, ExtraData, Type, TestSpec
 ) ->
     {ComplementaryPosixPermsPerFile, RequiredPosixPerms} = get_complementary_posix_perms(
         PosixPermsPerFile
@@ -571,7 +586,7 @@ run_posix_perms_scenario(
         run_posix_tests(
             Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
             Operation, ComplementaryPosixPermsPerFile,
-            RequiredPosixPerms, ExtraData, Type
+            RequiredPosixPerms, ExtraData, Type, TestSpec
         )
     catch _:Reason ->
         FilePathsToRequiredPerms = maps:fold(fun(Guid, RequiredPerms, Acc) ->
@@ -596,7 +611,7 @@ run_posix_perms_scenario(
 
 run_posix_tests(
     Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, owner
+    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, owner, TestSpec
 ) ->
     RequiredPermsWithoutFileOwnership = lists:filter(fun({_, Perm}) ->
         Perm == read orelse Perm == write orelse Perm == exec
@@ -610,18 +625,21 @@ run_posix_tests(
             ?assertMatch(
                 ok,
                 Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+            ),
+            assert_user_is_file_owner_on_storage(
+                FileOwnerSessId, SessId, TestCaseRootDirPath, TestSpec
             );
         _ ->
             run_standard_posix_tests(
                 Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
                 Operation, ComplementaryPermsPerFile, RequiredPermsWithoutFileOwnership,
-                ExtraData, owner
+                ExtraData, owner, TestSpec
             )
     end;
 
 run_posix_tests(
     Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, group
+    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, group, TestSpec
 ) ->
     OperationRequiresFileOwnership = lists:any(fun({_, Perm}) ->
         Perm == owner
@@ -643,14 +661,14 @@ run_posix_tests(
             run_standard_posix_tests(
                 Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
                 Operation, ComplementaryPermsPerFile, RequiredNormalPosixPerms,
-                ExtraData, group
+                ExtraData, group, TestSpec
             )
     end;
 
 % Users not belonging to space or unauthorized should not be able to conduct any operation
 run_posix_tests(
     Node, FileOwnerSessId, SessId, TestCaseRootDirPath, _ScenarioName, Operation,
-    ComplementaryPermsPerFile, _AllRequiredPerms, ExtraData, other
+    ComplementaryPermsPerFile, _AllRequiredPerms, ExtraData, other, _TestSpec
 ) ->
     permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
     ?assertMatch(
@@ -667,7 +685,7 @@ run_posix_tests(
 
 run_standard_posix_tests(
     Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, Type
+    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, Type, TestSpec
 ) ->
     AllRequiredModes = lists:map(fun({Guid, PosixPerm}) ->
         {Guid, permissions_test_utils:posix_perm_to_mode(PosixPerm, Type)}
@@ -708,6 +726,9 @@ run_standard_posix_tests(
         Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
         ScenarioName,
         RequiredModesPerFile
+    ),
+    assert_user_is_file_owner_on_storage(
+        FileOwnerSessId, SessId, TestCaseRootDirPath, TestSpec
     ).
 
 
@@ -746,9 +767,8 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
     space_user = SpaceUser,
     space_user_group = SpaceUserGroup,
     requires_traverse_ancestors = RequiresTraverseAncestors,
-    files = Files,
-    operation = Operation
-}, Config) ->
+    files = Files
+} = TestSpec, Config) ->
     FileOwnerUserSessId = ?config({session_id, {FileOwnerUser, ?GET_DOMAIN(Node)}}, Config),
     SpaceUserSessId = ?config({session_id, {SpaceUser, ?GET_DOMAIN(Node)}}, Config),
 
@@ -772,8 +792,8 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
         ),
         run_acl_perms_scenario(
             Node, FileOwnerUserSessId, SessId, TestCaseRootDirPath, ScenarioName,
-            Operation, ComplementaryPermsPerFile, AllRequiredPerms,
-            ExtraData, AceWho, AceFlags, ScenarioType
+            ComplementaryPermsPerFile, AllRequiredPerms,
+            ExtraData, AceWho, AceFlags, ScenarioType, TestSpec
         )
     end, [
         {FileOwnerUserSessId, allow, <<"acl_owner_allow">>, ?owner, ?no_flags_mask},
@@ -789,8 +809,9 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
 
 run_acl_perms_scenario(
-    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, allow
+    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
+    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, allow,
+    #perms_test_spec{operation = Operation} = TestSpec
 ) ->
     [AllRequiredPermsComb | EaccesPermsCombs] = combinations(AllRequiredPerms),
 
@@ -824,11 +845,15 @@ run_acl_perms_scenario(
         Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
         ScenarioName,
         RequiredPermsPerFile
+    ),
+    assert_user_is_file_owner_on_storage(
+        FileOwnerSessId, SessId, TestCaseRootDirPath, TestSpec
     );
 
 run_acl_perms_scenario(
-    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, deny
+    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
+    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, deny,
+    #perms_test_spec{operation = Operation} = TestSpec
 ) ->
     AllPermsPerFile = maps:map(fun(Guid, _) ->
         permissions_test_utils:all_perms(Node, Guid)
@@ -858,6 +883,9 @@ run_acl_perms_scenario(
         Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
         ScenarioName,
         ComplementaryPermsPerFile
+    ),
+    assert_user_is_file_owner_on_storage(
+        FileOwnerSessId, SessId, TestCaseRootDirPath, TestSpec
     ).
 
 
@@ -939,6 +967,9 @@ run_space_owner_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
                 Operation(FileOwnerSessId, SpaceOwnerSessId, TestCaseRootDirPath, ExtraData),
                 ScenarioName,
                 maps:map(fun(_, _) -> <<"none">> end, PermsPerFile)
+            ),
+            assert_user_is_file_owner_on_storage(
+                FileOwnerSessId, SpaceOwnerSessId, TestCaseRootDirPath, TestSpec
             )
         end, [
             {caveats, <<"space_owner_caveats">>},
@@ -954,6 +985,7 @@ run_space_owner_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
 %%%===================================================================
 
 
+%% @private
 -spec create_files(node(), session:id(), file_meta:path(), #dir{} | #file{}) ->
     {#{file_id:file_guid() => [FilePerm :: binary()]}, ExtraData :: map()}.
 create_files(Node, FileOwnerSessId, ParentDirPath, #file{
@@ -966,10 +998,7 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #file{
         {ok, _},
         lfm_proxy:create(Node, FileOwnerSessId, FilePath, 8#777)
     ),
-
-    % Open and close file to force it's creation on storage
-    {ok, Handle} = lfm_proxy:open(Node, FileOwnerSessId, {guid, FileGuid}, write),
-    ok = lfm_proxy:close(Node, Handle),
+    permissions_test_utils:ensure_file_created_on_storage(Node, FileGuid),
 
     ExtraData = case HookFun of
         undefined ->
@@ -1005,6 +1034,7 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #dir{
     {PermsPerFile0#{DirGuid => DirPerms}, ExtraData1}.
 
 
+%% @private
 -spec get_file_path(node(), session:id(), file_id:file_guid()) ->
     file_meta:path().
 get_file_path(Node, SessionId, Guid) ->
@@ -1018,6 +1048,7 @@ get_file_path(Node, SessionId, Guid) ->
     Path.
 
 
+%% @private
 -spec set_full_perms(posix | acl, node(), [file_id:file_guid()]) -> ok.
 set_full_perms(posix, Node, Files) ->
     AllPosixPermsPerFile = lists:foldl(fun(Guid, Acc) ->
@@ -1033,6 +1064,7 @@ set_full_perms(acl, Node, Files) ->
     ).
 
 
+%% @private
 -spec deny_full_perms(posix | acl, node(), [file_id:file_guid()]) -> ok.
 deny_full_perms(posix, Node, Files) ->
     AllPosixPermsPerFile = lists:foldl(fun(Guid, Acc) ->
@@ -1048,14 +1080,48 @@ deny_full_perms(acl, Node, Files) ->
     ).
 
 
+%% @private
 -spec invalidate_perms_cache(node()) -> ok.
 invalidate_perms_cache(Node) ->
     rpc:call(Node, permissions_cache, invalidate, []).
 
 
+%% @private
 -spec combinations([term()]) -> [[term()]].
 combinations([]) ->
     [[]];
 combinations([Item | Items]) ->
     Combinations = combinations(Items),
     [[Item | Comb] || Comb <- Combinations] ++ Combinations.
+
+
+%% @private
+-spec assert_user_is_file_owner_on_storage(
+    session:id(),
+    session:id(),
+    file_meta:path(),
+    #perms_test_spec{}
+) ->
+    ok | no_return().
+assert_user_is_file_owner_on_storage(
+    OriginalFileOwnerSessId,
+    OperationExecutionerSessId,
+    TestCaseRootDirPath,
+    #perms_test_spec{
+        test_node = Node,
+        space_id = SpaceId,
+        final_ownership_check = FinalOwnershipCheckFun
+    }
+) ->
+    case FinalOwnershipCheckFun(TestCaseRootDirPath) of
+        skip ->
+            ok;
+        {should_preserve_ownership, LogicalFilePath} ->
+            permissions_test_utils:assert_user_is_file_owner_on_storage(
+                Node, SpaceId, LogicalFilePath, OriginalFileOwnerSessId
+            );
+        {should_change_ownership, LogicalFilePath} ->
+            permissions_test_utils:assert_user_is_file_owner_on_storage(
+                Node, SpaceId, LogicalFilePath, OperationExecutionerSessId
+            )
+    end.

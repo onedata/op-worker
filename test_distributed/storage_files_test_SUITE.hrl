@@ -89,7 +89,7 @@
 
 -define(OWNER(Uid, Gid), #{uid => Uid, gid => Gid}).
 
--define(assertFileInfo(Expected, Worker, FilePath),
+-define(ASSERT_FILE_INFO(Expected, Worker, FilePath),
     storage_test_utils:assert_file_info(Expected, Worker, FilePath, ?LINE)
 ).
 

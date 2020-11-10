@@ -167,6 +167,11 @@
         {ok, term(), term()} |
         {ok, term(), term(), term()} |
         {error, term()}
+    ),
+
+    % Tells whether operation should change ownership on underlying storage
+    final_ownership_check = fun(_) -> skip end :: fun((TestCaseRootDirPath :: file_meta:path()) ->
+        skip | {should_preserve_ownership, file_meta:path()} | {should_change_ownership, file_meta:path()}
     )
 }).
 

@@ -1055,7 +1055,7 @@ space_directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         SpacePath = storage_test_utils:space_path(Worker, SpaceId),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?DEFAULT_DIR_MODE}, ExpectedOwner), Worker, SpacePath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DEFAULT_DIR_MODE}, ExpectedOwner), Worker, SpacePath)
     end).
 
 regular_file_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1081,7 +1081,7 @@ regular_file_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, FileName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath)
     end).
 
 regular_file_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1116,12 +1116,12 @@ regular_file_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, FileName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath),
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath),
 
         % pretend that ?UNKNOWN_USER logged to Onezone
         ok = rpc:call(Worker, files_to_chown, chown_deferred_files, [?UNKNOWN_USER]),
         ExpectedOwner2 = maps:get(expected_owner2, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner2), Worker, StorageFilePath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner2), Worker, StorageFilePath)
     end).
 
 directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1151,7 +1151,7 @@ directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageDirPath = storage_test_utils:file_path(Worker, SpaceId, DirName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath)
     end).
 
 directory_with_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1188,12 +1188,12 @@ directory_with_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageDirPath = storage_test_utils:file_path(Worker, SpaceId, DirName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath),
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath),
 
         % pretend that ?UNKNOWN_USER logged to Onezone
         ok = rpc:call(Worker, files_to_chown, chown_deferred_files, [?UNKNOWN_USER]),
         ExpectedOwner2 = maps:get(expected_owner2, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner2), Worker, StorageDirPath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner2), Worker, StorageDirPath)
     end).
 
 rename_file_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1236,8 +1236,8 @@ rename_file_test_base(TestName, Config, SpaceId, TestArgs) ->
         TargetStorageDirPath = storage_test_utils:file_path(Worker, SpaceId, DirName),
         TargetStorageFilePath = filename:join(TargetStorageDirPath, FileName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, TargetStorageDirPath),
-        ?assertFileInfo(maps:merge(#{mode => ?DEFAULT_FILE_MODE}, ExpectedOwner), Worker, TargetStorageFilePath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, TargetStorageDirPath),
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DEFAULT_FILE_MODE}, ExpectedOwner), Worker, TargetStorageFilePath)
     end).
 
 mapping_not_found_test_base(TestName, Config, SpaceId, TestArgs) ->
