@@ -154,7 +154,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
         kill ->
             % After node killing, it is possible that status in document is not updated
             % if node killing has been executed when link was moving from one tree to another
-            sets:to_list(sets:union(sets:from_list(TransferIds),
+            sets:to_list(sets:intersection(sets:from_list(TransferIds),
                 get_scheduled_and_current_transfer_links_set(WorkerP2, SpaceId)));
         _ ->
             TransferIds
