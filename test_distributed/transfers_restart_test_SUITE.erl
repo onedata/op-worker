@@ -49,7 +49,7 @@ rtransfer_restart_test(Config) ->
         Config
     end,
 
-    restart_test_base(Config, RestartFun, link).
+    restart_test_base(Config, RestartFun, rtransfer_link_only).
 
 node_gentle_restart_test(Config) ->
     RestartFun = fun(Worker) ->
@@ -152,8 +152,8 @@ restart_test_base(Config, RestartFun, RestartType) ->
     % Verify transfers
     TransferIdsToVerify = case RestartType of
         kill ->
-            % After node killing, it is possible that status in document is not updated
-            % if node killing has been executed when link was moving from one tree to another
+            % It is possible that status in the document hasn't been updated
+            % if node was killed when link was being moved from one tree to another.
             sets:to_list(sets:intersection(sets:from_list(TransferIds),
                 get_scheduled_and_current_transfer_links_set(WorkerP2, SpaceId)));
         _ ->
@@ -167,7 +167,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
     FilesToCheckDistribution = case RestartType of
         kill -> []; % documents with transferred blocks could be lost
         gentle_stop -> Files2; % on demand transfers could be lost
-        link -> AllFiles
+        rtransfer_link_only -> AllFiles
     end,
     lists:foreach(fun(File) ->
         % Use root session as user session is not valid after restart
