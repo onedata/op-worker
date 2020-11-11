@@ -30,12 +30,14 @@
 -type ct_config() :: proplists:proplist().
 -type perms_test_spec() :: #perms_test_spec{}.
 
+-type perms_per_file() :: #{file_id:file_guid() => [FilePerm :: binary()]}.
+
 -record(scenario_ctx, {
     meta_spec :: perms_test_spec(),
     scenario_name :: binary(),
     scenario_root_dir_path :: file_meta:path(),
     required_space_privs = [] :: owner | [privileges:space_privilege()],
-    required_perms_per_file = #{} :: #{file_id:file_guid() => [FilePerm :: binary()]},
+    required_perms_per_file = #{} :: perms_per_file(),
     extra_data :: map()
 }).
 -type scenario_ctx() :: #scenario_ctx{}.
@@ -536,25 +538,9 @@ run_share_test_scenario(#scenario_ctx{
         ExtraData, other, MetaSpec
     );
 
-run_share_test_scenario(#scenario_ctx{
-    meta_spec = #perms_test_spec{
-        test_node = Node,
-        owner_user = FileOwnerId
-    } = MetaSpec,
-    scenario_name = ScenarioName,
-    scenario_root_dir_path = ScenarioRootDirPath,
-    required_perms_per_file = PermsPerFile,
-    extra_data = ExtraData
-}, ExecutionerSessId, {acl, AllowOrDeny}, Config) ->
-    FileOwnerSessId = ?config({session_id, {FileOwnerId, ?GET_DOMAIN(Node)}}, Config),
-
-    {ComplementaryPermsPerFile, AllRequiredPerms} = get_complementary_perms(
-        Node, PermsPerFile
-    ),
+run_share_test_scenario(ScenarioCtx, ExecutionerSessId, {acl, AllowOrDeny}, Config) ->
     run_acl_perms_scenario(
-        Node, FileOwnerSessId, ExecutionerSessId, ScenarioRootDirPath, ScenarioName,
-        ComplementaryPermsPerFile, AllRequiredPerms, ExtraData,
-        ?everyone, ?no_flags_mask, AllowOrDeny, MetaSpec
+        ScenarioCtx, ExecutionerSessId, AllowOrDeny, ?everyone, ?no_flags_mask, Config
     ).
 
 
@@ -791,6 +777,8 @@ get_complementary_posix_perms(PosixPermsPerFile)->
 %% perms fails and that combination consisting of only required perms succeeds.
 %% @end
 %%--------------------------------------------------------------------
+-spec run_acl_perms_scenarios(file_meta:path(), perms_test_spec(), ct_config()) ->
+    ok | no_return().
 run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
     test_node = Node,
     owner_user = FileOwnerUser,
@@ -803,7 +791,7 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
     SpaceUserSessId = ?config({session_id, {SpaceUser, ?GET_DOMAIN(Node)}}, Config),
 
     lists:foreach(fun({SessId, ScenarioType, ScenarioName, AceWho, AceFlags}) ->
-        TestCaseRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
+        ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
 
         % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(
@@ -816,14 +804,15 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
                 children = Files
             }
         ),
-
-        {ComplementaryPermsPerFile, AllRequiredPerms} = get_complementary_perms(
-            Node, PermsPerFile
-        ),
+        ScenarioCtx = #scenario_ctx{
+            meta_spec = TestSpec,
+            scenario_name = ScenarioName,
+            scenario_root_dir_path = ScenarioRootDirPath,
+            required_perms_per_file = PermsPerFile,
+            extra_data = ExtraData
+        },
         run_acl_perms_scenario(
-            Node, FileOwnerUserSessId, SessId, TestCaseRootDirPath, ScenarioName,
-            ComplementaryPermsPerFile, AllRequiredPerms,
-            ExtraData, AceWho, AceFlags, ScenarioType, TestSpec
+            ScenarioCtx, SessId, ScenarioType, AceWho, AceFlags, Config
         )
     end, [
         {FileOwnerUserSessId, allow, <<"acl_owner_allow">>, ?owner, ?no_flags_mask},
@@ -838,11 +827,30 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
     ]).
 
 
-run_acl_perms_scenario(
-    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
-    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, allow,
-    #perms_test_spec{operation = Operation} = TestSpec
+%% @private
+-spec run_acl_perms_scenario(
+    scenario_ctx(),
+    ExecutionerSessId :: session:id(),
+    Type :: allow | deny,
+    AceWho :: binary(),
+    AceFlags :: ace:bitmask(),
+    ct_config()
 ) ->
+    ok | no_return().
+run_acl_perms_scenario(#scenario_ctx{
+    meta_spec = #perms_test_spec{
+        test_node = Node,
+        owner_user = FileOwnerId,
+        operation = Operation
+    } = MetaSpec,
+    scenario_name = ScenarioName,
+    scenario_root_dir_path = ScenarioRootDirPath,
+    required_perms_per_file = PermsPerFile,
+    extra_data = ExtraData
+}, ExecutionerSessId, allow, AceWho, AceFlags, Config) ->
+    FileOwnerSessId = ?config({session_id, {FileOwnerId, ?GET_DOMAIN(Node)}}, Config),
+
+    {ComplementaryPermsPerFile, AllRequiredPerms} = get_complementary_perms(Node, PermsPerFile),
     [AllRequiredPermsComb | EaccesPermsCombs] = combinations(AllRequiredPerms),
 
     % Granting all perms without required ones should result in {error, ?EACCES}
@@ -856,7 +864,7 @@ run_acl_perms_scenario(
         ),
         ?assertMatchWithPerms(
             {error, ?EACCES},
-            Operation(SessId, TestCaseRootDirPath, ExtraData),
+            Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
             ScenarioName,
             EaccesPermsPerFile
         )
@@ -872,22 +880,29 @@ run_acl_perms_scenario(
     ),
     ?assertMatchWithPerms(
         ok,
-        Operation(SessId, TestCaseRootDirPath, ExtraData),
+        Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
         ScenarioName,
         RequiredPermsPerFile
     ),
-    run_final_ownership_check(
-        FileOwnerSessId, SessId, TestCaseRootDirPath, TestSpec
-    );
+    run_final_ownership_check(FileOwnerSessId, ExecutionerSessId, ScenarioRootDirPath, MetaSpec);
 
-run_acl_perms_scenario(
-    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
-    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, deny,
-    #perms_test_spec{operation = Operation} = TestSpec
-) ->
+run_acl_perms_scenario(#scenario_ctx{
+    meta_spec = #perms_test_spec{
+        test_node = Node,
+        owner_user = FileOwnerId,
+        operation = Operation
+    } = MetaSpec,
+    scenario_name = ScenarioName,
+    scenario_root_dir_path = ScenarioRootDirPath,
+    required_perms_per_file = PermsPerFile,
+    extra_data = ExtraData
+}, ExecutionerSessId, deny, AceWho, AceFlags, Config) ->
+    FileOwnerSessId = ?config({session_id, {FileOwnerId, ?GET_DOMAIN(Node)}}, Config),
+
     AllPermsPerFile = maps:map(fun(Guid, _) ->
         permissions_test_utils:all_perms(Node, Guid)
-    end, ComplementaryPermsPerFile),
+    end, PermsPerFile),
+    {ComplementaryPermsPerFile, AllRequiredPerms} = get_complementary_perms(Node, PermsPerFile),
 
     % Denying only required perms and granting all others should result in eacces
     lists:foreach(fun({Guid, Perm}) ->
@@ -898,7 +913,7 @@ run_acl_perms_scenario(
         ),
         ?assertMatchWithPerms(
             {error, ?EACCES},
-            Operation(SessId, TestCaseRootDirPath, ExtraData),
+            Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
             ScenarioName,
             EaccesPermsPerFile
         )
@@ -910,15 +925,16 @@ run_acl_perms_scenario(
     ),
     ?assertMatchWithPerms(
         ok,
-        Operation(SessId, TestCaseRootDirPath, ExtraData),
+        Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
         ScenarioName,
         ComplementaryPermsPerFile
     ),
-    run_final_ownership_check(
-        FileOwnerSessId, SessId, TestCaseRootDirPath, TestSpec
-    ).
+    run_final_ownership_check(FileOwnerSessId, ExecutionerSessId, ScenarioRootDirPath, MetaSpec).
 
 
+%% @private
+-spec get_complementary_perms(node(), RequiredPermsPerFile :: perms_per_file()) ->
+    {ComplementaryPermsPerFile :: perms_per_file(), [{file_id:file_guid(), Perm :: binary()}]}.
 get_complementary_perms(Node, PermsPerFile)->
     maps:fold(fun(FileGuid, FileRequiredPerms, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
         {
