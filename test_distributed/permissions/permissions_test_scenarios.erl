@@ -34,7 +34,7 @@
     meta_spec :: perms_test_spec(),
     scenario_name :: binary(),
     scenario_root_dir_path :: file_meta:path(),
-    required_space_privs :: owner | [privileges:space_privilege()],
+    required_space_privs = [] :: owner | [privileges:space_privilege()],
     extra_data :: map()
 }).
 -type scenario_ctx() :: #scenario_ctx{}.
@@ -207,7 +207,7 @@ space_privs_test(#scenario_ctx{
         space_user = UserId,
         operation = Operation
     } = MetaSpec,
-    scenario_root_dir_path = RootDirPath,
+    scenario_root_dir_path = ScenarioRootDirPath,
     required_space_privs = owner,
     extra_data = ExtraData
 }, Config) ->
@@ -218,11 +218,17 @@ space_privs_test(#scenario_ctx{
     invalidate_perms_cache(Node),
 
     initializer:testmaster_mock_space_user_privileges([Node], SpaceId, UserId, privileges:space_admin()),
-    ?assertMatch({error, ?EACCES}, Operation(FileOwnerSessId, UserSessId, RootDirPath, ExtraData)),
+    ?assertMatch(
+        {error, ?EACCES},
+        Operation(FileOwnerSessId, UserSessId, ScenarioRootDirPath, ExtraData)
+    ),
 
     initializer:testmaster_mock_space_user_privileges([Node], SpaceId, FileOwnerId, []),
-    ?assertMatch(ok, Operation(FileOwnerSessId, FileOwnerSessId, RootDirPath, ExtraData)),
-    run_final_ownership_check(FileOwnerSessId, FileOwnerSessId, RootDirPath, MetaSpec);
+    ?assertMatch(
+        ok,
+        Operation(FileOwnerSessId, FileOwnerSessId, ScenarioRootDirPath, ExtraData)
+    ),
+    run_final_ownership_check(FileOwnerSessId, FileOwnerSessId, ScenarioRootDirPath, MetaSpec);
 
 space_privs_test(#scenario_ctx{
     meta_spec = #perms_test_spec{
@@ -232,7 +238,7 @@ space_privs_test(#scenario_ctx{
         space_user = UserId,
         operation = Operation
     } = MetaSpec,
-    scenario_root_dir_path = RootDirPath,
+    scenario_root_dir_path = ScenarioRootDirPath,
     required_space_privs = RequiredPrivs,
     extra_data = ExtraData
 }, Config) ->
@@ -247,7 +253,7 @@ space_privs_test(#scenario_ctx{
         ),
         ?assertMatch(
             {error, ?EACCES},
-            Operation(FileOwnerSessId, UserSessId, RootDirPath, ExtraData)
+            Operation(FileOwnerSessId, UserSessId, ScenarioRootDirPath, ExtraData)
         )
     end, combinations(RequiredPrivs) -- [[]]),
 
@@ -255,8 +261,11 @@ space_privs_test(#scenario_ctx{
     invalidate_perms_cache(Node),
 
     initializer:testmaster_mock_space_user_privileges([Node], SpaceId, UserId, RequiredPrivs),
-    ?assertMatch(ok, Operation(FileOwnerSessId, UserSessId, RootDirPath, ExtraData)),
-    run_final_ownership_check(FileOwnerSessId, UserSessId, RootDirPath, MetaSpec).
+    ?assertMatch(
+        ok,
+        Operation(FileOwnerSessId, UserSessId, ScenarioRootDirPath, ExtraData)
+    ),
+    run_final_ownership_check(FileOwnerSessId, UserSessId, ScenarioRootDirPath, MetaSpec).
 
 
 %%%===================================================================
@@ -265,6 +274,7 @@ space_privs_test(#scenario_ctx{
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Tests data caveats. For that it will setup environment,
 %% add full acl permissions and assert that even with full perms set
@@ -272,21 +282,21 @@ space_privs_test(#scenario_ctx{
 %% allow it.
 %% @end
 %%--------------------------------------------------------------------
+-spec run_data_access_caveats_scenarios(file_meta:path(), perms_test_spec(), ct_config()) ->
+    ok | no_return().
 run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     test_node = Node,
     space_id = SpaceId,
     owner_user = FileOwner,
     space_user = User,
     requires_traverse_ancestors = RequiresTraverseAncestors,
-    files = Files,
-    available_in_readonly_mode = IsReadonly,
-    operation = Operation
+    files = Files
 } = TestSpec, Config) ->
-    FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
-    MainToken = initializer:create_access_token(User),
     initializer:testmaster_mock_space_user_privileges(
         [Node], SpaceId, User, privileges:space_admin()
     ),
+    FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
+    MainToken = initializer:create_access_token(User),
 
     lists:foreach(fun(ScenarioType) ->
         ScenarioName = ?SCENARIO_NAME("cv_", ScenarioType),
@@ -303,44 +313,65 @@ run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
                 children = Files
             }
         ),
+        ScenarioCtx = #scenario_ctx{
+            meta_spec = TestSpec,
+            scenario_name = ScenarioName,
+            scenario_root_dir_path = ScenarioRootDirPath,
+            extra_data = ExtraData
+        },
 
         set_full_perms(acl, Node, maps:keys(PermsPerFile)),
 
         % Assert that even with all perms set operation can be performed
         % only when caveats allows it
-        run_caveats_scenario(
-            Node, MainToken, FileOwnerUserSessId, User, Operation, ScenarioType,
-            ScenarioRootDirPath, ExtraData, IsReadonly, TestSpec
-        )
+        run_caveats_scenario(ScenarioCtx, MainToken, Config)
     end, [data_path, data_objectid, data_readonly]).
 
 
-run_caveats_scenario(
-    Node, MainToken, FileOwnerUserSessId, User, Operation, data_path,
-    ScenarioRootDirPath, ExtraData, _IsReadonly, TestSpec
-) ->
+%% @private
+-spec run_caveats_scenario(scenario_ctx(), tokens:serialized(), ct_config()) ->
+    ok | no_return().
+run_caveats_scenario(#scenario_ctx{
+    meta_spec = #perms_test_spec{
+        test_node = Node,
+        owner_user = FileOwnerId,
+        space_user = UserId,
+        operation = Operation
+    } = MetaSpec,
+    scenario_name = <<"cv_data_path">>,
+    scenario_root_dir_path = ScenarioRootDirPath,
+    extra_data = ExtraData
+}, MainToken, Config) ->
+    FileOwnerUserSessId = ?config({session_id, {FileOwnerId, ?GET_DOMAIN(Node)}}, Config),
+
     Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}),
-    SessId1 = permissions_test_utils:create_session(Node, User, Token1),
+    SessId1 = permissions_test_utils:create_session(Node, UserId, Token1),
     ?assertMatch(
         {error, ?EACCES},
         Operation(FileOwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
     ),
 
-    Token2 = tokens:confine(MainToken, #cv_data_path{
-        whitelist = [ScenarioRootDirPath]
-    }),
-    SessId2 = permissions_test_utils:create_session(Node, User, Token2),
+    Token2 = tokens:confine(MainToken, #cv_data_path{whitelist = [ScenarioRootDirPath]}),
+    SessId2 = permissions_test_utils:create_session(Node, UserId, Token2),
     ?assertMatch(
         ok,
         Operation(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData)
     ),
-    run_final_ownership_check(
-        FileOwnerUserSessId, SessId2, ScenarioRootDirPath, TestSpec
-    );
-run_caveats_scenario(
-    Node, MainToken, FileOwnerUserSessId, User, Operation, data_objectid,
-    ScenarioRootDirPath, ExtraData, _IsReadonly, TestSpec
-) ->
+    run_final_ownership_check(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, MetaSpec);
+
+run_caveats_scenario(#scenario_ctx{
+    meta_spec = #perms_test_spec{
+        test_node = Node,
+        owner_user = FileOwnerId,
+        space_user = UserId,
+        operation = Operation
+    } = MetaSpec,
+    scenario_name = <<"cv_data_objectid">>,
+    scenario_root_dir_path = ScenarioRootDirPath,
+    extra_data = ExtraData
+}, MainToken, Config) ->
+    FileOwnerUserSessId = ?config({session_id, {FileOwnerId, ?GET_DOMAIN(Node)}}, Config),
+
     {guid, ScenarioRootDirGuid} = maps:get(ScenarioRootDirPath, ExtraData),
     {ok, ScenarioRootDirObjectId} = file_id:guid_to_objectid(ScenarioRootDirGuid),
 
@@ -348,41 +379,45 @@ run_caveats_scenario(
     {ok, DummyObjectId} = file_id:guid_to_objectid(DummyGuid),
 
     Token1 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [DummyObjectId]}),
-    SessId1 = permissions_test_utils:create_session(Node, User, Token1),
+    SessId1 = permissions_test_utils:create_session(Node, UserId, Token1),
     ?assertMatch(
         {error, ?EACCES},
         Operation(FileOwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
     ),
 
-    Token2 = tokens:confine(MainToken, #cv_data_objectid{
-        whitelist = [ScenarioRootDirObjectId]
-    }),
-    SessId2 = permissions_test_utils:create_session(Node, User, Token2),
+    Token2 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [ScenarioRootDirObjectId]}),
+    SessId2 = permissions_test_utils:create_session(Node, UserId, Token2),
     ?assertMatch(
         ok,
         Operation(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData), 100
     ),
-    run_final_ownership_check(
-        FileOwnerUserSessId, SessId2, ScenarioRootDirPath, TestSpec
-    );
-run_caveats_scenario(
-    Node, MainToken, FileOwnerUserSessId, User, Operation, data_readonly,
-    ScenarioRootDirPath, ExtraData, IsReadonly, TestSpec
-) ->
+    run_final_ownership_check(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, MetaSpec);
+
+run_caveats_scenario(#scenario_ctx{
+    meta_spec = #perms_test_spec{
+        test_node = Node,
+        owner_user = FileOwnerId,
+        space_user = UserId,
+        available_in_readonly_mode = AvailableInReadonlyMode,
+        operation = Operation
+    } = MetaSpec,
+    scenario_name = <<"cv_data_readonly">>,
+    scenario_root_dir_path = ScenarioRootDirPath,
+    extra_data = ExtraData
+}, MainToken, Config) ->
+    FileOwnerUserSessId = ?config({session_id, {FileOwnerId, ?GET_DOMAIN(Node)}}, Config),
+
     Token = tokens:confine(MainToken, #cv_data_readonly{}),
-    SessId = permissions_test_utils:create_session(Node, User, Token),
-    case IsReadonly of
+    SessId = permissions_test_utils:create_session(Node, UserId, Token),
+
+    case AvailableInReadonlyMode of
         true ->
-            % Operation should succeed
             ?assertMatch(
                 ok,
                 Operation(FileOwnerUserSessId, SessId, ScenarioRootDirPath, ExtraData)
             ),
-            run_final_ownership_check(
-                FileOwnerUserSessId, SessId, ScenarioRootDirPath, TestSpec
-            );
+            run_final_ownership_check(FileOwnerUserSessId, SessId, ScenarioRootDirPath, MetaSpec);
         false ->
-            % Operation should fail
             ?assertMatch(
                 {error, ?EACCES},
                 Operation(FileOwnerUserSessId, SessId, ScenarioRootDirPath, ExtraData)
