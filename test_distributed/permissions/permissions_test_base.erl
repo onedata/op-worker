@@ -617,7 +617,7 @@ data_access_caveats_cache_test(Config) ->
 mkdir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#dir{
@@ -628,7 +628,7 @@ mkdir_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
             case lfm_proxy:mkdir(W, SessId, ParentDirGuid, <<"dir2">>, 8#777) of
@@ -647,7 +647,7 @@ mkdir_test(Config) ->
 get_children_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#dir{
@@ -658,7 +658,7 @@ get_children_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
             extract_ok(lfm_proxy:get_children(W, SessId, DirKey, 0, 100))
@@ -672,7 +672,7 @@ get_children_test(Config) ->
 get_children_attrs_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#dir{
@@ -683,7 +683,7 @@ get_children_attrs_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
             extract_ok(lfm_proxy:get_children_attrs(W, SessId, DirKey, 0, 100))
@@ -697,7 +697,7 @@ get_children_attrs_test(Config) ->
 get_children_details_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#dir{
@@ -708,7 +708,7 @@ get_children_details_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
             extract_ok(lfm_proxy:get_children_details(W, SessId, DirKey, 0, 100, undefined))
@@ -722,7 +722,7 @@ get_children_details_test(Config) ->
 get_child_attr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#dir{
@@ -732,7 +732,7 @@ get_child_attr_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
             extract_ok(lfm_proxy:get_child_attr(W, SessId, ParentDirGuid, <<"file1">>))
@@ -746,7 +746,7 @@ get_child_attr_test(Config) ->
 mv_dir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [
@@ -769,7 +769,7 @@ mv_dir_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
             SrcDirKey = maps:get(SrcDirPath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
@@ -785,7 +785,7 @@ mv_dir_test(Config) ->
 rm_dir_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [
@@ -804,7 +804,7 @@ rm_dir_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
             DirKey = maps:get(DirPath, ExtraData),
             extract_ok(lfm_proxy:unlink(W, SessId, DirKey))
@@ -815,7 +815,7 @@ rm_dir_test(Config) ->
 create_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#dir{
@@ -826,7 +826,7 @@ create_file_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
             case lfm_proxy:create(W, SessId, ParentDirGuid, <<"file1">>, 8#777) of
@@ -845,7 +845,7 @@ create_file_test(Config) ->
 open_for_read_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -862,7 +862,7 @@ open_for_read_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:open(W, SessId, FileKey, read))
@@ -876,7 +876,7 @@ open_for_read_test(Config) ->
 open_for_write_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -893,7 +893,7 @@ open_for_write_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:open(W, SessId, FileKey, write))
@@ -907,7 +907,7 @@ open_for_write_test(Config) ->
 open_for_rdwr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -924,7 +924,7 @@ open_for_rdwr_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:open(W, SessId, FileKey, rdwr))
@@ -938,7 +938,7 @@ open_for_rdwr_test(Config) ->
 create_and_open_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#dir{
@@ -955,7 +955,7 @@ create_and_open_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
             extract_ok(lfm_proxy:create_and_open(W, SessId, ParentDirGuid, <<"file1">>, 8#777))
@@ -969,7 +969,7 @@ create_and_open_test(Config) ->
 truncate_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -980,7 +980,7 @@ truncate_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:truncate(W, SessId, FileKey, 0))
@@ -994,7 +994,7 @@ truncate_test(Config) ->
 mv_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [
@@ -1017,7 +1017,7 @@ mv_file_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
             SrcFileKey = maps:get(SrcFilePath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
@@ -1033,7 +1033,7 @@ mv_file_test(Config) ->
 rm_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [
@@ -1052,7 +1052,7 @@ rm_file_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:unlink(W, SessId, FileKey))
@@ -1063,13 +1063,13 @@ rm_file_test(Config) ->
 get_parent_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_parent(W, SessId, FileKey))
@@ -1083,13 +1083,13 @@ get_parent_test(Config) ->
 get_file_path_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = false, % TODO VFS-6057
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             {guid, FileGuid} = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_file_path(W, SessId, FileGuid))
@@ -1103,13 +1103,13 @@ get_file_path_test(Config) ->
 get_file_guid_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             extract_ok(lfm_proxy:resolve_guid(W, SessId, FilePath))
         end,
@@ -1122,13 +1122,13 @@ get_file_guid_test(Config) ->
 get_file_attr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:stat(W, SessId, FileKey))
@@ -1142,13 +1142,13 @@ get_file_attr_test(Config) ->
 get_file_details_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_details(W, SessId, FileKey))
@@ -1162,7 +1162,7 @@ get_file_details_test(Config) ->
 get_file_distribution_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1173,7 +1173,7 @@ get_file_distribution_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_file_distribution(W, SessId, FileKey))
@@ -1330,7 +1330,7 @@ set_perms_test(Config) ->
 check_read_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1341,7 +1341,7 @@ check_read_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, read))
@@ -1355,7 +1355,7 @@ check_read_perms_test(Config) ->
 check_write_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1366,7 +1366,7 @@ check_write_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, write))
@@ -1380,7 +1380,7 @@ check_write_perms_test(Config) ->
 check_rdwr_perms_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1391,7 +1391,7 @@ check_rdwr_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, rdwr))
@@ -1405,7 +1405,7 @@ check_rdwr_perms_test(Config) ->
 create_share_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#dir{name = <<"dir1">>}],
@@ -1413,7 +1413,7 @@ create_share_test(Config) ->
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
             extract_ok(lfm_proxy:create_share(W, SessId, DirKey, <<"create_share">>))
@@ -1427,7 +1427,7 @@ create_share_test(Config) ->
 remove_share_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#dir{
@@ -1443,7 +1443,7 @@ remove_share_test(Config) ->
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         available_in_readonly_mode = false,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),
             extract_ok(lfm_proxy:remove_share(W, SessId, ShareId))
@@ -1500,7 +1500,7 @@ share_perms_test(Config) ->
 get_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1509,7 +1509,7 @@ get_acl_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_acl(W, SessId, FileKey))
@@ -1523,7 +1523,7 @@ get_acl_test(Config) ->
 set_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1534,7 +1534,7 @@ set_acl_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:set_acl(W, SessId, FileKey, [
@@ -1554,7 +1554,7 @@ set_acl_test(Config) ->
 remove_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1565,7 +1565,7 @@ remove_acl_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:remove_acl(W, SessId, FileKey))
@@ -1579,7 +1579,7 @@ remove_acl_test(Config) ->
 get_transfer_encoding_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1592,7 +1592,7 @@ get_transfer_encoding_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_transfer_encoding(W, SessId, FileKey))
@@ -1606,7 +1606,7 @@ get_transfer_encoding_test(Config) ->
 set_transfer_encoding_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1617,7 +1617,7 @@ set_transfer_encoding_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:set_transfer_encoding(W, SessId, FileKey, <<"base64">>))
@@ -1631,7 +1631,7 @@ set_transfer_encoding_test(Config) ->
 get_cdmi_completion_status_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1644,7 +1644,7 @@ get_cdmi_completion_status_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_cdmi_completion_status(W, SessId, FileKey))
@@ -1658,7 +1658,7 @@ get_cdmi_completion_status_test(Config) ->
 set_cdmi_completion_status_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1669,7 +1669,7 @@ set_cdmi_completion_status_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:set_cdmi_completion_status(W, SessId, FileKey, <<"Completed">>))
@@ -1683,7 +1683,7 @@ set_cdmi_completion_status_test(Config) ->
 get_mimetype_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1696,7 +1696,7 @@ get_mimetype_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_mimetype(W, SessId, FileKey))
@@ -1710,7 +1710,7 @@ get_mimetype_test(Config) ->
 set_mimetype_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1721,7 +1721,7 @@ set_mimetype_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:set_mimetype(W, SessId, FileKey, <<"mimetype">>))
@@ -1735,7 +1735,7 @@ set_mimetype_test(Config) ->
 get_metadata_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1750,7 +1750,7 @@ get_metadata_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_metadata(W, SessId, FileKey, json, [], false))
@@ -1764,7 +1764,7 @@ get_metadata_test(Config) ->
 set_metadata_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1775,7 +1775,7 @@ set_metadata_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:set_metadata(W, SessId, FileKey, json, <<"VAL">>, []))
@@ -1789,7 +1789,7 @@ set_metadata_test(Config) ->
 remove_metadata_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1804,7 +1804,7 @@ remove_metadata_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:remove_metadata(W, SessId, FileKey, json))
@@ -1818,7 +1818,7 @@ remove_metadata_test(Config) ->
 get_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1834,7 +1834,7 @@ get_xattr_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_xattr(W, SessId, FileKey, <<"myxattr">>))
@@ -1848,7 +1848,7 @@ get_xattr_test(Config) ->
 list_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1861,7 +1861,7 @@ list_xattr_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:list_xattr(W, SessId, FileKey, false, false))
@@ -1875,7 +1875,7 @@ list_xattr_test(Config) ->
 set_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1886,7 +1886,7 @@ set_xattr_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:set_xattr(W, SessId, FileKey, #xattr{
@@ -1902,7 +1902,7 @@ set_xattr_test(Config) ->
 remove_xattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1918,7 +1918,7 @@ remove_xattr_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:remove_xattr(W, SessId, FileKey, <<"myxattr">>))
@@ -1932,7 +1932,7 @@ remove_xattr_test(Config) ->
 add_qos_entry_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1943,7 +1943,7 @@ add_qos_entry_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:add_qos_entry(W, SessId, FileKey, <<"country=FR">>, 1))
@@ -1957,7 +1957,7 @@ add_qos_entry_test(Config) ->
 get_qos_entry_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -1974,7 +1974,7 @@ get_qos_entry_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_qos_entry(W, SessId, QosEntryId))
@@ -1988,7 +1988,7 @@ get_qos_entry_test(Config) ->
 remove_qos_entry_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -2005,7 +2005,7 @@ remove_qos_entry_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:remove_qos_entry(W, SessId, QosEntryId))
@@ -2019,7 +2019,7 @@ remove_qos_entry_test(Config) ->
 get_effective_file_qos_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -2036,7 +2036,7 @@ get_effective_file_qos_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:get_effective_file_qos(W, SessId, FileKey))
@@ -2050,7 +2050,7 @@ get_effective_file_qos_test(Config) ->
 check_qos_fulfillment_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    permissions_test_scenarios:run_scenarios(#perms_test_spec{
+    permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
@@ -2067,7 +2067,7 @@ check_qos_fulfillment_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:check_qos_status(W, SessId, QosEntryId))

@@ -161,7 +161,7 @@
     %               be used.
     %               If `on_create` fun returns FileGuid it should be returned as
     %               following tuple {guid, FileGuid}, which is required by framework.
-    operation :: fun((OwnerSessId :: binary(), SessId :: binary(), TestCaseRootDirPath :: binary(), ExtraData :: map()) ->
+    operation :: fun((ExecutionerSessId :: binary(), TestCaseRootDirPath :: binary(), ExtraData :: map()) ->
         ok |
         {ok, term()} |
         {ok, term(), term()} |

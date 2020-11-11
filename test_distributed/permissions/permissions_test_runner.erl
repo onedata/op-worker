@@ -13,7 +13,7 @@
 %%% consisting of only required perms succeeds.
 %%% @end
 %%%-------------------------------------------------------------------
--module(permissions_test_scenarios).
+-module(permissions_test_runner).
 -author("Bartosz Walkowicz").
 
 -include("../storage_files_test_SUITE.hrl").
@@ -219,16 +219,10 @@ space_privs_test(#scenario_ctx{
     invalidate_perms_cache(Node),
 
     initializer:testmaster_mock_space_user_privileges([Node], SpaceId, UserId, privileges:space_admin()),
-    ?assertMatch(
-        {error, ?EACCES},
-        Operation(FileOwnerSessId, UserSessId, ScenarioRootDirPath, ExtraData)
-    ),
+    ?assertMatch({error, ?EACCES}, Operation(UserSessId, ScenarioRootDirPath, ExtraData)),
 
     initializer:testmaster_mock_space_user_privileges([Node], SpaceId, FileOwnerId, []),
-    ?assertMatch(
-        ok,
-        Operation(FileOwnerSessId, FileOwnerSessId, ScenarioRootDirPath, ExtraData)
-    ),
+    ?assertMatch(ok, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
     run_final_ownership_check(FileOwnerSessId, FileOwnerSessId, ScenarioRootDirPath, MetaSpec);
 
 space_privs_test(#scenario_ctx{
@@ -252,20 +246,14 @@ space_privs_test(#scenario_ctx{
         initializer:testmaster_mock_space_user_privileges(
             [Node], SpaceId, UserId, AllSpacePrivs -- SomeOfRequiredPrivs
         ),
-        ?assertMatch(
-            {error, ?EACCES},
-            Operation(FileOwnerSessId, UserSessId, ScenarioRootDirPath, ExtraData)
-        )
+        ?assertMatch({error, ?EACCES}, Operation(UserSessId, ScenarioRootDirPath, ExtraData))
     end, combinations(RequiredPrivs) -- [[]]),
 
     % invalidate permission cache as it is not done due to initializer mocks
     invalidate_perms_cache(Node),
 
     initializer:testmaster_mock_space_user_privileges([Node], SpaceId, UserId, RequiredPrivs),
-    ?assertMatch(
-        ok,
-        Operation(FileOwnerSessId, UserSessId, ScenarioRootDirPath, ExtraData)
-    ),
+    ?assertMatch(ok, Operation(UserSessId, ScenarioRootDirPath, ExtraData)),
     run_final_ownership_check(FileOwnerSessId, UserSessId, ScenarioRootDirPath, MetaSpec).
 
 
@@ -347,17 +335,11 @@ run_caveats_scenario(#scenario_ctx{
 
     Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}),
     SessId1 = permissions_test_utils:create_session(Node, UserId, Token1),
-    ?assertMatch(
-        {error, ?EACCES},
-        Operation(FileOwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
-    ),
+    ?assertMatch({error, ?EACCES}, Operation(SessId1, ScenarioRootDirPath, ExtraData)),
 
     Token2 = tokens:confine(MainToken, #cv_data_path{whitelist = [ScenarioRootDirPath]}),
     SessId2 = permissions_test_utils:create_session(Node, UserId, Token2),
-    ?assertMatch(
-        ok,
-        Operation(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData)
-    ),
+    ?assertMatch(ok, Operation(SessId2, ScenarioRootDirPath, ExtraData)),
     run_final_ownership_check(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, MetaSpec);
 
 run_caveats_scenario(#scenario_ctx{
@@ -381,17 +363,11 @@ run_caveats_scenario(#scenario_ctx{
 
     Token1 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [DummyObjectId]}),
     SessId1 = permissions_test_utils:create_session(Node, UserId, Token1),
-    ?assertMatch(
-        {error, ?EACCES},
-        Operation(FileOwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
-    ),
+    ?assertMatch({error, ?EACCES}, Operation(SessId1, ScenarioRootDirPath, ExtraData)),
 
     Token2 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [ScenarioRootDirObjectId]}),
     SessId2 = permissions_test_utils:create_session(Node, UserId, Token2),
-    ?assertMatch(
-        ok,
-        Operation(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData), 100
-    ),
+    ?assertMatch(ok, Operation(SessId2, ScenarioRootDirPath, ExtraData), 100),
     run_final_ownership_check(FileOwnerUserSessId, SessId2, ScenarioRootDirPath, MetaSpec);
 
 run_caveats_scenario(#scenario_ctx{
@@ -413,16 +389,10 @@ run_caveats_scenario(#scenario_ctx{
 
     case AvailableInReadonlyMode of
         true ->
-            ?assertMatch(
-                ok,
-                Operation(FileOwnerUserSessId, SessId, ScenarioRootDirPath, ExtraData)
-            ),
+            ?assertMatch(ok, Operation(SessId, ScenarioRootDirPath, ExtraData)),
             run_final_ownership_check(FileOwnerUserSessId, SessId, ScenarioRootDirPath, MetaSpec);
         false ->
-            ?assertMatch(
-                {error, ?EACCES},
-                Operation(FileOwnerUserSessId, SessId, ScenarioRootDirPath, ExtraData)
-            )
+            ?assertMatch({error, ?EACCES}, Operation(SessId, ScenarioRootDirPath, ExtraData))
     end.
 
 
@@ -539,7 +509,7 @@ run_share_test_scenario(#scenario_ctx{
     % Even with all perms set operation should fail
     ?assertMatchWithPerms(
         {error, ?EACCES},
-        Operation(FileOwnerSessId, ExecutionerSessId, ScenarioRootDirPath, ExtraData),
+        Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
         ScenarioName,
         maps:map(fun(_, _) -> <<"all">> end, PermsPerFile)
     );
@@ -693,10 +663,7 @@ run_posix_tests(
             % If operation requires only ownership then it should succeed
             % even if all files modes are set to 0
             permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 0 end, ComplementaryPermsPerFile)),
-            ?assertMatch(
-                ok,
-                Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
-            ),
+            ?assertMatch(ok, Operation(SessId, TestCaseRootDirPath, ExtraData)),
             run_final_ownership_check(
                 FileOwnerSessId, SessId, TestCaseRootDirPath, TestSpec
             );
@@ -721,10 +688,7 @@ run_posix_tests(
             % If operation requires ownership then for group member it should fail
             % even if all files modes are set to 777
             permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
-            ?assertMatch(
-                {error, ?EACCES},
-                Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
-            );
+            ?assertMatch({error, ?EACCES}, Operation(SessId, TestCaseRootDirPath, ExtraData));
         false ->
             RequiredNormalPosixPerms = lists:filter(fun({_, Perm}) ->
                 Perm == read orelse Perm == write orelse Perm == exec
@@ -742,16 +706,10 @@ run_posix_tests(
     ComplementaryPermsPerFile, _AllRequiredPerms, ExtraData, other, _TestSpec
 ) ->
     permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
-    ?assertMatch(
-        {error, ?ENOENT},
-        Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
-    ),
+    ?assertMatch({error, ?ENOENT}, Operation(SessId, TestCaseRootDirPath, ExtraData)),
     % Some operations cannot be performed with special session (either root or guest)
     % and result in eagain error instead of enoent
-    ?assertMatch(
-        {error, _},
-        Operation(FileOwnerSessId, ?GUEST_SESS_ID, TestCaseRootDirPath, ExtraData)
-    ).
+    ?assertMatch({error, _}, Operation(?GUEST_SESS_ID, TestCaseRootDirPath, ExtraData)).
 
 
 run_standard_posix_tests(
@@ -779,7 +737,7 @@ run_standard_posix_tests(
 
         ?assertMatchWithPerms(
             {error, ?EACCES},
-            Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
+            Operation(SessId, TestCaseRootDirPath, ExtraData),
             ScenarioName,
             EaccesModesPerFile
         )
@@ -794,7 +752,7 @@ run_standard_posix_tests(
 
     ?assertMatchWithPerms(
         ok,
-        Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
+        Operation(SessId, TestCaseRootDirPath, ExtraData),
         ScenarioName,
         RequiredModesPerFile
     ),
@@ -824,6 +782,7 @@ get_complementary_posix_perms(PosixPermsPerFile)->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Tests acl permissions needed to perform #perms_test_spec.operation.
 %% For each type (`allow`, `deny`) and identifier (`OWNER@`, user_id,
@@ -897,7 +856,7 @@ run_acl_perms_scenario(
         ),
         ?assertMatchWithPerms(
             {error, ?EACCES},
-            Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
+            Operation(SessId, TestCaseRootDirPath, ExtraData),
             ScenarioName,
             EaccesPermsPerFile
         )
@@ -913,7 +872,7 @@ run_acl_perms_scenario(
     ),
     ?assertMatchWithPerms(
         ok,
-        Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
+        Operation(SessId, TestCaseRootDirPath, ExtraData),
         ScenarioName,
         RequiredPermsPerFile
     ),
@@ -939,7 +898,7 @@ run_acl_perms_scenario(
         ),
         ?assertMatchWithPerms(
             {error, ?EACCES},
-            Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
+            Operation(SessId, TestCaseRootDirPath, ExtraData),
             ScenarioName,
             EaccesPermsPerFile
         )
@@ -951,7 +910,7 @@ run_acl_perms_scenario(
     ),
     ?assertMatchWithPerms(
         ok,
-        Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
+        Operation(SessId, TestCaseRootDirPath, ExtraData),
         ScenarioName,
         ComplementaryPermsPerFile
     ),
@@ -1038,7 +997,7 @@ run_space_owner_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
             ?assertMatchWithPerms(
                 ok,
-                Operation(FileOwnerSessId, SpaceOwnerSessId, TestCaseRootDirPath, ExtraData),
+                Operation(SpaceOwnerSessId, TestCaseRootDirPath, ExtraData),
                 ScenarioName,
                 maps:map(fun(_, _) -> <<"none">> end, PermsPerFile)
             ),
