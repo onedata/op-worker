@@ -401,10 +401,7 @@ init_per_testcase(_Case, Config) ->
 
 
 end_per_testcase(gui_download_file_test, Config) ->
-    lists:foreach(
-        fun(OpNode) -> unblock_file_streaming(OpNode) end,
-        ?config(op_worker_nodes, Config)
-    ),
+    lists:foreach(fun unblock_file_streaming/1, ?config(op_worker_nodes, Config)),
     end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

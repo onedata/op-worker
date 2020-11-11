@@ -452,6 +452,8 @@ init_per_testcase(_Case, Config) ->
     mock_space_logic(Config),
     mock_user_logic(Config),
     mock_token_logic(Config),
+    % required to trigger auth cache events that are based on run_after procedures
+    rpc:multicall(?config(op_worker_nodes, Config), gs_client_worker, enable_cache, []),
     Config.
 
 
@@ -526,9 +528,7 @@ mock_user_logic(Config) ->
                     maps:get(UserId, Users, ?ERROR_UNAUTHORIZED);
                 _ ->
                     ?ERROR_UNAUTHORIZED
-            end;
-        (_, _) ->
-            {error, not_found}
+            end
     end).
 
 
