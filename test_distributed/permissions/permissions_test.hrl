@@ -96,7 +96,7 @@
     space_id = ?SPACE_ID :: binary(),
 
     % Name of root dir for test
-    root_dir :: binary(),
+    root_dir_name :: binary(),
 
     % Id of user being owner of space. He should be allowed to perform any
     % operation on files in space regardless of permissions set.
@@ -169,9 +169,11 @@
         {error, term()}
     ),
 
-    % Tells whether operation should change ownership on underlying storage
+    % Tells whether successfully executed operation should change ownership on underlying storage
     final_ownership_check = fun(_) -> skip end :: fun((TestCaseRootDirPath :: file_meta:path()) ->
-        skip | {should_preserve_ownership, file_meta:path()} | {should_change_ownership, file_meta:path()}
+        skip |
+        {should_preserve_ownership, LogicalFilePath :: file_meta:path()} |
+        {should_change_ownership, LogicalFilePath :: file_meta:path()}
     )
 }).
 
