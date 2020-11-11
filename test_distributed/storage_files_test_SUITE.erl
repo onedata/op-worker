@@ -34,6 +34,9 @@
     creating_file_should_result_in_eacces_when_mapping_is_not_found/1
 ]).
 
+% utils
+-export([mount_dir_owner/2, mount_dir_owner/3]).
+
 -define(RUN(TestSpec), run_for_each_setup(TestSpec#test_spec{test_name = ?FUNCTION_NAME})).
 -record(test_spec, {
     config :: list(),
@@ -1396,3 +1399,11 @@ run_test(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
             "Stacktrace:~n~p", [TestName, SpaceId, TestNo, {Error, Reason}, erlang:get_stacktrace()]),
             false
     end.
+
+mount_dir_owner(Worker, StorageId) ->
+    {ok, FI} = rpc:call(Worker, file, read_file_info, [StorageId]),
+    ?OWNER(FI#file_info.uid, FI#file_info.gid).
+
+mount_dir_owner(Worker, StorageId, Uid) ->
+    Owner = mount_dir_owner(Worker, StorageId),
+    Owner#{uid => Uid}.

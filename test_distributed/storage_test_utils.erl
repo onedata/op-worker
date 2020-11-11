@@ -22,8 +22,7 @@
     space_path/2, file_path/3,
     get_space_mount_point/2, get_supporting_storage_id/2,
     storage_mount_point/2, get_helper/2,
-    is_supporting_storage_posix_compatible/2, is_posix_compatible_storage/2,
-    mount_dir_owner/2, mount_dir_owner/3
+    is_supporting_storage_posix_compatible/2, is_posix_compatible_storage/2
 ]).
 
 
@@ -127,11 +126,3 @@ is_supporting_storage_posix_compatible(Worker, SpaceId) ->
 is_posix_compatible_storage(Worker, StorageId) ->
     Helper = storage_test_utils:get_helper(Worker, StorageId),
     helper:is_posix_compatible(Helper).
-
-mount_dir_owner(Worker, StorageId) ->
-    {ok, FI} = rpc:call(Worker, file, read_file_info, [StorageId]),
-    ?OWNER(FI#file_info.uid, FI#file_info.gid).
-
-mount_dir_owner(Worker, StorageId, Uid) ->
-    Owner = mount_dir_owner(Worker, StorageId),
-    Owner#{uid => Uid}.
