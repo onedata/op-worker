@@ -159,7 +159,7 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, Config) ->
             true -> [{FileCreationNode, FileSize}];
             false -> [{FileCreationNode, FileSize}, {DownloadNode, FirstBlockFetchedSize}]
         end,
-        api_test_utils:assert_distribution([FileCreationNode, P2Node], [FileGuid], ExpDist),
+        api_test_utils:assert_distribution([FileCreationNode, P2Node], FileGuid, ExpDist),
 
         % Downloading file using received url should succeed without any auth with the first use.
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
@@ -412,7 +412,7 @@ build_download_file_setup_fun(MemRef, Content, Config) ->
             api_test_utils:get_file_attrs(P2Node, FileGuid),
             ?ATTEMPTS
         ),
-        api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}]),
+        api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]),
 
         api_test_memory:set(MemRef, file_guid, FileGuid),
         api_test_memory:set(MemRef, share_id, ShareId)
@@ -447,22 +447,22 @@ build_download_file_verify_fun(MemRef, FileSize, Config) ->
     fun
         (expected_failure, _) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
-            api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}]);
+            api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
         (expected_success, #api_test_ctx{node = DownloadNode, data = Data}) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
 
             case P1Node == DownloadNode of
                 true ->
-                    api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}]);
+                    api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
                 false ->
                     case maps:get(<<"range">>, utils:ensure_defined(Data, #{}), undefined) of
                         undefined ->
-                            api_test_utils:assert_distribution(Providers, [FileGuid], [
+                            api_test_utils:assert_distribution(Providers, FileGuid, [
                                 {P1Node, FileSize}, {DownloadNode, FileSize}
                             ]);
 
                         {_, ?HTTP_206_PARTIAL_CONTENT, [{RangeStart, _RangeLen} = Range]} ->
-                            api_test_utils:assert_distribution(Providers, [FileGuid], [
+                            api_test_utils:assert_distribution(Providers, FileGuid, [
                                 {P1Node, FileSize},
                                 {DownloadNode, [#file_block{
                                     offset = RangeStart,
@@ -479,13 +479,13 @@ build_download_file_verify_fun(MemRef, FileSize, Config) ->
                                     }
                                 end, Ranges
                             ))),
-                            api_test_utils:assert_distribution(Providers, [FileGuid], [
+                            api_test_utils:assert_distribution(Providers, FileGuid, [
                                 {P1Node, FileSize},
                                 {DownloadNode, Blocks}
                             ]);
 
                         {_, ?HTTP_416_RANGE_NOT_SATISFIABLE} ->
-                            api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}])
+                            api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}])
                     end
             end
     end.

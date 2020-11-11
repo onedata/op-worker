@@ -208,7 +208,7 @@ process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_re
             gri = resolve_gri_bindings(SessionId, GriWithBindings, Req),
             data = Data
         },
-        {stop, handle_request(OpReq, Req2), State}
+        {stop, route_to_proper_handler(OpReq, Req2), State}
     catch
         throw:Error ->
             {stop, http_req:send_error(Error, Req), State};
@@ -323,15 +323,9 @@ get_data(Req, {as_is, KeyName}, Consumes) ->
     {QueryParams#{KeyName => ParsedBody}, Req2}.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Calls middleware and translates obtained response into REST response
-%% using TranslatorModule.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_request(middleware:req(), cowboy_req:req()) -> cowboy_req:req().
-handle_request(#op_req{operation = Operation, gri = #gri{
+-spec route_to_proper_handler(middleware:req(), cowboy_req:req()) -> cowboy_req:req().
+route_to_proper_handler(#op_req{operation = Operation, gri = #gri{
     type = op_file,
     aspect = As
 }} = OpReq, Req) when
@@ -340,5 +334,5 @@ handle_request(#op_req{operation = Operation, gri = #gri{
     (Operation == get andalso As == content)
 ->
     file_content_rest_handler:handle_request(OpReq, Req);
-handle_request(OpReq, Req) ->
+route_to_proper_handler(OpReq, Req) ->
     middleware_rest_handler:handle_request(OpReq, Req).

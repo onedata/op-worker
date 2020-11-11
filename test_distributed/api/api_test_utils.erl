@@ -318,9 +318,13 @@ read_file(Node, SessId, FileGuid, Size) ->
     Content.
 
 
--spec assert_distribution([node()], file_id:file_guid(), [{node(), non_neg_integer()}]) ->
+-spec assert_distribution(
+    [node()],
+    file_id:file_guid() | [file_id:file_guid()],
+    [{node(), non_neg_integer()}]
+) ->
     true | no_return().
-assert_distribution(Nodes, Files, ExpSizePerProvider) ->
+assert_distribution(NodesToVerify, Files, ExpSizePerProvider) when is_list(Files) ->
     ExpDistribution = lists:sort(lists:map(fun
         ({Node, Blocks}) when is_list(Blocks) ->
             #{
@@ -354,10 +358,12 @@ assert_distribution(Nodes, Files, ExpSizePerProvider) ->
     lists:foreach(fun(FileGuid) ->
         lists:foreach(fun(Node) ->
             ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), ?ATTEMPTS)
-        end, Nodes)
+        end, NodesToVerify)
     end, Files),
 
-    true.
+    true;
+assert_distribution(NodesToVerify, File, ExpSizePerProvider) ->
+    assert_distribution(NodesToVerify, [File], ExpSizePerProvider).
 
 
 -spec share_file_and_sync_file_attrs(node(), session:id(), [node()], file_id:file_guid()) ->
