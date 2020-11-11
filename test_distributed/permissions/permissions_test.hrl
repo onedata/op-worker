@@ -86,14 +86,17 @@
     children = [] :: [#dir{} | #file{}]
 }).
 
+% Main space used in permissions tests
+-define(SPACE_ID, <<"space1">>).
+
 -record(perms_test_spec, {
     test_node :: node(),
 
     % Id of space within which test will be carried
-    space_id = <<"space1">> :: binary(),
+    space_id = ?SPACE_ID :: binary(),
 
     % Name of root dir for test
-    root_dir :: binary(),
+    root_dir_name :: binary(),
 
     % Id of user being owner of space. He should be allowed to perform any
     % operation on files in space regardless of permissions set.
@@ -143,10 +146,6 @@
     % (can't be called via shared guid == no share mode).
     available_in_share_mode = false :: boolean() | inapplicable,
 
-    % Tells whether operation should be allowed for space owner regardless of
-    % permissions.
-    applicable_to_space_owner = true :: boolean(),
-
     % Operation being tested. It will be called for various combinations of
     % either posix or acl permissions. It is expected to fail for combinations
     % not having all perms specified in `files` and space privileges and
@@ -162,12 +161,19 @@
     %               be used.
     %               If `on_create` fun returns FileGuid it should be returned as
     %               following tuple {guid, FileGuid}, which is required by framework.
-    operation :: fun((OwnerSessId :: binary(), SessId :: binary(), TestCaseRootDirPath :: binary(), ExtraData :: map()) ->
+    operation :: fun((ExecutionerSessId :: binary(), TestCaseRootDirPath :: binary(), ExtraData :: map()) ->
         ok |
         {ok, term()} |
         {ok, term(), term()} |
         {ok, term(), term(), term()} |
         {error, term()}
+    ),
+
+    % Tells whether successfully executed operation should change ownership on underlying storage
+    final_ownership_check = fun(_) -> skip end :: fun((TestCaseRootDirPath :: file_meta:path()) ->
+        skip |
+        {should_preserve_ownership, LogicalFilePath :: file_meta:path()} |
+        {should_change_ownership, LogicalFilePath :: file_meta:path()}
     )
 }).
 

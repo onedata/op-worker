@@ -22,8 +22,12 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API - basic model function
--export([create/1, save/1, get/1, exists/1, list/0,
-    update/2, update_doc_and_time/2, delete/1, delete_doc/1]).
+-export([
+    create/1, save/1, get/1, exists/1, list/0,
+    update/2, update_doc_and_time/2, delete/1, delete_doc/1
+]).
+-export([is_space_owner/2]).
+
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
@@ -169,6 +173,11 @@ delete(SessId) ->
     session_handles:remove_handles(SessId),
     session_open_files:invalidate_entries(SessId),
     datastore_model:delete(?CTX, SessId).
+
+-spec is_space_owner(id(), od_space:id()) -> boolean().
+is_space_owner(SessId, SpaceId) ->
+    {ok, UserId} = get_user_id(SessId),
+    space_logic:is_owner(SpaceId, UserId).
 
 %%%===================================================================
 %%% API - field access functions

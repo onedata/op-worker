@@ -13,8 +13,9 @@
         "cfg1": {
             "storages": [
                 {
-                    "type": "posix",
-                    "name": "/mnt/st"
+                    "type": "s3",
+                    "name": "s3_1",
+                    "bucket": "onedata"
                 }
             ],
             "users": [],
@@ -23,8 +24,9 @@
         "cfg2": {
             "storages": [
                 {
-                    "type": "posix",
-                    "name": "/mnt/st2"
+                    "type": "s3",
+                    "name": "s3_2",
+                    "bucket": "onedata"
                 }
             ],
             "users": [],
@@ -157,11 +159,11 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st",
+                        "storage": "s3_1",
                         "supported_size": 1000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st2",
+                        "storage": "s3_2",
                         "supported_size": 1000000000
                     }
                 }
@@ -174,11 +176,11 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st",
+                        "storage": "s3_1",
                         "supported_size": 1000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st2",
+                        "storage": "s3_2",
                         "supported_size": 1000000000
                     }
                 }
@@ -191,10 +193,30 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st",
+                        "storage": "s3_1",
                         "supported_size": 1000000000
                     }
                 }
+            }
+        },
+        "storages": {
+            "p1": {
+                "s3_1": {
+                    "luma": "local"
+                }
+            },
+            "p2": {
+                "s3_2": {
+                    "luma": "local"
+                }
+            }
+        },
+        "luma_configs": {
+            "p1": {
+                "local_feed_config_path": "p1_local_feed_luma.json"
+            },
+            "p2": {
+                "local_feed_config_path": "p2_local_feed_luma.json"
             }
         }
     }

@@ -1,0 +1,38 @@
+{
+    "/mnt/st": {
+        "storageUsers": {
+            "owner": {
+                "storageCredentials": {
+                    "uid": 3001
+                }
+            },
+            "user1": {
+                "storageCredentials": {
+                    "uid": 3002
+                }
+            },
+            "user2": {
+                "storageCredentials": {
+                    "uid": 3003
+                }
+            },
+            "user3": {
+                "storageCredentials": {
+                    "uid": 3004
+                }
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "posix": {
+                    "uid": 3000,
+                    "gid": 3000
+                },
+                "display": {
+                    "uid": 3333,
+                    "gid": 3333
+                }
+            }
+        }
+    }
+}
