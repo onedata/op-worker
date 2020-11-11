@@ -35,6 +35,7 @@
     scenario_name :: binary(),
     scenario_root_dir_path :: file_meta:path(),
     required_space_privs = [] :: owner | [privileges:space_privilege()],
+    required_perms_per_file = #{} :: #{file_id:file_guid() => [FilePerm :: binary()]},
     extra_data :: map()
 }).
 -type scenario_ctx() :: #scenario_ctx{}.
@@ -431,12 +432,15 @@ run_caveats_scenario(#scenario_ctx{
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Tests permissions needed to perform operation in share mode.
 %% If operation is not nat available in share mode then checks
 %% that even with all perms set ?EACCES should be returned.
 %% @end
 %%--------------------------------------------------------------------
+-spec run_share_test_scenarios(file_meta:path(), perms_test_spec(), ct_config()) ->
+    ok | no_return().
 run_share_test_scenarios(_ScenariosRootDirPath, #perms_test_spec{
     available_in_share_mode = inapplicable
 }, _Config) ->
@@ -446,17 +450,15 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
     owner_user = FileOwner,
     space_user = SpaceUser,
     other_user = OtherUser,
-    available_in_share_mode = IsAvailableInShareMode,
     requires_traverse_ancestors = RequiresTraverseAncestors,
-    files = Files,
-    operation = Operation
+    files = Files
 } = TestSpec, Config) ->
     FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
     SpaceUserSessId = ?config({session_id, {SpaceUser, ?GET_DOMAIN(Node)}}, Config),
     OtherUserSessId = ?config({session_id, {OtherUser, ?GET_DOMAIN(Node)}}, Config),
 
     lists:foreach(fun({SessId, PermsType, ScenarioName}) ->
-        TestCaseRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
+        ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
 
         % Create necessary file hierarchy
         {PermsPerFile, ExtraData0} = create_files(
@@ -470,7 +472,7 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
             }
         ),
 
-        TestCaseRootDirKey = maps:get(TestCaseRootDirPath, ExtraData0),
+        TestCaseRootDirKey = maps:get(ScenarioRootDirPath, ExtraData0),
         {ok, ShareId} = lfm_proxy:create_share(
             Node, FileOwnerUserSessId, TestCaseRootDirKey, ScenarioName
         ),
@@ -481,10 +483,14 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
                 Val
         end, ExtraData0),
 
-        run_share_test_scenario(
-            Node, FileOwnerUserSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-            PermsPerFile, ExtraData1, PermsType, IsAvailableInShareMode, TestSpec
-        )
+        ScenarioCtx = #scenario_ctx{
+            meta_spec = TestSpec,
+            scenario_name = ScenarioName,
+            scenario_root_dir_path = ScenarioRootDirPath,
+            required_perms_per_file = PermsPerFile,
+            extra_data = ExtraData1
+        },
+        run_share_test_scenario(ScenarioCtx, SessId, PermsType, Config)
     end, [
         {FileOwnerUserSessId, posix, <<"owner_posix_share">>},
         {SpaceUserSessId, posix, <<"space_user_posix_share">>},
@@ -501,10 +507,28 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
     ]).
 
 
-run_share_test_scenario(
-    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    PermsPerFile, ExtraData, PermsType0, _IsAvailableInShareMode = false, _TestSpec
+%% @private
+-spec run_share_test_scenario(
+    scenario_ctx(),
+    ExecutionerSessId :: session:id(),
+    PermsType :: posix | {acl, allow | deny},
+    ct_config()
 ) ->
+    ok | no_return().
+run_share_test_scenario(#scenario_ctx{
+    meta_spec = #perms_test_spec{
+        test_node = Node,
+        owner_user = FileOwnerId,
+        available_in_share_mode = false,
+        operation = Operation
+    },
+    scenario_name = ScenarioName,
+    scenario_root_dir_path = ScenarioRootDirPath,
+    required_perms_per_file = PermsPerFile,
+    extra_data = ExtraData
+}, ExecutionerSessId, PermsType0, Config) ->
+    FileOwnerSessId = ?config({session_id, {FileOwnerId, ?GET_DOMAIN(Node)}}, Config),
+
     % Set all posix or acl (depending on scenario) perms to files
     PermsType1 = case PermsType0 of
         posix -> posix;
@@ -515,33 +539,52 @@ run_share_test_scenario(
     % Even with all perms set operation should fail
     ?assertMatchWithPerms(
         {error, ?EACCES},
-        Operation(FileOwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
+        Operation(FileOwnerSessId, ExecutionerSessId, ScenarioRootDirPath, ExtraData),
         ScenarioName,
         maps:map(fun(_, _) -> <<"all">> end, PermsPerFile)
     );
-run_share_test_scenario(
-    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    PermsPerFile, ExtraData, posix, _IsAvailableInShareMode = true, TestSpec
-) ->
+
+run_share_test_scenario(#scenario_ctx{
+    meta_spec = #perms_test_spec{
+        test_node = Node,
+        owner_user = FileOwnerId,
+        operation = Operation
+    } = MetaSpec,
+    scenario_name = ScenarioName,
+    scenario_root_dir_path = ScenarioRootDirPath,
+    required_perms_per_file = PermsPerFile,
+    extra_data = ExtraData
+}, ExecutionerSessId, posix, Config) ->
+    FileOwnerSessId = ?config({session_id, {FileOwnerId, ?GET_DOMAIN(Node)}}, Config),
+
     {ComplementaryPosixPermsPerFile, RequiredPosixPerms} = get_complementary_posix_perms(
         maps:map(fun(_, Perms) -> perms_to_posix_perms(Perms) end, PermsPerFile)
     ),
     run_standard_posix_tests(
-        Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
+        Node, FileOwnerSessId, ExecutionerSessId, ScenarioRootDirPath, ScenarioName,
         Operation, ComplementaryPosixPermsPerFile, RequiredPosixPerms,
-        ExtraData, other, TestSpec
+        ExtraData, other, MetaSpec
     );
-run_share_test_scenario(
-    Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, _Operation,
-    PermsPerFile, ExtraData, {acl, AllowOrDeny}, _IsAvailableInShareMode = true, TestSpec
-) ->
+
+run_share_test_scenario(#scenario_ctx{
+    meta_spec = #perms_test_spec{
+        test_node = Node,
+        owner_user = FileOwnerId
+    } = MetaSpec,
+    scenario_name = ScenarioName,
+    scenario_root_dir_path = ScenarioRootDirPath,
+    required_perms_per_file = PermsPerFile,
+    extra_data = ExtraData
+}, ExecutionerSessId, {acl, AllowOrDeny}, Config) ->
+    FileOwnerSessId = ?config({session_id, {FileOwnerId, ?GET_DOMAIN(Node)}}, Config),
+
     {ComplementaryPermsPerFile, AllRequiredPerms} = get_complementary_perms(
         Node, PermsPerFile
     ),
     run_acl_perms_scenario(
-        Node, FileOwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
+        Node, FileOwnerSessId, ExecutionerSessId, ScenarioRootDirPath, ScenarioName,
         ComplementaryPermsPerFile, AllRequiredPerms, ExtraData,
-        ?everyone, ?no_flags_mask, AllowOrDeny, TestSpec
+        ?everyone, ?no_flags_mask, AllowOrDeny, MetaSpec
     ).
 
 
@@ -934,6 +977,7 @@ get_complementary_perms(Node, PermsPerFile)->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Tests permissions needed to perform operation as space owner.
 %% Generally access to space owner should be granted regardless of posix/acl
@@ -942,6 +986,8 @@ get_complementary_perms(Node, PermsPerFile)->
 %% be given any special treatment compared to any other space user.
 %% @end
 %%--------------------------------------------------------------------
+-spec run_space_owner_test_scenarios(file_meta:path(), perms_test_spec(), ct_config()) ->
+    ok | no_return().
 run_space_owner_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
     test_node = Node,
     space_id = SpaceId,
