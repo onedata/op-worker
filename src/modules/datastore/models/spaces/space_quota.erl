@@ -180,8 +180,8 @@ assert_write(SpaceId) ->
 -spec assert_write(SpaceId :: id(), WriteSize :: integer()) -> ok | no_return().
 assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
     ok;
-assert_write(SpaceId, WriteSize) ->
-    case space_quota:available_size(SpaceId) >= WriteSize of
+assert_write(SpaceId, _WriteSize) ->
+    case space_quota:available_size(SpaceId) > 0 of
         true -> ok;
         false -> throw(?ENOSPC)
     end.
