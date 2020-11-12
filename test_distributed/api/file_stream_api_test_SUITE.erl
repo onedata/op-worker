@@ -36,6 +36,7 @@ all() -> [
 
 
 -define(DEFAULT_READ_BLOCK_SIZE, 1024).
+-define(GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS, 20).
 
 -define(ATTEMPTS, 30).
 
@@ -66,7 +67,7 @@ gui_download_file_test(Config) ->
 
     SetupFun = build_download_file_setup_fun(MemRef, Content, Config),
     ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef, Content, Config),
-    VerifyFun = build_download_file_verify_fun(MemRef, FileSize, Config),
+    VerifyFun = build_download_file_with_gui_endpoint_verify_fun(MemRef, Content, Config),
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #scenario_spec{
@@ -161,13 +162,75 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, Config) ->
         end,
         api_test_utils:assert_distribution([FileCreationNode, P2Node], FileGuid, ExpDist),
 
-        % Downloading file using received url should succeed without any auth with the first use.
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
-        ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+        [_, DownloadCode] = binary:split(FileDownloadUrl, [<<"/download/">>]),
 
-        % But second try should fail as file download url is only one time use thing
-        ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl))
+        case rand:uniform(2) of
+            1 ->
+                % File download code should be still usable after unsuccessful download
+                block_file_streaming(DownloadNode, ?ERROR_POSIX(?EAGAIN)),
+                ?assertEqual(?ERROR_POSIX(?EAGAIN), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                unblock_file_streaming(DownloadNode),
+                ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
+
+                % But first successful download should make it unusable
+                ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory), ?ATTEMPTS),
+                ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+
+                api_test_memory:set(MemRef, download_succeeded, true);
+            2 ->
+                % File download code should be unusable after expiration period
+                timer:sleep(timer:seconds(?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS)),
+
+                % File download code should be deleted from db but stay in memory as couch
+                % unfortunately doesn't remove expired docs from memory
+                ?assertMatch(
+                    ?ERROR_NOT_FOUND,
+                    get_file_download_code_doc(DownloadNode, DownloadCode, disc),
+                    ?ATTEMPTS
+                ),
+                ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
+
+                % Still after request, which will fail, it should be deleted also from memory
+                ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
+
+                api_test_memory:set(MemRef, download_succeeded, false)
+        end
     end.
+
+
+%% @private
+-spec block_file_streaming(node(), errors:error()) -> ok.
+block_file_streaming(OpNode, ErrorReturned) ->
+    test_node_starter:load_modules([OpNode], [?MODULE]),
+    ok = test_utils:mock_new(OpNode, http_download_utils),
+    ok = test_utils:mock_expect(OpNode, http_download_utils, stream_file, fun(_, _, _, Req) ->
+        http_req:send_error(ErrorReturned, Req)
+    end).
+
+
+%% @private
+-spec unblock_file_streaming(node()) -> ok.
+unblock_file_streaming(OpNode) ->
+    ok = test_utils:mock_unload(OpNode).
+
+
+%% @private
+-spec get_file_download_code_doc(
+    node(),
+    file_download_code:code(),
+    Location :: memory | disc
+) ->
+    {ok, file_download_code:doc()} | {error, term()}.
+get_file_download_code_doc(Node, DownloadCode, Location) ->
+    Ctx0 = rpc:call(Node, file_download_code, get_ctx, []),
+    Ctx1 = case Location of
+        memory -> Ctx0;
+        disc -> Ctx0#{memory_driver => undefined}
+    end,
+    rpc:call(Node, datastore_model, get, [Ctx1, DownloadCode]).
 
 
 %% @private
@@ -184,6 +247,40 @@ download_file_with_gui_endpoint(Node, FileDownloadUrl) ->
             errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody)));
         {error, _} = Error ->
             Error
+    end.
+
+
+%% @private
+-spec build_download_file_with_gui_endpoint_verify_fun(
+    api_test_memory:mem_ref(),
+    FileContent :: binary(),
+    onenv_api_test_runner:ct_config()
+) ->
+    onenv_api_test_runner:verify_fun().
+build_download_file_with_gui_endpoint_verify_fun(MemRef, Content, Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P1Node, P2Node],
+
+    FileSize = size(Content),
+    FirstBlockFetchedSize = min(FileSize, ?DEFAULT_READ_BLOCK_SIZE),
+
+    fun
+        (expected_failure, _) ->
+            FileGuid = api_test_memory:get(MemRef, file_guid),
+            api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
+        (expected_success, #api_test_ctx{node = DownloadNode}) ->
+            FileGuid = api_test_memory:get(MemRef, file_guid),
+            case P1Node == DownloadNode of
+                true ->
+                    api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
+                false ->
+                    ExpDist = case api_test_memory:get(MemRef, download_succeeded) of
+                        true -> [{P1Node, FileSize}, {DownloadNode, FileSize}];
+                        false -> [{P1Node, FileSize}, {DownloadNode, FirstBlockFetchedSize}]
+                    end,
+                    api_test_utils:assert_distribution(Providers, FileGuid, ExpDist)
+            end
     end.
 
 
@@ -366,6 +463,65 @@ build_rest_download_file_validate_call_fun(_MemRef, ExpContent, _Config) ->
 
 
 %% @private
+-spec build_download_file_verify_fun(
+    api_test_memory:mem_ref(),
+    file_meta:size(),
+    onenv_api_test_runner:ct_config()
+) ->
+    onenv_api_test_runner:verify_fun().
+build_download_file_verify_fun(MemRef, FileSize, Config) ->
+    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    Providers = [P1Node, P2Node],
+
+    fun
+        (expected_failure, _) ->
+            FileGuid = api_test_memory:get(MemRef, file_guid),
+            api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
+        (expected_success, #api_test_ctx{node = DownloadNode, data = Data}) ->
+            FileGuid = api_test_memory:get(MemRef, file_guid),
+
+            case P1Node == DownloadNode of
+                true ->
+                    api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
+                false ->
+                    case maps:get(<<"range">>, utils:ensure_defined(Data, #{}), undefined) of
+                        undefined ->
+                            api_test_utils:assert_distribution(Providers, FileGuid, [
+                                {P1Node, FileSize}, {DownloadNode, FileSize}
+                            ]);
+
+                        {_, ?HTTP_206_PARTIAL_CONTENT, [{RangeStart, _RangeLen} = Range]} ->
+                            api_test_utils:assert_distribution(Providers, FileGuid, [
+                                {P1Node, FileSize},
+                                {DownloadNode, [#file_block{
+                                    offset = RangeStart,
+                                    size = get_fetched_block_size(Range, FileSize)
+                                }]}
+                            ]);
+
+                        {_, ?HTTP_206_PARTIAL_CONTENT, Ranges} ->
+                            Blocks = fslogic_blocks:consolidate(lists:sort(lists:map(
+                                fun({RangeStart, _RangeLen} = Range) ->
+                                    #file_block{
+                                        offset = RangeStart,
+                                        size = get_fetched_block_size(Range, FileSize)
+                                    }
+                                end, Ranges
+                            ))),
+                            api_test_utils:assert_distribution(Providers, FileGuid, [
+                                {P1Node, FileSize},
+                                {DownloadNode, Blocks}
+                            ]);
+
+                        {_, ?HTTP_416_RANGE_NOT_SATISFIABLE} ->
+                            api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}])
+                    end
+            end
+    end.
+
+
+%% @private
 -spec get_fetched_block_size({offset(), size()}, file_meta:size()) -> size().
 get_fetched_block_size({RangeStart, RangeLen}, FileSize) ->
     % posix storage has no block size so fetched blocks will not be tailored to
@@ -432,65 +588,6 @@ get_file_guid(MemRef, TestMode) ->
     end.
 
 
-%% @private
--spec build_download_file_verify_fun(
-    api_test_memory:mem_ref(),
-    file_meta:size(),
-    onenv_api_test_runner:ct_config()
-) ->
-    onenv_api_test_runner:verify_fun().
-build_download_file_verify_fun(MemRef, FileSize, Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    Providers = [P1Node, P2Node],
-
-    fun
-        (expected_failure, _) ->
-            FileGuid = api_test_memory:get(MemRef, file_guid),
-            api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
-        (expected_success, #api_test_ctx{node = DownloadNode, data = Data}) ->
-            FileGuid = api_test_memory:get(MemRef, file_guid),
-
-            case P1Node == DownloadNode of
-                true ->
-                    api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
-                false ->
-                    case maps:get(<<"range">>, utils:ensure_defined(Data, #{}), undefined) of
-                        undefined ->
-                            api_test_utils:assert_distribution(Providers, FileGuid, [
-                                {P1Node, FileSize}, {DownloadNode, FileSize}
-                            ]);
-
-                        {_, ?HTTP_206_PARTIAL_CONTENT, [{RangeStart, _RangeLen} = Range]} ->
-                            api_test_utils:assert_distribution(Providers, FileGuid, [
-                                {P1Node, FileSize},
-                                {DownloadNode, [#file_block{
-                                    offset = RangeStart,
-                                    size = get_fetched_block_size(Range, FileSize)
-                                }]}
-                            ]);
-
-                        {_, ?HTTP_206_PARTIAL_CONTENT, Ranges} ->
-                            Blocks = fslogic_blocks:consolidate(lists:sort(lists:map(
-                                fun({RangeStart, _RangeLen} = Range) ->
-                                    #file_block{
-                                        offset = RangeStart,
-                                        size = get_fetched_block_size(Range, FileSize)
-                                    }
-                                end, Ranges
-                            ))),
-                            api_test_utils:assert_distribution(Providers, FileGuid, [
-                                {P1Node, FileSize},
-                                {DownloadNode, Blocks}
-                            ]);
-
-                        {_, ?HTTP_416_RANGE_NOT_SATISFIABLE} ->
-                            api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}])
-                    end
-            end
-    end.
-
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -508,7 +605,9 @@ init_per_suite(Config) ->
             {minimal_sync_request, ?DEFAULT_READ_BLOCK_SIZE},
             {synchronizer_prefetch, false},
 
-            {public_block_percent_threshold, 1}
+            {public_block_percent_threshold, 1},
+
+            {download_code_expiration_interval_seconds, ?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS}
         ]}
     ]}).
 
@@ -530,5 +629,8 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 
+end_per_testcase(gui_download_file_test, Config) ->
+    lists:foreach(fun unblock_file_streaming/1, ?config(op_worker_nodes, Config)),
+    end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

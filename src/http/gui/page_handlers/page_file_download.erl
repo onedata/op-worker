@@ -63,14 +63,18 @@ get_file_download_url(SessionId, FileGuid) ->
 -spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
-    case file_download_code:consume(FileDownloadCode) of
+    case file_download_code:verify(FileDownloadCode) of
         {true, SessionId, FileGuid} ->
             OzUrl = oneprovider:get_oz_url(),
             Req2 = gui_cors:allow_origin(OzUrl, Req),
             Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
-            handle_http_download(SessionId, FileGuid, Req3);
+            handle_http_download(
+                SessionId, FileGuid,
+                fun() -> file_download_code:remove(FileDownloadCode) end,
+                Req3
+            );
         false ->
-            http_req:send_error(?ERROR_BAD_DATA(<<"code">>), Req)
+            http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
     end.
 
 
@@ -97,9 +101,14 @@ maybe_sync_first_file_block(SessionId, FileGuid) ->
 %% file body.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_http_download(session:id(), fslogic_worker:file_guid(), cowboy_req:req()) ->
+-spec handle_http_download(
+    session:id(),
+    fslogic_worker:file_guid(),
+    OnSuccessCallback :: fun(() -> ok),
+    cowboy_req:req()
+) ->
     cowboy_req:req().
-handle_http_download(SessionId, FileGuid, Req0) ->
+handle_http_download(SessionId, FileGuid, OnSuccessCallback, Req0) ->
     case lfm:stat(SessionId, {guid, FileGuid}) of
         {ok, #file_attr{name = FileName} = FileAttrs} ->
             %% @todo VFS-2073 - check if needed
@@ -111,7 +120,9 @@ handle_http_download(SessionId, FileGuid, Req0) ->
                 %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
                 Req0
             ),
-            http_download_utils:stream_file(SessionId, FileAttrs, Req1);
+            http_download_utils:stream_file(
+                SessionId, FileAttrs, OnSuccessCallback, Req1
+            );
         {error, Errno} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req0)
     end.

@@ -19,7 +19,8 @@
 
 %% API
 -export([create_dir/4, create_file/4, create_file/5]).
--export([create_files_and_dirs/5, verify_files_and_dirs/4, test_read_operations_on_error/4]).
+-export([create_files/4, create_files_and_dirs/5,
+    verify_files_and_dirs/4, test_read_operations_on_error/4]).
 
 -define(FILE_DATA, <<"1234567890abcd">>).
 
@@ -31,6 +32,10 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+create_files(Worker, SessId, ParentGuid, FilesNum) ->
+    #test_data{file_guids = FileGuids} = create_files_and_dirs(Worker, SessId, ParentGuid, 0, FilesNum),
+    FileGuids.
 
 create_files_and_dirs(Worker, SessId, ParentGuid, DirsNum, FilesNum) ->
     DirGuids = lists:map(fun(_) ->

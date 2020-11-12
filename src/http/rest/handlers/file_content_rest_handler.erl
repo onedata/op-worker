@@ -45,7 +45,7 @@ handle_request(OpReq0, Req) ->
     OpReq2 = sanitize_params(OpReq1),
 
     case api_auth:check_authorization(Auth, ?OP_WORKER, Operation, GRI) of
-        ok -> ensure_authorized(OpReq1);
+        ok -> ensure_has_access_to_file(OpReq1);
         {error, _} = Error -> throw(Error)
     end,
     middleware_utils:assert_file_managed_locally(FileGuid),
@@ -109,12 +109,12 @@ sanitize_params(#op_req{
 
 
 %% @private
--spec ensure_authorized(middleware:req()) -> true | no_return().
-ensure_authorized(#op_req{operation = get, auth = ?GUEST, gri = #gri{id = Guid, scope = public}}) ->
+-spec ensure_has_access_to_file(middleware:req()) -> true | no_return().
+ensure_has_access_to_file(#op_req{operation = get, auth = ?GUEST, gri = #gri{id = Guid, scope = public}}) ->
     file_id:is_share_guid(Guid) orelse throw(?ERROR_UNAUTHORIZED);
-ensure_authorized(#op_req{auth = ?GUEST}) ->
+ensure_has_access_to_file(#op_req{auth = ?GUEST}) ->
     throw(?ERROR_UNAUTHORIZED);
-ensure_authorized(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
+ensure_has_access_to_file(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
     middleware_utils:has_access_to_file(Auth, Guid) orelse throw(?ERROR_FORBIDDEN).
 
 
@@ -145,9 +145,11 @@ process_request(#op_req{
 
     Offset = case maps:get(<<"offset">>, Params, undefined) of
         undefined ->
+            % Overwrite file if no explicit offset was given
             ?check(lfm:truncate(SessionId, FileKey, 0)),
             0;
         Num ->
+            % Otherwise leave previous content and start writing from specified offset
             Num
     end,
 
