@@ -696,7 +696,10 @@ get_child(FileCtx, Name, UserCtx) ->
 ) ->
     {Children :: [ctx()], NewFileCtx :: ctx()}.
 get_file_children(FileCtx, UserCtx, Offset, Limit) ->
-    get_file_children(FileCtx, UserCtx, Offset, Limit, undefined).
+    case get_file_children(FileCtx, UserCtx, Offset, Limit, undefined) of
+        {Children, FileCtx2} -> {Children, FileCtx2};
+        {Children, _ExtendedInfo, FileCtx2} -> {Children, FileCtx2}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -708,7 +711,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
     Limit :: file_meta:limit(),
     Token :: undefined | datastore_links_iter:token()
 ) ->
-    {Children :: [ctx()], NewToken :: datastore_links_iter:token(), NewFileCtx :: ctx()} |
+    {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()} |
     {Children :: [ctx()], NewFileCtx :: ctx()}.
 get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
     get_file_children(FileCtx, UserCtx, Offset, Limit, Token, undefined).
@@ -758,13 +761,9 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, PrevTreeId) -
                     MapFun = fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
                         new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
                     end,
-
-                    case file_meta:list_children(FileDoc, Offset, Limit, Token, StartId, PrevTreeId) of
-                        {ok, ChildrenLinks, ListExtendedInfo = #{token := _}} ->
-                            {lists:map(MapFun, ChildrenLinks), ListExtendedInfo, FileCtx2};
-                        {ok, ChildrenLinks, _} ->
-                            {lists:map(MapFun, ChildrenLinks), FileCtx2}
-                    end;
+                    {ok, ChildrenLinks, ListExtendedInfo} =
+                        file_meta:list_children(FileDoc, Offset, Limit, Token, StartId, PrevTreeId),
+                    {lists:map(MapFun, ChildrenLinks), ListExtendedInfo, FileCtx2};
                 _ ->
                     % In case of listing regular file - return it
                     {[FileCtx2], FileCtx2}

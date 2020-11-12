@@ -44,7 +44,7 @@
     do_master_job/2, do_slave_job/2
 ]).
 
--type task_id() :: tree_traverse:task_id().
+-type task_id() :: tree_traverse:id().
 -export_type([task_id/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
@@ -144,10 +144,7 @@ do_slave_job(#tree_traverse_slave{
 }, TaskId) ->
     RemoveStorageFiles = maps:get(remove_storage_files, TraverseInfo),
     fslogic_delete:cleanup_file(FileCtx, RemoveStorageFiles),
-
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
-    file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles).
+    file_processed(TaskId, FileCtx, RemoveStorageFiles).
 
 %%%===================================================================
 %%% Internal functions
@@ -169,13 +166,15 @@ cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
         false ->
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
             {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
-            file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles)
+            file_processed(TaskId, ParentFileCtx, RemoveStorageFiles)
     end.
 
 
 %% @private
--spec file_traverse_finished(task_id(), file_ctx:ctx(), boolean()) -> ok.
-file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles) ->
+-spec file_processed(task_id(), file_ctx:ctx(), boolean()) -> ok.
+file_processed(TaskId, FileCtx, RemoveStorageFiles) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
     maybe_cleanup_dir(ParentStatus, TaskId, ParentFileCtx, RemoveStorageFiles).

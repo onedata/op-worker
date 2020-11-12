@@ -40,7 +40,8 @@
 -export([report_child_processed/2, delete_subtree_status_doc/2]).
 
 
--type task_id() :: traverse:id().
+-type id() :: traverse:id().
+-type pool() :: traverse:pool().
 -type master_job() :: #tree_traverse{}.
 -type master_jobs() :: [master_job()].
 -type slave_job() :: #tree_traverse_slave{}.
@@ -51,12 +52,15 @@
 -type traverse_info() :: term().
 -type run_options() :: #{
     % Options of traverse framework
-    task_id => task_id(),
+    task_id => id(),
     callback_module => traverse:callback_module(),
     group_id => traverse:group(),
     additional_data => traverse:additional_data(),
     % Options used to create jobs
     execute_slave_on_dir => execute_slave_on_dir(),
+    % flag determining whether token should be used for iterating over file_meta links
+    % token shouldn't be used when links may be deleted from tree
+    use_token => boolean,
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode => children_master_jobs_mode(),
     % With this option enabled, tree_traverse_status will be
@@ -82,8 +86,8 @@
 %formatter:on
 
 
--export_type([task_id/0, master_job/0, slave_job/0, execute_slave_on_dir/0, children_master_jobs_mode/0,
-    batch_size/0, traverse_info/0]).
+-export_type([id/0, pool/0, master_job/0, slave_job/0, execute_slave_on_dir/0,
+    children_master_jobs_mode/0, batch_size/0, traverse_info/0]).
 
 %%%===================================================================
 %%% Main API
@@ -110,11 +114,11 @@ stop(Pool) when is_atom(Pool) ->
 stop(Pool) ->
     traverse:stop_pool(Pool).
 
--spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx()) -> {ok, task_id()}.
+-spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx()) -> {ok, id()}.
 run(Pool, DocOrCtx) ->
     run(Pool, DocOrCtx, #{}).
 
--spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), run_options()) -> {ok, task_id()}.
+-spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), run_options()) -> {ok, id()}.
 run(Pool, DocOrCtx, Opts) when is_atom(Pool) ->
     run(atom_to_binary(Pool, utf8), DocOrCtx, Opts);
 run(Pool, FileDoc = #document{scope = SpaceId, value = #file_meta{}}, Opts) ->
@@ -130,6 +134,10 @@ run(Pool, FileCtx, Opts) ->
     ChildrenMasterJobsMode = maps:get(children_master_jobs, Opts, ?DEFAULT_CHILDREN_MASTER_JOBS_MODE),
     TrackSubtreeStatus = maps:get(track_subtree_status, Opts, ?DEFAULT_TRACK_SUBTREE_STATUS),
     TraverseInfo = maps:get(traverse_info, Opts, undefined),
+    Token = case maps:get(use_token, Opts, true) of
+        true -> #link_token{};
+        false -> undefined
+    end,
 
     RunOpts = case maps:get(target_provider_id, Opts, undefined) of
         undefined -> #{executor => oneprovider:get_id_or_undefined()};
@@ -150,6 +158,7 @@ run(Pool, FileCtx, Opts) ->
 
     Job = #tree_traverse{
         file_ctx = FileCtx,
+        token = Token,
         execute_slave_on_dir = ExecuteSlaveOnDir,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
@@ -160,7 +169,7 @@ run(Pool, FileCtx, Opts) ->
     ok = traverse:run(Pool, TaskId, Job, RunOpts4),
     {ok, TaskId}.
 
--spec cancel(traverse:pool() | atom(), task_id()) -> ok | {error, term()}.
+-spec cancel(traverse:pool() | atom(), id()) -> ok | {error, term()}.
 cancel(Pool, TaskId) when is_atom(Pool) ->
     cancel(atom_to_binary(Pool, utf8), TaskId);
 cancel(Pool, TaskId) ->
@@ -189,7 +198,7 @@ set_traverse_info(TraverseJob, TraverseInfo) ->
     TraverseJob#tree_traverse{traverse_info = TraverseInfo}.
 
 
--spec get_task(traverse:pool() | atom(), task_id()) -> {ok, traverse_task:doc()} | {error, term()}.
+-spec get_task(traverse:pool() | atom(), id()) -> {ok, traverse_task:doc()} | {error, term()}.
 get_task(Pool, Id) when is_atom(Pool) ->
     get_task(atom_to_binary(Pool, utf8), Id);
 get_task(Pool, Id) ->
@@ -236,7 +245,8 @@ do_master_job(Job, MasterJobArgs) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job = #tree_traverse{
     file_ctx = FileCtx,
-    children_master_jobs_mode = ChildrenMasterJobsMode
+    children_master_jobs_mode = ChildrenMasterJobsMode,
+    batch_size = BatchSize
 },
     #{task_id := TaskId},
     BatchProcessingPrehook
@@ -250,10 +260,10 @@ do_master_job(Job = #tree_traverse{
             {ChildrenCtxs, ListExtendedInfo, FileCtx3} = list_children(Job2),
             LastName2 = maps:get(last_name, ListExtendedInfo),
             LastTree2 = maps:get(last_tree, ListExtendedInfo),
-            Token2 = maps:get(token, ListExtendedInfo),
+            Token2 = maps:get(token, ListExtendedInfo, undefined),
             {SlaveJobs, MasterJobs} = generate_children_jobs(Job2, TaskId, ChildrenCtxs),
-            IsLastBatch = Token2#link_token.is_last,
             ChildrenCount = length(SlaveJobs) + length(MasterJobs),
+            IsLastBatch = (Token2 =/= undefined andalso Token2#link_token.is_last) orelse (length(ChildrenCtxs) < BatchSize),
             SubtreeProcessingStatus = maybe_report_children_jobs_to_process(Job2, TaskId, ChildrenCount, IsLastBatch),
             BatchProcessingPrehook(SlaveJobs, MasterJobs, ListExtendedInfo, SubtreeProcessingStatus),
             FinalMasterJobs = case IsLastBatch of
@@ -281,7 +291,7 @@ do_master_job(Job = #tree_traverse{
 %% @end
 %%--------------------------------------------------------------------
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
-    master_job(), traverse:pool(), task_id(), traverse:job_status(), traverse:callback_module()) ->
+    master_job(), traverse:pool(), id(), traverse:job_status(), traverse:callback_module()) ->
     {ok, traverse:job_id()}  | {error, term()}.
 update_job_progress(Id, Job, Pool, TaskId, Status, CallbackModule) when Status =:= waiting ; Status =:= on_pool ->
     tree_traverse_job:save_master_job(Id, Job, Pool, TaskId, CallbackModule);
@@ -290,10 +300,12 @@ update_job_progress(Id, #tree_traverse{file_ctx = FileCtx}, _, _, _, _) ->
     ok = tree_traverse_job:delete_master_job(Id, Scope),
     {ok, Id}.
 
+
 -spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
-    {ok, master_job(), traverse:pool(), task_id()}  | {error, term()}.
+    {ok, master_job(), traverse:pool(), id()}  | {error, term()}.
 get_job(DocOrId) ->
     tree_traverse_job:get_master_job(DocOrId).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -305,6 +317,7 @@ get_sync_info(#tree_traverse{file_ctx = FileCtx}) ->
     Scope = file_ctx:get_space_id_const(FileCtx),
     Info = get_sync_info(),
     {ok, Info#{scope => Scope}}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -333,7 +346,7 @@ list_children(#tree_traverse{
     file_ctx:get_file_children(FileCtx, UserCtx, 0, BatchSize, Token, LastName, LastTree).
 
 
--spec generate_children_jobs(master_job(), task_id(), [file_ctx:ctx()]) -> {[slave_job()], [master_job()]}.
+-spec generate_children_jobs(master_job(), id(), [file_ctx:ctx()]) -> {[slave_job()], [master_job()]}.
 generate_children_jobs(MasterJob = #tree_traverse{execute_slave_on_dir = ExecOnDir}, TaskId, Children) ->
     {SlaveJobsReversed, MasterJobsReversed} = lists:foldl(fun(ChildCtx, {SlavesAcc, MastersAcc} = Acc) ->
         try

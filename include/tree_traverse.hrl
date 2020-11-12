@@ -27,7 +27,7 @@
     file_ctx :: file_ctx:ctx(),
 
     % Fields used for directory listing
-    token = #link_token{} :: datastore_links_iter:token(),
+    token = #link_token{} :: undefined | datastore_links_iter:token(),
     last_name = <<>> :: file_meta:name(),
     last_tree = <<>> :: od_provider:id(),
     batch_size :: tree_traverse:batch_size(),

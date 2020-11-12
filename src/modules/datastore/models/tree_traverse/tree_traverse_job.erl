@@ -52,6 +52,7 @@
     traverse:callback_module()) -> {ok, key()} | {error, term()}.
 save_master_job(Key, #tree_traverse{
     file_ctx = FileCtx,
+    token = Token,
     last_name = LastName,
     last_tree = LastTree,
     execute_slave_on_dir = OnDir,
@@ -67,6 +68,7 @@ save_master_job(Key, #tree_traverse{
         callback_module = CallbackModule,
         task_id = TaskID,
         doc_id = Uuid,
+        use_token = Token =/= undefined,
         last_name = LastName,
         last_tree = LastTree,
         execute_slave_on_dir = OnDir,
@@ -88,6 +90,7 @@ delete_master_job(Key, _) ->
 get_master_job(#document{value = #tree_traverse_job{
     pool = Pool, task_id = TaskID,
     doc_id = DocID,
+    use_token = UseToken,
     last_name = LastName,
     last_tree = LastTree,
     execute_slave_on_dir = OnDir,
@@ -100,6 +103,10 @@ get_master_job(#document{value = #tree_traverse_job{
     FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
     Job = #tree_traverse{
         file_ctx = FileCtx,
+        token = case UseToken of
+            true -> #link_token{};
+            false -> undefined
+        end,
         last_name = LastName,
         last_tree = LastTree,
         execute_slave_on_dir = OnDir,
@@ -161,6 +168,7 @@ get_record_struct(2) ->
         {callback_module, atom},
         {task_id, string},
         {doc_id, string},
+        {use_token, boolean},
         {last_name, string},
         {last_tree, string},
         {execute_slave_on_dir, boolean},
@@ -181,7 +189,7 @@ get_record_struct(2) ->
 upgrade_record(1, {?MODULE, Pool, CallbackModule, TaskId, DocId, LastName, LastTree, ExecuteSlaveOnDir,
     BatchSize, TraverseInfo}
 ) ->
-    {2, {?MODULE, Pool, CallbackModule, TaskId, DocId, LastName, LastTree, ExecuteSlaveOnDir,
+    {2, {?MODULE, Pool, CallbackModule, TaskId, DocId, true, LastName, LastTree, ExecuteSlaveOnDir,
         sync, false, BatchSize, TraverseInfo}}.
 
 %%%===================================================================

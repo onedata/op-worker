@@ -73,8 +73,8 @@ report_children_to_process(TaskId, FileUUid, ChildrenCount, AllBatchesListed) ->
     update_and_check(TaskId, FileUUid, fun(#tree_traverse_progress{
         to_process = ToProcess,
         all_batches_listed = CurrentAllBatchesListed
-    } = TTS) ->
-        {ok, TTS#tree_traverse_progress{
+    } = TTP) ->
+        {ok, TTP#tree_traverse_progress{
             to_process = ToProcess + ChildrenCount,
             all_batches_listed = case AllBatchesListed of
                 true -> true;
@@ -86,16 +86,16 @@ report_children_to_process(TaskId, FileUUid, ChildrenCount, AllBatchesListed) ->
 
 -spec report_child_processed(id(), file_meta:uuid()) -> status().
 report_child_processed(TaskId, FileUuid) ->
-    update_and_check(TaskId, FileUuid, fun(#tree_traverse_progress{processed = Processed} = TTS) ->
-        {ok, TTS#tree_traverse_progress{processed = Processed + 1}}
+    update_and_check(TaskId, FileUuid, fun(#tree_traverse_progress{processed = Processed} = TTP) ->
+        {ok, TTP#tree_traverse_progress{processed = Processed + 1}}
     end).
 
 
 -spec report_last_batch(id(), file_meta:uuid()) ->
     status() | {error, term()}.
 report_last_batch(TaskId, FileUuid) ->
-    update_and_check(TaskId, FileUuid, fun(TTS) ->
-        {ok, TTS#tree_traverse_progress{all_batches_listed = true}}
+    update_and_check(TaskId, FileUuid, fun(TTP) ->
+        {ok, TTP#tree_traverse_progress{all_batches_listed = true}}
     end).
 
 
@@ -108,12 +108,12 @@ delete(TaskId, FileUuid) ->
 %%%===================================================================
 
 %% @private
--spec update(tree_traverse:task_id(), file_meta:uuid(), diff()) -> {ok, doc()} | {error, term()}.
+-spec update(tree_traverse:id(), file_meta:uuid(), diff()) -> {ok, doc()} | {error, term()}.
 update(TaskId, Uuid, UpdateFun) ->
     datastore_model:update(?CTX, gen_id(TaskId, Uuid), UpdateFun).
 
 %% @private
--spec update_and_check(tree_traverse:task_id(), file_meta:uuid(), diff()) -> status() | {error, term()}.
+-spec update_and_check(tree_traverse:id(), file_meta:uuid(), diff()) -> status() | {error, term()}.
 update_and_check(TaskId, Uuid, UpdateFun) ->
     case update(TaskId, Uuid, UpdateFun) of
         {ok, #document{value = #tree_traverse_progress{

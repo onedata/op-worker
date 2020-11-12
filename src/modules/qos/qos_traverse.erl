@@ -35,7 +35,7 @@
 -export([do_master_job/2, do_slave_job/2, task_finished/2, task_canceled/2, 
     get_job/1, update_job_progress/5]).
 
--type id() :: id().
+-type id() :: qos_traverse_req:id().
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
@@ -127,7 +127,7 @@ stop_pool() ->
 %%%===================================================================
 
 -spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
-    {ok, tree_traverse:master_job(), traverse:pool(), id()}  | {error, term()}.
+    {ok, tree_traverse:master_job(), traverse:pool(), tree_traverse:id()}  | {error, term()}.
 get_job(DocOrID) ->
     tree_traverse:get_job(DocOrID).
 

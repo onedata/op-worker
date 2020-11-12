@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Tests of tree_deletion_traverse.
 %%% @end
 %%%-------------------------------------------------------------------
--module(dir_deletion_traverse_test_SUITE).
+-module(tree_deletion_traverse_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("lfm_test_utils.hrl").
@@ -28,6 +28,7 @@
 
 %% tests
 -export([
+    delete_empty_dir_test/1,
     delete_regular_files_test/1,
     delete_empty_dirs_test/1,
     delete_empty_dirs2_test/1,
@@ -36,13 +37,11 @@
 
 
 all() -> ?ALL([
-    delete_regular_files_test
-%%    ,
-%%    delete_empty_dirs_test
-%%    ,
-%%    delete_empty_dirs2_test % todo debug bez 2 testu
-%%    ,
-%%    delete_tree_test
+    delete_empty_dir_test,
+    delete_regular_files_test,
+    delete_empty_dirs_test,
+    delete_empty_dirs2_test,
+    delete_tree_test
 ]).
 
 -define(SPACE_ID, <<"space1">>).
@@ -58,35 +57,20 @@ all() -> ?ALL([
 %%% Test functions
 %%%===================================================================
 
-% TODO ogarnac bledy w logach
-% todo usuwwanie katalogw fchybamusi byc na sam koniec idac do gory
-% jakie powinny tu byc testy?
-% mechanizm do zabezpoieczenia itd itp
-
-% TODO zabezpieczyc usuwania katalogu spejsa
+delete_empty_dir_test(Config) ->
+    delete_files_structure_test_base(Config, []).
 
 delete_regular_files_test(Config) ->
-%%   delete_files_structure_test_base(Config, [{0, 1}]).
-%%   delete_files_structure_test_base(Config, [{0, 100}]).
-   delete_files_structure_test_base(Config, [{0, 302}]).
-%%   delete_files_structure_test_base(Config, [{0, 10000}]).
+   delete_files_structure_test_base(Config, [{0, 10000}]).
 
 delete_empty_dirs_test(Config) ->
-%%    delete_files_structure_test_base(Config, [{1, 0}]).
-%%    delete_files_structure_test_base(Config, [{100, 0}]).
-    delete_files_structure_test_base(Config, [{302, 0}]).
-%%    delete_files_structure_test_base(Config, [{10000, 0}]).
+    delete_files_structure_test_base(Config, [{10000, 0}]).
 
 delete_empty_dirs2_test(Config) ->
-%%    delete_files_structure_test_base(Config, [{1, 0}, {1, 0}]).
-%%    delete_files_structure_test_base(Config, [{10, 0}, {10, 0}]).
-    delete_files_structure_test_base(Config, [{10, 0}, {10, 0}, {10, 0}]).
-%%    delete_files_structure_test_base(Config, [{10, 0}, {10, 0}, {10, 0}, {10, 0}]).
+    delete_files_structure_test_base(Config, [{10, 0}, {10, 0}, {10, 0}, {10, 0}]).
 
 delete_tree_test(Config) ->
-    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}]).
-%%    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}]).
-%%    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}, {10, 10}]).
+    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}, {10, 10}]).
 
 
 %%%===================================================================
@@ -97,36 +81,18 @@ delete_files_structure_test_base(Config, FilesStructure) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     mock_traverse_finished(W1, self()),
     DirName = ?RAND_DIR_NAME,
-    ct:pal("DirName: ~p", [DirName]),
     {ok, RootGuid} = lfm_proxy:mkdir(W1, ?SESS_ID(W1, Config), ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
-    ct:pal("DirGuid = ~p.", [RootGuid]),
-    {D, F} = lfm_test_utils:create_files_tree(W1, ?SESS_ID(W1, Config), FilesStructure, RootGuid),
-    ct:pal("DirNum: ~p", [length(D)]),
+    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(W1, ?SESS_ID(W1, Config), FilesStructure, RootGuid),
     RootDirCtx = file_ctx:new_by_guid(RootGuid),
     UserCtx = rpc:call(W1, user_ctx, new, [?SESS_ID(W1, Config)]),
 
-    {ok, C} = lfm_proxy:get_children(W1, ?SESS_ID(W1, Config), {guid, RootGuid}, 0, 1000),
-    ct:pal("Children len: ~p", [length(C)]),
-
-
-    {ok, TaskId} = rpc:call(W1, dir_deletion_traverse, start, [RootDirCtx, UserCtx]),
+    {ok, TaskId} = rpc:call(W1, tree_deletion_traverse, start, [RootDirCtx, UserCtx]),
     await_traverse_finished(TaskId),
 
-
-    try
-        ?assertMatch({ok, []}, lfm_proxy:get_children(W1, ?SESS_ID(W1, Config), {guid, ?SPACE_GUID}, 0, 1000))
-    catch
-        E:R ->
-            ct:pal("ASSERT FAILED: ~p", [{E, R}]),
-            ct:timetrap({hours, 10}),
-            ct:sleep({hours, 10})
-    end,
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, ?SESS_ID(W1, Config), {guid, ?SPACE_GUID}, 0, 10000)),
     lists:foreach(fun(Guid) ->
         ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W1, ?SESS_ID(W1, Config), {guid, Guid}))
-    end, [RootGuid | D] ++ F),
-
-    ct:pal("AFTER"),
-    timer:sleep(timer:seconds(30)).
+    end, [RootGuid | DirGuids] ++ FileGuids).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -164,8 +130,8 @@ sort_workers(Config) ->
     lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
 
 mock_traverse_finished(Worker, TestProcess) ->
-    ok = test_utils:mock_new(Worker, dir_deletion_traverse),
-    ok = test_utils:mock_expect(Worker, dir_deletion_traverse, task_finished, fun(TaskId, Pool) ->
+    ok = test_utils:mock_new(Worker, tree_deletion_traverse),
+    ok = test_utils:mock_expect(Worker, tree_deletion_traverse, task_finished, fun(TaskId, Pool) ->
         Result = meck:passthrough([TaskId, Pool]),
         TestProcess ! {traverse_finished, TaskId},
         Result

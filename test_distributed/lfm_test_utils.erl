@@ -55,7 +55,6 @@ space_occupation(Worker, SpaceId) ->
 
 clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
     {ok, GuidsAndPaths} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
-    ct:pal("GuidsAndPaths: ~p", [GuidsAndPaths]),
     FilesNum = length(GuidsAndPaths),
     delete_files(Worker, SessId, GuidsAndPaths),
     case FilesNum < BatchSize of

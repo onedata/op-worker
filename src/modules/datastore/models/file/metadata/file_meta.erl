@@ -94,7 +94,7 @@
 -export_type([
     doc/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
     type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
-    offset/0, non_neg_offset/0, limit/0, file_meta/0
+    offset/0, non_neg_offset/0, limit/0, file_meta/0, list_extended_info/0
 ]).
 
 -define(CTX, #{
