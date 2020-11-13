@@ -421,8 +421,7 @@ delete_file_instance_test(Config) ->
     SpaceOwnerSessId = api_test_env:get_user_session_id(user2, p1, Config),
 
     TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    % TODO VFS-6932 - change to 704 when space owner will start to work on posix storage
-    {ok, TopDirGuid} = lfm_proxy:mkdir(P1, UserSessIdP1, TopDirPath, 8#777),
+    {ok, TopDirGuid} = lfm_proxy:mkdir(P1, UserSessIdP1, TopDirPath, 8#704),
     TopDirShareId = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, TopDirGuid),
     TopDirShareGuid = file_id:guid_to_share_guid(TopDirGuid, TopDirShareId),
 
@@ -439,9 +438,8 @@ delete_file_instance_test(Config) ->
 %%                    user3  TODO VFS-6933 - fix rm shared file
                 ],
                 unauthorized = [nobody],
-                forbidden_not_in_space = [user1]
-                % TODO VFS-6932 - enable after changing file mode to 704
-%%                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+                forbidden_not_in_space = [user1],
+                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
             setup_fun = build_delete_instance_setup_fun(MemRef, TopDirPath, FileType, Config),
@@ -538,24 +536,21 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType, Config) ->
 
     fun() ->
         Path = filename:join([TopDirPath, ?RANDOM_FILE_NAME()]),
-        % TODO VFS-6932 - change to 704 when space owner will start to work on posix storage
-        {ok, Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#777),
+        {ok, Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
         ?assertMatch({ok, _}, api_test_utils:get_file_attrs(P2Node, Guid), ?ATTEMPTS),
 
         api_test_memory:set(MemRef, file_guid, Guid),
 
         case FileType of
             <<"dir">> ->
-                % TODO VFS-6932 - uncomment when space owner will start to work on posix storage
-%%                Files = lists_utils:pmap(fun(Num) ->
-%%                    {_, _, FileGuid, _} = api_test_utils:create_file_in_space2_with_additional_metadata(
-%%                        Path, false, <<"file_or_dir_", Num>>, Config
-%%                    ),
-%%                    FileGuid
-%%                end, [$0, $1, $2, $3, $4]),
-%%
-%%                api_test_memory:set(MemRef, files_in_dir, Files);
-                api_test_memory:set(MemRef, files_in_dir, []);
+                Files = lists_utils:pmap(fun(Num) ->
+                    {_, _, FileGuid, _} = api_test_utils:create_file_in_space2_with_additional_metadata(
+                        Path, false, <<"file_or_dir_", Num>>, Config
+                    ),
+                    FileGuid
+                end, [$0, $1, $2, $3, $4]),
+
+                api_test_memory:set(MemRef, files_in_dir, Files);
             _ ->
                 ok
         end

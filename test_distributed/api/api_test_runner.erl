@@ -726,6 +726,8 @@ make_gs_request(_Config, Node, Client, #gs_args{
     case connect_via_gs(Node, Client) of
         {ok, GsClient} ->
             case gs_client:graph_request(GsClient, GRI, Operation, Data, false, AuthHint) of
+                {ok, ?GS_RESP(undefined)} ->
+                    ok;
                 {ok, ?GS_RESP(Result)} ->
                     {ok, Result};
                 {error, _} = Error ->

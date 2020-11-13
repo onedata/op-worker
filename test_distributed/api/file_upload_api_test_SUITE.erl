@@ -49,6 +49,7 @@ create_file_test(Config) ->
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
     Providers = [P1Node, P2Node],
 
+    SpaceOwnerId = api_test_env:get_user_id(user2, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
     UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
@@ -77,8 +78,7 @@ create_file_test(Config) ->
             target_nodes = Providers,
             client_spec = #client_spec{
                 correct = [
-                    % TODO VFS-6959 unblock after making space owner work on posix storage
-%%                    user2, % space owner - doesn't need any perms
+                    user2,  % space owner - doesn't need any perms
                     user3  % files owner (see fun create_shared_file/1)
                 ],
                 unauthorized = [nobody],
@@ -87,7 +87,7 @@ create_file_test(Config) ->
             },
 
             prepare_args_fun = build_create_file_prepare_args_fun(MemRef, DirObjectId),
-            validate_result_fun = build_create_file_validate_call_fun(MemRef),
+            validate_result_fun = build_create_file_validate_call_fun(MemRef, SpaceOwnerId),
             verify_fun = build_create_file_verify_fun(MemRef, DirGuid, Providers),
 
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
@@ -153,10 +153,14 @@ build_create_file_prepare_args_fun(MemRef, ParentDirObjectId) ->
 
 
 %% @private
--spec build_create_file_validate_call_fun(api_test_memory:mem_ref()) ->
+-spec build_create_file_validate_call_fun(api_test_memory:mem_ref(), od_user:id()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_create_file_validate_call_fun(MemRef) ->
-    fun(#api_test_ctx{node = TestNode, data = Data}, {ok, RespCode, RespHeaders, RespBody}) ->
+build_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
+    fun(#api_test_ctx{
+        node = TestNode,
+        client = #auth{subject = #subject{id = UserId}},
+        data = Data
+    }, {ok, RespCode, RespHeaders, RespBody}) ->
         DataSent = maps:get(body, Data, <<>>),
         Offset = maps:get(<<"offset">>, Data, 0),
         ShouldResultInWrite = Offset > 0 orelse byte_size(DataSent) > 0,
@@ -164,8 +168,8 @@ build_create_file_validate_call_fun(MemRef) ->
         Type = maps:get(<<"type">>, Data, <<"reg">>),
         Mode = maps:get(<<"mode">>, Data, undefined),
 
-        case {Type, Mode, ShouldResultInWrite} of
-            {<<"reg">>, <<"0544">>, true} ->
+        case {Type, Mode, ShouldResultInWrite, UserId == SpaceOwnerId} of
+            {<<"reg">>, <<"0544">>, true, false} ->
                 % It is possible to create file but setting perms forbidding write access
                 % and uploading some data at the same time should result in error
                 ?assertEqual(?HTTP_400_BAD_REQUEST, RespCode),
@@ -270,8 +274,7 @@ update_file_content_test(Config) ->
             target_nodes = Providers,
             client_spec = #client_spec{
                 correct = [
-                    % TODO VFS-6959 unblock after making space owner work on posix storage
-%%                    user2, % space owner - doesn't need any perms
+                    user2, % space owner - doesn't need any perms
                     user3  % files owner (see fun create_shared_file/1)
                 ],
                 unauthorized = [nobody],
