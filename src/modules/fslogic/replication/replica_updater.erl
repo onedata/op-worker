@@ -169,8 +169,8 @@ has_replica_status_changed(ReplicaUpdateResult) ->
     {file_location:doc(), location_changes_description()}.
 do_local_truncate(FileSize, Doc = #document{value = #file_location{size = FileSize}}) ->
     {Doc, []};
-do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{size = LocalSize}}) when LocalSize < FileSize ->
-    append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize}], true);
+do_local_truncate(FileSize, Doc = #document{value = Record = #file_location{size = LocalSize}}) when LocalSize < FileSize ->
+    append(Doc#document{value = Record#file_location{size = FileSize}}, [#file_block{offset = LocalSize, size = 0}], true);
 do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{size = LocalSize}}) when LocalSize > FileSize ->
     shrink(LocalLocation, [#file_block{offset = FileSize, size = LocalSize - FileSize}], FileSize).
 

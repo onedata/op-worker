@@ -21,6 +21,8 @@
 -export([create_dir/4, create_file/4, create_file/5]).
 -export([create_files/4, create_files_and_dirs/5,
     verify_files_and_dirs/4, test_read_operations_on_error/4]).
+-export([write_byte_to_file/4, empty_write_to_file/4]).
+-export([get_sparse_file_content/2]).
 
 -define(FILE_DATA, <<"1234567890abcd">>).
 
@@ -103,3 +105,26 @@ create_file(Worker, SessId, ParentGuid, FileName, FileContent) when is_binary(Fi
     ?assertMatch({ok, FileContentSize}, lfm_proxy:write(Worker, Handle, 0, FileContent)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
     FileGuid.
+
+write_byte_to_file(W, SessId, FileGuid, Offset) ->
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
+    ?assertEqual({ok, 1}, lfm_proxy:write(W, Handle, Offset, <<"t">>)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
+
+empty_write_to_file(W, SessId, FileGuid, Offset) ->
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
+    ?assertEqual({ok, 0}, lfm_proxy:write(W, Handle, Offset, <<>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
+
+get_sparse_file_content([{_, _} | _] = ExpectedBlocks, FileSize) ->
+    Blocks = lists:foldl(fun({_ProviderId, ProviderBlocks}, Acc) -> Acc ++ ProviderBlocks end, [], ExpectedBlocks),
+    get_sparse_file_content(lists:usort(Blocks), FileSize);
+get_sparse_file_content(Blocks, FileSize) ->
+    get_sparse_file_content(Blocks, FileSize, 0).
+
+get_sparse_file_content([], FileSize, CurrentPos) ->
+    binary:copy(<<"\0">>, FileSize - CurrentPos);
+get_sparse_file_content([[Offset, Size] | Blocks], FileSize, Offset) ->
+    <<(binary:copy(<<"t">>, Size))/binary, (get_sparse_file_content(Blocks, FileSize, Offset + Size))/binary>>;
+get_sparse_file_content(Blocks, FileSize, CurrentPos) ->
+    <<"\0", (get_sparse_file_content(Blocks, FileSize, CurrentPos + 1))/binary>>.

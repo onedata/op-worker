@@ -51,11 +51,17 @@ truncate(UserCtx, FileCtx0, Size) ->
     Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
 truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes) ->
+    truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes, true).
+
+-spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    Size :: non_neg_integer(), UpdateTimes :: boolean(), CreateFileIfNotExist :: boolean()) ->
+    fslogic_worker:fuse_response().
+truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes, CreateFileIfNotExist) ->
     FileCtx1 = update_quota(FileCtx0, Size),
     SessId = user_ctx:get_session_id(UserCtx),
-    {ok, FileCtx4} = case file_ctx:is_readonly_storage(FileCtx1) of
+    case file_ctx:is_readonly_storage(FileCtx1) of
         {true, FileCtx2} ->
-            {ok, FileCtx2};
+            on_successful_truncate(FileCtx2, Size, UpdateTimes);
         {false, FileCtx2} ->
             {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
             case storage_driver:open(SDHandle, write) of
@@ -71,23 +77,24 @@ truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes) ->
                         ok -> ok;
                         Error2 = {error, ?EDOM} ->
                             log_warning(storage_driver, release, Error2, FileCtx3)
-                    end;
+                    end,
+                    on_successful_truncate(FileCtx3, Size, UpdateTimes);
                 {error, ?ENOENT} ->
-                    ok
-            end,
-            {ok, FileCtx3}
-    end,
-    case file_popularity:update_size(FileCtx4, Size) of
-        ok -> ok;
-        {error, not_found} -> ok
-    end,
-    case UpdateTimes of
-        true ->
-            fslogic_times:update_mtime_ctime(FileCtx4);
-        false ->
-            ok
-    end,
-    #fuse_response{status = #status{code = ?OK}}.
+                    case CreateFileIfNotExist of
+                        true ->
+                            case sd_utils:create_deferred(FileCtx3, user_ctx:new(?ROOT_SESS_ID), false, true) of
+                                {#document{}, FileCtx4} ->
+                                    truncate_insecure(UserCtx, FileCtx4, Size, UpdateTimes, false);
+                                Error3 = {error, _} ->
+                                    log_warning(storage_driver, truncate, Error3, FileCtx3),
+                                    on_successful_truncate(FileCtx3, Size, UpdateTimes)
+                            end;
+                        false ->
+                            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx3),
+                            ?warning("Cannot truncate file ~p on storage because it does not exist", [StorageFileId])
+                    end
+            end
+    end.
 
 
 %%%===================================================================
@@ -116,3 +123,20 @@ log_warning(Module, Function, Error, FileCtx) ->
     Guid = file_ctx:get_guid_const(FileCtx3),
     ?warning("~p:~p on file {~p, ~p} with file_id ~p returned ~p",
         [Module, Function, Path, Guid, StorageFileId, Error]).
+
+
+%% @private
+-spec on_successful_truncate(file_ctx:ctx(), Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
+    fslogic_worker:fuse_response().
+on_successful_truncate(FileCtx, Size, UpdateTimes) ->
+    case file_popularity:update_size(FileCtx, Size) of
+        ok -> ok;
+        {error, not_found} -> ok
+    end,
+    case UpdateTimes of
+        true ->
+            fslogic_times:update_mtime_ctime(FileCtx);
+        false ->
+            ok
+    end,
+    #fuse_response{status = #status{code = ?OK}}.

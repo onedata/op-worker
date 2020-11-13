@@ -20,7 +20,9 @@
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([new_handle/2, new_handle/3, new_handle/5, new_handle/6, set_size/1, increase_size/2, get_storage_file_id/1]).
+-export([new_handle/2, new_handle/3, new_handle/5, new_handle/6,
+    set_size/1, calculate_size/1, increase_size/2,
+    get_storage_file_id/1, get_storage_id/1]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
     get_child_handle/2, listobjects/4]).
 -export([stat/1, read/3, write/3, create/2, open/2, release/1,
@@ -118,6 +120,19 @@ set_size(#sd_handle{
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Calculates size of file represented by handle but does not cache result in handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec calculate_size(handle()) -> non_neg_integer().
+calculate_size(#sd_handle{
+    space_id = SpaceId,
+    file_uuid = FileUuid
+}) ->
+    get_size(FileUuid, SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Sets size in handle.
 %% @end
 %%--------------------------------------------------------------------
@@ -126,6 +141,11 @@ increase_size(SDHandle = #sd_handle{file_size = CurrentSize}, Increase) ->
     SDHandle#sd_handle{
         file_size = CurrentSize + Increase
     }.
+
+
+-spec get_storage_id(handle()) -> storage:id().
+get_storage_id(#sd_handle{storage_id = StorageId}) ->
+    StorageId.
 
 
 -spec get_storage_file_id(handle()) -> helpers:file_id().
