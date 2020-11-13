@@ -37,15 +37,6 @@
 % utils
 -export([mount_dir_owner/2, mount_dir_owner/3]).
 
--define(assertFileInfo(Expected, Worker, FilePath),
-    assert_file_info(Expected, Worker, FilePath, ?LINE)).
-
--define(EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, Fun),
-    case is_supporting_storage_posix_compatible(Worker, SpaceId) of
-        true -> Fun();
-        false -> ok
-    end
-).
 -define(RUN(TestSpec), run_for_each_setup(TestSpec#test_spec{test_name = ?FUNCTION_NAME})).
 -record(test_spec, {
     config :: list(),
@@ -1067,7 +1058,7 @@ space_directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         SpacePath = storage_test_utils:space_path(Worker, SpaceId),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?DEFAULT_DIR_MODE}, ExpectedOwner), Worker, SpacePath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DEFAULT_DIR_MODE}, ExpectedOwner), Worker, SpacePath)
     end).
 
 regular_file_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1093,7 +1084,7 @@ regular_file_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, FileName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath)
     end).
 
 regular_file_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1128,12 +1119,12 @@ regular_file_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, FileName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath),
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath),
 
         % pretend that ?UNKNOWN_USER logged to Onezone
         ok = rpc:call(Worker, files_to_chown, chown_deferred_files, [?UNKNOWN_USER]),
         ExpectedOwner2 = maps:get(expected_owner2, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner2), Worker, StorageFilePath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner2), Worker, StorageFilePath)
     end).
 
 directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1163,7 +1154,7 @@ directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageDirPath = storage_test_utils:file_path(Worker, SpaceId, DirName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath)
     end).
 
 directory_with_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1200,12 +1191,12 @@ directory_with_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageDirPath = storage_test_utils:file_path(Worker, SpaceId, DirName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath),
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath),
 
         % pretend that ?UNKNOWN_USER logged to Onezone
         ok = rpc:call(Worker, files_to_chown, chown_deferred_files, [?UNKNOWN_USER]),
         ExpectedOwner2 = maps:get(expected_owner2, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner2), Worker, StorageDirPath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner2), Worker, StorageDirPath)
     end).
 
 rename_file_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1248,8 +1239,8 @@ rename_file_test_base(TestName, Config, SpaceId, TestArgs) ->
         TargetStorageDirPath = storage_test_utils:file_path(Worker, SpaceId, DirName),
         TargetStorageFilePath = filename:join(TargetStorageDirPath, FileName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
-        ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, TargetStorageDirPath),
-        ?assertFileInfo(maps:merge(#{mode => ?DEFAULT_FILE_MODE}, ExpectedOwner), Worker, TargetStorageFilePath)
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, TargetStorageDirPath),
+        ?ASSERT_FILE_INFO(maps:merge(#{mode => ?DEFAULT_FILE_MODE}, ExpectedOwner), Worker, TargetStorageFilePath)
     end).
 
 mapping_not_found_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1337,7 +1328,7 @@ clean_posix_storage_mountpoints(Worker) ->
     {ok, SpaceIds} = get_supported_spaces(Worker),
     SpacesAndSupportingPosixStorageIds = lists:filtermap(fun(SpaceId) ->
         {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Worker, SpaceId),
-        case is_posix_compatible_storage(Worker, StorageId) of
+        case storage_test_utils:is_posix_compatible_storage(Worker, StorageId) of
             true -> {true, {SpaceId, StorageId}};
             false -> false
         end
@@ -1348,15 +1339,6 @@ clear_luma_db(Worker) ->
     lists:foreach(fun(StorageId) ->
         ok = rpc:call(Worker, luma, clear_db, [StorageId])
     end, ?AUTO_FEED_LUMA_STORAGES ++ ?EXTERNAL_FEED_LUMA_STORAGES).
-
-
-is_supporting_storage_posix_compatible(Worker, SpaceId) ->
-    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Worker, SpaceId),
-    is_posix_compatible_storage(Worker, StorageId).
-
-is_posix_compatible_storage(Worker, StorageId) ->
-    Helper = storage_test_utils:get_helper(Worker, StorageId),
-    helper:is_posix_compatible(Helper).
 
 clean_posix_storage_mountpoints(Worker, SpacesAndSupportingPosixStorageIds) ->
     lists:foreach(fun({SpaceId, StorageId}) ->
@@ -1374,56 +1356,6 @@ clean_posix_storage_mountpoint(Worker, SpaceId, StorageId) ->
 sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
-
-assert_file_info(ExpectedValues, Worker, FilePath, Line) ->
-    try
-        {ok, FI} = storage_test_utils:read_file_info(Worker, FilePath),
-        maps:fold(fun(Field, ExpectedValue, _) ->
-            assert_field(Field, ExpectedValue, FI)
-        end, undefined, ExpectedValues)
-    catch
-        throw:(Error = {assertion_error, Field, ExpectedValue, Value}) ->
-            ct:print(
-                "Assertion for file ~p failed.~n"
-                "   Field: ~p~n"
-                "   Expected: ~p~n"
-                "   Got: ~p~n"
-                "   Module: ~p~n"
-                "   Line: ~p",
-                [FilePath, Field, ExpectedValue, Value, ?MODULE, Line]
-            ),
-            ct:fail(Error);
-        Error:Reason ->
-            ct:print(
-                "Assertion for file ~p failed.~n"
-                "   Error: {~p, ~p}~n"
-                "   Module: ~p~n"
-                "   Line: ~p",
-                [FilePath, Error, Reason, ?MODULE, Line]
-            ),
-            ct:fail({Error, Reason})
-    end.
-
-assert_field(Field, ExpectedValue, Record) ->
-    case get_record_field(Record, Field) of
-        ExpectedValue ->
-            ok;
-        OtherValue ->
-            throw({assertion_error, Field, ExpectedValue, OtherValue})
-    end.
-
-get_record_field(Record, Field) ->
-    FieldsList = record_info(fields, file_info),
-    Index = index(Field, FieldsList),
-    element(Index + 1, Record).
-
-index(Key, List) ->
-    case lists:keyfind(Key, 2, lists:zip(lists:seq(1, length(List)), List)) of
-        false ->
-            throw({wrong_assertion_key, Key, List});
-        {Index, _} ->
-            Index
-    end.
 
 run_for_each_setup(#test_spec{
     config = Config,

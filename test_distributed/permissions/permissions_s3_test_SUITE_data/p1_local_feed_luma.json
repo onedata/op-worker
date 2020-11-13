@@ -1,0 +1,39 @@
+{
+    "s3_1": {
+        "storageUsers": {
+            "owner": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey",
+                    "secretKey": "SecretKey"
+                },
+                "displayUid": 9991
+            },
+            "user1": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey",
+                    "secretKey": "SecretKey"
+                }
+            },
+            "user2": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey",
+                    "secretKey": "SecretKey"
+                }
+            },
+            "user3": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey",
+                    "secretKey": "SecretKey"
+                }
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 9999,
+                    "gid": 9999
+                }
+            }
+        }
+    }
+}

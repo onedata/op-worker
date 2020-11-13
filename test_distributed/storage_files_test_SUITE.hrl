@@ -89,4 +89,15 @@
 
 -define(OWNER(Uid, Gid), #{uid => Uid, gid => Gid}).
 
+-define(ASSERT_FILE_INFO(Expected, Worker, FilePath),
+    storage_test_utils:assert_file_info(Expected, Worker, FilePath, ?LINE)
+).
+
+-define(EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, Fun),
+    case storage_test_utils:is_supporting_storage_posix_compatible(Worker, SpaceId) of
+        true -> Fun();
+        false -> ok
+    end
+).
+
 -endif.

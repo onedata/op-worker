@@ -98,23 +98,21 @@ init(Config, Link) ->
 
 -spec init(Config :: list(), boolean(), [node()]) -> list().
 init(Config, Link, Workers) ->
-    InitialServers = proplists:get_value(servers, Config, #{}),
-
     Host = self(),
     ServerFun = fun() ->
+        register(lfm_proxy_server, self()),
         lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
         Host ! {self(), done},
         receive
             exit -> ok
         end
     end,
-    Servers = lists:foldl(
-        fun(W, Acc) ->
-            case Link of
-                true -> Acc#{W => spawn_link(W, ServerFun)};
-                false -> Acc#{W => spawn(W, ServerFun)}
-            end
-        end, maps:without(Workers, InitialServers), lists:usort(Workers)),
+    Servers = lists:map(fun(W) ->
+        case Link of
+            true -> spawn_link(W, ServerFun);
+            false -> spawn(W, ServerFun)
+        end
+    end, lists:usort(Workers)),
 
     lists:foreach(
         fun(Server) ->
@@ -123,17 +121,18 @@ init(Config, Link, Workers) ->
             after timer:seconds(5) ->
                 error("Cannot setup lfm_handles ETS")
             end
-        end, maps:values(maps:with(Workers, Servers))),
+        end, Servers),
 
-    [{servers, Servers} | Config].
+    Config.
 
 
 -spec teardown(Config :: list()) -> ok.
 teardown(Config) ->
     lists:foreach(
-        fun(Pid) ->
+        fun(Worker) ->
+            Pid = rpc:call(Worker, erlang, whereis, [lfm_proxy_server]),
             Pid ! exit
-        end, maps:values(?config(servers, Config))).
+        end, ?config(op_worker_nodes, Config)).
 
 
 %%%===================================================================

@@ -45,7 +45,6 @@
     get_share/1,
     update_share_name/1,
     delete_share/1,
-    download_file_test/1,
     list_transfers/1,
     track_transferred_files/1
 ]).
@@ -68,7 +67,6 @@ all() ->
         get_share,
         update_share_name,
         delete_share,
-        download_file_test,
         list_transfers,
         track_transferred_files
     ]).
@@ -581,30 +579,6 @@ delete_share(Config) ->
         {ok, _},
         lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)
     ).
-
-download_file_test(Config) ->
-    {OpNode, _} = get_op_nodes(Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(OpNode)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-
-    % create regular file
-    FilePath = filename:join(["/", SpaceName, "download_file_test"]),
-    {ok, FileGuid} = lfm_proxy:create(OpNode, SessionId, FilePath, 8#777),
-
-    DummyData = <<"DATA">>,
-    {ok, WriteHandle} = lfm_proxy:open(OpNode, SessionId, {guid, FileGuid}, write),
-    {ok, _} = lfm_proxy:write(OpNode, WriteHandle, 0, DummyData),
-    ok = lfm_proxy:close(OpNode, WriteHandle),
-
-    % Assert file_download_url is one time use only
-    {ok, URL1} = rpc:call(OpNode, page_file_download, get_file_download_url, [SessionId, FileGuid]),
-    ?assertEqual({ok, <<"DATA">>}, download_file(OpNode, URL1, Config)),
-    ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file(OpNode, URL1, Config)),
-
-    % Assert that trying to download deleted file should result in ?ENOENT
-    {ok, URL2} = rpc:call(OpNode, page_file_download, get_file_download_url, [SessionId, FileGuid]),
-    lfm_proxy:unlink(OpNode, SessionId, {guid, FileGuid}),
-    ?assertEqual(?ERROR_POSIX(?ENOENT), download_file(OpNode, URL2, Config)).
 
 list_transfers(Config) ->
     ct:timetrap({hours, 1}),
