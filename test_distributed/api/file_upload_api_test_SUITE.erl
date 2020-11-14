@@ -77,10 +77,10 @@ create_file_test(Config) ->
             type = rest,
             target_nodes = Providers,
             client_spec = #client_spec{
-                correct = [
+                correct = lists_utils:random_sublist([
                     user2,  % space owner - doesn't need any perms
                     user3  % files owner (see fun create_shared_file/1)
-                ],
+                ], 1, 1),
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
@@ -273,10 +273,10 @@ update_file_content_test(Config) ->
             type = rest,
             target_nodes = Providers,
             client_spec = #client_spec{
-                correct = [
+                correct = lists_utils:random_sublist([
                     user2, % space owner - doesn't need any perms
                     user3  % files owner (see fun create_shared_file/1)
-                ],
+                ], 1, 1),
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
@@ -334,7 +334,7 @@ build_update_file_content_setup_fun(MemRef, Content, Config) ->
 
         api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
         ?assertMatch({ok, #file_attr{size = FileSize}}, api_test_utils:get_file_attrs(P2Node, FileGuid), ?ATTEMPTS),
-        api_test_utils:assert_distribution(Providers, [FileGuid], [{P1Node, FileSize}]),
+        api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]),
 
         api_test_memory:set(MemRef, file_guid, FileGuid)
     end.
@@ -386,7 +386,7 @@ build_update_file_content_verify_fun(MemRef, OriginalFileContent, Config) ->
     fun
         (expected_failure, _) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
-            api_test_utils:assert_distribution(AllProviders, [FileGuid], [{P1Node, OriginalFileSize}]);
+            api_test_utils:assert_distribution(AllProviders, FileGuid, [{P1Node, OriginalFileSize}]);
         (expected_success, #api_test_ctx{node = UpdateNode, data = Data}) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
             Offset = maps:get(<<"offset">>, Data, undefined),
@@ -421,7 +421,15 @@ verify_file_content_update(
         undefined ->
             % File was truncated and new data written at offset 0
             assert_file_size(AllProviders, FileGuid, DataSentSize),
-            api_test_utils:assert_distribution(AllProviders, [FileGuid], [{UpdateNode, DataSentSize}]),
+
+            ExpDist = case UpdateNode == CreationNode of
+                true ->
+                    [{UpdateNode, DataSentSize}];
+                false ->
+                    [{CreationNode, 0}, {UpdateNode, DataSentSize}]
+            end,
+            api_test_utils:assert_distribution(AllProviders, FileGuid, ExpDist),
+
             assert_file_content(AllProviders, FileGuid, DataSent);
         Offset ->
             assert_file_size(AllProviders, FileGuid, max(OriginalFileSize, Offset + DataSentSize)),
@@ -457,7 +465,7 @@ verify_file_content_update(
                             ]
                     end
             end,
-            api_test_utils:assert_distribution(AllProviders, [FileGuid], ExpDist),
+            api_test_utils:assert_distribution(AllProviders, FileGuid, ExpDist),
 
             case Offset > 1024*1024*1024 of  % 1 GB
                 true ->

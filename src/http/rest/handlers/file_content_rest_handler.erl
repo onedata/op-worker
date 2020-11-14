@@ -147,6 +147,7 @@ process_request(#op_req{
         undefined ->
             % Overwrite file if no explicit offset was given
             ?check(lfm:truncate(SessionId, FileKey, 0)),
+            ?check(lfm:fsync(SessionId, FileKey, oneprovider:get_id())),
             0;
         Num ->
             % Otherwise leave previous content and start writing from specified offset
