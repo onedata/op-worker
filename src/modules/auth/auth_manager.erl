@@ -202,11 +202,12 @@ verify_credentials(TokenCredentials) ->
                     TokenCredentials, TokenRef, VerificationResult
                 ),
                 VerificationResult
-            catch Type:Reason ->
-                ?error_stacktrace("Cannot verify user credentials due to ~p:~p", [
-                    Type, Reason
-                ]),
-                ?ERROR_INTERNAL_SERVER_ERROR
+            catch
+                Type:Reason ->
+                    ?error_stacktrace("Cannot verify user credentials due to ~p:~p", [
+                        Type, Reason
+                    ]),
+                    ?ERROR_INTERNAL_SERVER_ERROR
             end
     end.
 
@@ -226,45 +227,61 @@ verify_token_credentials(#token_credentials{
     interface = Interface,
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
-    case deserialize_and_validate_token(AccessToken) of
-        {ok, #token{subject = Subject} = Token} ->
-            case token_logic:verify_access_token(
-                AccessToken, ConsumerToken,
-                PeerIp, Interface, DataAccessCaveatsPolicy
-            ) of
-                {ok, Subject, TokenTTL} ->
-                    AaiAuth = #auth{
-                        subject = Subject,
-                        caveats = tokens:get_caveats(Token)
-                    },
-                    TokenExpiration = case TokenTTL of
-                        undefined -> undefined;
-                        _ -> ?NOW() + TokenTTL
-                    end,
-                    TokenRef = auth_cache:get_token_ref(Token),
-                    {TokenRef, {ok, AaiAuth, TokenExpiration}};
-                {error, _} = VerificationError ->
-                    {undefined, VerificationError}
-            end;
-        {error, _} = Error ->
+    try
+        % required to extract caveats, plus serves as a sanity check of token structure
+        Token = try_to_deserialize_token(AccessToken),
+        case token_logic:verify_access_token(
+            AccessToken, ConsumerToken,
+            PeerIp, Interface, DataAccessCaveatsPolicy
+        ) of
+            {ok, Subject, TokenTTL} ->
+                ensure_subject_is_a_supported_user(Subject),
+                AaiAuth = #auth{
+                    subject = Subject,
+                    caveats = tokens:get_caveats(Token)
+                },
+                TokenExpiration = case TokenTTL of
+                    undefined -> undefined;
+                    _ -> ?NOW() + TokenTTL
+                end,
+                TokenRef = auth_cache:get_token_ref(Token),
+                {TokenRef, {ok, AaiAuth, TokenExpiration}};
+            ?ERROR_TOKEN_SERVICE_FORBIDDEN(?SERVICE(?OP_WORKER, _)) = VerificationError ->
+                % this error may be generated when the user is not supported by the
+                % provider - check if this is the case and return a clearer error
+                case Token#token.subject of
+                    ?SUB(user, UserId) ->
+                        case provider_logic:has_eff_user(UserId) of
+                            true -> {undefined, VerificationError};
+                            false -> {undefined, ?ERROR_USER_NOT_SUPPORTED}
+                        end;
+                    _ ->
+                        {undefined, VerificationError}
+                end;
+            {error, _} = VerificationError ->
+                {undefined, VerificationError}
+        end
+    catch
+        throw:{error, _} = Error ->
             {undefined, Error}
     end.
 
 
 %% @private
--spec deserialize_and_validate_token(tokens:serialized()) ->
-    {ok, tokens:token()} | errors:error().
-deserialize_and_validate_token(SerializedToken) ->
+-spec try_to_deserialize_token(tokens:serialized()) -> tokens:token() | no_return().
+try_to_deserialize_token(SerializedToken) ->
     case tokens:deserialize(SerializedToken) of
-        {ok, #token{subject = ?SUB(user, UserId)} = Token} ->
-            case provider_logic:has_eff_user(UserId) of
-                true ->
-                    {ok, Token};
-                false ->
-                    ?ERROR_USER_NOT_SUPPORTED
-            end;
-        {ok, _} ->
-            ?ERROR_TOKEN_SUBJECT_INVALID;
-        {error, _} = DeserializationError ->
-            DeserializationError
+        {ok, Token} -> Token;
+        {error, _} = Error -> throw(Error)
     end.
+
+
+%% @private
+-spec ensure_subject_is_a_supported_user(aai:subject()) -> ok | no_return().
+ensure_subject_is_a_supported_user(?SUB(user, UserId)) ->
+    case provider_logic:has_eff_user(UserId) of
+        true -> ok;
+        false -> throw(?ERROR_USER_NOT_SUPPORTED)
+    end;
+ensure_subject_is_a_supported_user(_) ->
+    throw(?ERROR_TOKEN_SUBJECT_INVALID).
