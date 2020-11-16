@@ -338,7 +338,7 @@ handle_info({upgrade_protocol, Hostname}, State) ->
         {ok, NewState} ->
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, _Reason} ->
-            {stop, connection_attempt_failed, State}
+            {stop, termination_reason(connection_attempt_failed, State), State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Socket, ok = Ok} = State) ->
@@ -350,12 +350,12 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_protocol_upgrade_response'
             % so terminate gracefully as to not spam more error logs
-            {stop, connection_attempt_failed, State}
+            {stop, termination_reason(connection_attempt_failed, State), State}
     catch Type:Reason ->
         ?error_stacktrace("Unexpected error during protocol upgrade: ~p:~p", [
             Type, Reason
         ]),
-        {stop, connection_attempt_failed, State}
+        {stop, termination_reason(connection_attempt_failed, State), State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
@@ -368,12 +368,12 @@ handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = S
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_handshake' so
             % terminate gracefully as to not spam more error logs
-            {stop, connection_attempt_failed, State}
+            {stop, termination_reason(connection_attempt_failed, State), State}
     catch Type:Reason ->
         ?error_stacktrace("Unexpected error while performing handshake: ~p:~p", [
             Type, Reason
         ]),
-        {stop, connection_attempt_failed, State}
+        {stop, termination_reason(connection_attempt_failed, State), State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State) ->
@@ -901,3 +901,15 @@ activate_socket(#state{socket_mode = active_always}, false) ->
     ok;
 activate_socket(#state{transport = Transport, socket = Socket}, _) ->
     ok = Transport:setopts(Socket, [{active, once}]).
+
+
+%% @private
+-spec termination_reason(OriginalTerminationReason :: atom(), state()) ->
+    TerminationReason :: atom().
+termination_reason(_Reason, #state{type = incoming, status = Status}) when Status /= ready ->
+    % Concrete errors were already logged and in case of incoming connections
+    % no backoff is performed by server (as it is responsibility od remote peer)
+    % so terminate with reason 'normal' to not spam with termination logs
+    normal;
+termination_reason(Reason, _State) ->
+    Reason.
