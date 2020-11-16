@@ -50,14 +50,14 @@ truncate(UserCtx, FileCtx0, Size) ->
 -spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
     Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
-truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes) ->
-    truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes, true).
+truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
+    truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes, true).
+
 
 -spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
     Size :: non_neg_integer(), UpdateTimes :: boolean(), CreateFileIfNotExist :: boolean()) ->
     fslogic_worker:fuse_response().
-truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes, CreateFileIfNotExist) ->
-    FileCtx1 = update_quota(FileCtx0, Size),
+truncate_insecure(UserCtx, FileCtx1, Size, UpdateTimes, CreateFileIfNotExist) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case file_ctx:is_readonly_storage(FileCtx1) of
         {true, FileCtx2} ->
@@ -102,27 +102,15 @@ truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes, CreateFileIfNotExist) ->
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Updates space quota.
-%% @end
-%%--------------------------------------------------------------------
--spec update_quota(file_ctx:ctx(), file_meta:size()) -> NewFileCtx :: file_ctx:ctx().
-update_quota(FileCtx, Size) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {OldSize, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
-    ok = space_quota:assert_write(SpaceId, Size - OldSize),
-    FileCtx2.
-
-
 -spec log_warning(atom(), atom(), {error, term()}, file_ctx:ctx()) -> ok.
 log_warning(Module, Function, Error, FileCtx) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
     Guid = file_ctx:get_guid_const(FileCtx3),
-    ?warning("~p:~p on file {~p, ~p} with file_id ~p returned ~p",
-        [Module, Function, Path, Guid, StorageFileId, Error]).
+    ?warning("~p:~p on file {~p, ~p} with file_id ~p returned ~p", [
+        Module, Function, Path, Guid, StorageFileId, Error
+    ]).
 
 
 %% @private

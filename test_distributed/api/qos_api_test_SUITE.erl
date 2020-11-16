@@ -173,7 +173,7 @@ delete_qos_test(Config) ->
                     name = <<"Delete QoS using gs endpoint">>,
                     type = gs,
                     prepare_args_fun = prepare_args_fun_gs(MemRef, delete),
-                    validate_result_fun = fun(_, {ok, undefined}) -> ok end
+                    validate_result_fun = fun(_, ok) -> ok end
                 }
             ],
             data_spec = #data_spec{

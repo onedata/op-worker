@@ -24,7 +24,7 @@
     translate_value/2,
     translate_resource/2,
 
-    translate_distribution/1
+    translate_distribution/2
 ]).
 
 % For below types description see interpolate_chunks fun doc
@@ -101,8 +101,8 @@ translate_value(#gri{aspect = download_url}, URL) ->
 translate_resource(#gri{aspect = instance, scope = Scope}, FileDetails) ->
     translate_file_details(FileDetails, Scope);
 
-translate_resource(#gri{aspect = distribution, scope = private}, Distribution) ->
-    translate_distribution(Distribution);
+translate_resource(#gri{aspect = distribution, id = FileGuid, scope = private}, Distribution) ->
+    translate_distribution(FileGuid, Distribution);
 
 translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
     try
@@ -129,16 +129,10 @@ translate_resource(#gri{aspect = file_qos_summary, scope = private}, QosSummaryR
     maps:without([<<"status">>], QosSummaryResponse).
 
 
--spec translate_distribution(Distribution :: [file_distribution()]) ->
+-spec translate_distribution(file_id:file_guid(), Distribution :: [file_distribution()]) ->
     distribution_per_provider().
-translate_distribution(Distribution) ->
-    FileSize = lists:foldl(fun
-        (#{<<"blocks">> := []}, Acc) ->
-            Acc;
-        (#{<<"blocks">> := Blocks}, Acc) ->
-            [Offset, Size] = lists:last(Blocks),
-            max(Acc, Offset + Size)
-    end, 0, Distribution),
+translate_distribution(FileGuid, Distribution) ->
+    {ok, #file_attr{size = FileSize}} = lfm:stat(?ROOT_SESS_ID, {guid, FileGuid}),
 
     DistributionMap = lists:foldl(fun(#{
         <<"providerId">> := ProviderId,

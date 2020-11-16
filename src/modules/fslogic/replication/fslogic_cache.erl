@@ -718,9 +718,9 @@ flush_key(Key, Type) ->
                             _ -> Size0
                         end,
                         SizeThreshold = application:get_env(?APP_NAME,
-                            public_block_size_treshold, 104857600),
+                            public_block_size_threshold, 104857600),
                         PercentThreshold = application:get_env(?APP_NAME,
-                            public_block_percent_treshold, 10),
+                            public_block_percent_threshold, 10),
 
                         SavedBlocks = get_set({?SAVED_BLOCKS, Key}),
                         PublicBlocks = get({?PUBLIC_BLOCKS, Key}),

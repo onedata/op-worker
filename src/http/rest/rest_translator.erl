@@ -17,7 +17,10 @@
 
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 %% API
 -export([response/2, error_response/1]).
@@ -28,34 +31,21 @@
 %%%===================================================================
 
 
--spec response(_, middleware:result()) -> #rest_resp{}.
-response(_, {error, _} = Error) ->
-    error_response(Error);
-
-response(#op_req{operation = create}, ok) ->
-    % No need for translation, 'ok' means success with no response data
-    ?NO_CONTENT_REPLY;
-response(#op_req{operation = create} = OpReq, {ok, DataFormat, Result}) ->
-    #op_req{gri = GRI = #gri{type = Model}, auth_hint = AuthHint} = OpReq,
-    Translator = entity_type_to_translator(Model),
-    Translator:create_response(GRI, AuthHint, DataFormat, Result);
-
-response(#op_req{operation = get} = OpReq, {ok, Data}) ->
-    #op_req{gri = GRI = #gri{type = Model}} = OpReq,
-    Translator = entity_type_to_translator(Model),
-    Translator:get_response(GRI, Data);
-response(#op_req{operation = get} = OpReq, {ok, value, Data}) ->
-    response(OpReq, {ok, Data});
-
-response(#op_req{operation = update}, ok) ->
-    ?NO_CONTENT_REPLY;
-
-response(#op_req{operation = delete}, ok) ->
-    ?NO_CONTENT_REPLY;
-response(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
-    #op_req{gri = GRI = #gri{type = Model}} = OpReq,
-    Translator = entity_type_to_translator(Model),
-    Translator:delete_response(GRI, DataFormat, Result).
+-spec response(middleware:req(), middleware:result()) -> #rest_resp{}.
+response(#op_req{operation = Operation, gri = GRI} = OpReq, Result) ->
+    try
+        response_insecure(OpReq, Result)
+    catch Type:Message ->
+        ?error_stacktrace("Cannot translate REST result for:~n"
+                          "Operation: ~p~n"
+                          "GRI: ~p~n"
+                          "Result: ~p~n"
+                          "---------~n"
+                          "Error was: ~w:~p", [
+            Operation, GRI, Result, Type, Message
+        ]),
+        error_response(?ERROR_INTERNAL_SERVER_ERROR)
+    end.
 
 
 -spec error_response(errors:error()) -> #rest_resp{}.
@@ -70,6 +60,37 @@ error_response({error, _} = Error) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec response_insecure(middleware:req(), middleware:result()) -> #rest_resp{}.
+response_insecure(#op_req{operation = create}, ok) ->
+    % No need for translation, 'ok' means success with no response data
+    ?NO_CONTENT_REPLY;
+response_insecure(#op_req{operation = create} = OpReq, {ok, DataFormat, Result}) ->
+    #op_req{gri = GRI = #gri{type = Model}, auth_hint = AuthHint} = OpReq,
+    Translator = entity_type_to_translator(Model),
+    Translator:create_response(GRI, AuthHint, DataFormat, Result);
+
+response_insecure(#op_req{operation = get} = OpReq, {ok, Data}) ->
+    #op_req{gri = GRI = #gri{type = Model}} = OpReq,
+    Translator = entity_type_to_translator(Model),
+    Translator:get_response(GRI, Data);
+response_insecure(#op_req{operation = get} = OpReq, {ok, value, Data}) ->
+    response_insecure(OpReq, {ok, Data});
+
+response_insecure(#op_req{operation = update}, ok) ->
+    ?NO_CONTENT_REPLY;
+
+response_insecure(#op_req{operation = delete}, ok) ->
+    ?NO_CONTENT_REPLY;
+response_insecure(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
+    #op_req{gri = GRI = #gri{type = Model}} = OpReq,
+    Translator = entity_type_to_translator(Model),
+    Translator:delete_response(GRI, DataFormat, Result);
+
+response_insecure(_, {error, _} = Error) ->
+    error_response(Error).
 
 
 %% @private
