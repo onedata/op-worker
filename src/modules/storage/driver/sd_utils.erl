@@ -329,15 +329,39 @@ create_storage_file(SDHandle, FileCtx) ->
     FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx),
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     Mode = file_meta:get_mode(FileDoc),
-    Result = case file_meta:get_type(FileDoc) of
+    case file_meta:get_type(FileDoc) of
         ?REGULAR_FILE_TYPE ->
-            storage_driver:create(SDHandle, Mode);
+            case storage_driver:create(SDHandle, Mode) of
+                ok ->
+                    truncate_created_file(FileCtx);
+                Other ->
+                    Other
+            end;
         ?DIRECTORY_TYPE ->
-            storage_driver:mkdir(SDHandle, Mode)
-    end,
-    case Result of
-        ok -> {ok, FileCtx3};
-        Error -> Error
+            case storage_driver:mkdir(SDHandle, Mode) of
+                ok -> {ok, FileCtx3};
+                Error -> Error
+            end
+    end.
+
+-spec truncate_created_file(file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+truncate_created_file(FileCtx) ->
+    try
+        case file_ctx:get_file_size(FileCtx) of
+            {0, FileCtx2} ->
+                {ok, FileCtx2};
+            {Size, FileCtx2} ->
+                {SDHandle, FileCtx3} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx2),
+                {ok, Handle} = storage_driver:open(SDHandle, write),
+                ok = storage_driver:truncate(Handle, Size, 0),
+                storage_driver:release(Handle),
+                {ok, FileCtx3}
+        end
+    catch
+        Error:Reason ->
+            ?warning_stacktrace("Error truncating newly created storage file ~p: ~p:~p",
+                [file_ctx:get_guid_const(FileCtx), Error, Reason]),
+            {ok, FileCtx}
     end.
 
 %%--------------------------------------------------------------------

@@ -242,7 +242,7 @@ authorize_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    has_access_to_file(Auth, Guid);
+    middleware_utils:has_access_to_file(Auth, Guid);
 
 authorize_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % File path must have been resolved to guid by rest_handler already (to
@@ -266,7 +266,7 @@ validate_create(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_file_managed_locally(Guid);
+    middleware_utils:assert_file_managed_locally(Guid);
 
 validate_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % File path must have been resolved to guid by rest_handler already (to
@@ -503,7 +503,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= shares;
     As =:= download_url
 ->
-    has_access_to_file(Auth, Guid);
+    middleware_utils:has_access_to_file(Auth, Guid);
 
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = transfers}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -532,7 +532,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= file_qos_summary;
     As =:= download_url
 ->
-    assert_file_managed_locally(Guid).
+    middleware_utils:assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -724,27 +724,29 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) -
 %% @private
 -spec update_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
-update_operation_supported(instance, private) -> true;
+update_operation_supported(instance, private) -> true;              % gs only
 update_operation_supported(acl, private) -> true;
 update_operation_supported(_, _) -> false.
 
 
 %% @private
 -spec data_spec_update(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
-data_spec_update(#gri{aspect = instance}) -> #{
-    required => #{id => {binary, guid}},
-    optional => #{
-        <<"posixPermissions">> => {binary,
-            fun(Mode) ->
-                try
-                    {true, binary_to_integer(Mode, 8)}
-                catch _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>))
-                end
+data_spec_update(#gri{aspect = instance}) ->
+    ModeParam = <<"posixPermissions">>,
+
+    #{required => #{
+        id => {binary, guid},
+        ModeParam => {binary, fun(Mode) ->
+            try binary_to_integer(Mode, 8) of
+                ValidMode when ValidMode >= 0 andalso ValidMode =< 8#777 ->
+                    {true, ValidMode};
+                _ ->
+                    throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(ModeParam, 0, 8#777))
+            catch _:_ ->
+                throw(?ERROR_BAD_VALUE_INTEGER(ModeParam))
             end
-        }
-    }
-};
+        end}
+    }};
 
 data_spec_update(#gri{aspect = acl}) -> #{
     required => #{
@@ -766,7 +768,7 @@ authorize_update(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= instance;
     As =:= acl
 ->
-    has_access_to_file(Auth, Guid).
+    middleware_utils:has_access_to_file(Auth, Guid).
 
 
 %% @private
@@ -775,7 +777,7 @@ validate_update(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= acl
 ->
-    assert_file_managed_locally(Guid).
+    middleware_utils:assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -807,7 +809,7 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 %% @private
 -spec delete_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
-delete_operation_supported(instance, private) -> true;
+delete_operation_supported(instance, private) -> true;              % gs only
 delete_operation_supported(xattrs, private) -> true;                % REST/gs
 delete_operation_supported(json_metadata, private) -> true;         % REST/gs
 delete_operation_supported(rdf_metadata, private) -> true;          % REST/gs
@@ -839,7 +841,7 @@ authorize_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    has_access_to_file(Auth, Guid).
+    middleware_utils:has_access_to_file(Auth, Guid).
 
 
 %% @private
@@ -850,7 +852,7 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_file_managed_locally(Guid).
+    middleware_utils:assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -859,8 +861,17 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
-delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
-    ?check(lfm:rm_recursive(Auth#auth.session_id, {guid, FileGuid}));
+delete(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{id = FileGuid, aspect = instance}}) ->
+    FileKey = {guid, FileGuid},
+
+    case lfm:stat(SessionId, {guid, FileGuid}) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+            ?check(lfm:rm_recursive(SessionId, FileKey));
+        {ok, _} ->
+            ?check(lfm:unlink(SessionId, FileKey, false));
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
     lists:foreach(fun(XattrName) ->
@@ -877,46 +888,6 @@ delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) -
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks user membership in space containing specified file. Returns true
-%% in case of user root dir since it doesn't belong to any space.
-%% @end
-%%--------------------------------------------------------------------
--spec has_access_to_file(aai:auth(), file_id:file_guid()) -> boolean().
-has_access_to_file(?GUEST, _Guid) ->
-    false;
-has_access_to_file(?USER(UserId) = Auth, Guid) ->
-    case fslogic_uuid:user_root_dir_guid(UserId) of
-        Guid ->
-            true;
-        _ ->
-            SpaceId = file_id:guid_to_space_id(Guid),
-            middleware_utils:is_eff_space_member(Auth, SpaceId)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Asserts that space containing specified file is supported by this provider.
-%% Omit this check in case of user root dir which doesn't belong to any space
-%% and can be reached from any provider.
-%% @end
-%%--------------------------------------------------------------------
--spec assert_file_managed_locally(file_id:file_guid()) ->
-    ok | no_return().
-assert_file_managed_locally(FileGuid) ->
-    {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
-    case fslogic_uuid:is_root_dir_uuid(FileUuid) of
-        true ->
-            ok;
-        false ->
-            middleware_utils:assert_space_supported_locally(SpaceId)
-    end.
 
 
 %% @private

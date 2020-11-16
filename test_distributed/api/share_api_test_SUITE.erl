@@ -338,7 +338,7 @@ update_share_test(Config) ->
                     type = gs,
                     prepare_args_fun = build_update_share_prepare_gs_args_fun(ShareId),
                     validate_result_fun = fun(_, Result) ->
-                        ?assertEqual({ok, undefined}, Result)
+                        ?assertEqual(ok, Result)
                     end
                 }
             ],
@@ -477,7 +477,7 @@ build_delete_share_validate_rest_call_result_fun(MemRef, Providers, Config) ->
 %% @private
 build_delete_share_validate_gs_call_result_fun(MemRef, Providers, Config) ->
     fun(#api_test_ctx{client = ?USER(UserId)}, Result) ->
-        ?assertEqual({ok, undefined}, Result),
+        ?assertEqual(ok, Result),
         build_validate_delete_share_result(MemRef, UserId, Providers, Config)
     end.
 

@@ -23,7 +23,7 @@
 %% API
 -export([
     get_read_block_size/1,
-    stream_file/3, stream_bytes_range/5
+    stream_file/3, stream_file/4, stream_bytes_range/6
 ]).
 
 -type read_block_size() :: non_neg_integer().
@@ -43,6 +43,18 @@
 % implemented with below boundaries.
 -define(MIN_SEND_RETRY_DELAY, 100).
 -define(MAX_SEND_RETRY_DELAY, 1000).
+
+-record(download_ctx, {
+    file_size :: file_meta:size(),
+
+    file_handle :: lfm:handle(),
+    read_block_size :: read_block_size(),
+    max_read_blocks_count :: non_neg_integer(),
+    encoding_fun :: fun((Data :: binary()) -> EncodedData :: binary()),
+
+    on_success_callback :: fun(() -> ok)
+}).
+-type download_ctx() :: #download_ctx{}.
 
 
 %%%===================================================================
@@ -64,7 +76,22 @@ get_read_block_size(FileHandle) ->
 
 -spec stream_file(session:id(), lfm_attrs:file_attributes(), cowboy_req:req()) ->
     cowboy_req:req().
-stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileSize}, Req0) ->
+stream_file(SessionId, FileAttrs, Req) ->
+    stream_file(SessionId, FileAttrs, fun() -> ok end, Req).
+
+
+-spec stream_file(
+    session:id(),
+    lfm_attrs:file_attributes(),
+    OnSuccessCallback :: fun(() -> ok),
+    cowboy_req:req()
+) ->
+    cowboy_req:req().
+stream_file(SessionId, #file_attr{
+    guid = FileGuid,
+    name = FileName,
+    size = FileSize
+}, OnSuccessCallback, Req0) ->
     case http_parser:parse_range_header(Req0, FileSize) of
         invalid ->
             cowboy_req:reply(
@@ -79,7 +106,15 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
                 {ok, FileHandle} ->
                     try
                         ReadBlockSize = get_read_block_size(FileHandle),
-                        stream_file_insecure(FileHandle, Ranges, FileSize, ReadBlockSize, Req1)
+
+                        stream_file_insecure(Ranges, #download_ctx{
+                            file_size = FileSize,
+                            file_handle = FileHandle,
+                            read_block_size = ReadBlockSize,
+                            max_read_blocks_count = calculate_max_read_blocks_count(ReadBlockSize),
+                            encoding_fun = fun(Data) -> Data end,
+                            on_success_callback = OnSuccessCallback
+                        }, Req1)
                     catch Type:Reason ->
                         {ok, UserId} = session:get_user_id(SessionId),
                         ?error_stacktrace("Error while processing file (~p) download "
@@ -98,23 +133,33 @@ stream_file(SessionId, #file_attr{guid = FileGuid, name = FileName, size = FileS
 
 -spec stream_bytes_range(
     lfm:handle(),
+    file_meta:size(),
     http_parser:bytes_range(),
     cowboy_req:req(),
     EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     read_block_size()
 ) ->
     ok | no_return().
-stream_bytes_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize) ->
-    MaxReadBlocksNum = max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize),
-    stream_bytes_range(
-        FileHandle, Range, Req, EncodingFun,
-        ReadBlockSize, MaxReadBlocksNum, ?MIN_SEND_RETRY_DELAY
-    ).
+stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize) ->
+    stream_bytes_range(Range, #download_ctx{
+        file_size = FileSize,
+        file_handle = FileHandle,
+        read_block_size = ReadBlockSize,
+        max_read_blocks_count = calculate_max_read_blocks_count(ReadBlockSize),
+        encoding_fun = EncodingFun,
+        on_success_callback = fun() -> ok end
+    }, Req, ?MIN_SEND_RETRY_DELAY).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec calculate_max_read_blocks_count(read_block_size()) -> non_neg_integer().
+calculate_max_read_blocks_count(ReadBlockSize) ->
+    max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize).
 
 
 %% @private
@@ -136,46 +181,44 @@ build_content_range_header_value({RangeStart, RangeEnd}, FileSize) ->
 
 
 %% @private
--spec stream_file_insecure(
-    lfm:handle(),
-    undefined | [http_parser:bytes_range()],
-    file_meta:size(),
-    read_block_size(),
-    cowboy_req:req()
-) ->
+-spec stream_file_insecure(undefined | [http_parser:bytes_range()],download_ctx(), cowboy_req:req()) ->
     cowboy_req:req().
-stream_file_insecure(FileHandle, undefined, FileSize, ReadBlockSize, Req) ->
-    stream_whole_file(FileHandle, FileSize, ReadBlockSize, Req);
-stream_file_insecure(FileHandle, [OneRange], FileSize, ReadBlockSize, Req) ->
-    stream_one_ranged_body(FileHandle, OneRange, FileSize, ReadBlockSize, Req);
-stream_file_insecure(FileHandle, Ranges, FileSize, ReadBlockSize, Req) ->
-    stream_multipart_ranged_body(FileHandle, Ranges, FileSize, ReadBlockSize, Req).
+stream_file_insecure(undefined, DownloadCtx, Req) ->
+    stream_whole_file(DownloadCtx, Req);
+stream_file_insecure([OneRange], DownloadCtx, Req) ->
+    stream_one_ranged_body(OneRange, DownloadCtx, Req);
+stream_file_insecure(Ranges, DownloadCtx, Req) ->
+    stream_multipart_ranged_body(Ranges, DownloadCtx, Req).
 
 
 %% @private
--spec stream_whole_file(lfm:handle(), file_meta:size(), read_block_size(), cowboy_req:req()) ->
-    cowboy_req:req().
-stream_whole_file(FileHandle, FileSize, ReadBlockSize, Req0) ->
+-spec stream_whole_file(download_ctx(), cowboy_req:req()) -> cowboy_req:req().
+stream_whole_file(#download_ctx{
+    file_size = FileSize,
+    file_handle = FileHandle,
+    on_success_callback = OnSuccessCallback
+} = DownloadCtx, Req0) ->
     Req1 = cowboy_req:stream_reply(
         ?HTTP_200_OK,
         #{?HDR_CONTENT_LENGTH => integer_to_binary(FileSize)},
         Req0
     ),
-    stream_bytes_range(FileHandle, {0, FileSize - 1}, Req1, fun(Data) -> Data end, ReadBlockSize),
+
+    stream_bytes_range({0, FileSize - 1}, DownloadCtx, Req1, ?MIN_SEND_RETRY_DELAY),
+    execute_on_success_callback(FileHandle, OnSuccessCallback),
+
     cowboy_req:stream_body(<<"">>, fin, Req1),
     Req1.
 
 
 %% @private
--spec stream_one_ranged_body(
-    lfm:handle(),
-    http_parser:bytes_range(),
-    file_meta:size(),
-    read_block_size(),
-    cowboy_req:req()
-) ->
+-spec stream_one_ranged_body(http_parser:bytes_range(), download_ctx(), cowboy_req:req()) ->
     cowboy_req:req().
-stream_one_ranged_body(FileHandle, {RangeStart, RangeEnd} = Range, FileSize, ReadBlockSize, Req0) ->
+stream_one_ranged_body({RangeStart, RangeEnd} = Range, #download_ctx{
+    file_size = FileSize,
+    file_handle = FileHandle,
+    on_success_callback = OnSuccessCallback
+} = DownloadCtx, Req0) ->
     Req1 = cowboy_req:stream_reply(
         ?HTTP_206_PARTIAL_CONTENT,
         #{
@@ -184,21 +227,22 @@ stream_one_ranged_body(FileHandle, {RangeStart, RangeEnd} = Range, FileSize, Rea
         },
         Req0
     ),
-    stream_bytes_range(FileHandle, Range, Req1, fun(Data) -> Data end, ReadBlockSize),
+
+    stream_bytes_range(Range, DownloadCtx, Req1, ?MIN_SEND_RETRY_DELAY),
+    execute_on_success_callback(FileHandle, OnSuccessCallback),
+
     cowboy_req:stream_body(<<"">>, fin, Req1),
     Req1.
 
 
 %% @private
--spec stream_multipart_ranged_body(
-    lfm:handle(),
-    [http_parser:bytes_range()],
-    file_meta:size(),
-    read_block_size(),
-    cowboy_req:req()
-) ->
+-spec stream_multipart_ranged_body([http_parser:bytes_range()], download_ctx(), cowboy_req:req()) ->
     cowboy_req:req().
-stream_multipart_ranged_body(FileHandle, Ranges, FileSize, ReadBlockSize, Req0) ->
+stream_multipart_ranged_body(Ranges, #download_ctx{
+    file_size = FileSize,
+    file_handle = FileHandle,
+    on_success_callback = OnSuccessCallback
+} = DownloadCtx, Req0) ->
     Boundary = cow_multipart:boundary(),
     ContentType = cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req0),
 
@@ -207,73 +251,50 @@ stream_multipart_ranged_body(FileHandle, Ranges, FileSize, ReadBlockSize, Req0) 
         #{?HDR_CONTENT_TYPE => <<"multipart/byteranges; boundary=", Boundary/binary>>},
         Req0
     ),
-    stream_multipart_byteranges(
-        FileHandle, Ranges, FileSize, ReadBlockSize, Boundary, ContentType, Req1
-    ),
+
+    lists:foreach(fun(Range) ->
+        NextPartHead = cow_multipart:first_part(Boundary, [
+            {?HDR_CONTENT_TYPE, ContentType},
+            {?HDR_CONTENT_RANGE, build_content_range_header_value(Range, FileSize)}
+        ]),
+        cowboy_req:stream_body(NextPartHead, nofin, Req1),
+
+        stream_bytes_range(Range, DownloadCtx, Req1, ?MIN_SEND_RETRY_DELAY)
+    end, Ranges),
+    execute_on_success_callback(FileHandle, OnSuccessCallback),
+
     cowboy_req:stream_body(cow_multipart:close(Boundary), fin, Req1),
     Req1.
 
 
 %% @private
--spec stream_multipart_byteranges(
-    lfm:handle(),
-    [http_parser:bytes_range()],
-    file_meta:size(),
-    read_block_size(),
-    MultipartBoundary :: binary(),
-    ContentType :: binary(),
-    cowboy_req:req()
-) ->
-    ok.
-stream_multipart_byteranges(_Handle, [], _Size, _ReadBlockSize, _Boundary, _ContentType, _Req) ->
-    ok;
-stream_multipart_byteranges(
-    FileHandle, [Range | RestRanges], FileSize, ReadBlockSize,
-    Boundary, ContentType, Req
-) ->
-    NextPartHead = cow_multipart:first_part(Boundary, [
-        {?HDR_CONTENT_TYPE, ContentType},
-        {?HDR_CONTENT_RANGE, build_content_range_header_value(Range, FileSize)}
-    ]),
-    cowboy_req:stream_body(NextPartHead, nofin, Req),
-
-    stream_bytes_range(FileHandle, Range, Req, fun(Data) -> Data end, ReadBlockSize),
-
-    stream_multipart_byteranges(
-        FileHandle, RestRanges, FileSize, ReadBlockSize, Boundary, ContentType, Req
-    ).
-
-
-%% @private
 -spec stream_bytes_range(
-    lfm:handle(),
     http_parser:bytes_range(),
+    download_ctx(),
     cowboy_req:req(),
-    EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
-    read_block_size(),
-    MaxReadBlocksNum :: non_neg_integer(),
     SendRetryDelay :: clock:millis()
 ) ->
     ok | no_return().
-stream_bytes_range(_, {From, To}, _, _, _, _, _) when From > To ->
+stream_bytes_range({From, To}, _, _, _) when From > To ->
     ok;
-stream_bytes_range(
-    FileHandle, {From, To}, Req, EncodingFun,
-    ReadBlockSize, MaxReadBlocksNum, SendRetryDelay
-) ->
+stream_bytes_range({From, To}, #download_ctx{
+    file_handle = FileHandle,
+    read_block_size = ReadBlockSize,
+    max_read_blocks_count = MaxReadBlocksCount,
+    encoding_fun = EncodingFun
+} = DownloadCtx, Req, SendRetryDelay) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
-    {ok, NewFileHandle, Data} = ?check(lfm:read(FileHandle, From, ToRead)),
+    {ok, _NewFileHandle, Data} = ?check(lfm:read(FileHandle, From, ToRead)),
 
     case byte_size(Data) of
         0 ->
             ok;
         DataSize ->
             NextSendRetryDelay = send_data_chunk(
-                EncodingFun(Data), Req, MaxReadBlocksNum, SendRetryDelay
+                EncodingFun(Data), Req, MaxReadBlocksCount, SendRetryDelay
             ),
             stream_bytes_range(
-                NewFileHandle, {From + DataSize, To}, Req, EncodingFun,
-                ReadBlockSize, MaxReadBlocksNum, NextSendRetryDelay
+                {From + DataSize, To}, DownloadCtx, Req, NextSendRetryDelay
             )
     end.
 
@@ -294,21 +315,34 @@ stream_bytes_range(
 -spec send_data_chunk(
     Data :: binary(),
     cowboy_req:req(),
-    MaxReadBlocksNum :: non_neg_integer(),
+    MaxReadBlocksCount :: non_neg_integer(),
     RetryDelay :: clock:millis()
 ) ->
     NextRetryDelay :: clock:millis().
-send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksNum, RetryDelay) ->
+send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) ->
     {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
 
-    case MsgQueueLen < MaxReadBlocksNum of
+    case MsgQueueLen < MaxReadBlocksCount of
         true ->
             cowboy_req:stream_body(Data, nofin, Req),
             max(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY);
         false ->
             timer:sleep(RetryDelay),
             send_data_chunk(
-                Data, Req, MaxReadBlocksNum,
+                Data, Req, MaxReadBlocksCount,
                 min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY)
             )
+    end.
+
+
+%% @private
+-spec execute_on_success_callback(lfm:handle(), OnSuccessCallback :: fun(() -> ok)) -> ok.
+execute_on_success_callback(FileHandle, OnSuccessCallback) ->
+    try
+        ok = OnSuccessCallback()
+    catch Type:Reason ->
+        ?warning("Failed to execute file download successfully finished callback for file (~p) "
+                 "due to ~p:~p", [
+            lfm_context:get_guid(FileHandle), Type, Reason
+        ])
     end.

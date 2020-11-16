@@ -53,17 +53,38 @@ read(UserCtx, FileCtx, HandleId, Offset, Size) ->
     HandleId :: storage_driver:handle_id(),
     ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
 write(UserCtx, FileCtx, HandleId, ByteSequences) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId, write),
-    {Written, _} =
-        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
+
+    {Written, _} = lists:foldl(fun
+        (#byte_sequence{offset = Offset, data = <<>>}, {Acc, Handle}) ->
+            handle_empty_write(Handle, Offset),
+            {Acc, Handle};
+        (#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
+            space_quota:assert_write(SpaceId, max(0, size(Data))),
             {WrittenNow, NewHandle} = write_all(Handle, Offset, Data, 0),
             {Acc + WrittenNow, NewHandle}
-        end, {0, Handle0}, ByteSequences),
+    end, {0, Handle0}, ByteSequences),
 
     #proxyio_response{
         status = #status{code = ?OK},
         proxyio_response = #remote_write_result{wrote = Written}
     }.
+
+%% @private
+-spec handle_empty_write(storage_driver:handle(), non_neg_integer()) -> ok.
+handle_empty_write(Handle, Offset) ->
+    case helper:is_getting_size_supported(storage:get_helper(storage_driver:get_storage_id(Handle))) of
+        true ->
+            ok = case storage_driver:stat(Handle) of
+                {ok, #statbuf{st_size = Size}} when Size < Offset ->
+                    storage_driver:truncate(Handle, Offset, Size);
+                _ ->
+                    ok
+            end;
+        _ ->
+            ok % it is possible to read with offset larger than file size, truncate not needed
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

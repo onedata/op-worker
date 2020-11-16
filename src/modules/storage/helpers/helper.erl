@@ -30,7 +30,7 @@
     get_storage_path_type/1, get_block_size/1
 ]).
 -export([
-    is_posix_compatible/1, is_rename_supported/1,
+    is_posix_compatible/1, is_getting_size_supported/1, is_rename_supported/1,
     is_import_supported/1, is_auto_import_supported/1, is_file_registration_supported/1,
     is_nfs4_acl_supported/1, should_skip_storage_detection/1, supports_storage_access_type/2
 ]).
@@ -293,6 +293,16 @@ is_rename_supported(?XROOTD_HELPER_NAME) -> true;
 is_rename_supported(#helper{name = HelperName}) -> is_rename_supported(HelperName);
 is_rename_supported(_) -> false.
 
+%% @private
+-spec is_object(helpers:helper() | name()) -> boolean().
+is_object(#helper{name = Name}) ->
+    is_object(Name);
+is_object(HelperName) ->
+    lists:member(HelperName, ?OBJECT_HELPERS).
+
+-spec is_getting_size_supported(helpers:helper()) -> boolean().
+is_getting_size_supported(Helper) ->
+    not is_object(Helper) orelse block_size_equals_0(Helper).
 
 -spec supports_storage_access_type(helpers:helper() | name(), access_type()) -> boolean().
 supports_storage_access_type(#helper{name = HelperName}, AccessType) ->

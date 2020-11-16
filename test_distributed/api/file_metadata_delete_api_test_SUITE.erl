@@ -160,7 +160,7 @@ delete_metadata_test_base(
                         MetadataType, FileGuid, private
                     ),
                     validate_result_fun = fun(_TestCtx, Result) ->
-                        ?assertEqual({ok, undefined}, Result)
+                        ?assertEqual(ok, Result)
                     end
                 },
                 #scenario_template{

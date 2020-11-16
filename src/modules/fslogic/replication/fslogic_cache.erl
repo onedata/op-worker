@@ -551,10 +551,13 @@ finish_blocks_usage(Key) ->
             ?warning("Attepmted to finish usage of blocks that were not previously "
                 "declared for the key ~p", [Key]),
             [];
+        [] ->
+            ?warning("Empty list of blocks to use declared for the key ~p", [Key]),
+            [];
         [Head] ->
             erase({?BLOCKS_IN_USE, Key}),
             Head;
-        [Head | Tail] when is_list(Head) ->
+        [Head | Tail] ->
             use_blocks(Key, Tail),
             Head
     end.
@@ -715,9 +718,9 @@ flush_key(Key, Type) ->
                             _ -> Size0
                         end,
                         SizeThreshold = application:get_env(?APP_NAME,
-                            public_block_size_treshold, 104857600),
+                            public_block_size_threshold, 104857600),
                         PercentThreshold = application:get_env(?APP_NAME,
-                            public_block_percent_treshold, 10),
+                            public_block_percent_threshold, 10),
 
                         SavedBlocks = get_set({?SAVED_BLOCKS, Key}),
                         PublicBlocks = get({?PUBLIC_BLOCKS, Key}),

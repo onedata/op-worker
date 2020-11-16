@@ -29,15 +29,15 @@
 %% Definitions of file REST paths.
 %% @end
 %%--------------------------------------------------------------------
--spec routes() -> [{binary(), module(), map()}].
+-spec routes() -> [{Path :: binary(), Handler :: module(), RoutesForPath :: map()}].
 routes() ->
     AllRoutes = lists:flatten([
-        file_registration_rest_routes:routes(),
         basic_file_operations_rest_routes:routes(),
         custom_file_metadata_rest_routes:routes(),
         deprecated_file_api_rest_routes:routes(),
         file_distribution_rest_routes:routes(),
         file_path_resolution_rest_routes:routes(),
+        file_registration_rest_routes:routes(),
         monitoring_rest_routes:routes(),
         oneprovider_rest_routes:routes(),
         qos_rest_routes:routes(),
@@ -48,13 +48,15 @@ routes() ->
         view_rest_routes:routes()
     ]),
 
+    SortedRoutes = sort_routes(AllRoutes),
+
     % Aggregate routes that share the same path
     AggregatedRoutes = lists:foldr(fun
         ({Path, Handler, #rest_req{method = Method} = RestReq}, [{Path, _, RoutesForPath} | Acc]) ->
             [{Path, Handler, RoutesForPath#{Method => RestReq}} | Acc];
         ({Path, Handler, #rest_req{method = Method} = RestReq}, Acc) ->
             [{Path, Handler, #{Method => RestReq}} | Acc]
-    end, [], AllRoutes),
+    end, [], SortedRoutes),
 
     % Convert all routes to cowboy-compliant routes
     % - prepend REST prefix to every route
@@ -65,3 +67,22 @@ routes() ->
     lists:map(fun({Path, Handler, RoutesForPath}) ->
         {<<Prefix/binary, Path/binary>>, Handler, RoutesForPath}
     end, AggregatedRoutes).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sorts rest routes alphanumerically with accounting for fact that any concrete
+%% path must precede path with match (e.g. `data/register` must precede `data/:id`).
+%% Otherwise it would be impossible to make requests for such routes.
+%% @end
+%%--------------------------------------------------------------------
+-spec sort_routes([{Path :: binary(), Handler :: module(), #rest_req{}}]) ->
+    [{Path :: binary(), Handler :: module(), #rest_req{}}].
+sort_routes(AllRoutes) ->
+    % Replace ':' (ASCII 58) with `}` (ASCII 125) as this makes routes properly sortable
+    AllRoutesWithSortingKey = lists:map(fun({Path, _Handler, _RestReq} = Entry) ->
+        {binary:replace(Path, <<":">>, <<"}">>, [global]), Entry}
+    end, AllRoutes),
+
+    lists:map(fun({_Key, Entry}) -> Entry end, lists:sort(AllRoutesWithSortingKey)).
