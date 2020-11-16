@@ -2122,7 +2122,7 @@ init_per_testcase(rtransfer_works_between_providers_with_different_ports, Config
     rpc:call(Worker1, application, set_env, [rtransfer_link, transfer, C1]),
     
     ProviderId1 = rpc:call(Worker1, oneprovider, get_id, []),
-    rpc:call(Worker2, simple_cache, clear, [{rtransfer_port, ProviderId1}]),
+    rpc:call(Worker2, node_cache, clear, [{rtransfer_port, ProviderId1}]),
     rpc:call(Worker1, rtransfer_config, restart_link, []),
     
     init_per_testcase(all, Config);

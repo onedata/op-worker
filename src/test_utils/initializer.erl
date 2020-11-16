@@ -660,14 +660,12 @@ unmock_provider_ids(Workers) ->
 -spec testmaster_mock_space_user_privileges([node()], od_space:id(), od_user:id(),
     [privileges:space_privilege()]) -> ok.
 testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, Privileges) ->
-    rpc:multicall(Workers, simple_cache, put, [{privileges, {SpaceId, UserId}}, Privileges]),
+    rpc:multicall(Workers, node_cache, put, [{privileges, {SpaceId, UserId}}, Privileges]),
     ok.
 
 -spec node_get_mocked_space_user_privileges(od_space:id(), od_user:id()) -> [privileges:space_privilege()].
 node_get_mocked_space_user_privileges(SpaceId, UserId) ->
-    {ok, Privileges} = simple_cache:get({privileges, {SpaceId, UserId}}, fun() ->
-        {false, privileges:space_admin()} end),
-    Privileges.
+    node_cache:get({privileges, {SpaceId, UserId}}, privileges:space_admin()).
 
 -spec mock_share_logic(proplists:proplist()) -> ok.
 mock_share_logic(Config) ->
