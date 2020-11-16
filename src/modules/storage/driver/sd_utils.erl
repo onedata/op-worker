@@ -28,7 +28,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chmod/3, rename/7]).
+-export([chmod/2, chmod/3, rename/7]).
 -export([create_deferred/1, create_deferred/4, mkdir_deferred/2]).
 -export([delete/2, unlink/2, rmdir/2]).
 
@@ -43,23 +43,34 @@
 %%% API
 %%%===================================================================
 
+-spec chmod(file_ctx:ctx(), file_meta:posix_permissions()) ->
+    {ok, file_ctx:ctx()} | {error, Reason :: term()} | no_return().
+chmod(FileCtx, Mode) ->
+    chmod(user_ctx:new(?ROOT_SESS_ID), FileCtx, Mode).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Change mode of storage files related with given file_meta.
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(user_ctx:ctx(), file_ctx:ctx(),
-    file_meta:posix_permissions()) -> ok | {error, Reason :: term()} | no_return().
+    file_meta:posix_permissions()) -> {ok, file_ctx:ctx()} | {error, Reason :: term()} | no_return().
 chmod(UserCtx, FileCtx, Mode) ->
-    SessId = user_ctx:get_session_id(UserCtx),
-    case storage_driver:new_handle(SessId, FileCtx, false) of
-        {undefined, _} ->
-            ok;
-        {SDHandle, _} ->
-            case storage_driver:chmod(SDHandle, Mode) of
-                ok -> ok;
-                {error, ?ENOENT} -> ok;
-                {error, ?EROFS} -> {error, ?EROFS}
+    {IsReadonly, FileCtx2} = file_ctx:is_readonly_storage(FileCtx),
+    case IsReadonly of
+        true ->
+            {ok, FileCtx2};
+        false ->
+            SessId = user_ctx:get_session_id(UserCtx),
+            case storage_driver:new_handle(SessId, FileCtx2, false) of
+                {undefined, FileCtx3} ->
+                    {ok, FileCtx3};
+                {SDHandle, FileCtx3} ->
+                    case storage_driver:chmod(SDHandle, Mode) of
+                        ok -> {ok, FileCtx3};
+                        {error, ?ENOENT} -> {ok, FileCtx3};
+                        {error, ?EROFS} -> {error, ?EROFS}
+                    end
             end
     end.
 

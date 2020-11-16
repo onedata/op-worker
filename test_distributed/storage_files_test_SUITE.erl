@@ -31,7 +31,8 @@
     directory_custom_mode_and_owner_test/1,
     directory_with_unknown_owner_test/1,
     rename_file_test/1,
-    creating_file_should_result_in_eacces_when_mapping_is_not_found/1
+    creating_file_should_result_in_eacces_when_mapping_is_not_found/1,
+    remotely_updated_perms_should_be_updated_on_storage/1
 ]).
 
 % utils
@@ -47,6 +48,8 @@
     generic_test_args = #{} :: map()
 }).
 
+-define(ATTEMPTS, 15).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -60,7 +63,8 @@ all() -> [
     directory_custom_mode_and_owner_test,
     directory_with_unknown_owner_test,
     rename_file_test,
-    creating_file_should_result_in_eacces_when_mapping_is_not_found
+    creating_file_should_result_in_eacces_when_mapping_is_not_found,
+    remotely_updated_perms_should_be_updated_on_storage
 ].
 
 %%%===================================================================
@@ -1031,6 +1035,13 @@ creating_file_should_result_in_eacces_when_mapping_is_not_found(Config) ->
         }
     }).
 
+remotely_updated_perms_should_be_updated_on_storage(Config) ->
+    ?RUN(#test_spec{
+        config = Config,
+        test_fun = fun remotely_updated_perms_should_be_updated_on_storage_test_base/4,
+        custom_test_setups = #{?SPACE_ID1 => [#{user => ?USER1}]}
+    }).
+
 %%%===================================================================
 %%% Test bases
 %%%===================================================================
@@ -1253,6 +1264,39 @@ mapping_not_found_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?assertMatch({error, ?EACCES}, lfm_proxy:create_and_open(Worker, SessId, ?SPACE_GUID(SpaceId), FileName, 8#664)).
 
 
+remotely_updated_perms_should_be_updated_on_storage_test_base(TestName, Config, SpaceId, TestArgs) ->
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+    User = maps:get(user, TestArgs),
+    SessId = ?SESS_ID(Worker1, Config, User),
+    SessId2 = ?SESS_ID(Worker2, Config, User),
+    FileName = ?FILE_NAME(TestName),
+    InitialPerms = 8#664,
+    UpdatedPerms = 8#777,
+
+    % when
+    {ok, {FileGuid, Handle0}} = lfm_proxy:create_and_open(Worker2, SessId2, ?SPACE_GUID(SpaceId), FileName, InitialPerms),
+    ok = lfm_proxy:close(Worker2, Handle0),
+
+    % then
+    ?assertMatch({ok, #file_attr{mode = InitialPerms}}, lfm_proxy:stat(Worker1, SessId, {guid, FileGuid}), ?ATTEMPTS),
+    % open file to ensure that it's created on storage
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker1, SessId, {guid, FileGuid}, read), ?ATTEMPTS),
+    ok = lfm_proxy:close(Worker1, Handle),
+    ?EXEC_IF_SUPPORTED_BY_POSIX(Worker1, SpaceId, fun() ->
+        StorageFilePath = storage_test_utils:file_path(Worker1, SpaceId, FileName),
+        ?ASSERT_FILE_INFO(#{mode => ?FILE_MODE(InitialPerms)}, Worker1, StorageFilePath)
+    end),
+
+    % and
+    ok = lfm_proxy:set_perms(Worker2, SessId2, {guid, FileGuid}, UpdatedPerms),
+    ?assertMatch({ok, #file_attr{mode = InitialPerms}}, lfm_proxy:stat(Worker1, SessId, {guid, FileGuid}), ?ATTEMPTS),
+    % ensure that mode has been updated on storage
+    ?EXEC_IF_SUPPORTED_BY_POSIX(Worker1, SpaceId, fun() ->
+        StorageFilePath = storage_test_utils:file_path(Worker1, SpaceId, FileName),
+        ?ASSERT_FILE_INFO(#{mode => ?FILE_MODE(UpdatedPerms)}, Worker1, StorageFilePath, ?ATTEMPTS)
+    end).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1308,7 +1352,12 @@ clean_spaces(Workers = [W1 | _]) ->
 
 check_if_space_cleaned(Workers, SpaceId) ->
     lists:foreach(fun(W) ->
-        ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, ?SPACE_GUID(SpaceId)}, 0, 1))
+        case rpc:call(W, provider_logic, supports_space, [SpaceId]) of
+            true ->
+                ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, ?SPACE_GUID(SpaceId)}, 0, 1), ?ATTEMPTS);
+            false ->
+                ok
+        end
     end, Workers).
 
 clean_space(Worker, SpaceId) ->
