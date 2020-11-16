@@ -155,10 +155,12 @@ set_xattr(UserCtx, FileCtx, ?XATTR(?JSON_METADATA_KEY, Json), Create, Replace) -
         UserCtx, FileCtx, json, Json, [], Create, Replace
     ));
 
-set_xattr(UserCtx, FileCtx, ?XATTR(?RDF_METADATA_KEY, Rdf), Create, Replace) ->
+set_xattr(UserCtx, FileCtx, ?XATTR(?RDF_METADATA_KEY, Rdf), Create, Replace) when is_binary(Rdf)->
     provider_to_fuse_response(metadata_req:set_metadata(
         UserCtx, FileCtx, rdf, Rdf, [], Create, Replace
     ));
+set_xattr(_UserCtx, _FileCtx, ?XATTR(?RDF_METADATA_KEY, _Rdf), _Create, _Replace) ->
+    throw(?EINVAL);
 
 set_xattr(_, _, ?XATTR(<<?ONEDATA_PREFIX_STR, _/binary>>, _), _Create, _Replace) ->
     throw(?EPERM);
