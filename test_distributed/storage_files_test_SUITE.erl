@@ -1289,7 +1289,7 @@ remotely_updated_perms_should_be_updated_on_storage_test_base(TestName, Config, 
 
     % and
     ok = lfm_proxy:set_perms(Worker2, SessId2, {guid, FileGuid}, UpdatedPerms),
-    ?assertMatch({ok, #file_attr{mode = InitialPerms}}, lfm_proxy:stat(Worker1, SessId, {guid, FileGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{mode = UpdatedPerms}}, lfm_proxy:stat(Worker1, SessId, {guid, FileGuid}), ?ATTEMPTS),
     % ensure that mode has been updated on storage
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker1, SpaceId, fun() ->
         StorageFilePath = storage_test_utils:file_path(Worker1, SpaceId, FileName),
