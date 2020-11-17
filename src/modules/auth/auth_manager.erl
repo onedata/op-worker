@@ -202,12 +202,11 @@ verify_credentials(TokenCredentials) ->
                     TokenCredentials, TokenRef, VerificationResult
                 ),
                 VerificationResult
-            catch
-                Type:Reason ->
-                    ?error_stacktrace("Cannot verify user credentials due to ~p:~p", [
-                        Type, Reason
-                    ]),
-                    ?ERROR_INTERNAL_SERVER_ERROR
+            catch Type:Reason ->
+                ?error_stacktrace("Cannot verify user credentials due to ~p:~p", [
+                    Type, Reason
+                ]),
+                ?ERROR_INTERNAL_SERVER_ERROR
             end
     end.
 
@@ -246,17 +245,17 @@ verify_token_credentials(#token_credentials{
                 end,
                 TokenRef = auth_cache:get_token_ref(Token),
                 {TokenRef, {ok, AaiAuth, TokenExpiration}};
-            ?ERROR_TOKEN_SERVICE_FORBIDDEN(?SERVICE(?OP_WORKER, _)) = VerificationError ->
+            ?ERROR_TOKEN_SERVICE_FORBIDDEN(?SERVICE(?OP_WORKER, _)) = ServiceForbiddenError ->
                 % this error may be generated when the user is not supported by the
                 % provider - check if this is the case and return a clearer error
                 case Token#token.subject of
                     ?SUB(user, UserId) ->
                         case provider_logic:has_eff_user(UserId) of
-                            true -> {undefined, VerificationError};
+                            true -> {undefined, ServiceForbiddenError};
                             false -> {undefined, ?ERROR_USER_NOT_SUPPORTED}
                         end;
                     _ ->
-                        {undefined, VerificationError}
+                        {undefined, ServiceForbiddenError}
                 end;
             {error, _} = VerificationError ->
                 {undefined, VerificationError}
