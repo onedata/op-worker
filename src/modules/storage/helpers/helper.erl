@@ -27,7 +27,7 @@
 -export([
     get_name/1, get_args/1, get_admin_ctx/1, get_redacted_admin_ctx/1,
     get_params/2, get_proxy_params/2, get_timeout/1,
-    get_storage_path_type/1, get_block_size/1
+    get_storage_path_type/1, get_block_size/1, get_mount_point/1
 ]).
 -export([
     is_posix_compatible/1, is_getting_size_supported/1, is_rename_supported/1,
@@ -170,6 +170,13 @@ get_block_size(#helper{name = ?SWIFT_HELPER_NAME, args = Args}) ->
 get_block_size(#helper{name = ?S3_HELPER_NAME, args = Args}) ->
     sanitize_int(maps:get(<<"blockSize">>, Args, ?DEFAULT_S3_BLOCK_SIZE));
 get_block_size(_) ->
+    undefined.
+
+
+-spec get_mount_point(helpers:helper()) -> undefined | binary().
+get_mount_point(#helper{args = #{<<"mountPoint">> := MountPoint}}) ->
+    MountPoint;
+get_mount_point(_) ->
     undefined.
 
 
