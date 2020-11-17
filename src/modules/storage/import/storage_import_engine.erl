@@ -518,7 +518,7 @@ import_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
         storage_import_engine:import_file_unsafe(StorageFileCtx, Info)
     catch
         throw:?ENOENT ->
-            cleanup_file(ParentCtx, StorageFileCtx),
+            rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, ?ENOENT};
         Error:Reason ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
@@ -526,7 +526,7 @@ import_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
                 [FileName, StorageId, SpaceId, Error, Reason]),
-            cleanup_file(ParentCtx, StorageFileCtx),
+            rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, Reason}
     end.
 
@@ -538,7 +538,7 @@ create_missing_parent(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
         create_missing_parent_unsafe(StorageFileCtx, Info)
     catch
         throw:?ENOENT ->
-            cleanup_file(ParentCtx, StorageFileCtx),
+            rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, ?ENOENT};
         Error:Reason ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
@@ -546,20 +546,33 @@ create_missing_parent(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
                 [FileName, StorageId, SpaceId, Error, Reason]),
-            cleanup_file(ParentCtx, StorageFileCtx),
+            rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, Reason}
     end.
 
 
--spec cleanup_file(file_ctx:ctx(), storage_file_ctx:ctx()) -> ok.
-cleanup_file(ParentCtx, StorageFileCtx) ->
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+-spec rollback_file_creation(file_ctx:ctx(), storage_file_ctx:ctx()) -> ok.
+rollback_file_creation(ParentCtx, StorageFileCtx) ->
+    % importing file has crashed, perform best effort cleanup
+    % try to delete both normal as also as conflicting file name
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+    FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
+    try_to_delete_file(ParentCtx, FileName),
+    try_to_delete_file(ParentCtx, FileName2).
+
+
+-spec try_to_delete_file(file_ctx:ctx(), file_meta:name()) -> ok.
+try_to_delete_file(ParentCtx, ChildName) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        {FileCtx, _} = file_ctx:get_child(ParentCtx, FileName, UserCtx),
+        {FileCtx, _} = file_ctx:get_child(ParentCtx, ChildName, UserCtx),
         fslogic_delete:handle_file_deleted_on_imported_storage(FileCtx)
     catch
-        throw:?ENOENT -> ok
+        throw:?ENOENT ->
+            ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+            SpaceId = file_ctx:get_space_id_const(ParentCtx),
+            FileUuid = fslogic_path:to_uuid(ParentUuid, ChildName),
+            file_meta:delete_child_link(ParentUuid, SpaceId, FileUuid, ChildName)
     end.
 
 -spec import_file_unsafe(storage_file_ctx:ctx(), info()) ->
@@ -678,31 +691,51 @@ get_attr_including_deleted(FileCtx) ->
 
 -spec create_file_meta(file_meta:uuid(), storage_file_ctx:ctx(), od_user:id(), file_meta:uuid(),
     storage_sync_traverse:info()) -> {ok, file_ctx:ctx(), storage_file_ctx:ctx()} | {error, term()}.
-create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid, #{iterator_type := IteratorType}) ->
+create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid, TraverseInfo = #{iterator_type := IteratorType}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     FileType = file_meta:type(Mode),
     FileMetaDoc = file_meta:new_doc(FileUuid, FileName, FileType, Mode band 8#1777,
         OwnerId, ParentUuid, SpaceId),
-    {ok, FinalDoc} = case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
+    CreationResult = case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
         {error, already_exists} when IteratorType =:= ?FLAT_ITERATOR andalso FileType =:= ?DIRECTORY_TYPE ->
             % TODO VFS-6476 how to prevent conflicts on creating directories on s3?
             {ok, FileMetaDoc};
         {error, already_exists} ->
-            % there was race with creating file by lfm
-            % file will be imported with suffix
-            FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
-            FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, file_meta:type(Mode), Mode band 8#1777,
-                OwnerId, ParentUuid, SpaceId),
-            {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, FileMetaDoc2),
-            {ok, FileMetaDoc2};
+            % There are 2 cases possible here:
+            %  * there was race with creating file by lfm
+            %  * there is a stalled link
+
+            % resolve existing uuid
+            {ok, FileUuid2} = fslogic_path:to_uuid(ParentUuid, FileName),
+            case file_meta:get({uuid, FileUuid2}) of
+                {ok, _ConflictingFileDoc} ->
+                    % there is a conflicting file, import file with suffix
+                    FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
+                    FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, file_meta:type(Mode), Mode band 8#1777,
+                        OwnerId, ParentUuid, SpaceId),
+                    {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, FileMetaDoc2),
+                    {ok, FileMetaDoc2};
+                {error, not_found} ->
+                    % TODO VFS-6509 conflict is still possible here because link is created before document
+                    ?warning(
+                        "Possible stalled file_meta link ~p from parent ~p pointing to uuid ~p detected. "
+                        "The link will be deleted", [FileName, ParentUuid, FileUuid2]),
+                    ok = file_meta:delete_child_link(ParentUuid, SpaceId, FileUuid2, FileName),
+                    stalled_link
+            end;
         {ok, FileUuid} ->
             {ok, FileMetaDoc}
     end,
-    FileCtx = file_ctx:new_by_doc(FinalDoc, SpaceId, undefined),
-    ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, true, []),
-    {ok, FileCtx, StorageFileCtx2}.
+    case CreationResult of
+        {ok, FinalDoc} ->
+            FileCtx = file_ctx:new_by_doc(FinalDoc, SpaceId, undefined),
+            ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, true, []),
+            {ok, FileCtx, StorageFileCtx2};
+        stalled_link ->
+            create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid, TraverseInfo)
+    end.
 
 -spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->
     {ok, storage_file_ctx:ctx()}.

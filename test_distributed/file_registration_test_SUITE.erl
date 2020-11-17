@@ -33,7 +33,9 @@
     stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled/1,
     registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled/1,
     registration_should_fail_if_file_is_missing/1,
-    registration_should_succeed_if_size_is_passed/1
+    registration_should_succeed_if_size_is_passed/1,
+    stalled_file_link_test/1,
+    stalled_parent_link_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -43,7 +45,9 @@
     stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled,
     registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled,
     registration_should_fail_if_file_is_missing,
-    registration_should_succeed_if_size_is_passed
+    registration_should_succeed_if_size_is_passed,
+    stalled_file_link_test,
+    stalled_parent_link_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -426,6 +430,135 @@ registration_should_succeed_if_size_is_passed(Config) ->
     % check whether file is visible on 2nd provider
     ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, #{}, #{}, <<>>, ?ATTEMPTS).
 
+stalled_file_link_test(Config) ->
+    % these test checks whether subsequent registration can handle case when
+    % there is a stalled file_meta link (without doc) of the file e. g. when user aborted the registration
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+
+    FileName = ?FILE_NAME,
+    FilePath = ?PATH(FileName),
+    StorageFileId = filename:join(["/", FileName]),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
+    SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
+
+    mock_file_meta_save(W1, FileName),
+
+    Pid = spawn(fun() ->
+        register_file(W1, Config, #{
+            <<"spaceId">> => ?SPACE_ID,
+            <<"destinationPath">> => FileName,
+            <<"storageFileId">> => StorageFileId,
+            <<"storageId">> => StorageId,
+            <<"mtime">> => clock:timestamp_seconds(),
+            <<"size">> => byte_size(?TEST_DATA),
+            <<"mode">> => <<"664">>,
+            <<"xattrs">> => ?XATTRS,
+            <<"json">> => ?JSON1,
+            <<"rdf">> => ?ENCODED_RDF1
+        })
+    end),
+
+    wait_until_saving_file_meta_is_frozen(),
+
+    % kill process that requested the registration, the same things happen when user
+    % aborts the REST request with CTRL + C
+    exit(Pid, shutdown),
+
+    % file shouldn't have been registered
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?PATH(FileName)})),
+
+    unmock_file_meta_save(W1),
+
+    % retry registration
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
+        <<"spaceId">> => ?SPACE_ID,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"mtime">> => clock:timestamp_seconds(),
+        <<"size">> => byte_size(?TEST_DATA),
+        <<"mode">> => <<"664">>,
+        <<"xattrs">> => ?XATTRS,
+        <<"json">> => ?JSON1,
+        <<"rdf">> => ?ENCODED_RDF1
+    })),
+
+    % check whether file has been properly registered
+    ?assertFile(W1, SessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+
+    % check whether file is visible on 2nd provider
+    ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
+
+stalled_parent_link_test(Config) ->
+    % these test checks whether subsequent registration can handle case when
+    % there is a stalled file_meta link (without doc) of a parent dir e. g. when user aborted the registration
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+
+    DirName = ?DIR_NAME,
+    FileName = ?FILE_NAME,
+    DestinationPath = filename:join(["/", DirName, FileName]),
+    FilePath = ?PATH(DestinationPath),
+    StorageFileId = filename:join(["/", FileName]),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
+    SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
+
+    mock_file_meta_save(W1, DirName),
+
+    Pid = spawn(fun() ->
+        ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
+            <<"spaceId">> => ?SPACE_ID,
+            <<"destinationPath">> => DestinationPath,
+            <<"storageFileId">> => StorageFileId,
+            <<"storageId">> => StorageId,
+            <<"mtime">> => clock:timestamp_seconds(),
+            <<"size">> => byte_size(?TEST_DATA),
+            <<"mode">> => <<"664">>,
+            <<"xattrs">> => ?XATTRS,
+            <<"json">> => ?JSON1,
+            <<"rdf">> => ?ENCODED_RDF1
+        }))
+    end),
+
+    wait_until_saving_file_meta_is_frozen(),
+
+    % kill process that requested the registration, the same things happen when user
+    % aborts the REST request with CTRL + C
+    exit(Pid, shutdown),
+
+    % parent dir and file shouldn't have been created
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?PATH(DirName)})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, FilePath})),
+
+    unmock_file_meta_save(W1),
+
+    % retry registration
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
+        <<"spaceId">> => ?SPACE_ID,
+        <<"destinationPath">> => DestinationPath,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"mtime">> => clock:timestamp_seconds(),
+        <<"size">> => byte_size(?TEST_DATA),
+        <<"mode">> => <<"664">>,
+        <<"xattrs">> => ?XATTRS,
+        <<"json">> => ?JSON1,
+        <<"rdf">> => ?ENCODED_RDF1
+    })),
+
+    % check whether file has been properly registered
+    ?assertFile(W1, SessId, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+
+    % check whether file is visible on 2nd provider
+    ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -475,3 +608,22 @@ verify_file(Worker, SessionId, FilePath, ReadData, Xattrs, JSON, RDF, Attempts) 
 sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
+
+mock_file_meta_save(Worker, FileName) ->
+    TestMasterPid = self(),
+    ok = test_utils:mock_new(Worker, file_meta),
+    ok = test_utils:mock_expect(Worker, file_meta, save, fun(Doc = #document{value = FM}) ->
+        case FM#file_meta.name =:= FileName of
+            true ->
+                TestMasterPid ! saving_file_meta_frozen,
+                timer:sleep(timer:seconds(30));
+            false ->
+                meck:passthrough([Doc])
+        end
+    end).
+
+unmock_file_meta_save(Worker) ->
+    test_utils:mock_unload(Worker, file_meta).
+
+wait_until_saving_file_meta_is_frozen() ->
+    receive saving_file_meta_frozen  -> ok end.

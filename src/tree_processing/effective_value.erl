@@ -17,6 +17,7 @@
 
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_or_calculate/3, get_or_calculate/4, get_or_calculate/5, get_or_calculate/6,
@@ -116,8 +117,8 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCa
         {ok, Value} ->
             {ok, Value, InitialCalculationInfo};
         {error, not_found} ->
-            case fslogic_uuid:is_space_dir_uuid(Key) of
-                false ->
+            case {fslogic_uuid:is_space_dir_uuid(Key), fslogic_uuid:is_root_dir_uuid(Key)} of
+                {false, false} ->
                     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
                     case file_meta:get_including_deleted(ParentUuid) of
                         {ok, ParentDoc} ->
@@ -136,7 +137,10 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCa
                         _ ->
                             {error, {file_meta_missing, ParentUuid}}
                     end;
-                true ->
+                {false, true} ->
+                    ?critical("Incorrect usage of effective_value. Calculation has reached the global root directory."),
+                    {error, root_dir_reached};
+                {true, _} ->
                     bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
                         [Doc, undefined, InitialCalculationInfo | Args], Timestamp)
             end
