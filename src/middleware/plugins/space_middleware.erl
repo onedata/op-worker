@@ -460,16 +460,20 @@ get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
     case user_logic:get_eff_spaces(SessionId, UserId) of
         {ok, EffSpaces} ->
             {ok ,lists:map(fun(SpaceId) ->
+                SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
                 {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
+
                 #{
                     <<"spaceId">> => SpaceId,
-                    <<"fileId">> => fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                    <<"fileId">> => SpaceDirObjectId,
                     <<"name">> => SpaceName
                 }
             end, EffSpaces)};
         {error, _} = Error ->
             Error
     end;
+
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     case space_logic:get(Auth#auth.session_id, SpaceId) of
         {ok, #document{value = Space}} ->

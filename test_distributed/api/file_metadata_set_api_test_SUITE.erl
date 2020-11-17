@@ -582,7 +582,7 @@ build_set_metadata_validate_gs_call_fun(GetExpResultFun) ->
     fun(TestCtx, Result) ->
         case GetExpResultFun(TestCtx) of
             ok ->
-                ?assertEqual({ok, undefined}, Result);
+                ?assertEqual(ok, Result);
             {error, _} = ExpError ->
                 ?assertEqual(ExpError, Result)
         end

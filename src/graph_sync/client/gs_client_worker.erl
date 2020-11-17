@@ -136,14 +136,13 @@ force_terminate() ->
 %%--------------------------------------------------------------------
 -spec enable_cache() -> ok.
 enable_cache() ->
-    simple_cache:put(gs_client_worker_cache_enabled, true).
+    node_cache:put(gs_client_worker_cache_enabled, true).
 
 
 %% @private
 -spec is_cache_enabled() -> boolean().
 is_cache_enabled() ->
-    {ok, Enabled} = simple_cache:get(gs_client_worker_cache_enabled, fun() -> {false, false} end),
-    Enabled.
+    node_cache:get(gs_client_worker_cache_enabled, false).
 
 
 %%--------------------------------------------------------------------

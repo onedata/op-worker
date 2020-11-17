@@ -20,24 +20,25 @@
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -type method() :: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'.
 -type parse_body() :: ignore | as_json_params | {as_is, KeyName :: binary()}.
 -type binding() :: {binding, atom()} | {objectid_binding, atom()} | path_binding.
 -type bound_gri() :: #b_gri{}.
+-type rest_req() :: #rest_req{}.
 
 -export_type([method/0, parse_body/0, binding/0, bound_gri/0]).
 
 % State of REST handler
 -record(state, {
     auth = undefined :: undefined | aai:auth(),
-    rest_req = undefined :: undefined | #rest_req{},
+    rest_req = undefined :: undefined | rest_req(),
     allowed_methods :: [method()]
 }).
 -type state() :: #state{}.
--type opts() :: #{method() => #rest_req{}}.
+-type opts() :: #{method() => rest_req()}.
 
 %% cowboy rest handler API
 -export([
@@ -136,7 +137,7 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
     {true | {false, binary()}, cowboy_req:req(), state()}.
 is_authorized(Req, State) ->
     % The data access caveats policy depends on requested resource,
-    % which is not known yet - it is checked later in middleware.
+    % which is not known yet - it is checked later in specific handler.
     case http_auth:authenticate(Req, rest, allow_data_access_caveats) of
         {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
@@ -193,70 +194,43 @@ delete_resource(Req, State) ->
 %%--------------------------------------------------------------------
 -spec process_request(cowboy_req:req(), state()) ->
     {stop, cowboy_req:req(), state()}.
-process_request(Req, State) ->
+process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_req = #rest_req{
+    method = Method,
+    parse_body = ParseBody,
+    consumes = Consumes,
+    b_gri = GriWithBindings
+}} = State) ->
     try
-        #state{auth = Auth, rest_req = #rest_req{
-            method = Method,
-            parse_body = ParseBody,
-            consumes = Consumes,
-            b_gri = GriWithBindings
-        }} = State,
-        Operation = method_to_operation(Method),
-        GRI = resolve_gri_bindings(Auth#auth.session_id, GriWithBindings, Req),
         {Data, Req2} = get_data(Req, ParseBody, Consumes),
         OpReq = #op_req{
-            operation = Operation,
             auth = Auth,
-            gri = GRI,
+            operation = method_to_operation(Method),
+            gri = resolve_gri_bindings(SessionId, GriWithBindings, Req),
             data = Data
         },
-        RestResp = handle_request(OpReq),
-        {stop, http_req:send_response(RestResp, Req2), State}
+        {stop, route_to_proper_handler(OpReq, Req2), State}
     catch
         throw:Error ->
             {stop, http_req:send_error(Error, Req), State};
         Type:Message ->
-            ?error_stacktrace("Unexpected error in ~p:process_request - ~p:~p", [
-                ?MODULE, Type, Message
+            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
+                ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
             NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
             {stop, NewReq, State}
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Calls middleware and translates obtained response into REST response
-%% using TranslatorModule.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_request(#op_req{}) -> #rest_resp{}.
-handle_request(#op_req{operation = Operation, gri = GRI} = ElReq) ->
-    Result = middleware:handle(ElReq),
-    try
-        rest_translator:response(ElReq, Result)
-    catch
-        Type:Message ->
-            ?error_stacktrace("Cannot translate REST result for:~n"
-            "Operation: ~p~n"
-            "GRI: ~p~n"
-            "Result: ~p~n"
-            "---------~n"
-            "Error was: ~w:~p", [
-                Operation, GRI, Result, Type, Message
-            ]),
-            rest_translator:error_response(?ERROR_INTERNAL_SERVER_ERROR)
-    end.
+-spec method_to_operation(method()) -> middleware:operation().
+method_to_operation('POST') -> create;
+method_to_operation('PUT') -> create;
+method_to_operation('GET') -> get;
+method_to_operation('PATCH') -> update;
+method_to_operation('DELETE') -> delete.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Transforms bindings included in a #b_gri{} record into actual data
-%% that was sent with the request.
-%% @end
-%%--------------------------------------------------------------------
 -spec resolve_gri_bindings(session:id(), bound_gri(), cowboy_req:req()) ->
     gri:gri().
 resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
@@ -269,12 +243,7 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
         true -> public;
         false -> Sc
     end,
-    #gri{
-        type = Tp,
-        id = IdBinding,
-        aspect = AsBinding,
-        scope = ScBinding
-    }.
+    #gri{type = Tp, id = IdBinding, aspect = AsBinding, scope = ScBinding}.
 
 
 %%--------------------------------------------------------------------
@@ -315,11 +284,11 @@ resolve_bindings(_SessionId, Other, _Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_data(cowboy_req:req(), parse_body(), Consumes :: [term()]) ->
-    {Data :: middleware:data(), cowboy_req:req()}.
+    {middleware:data(), cowboy_req:req()}.
 get_data(Req, ignore, _Consumes) ->
-    {parse_query_string(Req), Req};
+    {http_parser:parse_query_string(Req), Req};
 get_data(Req, as_json_params, _Consumes) ->
-    QueryParams = parse_query_string(Req),
+    QueryParams = http_parser:parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ParsedBody = try
         case Body of
@@ -332,7 +301,7 @@ get_data(Req, as_json_params, _Consumes) ->
     is_map(ParsedBody) orelse throw(?ERROR_MALFORMED_DATA),
     {maps:merge(ParsedBody, QueryParams), Req2};
 get_data(Req, {as_is, KeyName}, Consumes) ->
-    QueryParams = parse_query_string(Req),
+    QueryParams = http_parser:parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ContentType = case Consumes of
         [ConsumedType] ->
@@ -354,45 +323,16 @@ get_data(Req, {as_is, KeyName}, Consumes) ->
     {QueryParams#{KeyName => ParsedBody}, Req2}.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Parses and returns query string parameters. For every parameter
-%% specified multiple times it's values are merged into list.
-%% @end
-%%--------------------------------------------------------------------
--spec parse_query_string(cowboy_req:req()) -> map().
-parse_query_string(Req) ->
-    Params = lists:foldl(fun({Key, Val}, AccMap) ->
-        maps:update_with(Key, fun(OldVal) ->
-            [Val | ensure_list(OldVal)]
-        end, Val, AccMap)
-    end, #{}, cowboy_req:parse_qs(Req)),
-
-    maps:fold(fun
-        (K, V, AccIn) when is_list(V) ->
-            AccIn#{K => lists:reverse(V)};
-        (_K, _V, AccIn) ->
-            AccIn
-    end, Params, Params).
-
-
-%% @private
--spec ensure_list(Val | [Val]) -> [Val] when Val :: true | binary().
-ensure_list(Val) when is_list(Val) -> Val;
-ensure_list(Val) -> [Val].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts an atom representing a REST method into operation
-%% that should be called to handle it.
-%% @end
-%%--------------------------------------------------------------------
--spec method_to_operation(method()) -> middleware:operation().
-method_to_operation('POST') -> create;
-method_to_operation('PUT') -> create;
-method_to_operation('GET') -> get;
-method_to_operation('PATCH') -> update;
-method_to_operation('DELETE') -> delete.
+-spec route_to_proper_handler(middleware:req(), cowboy_req:req()) -> cowboy_req:req().
+route_to_proper_handler(#op_req{operation = Operation, gri = #gri{
+    type = op_file,
+    aspect = As
+}} = OpReq, Req) when
+    (Operation == create andalso As == child);
+    (Operation == create andalso As == content);
+    (Operation == get andalso As == content)
+->
+    file_content_rest_handler:handle_request(OpReq, Req);
+route_to_proper_handler(OpReq, Req) ->
+    middleware_rest_handler:handle_request(OpReq, Req).

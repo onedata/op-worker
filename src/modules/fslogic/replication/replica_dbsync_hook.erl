@@ -296,7 +296,8 @@ notify_attrs_change_if_necessary(FileCtx,
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Truncates file on storage if storage is not synced.
+%% Truncates file on storage if its size has changed and if storage
+%% is not synced.
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_truncate_file_on_storage(file_ctx:ctx(), non_neg_integer(),

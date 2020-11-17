@@ -53,16 +53,18 @@ read(UserCtx, FileCtx, HandleId, Offset, Size) ->
     HandleId :: storage_driver:handle_id(),
     ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
 write(UserCtx, FileCtx, HandleId, ByteSequences) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId, write),
-    {Written, _} =
-        lists:foldl(fun
-            (#byte_sequence{offset = Offset, data = <<>>}, {Acc, Handle}) ->
-                handle_empty_write(Handle, Offset),
-                {Acc, Handle};
-            (#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
-                {WrittenNow, NewHandle} = write_all(Handle, Offset, Data, 0),
-                {Acc + WrittenNow, NewHandle}
-        end, {0, Handle0}, ByteSequences),
+
+    {Written, _} = lists:foldl(fun
+        (#byte_sequence{offset = Offset, data = <<>>}, {Acc, Handle}) ->
+            handle_empty_write(Handle, Offset),
+            {Acc, Handle};
+        (#byte_sequence{offset = Offset, data = Data}, {Acc, Handle}) ->
+            space_quota:assert_write(SpaceId, max(0, size(Data))),
+            {WrittenNow, NewHandle} = write_all(Handle, Offset, Data, 0),
+            {Acc + WrittenNow, NewHandle}
+    end, {0, Handle0}, ByteSequences),
 
     #proxyio_response{
         status = #status{code = ?OK},

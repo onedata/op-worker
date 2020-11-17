@@ -272,7 +272,7 @@ init_per_testcase(provider_logic_should_correctly_resolve_nodes_to_connect, Conf
     hackney:start(),
 
     % Disable caching of resolved nodes
-    rpc:multicall(Nodes, application, set_env, [?APP_NAME, provider_nodes_cache_ttl, -1]),
+    rpc:multicall(Nodes, application, set_env, [?APP_NAME, provider_nodes_cache_ttl_seconds, -1]),
 
     init_per_testcase(default, Config),
     % get_nodes/1 is mocked in initializer - unmock

@@ -286,16 +286,18 @@ list_spaces(Config) ->
         rest_test_utils:request(WorkerP1, <<"spaces">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
 
     % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertMatch(
-        [
-            #{<<"name">> := <<"space1">>, <<"spaceId">> := <<"space1">>},
-            #{<<"name">> := <<"space2">>, <<"spaceId">> := <<"space2">>},
-            #{<<"name">> := <<"space3">>, <<"spaceId">> := <<"space3">>},
-            #{<<"name">> := <<"space4">>, <<"spaceId">> := <<"space4">>}
-        ],
-        lists:sort(DecodedBody)
-    ).
+    ExpSpaces = lists:sort(lists:map(fun(SpaceId) ->
+        SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+        {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
+
+        #{
+            <<"name">> => SpaceId,
+            <<"spaceId">> => SpaceId,
+            <<"fileId">> => SpaceDirObjectId
+        }
+    end, [<<"space1">>, <<"space2">>, <<"space3">>, <<"space4">>])),
+
+    ?assertEqual(ExpSpaces, lists:sort(json_utils:decode(Body))).
 
 get_space(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -304,11 +306,15 @@ get_space(Config) ->
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"spaces/space2">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
 
+    SpaceId = <<"space2">>,
+    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
+
     % then
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
-            <<"name">> := <<"space2">>,
+            <<"name">> := SpaceId,
             <<"providers">> := [
                 #{
                     <<"providerId">> := PID1,
@@ -319,7 +325,8 @@ get_space(Config) ->
                     <<"providerName">> := PID2
                 }
             ],
-            <<"spaceId">> := <<"space2">>
+            <<"spaceId">> := SpaceId,
+            <<"fileId">> := SpaceDirObjectId
         },
         DecodedBody
     ).
@@ -1088,17 +1095,4 @@ get_op_nodes(Config) ->
             {Worker1, Worker2};
         false ->
             {Worker2, Worker1}
-    end.
-
-download_file(Node, DownloadUrl, Config) ->
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
-    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
-    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 15000}],
-
-    case http_client:request(get, DownloadUrl, maps:from_list(Headers), <<>>, Opts) of
-        {ok, ?HTTP_200_OK, _RespHeaders, Content} ->
-            {ok, Content};
-        {ok, _ErrorCode, _ErrorHeaders, ErrorResponse} ->
-            Error = maps:get(<<"error">>, json_utils:decode(ErrorResponse), #{}),
-            errors:from_json(Error)
     end.
