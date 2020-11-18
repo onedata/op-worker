@@ -1319,13 +1319,21 @@ resolve_and_cache_path(FileCtx, Type) ->
     end,
     case FileType of
         ?DIRECTORY_TYPE ->
-            {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
-            {Path, FileCtx2};
+            case effective_value:get_or_calculate(CacheName, Doc, Callback) of
+                {ok, Path, _} ->
+                    {Path, FileCtx2};
+                {error, {file_meta_missing, _}} ->
+                    throw(?ERROR_NOT_FOUND)
+            end;
         _ ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
             {ok, ParentDoc} = file_meta:get_including_deleted(ParentUuid),
-            {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
-            {Path ++ [FilenameOrUuid], FileCtx2}
+            case effective_value:get_or_calculate(CacheName, ParentDoc, Callback) of
+                {ok, Path, _} ->
+                    {Path ++ [FilenameOrUuid], FileCtx2};
+                {error, {file_meta_missing, _}} ->
+                    throw(?ERROR_NOT_FOUND)
+            end
     end.
 
 %%--------------------------------------------------------------------

@@ -171,49 +171,53 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         LocalTreeId = oneprovider:get_id(),
         Ctx = ?CTX#{scope => ParentScopeId},
         Link = {FileName, FileUuid},
-        case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
-            {ok, #link{}} ->
-                case file_meta:save(FileDoc3) of
-                    {ok, FileUuid} -> {ok, FileUuid};
-                    Error -> Error
-                end;
-            {error, already_exists} = Eexists ->
-                case datastore_model:get_links(Ctx, ParentUuid, CheckTrees, FileName) of
-                    {ok, Links} ->
-                        FileExists = lists:any(fun(#link{target = Uuid, tree_id = TreeId}) ->
-                            Deleted = case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
-                                {ok, #document{deleted = true}} ->
-                                    true;
-                                {ok, #document{value = #file_meta{deleted = true}}} ->
-                                    true;
-                                _ ->
-                                    false
-                            end,
-                            case {Deleted, TreeId} of
-                                {true, LocalTreeId} ->
-                                    datastore_model:delete_links(
-                                        Ctx, ParentUuid,
-                                        LocalTreeId, FileName
-                                    ),
-                                    false;
-                                _ ->
-                                    not Deleted
-                            end
-                        end, Links),
+        case file_meta:save(FileDoc3) of
+            {ok, FileUuid} ->
+                case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
+                    {ok, #link{}} ->
+                        {ok, FileUuid};
+                    {error, already_exists} = Eexists ->
+                        case datastore_model:get_links(Ctx, ParentUuid, CheckTrees, FileName) of
+                            {ok, Links} ->
+                                FileExists = lists:any(fun(#link{target = Uuid, tree_id = TreeId}) ->
+                                    Deleted = case get_including_deleted(Uuid) of
+                                        {ok, #document{deleted = true}} ->
+                                            true;
+                                        {ok, #document{value = #file_meta{deleted = true}}} ->
+                                            true;
+                                        _ ->
+                                            false
+                                    end,
+                                    case {Deleted, TreeId} of
+                                        {true, LocalTreeId} ->
+                                            datastore_model:delete_links(
+                                                Ctx, ParentUuid,
+                                                LocalTreeId, FileName
+                                            ),
+                                            false;
+                                        _ ->
+                                            not Deleted
+                                    end
+                                end, Links),
 
-                        case FileExists of
-                            false ->
-                                create({uuid, ParentUuid}, FileDoc, [LocalTreeId]);
+                                case FileExists of
+                                    false ->
+                                        create({uuid, ParentUuid}, FileDoc, [LocalTreeId]);
+                                    _ ->
+                                        delete_doc_if_not_special(FileUuid),
+                                        Eexists
+                                end;
+                            {error, not_found} ->
+                                create({uuid, ParentUuid}, FileDoc, CheckTrees);
                             _ ->
+                                delete_doc_if_not_special(FileUuid),
                                 Eexists
                         end;
-                    {error, not_found} ->
-                        create({uuid, ParentUuid}, FileDoc, CheckTrees);
-                    _ ->
-                        Eexists
+                    {error, Reason} ->
+                        {error, Reason}
                 end;
-            {error, Reason} ->
-                {error, Reason}
+            Error ->
+                Error
         end
     end).
 
@@ -296,7 +300,7 @@ delete(#document{
 }) ->
     ?run(begin
         ok = delete_child_link(ParentUuid, Scope, FileUuid, FileName),
-        datastore_model:delete(?CTX, FileUuid)
+        delete_without_link(FileUuid)
     end);
 delete({path, Path}) ->
     ?run(begin
@@ -323,6 +327,15 @@ delete_without_link(#document{
     delete_without_link(FileUuid);
 delete_without_link(FileUuid) ->
     ?run(begin datastore_model:delete(?CTX, FileUuid) end).
+
+
+-spec delete_doc_if_not_special(uuid()) -> ok.
+delete_doc_if_not_special(FileUuid) ->
+    case fslogic_uuid:is_special_uuid(FileUuid) of
+        true -> ok;
+        false -> delete_without_link(FileUuid)
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -399,7 +412,7 @@ exists(Key) ->
 -spec get_child(uuid(), name()) -> {ok, doc()} | {error, term()}.
 get_child(ParentUuid, Name) ->
     case get_child_uuid(ParentUuid, Name) of
-        {ok, ChildUuid} ->
+        {ok, ChildUuid, _} ->
             file_meta:get({uuid, ChildUuid});
         Error -> Error
     end.
@@ -409,13 +422,13 @@ get_child(ParentUuid, Name) ->
 %% Returns parent child's UUID by Name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_child_uuid(uuid(), name()) -> {ok, uuid()} | {error, term()}.
+-spec get_child_uuid(uuid(), name()) -> {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
 get_child_uuid(ParentUuid, Name) ->
     Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
         [Name] ->
             case get_child_uuid(ParentUuid, oneprovider:get_id(), Name) of
-                {ok, Doc} -> {ok, Doc};
+                {ok, Uuid, TreeId} -> {ok, Uuid, TreeId};
                 {error, not_found} -> get_child_uuid(ParentUuid, all, Name);
                 {error, Reason} -> {error, Reason}
             end;
@@ -432,8 +445,8 @@ get_child_uuid(ParentUuid, Name) ->
             case TreeIds2 of
                 [TreeId] ->
                     case get_child_uuid(ParentUuid, TreeId, Name2) of
-                        {ok, Doc} ->
-                            {ok, Doc};
+                        {ok, Doc, TreeId} ->
+                            {ok, Doc, TreeId};
                         {error, Reason} ->
                             {error, Reason}
                     end;
@@ -879,7 +892,7 @@ type(Mode) ->
 hidden_file_name(FileName) ->
     <<?HIDDEN_FILE_PREFIX, FileName/binary>>.
 
-%%--------------------------------------------------------------------
+%%-------------------------------------------------------------------uuid()-
 %% @doc
 %% Checks if given filename contains hidden file prefix.
 %% @end
@@ -1193,15 +1206,16 @@ is_valid_filename(FileName) when is_binary(FileName) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns parent child's UUID by name within given links tree set.
+%% Returns parent child's UUID by name within given links tree set
+%% alongside with TreeId in which it was found.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_uuid(uuid(), datastore_links:tree_ids(), name()) ->
-    {ok, uuid()} | {error, term()}.
+    {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
 get_child_uuid(ParentUuid, TreeIds, Name) ->
     case datastore_model:get_links(?CTX, ParentUuid, TreeIds, Name) of
-        {ok, [#link{target = FileUuid}]} ->
-            {ok, FileUuid};
+        {ok, [#link{target = FileUuid, tree_id = TreeId}]} ->
+            {ok, FileUuid, TreeId};
         {ok, [#link{} | _]} ->
             {error, ?EINVAL};
         {error, Reason} ->
