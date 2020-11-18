@@ -809,7 +809,7 @@ maybe_retry_sync(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum, Erro
     MaxRetires = ?SYNC_MAX_RETRIES,
     case RetryNum >= MaxRetires of
         true ->
-            throw(Error);
+            throw({error, Error});
         false ->
             SleepTime = round(?SYNC_MIN_BACKOFF * math:pow(?SYNC_BACKOFF_RATE, RetryNum)),
             timer:sleep(min(SleepTime, ?SYNC_MAX_BACKOFF)),

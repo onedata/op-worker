@@ -218,6 +218,8 @@ resource_exists(Req, #cdmi_req{
             {false, Req, CdmiReq};
         {error, ?ENOENT} ->
             {false, Req, CdmiReq};
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(_) = Error ->
+            {stop, http_req:send_error(Error, Req), CdmiReq};
         {error, Errno} ->
             {stop, http_req:send_error(?ERROR_POSIX(Errno), Req), CdmiReq}
     end.

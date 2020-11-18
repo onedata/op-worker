@@ -21,6 +21,8 @@
     try
         F()
     catch
+        throw:{error, __Error} ->
+            {error, __Error};
         _:{badmatch, {error, not_found}} ->
             {error, ?ENOENT};
         _:{badmatch, Error} ->
@@ -897,6 +899,7 @@ check_result(ok) -> ok;
 check_result({ok, _} = Res) -> Res;
 check_result({ok, _, _} = Res) -> Res;
 check_result({ok, _, _, _} = Res) -> Res;
+check_result(?ERROR_SPACE_NOT_SUPPORTED_BY(_) = Error) -> throw(Error);
 check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 
 %%--------------------------------------------------------------------

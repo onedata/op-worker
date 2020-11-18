@@ -186,6 +186,10 @@
     path :: file_meta:path()
 }).
 
+-record(resolve_guid_by_canonical_path, {
+    path :: file_meta:path()
+}).
+
 -record(get_helper_params, {
     storage_id :: storage:id(),
     space_id :: od_space:id(),

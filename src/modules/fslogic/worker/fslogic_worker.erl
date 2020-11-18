@@ -432,6 +432,8 @@ handle_request_remotely(UserCtx, Req, Providers) ->
     fuse_response().
 handle_fuse_request(UserCtx, #resolve_guid{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
+handle_fuse_request(UserCtx, #resolve_guid_by_canonical_path{}, FileCtx) ->
+    guid_req:resolve_guid(UserCtx, FileCtx);
 handle_fuse_request(UserCtx, #get_helper_params{
     storage_id = StorageId,
     space_id = SpaceId,
