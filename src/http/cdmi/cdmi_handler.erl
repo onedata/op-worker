@@ -17,9 +17,10 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
 -include("http/cdmi.hrl").
 -include("http/rest.hrl").
+-include("middleware/middleware.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -205,23 +206,31 @@ resource_exists(Req, #cdmi_req{
     file_path = Path,
     resource = Type
 } = CdmiReq) ->
-    case lfm:stat(SessionId, {path, Path}) of
-        {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} when Type == container ->
-            {true, Req, CdmiReq#cdmi_req{file_attrs = Attr}};
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} when Type == dataobject ->
-            redirect_to_container(Req, CdmiReq);
-        {ok, Attr = #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == dataobject ->
-            {true, Req, CdmiReq#cdmi_req{file_attrs = Attr}};
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == container ->
-            redirect_to_dataobject(Req, CdmiReq);
-        {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
+    try
+        {ok, FileGuid} = middleware_utils:resolve_file_path(SessionId, Path),
+        case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
+            {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} when Type == container ->
+                {true, Req, CdmiReq#cdmi_req{file_attrs = Attr}};
+            {ok, #file_attr{type = ?DIRECTORY_TYPE}} when Type == dataobject ->
+                redirect_to_container(Req, CdmiReq);
+            {ok, Attr = #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == dataobject ->
+                {true, Req, CdmiReq#cdmi_req{file_attrs = Attr}};
+            {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == container ->
+                redirect_to_dataobject(Req, CdmiReq);
+            {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
+                {false, Req, CdmiReq}
+        end
+    catch
+        throw:?ERROR_POSIX(?ENOENT) ->
             {false, Req, CdmiReq};
-        {error, ?ENOENT} ->
-            {false, Req, CdmiReq};
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(_) = Error ->
+        throw:Error ->
             {stop, http_req:send_error(Error, Req), CdmiReq};
-        {error, Errno} ->
-            {stop, http_req:send_error(?ERROR_POSIX(Errno), Req), CdmiReq}
+        Type:Reason ->
+            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
+                ?MODULE, ?FUNCTION_NAME, Type, Reason
+            ]),
+            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
+            {stop, NewReq, CdmiReq}
     end.
 
 
@@ -456,12 +465,8 @@ resolve_resource_by_id(Req) ->
         undefined ->
             case http_auth:authenticate(Req, rest, allow_data_access_caveats) of
                 {ok, ?USER(_UserId, SessionId) = Auth0} ->
-                    case lfm:get_file_path(SessionId, Guid) of
-                        {ok, FilePath} ->
-                            {Auth0, FilePath};
-                        {error, Errno} ->
-                            throw(?ERROR_POSIX(Errno))
-                    end;
+                    {ok, FilePath} = ?check(lfm:get_file_path(SessionId, Guid)),
+                    {Auth0, FilePath};
                 {ok, ?GUEST} ->
                     throw(?ERROR_UNAUTHORIZED);
                 {error, _} = Error ->

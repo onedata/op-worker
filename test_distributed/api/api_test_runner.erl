@@ -139,7 +139,7 @@ get_scenario_specific_error_for_invalid_clients(rest_with_file_path, InvalidClie
 ->
     % Error thrown by rest_handler (before middleware auth checks could be performed)
     % as invalid clients who doesn't belong to space can't resolve file path to guid
-    ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
+    ?ERROR_POSIX(?ENOENT);
 get_scenario_specific_error_for_invalid_clients(_ScenarioType, unauthorized) ->
     ?ERROR_UNAUTHORIZED;
 get_scenario_specific_error_for_invalid_clients(_ScenarioType, forbidden_not_in_space) ->

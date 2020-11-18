@@ -37,12 +37,8 @@
 
 
 -define(check_transfer_creation(__FunctionCall),
-    case __FunctionCall of
-        {ok, __TransferId} ->
-            {ok, value, __TransferId};
-        {error, __Errno} ->
-            ?ERROR_POSIX(__Errno)
-    end
+    {ok, __TransferId} = ?check(__FunctionCall),
+    {ok, value, __TransferId}
 ).
 
 

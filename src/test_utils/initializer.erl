@@ -1157,46 +1157,41 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
                 storages = #{}
             }}};
         (_, SpaceId) ->
-            case proplists:is_defined(SpaceId, Spaces) of
-                true ->
-                    SpaceName = proplists:get_value(SpaceId, Spaces),
-                    UserIds = proplists:get_value(SpaceId, Users, []),
+            SpaceName = proplists:get_value(SpaceId, Spaces),
+            UserIds = proplists:get_value(SpaceId, Users, []),
 
-                    EffUsers = maps:from_list(lists:map(fun(UID) ->
-                        {UID, node_get_mocked_space_user_privileges(SpaceId, UID)}
-                    end, UserIds)),
+            EffUsers = maps:from_list(lists:map(fun(UID) ->
+                {UID, node_get_mocked_space_user_privileges(SpaceId, UID)}
+            end, UserIds)),
 
-                    Storages = proplists:get_value(SpaceId, SpacesToStorages,
-                        maps:from_list([{St, 1000000000} || St <- CustomStorages])),
+            Storages = proplists:get_value(SpaceId, SpacesToStorages,
+                maps:from_list([{St, 1000000000} || St <- CustomStorages])),
 
-                    StoragesByProvider = lists:foldl(fun({StorageId, ProviderId}, Acc) ->
-                        StorageConfig = maps:get(StorageId, maps:get(ProviderId, StoragesSetupMap, #{}), #{}),
-                        AccessType = case maps:get(<<"readonly">>, StorageConfig, false) of
-                            true -> ?READONLY;
-                            false -> ?READWRITE
-                        end,
-                        maps:update_with(ProviderId, fun(ProviderStorages) ->
-                            ProviderStorages#{StorageId => AccessType}
-                        end, #{StorageId => AccessType}, Acc)
-                    end, #{}, maps:keys(Storages)),
+            StoragesByProvider = lists:foldl(fun({StorageId, ProviderId}, Acc) ->
+                StorageConfig = maps:get(StorageId, maps:get(ProviderId, StoragesSetupMap, #{}), #{}),
+                AccessType = case maps:get(<<"readonly">>, StorageConfig, false) of
+                    true -> ?READONLY;
+                    false -> ?READWRITE
+                end,
+                maps:update_with(ProviderId, fun(ProviderStorages) ->
+                    ProviderStorages#{StorageId => AccessType}
+                end, #{StorageId => AccessType}, Acc)
+            end, #{}, maps:keys(Storages)),
 
-                    {ok, #document{key = SpaceId, value = #od_space{
-                        name = SpaceName,
-                        providers = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
-                            maps:update_with(ProviderId, fun(PrevSupport) -> PrevSupport + Support end, Support, Acc)
-                        end, #{}, Storages),
-                        harvesters = proplists:get_value(SpaceId, SpacesHarvesters, []),
-                        eff_users = EffUsers,
-                        eff_groups = #{},
-                        storages = maps:fold(fun({StorageName, _Provider}, Support, Acc) ->
-                            % StorageName is the same as Id
-                            Acc#{StorageName => Support}
-                        end, #{}, Storages),
-                        storages_by_provider = StoragesByProvider
-                    }}};
-                false ->
-                    ?ERROR_NOT_FOUND
-            end
+            {ok, #document{key = SpaceId, value = #od_space{
+                name = SpaceName,
+                providers = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
+                    maps:update_with(ProviderId, fun(PrevSupport) -> PrevSupport + Support end, Support, Acc)
+                end, #{}, Storages),
+                harvesters = proplists:get_value(SpaceId, SpacesHarvesters, []),
+                eff_users = EffUsers,
+                eff_groups = #{},
+                storages = maps:fold(fun({StorageName, _Provider}, Support, Acc) ->
+                    % StorageName is the same as Id
+                    Acc#{StorageName => Support}
+                end, #{}, Storages),
+                storages_by_provider = StoragesByProvider
+            }}}
     end,
 
     test_utils:mock_expect(Workers, space_logic, get, GetSpaceFun),

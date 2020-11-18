@@ -138,7 +138,7 @@ put_binary(Req, #cdmi_req{
     {FileGuid, Truncate, Offset} = case Attrs of
         undefined ->
             {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
-            {ok, Guid} = ?check(lfm:create(SessionId, Path, DefaultMode)),
+            {ok, Guid} = cdmi_utils:create_file(SessionId, Path, DefaultMode),
             {Guid, false, 0};
         #file_attr{guid = Guid, size = Size} ->
             Length = cowboy_req:body_length(Req),
@@ -198,7 +198,7 @@ put_cdmi(Req, #cdmi_req{
     {ok, OperationPerformed, Guid} = case {Attrs, CopyURI, MoveURI} of
         {undefined, undefined, undefined} ->
             {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
-            {ok, NewGuid} = ?check(lfm:create(SessionId, Path, DefaultMode)),
+            {ok, NewGuid} = cdmi_utils:create_file(SessionId, Path, DefaultMode),
             write_binary_to_file(
                 SessionId, {guid, NewGuid},
                 false, 0, RawValue,
@@ -208,18 +208,10 @@ put_cdmi(Req, #cdmi_req{
         {#file_attr{guid = NewGuid}, undefined, undefined} ->
             {ok, none, NewGuid};
         {undefined, CopyURI, undefined} ->
-            {ok, NewGuid} = ?check(lfm:cp(
-                SessionId,
-                {path, filepath_utils:ensure_begins_with_slash(CopyURI)},
-                Path
-            )),
+            {ok, NewGuid} = cdmi_utils:cp(SessionId, CopyURI, Path),
             {ok, copied, NewGuid};
         {undefined, undefined, MoveURI} ->
-            {ok, NewGuid} = ?check(lfm:mv(
-                SessionId,
-                {path, filepath_utils:ensure_begins_with_slash(MoveURI)},
-                Path
-            )),
+            {ok, NewGuid} = cdmi_utils:mv(SessionId, MoveURI, Path),
             {ok, moved, NewGuid}
     end,
 
@@ -296,7 +288,11 @@ prepare_create_file_cdmi_response(Req1, #cdmi_req{
 get_file_info(RequestedInfo, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
     file_path = Path,
-    file_attrs = #file_attr{guid = Guid, size = FileSize} = Attrs
+    file_attrs = #file_attr{
+        guid = Guid,
+        parent_uuid = ParentGuid,
+        size = FileSize
+    } = Attrs
 }) ->
     lists:foldl(fun
         (<<"objectType">>, Acc) ->
@@ -317,10 +313,6 @@ get_file_info(RequestedInfo, #cdmi_req{
                 <<"/">> ->
                     Acc;
                 _ ->
-                    {ok, #file_attr{guid = ParentGuid}} = ?check(lfm:stat(
-                        SessionId,
-                        {path, filepath_utils:parent_dir(Path)}
-                    )),
                     {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
                     Acc#{<<"parentID">> => ParentObjectId}
             end;

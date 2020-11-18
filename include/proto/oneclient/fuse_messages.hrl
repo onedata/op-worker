@@ -213,7 +213,8 @@
 }).
 
 -type fuse_request_type() ::
-    #resolve_guid{} | #get_helper_params{} | #create_storage_test_file{} |
+    #resolve_guid{} | #resolve_guid_by_canonical_path{} |
+    #get_helper_params{} | #create_storage_test_file{} |
     #verify_storage_test_file{} | #file_request{} | #get_fs_stats{}.
 
 -record(fuse_request, {

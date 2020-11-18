@@ -53,7 +53,7 @@
     % Rest scenario using file path in URL - causes fileId lookup in
     % rest_handler. If path can't be resolved (this file/space is not
     % supported by specific provider) rather then concrete error a
-    % ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>) will be returned
+    % ?ERROR_POSIX(?ENOENT) will be returned
     rest_with_file_path |
     % Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
     % of request auth and parameters.
@@ -257,7 +257,7 @@ get_scenario_specific_error_for_invalid_client(rest_with_file_path, ClientType, 
 ->
     % Error thrown by rest_handler (before middleware auth checks could be performed)
     % as invalid clients who doesn't belong to space can't resolve file path to guid
-    {extract_client(ClientAndError), ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>)};
+    {extract_client(ClientAndError), ?ERROR_POSIX(?ENOENT)};
 get_scenario_specific_error_for_invalid_client(_ScenarioType, _, {_, {error, _}} = ClientAndError) ->
     ClientAndError;
 get_scenario_specific_error_for_invalid_client(_ScenarioType, unauthorized, Client) ->
