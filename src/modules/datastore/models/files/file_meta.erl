@@ -27,7 +27,7 @@
 %% How many entries shall be processed in one batch for set_scope operation.
 -define(SET_SCOPE_BATCH_SIZE, 100).
 
--export([save/1, create/2, save/2, get/1, exists/1, update/2, delete/1,
+-export([save/1, create/2, create/3, save/2, get/1, exists/1, update/2, delete/1,
     delete_without_link/1]).
 -export([delete_child_link/4, foreach_child/3, add_child_link/4, delete_deletion_link/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
@@ -39,7 +39,7 @@
     list_children/5, list_children/6,
     list_children_whitelisted/4
 ]).
--export([get_name/1]).
+-export([get_name/1, set_name/2]).
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/6, new_doc/7, type/1, get_ancestors/1,
@@ -930,6 +930,12 @@ is_child_of_hidden_dir(Path) ->
 -spec get_name(doc()) -> binary().
 get_name(#document{value = #file_meta{name = Name}}) ->
     Name.
+
+
+-spec set_name(doc(), name()) -> doc().
+set_name(Doc = #document{value = FileMeta}, NewName) ->
+    Doc#document{value = FileMeta#file_meta{name = NewName}}.
+
 
 %%--------------------------------------------------------------------
 %% @doc

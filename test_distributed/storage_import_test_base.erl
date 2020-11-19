@@ -6337,15 +6337,15 @@ end_per_testcase(sync_should_not_process_file_if_hash_of_its_attrs_has_not_chang
     end_per_testcase(default, Config);
 
 end_per_testcase(create_remote_dir_import_race_test, Config) ->
-    [W1| _] = ?config(op_worker_nodes, Config),
+    [_W1, W2| _] = ?config(op_worker_nodes, Config),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
-    remove_link(W1, SpaceUuid, ?TEST_DIR),
+    remove_link(W2, SpaceUuid, ?TEST_DIR),
     end_per_testcase(default, Config);
 
 end_per_testcase(create_remote_file_import_race_test, Config) ->
-    [W1| _] = ?config(op_worker_nodes, Config),
+    [_W1, W2| _] = ?config(op_worker_nodes, Config),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
-    remove_link(W1, SpaceUuid, ?TEST_FILE1),
+    remove_link(W2, SpaceUuid, ?TEST_FILE1),
     end_per_testcase(default, Config);
 
 end_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage, Config) ->

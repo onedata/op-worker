@@ -208,7 +208,16 @@ create_missing_directories(ParentCtx, [DirectChildPartialCtx | Rest], UserId) ->
 -spec create_missing_directory_secure(file_ctx:ctx(), file_meta:name(), od_user:id()) -> {ok, file_ctx:ctx()}.
 create_missing_directory_secure(ParentCtx, DirName, UserId) ->
     critical_section:run({create_missing_directory, file_ctx:get_uuid_const(ParentCtx), DirName, UserId}, fun() ->
-        create_missing_directory(ParentCtx, DirName, UserId)
+        try
+            % ensure whether directory is still missing as it might have been created by other registering process
+            {DirCtx, _} = file_ctx:get_child(ParentCtx, DirName, user_ctx:new(?ROOT_SESS_ID)),
+            {ok, DirCtx}
+        catch
+            error:{badmatch,{error,not_found}} ->
+                create_missing_directory(ParentCtx, DirName, UserId);
+            throw:?ENOENT ->
+                create_missing_directory(ParentCtx, DirName, UserId)
+        end
     end).
 
 

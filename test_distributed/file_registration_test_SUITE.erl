@@ -35,7 +35,9 @@
     registration_should_fail_if_file_is_missing/1,
     registration_should_succeed_if_size_is_passed/1,
     stalled_file_link_test/1,
-    stalled_parent_link_test/1
+    stalled_parent_link_test/1,
+    register_many_files_test/1,
+    register_many_nested_files_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -47,7 +49,9 @@
     registration_should_fail_if_file_is_missing,
     registration_should_succeed_if_size_is_passed,
     stalled_file_link_test,
-    stalled_parent_link_test
+    stalled_parent_link_test,
+    register_many_files_test,
+    register_many_nested_files_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -99,7 +103,6 @@ all() -> ?ALL(?TEST_CASES).
 -define(ENCODED_RDF2, ?ENCODED_RDF(?RDF2)).
 
 -define(ATTEMPTS, 15).
-
 
 -define(assertInLs(Worker, SessId, FilePath, Attempts), (
     fun(__Worker, __SessId, __FilePath, __Attempts) ->
@@ -559,6 +562,111 @@ stalled_parent_link_test(Config) ->
     % check whether file is visible on 2nd provider
     ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
 
+register_many_files_test(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+    LogicalFilesCount = 100,
+
+    BaseFileName = ?FILE_NAME,
+    StorageFileId = filename:join(["/", BaseFileName]),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
+    SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
+    % create only 1 file on storage
+    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
+
+    % but register it as many logical files
+    DestinationPaths = lists:map(fun(I) ->
+        str_utils:format_bin("/~s_~p", [BaseFileName, I])
+    end, lists:seq(1, LogicalFilesCount)),
+
+    TestMaster = self(),
+
+    LogicalFilePaths = lists:map(fun(DestinationPath) ->
+        LogicalFilePath = ?PATH(DestinationPath),
+        spawn(fun() ->
+            ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
+                <<"spaceId">> => ?SPACE_ID,
+                <<"destinationPath">> => DestinationPath,
+                <<"storageFileId">> => StorageFileId,
+                <<"storageId">> => StorageId,
+                <<"mtime">> => clock:timestamp_seconds(),
+                <<"size">> => byte_size(?TEST_DATA),
+                <<"mode">> => <<"664">>,
+                <<"xattrs">> => ?XATTRS,
+                <<"json">> => ?JSON1,
+                <<"rdf">> => ?ENCODED_RDF1
+            })),
+            TestMaster ! {file_registered, LogicalFilePath}
+        end),
+        LogicalFilePath
+    end, DestinationPaths),
+
+    verification_loop(LogicalFilePaths, fun(LogicalFilePath) ->
+        % check whether file has been properly registered
+        ?assertFile(W1, SessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+
+        % check whether file is visible on 2nd provider
+        ?assertFile(W2, SessId2, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
+    end, timer:seconds(60)).
+
+register_many_nested_files_test(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+    LogicalFilesCount = 100,
+
+    BaseFileName = ?FILE_NAME,
+    StorageFileId = filename:join(["/", BaseFileName]),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
+    SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
+    % create only 1 file on storage
+    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
+
+    % but register it as many logical files in the same directory
+    Dir1 = ?DIR_NAME,
+    Dir2 = ?DIR_NAME,
+    Dir3 = ?DIR_NAME,
+    ParentPath = filename:join([Dir1, Dir2, Dir3]),
+    % but register it as many logical files
+    DestinationPaths = lists:map(fun(I) ->
+        FileName = str_utils:format_bin("~s_~p", [BaseFileName, I]),
+        filename:join(["/", ParentPath, FileName])
+    end, lists:seq(1, LogicalFilesCount)),
+
+    TestMaster = self(),
+
+    LogicalFilePaths = lists:map(fun(DestinationPath) ->
+        LogicalFilePath = ?PATH(DestinationPath),
+        spawn(fun() ->
+            ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
+                <<"spaceId">> => ?SPACE_ID,
+                <<"destinationPath">> => DestinationPath,
+                <<"storageFileId">> => StorageFileId,
+                <<"storageId">> => StorageId,
+                <<"mtime">> => clock:timestamp_seconds(),
+                <<"size">> => byte_size(?TEST_DATA),
+                <<"mode">> => <<"664">>,
+                <<"xattrs">> => ?XATTRS,
+                <<"json">> => ?JSON1,
+                <<"rdf">> => ?ENCODED_RDF1
+            })),
+            TestMaster ! {file_registered, LogicalFilePath}
+        end),
+        LogicalFilePath
+    end, DestinationPaths),
+
+    verification_loop(LogicalFilePaths, fun(LogicalFilePath) ->
+        % check whether file has been properly registered
+        ?assertFile(W1, SessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+
+        % check whether file is visible on 2nd provider
+        ?assertFile(W2, SessId2, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
+    end, timer:seconds(60)).
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -627,3 +735,28 @@ unmock_file_meta_save(Worker) ->
 
 wait_until_saving_file_meta_is_frozen() ->
     receive saving_file_meta_frozen -> ok end.
+
+
+verification_loop([], _VerifyFun, _TimeoutMillis) ->
+    ok;
+verification_loop(FilePaths, _VerifyFun, TimeoutMillis) when TimeoutMillis < 0 ->
+    ct:pal(
+        "Verification loop timeout.~n"
+        "Unverified files: ~p", [FilePaths]
+    ),
+    ct:fail(verification_loop_timeout);
+verification_loop(FilePaths, VerifyFun ,TimeoutMillis) when TimeoutMillis >= 0 ->
+    Start = clock:timestamp_millis(),
+    receive
+        {file_registered, FilePath} ->
+            End = clock:timestamp_millis(),
+            VerifyFun(FilePath),
+            verification_loop(FilePaths -- [FilePath], VerifyFun, TimeoutMillis - (End - Start))
+    after
+        TimeoutMillis ->
+            ct:pal(
+                "Verification loop timeout.~n"
+                "Unverified files: ~p", [FilePaths]
+            ),
+            ct:fail(verification_loop_timeout)
+    end.

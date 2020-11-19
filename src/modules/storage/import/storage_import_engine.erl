@@ -704,19 +704,21 @@ get_attr_including_deleted(FileCtx) ->
             {error, Error}
     end.
 
--spec create_file_meta_and_handle_conflicts(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(), file_meta:uuid(),
-    od_space:id(), storage_sync_traverse:info()) -> {ok, file_ctx:ctx()} | {error, term()}.
+
+-spec create_file_meta_and_handle_conflicts(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(),
+    file_meta:uuid(), od_space:id(), storage_sync_traverse:info()) -> {ok, file_ctx:ctx()} | {error, term()}.
 create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId, Info) ->
     FileType = file_meta:type(Mode),
     IteratorType = maps:get(iterator_type, Info, undefined),
-    CreationResult = case create_file_meta(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) of
-        {{error, already_exists}, FileDoc}
+    FileDoc = prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId),
+    CreationResult = case create_file_meta(FileDoc, ParentUuid) of
+        {error, already_exists}
             when IteratorType =:= ?FLAT_ITERATOR
             andalso FileType =:= ?DIRECTORY_TYPE
         ->
             % TODO VFS-6476 how to prevent conflicts on creating directories on s3?
             {ok, FileDoc};
-        {{error, already_exists}, _} ->
+        {error, already_exists} ->
             % There are 2 cases possible here:
             %  * there was race with creating file by lfm
             %  * there is a stalled link
@@ -725,9 +727,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
             {ok, FileUuid2, TreeId} = file_meta:get_child_uuid(ParentUuid, FileName),
             case file_meta:get({uuid, FileUuid2}) of
                 {ok, _ConflictingFileDoc} ->
-                    % there is a conflicting file, import file with suffix
-                    FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
-                    create_file_meta(FileUuid, FileName2, Mode, OwnerId, ParentUuid, SpaceId);
+                    create_conflicting_file_meta(FileDoc, ParentUuid);
                 {error, not_found} ->
                     case TreeId =:= oneprovider:get_id() of
                         true ->
@@ -748,8 +748,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
                             % conflicting file.
                             % It would be possible when we fetching remote document on demand is implemented.
                             % TODO VFS-6509 fetch file_meta from remote provider to distinguish aforementioned situations
-                            FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
-                            create_file_meta(FileUuid, FileName2, Mode, OwnerId, ParentUuid, SpaceId)
+                            create_conflicting_file_meta(FileDoc, ParentUuid)
                     end
             end;
         {ok, FileDoc} ->
@@ -765,15 +764,38 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
     end.
 
 
--spec create_file_meta(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(), file_meta:uuid(),
-    od_space:id()) -> {ok, file_meta:doc()} | {{error, term()}, file_meta:doc()}.
-create_file_meta(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
-    Type = file_meta:type(Mode),
-    FileDoc = file_meta:new_doc(FileUuid, FileName, Type, Mode band 8#1777, OwnerId, ParentUuid, SpaceId),
+-spec create_file_meta(file_meta:doc(), file_meta:uuid()) -> {ok, file_meta:doc()} | {error, term()}.
+create_file_meta(FileDoc, ParentUuid) ->
     case file_meta:create({uuid, ParentUuid}, FileDoc) of
         {ok, _} -> {ok, FileDoc};
-        Error = {error, _} -> {Error, FileDoc}
+        {error, _} = Error -> Error
     end.
+
+
+-spec create_conflicting_file_meta(file_meta:doc(), file_meta:uuid()) -> {ok, file_meta:doc()}.
+create_conflicting_file_meta(FileDoc, ParentUuid) ->
+    create_conflicting_file_meta(FileDoc, ParentUuid, ?IMPORTED_CONFLICTING_FILE_DEFAULT_NUMBER).
+
+
+-spec create_conflicting_file_meta(file_meta:doc(), file_meta:uuid(), non_neg_integer()) -> {ok, file_meta:doc()}.
+create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber) ->
+    OriginalName = file_meta:get_name(FileDoc),
+    FileDoc2 = file_meta:set_name(FileDoc, ?IMPORTED_CONFLICTING_FILE_NAME(OriginalName, oneprovider:get_id(), ConflictNumber)),
+    % do not check for conflicting links in other providers' trees
+    case file_meta:create({uuid, ParentUuid}, FileDoc2, [oneprovider:get_id()]) of
+        {ok, _} ->
+            {ok, FileDoc2};
+        {error, already_exists} ->
+            % if there was conflict on creating file with suffix, bump the ConflictNumber and try again
+            create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber + 1)
+    end.
+
+
+-spec prepare_file_meta_doc(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(),
+    file_meta:uuid(), od_space:id()) -> file_meta:doc().
+prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
+    Type = file_meta:type(Mode),
+    file_meta:new_doc(FileUuid, FileName, Type, Mode band 8#1777, OwnerId, ParentUuid, SpaceId).
 
 
 -spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->
