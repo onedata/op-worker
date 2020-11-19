@@ -41,7 +41,7 @@
 -type versioned_entity() :: gs_protocol:versioned_entity().
 -type scope() :: gs_protocol:scope().
 -type data_format() :: gs_protocol:data_format().
--type data() :: gs_protocol:data().
+-type data() :: gs_protocol:data() | any(). % any data is possible after data sanitization
 -type auth_hint() :: gs_protocol:auth_hint().
 
 -type create_result() :: gs_protocol:graph_create_result().
