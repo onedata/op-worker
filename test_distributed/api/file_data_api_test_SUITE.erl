@@ -650,6 +650,9 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
     {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space1(Config),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
+    DataSpec = set_mode_data_spec(),
+    DataSpecWithoutBadValues = DataSpec#data_spec{bad_values = []},
+
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
         ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id)),
         ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody})
@@ -658,29 +661,25 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
         ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
     end,
 
+    VerifyFun = fun(_, _) ->
+        ?assertMatch(
+            {ok, #file_attr{mode = 8#777}},
+            api_test_utils:get_file_attrs(P1Node, FileGuid),
+            ?ATTEMPTS
+        ),
+        true
+    end,
+
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = [P2Node],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_1,
-            verify_fun = fun(_, _) ->
-                ?assertMatch(
-                    {ok, #file_attr{mode = 8#777}},
-                    api_test_utils:get_file_attrs(P1Node, FileGuid),
-                    ?ATTEMPTS
-                ),
-                true
-            end,
+            verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = build_set_mode_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
@@ -695,7 +694,19 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
                     prepare_args_fun = build_set_mode_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = ValidateGsCallResultFun
                 }
-            ]
+            ],
+            randomly_select_scenarios = true,
+            data_spec = DataSpecWithoutBadValues
+        },
+        #scenario_spec{
+            name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
+            type = rest_with_file_path,
+            target_nodes = [P2Node],
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_1,
+
+            prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
+            validate_result_fun = ValidateRestCallResultFun,
+            verify_fun = VerifyFun
         }
     ])).
 

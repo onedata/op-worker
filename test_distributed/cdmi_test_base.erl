@@ -1849,12 +1849,12 @@ errors(Config) ->
 %%------------------------------
 
 accept_header(Config) ->
-    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     AcceptHeader = {?HDR_ACCEPT, <<"*/*">>},
 
     % when
     {ok, Code1, _Headers1, _Response1} =
-        do_request(WorkerP2, [], get,
+        do_request(Workers, [], get,
             [user_1_token_header(Config), ?CDMI_VERSION_HEADER, AcceptHeader], []),
 
     % then
@@ -1937,14 +1937,9 @@ do_request(Node, RestSubpath, Method, Headers) ->
 
 do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
     [FRes | _] = Responses = lists:filtermap(fun(Node) ->
-        case cdmi_test_utils:do_request(Node, RestSubpath, get, Headers, Body) of
-            {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, RespBody} = Resp ->
-                case errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody))) of
-                    ?ERROR_SPACE_NOT_SUPPORTED_BY(_) -> false;
-                    _ -> {true, Resp}
-                end;
-            Else ->
-                {true, Else}
+        case make_request(Node, RestSubpath, get, Headers, Body) of
+            undefined -> false;
+            Result -> {true, Result}
         end
     end, Nodes),
 
@@ -1967,20 +1962,66 @@ do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
 do_request([_ | _] = Nodes, RestSubpath, Method, Headers, Body) ->
     lists:foldl(fun
         (Node, undefined) ->
-            case cdmi_test_utils:do_request(Node, RestSubpath, Method, Headers, Body) of
-                {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, RespBody} = Resp ->
-                    case errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody))) of
-                        ?ERROR_SPACE_NOT_SUPPORTED_BY(_) -> undefined;
-                        _ -> Resp
-                    end;
-                Else ->
-                    Else
-            end;
+            make_request(Node, RestSubpath, Method, Headers, Body);
         (_Node, Result) ->
             Result
     end, undefined, lists_utils:shuffle(Nodes));
 do_request(Node, RestSubpath, Method, Headers, Body) when is_atom(Node) ->
-    cdmi_test_utils:do_request(Node, RestSubpath, Method, Headers, Body).
+    make_request(Node, RestSubpath, Method, Headers, Body).
+
+make_request(Node, RestSubpath, Method, Headers, Body) ->
+    case cdmi_test_utils:do_request(Node, RestSubpath, Method, Headers, Body) of
+        {ok, RespCode, _RespHeaders, RespBody} = Result ->
+            case is_space_supported(Node, RestSubpath) of
+                true ->
+                    Result;
+                false ->
+                    % Returned error may not be necessarily ?ERROR_SPACE_NOT_SUPPORTED(_)
+                    % as some errors may be thrown even before file path resolution attempt,
+                    % but it should never be any successful response
+                    ?assert(RespCode >= 300),
+
+                    SpaceNotSuppError = #{<<"error">> => errors:to_json(?ERROR_SPACE_NOT_SUPPORTED_BY(
+                        rpc:call(Node, oneprovider, get_id, [])
+                    ))},
+                    case {RespCode, try_to_decode(RespBody)} of
+                        {?HTTP_400_BAD_REQUEST, SpaceNotSuppError} ->
+                            undefined;
+                        _ ->
+                            Result
+                    end
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+is_space_supported(_Node, "") ->
+    true;
+is_space_supported(_Node, "/") ->
+    true;
+is_space_supported(Node, CdmiPath) ->
+    {ok, SuppSpaces} = rpc:call(Node, provider_logic, get_spaces, []),
+    SpecialObjectIds = [?ROOT_CAPABILITY_ID, ?CONTAINER_CAPABILITY_ID, ?DATAOBJECT_CAPABILITY_ID],
+
+    case binary:split(list_to_binary(CdmiPath), <<"/">>, [global, trim_all]) of
+        [<<"cdmi_capabilities">> | _] ->
+            true;
+        [<<"cdmi_objectid">>, ObjectId | _] ->
+            case lists:member(ObjectId, SpecialObjectIds) of
+                true ->
+                    true;
+                false ->
+                    {ok, FileGuid} = file_id:objectid_to_guid(ObjectId),
+                    SpaceId = file_id:guid_to_space_id(FileGuid),
+                    SpaceId == <<"rootDirVirtualSpaceId">> orelse lists:member(SpaceId, SuppSpaces)
+            end;
+        [SpaceName | _] ->
+            lists:any(fun(SpaceId) -> get_space_name(Node, SpaceId) == SpaceName end, SuppSpaces)
+    end.
+
+get_space_name(Node, SpaceId) ->
+    {ok, SpaceName} = rpc:call(Node, space_logic, get_name, [<<"0">>, SpaceId]),
+    SpaceName.
 
 try_to_decode(Body) ->
     try
