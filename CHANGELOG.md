@@ -385,6 +385,11 @@ CHANGELOG
 -   Hotfix - rename opened deleted files, enotdir when needed and fix
     async\_request\_manager
 
+### 19.02.5
+
+-   **VFS-6857** Add support for resuming partial file downloads via
+    CDMI.
+
 ### 19.02.4
 
 -   **VFS-6635** Improve synchronization retries politics to prevent
