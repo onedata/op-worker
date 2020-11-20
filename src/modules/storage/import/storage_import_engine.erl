@@ -751,12 +751,12 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
                             create_conflicting_file_meta(FileDoc, ParentUuid)
                     end
             end;
-        {ok, FileDoc} ->
-            {ok, FileDoc}
+        {ok, FinalDoc} ->
+            {ok, FinalDoc}
     end,
     case CreationResult of
-        {ok, FinalDoc} ->
-            FileCtx = file_ctx:new_by_doc(FinalDoc, SpaceId, undefined),
+        {ok, FinalDoc2} ->
+            FileCtx = file_ctx:new_by_doc(FinalDoc2, SpaceId, undefined),
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, true, []),
             {ok, FileCtx};
         stalled_link ->
