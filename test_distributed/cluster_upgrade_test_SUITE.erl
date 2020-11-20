@@ -313,15 +313,11 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
 
     SIMBase = #storage_import_monitoring{
         finished_scans = Scans,
-        to_process = ToProcess,
         created = Imported,
         modified = Updated,
         deleted = Deleted,
         failed = Failed,
-        other_processed = OtherProcessed,
-        created_sum = ImportedSum,
-        modified_sum = UpdatedSum,
-        deleted_sum = DeletedSum,
+        unmodified = 0,
         created_min_hist = EmptyMinHist,
         created_hour_hist = EmptyHourHist,
         created_day_hist = EmptyDayHist,
@@ -342,7 +338,8 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     },
     SIMDoc1 = #document{
         key = SpaceId1,
-        value = SIMBase#storage_import_monitoring{status = ?ENQUEUED}
+        value = SIMBase#storage_import_monitoring{status = ?ENQUEUED},
+        version = storage_import_monitoring:get_record_version()
     },
 
     ImportStartTime = 10,
@@ -357,7 +354,8 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
         value = SIMBase#storage_import_monitoring{
             scan_start_time = ImportStartTime * 1000,
             status = ?RUNNING
-        }
+        },
+        version = storage_import_monitoring:get_record_version()
     },
 
     ImportFinishTime = 15,
@@ -374,7 +372,8 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
             scan_start_time = ImportStartTime * 1000,
             scan_stop_time = ImportFinishTime * 1000,
             status = ?COMPLETED
-        }
+        },
+        version = storage_import_monitoring:get_record_version()
     },
 
     LastUpdateStartTime = 20,
@@ -392,7 +391,8 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
             scan_start_time = LastUpdateStartTime * 1000,
             scan_stop_time = ImportFinishTime * 1000,
             status = ?RUNNING
-        }
+        },
+        version = storage_import_monitoring:get_record_version()
     },
 
     LastUpdateStopTime = 25,
@@ -411,7 +411,8 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
             scan_start_time = LastUpdateStartTime * 1000,
             scan_stop_time = LastUpdateStopTime * 1000,
             status = ?COMPLETED
-        }
+        },
+        version = storage_import_monitoring:get_record_version()
     },
 
     create_doc(Worker, SSMCtx, SSMDoc1),

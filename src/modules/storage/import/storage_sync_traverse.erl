@@ -72,8 +72,8 @@
     task_started/2, task_finished/2, task_canceled/2]).
 
 %% storage_traverse callbacks
--export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1, get_fold_children_fun/1,
-    on_cancel/3]).
+-export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1,
+    get_fold_children_fun/1, on_cancel/3]).
 
 %% exported for tests
 -export([has_mtime_changed/2, run/4, run_deletion_scan/4]).
@@ -204,7 +204,7 @@ do_master_job(TraverseJob = #storage_traverse_master{storage_file_ctx = StorageF
     catch
         throw:?ENOENT ->
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-            storage_import_monitoring:mark_processed_file(SpaceId),
+            storage_import_monitoring:mark_unmodified_file(SpaceId),
             {ok, #{}}
     end.
 
@@ -218,9 +218,9 @@ do_slave_job(#storage_traverse_slave{
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     case process_storage_file(StorageFileCtx, Info) of
         {ok, {SyncResult, _, _}} ->
-            increase_counter(SyncResult, SpaceId);
+            increment_counter(SyncResult, SpaceId);
         {error, ?ENOENT} ->
-            storage_import_monitoring:mark_processed_file(SpaceId),
+            storage_import_monitoring:mark_unmodified_file(SpaceId),
             ok;
         Error = {error, _} ->
             storage_import_monitoring:mark_failed_file(SpaceId),
@@ -305,7 +305,7 @@ reset_info(#storage_traverse_master{info = Info}) ->
 get_next_batch_job_prehook(_TraverseInfo) ->
     fun(#storage_traverse_master{storage_file_ctx = StorageFileCtx}) ->
         SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-        storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
+        storage_import_monitoring:increment_queue_length_histograms(SpaceId, 1),
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId)
     end.
@@ -331,7 +331,7 @@ get_fold_children_fun(TraverseInfo) ->
 -spec on_cancel(non_neg_integer(), non_neg_integer(), storage_file_ctx:ctx()) -> ok.
 on_cancel(MasterJobsDelegated, SlaveJobsDelegated, StorageFileCtx) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    storage_import_monitoring:mark_processed_files(SpaceId, MasterJobsDelegated + SlaveJobsDelegated).
+    storage_import_monitoring:mark_unmodified_file(SpaceId, MasterJobsDelegated + SlaveJobsDelegated).
 
 %%%===================================================================
 %%% Functions exported for tests
@@ -432,7 +432,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
     % for next batches are scheduled asynchronously
     case do_slave_job_on_directory(TraverseJob) of
         {ok, {SyncResult, FileCtx, StorageFileCtx2}} ->
-            increase_counter(SyncResult, SpaceId),
+            increment_counter(SyncResult, SpaceId),
             % stat result will be cached in StorageFileCtx
             % we perform stat here to ensure that jobs for all batches for given directory
             % will be scheduled with the same stat result
@@ -446,7 +446,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
                     SlaveJobsNum = length(maps:get(slave_jobs, MasterJobMap, [])),
                     AsyncMasterJobsNum = length(maps:get(async_master_jobs, MasterJobMap, [])),
                     ToProcess = SlaveJobsNum + AsyncMasterJobsNum,
-                    storage_import_monitoring:increase_to_process_counter(SpaceId, ToProcess),
+                    storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
                     FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
                         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                         case Depth =:= MaxDepth of
@@ -506,7 +506,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                 }
             },
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx3),
-            increase_counter(SyncResult, SpaceId),
+            increment_counter(SyncResult, SpaceId),
 
             case {MTimeHasChanged, DetectDeletions, DetectModifications} of
                 {true, true, _} ->
@@ -529,7 +529,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
             storage_import_monitoring:mark_modified_file(SpaceId),
             {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
             FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, _SlavesDescription) ->
-                storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
+                storage_import_monitoring:increment_queue_length_histograms(SpaceId, 1),
                 MasterJobCallback(#{
                     jobs => [
                         storage_import_deletion:get_master_job(
@@ -540,7 +540,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                         }})
                     ],
                     cancel_callback => fun(_CancelDescription) ->
-                        storage_import_monitoring:mark_processed_file(SpaceId)
+                        storage_import_monitoring:mark_unmodified_file(SpaceId)
                     end
                 })
             end,
@@ -607,7 +607,7 @@ schedule_jobs_for_directories_only(#storage_traverse_master{
     end,
     AsyncMasterJobs = maps:get(async_master_jobs, MasterJobMap2, []),
     ToProcess = length(AsyncMasterJobs),
-    storage_import_monitoring:increase_to_process_counter(SpaceId, ToProcess),
+    storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
     {ok, MasterJobMap2#{finish_callback => FinishCallback}};
 schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
@@ -634,11 +634,11 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
                 case storage_sync_info:are_all_batches_processed(SSI) of
                     true ->
                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId),
-                        storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
+                        storage_import_monitoring:increment_queue_length_histograms(SpaceId, 1),
                         MasterJobCallback(#{
                             jobs => [storage_import_deletion:get_master_job(TraverseJob)],
                             cancel_callback => fun(_CancelDescription) ->
-                                storage_import_monitoring:mark_processed_file(SpaceId)
+                                storage_import_monitoring:mark_unmodified_file(SpaceId)
                             end
                         });
                     false ->
@@ -650,7 +650,7 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
     end,
     AsyncMasterJobs = maps:get(async_master_jobs, MasterJobMap2, []),
     ToProcess = length(AsyncMasterJobs),
-    storage_import_monitoring:increase_to_process_counter(SpaceId, ToProcess),
+    storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
     {ok, MasterJobMap2#{finish_callback => FinishCallback}}.
 
 -spec schedule_jobs_for_all_files(master_job(), traverse:master_job_map(), storage_import_hash:hash(),
@@ -667,7 +667,7 @@ schedule_jobs_for_all_files(#storage_traverse_master{
     AsyncMasterJobs = maps:get(async_master_jobs, MasterJobMap, []),
     SlaveJobs = maps:get(slave_jobs, MasterJobMap, []),
     ToProcess = length(AsyncMasterJobs) + length(SlaveJobs),
-    storage_import_monitoring:increase_to_process_counter(SpaceId, ToProcess),
+    storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
     FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
         case Depth =:= MaxDepth of
@@ -691,7 +691,7 @@ schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
     AsyncMasterJobs = maps:get(async_master_jobs, MasterJobMap, []),
     SlaveJobs = maps:get(slave_jobs, MasterJobMap, []),
     ToProcess = length(AsyncMasterJobs) + length(SlaveJobs),
-    storage_import_monitoring:increase_to_process_counter(SpaceId, ToProcess),
+    storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
     FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, SlavesDescription) ->
         case maps:get(slave_jobs_failed, SlavesDescription) of
             0 ->
@@ -706,11 +706,11 @@ schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
                 case storage_sync_info:are_all_batches_processed(SSI) of
                     true ->
                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId),
-                        storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
+                        storage_import_monitoring:increment_queue_length_histograms(SpaceId, 1),
                         MasterJobCallback(#{
                             jobs => [storage_import_deletion:get_master_job(TraverseJob)],
                             cancel_callback => fun(_CancelDescription) ->
-                                storage_import_monitoring:mark_processed_file(SpaceId)
+                                storage_import_monitoring:mark_unmodified_file(SpaceId)
                             end
                         });
                     false ->
@@ -744,7 +744,7 @@ do_slave_job_on_directory(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = #{file_ctx := FileCtx}
 }) ->
-    {ok, {?FILE_PROCESSED, FileCtx, StorageFileCtx}}.
+    {ok, {?FILE_UNMODIFIED, FileCtx, StorageFileCtx}}.
 
 -spec process_storage_file(storage_file_ctx:ctx(), info()) ->
     {ok, {storage_import_engine:result(), file_ctx:ctx(), storage_file_ctx:ctx()}} | {error, term()}.
@@ -758,7 +758,7 @@ process_storage_file(StorageFileCtx, Info) ->
             Result = {SyncResult, _, _}
                 when SyncResult =:= ?FILE_CREATED
                 orelse SyncResult =:= ?FILE_MODIFIED
-                orelse SyncResult =:= ?FILE_PROCESSED
+                orelse SyncResult =:= ?FILE_UNMODIFIED
             ->
                 {ok, Result};
             {error, ?ENOENT} ->
@@ -779,13 +779,15 @@ process_storage_file(StorageFileCtx, Info) ->
             {error, {Error2, Reason2}}
     end.
 
--spec increase_counter(storage_import_engine:result(), od_space:id()) -> ok.
-increase_counter(?FILE_CREATED, SpaceId) ->
+
+-spec increment_counter(storage_import_engine:result(), od_space:id()) -> ok.
+increment_counter(?FILE_CREATED, SpaceId) ->
     storage_import_monitoring:mark_created_file(SpaceId);
-increase_counter(?FILE_MODIFIED, SpaceId) ->
+increment_counter(?FILE_MODIFIED, SpaceId) ->
     storage_import_monitoring:mark_modified_file(SpaceId);
-increase_counter(?FILE_PROCESSED, SpaceId) ->
-    storage_import_monitoring:mark_processed_file(SpaceId).
+increment_counter(?FILE_UNMODIFIED, SpaceId) ->
+    storage_import_monitoring:mark_unmodified_file(SpaceId).
+
 
 -spec get_storage_sync_info_doc(master_job()) -> storage_sync_info:doc().
 get_storage_sync_info_doc(#storage_traverse_master{
