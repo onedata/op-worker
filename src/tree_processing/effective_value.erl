@@ -138,7 +138,8 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCa
                             {error, {file_meta_missing, ParentUuid}}
                     end;
                 {false, true} ->
-                    ?critical("Incorrect usage of effective_value cache ~p. Calculation has reached the global root directory."),
+                    ?critical("Incorrect usage of effective_value cache ~p. Calculation has reached the global root directory.",
+                        [Cache]),
                     {error, root_dir_reached};
                 {true, _} ->
                     bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,

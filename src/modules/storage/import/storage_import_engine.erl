@@ -711,7 +711,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
     FileType = file_meta:type(Mode),
     IteratorType = maps:get(iterator_type, Info, undefined),
     FileDoc = prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId),
-    CreationResult = case create_file_meta(FileDoc, ParentUuid) of
+    CreationResult = case file_meta:create({uuid, ParentUuid}, FileDoc) of
         {error, already_exists}
             when IteratorType =:= ?FLAT_ITERATOR
             andalso FileType =:= ?DIRECTORY_TYPE
@@ -764,14 +764,6 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
     end.
 
 
--spec create_file_meta(file_meta:doc(), file_meta:uuid()) -> {ok, file_meta:doc()} | {error, term()}.
-create_file_meta(FileDoc, ParentUuid) ->
-    case file_meta:create({uuid, ParentUuid}, FileDoc) of
-        {ok, FileDocFinal} -> {ok, FileDocFinal};
-        {error, _} = Error -> Error
-    end.
-
-
 -spec create_conflicting_file_meta(file_meta:doc(), file_meta:uuid()) -> {ok, file_meta:doc()}.
 create_conflicting_file_meta(FileDoc, ParentUuid) ->
     create_conflicting_file_meta(FileDoc, ParentUuid, ?IMPORTED_CONFLICTING_FILE_DEFAULT_NUMBER).
@@ -782,7 +774,7 @@ create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber) ->
     OriginalName = file_meta:get_name(FileDoc),
     FileDoc2 = file_meta:set_name(FileDoc, ?IMPORTED_CONFLICTING_FILE_NAME(OriginalName, oneprovider:get_id(), ConflictNumber)),
     % do not check for conflicting links in other providers' trees
-    case create_file_meta(FileDoc2, ParentUuid) of
+    case file_meta:create({uuid, ParentUuid}, FileDoc2) of
         {ok, FileDocFinal} ->
             {ok, FileDocFinal};
         {error, already_exists} ->
