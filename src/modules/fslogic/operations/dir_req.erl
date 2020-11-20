@@ -176,7 +176,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     Owner = user_ctx:get_user_id(UserCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
-    {ok, DirUuid} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
+    {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
 
     try

@@ -117,7 +117,7 @@ logical_to_canonical_path(LogicalPath, SpaceId) ->
 -spec to_uuid(file_meta:uuid(), file_meta:name()) ->
     {ok, file_meta:uuid()} | {error, term()}.
 to_uuid(ParentUuid, Name) ->
-    case file_meta:get_child_uuid(ParentUuid, Name) of
+    case file_meta:get_child_uuid_and_tree_id(ParentUuid, Name) of
         {ok, Uuid, _} -> {ok, Uuid};
         Error = {error, _} -> Error
     end.

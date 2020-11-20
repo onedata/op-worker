@@ -724,7 +724,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
             %  * there is a stalled link
 
             % resolve existing uuid
-            {ok, FileUuid2, TreeId} = file_meta:get_child_uuid(ParentUuid, FileName),
+            {ok, FileUuid2, TreeId} = file_meta:get_child_uuid_and_tree_id(ParentUuid, FileName),
             case file_meta:get({uuid, FileUuid2}) of
                 {ok, _ConflictingFileDoc} ->
                     create_conflicting_file_meta(FileDoc, ParentUuid);
@@ -767,7 +767,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
 -spec create_file_meta(file_meta:doc(), file_meta:uuid()) -> {ok, file_meta:doc()} | {error, term()}.
 create_file_meta(FileDoc, ParentUuid) ->
     case file_meta:create({uuid, ParentUuid}, FileDoc) of
-        {ok, _} -> {ok, FileDoc};
+        {ok, FileDocFinal} -> {ok, FileDocFinal};
         {error, _} = Error -> Error
     end.
 
@@ -782,9 +782,9 @@ create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber) ->
     OriginalName = file_meta:get_name(FileDoc),
     FileDoc2 = file_meta:set_name(FileDoc, ?IMPORTED_CONFLICTING_FILE_NAME(OriginalName, oneprovider:get_id(), ConflictNumber)),
     % do not check for conflicting links in other providers' trees
-    case file_meta:create({uuid, ParentUuid}, FileDoc2, [oneprovider:get_id()]) of
-        {ok, _} ->
-            {ok, FileDoc2};
+    case create_file_meta(FileDoc2, ParentUuid) of
+        {ok, FileDocFinal} ->
+            {ok, FileDocFinal};
         {error, already_exists} ->
             % if there was conflict on creating file with suffix, bump the ConflictNumber and try again
             create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber + 1)

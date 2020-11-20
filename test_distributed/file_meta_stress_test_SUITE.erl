@@ -123,7 +123,7 @@ many_files_creation_test_base(Config) ->
     ct:print("Space name: ~p", [SpaceNameString]),
     SpaceName = list_to_binary(SpaceNameString),
     FullSpaceNameString = "/" ++ SpaceNameString,
-    {ok, SpaceUuid} = ?assertMatch({ok, _}, rpc:call(Worker2, file_meta, create, [{uuid, RootUuid},
+    {ok, #document{key = SpaceUuid}} = ?assertMatch({ok, _}, rpc:call(Worker2, file_meta, create, [{uuid, RootUuid},
             #document{key = fslogic_uuid:spaceid_to_space_dir_uuid(list_to_binary(SpaceNameString)),
                 value = #file_meta{name = SpaceName, is_scope = true}}])),
 

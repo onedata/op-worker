@@ -27,14 +27,14 @@
 %% How many entries shall be processed in one batch for set_scope operation.
 -define(SET_SCOPE_BATCH_SIZE, 100).
 
--export([save/1, create/2, create/3, save/2, get/1, exists/1, update/2, delete/1,
+-export([save/1, create/2, save/2, get/1, exists/1, update/2, delete/1,
     delete_without_link/1]).
 -export([delete_child_link/4, foreach_child/3, add_child_link/4, delete_deletion_link/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
-    get_child/2, get_child_uuid/2,
+    get_child/2, get_child_uuid_and_tree_id/2,
     list_children/2, list_children/3, list_children/4,
     list_children/5, list_children/6,
     list_children_whitelisted/4
@@ -119,7 +119,7 @@
 %% Saves file meta doc.
 %% @end
 %%--------------------------------------------------------------------
--spec save(doc()) -> {ok, uuid()} | {error, term()}.
+-spec save(doc()) -> {ok, doc()} | {error, term()}.
 save(Doc) ->
     save(Doc, true).
 
@@ -128,12 +128,11 @@ save(Doc) ->
 %% Saves file meta doc.
 %% @end
 %%--------------------------------------------------------------------
--spec save(doc(), boolean()) -> {ok, uuid()} | {error, term()}.
-
+-spec save(doc(), boolean()) -> {ok, doc()} | {error, term()}.
 save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
-    ?extract_key(datastore_model:save(?CTX#{memory_copies => all}, Doc));
+    datastore_model:save(?CTX#{memory_copies => all}, Doc);
 save(Doc, GeneratedKey) ->
-    ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
+    datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -152,7 +151,7 @@ create(Parent, FileDoc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc(), datastore:tree_ids()) ->
-    {ok, uuid()} | {error, term()}.
+    {ok, doc()} | {error, term()}.
 create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{name = FileName}}, CheckTrees) ->
     ?run(begin
         true = is_valid_filename(FileName),
@@ -172,10 +171,10 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         Ctx = ?CTX#{scope => ParentScopeId},
         Link = {FileName, FileUuid},
         case file_meta:save(FileDoc3) of
-            {ok, FileUuid} ->
+            {ok, FileDocFinal = #document{key = FileUuid}} ->
                 case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
                     {ok, #link{}} ->
-                        {ok, FileUuid};
+                        {ok, FileDocFinal};
                     {error, already_exists} = Eexists ->
                         case datastore_model:get_links(Ctx, ParentUuid, CheckTrees, FileName) of
                             {ok, Links} ->
@@ -411,7 +410,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec get_child(uuid(), name()) -> {ok, doc()} | {error, term()}.
 get_child(ParentUuid, Name) ->
-    case get_child_uuid(ParentUuid, Name) of
+    case get_child_uuid_and_tree_id(ParentUuid, Name) of
         {ok, ChildUuid, _} ->
             file_meta:get({uuid, ChildUuid});
         Error -> Error
@@ -419,17 +418,18 @@ get_child(ParentUuid, Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns parent child's UUID by Name.
+%% Returns parent child's UUID by Name and TreeId of a tree in which
+%% the link was found.
 %% @end
 %%--------------------------------------------------------------------
--spec get_child_uuid(uuid(), name()) -> {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
-get_child_uuid(ParentUuid, Name) ->
+-spec get_child_uuid_and_tree_id(uuid(), name()) -> {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
+get_child_uuid_and_tree_id(ParentUuid, Name) ->
     Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
         [Name] ->
-            case get_child_uuid(ParentUuid, oneprovider:get_id(), Name) of
+            case get_child_uuid_and_tree_id(ParentUuid, oneprovider:get_id(), Name) of
                 {ok, Uuid, TreeId} -> {ok, Uuid, TreeId};
-                {error, not_found} -> get_child_uuid(ParentUuid, all, Name);
+                {error, not_found} -> get_child_uuid_and_tree_id(ParentUuid, all, Name);
                 {error, Reason} -> {error, Reason}
             end;
         [TreeIdPrefix | Tokens2] ->
@@ -444,14 +444,14 @@ get_child_uuid(ParentUuid, Name) ->
             end, TreeIds),
             case TreeIds2 of
                 [TreeId] ->
-                    case get_child_uuid(ParentUuid, TreeId, Name2) of
+                    case get_child_uuid_and_tree_id(ParentUuid, TreeId, Name2) of
                         {ok, Doc, TreeId} ->
                             {ok, Doc, TreeId};
                         {error, Reason} ->
                             {error, Reason}
                     end;
                 [] ->
-                    get_child_uuid(ParentUuid, all, Name)
+                    get_child_uuid_and_tree_id(ParentUuid, all, Name)
             end
     end.
 
@@ -754,7 +754,7 @@ setup_onedata_user(UserId, EffSpaces) ->
                     }
                 })
             of
-                {ok, _RootUuid} ->
+                {ok, _} ->
                     {ok, _} = times:save(#document{
                         key = FileUuid,
                         value = #times{mtime = CTime, atime = CTime, ctime = CTime},
@@ -892,7 +892,7 @@ type(Mode) ->
 hidden_file_name(FileName) ->
     <<?HIDDEN_FILE_PREFIX, FileName/binary>>.
 
-%%-------------------------------------------------------------------uuid()-
+%%--------------------------------------------------------------------
 %% @doc
 %% Checks if given filename contains hidden file prefix.
 %% @end
@@ -1216,9 +1216,9 @@ is_valid_filename(FileName) when is_binary(FileName) ->
 %% alongside with TreeId in which it was found.
 %% @end
 %%--------------------------------------------------------------------
--spec get_child_uuid(uuid(), datastore_links:tree_ids(), name()) ->
+-spec get_child_uuid_and_tree_id(uuid(), datastore_links:tree_ids(), name()) ->
     {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
-get_child_uuid(ParentUuid, TreeIds, Name) ->
+get_child_uuid_and_tree_id(ParentUuid, TreeIds, Name) ->
     case datastore_model:get_links(?CTX, ParentUuid, TreeIds, Name) of
         {ok, [#link{target = FileUuid, tree_id = TreeId}]} ->
             {ok, FileUuid, TreeId};

@@ -112,8 +112,8 @@ create_missing_directory(ParentCtx, DirName, UserId) ->
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
     ok = dir_location:mark_dir_synced_from_storage(FileUuid, undefined),
-    {ok, DirCtx} = storage_import_engine:create_file_meta_and_handle_conflicts(FileUuid, DirName, ?DEFAULT_DIR_PERMS,
-        UserId, ParentUuid, SpaceId),
+    {ok, DirCtx} = storage_import_engine:create_file_meta_and_handle_conflicts(
+        FileUuid, DirName, ?DEFAULT_DIR_PERMS, UserId, ParentUuid, SpaceId),
     CurrentTime = clock:timestamp_seconds(),
     times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime),
     {ok, DirCtx}.

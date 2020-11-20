@@ -974,7 +974,7 @@ create_remote_dir_import_race_test(Config) ->
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
     {ok, _} = rpc:call(W2, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),
-    ?assertMatch({ok, _, _}, rpc:call(W1, file_meta, get_child_uuid, [SpaceUuid, ?TEST_DIR]), ?ATTEMPTS),
+    ?assertMatch({ok, _, _}, rpc:call(W1, file_meta, get_child_uuid_and_tree_id, [SpaceUuid, ?TEST_DIR]), ?ATTEMPTS),
 
     % storage import should import directory with conflicting name
     ProviderId1 = provider_id(W1),
@@ -1036,7 +1036,7 @@ create_remote_file_import_race_test(Config) ->
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
     {ok, _} = rpc:call(W2, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_FILE1, FileUuid}]),
-    ?assertMatch({ok, _, _}, rpc:call(W1, file_meta, get_child_uuid, [SpaceUuid, ?TEST_FILE1]), ?ATTEMPTS),
+    ?assertMatch({ok, _, _}, rpc:call(W1, file_meta, get_child_uuid_and_tree_id, [SpaceUuid, ?TEST_FILE1]), ?ATTEMPTS),
 
     % storage import should import file with conflicting name
     ProviderId1 = provider_id(W1),
