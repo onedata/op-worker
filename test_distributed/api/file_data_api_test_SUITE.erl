@@ -250,9 +250,7 @@ get_attrs_on_provider_not_supporting_space_test(Config) ->
                     prepare_args_fun = build_get_attrs_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = ValidateGsCallResultFun
                 }
-            ],
-            randomly_select_scenarios = true,
-            data_spec = get_attrs_data_spec(normal_mode)
+            ]
         }
     ])).
 
@@ -697,9 +695,7 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
                     prepare_args_fun = build_set_mode_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = ValidateGsCallResultFun
                 }
-            ],
-            randomly_select_scenarios = true,
-            data_spec = set_mode_data_spec()
+            ]
         }
     ])).
 
