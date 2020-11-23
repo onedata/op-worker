@@ -220,7 +220,7 @@ mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
             ok ->
                 ok;
             {error, ?ENOENT} when Recursive ->
-                Tokens = fslogic_path:split(FileId),
+                Tokens = filepath_utils:split(FileId),
                 case Tokens of
                     [_] -> ok;
                     [_ | _] ->

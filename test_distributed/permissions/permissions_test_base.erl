@@ -1252,7 +1252,7 @@ set_perms_test(Config) ->
     ?assertMatch(ok, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, FileGuid}, 8#555)),
     AssertProperStorageAttrsFun(8#555),
 
-    % unless it is space dir write operation on which are forbidden even for space owner
+    % but even space owner cannot perform write operation on space dir
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(<<"space1">>),
     ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#000)),
     ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#555)),

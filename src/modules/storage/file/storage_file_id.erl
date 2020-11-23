@@ -67,18 +67,18 @@ flat(FileCtx) ->
             end,
             FileId = case file_ctx:is_space_dir_const(FileCtx2) of
                 true ->
-                    fslogic_path:join(PathTokens);
+                    filepath_utils:join(PathTokens);
                 false ->
                     FileUuid = file_ctx:get_uuid_const(FileCtx2),
                     case size(FileUuid) > 3 of
                         true ->
-                            fslogic_path:join(PathTokens ++ [
+                            filepath_utils:join(PathTokens ++ [
                                 binary_part(FileUuid, 0, 1),
                                 binary_part(FileUuid, 1, 1),
                                 binary_part(FileUuid, 2, 1),
                                 FileUuid]);
                         false ->
-                            fslogic_path:join(PathTokens ++ [<<"other">>, FileUuid])
+                            filepath_utils:join(PathTokens ++ [<<"other">>, FileUuid])
                     end
             end,
             {FileId, FileCtx2}
@@ -113,9 +113,9 @@ canonical(FileCtx) ->
 
 -spec filter_space_id(file_meta:path(), od_space:id()) -> file_meta:path().
 filter_space_id(FilePath, SpaceId) ->
-    case fslogic_path:split(FilePath) of
+    case filepath_utils:split(FilePath) of
         [Sep, SpaceId | Path] ->
-            fslogic_path:join([Sep | Path]);
+            filepath_utils:join([Sep | Path]);
         _ ->
             FilePath
     end.

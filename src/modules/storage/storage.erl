@@ -621,12 +621,12 @@ ensure_boolean(Boolean) when is_boolean(Boolean) -> Boolean.
 -spec assert_mount_point_not_occupied(id() | name(), undefined | file_meta:path()) -> ok | no_return().
 assert_mount_point_not_occupied(_, undefined) ->
     ok;
-assert_mount_point_not_occupied(NewStorageNameOrdUpdatedStorageId, NewStorageMountPoint0) ->
+assert_mount_point_not_occupied(StorageIdOrName, NewStorageMountPoint0) ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
-    NewStorageMountPoint1 = sanitize_path(NewStorageMountPoint0),
+    {ok, NewStorageMountPoint1} = filepath_utils:sanitize(NewStorageMountPoint0),
 
     lists:foreach(fun
-        (StorageId) when StorageId == NewStorageNameOrdUpdatedStorageId ->
+        (StorageId) when StorageId == StorageIdOrName ->
             ok;
         (StorageId) ->
             Helper = get_helper(StorageId),
@@ -634,47 +634,23 @@ assert_mount_point_not_occupied(NewStorageNameOrdUpdatedStorageId, NewStorageMou
                 undefined ->
                     ok;
                 ExistingStorageMountPoint0 ->
-                    ExistingStorageMountPoint1 = sanitize_path(ExistingStorageMountPoint0),
-                    IsAncestor = is_subpath(NewStorageMountPoint1, ExistingStorageMountPoint1),
-                    IsSubPath = is_subpath(ExistingStorageMountPoint1, NewStorageMountPoint1),
+                    {ok, ExistingStorageMountPoint1} = filepath_utils:sanitize(ExistingStorageMountPoint0),
 
-                    case IsAncestor orelse IsSubPath of
-                        true ->
-                            throw(?ERROR_BAD_DATA(
-                                <<"mountPoint">>,
-                                str_utils:format_bin(
-                                    "Provided mountpoint conflicts with the mountpoint of storage "
-                                    "\"~s\": \"~ts\" - POSIX mountpoints cannot be nested.", [
-                                        StorageId, ExistingStorageMountPoint1
-                                    ]
-                                )
-                            ));
-                        false ->
-                            ok
+                    case filepath_utils:check_relation(NewStorageMountPoint1, [ExistingStorageMountPoint1]) of
+                        undefined ->
+                            ok;
+                        equal ->
+                            ok;
+                        _ ->
+                            throw(?ERROR_BAD_DATA(<<"mountPoint">>, str_utils:format_bin(
+                                "Provided mountpoint conflicts with the mountpoint of storage "
+                                "\"~s\": \"~ts\" - POSIX mountpoints cannot be nested.", [
+                                    StorageId, ExistingStorageMountPoint1
+                                ]
+                            )))
                     end
             end
     end, StorageIds).
-
-
-%% @private
--spec is_subpath(file_meta:path(), file_meta:path()) -> boolean().
-is_subpath(PossibleAncestor, PossibleSubPath) ->
-    PossibleAncestorLen = size(PossibleAncestor),
-
-    case PossibleSubPath of
-        <<PossibleAncestor:PossibleAncestorLen/binary, Rest/binary>> ->
-            size(Rest) > 0;
-        _ ->
-            false
-    end.
-
-
-%% @private
--spec sanitize_path(file_meta:path()) -> file_meta:path().
-sanitize_path(OriginalPath) ->
-    filepath_utils:ensure_ends_with_slash(
-        list_to_binary(string:strip(binary_to_list(OriginalPath)))
-    ).
 
 
 %%%===================================================================

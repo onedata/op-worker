@@ -711,11 +711,11 @@ gen_test_env(Config) ->
     }.
 
 f(Space, FileName) ->
-    P = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space, FileName]),
+    P = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, Space, FileName]),
     {path, P}.
 
 f(Space, Dirs, FileName) ->
-    P = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space] ++ Dirs ++ [FileName]),
+    P = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, Space] ++ Dirs ++ [FileName]),
     {path, P}.
 
 current_size(Worker, SpaceId) ->

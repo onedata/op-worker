@@ -180,7 +180,7 @@ gen_path(Entry, SessionId, Tokens) ->
         {ok, #document{key = ?GLOBAL_ROOT_DIR_UUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Uuid),
             {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
+            {ok, filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
         {ok, #document{key = ParentUuid}} ->
             gen_path({uuid, ParentUuid}, SessionId, [Name | Tokens])
     end.

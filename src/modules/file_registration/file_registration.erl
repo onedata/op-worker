@@ -210,7 +210,7 @@ create_missing_directory_file_meta(FileUuid, ParentCtx, FileName, SpaceId, UserI
 
 -spec destination_path_to_canonical_path(od_space:id(), file_meta:path()) -> file_meta:path().
 destination_path_to_canonical_path(SpaceId, DestinationPath) ->
-    fslogic_path:join([?DIRECTORY_SEPARATOR_BINARY, SpaceId, DestinationPath]).
+    filepath_utils:join([?DIRECTORY_SEPARATOR_BINARY, SpaceId, DestinationPath]).
 
 -spec maybe_verify_existence(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
 maybe_verify_existence(StorageFileCtx, Spec) ->

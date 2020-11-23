@@ -177,11 +177,11 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_s
             % This is caused by the fact that on object storages, file structure is flat
             % and all files are "direct" children of the space directory.
             {ParentStorageFileId, ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
-            ParentStorageFileIdTokens = fslogic_path:split(ParentStorageFileId),
+            ParentStorageFileIdTokens = filepath_utils:split(ParentStorageFileId),
             % Path to the direct parent of the child can be acquired from the file's path.
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             DirectParentStorageFileId = filename:dirname(StorageFileId),
-            DirectParentStorageFileIdTokens = fslogic_path:split(DirectParentStorageFileId),
+            DirectParentStorageFileIdTokens = filepath_utils:split(DirectParentStorageFileId),
             % compare tokens of both parents' paths
             MissingParentTokens = DirectParentStorageFileIdTokens -- ParentStorageFileIdTokens,
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),

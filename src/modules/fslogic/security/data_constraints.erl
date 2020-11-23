@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -9,9 +9,9 @@
 %%% This module handles operations on data constraints (e.g. verifying
 %%% whether access to file should be allowed).
 %%% There are 3 types of constraints:
-%%% - allowed_paths    - list of paths which are allowed (also their subpaths).
+%%% - allowed_paths    - list of paths which are allowed (also their descendants).
 %%%                      To verify if allowed_paths hold for some file one must
-%%%                      check if file path is contained in list or is subpath
+%%%                      check if file path is contained in list or is descendant
 %%%                      of any path from list,
 %%% - guid_constraints - list of guid whitelists. To verify if guid_constraints
 %%%                      hold for some file one must check if every whitelist
@@ -19,46 +19,35 @@
 %%%                      of its ancestors,
 %%% - readonly mode    - flag telling whether only operations available in
 %%%                      readonly mode can be performed.
-%%% NOTE !!!
-%%% Sometimes access may be granted not only to paths or subpaths allowed
+%%%
+%%%                              !!! NOTE !!!
+%%% Sometimes access may be granted not only to paths or descendants allowed
 %%% by constraints directly but also to those paths ancestors (operations like
 %%% readdir, stat, resolve_path/guid, get_parent). For such cases whitelist
 %%% containing file's immediate children leading to paths allowed by
 %%% constraints is also returned (may be useful to e.g. filter
 %%% readdir result).
 %%%
-%%% To see examples of how function is this module works please check
+%%% To see examples of how function in this module works please check
 %%% data_constraints_test.erl
 %%% @end
 %%%-------------------------------------------------------------------
 -module(data_constraints).
 -author("Bartosz Walkowicz").
 
--include("proto/common/credentials.hrl").
 -include_lib("ctool/include/aai/caveats.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
 %% API
--export([get_allow_all_constraints/0, get/1, assert_not_readonly_mode/1, inspect/4]).
-
--ifdef(TEST).
--export([
-    intersect_path_whitelists/2,
-    consolidate_paths/1,
-
-    check_against_allowed_paths/2,
-    is_ancestor/3, is_subpath/3, is_path_or_subpath/2
-]).
--endif.
+-export([get_allow_all_constraints/0, get/1]).
+-export([assert_not_readonly_mode/1, inspect/4]).
 
 
--type relation() :: subpath | {ancestor, ordsets:ordset(file_meta:name())}.
+% Specific file relation to files specified in constraints set by token caveats
+-type constraint_relation() :: {ancestor, ordsets:ordset(file_meta:name())} | equal_or_descendant.
 
--type ancestor_policy() :: allow_ancestors | disallow_ancestors.
-
--type path_whitelist() :: [file_meta:path()].
--type allowed_paths() :: any | path_whitelist().
+-type allowed_paths() :: any | [file_meta:path()].
 
 -type guid_whitelist() :: [file_id:file_guid()].
 -type guid_constraints() :: any | [guid_whitelist()].
@@ -68,8 +57,9 @@
     guids :: guid_constraints(),
     readonly = false :: boolean()
 }).
-
 -opaque constraints() :: #constraints{}.
+
+-type ancestor_policy() :: allow_ancestors | disallow_ancestors.
 
 -export_type([constraints/0, ancestor_policy/0]).
 
@@ -96,12 +86,12 @@ get(Caveats) ->
         (?CV_READONLY, Acc) ->
             Acc#constraints{readonly = true};
         (?CV_PATH(Paths), #constraints{paths = any} = Acc) ->
-            Acc#constraints{paths = consolidate_paths(Paths)};
+            Acc#constraints{paths = sanitize_and_consolidate_paths(Paths)};
         (?CV_PATH(_Paths), #constraints{paths = []} = Acc) ->
             Acc;
         (?CV_PATH(Paths), #constraints{paths = AllowedPaths} = Acc) ->
-            Acc#constraints{paths = intersect_path_whitelists(
-                consolidate_paths(Paths), AllowedPaths
+            Acc#constraints{paths = filepath_utils:intersect(
+                sanitize_and_consolidate_paths(Paths), AllowedPaths
             )};
         (?CV_OBJECTID(ObjectIds), #constraints{guids = any} = Acc) ->
             Acc#constraints{
@@ -150,7 +140,8 @@ assert_not_readonly_mode(UserCtx) ->
 %% by constraints (with AllowAncestorsOfPaths set to allow_ancestors) it may
 %% be necessary to know list of file's immediate children leading to paths
 %% allowed by constraints. That is why it is also returned.
-%% NOTE !!!
+%%
+%%                            !!! NOTE !!!
 %% AllowAncestorsOfPaths set to allow_ancestors involves potentially higher
 %% calculation cost so it should be used only in necessity.
 %% @end
@@ -181,7 +172,7 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
                 UserCtx, FileCtx0, DataConstraints, AncestorPolicy
             ),
             case CheckResult of
-                {subpath, FileCtx1} ->
+                {equal_or_descendant, FileCtx1} ->
                     {undefined, FileCtx1};
                 {{ancestor, ChildrenWhiteList}, FileCtx1} ->
                     {ChildrenWhiteList, FileCtx1}
@@ -194,95 +185,24 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Intersects 2 path whitelists.
-%% NOTE !!!
-%% Those whitelists must be consolidated before calling this function.
-%% @end
-%%--------------------------------------------------------------------
--spec intersect_path_whitelists(path_whitelist(), path_whitelist()) ->
-    path_whitelist().
-intersect_path_whitelists(WhiteListA, WhiteListB) ->
-    intersect_path_whitelists(WhiteListA, WhiteListB, []).
+-spec sanitize_and_consolidate_paths([file_meta:path()]) -> [file_meta:path()].
+sanitize_and_consolidate_paths(RawPaths) ->
+    Paths = lists:filtermap(fun(Path) ->
+        case filepath_utils:sanitize(Path) of
+            {ok, SanitizedPath} -> {true, SanitizedPath};
+            {error, _} -> false
+        end
+    end, RawPaths),
 
-
-%% @private
--spec intersect_path_whitelists(
-    WhiteListA :: path_whitelist(),
-    WhiteListB :: path_whitelist(),
-    Intersection :: path_whitelist()
-) ->
-    UpdatedIntersection :: path_whitelist().
-intersect_path_whitelists([], _, Intersection) ->
-    lists:reverse(Intersection);
-intersect_path_whitelists(_, [], Intersection) ->
-    lists:reverse(Intersection);
-intersect_path_whitelists(
-    [PathA | RestA] = WhiteListA,
-    [PathB | RestB] = WhiteListB,
-    Intersection
-) ->
-    PathALen = size(PathA),
-    PathBLen = size(PathB),
-
-    case PathA < PathB of
-        true ->
-            case is_subpath(PathB, PathA, PathALen) of
-                true ->
-                    intersect_path_whitelists(RestA, RestB, [PathB | Intersection]);
-                false ->
-                    intersect_path_whitelists(RestA, WhiteListB, Intersection)
-            end;
-        false ->
-            case is_path_or_subpath(PathA, PathB, PathBLen) of
-                true ->
-                    intersect_path_whitelists(RestA, RestB, [PathA | Intersection]);
-                false ->
-                    intersect_path_whitelists(WhiteListA, RestB, Intersection)
-            end
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes trailing '/' from paths and consolidates them by removing
-%% ones that are subpaths of others (e.g consolidation of
-%% [/a/b/, /a/b/c, /q/w/e] results in [/a/b, /q/w/e]).
-%% @end
-%%--------------------------------------------------------------------
--spec consolidate_paths(path_whitelist()) -> path_whitelist().
-consolidate_paths(Paths) ->
-    TrimmedPaths = [string:trim(Path, trailing, "/") || Path <- Paths],
-    consolidate_paths(lists:usort(TrimmedPaths), []).
-
-
-%% @private
--spec consolidate_paths(
-    Paths :: path_whitelist(),
-    ConsolidatedPaths :: path_whitelist()
-) ->
-    UpdatedConsolidatedPaths :: path_whitelist().
-consolidate_paths([], ConsolidatedPaths) ->
-    lists:reverse(ConsolidatedPaths);
-consolidate_paths([Path], ConsolidatedPaths) ->
-    lists:reverse([Path | ConsolidatedPaths]);
-consolidate_paths([PathA, PathB | RestOfPaths], ConsolidatedPaths) ->
-    case is_path_or_subpath(PathB, PathA) of
-        true ->
-            consolidate_paths([PathA | RestOfPaths], ConsolidatedPaths);
-        false ->
-            consolidate_paths([PathB | RestOfPaths], [PathA | ConsolidatedPaths])
-    end.
+    filepath_utils:consolidate(Paths).
 
 
 %% @private
 -spec check_and_cache_data_constraints(user_ctx:ctx(), file_ctx:ctx(),
     constraints(), ancestor_policy()
 ) ->
-    {relation(), file_ctx:ctx()} | no_return().
+    {constraint_relation(), file_ctx:ctx()} | no_return().
 check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
     paths = AllowedPaths,
     guids = GuidConstraints
@@ -291,13 +211,12 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
     SerializedToken = get_access_token(UserCtx),
     CacheKey = {data_constraint, SerializedToken, FileGuid},
     case permissions_cache:check_permission(CacheKey) of
-        {ok, subpath} ->
+        {ok, equal_or_descendant} ->
             % File is allowed by constraints - every operations are permitted
-            {subpath, FileCtx0};
-        {ok, {subpath, ?EACCES}} when AncestorPolicy =:= disallow_ancestors ->
+            {equal_or_descendant, FileCtx0};
+        {ok, {equal_or_descendant, ?EACCES}} when AncestorPolicy =:= disallow_ancestors ->
             % File is not allowed by constraints but it may be ancestor to some
-            % of those paths (such checks were not performed) - forbid only
-            % operations on subpaths
+            % of allowed paths (such checks were not performed)
             throw(?EACCES);
         {ok, {ancestor, _} = Ancestor} ->
             % File is ancestor to path allowed by constraints so only specific
@@ -318,7 +237,7 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
                     UserCtx, SerializedToken, FileCtx1,
                     GuidConstraints, AncestorPolicy
                 ),
-                Result = intersect_relations(PathRel, GuidRel),
+                Result = intersect_constraint_relations(PathRel, GuidRel),
                 permissions_cache:cache_permission(CacheKey, Result),
                 {Result, FileCtx2}
             catch throw:?EACCES ->
@@ -326,9 +245,7 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
                     allow_ancestors ->
                         permissions_cache:cache_permission(CacheKey, ?EACCES);
                     disallow_ancestors ->
-                        permissions_cache:cache_permission(
-                            CacheKey, {subpath, ?EACCES}
-                        )
+                        permissions_cache:cache_permission(CacheKey, {equal_or_descendant, ?EACCES})
                 end,
                 throw(?EACCES)
             end
@@ -337,33 +254,31 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
 
 %% @private
 -spec check_allowed_paths(file_ctx:ctx(), allowed_paths(), ancestor_policy()) ->
-    {relation(), file_ctx:ctx()} | no_return().
+    {constraint_relation(), file_ctx:ctx()} | no_return().
 check_allowed_paths(FileCtx, any, _AncestorPolicy) ->
-    % 'any' allows all subpaths of "/" - effectively all files
-    {subpath, FileCtx};
+    % 'any' allows all descendants of "/" - effectively all files
+    {equal_or_descendant, FileCtx};
 check_allowed_paths(FileCtx0, AllowedPaths, disallow_ancestors) ->
     {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
-    IsFileAllowedSubPath = lists:any(fun(AllowedPath) ->
-        is_path_or_subpath(FilePath, AllowedPath)
+    IsAllowed = lists:any(fun(AllowedPath) ->
+        filepath_utils:is_equal_or_descendant(FilePath, AllowedPath)
     end, AllowedPaths),
 
-    case IsFileAllowedSubPath of
+    case IsAllowed of
         true ->
-            {subpath, FileCtx1};
+            {equal_or_descendant, FileCtx1};
         false ->
             throw(?EACCES)
     end;
 check_allowed_paths(FileCtx0, AllowedPaths, allow_ancestors) ->
     {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
-    case check_against_allowed_paths(FilePath, AllowedPaths) of
+    case filepath_utils:check_relation(FilePath, AllowedPaths) of
         undefined ->
             throw(?EACCES);
-        subpath ->
-            {subpath, FileCtx1};
-        {ancestor, _Children} = Ancestor ->
-            {Ancestor, FileCtx1}
+        PathRelation ->
+            {path_relation_to_constraint_relation(PathRelation), FileCtx1}
     end.
 
 
@@ -371,10 +286,10 @@ check_allowed_paths(FileCtx0, AllowedPaths, allow_ancestors) ->
 -spec check_guid_constraints(user_ctx:ctx(), tokens:serialized(),
     file_ctx:ctx(), guid_constraints(), ancestor_policy()
 ) ->
-    {relation(), file_ctx:ctx()} | no_return().
+    {constraint_relation(), file_ctx:ctx()} | no_return().
 check_guid_constraints(_, _, FileCtx, any, _AncestorPolicy) ->
     % 'any' allows all descendants of UserRootDir ("/") - effectively all files
-    {subpath, FileCtx};
+    {equal_or_descendant, FileCtx};
 check_guid_constraints(
     UserCtx, SerializedToken, FileCtx0, GuidConstraints, disallow_ancestors
 ) ->
@@ -382,7 +297,7 @@ check_guid_constraints(
         UserCtx, SerializedToken, FileCtx0, GuidConstraints
     ) of
         {true, FileCtx1} ->
-            {subpath, FileCtx1};
+            {equal_or_descendant, FileCtx1};
         {false, _, _} ->
             throw(?EACCES)
     end;
@@ -393,19 +308,22 @@ check_guid_constraints(
         UserCtx, SerializedToken, FileCtx0, GuidConstraints
     ) of
         {true, FileCtx1} ->
-            {subpath, FileCtx1};
+            {equal_or_descendant, FileCtx1};
         {false, _, FileCtx1} ->
             {FilePath, FileCtx2} = get_canonical_path(FileCtx1),
 
             Relation = lists:foldl(fun(GuidsList, CurrRelation) ->
-                AllowedPaths = guids_to_paths(GuidsList),
-                case check_against_allowed_paths(FilePath, AllowedPaths) of
+                AllowedPaths = guids_to_canonical_paths(GuidsList),
+                case filepath_utils:check_relation(FilePath, AllowedPaths) of
                     undefined ->
                         throw(?EACCES);
-                    Rel ->
-                        intersect_relations(CurrRelation, Rel)
+                    PathRelation ->
+                        intersect_constraint_relations(
+                            CurrRelation,
+                            path_relation_to_constraint_relation(PathRelation)
+                        )
                 end
-            end, subpath, GuidConstraints),
+            end, equal_or_descendant, GuidConstraints),
 
             {Relation, FileCtx2}
     end.
@@ -427,7 +345,7 @@ check_guid_constraints(
 does_fulfill_guid_constraints(
     UserCtx, SerializedToken, FileCtx, AllGuidConstraints
 ) ->
-    FileGuid = get_file_guid(FileCtx),
+    FileGuid = get_file_bare_guid(FileCtx),
     CacheKey = {guid_constraint, SerializedToken, FileGuid},
 
     case permissions_cache:check_permission(CacheKey) of
@@ -467,7 +385,7 @@ does_fulfill_guid_constraints(
     {true, file_ctx:ctx()} |
     {false, guid_constraints(), file_ctx:ctx()}.
 check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints) ->
-    FileGuid = get_file_guid(FileCtx),
+    FileGuid = get_file_bare_guid(FileCtx),
     RemainingGuidConstraints = lists:filter(fun(GuidsList) ->
         not lists:member(FileGuid, GuidsList)
     end, GuidConstraints),
@@ -484,102 +402,25 @@ check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints)
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks whether Path is ancestor or subpath to any of specified
-%% AllowedPaths. In case when Path is ancestor to one path and subpath
-%% to another, then subpath takes precedence.
-%% Additionally, if it is ancestor, it returns whitelist of it's immediate
-%% children from AllowedPaths.
-%% @end
-%%--------------------------------------------------------------------
--spec check_against_allowed_paths(file_meta:path(), path_whitelist()) ->
-    undefined | relation().
-check_against_allowed_paths(Path, AllowedPaths) ->
-    PathLen = size(Path),
-
-    lists:foldl(fun
-        (_AllowedPath, subpath) ->
-            subpath;
-        (AllowedPath, Acc) ->
-            AllowedPathLen = size(AllowedPath),
-            case PathLen >= AllowedPathLen of
-                true ->
-                    case is_path_or_subpath(Path, AllowedPath, AllowedPathLen) of
-                        true -> subpath;
-                        false -> Acc
-                    end;
-                false ->
-                    case is_ancestor(Path, PathLen, AllowedPath) of
-                        {true, Child} ->
-                            NamesAcc = case Acc of
-                                undefined -> ordsets:new();
-                                {ancestor, Children} -> Children
-                            end,
-                            {ancestor, ordsets:add_element(Child, NamesAcc)};
-                        false -> Acc
-                    end
-            end
-    end, undefined, AllowedPaths).
+-spec path_relation_to_constraint_relation(filepath_utils:relation()) ->
+    constraint_relation().
+path_relation_to_constraint_relation({ancestor, _} = Relation) -> Relation;
+path_relation_to_constraint_relation(equal)                    -> equal_or_descendant;
+path_relation_to_constraint_relation(descendant)               -> equal_or_descendant.
 
 
 %% @private
--spec intersect_relations(relation(), relation()) -> relation().
-intersect_relations(subpath, subpath) ->
-    subpath;
-intersect_relations({ancestor, _Children} = Ancestor, subpath) ->
+-spec intersect_constraint_relations(constraint_relation(), constraint_relation()) ->
+    constraint_relation().
+intersect_constraint_relations(equal_or_descendant, equal_or_descendant) ->
+    equal_or_descendant;
+intersect_constraint_relations({ancestor, _Children} = Ancestor, equal_or_descendant) ->
     Ancestor;
-intersect_relations(subpath, {ancestor, _Children} = Ancestor) ->
+intersect_constraint_relations(equal_or_descendant, {ancestor, _Children} = Ancestor) ->
     Ancestor;
-intersect_relations({ancestor, ChildrenA}, {ancestor, ChildrenB}) ->
+intersect_constraint_relations({ancestor, ChildrenA}, {ancestor, ChildrenB}) ->
     {ancestor, ordsets:intersection(ChildrenA, ChildrenB)}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks whether Path is ancestor of PossibleSubPath. If it is then
-%% returns additionally it's immediate child.
-%% @end
-%%--------------------------------------------------------------------
--spec is_ancestor(file_meta:path(), pos_integer(), file_meta:path()) ->
-    {true, file_meta:name()} | false.
-is_ancestor(Path, PathLen, PossibleSubPath) ->
-    case PossibleSubPath of
-        <<Path:PathLen/binary, "/", SubPath/binary>> ->
-            [Name | _] = string:split(SubPath, <<"/">>),
-            {true, Name};
-        _ ->
-            false
-    end.
-
-
-%% @private
--spec is_subpath(file_meta:path(), file_meta:path(), pos_integer()) ->
-    boolean().
-is_subpath(PossibleSubPath, Path, PathLen) ->
-    case PossibleSubPath of
-        <<Path:PathLen/binary, "/", _/binary>> ->
-            true;
-        _ ->
-            false
-    end.
-
-
-%% @private
--spec is_path_or_subpath(file_meta:path(), file_meta:path()) -> boolean().
-is_path_or_subpath(PossiblePathOrSubPath, Path) ->
-    is_path_or_subpath(PossiblePathOrSubPath, Path, size(Path)).
-
-
-%% @private
--spec is_path_or_subpath(file_meta:path(), file_meta:path(), pos_integer()) ->
-    boolean().
-is_path_or_subpath(Path, Path, _PathLen) ->
-    true;
-is_path_or_subpath(PossiblePathOrSubPath, Path, PathLen) ->
-    is_subpath(PossiblePathOrSubPath, Path, PathLen).
 
 
 %% @private
@@ -596,8 +437,8 @@ objectids_to_guid_whitelist(Objectids) ->
 
 
 %% @private
--spec guids_to_paths([file_id:file_guid()]) -> [file_meta:path()].
-guids_to_paths(Guids) ->
+-spec guids_to_canonical_paths([file_id:file_guid()]) -> [file_meta:path()].
+guids_to_canonical_paths(Guids) ->
     lists:filtermap(fun(Guid) ->
         try
             {true, element(1, get_canonical_path(file_ctx:new_by_guid(Guid)))}
@@ -622,8 +463,8 @@ get_canonical_path(FileCtx) ->
 %% Returns file's guid stripped of share id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_guid(file_ctx:ctx()) -> file_id:file_guid().
-get_file_guid(FileCtx) ->
+-spec get_file_bare_guid(file_ctx:ctx()) -> file_id:file_guid().
+get_file_bare_guid(FileCtx) ->
     file_id:share_guid_to_guid(file_ctx:get_guid_const(FileCtx)).
 
 

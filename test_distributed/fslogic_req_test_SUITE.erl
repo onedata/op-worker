@@ -359,7 +359,7 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     {_, _, _, _, Uuids2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<"/space_name2">>, RootGuid2, []},
         [<<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
 
-    TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name2">>,
+    TestPath1 = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name2">>,
         <<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
     FileResolvedGuid = ?req(Worker, SessId1, #resolve_guid{path = TestPath1}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileResolvedGuid),
@@ -456,7 +456,7 @@ chmod_test(Config) ->
 
     lists:foreach(
         fun(SessId) ->
-            Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name4">>, SessId]),
+            Path = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name4">>, SessId]),
             ParentGuid = get_guid_privileged(Worker, SessId, <<"/space_name4">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
                 ?file_req(Worker, SessId, ParentGuid, #create_dir{name = SessId, mode = 8#000})),
@@ -789,7 +789,7 @@ get_guid_privileged(Worker, SessId, Path) ->
         <<"/">> ->
             SessId;
         _ ->
-            {ok, [_, SpaceName | _]} = fslogic_path:split_skipping_dots(Path),
+            {ok, [_, SpaceName | _]} = canonical_path:split_skipping_dots(Path),
             hd(get(SpaceName))
     end,
     get_guid(Worker, SessId1, Path).

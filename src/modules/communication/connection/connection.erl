@@ -908,7 +908,7 @@ activate_socket(#state{transport = Transport, socket = Socket}, _) ->
     TerminationReason :: atom().
 termination_reason(_Reason, #state{type = incoming, status = Status}) when Status /= ready ->
     % Concrete errors were already logged and in case of incoming connections
-    % no backoff is performed by server (as it is responsibility od remote peer)
+    % no backoff is performed by server (as it is responsibility of a remote peer)
     % so terminate with reason 'normal' to not spam with termination logs
     normal;
 termination_reason(Reason, _State) ->

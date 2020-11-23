@@ -229,7 +229,7 @@ get({uuid, FileUuid}) ->
 get(#document{value = #file_meta{}} = Doc) ->
     {ok, Doc};
 get({path, Path}) ->
-    ?run(fslogic_path:resolve(Path));
+    ?run(canonical_path:resolve(Path));
 get(FileUuid) ->
     case get_including_deleted(FileUuid) of
         {ok, #document{value = #file_meta{deleted = true}}} ->
@@ -272,7 +272,7 @@ update(#document{value = #file_meta{}, key = Key}, Diff) ->
     update(Key, Diff);
 update({path, Path}, Diff) ->
     ?run(begin
-        {ok, #document{} = Doc} = fslogic_path:resolve(Path),
+        {ok, #document{} = Doc} = canonical_path:resolve(Path),
         update(Doc, Diff)
     end);
 update(Key, Diff) ->
@@ -300,7 +300,7 @@ delete(#document{
     end);
 delete({path, Path}) ->
     ?run(begin
-        {ok, #document{} = Doc} = fslogic_path:resolve(Path),
+        {ok, #document{} = Doc} = canonical_path:resolve(Path),
         delete(Doc)
     end);
 delete(FileUuid) ->
@@ -380,7 +380,7 @@ exists({uuid, FileUuid}) ->
 exists(#document{value = #file_meta{}, key = Key}) ->
     exists(Key);
 exists({path, Path}) ->
-    case fslogic_path:resolve(Path) of
+    case canonical_path:resolve(Path) of
         {ok, #document{}} -> true;
         {error, not_found} -> false
     end;
@@ -910,8 +910,8 @@ is_deletion_link(LinkName) ->
 %%--------------------------------------------------------------------
 -spec is_child_of_hidden_dir(FileName :: name()) -> boolean().
 is_child_of_hidden_dir(Path) ->
-    {_, ParentPath} = fslogic_path:basename_and_parent(Path),
-    {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
+    {_, ParentPath} = filepath_utils:basename_and_parent_dir(Path),
+    {Parent, _} = filepath_utils:basename_and_parent_dir(ParentPath),
     is_hidden(Parent).
 
 -spec get_name(doc()) -> binary().
@@ -1148,7 +1148,7 @@ get_uuid({uuid, FileUuid}) ->
 get_uuid(#document{key = FileUuid, value = #file_meta{}}) ->
     {ok, FileUuid};
 get_uuid({path, Path}) ->
-    case fslogic_path:resolve(Path) of
+    case canonical_path:resolve(Path) of
         {ok, Doc} -> get_uuid(Doc);
         Error -> Error
     end;
