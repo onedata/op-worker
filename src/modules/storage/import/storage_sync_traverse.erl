@@ -224,6 +224,8 @@ do_slave_job(#storage_traverse_slave{
             ok;
         Error = {error, _} ->
             storage_import_monitoring:mark_failed_file(SpaceId),
+            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+            storage_import_logger:log_failure(StorageFileId, Error, SpaceId),
             Error
     end.
 
@@ -331,7 +333,7 @@ get_fold_children_fun(TraverseInfo) ->
 -spec on_cancel(non_neg_integer(), non_neg_integer(), storage_file_ctx:ctx()) -> ok.
 on_cancel(MasterJobsDelegated, SlaveJobsDelegated, StorageFileCtx) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    storage_import_monitoring:mark_unmodified_file(SpaceId, MasterJobsDelegated + SlaveJobsDelegated).
+    storage_import_monitoring:mark_unmodified_files(SpaceId, MasterJobsDelegated + SlaveJobsDelegated).
 
 %%%===================================================================
 %%% Functions exported for tests
@@ -420,7 +422,7 @@ run(SpaceId, StorageId, ScanNum, Config) ->
     {ok, traverse:master_job_map()} | {error, term()}.
 do_import_master_job(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    info = Info,
+    info = Info = #{parent_ctx := ParentCtx},
     offset = Offset,
     batch_size = BatchSize,
     depth = Depth,
@@ -439,7 +441,10 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
             {#statbuf{st_mtime = MTime}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
             TraverseJob2 = TraverseJob#storage_traverse_master{
                 storage_file_ctx = StorageFileCtx3,
-                info = Info#{file_ctx => FileCtx}
+                info = Info#{
+                    file_ctx => FileCtx,
+                    parent_ctx => FileCtx
+                }
             },
             case storage_traverse:do_master_job(TraverseJob2, Args) of
                 {ok, MasterJobMap, HashesReversed} ->
@@ -463,18 +468,24 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
                 Error = {error, _} ->
                     Error
             end;
-        {error, ?ENOENT} ->
-            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-            case storage_file_id:space_dir_id(SpaceId, StorageId) of
-                StorageFileId ->
-                    % space dir may have not been created on storage yet
-                    storage_import_monitoring:mark_modified_file(SpaceId),
-                    {ok, #{}};
-                _OtherStorageFileId ->
+        Error2 = {error, ?ENOENT} ->
+            % directory might have been deleted after it was listed in parent's master job
+            case file_ctx:is_root_dir_const(ParentCtx) of
+                true ->
+                    % Space directory wasn't found on storage
+                    ?error("Storage import has failed because directory of space ~s was not found on storage ~s.",
+                        [SpaceId, StorageId]),
+                    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+                    storage_import_logger:log_failure(StorageFileId, Error2, SpaceId),
                     storage_import_monitoring:mark_failed_file(SpaceId),
+                    {ok, #{}};
+                false ->
+                    storage_import_monitoring:mark_unmodified_file(SpaceId),
                     {error, ?ENOENT}
             end;
         Error2 = {error, _} ->
+            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+            storage_import_logger:log_failure(StorageFileId, Error2, SpaceId),
             storage_import_monitoring:mark_failed_file(SpaceId),
             Error2
     end.
@@ -494,7 +505,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
         {ok, {SyncResult, FileCtx, StorageFileCtx2}} ->
             SSIDoc = get_storage_sync_info_doc(TraverseJob),
             % stat result will be cached in StorageFileCtx
-            % we perform stat here to ensure that jobs for all batches for given directory
+            % we perform stat here to ensure that jobs Error2for all batches for given directory
             % will be scheduled with the same stat result
             {#statbuf{}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
             MTimeHasChanged = storage_sync_traverse:has_mtime_changed(SSIDoc, StorageFileCtx3),
@@ -502,7 +513,8 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                 storage_file_ctx = StorageFileCtx3,
                 info = Info2 = Info#{
                     file_ctx => FileCtx,
-                    storage_sync_info_doc => SSIDoc
+                    storage_sync_info_doc => SSIDoc,
+                    parent_ctx => FileCtx
                 }
             },
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx3),
@@ -523,29 +535,45 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                     % Do not detect deletions as (MtimeHasChanged and DetectDeletions) = false
                     traverse(TraverseJob2, Args, false)
             end;
-        {error, ?ENOENT} ->
-            % directory might have been deleted
-            FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
-            storage_import_monitoring:mark_modified_file(SpaceId),
-            {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
-            FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, _SlavesDescription) ->
-                storage_import_monitoring:increment_queue_length_histograms(SpaceId, 1),
-                MasterJobCallback(#{
-                    jobs => [
-                        storage_import_deletion:get_master_job(
-                            TraverseJob#storage_traverse_master{
-                                info = Info#{
-                                    file_ctx => FileCtx,
-                                    parent_ctx => ParentCtx2
-                        }})
-                    ],
-                    cancel_callback => fun(_CancelDescription) ->
-                        storage_import_monitoring:mark_unmodified_file(SpaceId)
-                    end
-                })
-            end,
-            {ok, #{finish_callback => FinishCallback}};
+        Error = {error, ?ENOENT} ->
+            % directory might have been deleted after it was listed in parent's master job
+            case file_ctx:is_root_dir_const(ParentCtx) of
+                true ->
+                    % space directory is missing
+                    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+                    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+                    ?error("Storage import has failed because directory of space ~s was not found on storage ~s.",
+                        [SpaceId, StorageId]),
+                    storage_import_logger:log_failure(StorageFileId, Error, SpaceId),
+                    storage_import_monitoring:mark_failed_file(SpaceId),
+                    {ok, #{}};
+                false ->
+                    % directory was deleted after listing it on storage
+                    % ensure it's deleted from the space
+                    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+                    storage_import_monitoring:mark_processed_job(SpaceId),
+                    {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
+                    FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, _SlavesDescription) ->
+                        storage_import_monitoring:increment_queue_length_histograms(SpaceId, 1),
+                        MasterJobCallback(#{
+                            jobs => [
+                                storage_import_deletion:get_master_job(
+                                    TraverseJob#storage_traverse_master{
+                                        info = Info#{
+                                            file_ctx => FileCtx,
+                                            parent_ctx => ParentCtx2
+                                        }})
+                            ],
+                            cancel_callback => fun(_CancelDescription) ->
+                                storage_import_monitoring:mark_unmodified_file(SpaceId)
+                            end
+                        })
+                    end,
+                    {ok, #{finish_callback => FinishCallback}}
+            end;
         Error = {error, _} ->
+            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+            storage_import_logger:log_failure(StorageFileId, Error, SpaceId),
             storage_import_monitoring:mark_failed_file(SpaceId),
             Error
     end.
@@ -594,7 +622,10 @@ schedule_jobs_for_directories_only(#storage_traverse_master{
     max_depth = MaxDepth
 }, MasterJobMap, false) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    MasterJobMap2 = maps:remove(slave_jobs, MasterJobMap),
+    {IgnoredSlaveJobsNum, MasterJobMap2} =  case maps:take(slave_jobs, MasterJobMap) of
+        error -> {0, MasterJobMap};
+        {SlaveJobs, MJM} -> {length(SlaveJobs), MJM}
+    end,
     {#statbuf{st_mtime = STMtime}, _StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     FinishCallback = fun(_MasterJobExtendedArgs, _SlaveJobsDescription) ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
@@ -607,7 +638,8 @@ schedule_jobs_for_directories_only(#storage_traverse_master{
     end,
     AsyncMasterJobs = maps:get(async_master_jobs, MasterJobMap2, []),
     ToProcess = length(AsyncMasterJobs),
-    storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
+    storage_import_monitoring:mark_unmodified_files_and_increment_queue_length_histograms(
+        SpaceId, IgnoredSlaveJobsNum, ToProcess),
     {ok, MasterJobMap2#{finish_callback => FinishCallback}};
 schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
@@ -617,7 +649,10 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
     MasterJobMap, true
 ) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    MasterJobMap2 = maps:remove(slave_jobs, MasterJobMap),
+    {IgnoredSlaveJobsNum, MasterJobMap2} =  case maps:take(slave_jobs, MasterJobMap) of
+        error -> {0, MasterJobMap};
+        {SlaveJobs, MJM} -> {length(SlaveJobs), MJM}
+    end,
     {#statbuf{st_mtime = STMtime}, _StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
 
     FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, SlavesDescription) ->
@@ -650,7 +685,8 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
     end,
     AsyncMasterJobs = maps:get(async_master_jobs, MasterJobMap2, []),
     ToProcess = length(AsyncMasterJobs),
-    storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
+    storage_import_monitoring:mark_unmodified_files_and_increment_queue_length_histograms(
+        SpaceId, IgnoredSlaveJobsNum, ToProcess),
     {ok, MasterJobMap2#{finish_callback => FinishCallback}}.
 
 -spec schedule_jobs_for_all_files(master_job(), traverse:master_job_map(), storage_import_hash:hash(),
@@ -765,7 +801,7 @@ process_storage_file(StorageFileCtx, Info) ->
                 {error, ?ENOENT};
             Error = {error, _} ->
                 ?error(
-                    "Syncing file ~p on storage ~p supported by space ~p failed due to ~w.",
+                    "Syncing file ~p on storage ~p supporting space ~p failed due to ~w.",
                     [StorageFileId, StorageId, SpaceId, Error]),
                 Error
         end
@@ -774,7 +810,7 @@ process_storage_file(StorageFileCtx, Info) ->
             {error, ?ENOENT};
         Error2:Reason2 ->
             ?error_stacktrace(
-                "Syncing file ~p on storage ~p supported by space ~p failed due to ~w:~w.",
+                "Syncing file ~p on storage ~p supporting space ~p failed due to ~w:~w.",
                 [StorageFileId, StorageId, SpaceId, Error2, Reason2]),
             {error, {Error2, Reason2}}
     end.

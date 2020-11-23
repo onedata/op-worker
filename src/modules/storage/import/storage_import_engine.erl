@@ -575,7 +575,7 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    storage_import_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
     {?FILE_CREATED, FileCtx2, StorageFileCtx6}.
 
 %%-------------------------------------------------------------------
@@ -595,7 +595,7 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
     create_times_from_current_time(FileUuid, SpaceId),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    storage_import_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
     {?FILE_CREATED, FileCtx2}.
 
 
@@ -844,7 +844,7 @@ maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx2),
             {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
             FileUuid = file_ctx:get_uuid_const(FileCtx3),
-            storage_import_logger:log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
+            storage_import_logger:log_modification(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
             fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
             {?FILE_MODIFIED, FileCtx3, StorageFileCtx2}
     end.

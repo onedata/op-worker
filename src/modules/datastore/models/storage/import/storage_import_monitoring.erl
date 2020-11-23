@@ -23,12 +23,13 @@
 -export([prepare_new_scan/1, ensure_created/1]).
 -export([
     increment_queue_length_histograms/2,
+    mark_unmodified_files_and_increment_queue_length_histograms/3,
     mark_started_scan/1,
     mark_created_file/1,
     mark_modified_file/1,
     mark_deleted_file/1,
     mark_unmodified_file/1,
-    mark_unmodified_file/2,
+    mark_unmodified_files/2,
     mark_failed_file/1,
     mark_processed_job/1,
     mark_finished_scan/2,
@@ -175,6 +176,24 @@ increment_queue_length_histograms(SpaceId, Value) ->
         {ok, increment_queue_length_histograms(SIM2, Timestamp, Value)}
     end)).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% This function marks in document that there were unmodified files found
+%% and new file jobs were added to queue.
+%% It increases suitable counters and histograms.
+%% @end
+%%-------------------------------------------------------------------
+-spec mark_unmodified_files_and_increment_queue_length_histograms(key(), non_neg_integer(), non_neg_integer()) -> ok.
+mark_unmodified_files_and_increment_queue_length_histograms(SpaceId, NewUnmodifiedFilesNum, NewJobsToProcessNum) ->
+    ok = ?extract_ok(storage_import_monitoring:update(SpaceId, fun(SIM = #storage_import_monitoring{
+        unmodified = CurrentUnmodifiedFilesNum
+    }) ->
+        Timestamp = clock:timestamp_seconds(),
+        SIM2 = maybe_proceed_to_running_status(SIM),
+        SIM3 = SIM2#storage_import_monitoring{unmodified = CurrentUnmodifiedFilesNum + NewUnmodifiedFilesNum},
+        {ok, increment_queue_length_histograms(SIM3, Timestamp, NewJobsToProcessNum)}
+    end)).
+
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -264,7 +283,7 @@ mark_deleted_file(SpaceId) ->
 
 -spec mark_unmodified_file(key()) -> ok.
 mark_unmodified_file(SpaceId) ->
-    mark_unmodified_file(SpaceId, 1).
+    mark_unmodified_files(SpaceId, 1).
 
 
 %%-------------------------------------------------------------------
@@ -276,8 +295,8 @@ mark_unmodified_file(SpaceId) ->
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_unmodified_file(key(), FilesNum :: non_neg_integer()) -> ok.
-mark_unmodified_file(SpaceId, NewUnmodifiedFilesNum) ->
+-spec mark_unmodified_files(key(), FilesNum :: non_neg_integer()) -> ok.
+mark_unmodified_files(SpaceId, NewUnmodifiedFilesNum) ->
     ok = ?extract_ok(storage_import_monitoring:update(SpaceId, fun(SIM = #storage_import_monitoring{
         unmodified = UnmodifiedFilesNum
     }) ->
@@ -298,7 +317,6 @@ mark_unmodified_file(SpaceId, NewUnmodifiedFilesNum) ->
 %%-------------------------------------------------------------------
 -spec mark_failed_file(key()) -> ok.
 mark_failed_file(SpaceId) ->
-    % todo moze logowac w audit logu faile?
     ok = ?extract_ok(storage_import_monitoring:update(SpaceId, fun(SIM = #storage_import_monitoring{
         failed = FilesFailed
     }) ->
