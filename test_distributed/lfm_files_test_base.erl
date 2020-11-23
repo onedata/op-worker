@@ -1681,7 +1681,7 @@ opening_file_should_increase_file_popularity(Config) ->
     ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
 
     % when
-    TimeBeforeFirstOpen = rpc:call(W, clock, timestamp_seconds, []) div 3600,
+    TimeBeforeFirstOpen = rpc:call(W, global_clock, timestamp_hours, []),
     {ok, Handle1} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
     lfm_proxy:close(W, Handle1),
 
@@ -1703,7 +1703,7 @@ opening_file_should_increase_file_popularity(Config) ->
     ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
     % when
-    TimeBeforeSecondOpen = rpc:call(W, clock, timestamp_seconds, []) div 3600,
+    TimeBeforeSecondOpen = rpc:call(W, global_clock, timestamp_hours, []),
     lists:foreach(fun(_) ->
         {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
         lfm_proxy:close(W, Handle2)
@@ -1887,10 +1887,9 @@ for(From, To, Step, Fun) ->
     [Fun(I) || I <- lists:seq(From, To, Step)].
 
 measure_execution_time(Fun) ->
-    StartTime = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     Ans = Fun(),
-    Now = os:timestamp(),
-    {timer:now_diff(Now, StartTime), Ans}.
+    {stopwatch:read_micros(Stopwatch), Ans}.
 
 check_run_parallel_ans(0) ->
     ok;

@@ -56,7 +56,7 @@
     terminate/2, code_change/3
 ]).
 
--type timestamp() :: clock:seconds().
+-type timestamp() :: time:seconds().
 
 -type token_ref() ::
     {named, tokens:id()} |
@@ -116,7 +116,7 @@
     {temporary_tokens_deleted, __UserId}
 ).
 
--define(NOW(), clock:timestamp_seconds()).
+-define(NOW(), global_clock:timestamp_seconds()).
 
 
 %%%===================================================================

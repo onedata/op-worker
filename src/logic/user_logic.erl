@@ -129,7 +129,7 @@ get_full_name(Client, UserId, AuthHint) ->
 
 
 -spec fetch_idp_access_token(gs_client_worker:client(), od_user:id(), IdP :: binary()) ->
-    {ok, {AccessToken :: binary(), Ttl :: non_neg_integer()}} | errors:error().
+    {ok, {AccessToken :: binary(), Ttl :: time:seconds()}} | errors:error().
 fetch_idp_access_token(Client, UserId, IdP) ->
     Result = gs_client_worker:request(Client, #gs_req_graph{
         operation = create,

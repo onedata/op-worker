@@ -53,7 +53,7 @@
 % (they might expire before they are consumed), a new one will be generated.
 -define(MIN_TTL_FROM_CACHE, 15).
 
--define(NOW(), clock:timestamp_seconds()).
+-define(NOW(), global_clock:timestamp_seconds()).
 
 -define(FILE_COMMENT,
     <<"This file holds the Oneprovider root token "
@@ -166,9 +166,8 @@ get_identity_token_for_consumer(Consumer) ->
 %%--------------------------------------------------------------------
 -spec get_root_token_file_path() -> string().
 get_root_token_file_path() ->
-    {ok, ProviderRootMacaroonFile} = application:get_env(?APP_NAME,
-        root_token_path),
-    filename:absname(ProviderRootMacaroonFile).
+    {ok, ProviderRootTokenFile} = application:get_env(?APP_NAME, root_token_path),
+    filename:absname(ProviderRootTokenFile).
 
 
 %%--------------------------------------------------------------------
@@ -326,7 +325,7 @@ get_token(Type) ->
 
 %% @private
 -spec get_cached_token(access | identity, record()) ->
-    {ValidUntil :: clock:seconds(), tokens:serialized()}.
+    {ValidUntil :: time:seconds(), tokens:serialized()}.
 get_cached_token(access, ProviderAuth) ->
     ProviderAuth#provider_auth.cached_access_token;
 get_cached_token(identity, ProviderAuth) ->

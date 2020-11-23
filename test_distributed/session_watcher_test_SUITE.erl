@@ -106,7 +106,7 @@ session_update_should_update_session_access_time(Config) ->
     timer:sleep(timer:seconds(1)),
     ?assertMatch(
         {ok, #document{key = SessId}},
-        ?call(Worker, update_doc_and_time, [SessId, fun(Sess) -> {ok, Sess} end])
+        ?call(Worker, update_doc_and_access_time, [SessId, fun(Sess) -> {ok, Sess} end])
     ),
     Accessed2 = get_session_access_time(Config),
     ?assert(Accessed2 - Accessed1 > 0).
@@ -126,7 +126,7 @@ session_save_should_update_session_access_time(Config) ->
 session_create_should_set_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = base64:encode(crypto:strong_rand_bytes(20)),
-    Accessed1 = rpc:call(Worker, clock, timestamp_seconds, []),
+    Accessed1 = rpc:call(Worker, global_clock, timestamp_seconds, []),
     timer:sleep(timer:seconds(1)),
     ?call(Worker, create, [#document{key = SessId, value = #session{}}]),
     Accessed2 = get_session_access_time([{session_id, SessId} | Config]),
@@ -247,7 +247,7 @@ get_session_doc(Config) ->
 %% Returns session access time.
 %% @end
 %%--------------------------------------------------------------------
--spec get_session_access_time(Config :: term()) -> clock:seconds().
+-spec get_session_access_time(Config :: term()) -> time:seconds().
 get_session_access_time(Config) ->
-    #document{value = #session{accessed = Accessed}} = get_session_doc(Config),
+    #document{value = #session{last_access_timer = Accessed}} = get_session_doc(Config),
     Accessed.

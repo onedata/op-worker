@@ -77,7 +77,7 @@ increment_by_more_than_one_test_() ->
         fun teardown/1, 
         fun() ->
         Histogram = time_slot_histogram:new(0, 60, histogram:new(60)),
-        Timestamp = clock:timestamp_seconds(),
+        Timestamp = global_clock:timestamp_seconds(),
 
         ?assertMatch(
             [5 | _],

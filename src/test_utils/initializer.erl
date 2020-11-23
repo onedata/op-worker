@@ -556,7 +556,7 @@ mock_auth_manager(Config, CheckIfUserIsSupported, NoHistory) ->
                                     Csm
                             end,
                             AuthCtx = #auth_ctx{
-                                current_timestamp = clock:timestamp_seconds(),
+                                current_timestamp = global_clock:timestamp_seconds(),
                                 ip = auth_manager:get_peer_ip(TokenCredentials),
                                 interface = auth_manager:get_interface(TokenCredentials),
                                 service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
@@ -628,7 +628,7 @@ mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
     ),
 
     % Mock cached auth and identity tokens with large TTL
-    ExpirationTime = clock:timestamp_seconds() + 999999999,
+    ExpirationTime = global_clock:timestamp_seconds() + 999999999,
     {RpcAns, []} = rpc:multicall(Workers, datastore_model, save, [#{model => provider_auth}, #document{
         key = <<"provider_auth">>,
         value = #provider_auth{

@@ -21,14 +21,13 @@
 -export([
     key/2, key/3,
     get/1, get/2, get/3,
-    update/4, update_with_cache/3,
+    update/3, update_with_cache/3,
     delete/1, delete/2
 ]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
--type timestamp() :: clock:seconds().
 -type size() :: pos_integer().
 -type space_transfer_stats() :: #space_transfer_stats{}.
 -type doc() :: datastore_doc:doc(space_transfer_stats()).
@@ -128,10 +127,10 @@ update_with_cache(?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update(TransferType :: binary(), SpaceId :: od_space:id(),
-    BytesPerProvider :: #{od_provider:id() => size()}, CurrentTime :: timestamp()
+    BytesPerProvider :: #{od_provider:id() => size()}
 ) ->
     ok | {error, term()}.
-update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
+update(TransferType, SpaceId, BytesPerProvider) ->
     Key = key(TransferType, SpaceId),
     Diff = fun(SpaceTransfers = #space_transfer_stats{
         last_update = LastUpdateMap,
@@ -144,46 +143,39 @@ update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
             maps:get(ProviderId, LastUpdateMap, ?START_TIME)
         end, maps:keys(BytesPerProvider)),
         LatestLastUpdate = lists:max(LastUpdates),
-        % Due to race between processes updating stats it is possible
-        % for LatestLastUpdate to be larger than CurrentTime, also because
-        % clock:timestamp_seconds() caches zone time locally it is
-        % possible for time of various provider nodes to differ by several
-        % seconds.
-        % So if the CurrentTime is less than LatestLastUpdate by no more than
-        % 5 sec accept it and update latest slot, otherwise silently reject it
-        case CurrentTime - LatestLastUpdate > -5 of
-            false ->
-                {ok, SpaceTransfers};
-            true ->
-                ApproxCurrentTime = max(CurrentTime, LatestLastUpdate),
-                NewTimestamps = maps:map(
-                    fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
-                {ok, SpaceTransfers#space_transfer_stats{
-                    last_update = maps:merge(LastUpdateMap, NewTimestamps),
-                    min_hist = transfer_histograms:update(
-                        BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
-                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
-                    ),
-                    hr_hist = transfer_histograms:update(
-                        BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
-                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
-                    ),
-                    dy_hist = transfer_histograms:update(
-                        BytesPerProvider, DyHistograms, ?DAY_PERIOD,
-                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
-                    ),
-                    mth_hist = transfer_histograms:update(
-                        BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
-                        LastUpdateMap, ?START_TIME, ApproxCurrentTime
-                    )
-                }}
-        end
+        % Due to race between processes updating stats it is possible for
+        % LatestLastUpdate to be larger than the current global time, plus the
+        % global time may warp backwards. In such cases, all updates will fall
+        % into the same histogram slot and a spike may be visible.
+        ApproxCurrentTime = global_clock:monotonic_timestamp_seconds(LatestLastUpdate),
+        NewTimestamps = maps:map(fun(_, _) ->
+            ApproxCurrentTime
+        end, BytesPerProvider),
+        {ok, SpaceTransfers#space_transfer_stats{
+            last_update = maps:merge(LastUpdateMap, NewTimestamps),
+            min_hist = transfer_histograms:update(
+                BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
+                LastUpdateMap, ?START_TIME, ApproxCurrentTime
+            ),
+            hr_hist = transfer_histograms:update(
+                BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
+                LastUpdateMap, ?START_TIME, ApproxCurrentTime
+            ),
+            dy_hist = transfer_histograms:update(
+                BytesPerProvider, DyHistograms, ?DAY_PERIOD,
+                LastUpdateMap, ?START_TIME, ApproxCurrentTime
+            ),
+            mth_hist = transfer_histograms:update(
+                BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
+                LastUpdateMap, ?START_TIME, ApproxCurrentTime
+            )
+        }}
     end,
     Default = #document{
         scope = SpaceId,
         key = Key,
         value = #space_transfer_stats{
-            last_update = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
+            last_update = maps:map(fun(_, _) -> global_clock:timestamp_seconds() end, BytesPerProvider),
             min_hist = transfer_histograms:new(BytesPerProvider, ?MINUTE_PERIOD),
             hr_hist = transfer_histograms:new(BytesPerProvider, ?HOUR_PERIOD),
             dy_hist = transfer_histograms:new(BytesPerProvider, ?DAY_PERIOD),

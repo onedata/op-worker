@@ -699,7 +699,7 @@ check_ended(Worker, Tasks) ->
 save_callback(Callback, TaskID) ->
     critical_section:run(save_callback, fun() ->
         List = application:get_env(?APP_NAME, Callback, []),
-        application:set_env(?APP_NAME, Callback, [{TaskID, os:timestamp()} | List])
+        application:set_env(?APP_NAME, Callback, [{TaskID, stopwatch:start()} | List])
     end),
     ok.
 
@@ -720,9 +720,10 @@ check_callbacks(Worker, OnCancelNum, CancelNum, FinishNum) ->
     Init = rpc:call(Worker, application, get_env, [?APP_NAME, on_cancel_init, []]),
     Cancel = rpc:call(Worker, application, get_env, [?APP_NAME, task_canceled, []]),
 
-    lists:foreach(fun({TaskID, Time}) ->
-        Time2 = proplists:get_value(TaskID, Cancel, 0),
-        ?assert(timer:now_diff(Time2, Time) >= 2000000)
+    % the stopwatches are started and saved when a callback is executed
+    lists:foreach(fun({TaskID, InitStopwatch}) ->
+        CancelStopwatch = proplists:get_value(TaskID, Cancel),
+        ?assert(stopwatch:read_millis(InitStopwatch) - stopwatch:read_millis(CancelStopwatch) >= timer:seconds(2))
     end, Init).
 
 get_expected_jobs() ->

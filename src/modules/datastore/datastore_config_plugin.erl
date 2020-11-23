@@ -13,7 +13,7 @@
 -author("Michal Zmuda").
 
 %% datastore_config callbacks
--export([get_models/0, get_throttled_models/0, get_timestamp/0]).
+-export([get_models/0, get_throttled_models/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -101,12 +101,3 @@ get_models() -> [
 -spec get_throttled_models() -> [datastore_model:model()].
 get_throttled_models() ->
     [file_meta].
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns timestamp to be used to tag document.
-%% @end
-%%--------------------------------------------------------------------
--spec get_timestamp() -> datastore_doc:timestamp().
-get_timestamp() ->
-    clock:timestamp_seconds().

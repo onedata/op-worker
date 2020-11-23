@@ -16,7 +16,7 @@
 
 -record(time_slot_histogram, {
     start_time :: timestamp(),
-    last_update_time :: timestamp(),
+    last_update_time :: timestamp(), % @TODO VFS-7020 Rework time measuring in histograms
     time_window :: time(),
     values :: values(),
     size :: non_neg_integer(),

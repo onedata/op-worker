@@ -262,7 +262,7 @@ get_sync_info(#tree_traverse{
 %%--------------------------------------------------------------------
 -spec get_timestamp() -> {ok, traverse:timestamp()}.
 get_timestamp() ->
-    {ok, clock:timestamp_seconds()}.
+    {ok, global_clock:timestamp_seconds()}.
 
 %%%===================================================================
 %%% Internal functions

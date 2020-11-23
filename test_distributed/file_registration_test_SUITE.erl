@@ -204,7 +204,7 @@ register_file_test(Config) ->
         <<"destinationPath">> => FileName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"mtime">> => clock:timestamp_seconds(),
+        <<"mtime">> => global_clock:timestamp_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
@@ -237,7 +237,7 @@ register_file_and_create_parents_test(Config) ->
         <<"destinationPath">> => DestinationPath,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"mtime">> => clock:timestamp_seconds(),
+        <<"mtime">> => global_clock:timestamp_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
@@ -270,7 +270,7 @@ update_registered_file_test(Config) ->
         <<"destinationPath">> => DestinationPath,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"mtime">> => clock:timestamp_seconds(),
+        <<"mtime">> => global_clock:timestamp_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
@@ -291,7 +291,7 @@ update_registered_file_test(Config) ->
         <<"destinationPath">> => DestinationPath,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"mtime">> => clock:timestamp_seconds(),
+        <<"mtime">> => global_clock:timestamp_seconds(),
         <<"size">> => byte_size(?TEST_DATA2),
         <<"mode">> => <<"664">>
         })),
@@ -334,7 +334,7 @@ stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
     ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
-    Timestamp = clock:timestamp_seconds(),
+    Timestamp = global_clock:timestamp_seconds(),
 
     ok = test_utils:mock_new(W1, [storage_driver], [passthrough]),
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
@@ -456,7 +456,7 @@ stalled_file_link_test(Config) ->
             <<"destinationPath">> => FileName,
             <<"storageFileId">> => StorageFileId,
             <<"storageId">> => StorageId,
-            <<"mtime">> => clock:timestamp_seconds(),
+            <<"mtime">> => global_clock:timestamp_seconds(),
             <<"size">> => byte_size(?TEST_DATA),
             <<"mode">> => <<"664">>,
             <<"xattrs">> => ?XATTRS,
@@ -482,7 +482,7 @@ stalled_file_link_test(Config) ->
         <<"destinationPath">> => FileName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"mtime">> => clock:timestamp_seconds(),
+        <<"mtime">> => global_clock:timestamp_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
@@ -521,7 +521,7 @@ stalled_parent_link_test(Config) ->
             <<"destinationPath">> => DestinationPath,
             <<"storageFileId">> => StorageFileId,
             <<"storageId">> => StorageId,
-            <<"mtime">> => clock:timestamp_seconds(),
+            <<"mtime">> => global_clock:timestamp_seconds(),
             <<"size">> => byte_size(?TEST_DATA),
             <<"mode">> => <<"664">>,
             <<"xattrs">> => ?XATTRS,
@@ -548,7 +548,7 @@ stalled_parent_link_test(Config) ->
         <<"destinationPath">> => DestinationPath,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"mtime">> => clock:timestamp_seconds(),
+        <<"mtime">> => global_clock:timestamp_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
@@ -591,7 +591,7 @@ register_many_files_test(Config) ->
                 <<"destinationPath">> => DestinationPath,
                 <<"storageFileId">> => StorageFileId,
                 <<"storageId">> => StorageId,
-                <<"mtime">> => clock:timestamp_seconds(),
+                <<"mtime">> => global_clock:timestamp_seconds(),
                 <<"size">> => byte_size(?TEST_DATA),
                 <<"mode">> => <<"664">>,
                 <<"xattrs">> => ?XATTRS,
@@ -646,7 +646,7 @@ register_many_nested_files_test(Config) ->
                 <<"destinationPath">> => DestinationPath,
                 <<"storageFileId">> => StorageFileId,
                 <<"storageId">> => StorageId,
-                <<"mtime">> => clock:timestamp_seconds(),
+                <<"mtime">> => global_clock:timestamp_seconds(),
                 <<"size">> => byte_size(?TEST_DATA),
                 <<"mode">> => <<"664">>,
                 <<"xattrs">> => ?XATTRS,
@@ -745,11 +745,11 @@ verification_loop(FilePaths, _VerifyFun, TimeoutMillis) when TimeoutMillis < 0 -
         "Unverified files: ~p", [FilePaths]
     ),
     ct:fail(verification_loop_timeout);
-verification_loop(FilePaths, VerifyFun ,TimeoutMillis) when TimeoutMillis >= 0 ->
-    Start = clock:timestamp_millis(),
+verification_loop(FilePaths, VerifyFun, TimeoutMillis) when TimeoutMillis >= 0 ->
+    Start = global_clock:timestamp_millis(),
     receive
         {file_registered, FilePath} ->
-            End = clock:timestamp_millis(),
+            End = global_clock:timestamp_millis(),
             VerifyFun(FilePath),
             verification_loop(FilePaths -- [FilePath], VerifyFun, TimeoutMillis - (End - Start))
     after

@@ -124,14 +124,13 @@ many_files_creation_test_base(Config) ->
 
     CreateFiles = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
-            BeforeProcessing = os:timestamp(),
+            Stopwatch = stopwatch:start(),
             Ans = file_meta:create({uuid, SpaceUuid}, #document{
                 value = #file_meta{
                     name = list_to_binary(DocsSet ++ integer_to_list(I))
                 }
             }),
-            AfterProcessing = os:timestamp(),
-            Master ! {store_ans, AnswerDesc, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            Master ! {store_ans, AnswerDesc, Ans, stopwatch:read_micros(Stopwatch)}
         end)
     end,
 
@@ -142,10 +141,9 @@ many_files_creation_test_base(Config) ->
 
     Get = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
-            BeforeProcessing = os:timestamp(),
+            Stopwatch = stopwatch:start(),
             Ans = file_meta:get({path, list_to_binary(FullSpaceNameString ++ "/" ++ DocsSet ++ integer_to_list(I))}),
-            AfterProcessing = os:timestamp(),
-            Master ! {store_ans, AnswerDesc, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            Master ! {store_ans, AnswerDesc, Ans, stopwatch:read_micros(Stopwatch)}
         end)
     end,
 
@@ -161,10 +159,9 @@ many_files_creation_test_base(Config) ->
 
     ClearMany = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
-            BeforeProcessing = os:timestamp(),
+            Stopwatch = stopwatch:start(),
             Ans = file_meta:delete({path, list_to_binary(FullSpaceNameString ++ "/" ++ DocsSet ++ integer_to_list(I))}),
-            AfterProcessing = os:timestamp(),
-            Master ! {store_ans, AnswerDesc, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            Master ! {store_ans, AnswerDesc, Ans, stopwatch:read_micros(Stopwatch)}
         end)
     end,
 
