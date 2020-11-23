@@ -109,9 +109,11 @@ register(SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
 -spec create_missing_directory(file_ctx:ctx(), file_meta:name(), od_user:id()) -> {ok, file_ctx:ctx()}.
 create_missing_directory(ParentCtx, DirName, UserId) ->
     SpaceId = file_ctx:get_space_id_const(ParentCtx),
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
     ok = dir_location:mark_dir_synced_from_storage(FileUuid, undefined),
-    {ok, DirCtx} = create_missing_directory_file_meta(FileUuid, ParentCtx, DirName, SpaceId, UserId),
+    {ok, DirCtx} = storage_import_engine:create_file_meta_and_handle_conflicts(
+        FileUuid, DirName, ?DEFAULT_DIR_PERMS, UserId, ParentUuid, SpaceId),
     CurrentTime = clock:timestamp_seconds(),
     times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime),
     {ok, DirCtx}.
@@ -165,12 +167,12 @@ ensure_all_parents_exist_and_are_dirs(FilePartialCtx, UserCtx) ->
 ensure_all_parents_exist_and_are_dirs(PartialCtx, UserCtx, ChildrenPartialCtxs) ->
     try
         {FileCtx, _} = file_ctx:new_by_partial_context(PartialCtx),
-        case file_ctx:is_dir(FileCtx) of
+         case file_ctx:is_dir(FileCtx) of
             {true, FileCtx2} ->
                 % first directory on the path that exists in db
                 create_missing_directories(FileCtx2, ChildrenPartialCtxs, user_ctx:get_user_id(UserCtx));
             {false, _} ->
-                {error, ?ENOTDIR}
+                throw(?ENOTDIR)
         end
     catch
         error:{badmatch, {error, not_found}} ->
@@ -182,31 +184,42 @@ ensure_all_parents_exist_and_are_dirs(PartialCtx, UserCtx, ChildrenPartialCtxs) 
 create_missing_directories(ParentCtx, [], _UserId) ->
     ParentCtx;
 create_missing_directories(ParentCtx, [DirectChildPartialCtx | Rest], UserId) ->
-    {CanonicalPath, _} = file_partial_ctx:get_canonical_path(DirectChildPartialCtx),
-    DirectChildName = filename:basename(CanonicalPath),
-    {ok, DirectChildCtx} = create_missing_directory(ParentCtx, DirectChildName, UserId),
-    create_missing_directories(DirectChildCtx, Rest, UserId).
+    try
+        {CanonicalPath, _} = file_partial_ctx:get_canonical_path(DirectChildPartialCtx),
+        DirectChildName = filename:basename(CanonicalPath),
+        {ok, DirectChildCtx} = create_missing_directory_secure(ParentCtx, DirectChildName, UserId),
+        create_missing_directories(DirectChildCtx, Rest, UserId)
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Creating missing directories for file being registered has failed with ~p:~p",
+                [Error, Reason]),
+            throw(?ENOENT)
+    end.
 
 
--spec create_missing_directory_file_meta(file_meta:uuid(), file_ctx:ctx(), file_meta:name(),
-    od_space:id(), od_user:id()) -> {ok, file_ctx:ctx()}.
-create_missing_directory_file_meta(FileUuid, ParentCtx, FileName, SpaceId, UserId) ->
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    FileMetaDoc = file_meta:new_doc(FileUuid, FileName, ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS,
-        UserId, ParentUuid, SpaceId),
-    {ok, FinalDoc} = case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
-        {error, already_exists} ->
-            % TODO VFS-6509
-            % there was race with other process creating missing parent or with lfm
-            % In case it is conflict with lfm we should create file with IMPORTED suffix
-            {ok, FileUuid2} = link_utils:try_to_resolve_child_link(FileName, ParentCtx),
-            file_meta:get(FileUuid2);
-        {ok, _} ->
-            {ok, FileMetaDoc}
-    end,
-    FileCtx = file_ctx:new_by_doc(FinalDoc, SpaceId, undefined),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-    {ok, FileCtx}.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% The same as create_missing_directory/3 but run in a critical section
+%% to avoid conflicts between processes registering files in parallel
+%% for the same user.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_missing_directory_secure(file_ctx:ctx(), file_meta:name(), od_user:id()) -> {ok, file_ctx:ctx()}.
+create_missing_directory_secure(ParentCtx, DirName, UserId) ->
+    critical_section:run({create_missing_directory, file_ctx:get_uuid_const(ParentCtx), DirName, UserId}, fun() ->
+        try
+            % ensure whether directory is still missing as it might have been created by other registering process
+            {DirCtx, _} = file_ctx:get_child(ParentCtx, DirName, user_ctx:new(?ROOT_SESS_ID)),
+            {ok, DirCtx}
+        catch
+            error:{badmatch,{error,not_found}} ->
+                create_missing_directory(ParentCtx, DirName, UserId);
+            throw:?ENOENT ->
+                create_missing_directory(ParentCtx, DirName, UserId)
+        end
+    end).
+
 
 -spec destination_path_to_canonical_path(od_space:id(), file_meta:path()) -> file_meta:path().
 destination_path_to_canonical_path(SpaceId, DestinationPath) ->

@@ -1952,7 +1952,7 @@ get_locations(W, FileUuid, SpaceId) ->
 create_doc(Doc = #document{value = FileMeta}, #document{key = ParentUuid}, _LocId, _Path) ->
     SpaceId = Doc#document.scope,
     DocWithParentUuid = Doc#document{value = FileMeta#file_meta{parent_uuid = ParentUuid}},
-    {ok, FileUuid} = file_meta:save(DocWithParentUuid),
+    {ok, #document{key = FileUuid}} = file_meta:save(DocWithParentUuid),
     {ok, _} = times:save(#document{key = FileUuid, value = #times{},
         scope = SpaceId}),
     ok.

@@ -62,15 +62,20 @@ chmod(UserCtx, FileCtx, Mode) ->
             {ok, FileCtx2};
         false ->
             SessId = user_ctx:get_session_id(UserCtx),
-            case storage_driver:new_handle(SessId, FileCtx2, false) of
-                {undefined, FileCtx3} ->
-                    {ok, FileCtx3};
-                {SDHandle, FileCtx3} ->
-                    case storage_driver:chmod(SDHandle, Mode) of
-                        ok -> {ok, FileCtx3};
-                        {error, ?ENOENT} -> {ok, FileCtx3};
-                        {error, ?EROFS} -> {error, ?EROFS}
-                    end
+            try
+                case storage_driver:new_handle(SessId, FileCtx2, false) of
+                    {undefined, FileCtx3} ->
+                        {ok, FileCtx3};
+                    {SDHandle, FileCtx3} ->
+                        case storage_driver:chmod(SDHandle, Mode) of
+                            ok -> {ok, FileCtx3};
+                            {error, ?ENOENT} -> {ok, FileCtx3};
+                            {error, ?EROFS} -> {error, ?EROFS}
+                        end
+                end
+            catch
+                throw:?ERROR_NOT_FOUND ->
+                    {ok, FileCtx}
             end
     end.
 
