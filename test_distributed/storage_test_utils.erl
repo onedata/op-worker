@@ -17,7 +17,7 @@
 
 %% API
 -export([
-    assert_file_info/4,
+    assert_file_info/5,
     read_file/2, read_file_info/2, list_dir/2,
     space_path/2, file_path/3,
     get_space_mount_point/2, get_supporting_storage_id/2,
@@ -30,14 +30,14 @@
 %%% API functions
 %%%===================================================================
 
-assert_file_info(ExpectedValues, Worker, FilePath, Line) ->
+assert_file_info(ExpectedValues, Worker, FilePath, Line, Attempts) when Attempts >= 0 ->
     try
         {ok, FI} = storage_test_utils:read_file_info(Worker, FilePath),
         maps:map(fun(Field, ExpectedValue) ->
             assert_field(Field, ExpectedValue, FI)
         end, ExpectedValues)
     catch
-        throw:(Error = {assertion_error, Field, ExpectedValue, Value}) ->
+        throw:(Error = {assertion_error, Field, ExpectedValue, Value}) when Attempts =:= 0 ->
             ct:pal(
                 "Assertion for file ~p failed.~n"
                 "   Field: ~p~n"
@@ -48,7 +48,7 @@ assert_file_info(ExpectedValues, Worker, FilePath, Line) ->
                 [FilePath, Field, ExpectedValue, Value, ?MODULE, Line]
             ),
             ct:fail(Error);
-        Error:Reason ->
+        Error:Reason when Attempts =:= 0 ->
             ct:pal(
                 "Assertion for file ~p failed.~n"
                 "   Error: {~p, ~p}~n"
@@ -56,7 +56,10 @@ assert_file_info(ExpectedValues, Worker, FilePath, Line) ->
                 "   Line: ~p",
                 [FilePath, Error, Reason, ?MODULE, Line]
             ),
-            ct:fail({Error, Reason})
+            ct:fail({Error, Reason});
+        _:_ ->
+            timer:sleep(timer:seconds(1)),
+            assert_file_info(ExpectedValues, Worker, FilePath, Line, Attempts - 1)
     end.
 
 %% @private

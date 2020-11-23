@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_root_dir_uuid/1, is_user_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1]).
+-export([is_root_dir_uuid/1, is_user_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1, is_special_uuid/1]).
 -export([user_root_dir_uuid/1, user_root_dir_guid/1, root_dir_guid/0]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, spaceid_to_space_dir_guid/1]).
@@ -54,6 +54,12 @@ is_user_root_dir_uuid(FileUuid) ->
         _ ->
             false
     end.
+
+
+-spec is_special_uuid(file_meta:uuid()) -> boolean().
+is_special_uuid(FileUuid) ->
+    is_root_dir_uuid(FileUuid) orelse is_space_dir_uuid(FileUuid).
+
 
 %%--------------------------------------------------------------------
 %% @doc Returns Guid of root directory.

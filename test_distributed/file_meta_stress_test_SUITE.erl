@@ -49,7 +49,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 90}, % Allow errors because of throttling
+            {success_rate, 100}, % Allow errors because of throttling
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
@@ -88,8 +88,8 @@ many_files_creation_test(Config) ->
         {description, "Performs multiple datastore operations using many threads. Level - database."}
     ]).
 many_files_creation_test_base(Config) ->
-    % Sleep because test does to many operations for Cauchbase when running for a long time
-    % TODO - make mnesia slower when Cauchbase working too slow
+    % Sleep because test does to many operations for Couchbase when running for a long time
+    % TODO - make mnesia slower when Couchbase working too slow
 %%    timer:sleep(timer:seconds(15)),
 
     LastFails = ?config(last_fails, Config),
@@ -111,21 +111,16 @@ many_files_creation_test_base(Config) ->
     AnswerDesc = get(file_beg),
     RootUuid = <<>>,
 
-    case RepNum of
-        1 ->
-            ?assertMatch({ok, _}, rpc:call(Worker1, file_meta, create,
-                [{uuid, RootUuid}, #document{value = #file_meta{name = <<"spaces">>, is_scope = true}}]));
-        _ ->
-            ok
-    end,
-
     SpaceNameString = "Space" ++ AnswerDesc,
     ct:print("Space name: ~p", [SpaceNameString]),
     SpaceName = list_to_binary(SpaceNameString),
     FullSpaceNameString = "/" ++ SpaceNameString,
-    {ok, SpaceUuid} = ?assertMatch({ok, _}, rpc:call(Worker2, file_meta, create, [{uuid, RootUuid},
-            #document{key = fslogic_uuid:spaceid_to_space_dir_uuid(list_to_binary(SpaceNameString)),
-                value = #file_meta{name = SpaceName, is_scope = true}}])),
+    {ok, #document{key = SpaceUuid}} = ?assertMatch({ok, _}, rpc:call(Worker2, file_meta, create, [{uuid, RootUuid},
+            #document{
+                key = fslogic_uuid:spaceid_to_space_dir_uuid(list_to_binary(SpaceNameString)),
+                value = #file_meta{name = SpaceName, is_scope = true}
+            }
+    ])),
 
     CreateFiles = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->

@@ -968,12 +968,13 @@ create_remote_dir_import_race_test(Config) ->
     ok = sd_test_utils:mkdir(W1, SDHandle, 8#775),
 
     % pretend that only link has been synchronized
-    Ctx = rpc:call(W1, file_meta, get_ctx, []),
-    TreeId = rpc:call(W1, oneprovider, get_id, []),
+    Ctx = rpc:call(W2, file_meta, get_ctx, []),
+    TreeId = rpc:call(W2, oneprovider, get_id, []),
     FileUuid = datastore_key:new(),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
-    {ok, _} = rpc:call(W1, datastore_model, add_links,
+    {ok, _} = rpc:call(W2, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),
+    ?assertMatch({ok, _, _}, rpc:call(W1, file_meta, get_child_uuid_and_tree_id, [SpaceUuid, ?TEST_DIR]), ?ATTEMPTS),
 
     % storage import should import directory with conflicting name
     ProviderId1 = provider_id(W1),
@@ -1029,12 +1030,13 @@ create_remote_file_import_race_test(Config) ->
     {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
 
     % pretend that only link has been synchronized
-    Ctx = rpc:call(W1, file_meta, get_ctx, []),
-    TreeId = rpc:call(W1, oneprovider, get_id, []),
+    Ctx = rpc:call(W2, file_meta, get_ctx, []),
+    TreeId = rpc:call(W2, oneprovider, get_id, []),
     FileUuid = datastore_key:new(),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
-    {ok, _} = rpc:call(W1, datastore_model, add_links,
+    {ok, _} = rpc:call(W2, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_FILE1, FileUuid}]),
+    ?assertMatch({ok, _, _}, rpc:call(W1, file_meta, get_child_uuid_and_tree_id, [SpaceUuid, ?TEST_FILE1]), ?ATTEMPTS),
 
     % storage import should import file with conflicting name
     ProviderId1 = provider_id(W1),
@@ -6335,15 +6337,15 @@ end_per_testcase(sync_should_not_process_file_if_hash_of_its_attrs_has_not_chang
     end_per_testcase(default, Config);
 
 end_per_testcase(create_remote_dir_import_race_test, Config) ->
-    [W1| _] = ?config(op_worker_nodes, Config),
+    [_W1, W2| _] = ?config(op_worker_nodes, Config),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
-    remove_link(W1, SpaceUuid, ?TEST_DIR),
+    remove_link(W2, SpaceUuid, ?TEST_DIR),
     end_per_testcase(default, Config);
 
 end_per_testcase(create_remote_file_import_race_test, Config) ->
-    [W1| _] = ?config(op_worker_nodes, Config),
+    [_W1, W2| _] = ?config(op_worker_nodes, Config),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
-    remove_link(W1, SpaceUuid, ?TEST_FILE1),
+    remove_link(W2, SpaceUuid, ?TEST_FILE1),
     end_per_testcase(default, Config);
 
 end_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage, Config) ->

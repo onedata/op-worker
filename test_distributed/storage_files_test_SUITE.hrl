@@ -90,7 +90,11 @@
 -define(OWNER(Uid, Gid), #{uid => Uid, gid => Gid}).
 
 -define(ASSERT_FILE_INFO(Expected, Worker, FilePath),
-    storage_test_utils:assert_file_info(Expected, Worker, FilePath, ?LINE)
+    ?ASSERT_FILE_INFO(Expected, Worker, FilePath, 0)
+).
+
+-define(ASSERT_FILE_INFO(Expected, Worker, FilePath, Attempts),
+    storage_test_utils:assert_file_info(Expected, Worker, FilePath, ?LINE, Attempts)
 ).
 
 -define(EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, Fun),

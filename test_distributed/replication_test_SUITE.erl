@@ -97,7 +97,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
         type = ?REGULAR_FILE_TYPE,
         owner = UserId
     }},
-    {ok, FileUuid} = ?assertMatch(
+    {ok, #document{key = FileUuid}} = ?assertMatch(
         {ok, _},
         rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])
     ),
@@ -147,7 +147,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
         type = ?REGULAR_FILE_TYPE,
         owner = UserId
     },
-    {ok, FileUuid} = ?assertMatch(
+    {ok, #document{key = FileUuid}} = ?assertMatch(
         {ok, _},
         rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, #document{value = FileMeta}])
     ),
@@ -212,7 +212,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         type = ?REGULAR_FILE_TYPE,
         owner = ExternalUser
     },
-    {ok, FileUuid} = ?assertMatch(
+    {ok, #document{key = FileUuid}} = ?assertMatch(
         {ok, _},
         rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, #document{value = FileMeta}])
     ),
