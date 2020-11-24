@@ -9,7 +9,7 @@
 %%% This module implements utility functions for use by other `cdmi_` modules.
 %%% @end
 %%%--------------------------------------------------------------------
--module(cdmi_utils).
+-module(cdmi_lfm).
 -author("Bartosz Walkowicz").
 
 -include("modules/logical_file_manager/lfm.hrl").

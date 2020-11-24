@@ -756,8 +756,9 @@ build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_set_mode_prepare_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ValidId, Data0),
-
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(
+            ValidId, utils:ensure_defined(Data0, #{})
+        ),
         RestPath = case Endpoint of
             new_id -> <<"data/", Id/binary>>;
             deprecated_path -> <<"metadata/attrs", Id/binary>>;

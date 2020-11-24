@@ -1938,7 +1938,7 @@ do_request(Node, RestSubpath, Method, Headers) ->
 do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
     [FRes | _] = Responses = lists:filtermap(fun(Node) ->
         case make_request(Node, RestSubpath, get, Headers, Body) of
-            undefined -> false;
+            space_not_supported -> false;
             Result -> {true, Result}
         end
     end, Nodes),
@@ -1961,11 +1961,11 @@ do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
     FRes;
 do_request([_ | _] = Nodes, RestSubpath, Method, Headers, Body) ->
     lists:foldl(fun
-        (Node, undefined) ->
+        (Node, space_not_supported) ->
             make_request(Node, RestSubpath, Method, Headers, Body);
         (_Node, Result) ->
             Result
-    end, undefined, lists_utils:shuffle(Nodes));
+    end, space_not_supported, lists_utils:shuffle(Nodes));
 do_request(Node, RestSubpath, Method, Headers, Body) when is_atom(Node) ->
     make_request(Node, RestSubpath, Method, Headers, Body).
 
@@ -1977,7 +1977,8 @@ make_request(Node, RestSubpath, Method, Headers, Body) ->
                     Result;
                 false ->
                     % Returned error may not be necessarily ?ERROR_SPACE_NOT_SUPPORTED(_)
-                    % as some errors may be thrown even before file path resolution attempt,
+                    % as some errors may be thrown even before file path resolution attempt
+                    % (and such errors are explicitly checked by some tests),
                     % but it should never be any successful response
                     ?assert(RespCode >= 300),
 
@@ -1986,7 +1987,7 @@ make_request(Node, RestSubpath, Method, Headers, Body) ->
                     ))},
                     case {RespCode, try_to_decode(RespBody)} of
                         {?HTTP_400_BAD_REQUEST, SpaceNotSuppError} ->
-                            undefined;
+                            space_not_supported;
                         _ ->
                             Result
                     end

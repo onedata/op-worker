@@ -138,7 +138,7 @@ put_binary(Req, #cdmi_req{
     {FileGuid, Truncate, Offset} = case Attrs of
         undefined ->
             {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
-            {ok, Guid} = cdmi_utils:create_file(SessionId, Path, DefaultMode),
+            {ok, Guid} = cdmi_lfm:create_file(SessionId, Path, DefaultMode),
             {Guid, false, 0};
         #file_attr{guid = Guid, size = Size} ->
             Length = cowboy_req:body_length(Req),
@@ -198,7 +198,7 @@ put_cdmi(Req, #cdmi_req{
     {ok, OperationPerformed, Guid} = case {Attrs, CopyURI, MoveURI} of
         {undefined, undefined, undefined} ->
             {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
-            {ok, NewGuid} = cdmi_utils:create_file(SessionId, Path, DefaultMode),
+            {ok, NewGuid} = cdmi_lfm:create_file(SessionId, Path, DefaultMode),
             write_binary_to_file(
                 SessionId, {guid, NewGuid},
                 false, 0, RawValue,
@@ -208,10 +208,10 @@ put_cdmi(Req, #cdmi_req{
         {#file_attr{guid = NewGuid}, undefined, undefined} ->
             {ok, none, NewGuid};
         {undefined, CopyURI, undefined} ->
-            {ok, NewGuid} = cdmi_utils:cp(SessionId, CopyURI, Path),
+            {ok, NewGuid} = cdmi_lfm:cp(SessionId, CopyURI, Path),
             {ok, copied, NewGuid};
         {undefined, undefined, MoveURI} ->
-            {ok, NewGuid} = cdmi_utils:mv(SessionId, MoveURI, Path),
+            {ok, NewGuid} = cdmi_lfm:mv(SessionId, MoveURI, Path),
             {ok, moved, NewGuid}
     end,
 

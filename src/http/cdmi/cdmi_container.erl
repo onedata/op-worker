@@ -79,7 +79,7 @@ put_cdmi(Req, #cdmi_req{
     case {Attrs, CopyURI, MoveURI} of
         % create directory
         {undefined, undefined, undefined} ->
-            {ok, Guid} = cdmi_utils:create_dir(SessId, Path),
+            {ok, Guid} = cdmi_lfm:create_dir(SessId, Path),
             cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
             prepare_create_dir_cdmi_response(Req, CdmiReq, Guid);
         % update metadata
@@ -93,12 +93,12 @@ put_cdmi(Req, #cdmi_req{
             {true, Req1, CdmiReq};
         % copy directory
         {undefined, CopyURI, undefined} ->
-            {ok, Guid} = cdmi_utils:cp(SessId, CopyURI, Path),
+            {ok, Guid} = cdmi_lfm:cp(SessId, CopyURI, Path),
             cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
             prepare_create_dir_cdmi_response(Req, CdmiReq, Guid);
         % move directory
         {undefined, undefined, MoveURI} ->
-            {ok, Guid} = cdmi_utils:mv(SessId, MoveURI, Path),
+            {ok, Guid} = cdmi_lfm:mv(SessId, MoveURI, Path),
             cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
             prepare_create_dir_cdmi_response(Req, CdmiReq, Guid)
     end.
@@ -112,7 +112,7 @@ put_cdmi(Req, #cdmi_req{
 -spec put_binary(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {true, cowboy_req:req(), cdmi_handler:cdmi_req()} | no_return().
 put_binary(Req, #cdmi_req{auth = ?USER(_UserId, SessionId), file_path = Path} = CdmiReq) ->
-    cdmi_utils:create_dir(SessionId, Path),
+    cdmi_lfm:create_dir(SessionId, Path),
     {true, Req, CdmiReq}.
 
 
