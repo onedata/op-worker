@@ -349,8 +349,8 @@ get_session_grace_period(_) ->
     true | {false, RemainingTime :: time:seconds()}.
 mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
     Diff = fun
-        (#session{status = active, last_access_timer = LastAccessTimer} = Sess) ->
-            InactivityPeriod = stopwatch:read_seconds(LastAccessTimer),
+        (#session{status = active, accessed = Accessed} = Sess) ->
+            InactivityPeriod = global_clock:timestamp_seconds() - Accessed,
             case InactivityPeriod >= GracePeriod of
                 true ->
                     {ok, Sess#session{status = inactive}};

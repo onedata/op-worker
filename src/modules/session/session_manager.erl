@@ -144,7 +144,6 @@ create_root_session() ->
         value = #session{
             type = root,
             status = active,
-            last_access_timer = stopwatch:start(),
             identity = ?ROOT_IDENTITY,
             credentials = ?ROOT_CREDENTIALS,
             data_constraints = data_constraints:get_allow_all_constraints()
@@ -164,7 +163,6 @@ create_guest_session() ->
         value = #session{
             type = guest,
             status = active,
-            last_access_timer = stopwatch:start(),
             identity = ?GUEST_IDENTITY,
             credentials = ?GUEST_CREDENTIALS,
             data_constraints = data_constraints:get_allow_all_constraints()
@@ -188,7 +186,7 @@ restart_dead_sessions() ->
 %%--------------------------------------------------------------------
 -spec restart_session_if_dead(SessId :: session:id()) -> ok.
 restart_session_if_dead(SessId) ->
-    case session:update_doc_and_access_time(SessId, fun try_to_clear_dead_connections/1) of
+    case session:update_doc_and_time(SessId, fun try_to_clear_dead_connections/1) of
         {ok, #document{key = SessId}} ->
             ok;
         {error, update_not_needed} ->
@@ -362,7 +360,6 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
     Sess = #session{
         type = SessType,
         status = initializing,
-        last_access_timer = stopwatch:start(),
         identity = Identity,
         credentials = Credentials,
         data_constraints = DataConstraints,
@@ -386,7 +383,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
                     {error, {invalid_identity, Identity}}
             end
     end,
-    case session:update_doc_and_access_time(SessId, Diff) of
+    case session:update_doc_and_time(SessId, Diff) of
         {ok, #document{key = SessId, value = ProxySession}} when is_binary(ProxyVia) ->
             update_credentials_if_changed(Credentials, ProxySession),
             {ok, SessId};

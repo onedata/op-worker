@@ -241,7 +241,7 @@
 %% User session
 -record(session, {
     status :: undefined | session:status(),
-    last_access_timer :: stopwatch:instance(),
+    accessed :: undefined | time:seconds(),
     type :: undefined | session:type(),
     identity :: aai:subject(),
     credentials :: undefined | auth_manager:credentials(),

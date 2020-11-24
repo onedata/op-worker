@@ -24,7 +24,7 @@
 %% API - basic model function
 -export([
     create/1, save/1, get/1, exists/1, list/0,
-    update/2, update_doc_and_access_time/2, delete/1, delete_doc/1
+    update/2, update_doc_and_time/2, delete/1, delete_doc/1
 ]).
 -export([is_space_owner/2]).
 
@@ -82,7 +82,7 @@
 create(Doc = #document{value = Sess}) ->
     ?update_counter(?EXOMETER_NAME(active_sessions)),
     ?extract_key(datastore_model:create(?CTX, Doc#document{value = Sess#session{
-        last_access_timer = stopwatch:start()
+        accessed = global_clock:timestamp_seconds()
     }})).
 
 %%--------------------------------------------------------------------
@@ -93,7 +93,7 @@ create(Doc = #document{value = Sess}) ->
 -spec save(doc()) -> {ok, id()} | {error, term()}.
 save(Doc = #document{value = Sess}) ->
     ?extract_key(datastore_model:save(?CTX, Doc#document{value = Sess#session{
-        last_access_timer = stopwatch:start()
+        accessed = global_clock:timestamp_seconds()
     }})).
 
 %%--------------------------------------------------------------------
@@ -135,15 +135,15 @@ update(SessId, Diff) when is_function(Diff) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates session and resets the last access timer.
+%% Updates session and sets new access time.
 %% @end
 %%--------------------------------------------------------------------
--spec update_doc_and_access_time(id(), diff()) -> {ok, doc()} | {error, term()}.
-update_doc_and_access_time(SessId, Diff) when is_function(Diff) ->
+-spec update_doc_and_time(id(), diff()) -> {ok, doc()} | {error, term()}.
+update_doc_and_time(SessId, Diff) when is_function(Diff) ->
     Diff2 = fun(Sess) ->
         case Diff(Sess) of
             {ok, NewSess} ->
-                {ok, NewSess#session{last_access_timer = stopwatch:start()}};
+                {ok, NewSess#session{accessed = global_clock:timestamp_seconds()}};
             {error, Reason} ->
                 {error, Reason}
         end

@@ -249,5 +249,5 @@ get_session_doc(Config) ->
 %%--------------------------------------------------------------------
 -spec get_session_access_time(Config :: term()) -> time:seconds().
 get_session_access_time(Config) ->
-    #document{value = #session{last_access_timer = Accessed}} = get_session_doc(Config),
+    #document{value = #session{accessed = Accessed}} = get_session_doc(Config),
     Accessed.
