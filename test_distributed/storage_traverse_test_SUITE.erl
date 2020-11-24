@@ -13,6 +13,7 @@
 -author("Jakub Kudzia").
 
 -behaviour(traverse_behaviour).
+-behaviour(storage_traverse).
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/traverse/storage_traverse.hrl").

@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module contains functions for adding log entries in sync audit log
+%%% This module contains functions for adding log entries in import audit log
 %%% file.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -17,7 +17,8 @@
 
 %% API
 -export([log_scan_started/3, log_scan_finished/3, log_scan_cancelled/3,
-    log_import/4, log_update/5, log_deletion/4]).
+    log_creation/4, log_modification/5, log_deletion/4, log_failure/3]).
+
 
 %%%===================================================================
 %%% API functions
@@ -25,52 +26,63 @@
 
 -spec log_scan_started(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
 log_scan_started(SpaceId, ScanNum, TaskId) ->
-    ?debug("Storage import scan ~p started", [TaskId]),
-    log("Storage import scan no. ~p started.", [ScanNum], SpaceId).
+    ?debug("Auto storage import scan ~s started", [TaskId]),
+    log("Auto storage import scan no. ~p started.", [ScanNum], SpaceId).
 
 -spec log_scan_finished(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
 log_scan_finished(SpaceId, ScanNum, TaskId) ->
-    ?debug("Storage import scan ~p finished", [TaskId]),
-    log("Storage import scan no. ~p finished.", [ScanNum], SpaceId).
+    ?debug("Auto storage import scan ~s finished", [TaskId]),
+    log("Auto storage import scan no. ~p finished.", [ScanNum], SpaceId).
 
 -spec log_scan_cancelled(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
 log_scan_cancelled(SpaceId, ScanNum, TaskId) ->
-    ?debug("Storage import scan ~p canceled", [TaskId]),
-    log("Storage import scan no. ~p cancelled.", [ScanNum], SpaceId).
+    ?debug("Auto storage import scan ~s canceled", [TaskId]),
+    log("Auto storage import scan no. ~p cancelled.", [ScanNum], SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Function used to add log of import to sync audit log.
+%% Function used to log detection of file creation to import audit log.
 %% @end
 %%-------------------------------------------------------------------
--spec log_import(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id()) -> ok.
-log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
+-spec log_creation(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id()) -> ok.
+log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
     log("Creation of storage file ~s has been detected.~n"
-    "Corresponding file ~s with uuid ~s has been imported.",
+    "Corresponding file ~s with uuid ~s has been created.",
         [StorageFileId, CanonicalPath, FileUuid], SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Function used to add log of update to sync audit log.
+%% Function used to log detection of file modification to import audit log.
 %% @end
 %%-------------------------------------------------------------------
--spec log_update(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id(),
+-spec log_modification(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id(),
     [storage_import_engine:file_attr_name()]) -> ok.
-log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs) ->
-    log("Update of storage file ~s has been detected. Updated attrs: ~w.~n"
-    "Corresponding file ~s with uuid ~s has been updated.",
+log_modification(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs) ->
+    log("Modification of storage file ~s has been detected. Updated attrs: ~w.~n"
+    "Corresponding file ~s with uuid ~s has been modified.",
         [StorageFileId, UpdatedAttrs, CanonicalPath, FileUuid], SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Function used to add log of deletion to sync audit log.
+%% Function used to log detection of file deletion to import audit log.
 %% @end
 %%-------------------------------------------------------------------
 -spec log_deletion(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id()) -> ok.
 log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
-    log("Deletion of storage file ~p has been detected.~n"
+    log("Deletion of storage file ~s has been detected.~n"
     "Corresponding file ~s with uuid ~s has been deleted",
         [StorageFileId, CanonicalPath, FileUuid], SpaceId).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Function used to log failure of file processing to import audit log.
+%% @end
+%%-------------------------------------------------------------------
+-spec log_failure(helpers:file_id(), term(), od_space:id()) -> ok.
+log_failure(StorageFileId, Error, SpaceId) ->
+    log("Processing of storage file ~s has failed due to ~w.~n",
+        [StorageFileId, Error], SpaceId).
 
 %%===================================================================
 %% Internal functions
@@ -92,7 +104,7 @@ log(Format, Args, SpaceId) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns path of sync audit log for given SpaceId.
+%% Returns path of import audit log for given SpaceId.
 %% @end
 %%-------------------------------------------------------------------
 -spec audit_log_file_name(od_space:id()) -> string().
