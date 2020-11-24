@@ -1625,7 +1625,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
             {ok, maps:get(<<"provider_id">>, maps:get(StorageId, StorageMap, #{}))}
         end),
 
-    ok = test_utils:mock_expect(Workers, storage_logic, get_name,
+    ok = test_utils:mock_expect(Workers, storage_logic, get_name_of_local_storage,
         % storage name is equal to its id
         fun(#document{key = Id}) -> {ok, Id};
             (Id) -> {ok, Id}

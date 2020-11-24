@@ -263,7 +263,7 @@ get_luma_config(StorageData) ->
 
 -spec fetch_name(id()) -> name().
 fetch_name(StorageId) when is_binary(StorageId) ->
-    {ok, Name} = ?throw_on_error(storage_logic:get_name(StorageId)),
+    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_local_storage(StorageId)),
     Name.
 
 
@@ -539,7 +539,7 @@ on_helper_changed(StorageId) ->
 is_name_occupied(Name) ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
     lists:member(Name, lists:map(fun(StorageId) ->
-        {ok, OccupiedName} = storage_logic:get_name(StorageId),
+        {ok, OccupiedName} = storage_logic:get_name_of_local_storage(StorageId),
         OccupiedName
     end, StorageIds)).
 

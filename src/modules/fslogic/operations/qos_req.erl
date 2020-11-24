@@ -126,7 +126,7 @@ add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
     
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     
-    case qos_hooks:try_assigning_storages(SpaceId, Expression, ReplicasNum) of
+    case qos_expression:try_assigning_storages(SpaceId, Expression, ReplicasNum) of
         {true, AssignedStorages} ->
             add_possible_qos(FileCtx, Expression, ReplicasNum, EntryType, AssignedStorages);
         false ->

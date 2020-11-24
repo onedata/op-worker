@@ -459,7 +459,7 @@ validate_result_fun_rest(MemRef, evaluate_qos_expression) ->
         ?assertEqual(?HTTP_200_OK, RespCode),
         SpaceId = api_test_memory:get(MemRef, space_id),
         Expression = qos_expression:parse(maps:get(<<"expression">>, Data)),
-        check_evaluate_expression_result_storages(Node, SpaceId, Expression, Result)
+        check_evaluate_expression_result_storages(Node, SpaceId, Expression, maps:get(<<"matchingStorages">>, Result))
     end.
 
 
@@ -594,7 +594,7 @@ maybe_inject_object_id(Data, Guid) ->
 
 
 check_evaluate_expression_result_storages(Node, SpaceId, Expression, Result) ->
-    ExpectedStorages = rpc:call(Node, qos_hooks, get_storages_by_expression, [SpaceId, Expression]),
+    ExpectedStorages = rpc:call(Node, qos_expression, get_matching_storages_in_space, [SpaceId, Expression]),
     lists:foreach(fun(StorageDetails) ->
         #{<<"id">> := Id, <<"name">> := Name, <<"providerId">> := ProviderId} = StorageDetails,
         ?assert(lists:member(Id, ExpectedStorages)),

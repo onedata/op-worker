@@ -108,8 +108,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = {view_reduce_function,
 
 data_spec(#op_req{operation = create, gri = #gri{aspect = evaluate_qos_expression}}) -> #{
     required => #{
-        <<"expression">> => {binary,
-            fun(Expression) -> {true, qos_expression:parse(Expression)} end}
+        <<"expression">> => {binary, non_empty}
     }
 };
 
@@ -364,6 +363,7 @@ validate(#op_req{operation = create, data = Data, gri = #gri{
             end, Providers)
     end;
 
+% for all other aspects check only that space is supported locally
 validate(#op_req{operation = create, gri = #gri{
     id = SpaceId
 }}, _) ->
@@ -463,8 +463,9 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName
     end;
 
 create(#op_req{gri = #gri{id = SpaceId, aspect = evaluate_qos_expression}} = Req) ->
-    QosExpression = maps:get(<<"expression">>, Req#op_req.data),
-    StorageIds = qos_hooks:get_storages_by_expression(SpaceId, QosExpression),
+    QosExpressionInfix = maps:get(<<"expression">>, Req#op_req.data),
+    QosExpression = qos_expression:parse(QosExpressionInfix),
+    StorageIds = qos_expression:get_matching_storages_in_space(SpaceId, QosExpression),
     StoragesList = lists:map(fun(StorageId) ->
         StorageName = storage:fetch_name_of_remote_storage(StorageId, SpaceId),
         ProviderId = storage:fetch_provider_id_of_remote_storage(StorageId, SpaceId),
