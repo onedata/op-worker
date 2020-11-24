@@ -37,6 +37,7 @@
 
 -include_lib("ctool/include/aai/caveats.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 
 %% API
@@ -262,7 +263,10 @@ check_allowed_paths(FileCtx0, AllowedPaths, disallow_ancestors) ->
     {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
     IsAllowed = lists:any(fun(AllowedPath) ->
-        filepath_utils:is_equal_or_descendant(FilePath, AllowedPath)
+        case filepath_utils:is_equal_or_descendant(FilePath, AllowedPath) of
+            {true, _} -> true;
+            false -> false
+        end
     end, AllowedPaths),
 
     case IsAllowed of
@@ -274,11 +278,11 @@ check_allowed_paths(FileCtx0, AllowedPaths, disallow_ancestors) ->
 check_allowed_paths(FileCtx0, AllowedPaths, allow_ancestors) ->
     {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
-    case filepath_utils:check_relation(FilePath, AllowedPaths) of
+    case check_path_constraint_relation(FilePath, AllowedPaths) of
         undefined ->
             throw(?EACCES);
         PathRelation ->
-            {path_relation_to_constraint_relation(PathRelation), FileCtx1}
+            {PathRelation, FileCtx1}
     end.
 
 
@@ -314,14 +318,11 @@ check_guid_constraints(
 
             Relation = lists:foldl(fun(GuidsList, CurrRelation) ->
                 AllowedPaths = guids_to_canonical_paths(GuidsList),
-                case filepath_utils:check_relation(FilePath, AllowedPaths) of
+                case check_path_constraint_relation(FilePath, AllowedPaths) of
                     undefined ->
                         throw(?EACCES);
                     PathRelation ->
-                        intersect_constraint_relations(
-                            CurrRelation,
-                            path_relation_to_constraint_relation(PathRelation)
-                        )
+                        intersect_constraint_relations(CurrRelation, PathRelation)
                 end
             end, equal_or_descendant, GuidConstraints),
 
@@ -403,11 +404,29 @@ check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints)
 
 
 %% @private
--spec path_relation_to_constraint_relation(filepath_utils:relation()) ->
-    constraint_relation().
-path_relation_to_constraint_relation({ancestor, _} = Relation) -> Relation;
-path_relation_to_constraint_relation(equal)                    -> equal_or_descendant;
-path_relation_to_constraint_relation(descendant)               -> equal_or_descendant.
+-spec check_path_constraint_relation(
+    Path :: filepath_utils:sanitized_path(),
+    AllowedPaths :: [filepath_utils:sanitized_path()]
+) ->
+    undefined | constraint_relation().
+check_path_constraint_relation(Path, ReferencePaths) ->
+    lists_utils:foldl_while(fun(ReferencePath, Acc) ->
+        case filepath_utils:check_relation(Path, ReferencePath) of
+            undefined ->
+                {cont, Acc};
+            {ancestor, RelPathToDescendant} ->
+                [Name | _] = string:split(RelPathToDescendant, <<?DIRECTORY_SEPARATOR>>),
+                NamesAcc = case Acc of
+                    undefined -> ordsets:new();
+                    {ancestor, Children} -> Children
+                end,
+                {cont, {ancestor, ordsets:add_element(Name, NamesAcc)}};
+            equal ->
+                {halt, equal_or_descendant};
+            {descendant, _} ->
+                {halt, equal_or_descendant}
+        end
+    end, undefined, ReferencePaths).
 
 
 %% @private

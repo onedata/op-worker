@@ -618,34 +618,40 @@ ensure_boolean(Boolean) when is_boolean(Boolean) -> Boolean.
 
 
 %% @private
--spec assert_mount_point_not_occupied(id() | name(), undefined | file_meta:path()) -> ok | no_return().
+-spec assert_mount_point_not_occupied(id() | name(), undefined | file_meta:path()) ->
+    ok | no_return().
 assert_mount_point_not_occupied(_, undefined) ->
     ok;
-assert_mount_point_not_occupied(StorageIdOrName, NewStorageMountPoint0) ->
+assert_mount_point_not_occupied(StorageIdOrName, NewStorageMountPoint) ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
-    {ok, NewStorageMountPoint1} = filepath_utils:sanitize(NewStorageMountPoint0),
+    {ok, SanitizedNewStorageMountPoint} = filepath_utils:sanitize(NewStorageMountPoint),
 
     lists:foreach(fun
         (StorageId) when StorageId == StorageIdOrName ->
+            % This function is called either when adding new storage (with Name)
+            % or updating existing storage (with Id). This check is added to skip
+            % comparing storage to itself in the second case.
             ok;
         (StorageId) ->
             Helper = get_helper(StorageId),
             case helper:get_mount_point(Helper) of
                 undefined ->
                     ok;
-                ExistingStorageMountPoint0 ->
-                    {ok, ExistingStorageMountPoint1} = filepath_utils:sanitize(ExistingStorageMountPoint0),
-
-                    case filepath_utils:check_relation(NewStorageMountPoint1, [ExistingStorageMountPoint1]) of
+                ExistingStorageMountPoint ->
+                    {ok, SanitizedExistingStorageMountPoint} = filepath_utils:sanitize(
+                        ExistingStorageMountPoint
+                    ),
+                    Relation = filepath_utils:check_relation(
+                        SanitizedNewStorageMountPoint, SanitizedExistingStorageMountPoint
+                    ),
+                    case Relation of
                         undefined ->
-                            ok;
-                        equal ->
                             ok;
                         _ ->
                             throw(?ERROR_BAD_DATA(<<"mountPoint">>, str_utils:format_bin(
                                 "Provided mountpoint conflicts with the mountpoint of storage "
                                 "\"~s\": \"~ts\" - POSIX mountpoints cannot be nested.", [
-                                    StorageId, ExistingStorageMountPoint1
+                                    StorageId, SanitizedExistingStorageMountPoint
                                 ]
                             )))
                     end

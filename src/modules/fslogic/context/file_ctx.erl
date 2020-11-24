@@ -298,7 +298,7 @@ get_logical_path(FileCtx, UserCtx) ->
             {<<"/">>, FileCtx2};
         {Path, FileCtx2} ->
             {SpaceName, FileCtx3} = get_space_name(FileCtx2, UserCtx),
-            {ok, [<<"/">>, _SpaceId | Rest]} = canonical_path:split_skipping_dots(Path),
+            {ok, [<<"/">>, _SpaceId | Rest]} = filepath_utils:split_and_skip_dots(Path),
             LogicalPath = filename:join([<<"/">>, SpaceName | Rest]),
             {LogicalPath, FileCtx3}
     end.
@@ -488,7 +488,7 @@ get_storage_file_id(FileCtx) ->
 get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
     case is_root_dir_const(FileCtx0) of
         true ->
-            StorageFileId = ?DIRECTORY_SEPARATOR_BINARY,
+            StorageFileId = <<?DIRECTORY_SEPARATOR>>,
             {StorageFileId, FileCtx0#file_ctx{storage_file_id = StorageFileId}};
         false ->
             case get_local_file_location_doc(FileCtx0, false) of

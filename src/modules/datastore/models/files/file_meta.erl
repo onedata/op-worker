@@ -20,6 +20,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% How many processes shall be process single set_scope operation.
 -define(SET_SCOPER_WORKERS, 25).

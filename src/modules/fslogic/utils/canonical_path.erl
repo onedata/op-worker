@@ -14,12 +14,9 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include("proto/common/credentials.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% API
--export([split_skipping_dots/1]).
 -export([to_uuid/2]).
 -export([resolve/1, resolve/2]).
 
@@ -27,20 +24,6 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc Strips '.' from path. Also if '..' path element if present, path is considered invalid.
-%% @end
-%%--------------------------------------------------------------------
--spec split_skipping_dots(FileName :: file_meta:path()) -> Result when
-    Result :: {ok, Tokens :: [binary()]} | {error, wrong_filename}.
-split_skipping_dots(FileName) ->
-    Tokens = filepath_utils:split(FileName),
-    case lists:any(fun(X) -> X =:= <<"..">> end, Tokens) of
-        true -> {error, wrong_filename};
-        _ -> {ok, Tokens}
-    end.
 
 
 %%-------------------------------------------------------------------
