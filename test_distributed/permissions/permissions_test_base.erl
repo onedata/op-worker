@@ -570,20 +570,20 @@ data_access_caveats_cache_test(Config) ->
     end, [UserRootDir, SpaceRootDirGuid, RootDirGuid, DirGuid]),
 
     ?assertEqual(
-        {ok, subpath},
+        {ok, equal_or_descendant},
         ?rpcCache(W, check_permission, [{data_constraint, Token, FileGuid}])
     ),
 
-    % calling on dir any function reserved only for subpath should cache
-    % {subpath, ?EACCES} meaning that no such operation can be performed
-    % but since ancestor checks were not performed it is not known whether
+    % calling on dir any function reserved only for equal_or_descendant should
+    % cache {equal_or_descendant, ?EACCES} meaning that no such operation can be
+    % performed but since ancestor checks were not performed it is not known whether
     % ancestor operations can be performed
     ?assertMatch(
         {error, ?EACCES},
         lfm_proxy:get_acl(W, SessId, {guid, DirGuid})
     ),
     ?assertEqual(
-        {ok, {subpath, ?EACCES}},
+        {ok, {equal_or_descendant, ?EACCES}},
         ?rpcCache(W, check_permission, [{data_constraint, Token, DirGuid}])
     ),
 
