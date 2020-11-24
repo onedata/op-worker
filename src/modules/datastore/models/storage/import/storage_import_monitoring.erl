@@ -98,8 +98,6 @@
 -define(HOUR_HIST_SLOT, 3600 div ?HISTOGRAM_LENGTH).
 -define(DAY_HIST_SLOT, 86400 div ?HISTOGRAM_LENGTH).
 
-% TODO update dokumentacji !!!
-
 %%%===================================================================
 %%% API
 %%%===================================================================

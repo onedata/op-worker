@@ -443,6 +443,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
                 storage_file_ctx = StorageFileCtx3,
                 info = Info#{
                     file_ctx => FileCtx,
+                    % this job will be used to generated children jobs so set current FileCtx as parent
                     parent_ctx => FileCtx
                 }
             },
@@ -505,7 +506,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
         {ok, {SyncResult, FileCtx, StorageFileCtx2}} ->
             SSIDoc = get_storage_sync_info_doc(TraverseJob),
             % stat result will be cached in StorageFileCtx
-            % we perform stat here to ensure that jobs Error2for all batches for given directory
+            % we perform stat here to ensure that jobs for all batches for given directory
             % will be scheduled with the same stat result
             {#statbuf{}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
             MTimeHasChanged = storage_sync_traverse:has_mtime_changed(SSIDoc, StorageFileCtx3),
@@ -514,6 +515,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                 info = Info2 = Info#{
                     file_ctx => FileCtx,
                     storage_sync_info_doc => SSIDoc,
+                    % this job will be used to generated children jobs so set current FileCtx as parent
                     parent_ctx => FileCtx
                 }
             },
