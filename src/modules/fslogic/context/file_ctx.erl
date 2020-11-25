@@ -758,7 +758,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, PrevTreeId) -
             ShareId = get_share_id_const(FileCtx2),
             case FileType of
                 ?DIRECTORY_TYPE ->
-                    MapFun = fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
+                    MapFun = fun({Name, Uuid}) ->
                         new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
                     end,
                     {ok, ChildrenLinks, ListExtendedInfo} =
@@ -795,7 +795,7 @@ get_file_children_whitelisted(
             {ok, ChildrenLinks} = file_meta:list_children_whitelisted(
                 FileDoc, NonNegOffset, Limit, ChildrenWhiteList
             ),
-            ChildrenCtxs = lists:map(fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
+            ChildrenCtxs = lists:map(fun({Name, Uuid}) ->
                 new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
             end, ChildrenLinks),
             {ChildrenCtxs, FileCtx2}

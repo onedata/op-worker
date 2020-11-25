@@ -48,12 +48,12 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
             RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
             {#fuse_response{
                 fuse_response = #file_attr{} = FileAttr
-            }, OtherFiles, _} = attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx2, #{
+            }, ConflictingFiles, _} = attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx2, #{
                 allow_deleted_files => true,
                 include_size => true,
                 name_conflicts_resolution_policy => resolve_name_conflicts
             }),
-            emit_suffixes(OtherFiles, {ctx, FileCtx2}),
+            emit_suffixes(ConflictingFiles, {ctx, FileCtx2}),
             emit_file_attr_changed(FileCtx2, FileAttr, ExcludedSessions);
         Other ->
             Other
@@ -206,15 +206,10 @@ emit_file_perm_changed(FileCtx) ->
 emit_file_removed(FileCtx, ExcludedSessions) ->
     Ans = event:emit_to_filtered_subscribers(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
         #{file_ctx => FileCtx}, ExcludedSessions),
-
-    {#document{
-        value = #file_meta{
-            name = Name,
-            parent_uuid = ParentUuid
-        }} = Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    case file_meta:check_name(ParentUuid, Name, Doc) of
-        {conflicting, _, OtherFiles} ->
-            emit_suffixes(OtherFiles, {ctx, FileCtx2});
+    {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    case file_meta:check_name_and_get_conflicting_files(Doc) of
+        {conflicting, _, ConflictingFiles} ->
+            emit_suffixes(ConflictingFiles, {ctx, FileCtx2});
         _ ->
             ok
     end,
@@ -285,15 +280,14 @@ emit_file_attr_changed_with_replication_status_internal(_FileCtx, [], []) ->
     ok;
 emit_file_attr_changed_with_replication_status_internal(FileCtx, WithoutStatusSessIds, WithStatusSessIds) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {#fuse_response{
-        fuse_response = #file_attr{} = FileAttr
-    }, OtherFiles, _} = attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx, #{
-        allow_deleted_files => true,
-        include_size => true,
-        name_conflicts_resolution_policy => resolve_name_conflicts,
-        include_replication_status => WithStatusSessIds =/= []
-    }),
-    emit_suffixes(OtherFiles, {ctx, FileCtx}),
+    {#fuse_response{fuse_response = #file_attr{} = FileAttr}, ConflictingFiles, _} =
+        attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx, #{
+            allow_deleted_files => true,
+            include_size => true,
+            name_conflicts_resolution_policy => resolve_name_conflicts,
+            include_replication_status => WithStatusSessIds =/= []
+        }),
+    emit_suffixes(ConflictingFiles, {ctx, FileCtx}),
     event:emit(#file_attr_changed_event{file_attr = FileAttr}, WithStatusSessIds),
     event:emit(#file_attr_changed_event{file_attr = FileAttr#file_attr{fully_replicated = undefined}},
         WithoutStatusSessIds -- WithStatusSessIds).
@@ -308,9 +302,14 @@ emit_file_attr_changed_with_replication_status_internal(FileCtx, WithoutStatusSe
 emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclude) ->
     Guid = file_ctx:get_guid_const(FileCtx),
     {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    FinalName = case file_meta:check_name(file_id:guid_to_uuid(OldParentGuid), OldName, Doc) of
-        {conflicting, ExtendedName, OtherFiles} ->
-            emit_suffixes(OtherFiles, {parent_guid, NewParentGuid}),
+    ProviderId = file_meta:get_provider_id(Doc),
+    {ok, FileUuid} = file_meta:get_uuid(Doc),
+    % do not get ParentUuid and Name from Doc
+    FinalName = case file_meta:check_name_and_get_conflicting_files(file_id:guid_to_uuid(OldParentGuid), 
+        OldName, FileUuid, ProviderId
+    ) of
+        {conflicting, ExtendedName, ConflictingFiles} ->
+            emit_suffixes(ConflictingFiles, {parent_guid, NewParentGuid}),
             ExtendedName;
         _ ->
             NewName
@@ -348,12 +347,12 @@ create_file_location_changed(Location, Offset, OffsetEnd) ->
 %% Can be removed after upgrade of oneclient.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_suffixes(Files :: [{file_meta:uuid(), file_meta:name()}],
+-spec emit_suffixes(Files :: file_meta:conflicts(),
     {parent_guid, ParentGuid :: fslogic_worker:file_guid()} | {ctx, file_ctx:ctx()}) -> ok.
 emit_suffixes([], _) ->
     ok;
-emit_suffixes(Files, {parent_guid, ParentGuid}) ->
-    lists:foreach(fun({Uuid, ExtendedName}) ->
+emit_suffixes(ConflictingFiles, {parent_guid, ParentGuid}) ->
+    lists:foreach(fun({TaggedName, Uuid}) ->
         try
             {_, SpaceId} = file_id:unpack_guid(ParentGuid),
             Guid = file_id:pack_guid(Uuid, SpaceId),
@@ -363,12 +362,12 @@ emit_suffixes(Files, {parent_guid, ParentGuid}) ->
                 old_guid = Guid,
                 new_guid = Guid,
                 new_parent_guid = ParentGuid,
-                new_name = ExtendedName
+                new_name = TaggedName
             }}, [#{file_ctx => FileCtx, parent => ParentGuid}], [])
         catch
             _:_ -> ok % File not fully synchronized (file_meta is missing)
         end
-    end, Files);
+    end, ConflictingFiles);
 emit_suffixes(Files, {ctx, FileCtx}) ->
     try
         {ParentCtx, _} = file_ctx:get_parent(FileCtx, user_ctx:new(?ROOT_USER_ID)),

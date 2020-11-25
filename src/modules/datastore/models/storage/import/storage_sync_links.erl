@@ -37,11 +37,12 @@
 
 -type root_id() :: binary().
 -type link_name() :: helpers:file_id().
+-type link() :: {link_name(), link_target()}.
 -type link_target() :: root_id() | undefined.
 -type fold_fun() :: datastore:fold_fun({link_name(), link_target()}).
 -type error() :: {error, term()}.
 
--export_type([link_name/0, link_target/0]).
+-export_type([link/0]).
 
 -define(CTX, #{model => ?MODULE}).
 % RootId of a links tree associated with StorageFileId directory
@@ -80,7 +81,7 @@ add_link_recursive(StorageFileId, StorageId, ChildStorageFileId, MarkLeaves) ->
     add_link_recursive(RootId, StorageFileId, StorageId, ChildrenTokens, MarkLeaves).
 
 -spec list(helpers:file_id(), storage:id(), datastore_links_iter:token(), non_neg_integer()) ->
-    {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
+    {{ok, [link()]}, datastore_links_iter:token()} | {error, term()}.
 list(StorageFileId, StorageId, Token, Limit) ->
     list_internal(?ROOT_ID(StorageFileId, StorageId), Token, Limit).
 
@@ -111,7 +112,7 @@ get_link(StorageFileId, StorageId, ChildName) ->
     get_link(?ROOT_ID(StorageFileId, StorageId), ChildName).
 
 -spec list(helpers:file_id(), storage:id(), non_neg_integer()) ->
-    {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
+    {{ok, [link()]}, datastore_links_iter:token()} | {error, term()}.
 list(StorageFileId, StorageId, Limit) ->
     list_internal(?ROOT_ID(StorageFileId, StorageId), #link_token{}, Limit).
 
@@ -150,7 +151,7 @@ add_link_recursive(RootId, StorageFileId, StorageId, [ChildName | RestChildren],
     add_link_recursive(ChildRootId, ChildStorageFileId, StorageId, RestChildren, MarkLeaves).
 
 -spec list_internal(root_id(), undefined | datastore_links_iter:token(), non_neg_integer()) ->
-    {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
+    {{ok, [link()]}, datastore_links_iter:token()} | {error, term()}.
 list_internal(RootId, Token, Limit) ->
     Token2 = utils:ensure_defined(Token, #link_token{}),
     Opts = #{token => Token2},
@@ -161,7 +162,7 @@ list_internal(RootId, Token, Limit) ->
     list_internal(RootId, Opts2).
 
 -spec list_internal(root_id(), datastore_links_iter:fold_opts()) ->
-    {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
+    {{ok, [link()]}, datastore_links_iter:token()} | {error, term()}.
 list_internal(RootId, Opts) ->
     Result = for_each(RootId, fun({ChildName, ChildTreeRootId}, FilesAcc) ->
         [{ChildName, ChildTreeRootId} | FilesAcc]
@@ -192,7 +193,7 @@ delete_recursive_internal(RootId, Token) ->
             ok
     end.
 
--spec delete_children(root_id(), [{link_name(), link_target()}]) -> ok.
+-spec delete_children(root_id(), [link()]) -> ok.
 delete_children(_RootId, []) ->
     ok;
 delete_children(RootId, [{ChildName, undefined} | Rest]) ->

@@ -18,6 +18,7 @@
 
 %% API
 -export([is_root_dir_uuid/1, is_user_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1, is_special_uuid/1]).
+-export([is_trash_dir_uuid/1, spaceid_to_trash_dir_uuid/1, spaceid_to_trash_dir_guid/1]).
 -export([user_root_dir_uuid/1, user_root_dir_guid/1, root_dir_guid/0]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, spaceid_to_space_dir_guid/1]).
@@ -26,6 +27,7 @@
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
 -define(ROOT_DIR_VIRTUAL_SPACE_ID, <<"rootDirVirtualSpaceId">>).
+-define(TRASH_DIR_UUID_PREFIX, "trash_").
 
 %%%===================================================================
 %%% API
@@ -167,6 +169,21 @@ unpack_space_owner(<<?SPACE_OWNER_PREFIX_STR, SpaceId/binary>>) ->
     {ok, SpaceId};
 unpack_space_owner(_) ->
     {error, not_space_owner}.
+
+
+-spec is_trash_dir_uuid(file_meta:uuid()) -> boolean().
+is_trash_dir_uuid(<<?TRASH_DIR_UUID_PREFIX, _SpaceId/binary>>) ->
+    true;
+is_trash_dir_uuid(_) ->
+    false.
+
+-spec spaceid_to_trash_dir_uuid(od_space:id()) -> file_meta:uuid().
+spaceid_to_trash_dir_uuid(SpaceId) ->
+    <<?TRASH_DIR_UUID_PREFIX, SpaceId/binary>>.
+
+-spec spaceid_to_trash_dir_guid(od_space:id()) -> file_id:file_guid().
+spaceid_to_trash_dir_guid(SpaceId) ->
+    file_id:pack_guid(spaceid_to_trash_dir_uuid(SpaceId), SpaceId).
 
 %%%===================================================================
 %%% Internal functions

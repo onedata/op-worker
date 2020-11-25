@@ -23,11 +23,6 @@
 -define(FORCE_PROXY_HELPER_MODE, 'FORCE_PROXY').
 -define(FORCE_DIRECT_HELPER_MODE, 'FORCE_DIRECT').
 
--record(child_link_uuid, {
-    uuid :: file_meta:uuid(),
-    name :: binary()
-}).
-
 -record(child_link, {
     guid :: fslogic_worker:file_guid(),
     name :: binary()

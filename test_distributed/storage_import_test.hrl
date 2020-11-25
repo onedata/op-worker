@@ -41,7 +41,6 @@
 -define(TEST_FILE2, <<"test_file2">>).
 -define(TEST_FILE3, <<"test_file3">>).
 -define(TEST_FILE4, <<"test_file4">>).
--define(INIT_FILE, <<".__onedata__init_file">>).
 -define(SPACE_TEST_DIR_PATH(DirName), filename:join(["/", ?SPACE_NAME, DirName])).
 -define(SPACE_TEST_FILE_IN_DIR_PATH(DirName, FileName), filename:join(["/", ?SPACE_NAME, DirName, FileName])).
 -define(SPACE_TEST_DIR_PATH, filename:join(["/", ?SPACE_NAME, ?TEST_DIR])).
@@ -54,7 +53,6 @@
 -define(SPACE_TEST_FILE_IN_DIR_PATH, filename:join([?SPACE_TEST_DIR_PATH, ?TEST_FILE1])).
 -define(SPACE_TEST_FILE_IN_DIR_PATH2, filename:join([?SPACE_TEST_DIR_PATH, ?TEST_FILE2])).
 -define(SPACE_TEST_FILE_IN_DIR_PATH3, filename:join([?SPACE_TEST_DIR_PATH, ?TEST_FILE3])).
--define(SPACE_INIT_FILE_PATH, filename:join(["/", ?SPACE_NAME, ?INIT_FILE])).
 -define(TEST_DATA, <<"test_data">>).
 -define(TEST_DATA_SIZE, byte_size(?TEST_DATA)).
 -define(CHANGED_BYTE, <<"-">>).

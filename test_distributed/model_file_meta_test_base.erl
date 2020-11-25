@@ -142,7 +142,7 @@ basic_operations_test_core(Config, LastLevel) ->
         ?call_with_time(Worker2, get_scope_id, [UL20])
     ),
 
-    ?assertMatch({ok, [#child_link_uuid{uuid = Space1Uuid}], #{}}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/">>}, 0, 10])),
+    ?assertMatch({ok, [{_, Space1Uuid}], #{}}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/">>}, 0, 10])),
     ?assertMatch({ok, [], #{}}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space 1/dir2/file3">>}, 0, 10])),
 
     {{A15, U15, #{}}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 20]),
@@ -189,7 +189,7 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(false, rpc:call(Worker1, file_meta, exists, [{path, <<"/Space 1/dir2/file1">>}])),
     ?assertMatch(false, rpc:call(Worker1, file_meta, exists, [{path, <<"/Space 1/dir2/file2">>}])),
 
-    ?assertMatch({ok, [#child_link_uuid{uuid = Dir2File3Uuid}], #{}}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
+    ?assertMatch({ok, [{_Name, Dir2File3Uuid}], #{}}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
 
     BigDirDel(0),
 

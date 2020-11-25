@@ -144,7 +144,7 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
                 % this can happen if sync mechanisms decide not to synchronize file
                 ?error("Skipped registration of file ~s located on storage ~s in space ~s under path ~s.",
                     [StorageFileId2, StorageId, SpaceId, DestinationPath]),
-                ?ERROR_POSIX(?ENOENT)
+                ?ERROR_POSIX(?EINPROGRESS)
         end
     catch
         throw:?ENOTSUP ->

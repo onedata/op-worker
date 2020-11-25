@@ -238,8 +238,10 @@ get_children_insecure(UserCtx, FileCtx0, Offset, Limit, Token, StartId, Children
             true ->
                 try
                     {FileDoc, _ChildCtx3} = file_ctx:get_file_doc(ChildCtx2),
-                    case file_meta:check_name(file_id:guid_to_uuid(ParentGuid), ChildName, FileDoc) of
-                        {conflicting, ExtendedName, _Others} ->
+                    ProviderId = file_meta:get_provider_id(FileDoc),
+                    {ok, FileUuid} = file_meta:get_uuid(FileDoc),
+                    case file_meta:check_name_and_get_conflicting_files(file_id:guid_to_uuid(ParentGuid), ChildName, FileUuid, ProviderId) of
+                        {conflicting, ExtendedName, _ConflictingFiles} ->
                             {true, #child_link{name = ExtendedName, guid = ChildGuid}};
                         _ ->
                             {true, #child_link{name = ChildName, guid = ChildGuid}}

@@ -204,7 +204,6 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
             ?SINGLE_STEP_DEL(?ALL_DOCS) ->
                 FileCtx4 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
-%%                FileCtx6 = delete_storage_sync_info(FileCtx5),
                 % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
                 ok = delete_location(FileCtx5),
                 ok = file_meta:delete(FileDoc),
@@ -213,8 +212,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 maybe_try_to_delete_parent(FileCtx6, UserCtx, RemoveStorageFileResult, ?ALL_DOCS);
             ?TWO_STEP_DEL_INIT ->
                 % TODO VFS-6114 maybe delete file_meta and associated documents here?
-                FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
-%%                delete_storage_sync_info(FileCtx5),
+                delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 ok;
             ?TWO_STEP_DEL_FIN(DocsDeletionScope) ->
                 {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
@@ -229,7 +227,6 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 FileCtx5 = maybe_remove_deletion_marker(FileCtx4, UserCtx, RemoveStorageFileResult),
                 maybe_try_to_delete_parent(FileCtx5, UserCtx, RemoveStorageFileResult, DocsDeletionScope);
             ?SINGLE_STEP_DEL(?LOCAL_DOCS) ->
-%%                FileCtx4 = delete_storage_sync_info(FileCtx3),
                 ok = delete_location(FileCtx),
                 remove_local_associated_documents(FileCtx3),
                 maybe_try_to_delete_parent(FileCtx3, UserCtx, RemoveStorageFileResult, ?LOCAL_DOCS)
@@ -321,7 +318,7 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx, UserCtx),
     {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
-    ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName),
+    ok = file_meta:delete_child_link(ParentUuid, Scope, FileName, FileUuid),
     FileCtx4.
 
 
