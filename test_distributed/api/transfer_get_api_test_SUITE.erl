@@ -14,7 +14,7 @@
 
 -include("api_test_runner.hrl").
 -include("transfer_api_test_utils.hrl").
--include("../transfers_test_mechanism.hrl").
+-include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -510,8 +510,6 @@ get_rerun_transfer_status(Config, TransferType, Env, RerunId, EffTransferId, Exp
 
 
 init_per_suite(Config) ->
-    api_test_utils:load_module_from_test_distributed_dir(Config, transfers_test_utils),
-
     Posthook = fun(NewConfig) ->
         NewConfig1 = [{space_storage_mock, false} | NewConfig],
         NewConfig2 = initializer:setup_storage(NewConfig1),

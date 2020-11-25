@@ -13,7 +13,7 @@
 -module(permissions_test_base).
 -author("Bartosz Walkowicz").
 
--include("../storage_files_test_SUITE.hrl").
+-include("storage_files_test_SUITE.hrl").
 -include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -2256,7 +2256,6 @@ init_per_suite(Config) ->
             [{spaces_owners, [<<"owner">>]} | NewConfig2]
         ),
         initializer:mock_auth_manager(NewConfig3),
-        load_module_from_test_distributed_dir(Config, storage_test_utils),
         NewConfig3
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
@@ -2284,34 +2283,6 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%%% TODO VFS-6385 Reorganize and fix includes and loading modules from other dirs in tests
--spec load_module_from_test_distributed_dir(proplists:proplist(), module()) ->
-    ok.
-load_module_from_test_distributed_dir(Config, ModuleName) ->
-    DataDir = ?config(data_dir, Config),
-    ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
-        Token /= "test_distributed"
-    end, filename:split(DataDir))),
-    TestsRootDir = filename:join([ProjectRoot, "test_distributed"]),
-
-    code:add_pathz(TestsRootDir),
-
-    CompileOpts = [
-        verbose,report_errors,report_warnings,
-        {i, TestsRootDir},
-        {i, filename:join([TestsRootDir, "..", "include"])},
-        {i, filename:join([TestsRootDir, "..", "_build", "default", "lib"])}
-    ],
-    case compile:file(filename:join(TestsRootDir, ModuleName), CompileOpts) of
-        {ok, ModuleName} ->
-            code:purge(ModuleName),
-            code:load_file(ModuleName),
-            ok;
-        _ ->
-            ct:fail("Couldn't load module: ~p", [ModuleName])
-    end.
 
 
 %% @private
