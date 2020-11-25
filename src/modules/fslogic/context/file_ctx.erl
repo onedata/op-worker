@@ -146,7 +146,7 @@ new_by_partial_context(FileCtx = #file_ctx{}) ->
     {FileCtx, get_space_id_const(FileCtx)};
 new_by_partial_context(FilePartialCtx) ->
     {CanonicalPath, FilePartialCtx2} = file_partial_ctx:get_canonical_path(FilePartialCtx),
-    {ok, FileDoc} = fslogic_path:resolve(CanonicalPath),
+    {ok, FileDoc} = canonical_path:resolve(CanonicalPath),
     SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx2),
     {new_by_doc(FileDoc, SpaceId, undefined), SpaceId}.
 
@@ -274,7 +274,7 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
                 FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
-    {fslogic_path:split(Path), FileCtx}.
+    {filepath_utils:split(Path), FileCtx}.
 
 
 -spec get_uuid_based_path(ctx()) -> {file_meta:uuid_based_path(), ctx()}.
@@ -298,7 +298,7 @@ get_logical_path(FileCtx, UserCtx) ->
             {<<"/">>, FileCtx2};
         {Path, FileCtx2} ->
             {SpaceName, FileCtx3} = get_space_name(FileCtx2, UserCtx),
-            {ok, [<<"/">>, _SpaceId | Rest]} = fslogic_path:split_skipping_dots(Path),
+            {ok, [<<"/">>, _SpaceId | Rest]} = filepath_utils:split_and_skip_dots(Path),
             LogicalPath = filename:join([<<"/">>, SpaceName | Rest]),
             {LogicalPath, FileCtx3}
     end.
@@ -488,7 +488,7 @@ get_storage_file_id(FileCtx) ->
 get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
     case is_root_dir_const(FileCtx0) of
         true ->
-            StorageFileId = ?DIRECTORY_SEPARATOR_BINARY,
+            StorageFileId = <<?DIRECTORY_SEPARATOR>>,
             {StorageFileId, FileCtx0#file_ctx{storage_file_id = StorageFileId}};
         false ->
             case get_local_file_location_doc(FileCtx0, false) of
@@ -651,7 +651,7 @@ get_child(FileCtx, Name, UserCtx) ->
         _ ->
             SpaceId = get_space_id_const(FileCtx),
             {FileDoc, FileCtx2} = get_file_doc(FileCtx),
-            case fslogic_path:resolve(FileDoc, <<"/", Name/binary>>) of
+            case canonical_path:resolve(FileDoc, <<"/", Name/binary>>) of
                 {ok, ChildDoc} ->
                     ShareId = get_share_id_const(FileCtx2),
                     Child = new_by_doc(ChildDoc, SpaceId, ShareId),

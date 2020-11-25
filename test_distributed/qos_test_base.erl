@@ -1440,7 +1440,7 @@ prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
 %% @private
 resolve_path(SpaceId, Name, Files) ->
     Files1 = lists:map(fun(A) -> ?filename(Name, A) end, Files),
-    fslogic_path:join([<<"/">>, SpaceId, Name | Files1]).
+    filepath_utils:join([<<"/">>, SpaceId, Name | Files1]).
 
 
 %% @private

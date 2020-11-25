@@ -38,9 +38,9 @@
 space_dir_id(SpaceId, StorageId) ->
     case storage:is_imported(StorageId) of
         true ->
-            ?DIRECTORY_SEPARATOR_BINARY;
+            <<?DIRECTORY_SEPARATOR>>;
         false ->
-            <<(?DIRECTORY_SEPARATOR_BINARY)/binary, SpaceId/binary>>
+            <<?DIRECTORY_SEPARATOR, SpaceId/binary>>
     end.
 
 %%--------------------------------------------------------------------
@@ -57,28 +57,28 @@ space_dir_id(SpaceId, StorageId) ->
 flat(FileCtx) ->
     case file_ctx:is_root_dir_const(FileCtx) of
         true ->
-            {?DIRECTORY_SEPARATOR_BINARY, FileCtx};
+            {<<?DIRECTORY_SEPARATOR>>, FileCtx};
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             {IsSpaceMountedInRoot, FileCtx2} = file_ctx:is_imported_storage(FileCtx),
             PathTokens = case IsSpaceMountedInRoot of
-                true -> [?DIRECTORY_SEPARATOR_BINARY, SpaceId];
-                false -> [?DIRECTORY_SEPARATOR_BINARY]
+                true -> [<<?DIRECTORY_SEPARATOR>>, SpaceId];
+                false -> [<<?DIRECTORY_SEPARATOR>>]
             end,
             FileId = case file_ctx:is_space_dir_const(FileCtx2) of
                 true ->
-                    fslogic_path:join(PathTokens);
+                    filepath_utils:join(PathTokens);
                 false ->
                     FileUuid = file_ctx:get_uuid_const(FileCtx2),
                     case size(FileUuid) > 3 of
                         true ->
-                            fslogic_path:join(PathTokens ++ [
+                            filepath_utils:join(PathTokens ++ [
                                 binary_part(FileUuid, 0, 1),
                                 binary_part(FileUuid, 1, 1),
                                 binary_part(FileUuid, 2, 1),
                                 FileUuid]);
                         false ->
-                            fslogic_path:join(PathTokens ++ [<<"other">>, FileUuid])
+                            filepath_utils:join(PathTokens ++ [<<"other">>, FileUuid])
                     end
             end,
             {FileId, FileCtx2}
@@ -113,9 +113,9 @@ canonical(FileCtx) ->
 
 -spec filter_space_id(file_meta:path(), od_space:id()) -> file_meta:path().
 filter_space_id(FilePath, SpaceId) ->
-    case fslogic_path:split(FilePath) of
+    case filepath_utils:split(FilePath) of
         [Sep, SpaceId | Path] ->
-            fslogic_path:join([Sep | Path]);
+            filepath_utils:join([Sep | Path]);
         _ ->
             FilePath
     end.

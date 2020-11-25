@@ -157,7 +157,7 @@ get_directory_info(RequestedInfo, #cdmi_req{
     file_path = Path,
     file_attrs = #file_attr{
         guid = Guid,
-        parent_uuid = ParentGuid
+        parent_guid = ParentGuid
     } = Attrs
 }) ->
     lists:foldl(fun

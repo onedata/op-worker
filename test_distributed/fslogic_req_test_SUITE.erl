@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -116,7 +117,7 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
             fuse_response = #file_attr{
                 guid = Guid, name = Name, type = Type, mode = Mode,
-                uid = UID, parent_uuid = ParentGuid, fully_replicated = FullyReplicated
+                uid = UID, parent_guid = ParentGuid, fully_replicated = FullyReplicated
             }
         }, ?file_req(Worker, SessId, Guid, #get_file_attr{include_replication_status = CheckReplicationStatus})),
 
@@ -125,7 +126,7 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
                 ?assertMatch(#fuse_response{status = #status{code = ?OK},
                     fuse_response = #file_attr{
                         name = Name, type = Type, mode = Mode,
-                        uid = UID, parent_uuid = ParentGuid, fully_replicated = FullyReplicated
+                        uid = UID, parent_guid = ParentGuid, fully_replicated = FullyReplicated
                     }
                 }, ?file_req(Worker, SessId, ParentGuid,
                     #get_child_attr{name = Name, include_replication_status = CheckReplicationStatus}));
@@ -218,12 +219,12 @@ fslogic_get_file_children_attrs_test(Config) ->
                         lists:foreach(fun({A1, A2}) ->
                             #file_attr{
                                 guid = Guid, name = Name, type = Type, mode = Mode,
-                                uid = UID, parent_uuid = ParentGuid, provider_id = ProviderID,
+                                uid = UID, parent_guid = ParentGuid, provider_id = ProviderID,
                                 owner_id = OwnerID
                             } = A1,
                             #file_attr{
                                 guid = Guid2, name = Name2, type = Type2, mode = Mode2,
-                                uid = UID2, parent_uuid = ParentGuid2, provider_id = ProviderID2,
+                                uid = UID2, parent_guid = ParentGuid2, provider_id = ProviderID2,
                                 owner_id = OwnerID2, fully_replicated = ReplicationStatus
                             } = A2,
 
@@ -256,7 +257,7 @@ fslogic_get_file_children_attrs_test(Config) ->
 
             #file_attr{
                 guid = Guid, name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
-                uid = UID, parent_uuid = ParentGuid, provider_id = ProviderID,
+                uid = UID, parent_guid = ParentGuid, provider_id = ProviderID,
                 owner_id = Owner
             }
         end, Files),
@@ -302,7 +303,7 @@ fslogic_get_child_attr_test(Config) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
             fuse_response = #file_attr{
                 name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
-                uid = UID, parent_uuid = ParentGuid
+                uid = UID, parent_guid = ParentGuid
             }
         }, ?file_req(Worker, SessId, ParentGuid, #get_child_attr{name = ChildName}))
     end, [
@@ -359,7 +360,7 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     {_, _, _, _, Uuids2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<"/space_name2">>, RootGuid2, []},
         [<<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
 
-    TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name2">>,
+    TestPath1 = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name2">>,
         <<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
     FileResolvedGuid = ?req(Worker, SessId1, #resolve_guid{path = TestPath1}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileResolvedGuid),
@@ -456,7 +457,7 @@ chmod_test(Config) ->
 
     lists:foreach(
         fun(SessId) ->
-            Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name4">>, SessId]),
+            Path = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name4">>, SessId]),
             ParentGuid = get_guid_privileged(Worker, SessId, <<"/space_name4">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
                 ?file_req(Worker, SessId, ParentGuid, #create_dir{name = SessId, mode = 8#000})),
@@ -789,7 +790,7 @@ get_guid_privileged(Worker, SessId, Path) ->
         <<"/">> ->
             SessId;
         _ ->
-            {ok, [_, SpaceName | _]} = fslogic_path:split_skipping_dots(Path),
+            {ok, [_, SpaceName | _]} = filepath_utils:split_and_skip_dots(Path),
             hd(get(SpaceName))
     end,
     get_guid(Worker, SessId1, Path).
