@@ -140,13 +140,11 @@ convert_from_old_version_rpn(PreviousExpression) ->
 -spec try_assigning_storages(od_space:id(), qos_expression:expression(), qos_entry:replicas_num()) ->
     {true, [storage:id()]} | false.
 try_assigning_storages(SpaceId, QosExpression, ReplicasNum) ->
-    MatchingStorages = get_matching_storages_in_space(SpaceId, QosExpression),
-    CalculatedStorages = lists_utils:random_sublist(MatchingStorages, ReplicasNum, ReplicasNum),
-    case CalculatedStorages of
-        L when length(L) == ReplicasNum ->
-            {true, CalculatedStorages};
-        _ ->
-            false
+    case get_matching_storages_in_space(SpaceId, QosExpression) of
+        TooFew when length(TooFew) < ReplicasNum ->
+            false;
+        MatchingStorages ->
+            {true, lists_utils:random_sublist(MatchingStorages, ReplicasNum, ReplicasNum)}
     end.
 
 
