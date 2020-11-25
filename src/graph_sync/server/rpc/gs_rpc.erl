@@ -31,7 +31,7 @@ handle(Auth, RpcFun, Data) ->
     try
         handle_internal(Auth, RpcFun, Data)
     catch
-        throw:Error = {error, _} ->
+        throw:{error, _} = Error ->
             Error;
         Type:Reason ->
             ?error_stacktrace("Unexpected error while processing gs file rpc "

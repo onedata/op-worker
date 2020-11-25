@@ -84,7 +84,7 @@
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
@@ -660,18 +660,6 @@ get_child(FileCtx, Name, UserCtx) ->
                     throw(?ENOENT)
             end
     end.
-
-%%%-------------------------------------------------------------------
-%%% @doc
-%%% Returns CanonicalPath for child of ParentCtx with given FileName.
-%%% @end
-%%%-------------------------------------------------------------------
--spec get_child_canonical_path(ctx(), file_meta:name()) ->
-    {file_meta:name(), NewParenCtx :: ctx()}.
-get_child_canonical_path(ParentCtx, FileName) ->
-    {ParentPath, ParentCtx2} = get_canonical_path(ParentCtx),
-    CanonicalPath = filename:join(ParentPath, FileName),
-    {CanonicalPath, ParentCtx2}.
 
 
 %%--------------------------------------------------------------------

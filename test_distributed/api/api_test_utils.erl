@@ -811,7 +811,7 @@ get_invalid_file_id_errors() ->
 
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
-        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>)}},
+        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
         {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>)}},
 
         % Errors thrown by middleware and internal logic

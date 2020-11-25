@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([ensure_guid/2]).

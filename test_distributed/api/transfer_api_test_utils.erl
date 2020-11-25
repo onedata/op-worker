@@ -153,7 +153,7 @@ build_create_view_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, Use
         sync_files_between_nodes(TransferType, SrcNode, DstNode, OtherFiles ++ FilesToTransfer),
 
         ObjectIds = api_test_utils:guids_to_object_ids(FilesToTransfer),
-        QueryViewParams = [{key, XattrValue}],
+        QueryViewParams = [{key, XattrValue}, {stale, false}],
 
         case TransferType of
             replication ->

@@ -13,10 +13,13 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/storage/import/storage_import.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -export([
+    resolve_file_path/2,
     switch_context_if_shared_file_request/1,
     is_shared_file_request/3,
 
@@ -35,6 +38,17 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec resolve_file_path(session:id(), file_meta:path()) ->
+    {ok, file_id:file_guid()} | no_return().
+resolve_file_path(SessionId, Path) ->
+    ?check(remote_utils:call_fslogic(
+        SessionId,
+        fuse_request,
+        #resolve_guid_by_canonical_path{path = ensure_canonical_path(SessionId, Path)},
+        fun(#guid{guid = Guid}) -> {ok, Guid} end
+    )).
 
 
 -spec switch_context_if_shared_file_request(middleware:req()) -> middleware:req().
@@ -110,12 +124,8 @@ decode_object_id(ObjectId, Key) ->
 -spec assert_file_exists(aai:auth(), file_id:file_guid()) ->
     ok | no_return().
 assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
-    case lfm:stat(SessionId, {guid, FileGuid}) of
-        {ok, _} ->
-            ok;
-        {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
-    end.
+    ?check(lfm:stat(SessionId, {guid, FileGuid})),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -153,4 +163,29 @@ assert_file_managed_locally(FileGuid) ->
             ok;
         false ->
             assert_space_supported_locally(SpaceId)
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec ensure_canonical_path(session:id(), file_meta:path()) -> file_meta:path() | no_return().
+ensure_canonical_path(SessionId, Path) ->
+    case filepath_utils:split_and_skip_dots(Path) of
+        {ok, [<<"/">>]} ->
+            <<"/">>;
+        {ok, [<<"/">>, SpaceName | Rest]} ->
+            {ok, UserId} = session:get_user_id(SessionId),
+            case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
+                false ->
+                    throw(?ERROR_POSIX(?ENOENT));
+                {true, SpaceId} ->
+                    assert_space_supported_locally(SpaceId),
+                    filename:join([<<"/">>, SpaceId | Rest])
+            end;
+        _ ->
+            throw(?ERROR_POSIX(?ENOENT))
     end.
