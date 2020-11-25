@@ -639,9 +639,7 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(Space1Guid, private),
                     validate_result_fun = ValidateGsListedFilesOnProvidersNotSupportingSpaceFun
                 }
-            ],
-            randomly_select_scenarios = true,
-            data_spec = get_children_data_spec()
+            ]
         }
     ])).
 
