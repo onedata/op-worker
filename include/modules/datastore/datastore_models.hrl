@@ -633,38 +633,30 @@
     scan_start_time :: undefined | time:millis(),
     scan_stop_time :: undefined | time:millis(),
 
-    % counters used for scan management, they're reset on the beginning of each scan
-    to_process = 0 :: non_neg_integer(),
+    % Counters of files (regular and directories) processed during current (or last finished) scan.
+    % Each processed file is counted just once.
     created = 0 :: non_neg_integer(),
     modified = 0 :: non_neg_integer(),
     deleted = 0 :: non_neg_integer(),
     failed = 0 :: non_neg_integer(),
-    % counter for tasks which don't match to any one of the above categories
-    % i.e.
-    %   * remote files that were processed by sync algorithm but not deleted
-    %   * directories are processed many times (for each batch) but we increase
-    %     `updated` counter only for 1 batch, for other batches we increase
-    %     `other_processed_tasks` to keep track of algorithm and check whether
-    %     it performs as intended
-    other_processed = 0 :: non_neg_integer(),
+    unmodified = 0 :: non_neg_integer(),
 
-    % summary of all scans
-    created_sum = 0 :: non_neg_integer(),
-    modified_sum = 0 :: non_neg_integer(),
-    deleted_sum = 0 :: non_neg_integer(),
-
+    % histograms for files (both directories and regular files) creations
     created_min_hist :: time_slot_histogram:histogram(),
     created_hour_hist :: time_slot_histogram:histogram(),
     created_day_hist :: time_slot_histogram:histogram(),
 
+    % histograms for files (both directories and regular files) modification
     modified_min_hist :: time_slot_histogram:histogram(),
     modified_hour_hist :: time_slot_histogram:histogram(),
     modified_day_hist :: time_slot_histogram:histogram(),
 
+    % histograms for files (both directories and regular files) deletions
     deleted_min_hist :: time_slot_histogram:histogram(),
     deleted_hour_hist :: time_slot_histogram:histogram(),
     deleted_day_hist :: time_slot_histogram:histogram(),
 
+    % histograms for length of jobs' queue
     queue_length_min_hist :: time_slot_histogram:histogram(),
     queue_length_hour_hist :: time_slot_histogram:histogram(),
     queue_length_day_hist :: time_slot_histogram:histogram()

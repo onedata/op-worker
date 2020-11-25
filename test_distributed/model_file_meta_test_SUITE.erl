@@ -143,6 +143,7 @@ list_test(Config) ->
     ?assertMatch({ok, [#child_link_uuid{name = <<"f1">>}, #child_link_uuid{name = <<"f2">>}, #child_link_uuid{name = <<"f3">>}], #{token := _}},
         rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space list 1/list_test_d1">>}, 100])),
 
+    test_utils:set_env(Workers, ?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, timer:seconds(5)),
     {ok, _, #{token := T1}} = ?assertMatch({ok, [#child_link_uuid{name = <<"f1">>}], #{token := _}},
         rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space list 1/list_test_d1">>}, 1])),
     {ok, _, #{token := T2}} = ?assertMatch({ok, [#child_link_uuid{name = <<"f2">>}], #{token := _}},
@@ -150,6 +151,8 @@ list_test(Config) ->
     ?assertMatch({ok, [#child_link_uuid{name = <<"f3">>}], #{token := _}},
         rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space list 1/list_test_d1">>}, 0, 1, T2, <<>>, <<>>])),
 
+    % let the previous cache expire
+    timer:sleep(timer:seconds(5)),
     test_utils:set_env(Workers, ?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, 0),
     {ok, _, #{token := T3}} = ?assertMatch({ok, [#child_link_uuid{name = <<"f1">>}], #{token := _}},
         rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space list 1/list_test_d1">>}, 1])),

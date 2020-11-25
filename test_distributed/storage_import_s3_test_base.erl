@@ -95,15 +95,11 @@ create_file_in_dir_import_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 2,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -112,7 +108,10 @@ create_file_in_dir_import_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
 create_subfiles_import_many_test(Config) ->
@@ -141,15 +140,11 @@ create_subfiles_import_many_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 201,
         <<"created">> => 200,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 200,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdHourHist">> => 200,
         <<"createdDayHist">> => 200,
         <<"modifiedMinHist">> => 1,
@@ -157,7 +152,10 @@ create_subfiles_import_many_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
 create_subfiles_import_many2_test(Config) ->
@@ -180,22 +178,21 @@ create_subfiles_import_many2_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 1002,
         <<"created">> => 1000,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
-        <<"createdSum">> => 1000,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 1,
         <<"createdDayHist">> => 1000,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
 
@@ -218,15 +215,11 @@ create_file_in_dir_update_test(Config) ->
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID),
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 1,
         <<"created">> => 0,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 0,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 0,
         <<"createdHourHist">> => 0,
         <<"createdDayHist">> => 0,
@@ -235,7 +228,10 @@ create_file_in_dir_update_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
@@ -248,15 +244,11 @@ create_file_in_dir_update_test(Config) ->
     %% Check if files were imported on W1
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 2,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 2,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -265,7 +257,10 @@ create_file_in_dir_update_test(Config) ->
         <<"modifiedDayHist">> => 2,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     ?assertMatch({ok, #file_attr{}},
@@ -336,15 +331,11 @@ changing_max_depth_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 2,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -353,7 +344,10 @@ changing_max_depth_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
 
@@ -379,15 +373,11 @@ changing_max_depth_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 3,
         <<"created">> => 1,
         <<"modified">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 2,
-        <<"createdSum">> => 2,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 2,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
         <<"modifiedMinHist">> => 1,
@@ -395,7 +385,10 @@ changing_max_depth_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     % run another scan with max_depth = 3
@@ -420,22 +413,21 @@ changing_max_depth_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 3,
-        <<"toProcess">> => 4,
         <<"created">> => 1,
         <<"modified">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 3,
-        <<"createdSum">> => 3,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 3,
         <<"createdHourHist">> => 3,
         <<"createdDayHist">> => 3,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
 create_file_in_dir_exceed_batch_update_test(Config) ->
@@ -490,15 +482,11 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 7,
         <<"created">> => 4,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 2,
-        <<"createdSum">> => 4,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 2,
         <<"createdMinHist">> => 4,
         <<"createdHourHist">> => 4,
         <<"createdDayHist">> => 4,
@@ -507,7 +495,10 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     ok = sd_test_utils:create_file(W1, FileInDirSDHandle, 8#664),
@@ -518,15 +509,11 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 8,
         <<"created">> => 1,
         <<"modified">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 7,
-        <<"createdSum">> => 5,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 7,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 5,
         <<"createdDayHist">> => 5,
@@ -535,7 +522,10 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Check if files were imported on W1
@@ -580,15 +570,11 @@ update_syncs_files_after_import_failed_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 2,
         <<"created">> => 0,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 1,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 0,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 0,
         <<"createdHourHist">> => 0,
         <<"createdDayHist">> => 0,
@@ -597,7 +583,10 @@ update_syncs_files_after_import_failed_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     storage_import_test_base:unmock_import_file_error(W1),
@@ -607,21 +596,21 @@ update_syncs_files_after_import_failed_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 2,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 2,
+        <<"unmodified">> => 0,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
         <<"modifiedHourHist">> => 2,
         <<"modifiedDayHist">> => 2,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     ?assertMatch({ok, #file_attr{}},
@@ -641,18 +630,18 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 1,
         <<"created">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"createdSum">> => 0,
-        <<"deletedSum">> => 0,
         <<"createdMinHist">> => 0,
         <<"createdHourHist">> => 0,
         <<"createdDayHist">> => 0,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Create dir on storage
@@ -669,20 +658,20 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 2,
         <<"created">> => 0,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 1,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 0,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 0,
         <<"createdHourHist">> => 0,
         <<"createdDayHist">> => 0,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Check if dir was not imported
@@ -698,20 +687,20 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     %next scan should import file
     ?assertMonitoring(W1, #{
         <<"scans">> => 3,
-        <<"toProcess">> => 2,
         <<"created">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
         <<"modified">> => 1,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID, ?ATTEMPTS),
 
     ?assertMatch({ok, #file_attr{}},
@@ -752,15 +741,11 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 2,
         <<"created">> => 0,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
-        <<"createdSum">> => 0,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 1,
         <<"createdMinHist">> => 0,
         <<"createdHourHist">> => 0,
         <<"createdDayHist">> => 0,
@@ -769,7 +754,10 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
 
@@ -787,15 +775,11 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 2,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -804,7 +788,10 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
@@ -813,15 +800,11 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 2,
         <<"created">> => 0,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 2,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 1,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -830,7 +813,10 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
         <<"modifiedDayHist">> => 2,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->
@@ -891,14 +877,12 @@ force_stop_test(Config) ->
     }, ?SPACE_ID),
 
     #{
-        <<"toProcess">> := ToProcess,
-        <<"otherProcessed">> := OtherProcessed,
+        <<"unmodified">> := Unmodified,
         <<"modified">> := Modified,
         <<"created">> := Created
     } = SSM,
 
-    ?assert(ToProcess < 1000),
-    ?assert((OtherProcessed + Modified + Created) < 1000),
+    ?assert((Unmodified + Modified + Created) < 1000),
 
     % check whether next scan will import missing files
     storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
@@ -909,12 +893,13 @@ force_stop_test(Config) ->
         <<"scans">> => 2,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"createdSum">> => 1000,
-        <<"deletedSum">> => 0,
         <<"createdDayHist">> => 1000,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
     storage_import_test_base:parallel_assert(storage_import_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout).
 
@@ -951,15 +936,11 @@ delete_non_empty_directory_update_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 4,
         <<"created">> => 0,
         <<"modified">> => 0,
         <<"deleted">> => 2,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 2,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 2,
+        <<"unmodified">> => 1,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -968,7 +949,10 @@ delete_non_empty_directory_update_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 2,
         <<"deletedHourHist">> => 2,
-        <<"deletedDayHist">> => 2
+        <<"deletedDayHist">> => 2,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Check if dir was deleted in space
@@ -997,15 +981,11 @@ sync_works_properly_after_delete_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 2,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -1014,7 +994,10 @@ sync_works_properly_after_delete_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Check if dir was imported
@@ -1044,15 +1027,11 @@ sync_works_properly_after_delete_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 4,
         <<"created">> => 0,
         <<"modified">> => 1,
         <<"deleted">> => 2,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 2,
-        <<"deletedSum">> => 2,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -1061,7 +1040,10 @@ sync_works_properly_after_delete_test(Config) ->
         <<"modifiedDayHist">> => 2,
         <<"deletedMinHist">> => 2,
         <<"deletedHourHist">> => 2,
-        <<"deletedDayHist">> => 2
+        <<"deletedDayHist">> => 2,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     % ensure that mtime will be changed
@@ -1079,15 +1061,11 @@ sync_works_properly_after_delete_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 3,
-        <<"toProcess">> => 4,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 2,
-        <<"createdSum">> => 2,
-        <<"modifiedSum">> => 3,
-        <<"deletedSum">> => 2,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
@@ -1096,7 +1074,10 @@ sync_works_properly_after_delete_test(Config) ->
         <<"modifiedDayHist">> => 3,
         <<"deletedMinHist">> => 2,
         <<"deletedHourHist">> => 2,
-        <<"deletedDayHist">> => 2
+        <<"deletedDayHist">> => 2,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID, ?ATTEMPTS),
 
     ?assertMatch({ok, #file_attr{}},
@@ -1148,15 +1129,11 @@ delete_and_update_files_simultaneously_update_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 3,
         <<"created">> => 2,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 2,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 2,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
@@ -1165,7 +1142,10 @@ delete_and_update_files_simultaneously_update_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Delete file on storage
@@ -1178,20 +1158,20 @@ delete_and_update_files_simultaneously_update_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 5,
         <<"created">> => 0,
         <<"deleted">> => 1,
         <<"modified">> => 1,
-        <<"otherProcessed">> => 3,
+        <<"unmodified">> => 1,
         <<"failed">> => 0,
-        <<"createdSum">> => 2,
-        <<"deletedSum">> => 1,
         <<"createdMinHist">> => 2,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1
+        <<"deletedDayHist">> => 1,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Check if File1 was deleted in and if File2 was updated
@@ -1225,15 +1205,11 @@ delete_file_in_dir_update_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 2,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -1242,7 +1218,10 @@ delete_file_in_dir_update_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Check if file was imported on W1
@@ -1267,18 +1246,18 @@ delete_file_in_dir_update_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 5,
         <<"created">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"createdSum">> => 2,
-        <<"deletedSum">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Check if file was imported on W1
@@ -1300,17 +1279,17 @@ delete_file_in_dir_update_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 3,
-        <<"toProcess">> => 5,
         <<"deleted">> => 1,
         <<"failed">> => 0,
-        <<"createdSum">> => 2,
-        <<"deletedSum">> => 1,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1
+        <<"deletedDayHist">> => 1,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Check if file was deleted from the space
@@ -1339,15 +1318,11 @@ delete_many_subfiles_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 1002,
         <<"created">> => 1000,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
-        <<"createdSum">> => 1000,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 1,
         <<"createdHourHist">> => 1000,
         <<"createdDayHist">> => 1000,
         <<"modifiedMinHist">> => 1,
@@ -1355,7 +1330,10 @@ delete_many_subfiles_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
@@ -1366,21 +1344,20 @@ delete_many_subfiles_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 1113,
         <<"created">> => 0,
         <<"modified">> => 0,
         <<"deleted">> => 1111,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 2,
-        <<"createdSum">> => 1000,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 1111,
+        <<"unmodified">> => 1,
         <<"createdDayHist">> => 1000,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
         <<"deletedHourHist">> => 1111,
-        <<"deletedDayHist">> => 1111
+        <<"deletedDayHist">> => 1111,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
 create_list_race_test(Config) ->
@@ -1455,14 +1432,15 @@ create_list_race_test(Config) ->
         <<"created">> => 0,
         <<"deleted">> => 0, % no deleted files because FileToDeleteOnStorage deletion will be detected in next scan
         <<"failed">> => 0,
-        <<"createdSum">> => 0,
-        <<"deletedSum">> => 0,
         <<"createdMinHist">> => 0,
         <<"createdHourHist">> => 0,
         <<"createdDayHist">> => 0,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     [LeftFile] = FilePaths -- [?SPACE_TEST_FILE_PATH(F) || F <- ListedFiles],
@@ -1484,18 +1462,18 @@ create_list_race_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 3,
-        <<"toProcess">> => 4,
         <<"created">> => 0,
         <<"deleted">> => 1,
         <<"failed">> => 0,
-        <<"createdSum">> => 0,
-        <<"deletedSum">> => 1,
         <<"createdMinHist">> => 0,
         <<"createdHourHist">> => 0,
         <<"createdDayHist">> => 0,
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1
+        <<"deletedDayHist">> => 1,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID, ?ATTEMPTS),
 
 
@@ -1541,15 +1519,11 @@ change_file_type_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 2,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -1558,7 +1532,10 @@ change_file_type_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     ok = sd_test_utils:unlink(W1, SDHandle, ?TEST_DATA_SIZE),
@@ -1576,15 +1553,11 @@ change_file_type_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 3,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 1,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 2,
-        <<"modifiedSum">> => 2,
-        <<"deletedSum">> => 1,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
@@ -1593,7 +1566,10 @@ change_file_type_test(Config) ->
         <<"modifiedDayHist">> => 2,
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1
+        <<"deletedDayHist">> => 1,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     % check whether directory has been imported
@@ -1647,15 +1623,11 @@ change_file_type3_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"toProcess">> => 2,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 1,
-        <<"modifiedSum">> => 1,
-        <<"deletedSum">> => 0,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
@@ -1664,7 +1636,10 @@ change_file_type3_test(Config) ->
         <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
 
@@ -1679,15 +1654,11 @@ change_file_type3_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
-        <<"toProcess">> => 4,
         <<"created">> => 1,
         <<"modified">> => 1,
         <<"deleted">> => 2,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"createdSum">> => 2,
-        <<"modifiedSum">> => 2,
-        <<"deletedSum">> => 2,
+        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
@@ -1696,7 +1667,10 @@ change_file_type3_test(Config) ->
         <<"modifiedDayHist">> => 2,
         <<"deletedMinHist">> => 2,
         <<"deletedHourHist">> => 2,
-        <<"deletedDayHist">> => 2
+        <<"deletedDayHist">> => 2,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
     ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
