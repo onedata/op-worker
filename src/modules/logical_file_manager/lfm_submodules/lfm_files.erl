@@ -77,7 +77,7 @@ rm(SessId, FileKey) ->
     TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 mv(SessId, FileKey, TargetPath) ->
-    {TargetName, TargetDir} = fslogic_path:basename_and_parent(TargetPath),
+    {TargetName, TargetDir} = filepath_utils:basename_and_parent_dir(TargetPath),
     mv(SessId, FileKey, {path, TargetDir}, TargetName).
 
 %%--------------------------------------------------------------------
@@ -107,7 +107,7 @@ mv(SessId, FileKey, TargetParentKey, TargetName) ->
     TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 cp(SessId, FileKey, TargetPath) ->
-    {TargetName, TargetParentPath} = fslogic_path:basename_and_parent(TargetPath),
+    {TargetName, TargetParentPath} = filepath_utils:basename_and_parent_dir(TargetPath),
     cp(SessId, FileKey, {path, TargetParentPath}, TargetName).
 
 %%--------------------------------------------------------------------
@@ -327,7 +327,7 @@ create(SessId, Path) ->
     Mode :: file_meta:posix_permissions() | undefined) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(SessId, Path, Mode) ->
-    {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
+    {Name, ParentPath} = filepath_utils:basename_and_parent_dir(Path),
     remote_utils:call_fslogic(SessId, fuse_request,
         #resolve_guid{path = ParentPath},
         fun(#guid{guid = ParentGuid}) ->
@@ -358,7 +358,7 @@ create(SessId, ParentGuid, Name, Mode) ->
     {ok, {fslogic_worker:file_guid(), lfm:handle()}}
     | lfm:error_reply().
 create_and_open(SessId, Path, Mode, OpenFlag) ->
-    {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
+    {Name, ParentPath} = filepath_utils:basename_and_parent_dir(Path),
     remote_utils:call_fslogic(SessId, fuse_request,
         #resolve_guid{path = ParentPath},
         fun(#guid{guid = ParentGuid}) ->

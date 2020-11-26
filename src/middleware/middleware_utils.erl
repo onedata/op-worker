@@ -174,7 +174,7 @@ assert_file_managed_locally(FileGuid) ->
 %% @private
 -spec ensure_canonical_path(session:id(), file_meta:path()) -> file_meta:path() | no_return().
 ensure_canonical_path(SessionId, Path) ->
-    case fslogic_path:split_skipping_dots(Path) of
+    case filepath_utils:split_and_skip_dots(Path) of
         {ok, [<<"/">>]} ->
             <<"/">>;
         {ok, [<<"/">>, SpaceName | Rest]} ->

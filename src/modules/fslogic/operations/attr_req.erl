@@ -377,7 +377,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         guid = FileGuid,
         name = FileName,
         mode = Mode,
-        parent_uuid = ParentGuid,
+        parent_guid = ParentGuid,
         uid = Uid,
         gid = Gid,
         atime = ATime,

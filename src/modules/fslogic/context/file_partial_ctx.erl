@@ -56,7 +56,7 @@ new_by_guid(Guid)->
 %%--------------------------------------------------------------------
 -spec new_by_logical_path(user_ctx:ctx(), file_meta:path()) -> ctx().
 new_by_logical_path(UserCtx, Path) ->
-    {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
+    {ok, Tokens} = filepath_utils:split_and_skip_dots(Path),
     case session_utils:is_special(user_ctx:get_session_id(UserCtx)) of
         true ->
             throw({invalid_request, <<"Path resolution requested in the context"
@@ -86,7 +86,7 @@ new_by_logical_path(UserCtx, Path) ->
     ctx().
 new_by_canonical_path(UserCtx, Path) ->
     UserId = user_ctx:get_user_id(UserCtx),
-    {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
+    {ok, Tokens} = filepath_utils:split_and_skip_dots(Path),
     case Tokens of
         [<<"/">>] ->
             UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserId),
@@ -130,7 +130,7 @@ get_canonical_path(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_space_id_const(ctx()) -> od_space:id() | undefined.
 get_space_id_const(#file_partial_ctx{canonical_path = Path}) ->
-    case fslogic_path:split(Path) of
+    case filepath_utils:split(Path) of
         [<<"/">>, SpaceId | _] ->
             SpaceId;
         _ ->
@@ -146,7 +146,7 @@ get_space_id_const(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec is_space_dir_const(ctx()) -> boolean().
 is_space_dir_const(#file_partial_ctx{canonical_path = Path}) ->
-    case fslogic_path:split(Path) of
+    case filepath_utils:split(Path) of
         [<<"/">>, _SpaceId] ->
             true;
         _ ->

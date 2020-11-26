@@ -6262,11 +6262,6 @@ end_per_testcase(force_stop_test, Config) ->
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
     end_per_testcase(default, Config);
 
-end_per_testcase(sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(Workers, [fslogic_path]),
-    end_per_testcase(default, Config);
-
 end_per_testcase(create_remote_dir_import_race_test, Config) ->
     [_W1, W2| _] = ?config(op_worker_nodes, Config),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),

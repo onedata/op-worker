@@ -142,7 +142,7 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             {SpaceStorageFileId, _SpaceCtx3} = file_ctx:get_storage_file_id(SpaceCtx2),
             DirName = filename:dirname(SpaceStorageFileId),
             TestFileName = storage_detector:generate_file_id(),
-            TestFileId = fslogic_path:join([DirName, TestFileName]),
+            TestFileId = filepath_utils:join([DirName, TestFileName]),
             try
                 FileContent = storage_detector:create_test_file(Helper, ServerStorageUserCtx, TestFileId),
                 spawn(storage_req, remove_storage_test_file, [

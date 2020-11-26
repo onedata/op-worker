@@ -570,20 +570,20 @@ data_access_caveats_cache_test(Config) ->
     end, [UserRootDir, SpaceRootDirGuid, RootDirGuid, DirGuid]),
 
     ?assertEqual(
-        {ok, subpath},
+        {ok, equal_or_descendant},
         ?rpcCache(W, check_permission, [{data_constraint, Token, FileGuid}])
     ),
 
-    % calling on dir any function reserved only for subpath should cache
-    % {subpath, ?EACCES} meaning that no such operation can be performed
-    % but since ancestor checks were not performed it is not known whether
+    % calling on dir any function reserved only for equal_or_descendant should
+    % cache {equal_or_descendant, ?EACCES} meaning that no such operation can be
+    % performed but since ancestor checks were not performed it is not known whether
     % ancestor operations can be performed
     ?assertMatch(
         {error, ?EACCES},
         lfm_proxy:get_acl(W, SessId, {guid, DirGuid})
     ),
     ?assertEqual(
-        {ok, {subpath, ?EACCES}},
+        {ok, {equal_or_descendant, ?EACCES}},
         ?rpcCache(W, check_permission, [{data_constraint, Token, DirGuid}])
     ),
 
@@ -1251,6 +1251,12 @@ set_perms_test(Config) ->
     permissions_test_utils:set_modes(W, #{DirGuid => 8#000, FileGuid => 8#000}),
     ?assertMatch(ok, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, FileGuid}, 8#555)),
     AssertProperStorageAttrsFun(8#555),
+
+    % but even space owner cannot perform write operation on space dir
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(<<"space1">>),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#000)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#555)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#777)),
 
     % users outside of space shouldn't even see the file
     permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),

@@ -71,7 +71,7 @@ all() -> ?ALL(?TEST_CASES).
 -define(TEST_DATA, <<"abcdefgh">>).
 -define(TEST_DATA2, <<"zyxwvut">>).
 -define(CANONICAL_PATH(FileRelativePath), filename:join(["/", ?SPACE_ID, FileRelativePath])).
--define(PATH(FileRelativePath), fslogic_path:join([<<"/">>, ?SPACE_NAME, FileRelativePath])).
+-define(PATH(FileRelativePath), filepath_utils:join([<<"/">>, ?SPACE_NAME, FileRelativePath])).
 -define(XATTR_KEY(N), <<"xattrName", (integer_to_binary(N))/binary>>).
 -define(XATTR_VALUE(N), <<"xattrValue", (integer_to_binary(N))/binary>>).
 -define(XATTRS, #{

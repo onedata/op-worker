@@ -497,7 +497,7 @@ guids_to_object_ids(Guids) ->
 file_details_to_gs_json(undefined, #file_details{
     file_attr = #file_attr{
         guid = FileGuid,
-        parent_uuid = ParentGuid,
+        parent_guid = ParentGuid,
         name = FileName,
         type = Type,
         mode = Mode,
@@ -545,7 +545,7 @@ file_details_to_gs_json(undefined, #file_details{
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{
         guid = FileGuid,
-        parent_uuid = ParentGuid,
+        parent_guid = ParentGuid,
         name = FileName,
         type = Type,
         mode = Mode,

@@ -602,14 +602,12 @@ sanitize_readonly_option(IdOrName, #{
     readonly := Readonly,
     importedStorage := Imported
 }) ->
-
     case {ensure_boolean(Readonly), ensure_boolean(SkipStorageDetection), ensure_boolean(Imported)} of
         {false, _, _} -> ok;
         {true, false, _} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(skipStorageDetection, [true]));
         {true, true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
         {true, true, true} -> ok
     end.
-
 
 
 -spec ensure_boolean(binary() | boolean()) -> boolean().

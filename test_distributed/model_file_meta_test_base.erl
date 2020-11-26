@@ -114,9 +114,9 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(<<"/Space 1/dir2/file2">>, U31),
     ?assertMatch(<<"/Space 1/dir2/file3">>, U32),
 
-    {A41, ResolveLevel2} = ?call_with_time(Worker1, fslogic_path, resolve, [<<"/Space 1/">>]),
-    {A42, ResolveLevel3} = ?call_with_time(Worker1, fslogic_path, resolve, [<<"/Space 1/dir2">>]),
-    {A43, ResolveLevel20} = ?call_with_time(Worker1, fslogic_path, resolve, [Level20Path]),
+    {A41, ResolveLevel2} = ?call_with_time(Worker1, canonical_path, resolve, [<<"/Space 1/">>]),
+    {A42, ResolveLevel3} = ?call_with_time(Worker1, canonical_path, resolve, [<<"/Space 1/dir2">>]),
+    {A43, ResolveLevel20} = ?call_with_time(Worker1, canonical_path, resolve, [Level20Path]),
     ?assertMatch({ok, #document{key = Space1Uuid}}, A41),
     ?assertMatch({ok, #document{key = Dir2Uuid}}, A42),
     ?assertMatch({ok, #document{key = Level20Key}}, A43),
