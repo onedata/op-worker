@@ -253,7 +253,8 @@ migrate_storage_sync_monitoring() ->
                 case storage_sync_monitoring:get(SpaceId, StorageId) of
                     {ok, #document{value = SSM}} ->
                         SIMV1 = storage_import_monitoring:migrate_to_v1(SSM),
-                        case storage_import_monitoring:create(SpaceId, SIMV1) of
+                        {_, SIM} = datastore_versions:upgrade_record(1, storage_import_monitoring, SIMV1),
+                        case storage_import_monitoring:create(SpaceId, SIM) of
                             {ok, _} ->
                                 ?info("storage_sync_monitoring migration procedure for space ~s finished succesfully.", [SpaceId]),
                                 ok;
@@ -312,7 +313,7 @@ assert_manual_storage_import_supported(SpaceId) ->
                 true ->
                     ok;
                 false ->
-                    throw(?ERROR_FILE_REGISTRATION_NOT_SUPPORTED(StorageId, ?OBJECT_HELPERS))
+                    throw(?ERROR_STORAGE_IMPORT_NOT_SUPPORTED(StorageId, ?OBJECT_HELPERS))
             end;
         Error ->
             throw(Error)

@@ -21,7 +21,7 @@
 % storage_import_engine results
 -define(FILE_CREATED, created).
 -define(FILE_MODIFIED, modified).
--define(FILE_PROCESSED, processed).
+-define(FILE_UNMODIFIED, unmodified).
 -define(FILE_PROCESSING_FAILED, failed).
 
 % storage import scan statuses

@@ -52,7 +52,8 @@
     query_file_popularity_view/1,
     spatial_flag_test/1,
     file_removal_test/1,
-    create_duplicated_views_on_remote_providers/1]).
+    create_duplicated_views_on_remote_providers/1
+]).
 
 all() ->
     ?ALL([
@@ -903,7 +904,7 @@ create_duplicated_views_on_remote_providers(Config) ->
     % get by simple name
     ?assertEqual({ok, #{
         <<"viewOptions">> => Options1,
-        <<"providers">> => [Provider1, Provider2],
+        <<"providers">> => [Provider2, Provider1],
         <<"mapFunction">> => ExpMapFun,
         <<"reduceFunction">> => null,
         <<"spatial">> => false
@@ -922,7 +923,7 @@ create_duplicated_views_on_remote_providers(Config) ->
     % get by extended name
     ?assertEqual({ok, #{
         <<"viewOptions">> => Options1,
-        <<"providers">> => [Provider1, Provider2],
+        <<"providers">> => [Provider2, Provider1],
         <<"mapFunction">> => ExpMapFun,
         <<"reduceFunction">> => null,
         <<"spatial">> => false
@@ -938,7 +939,7 @@ create_duplicated_views_on_remote_providers(Config) ->
 
     ?assertEqual({ok, #{
         <<"viewOptions">> => Options1,
-        <<"providers">> => [Provider1, Provider2],
+        <<"providers">> => [Provider2, Provider1],
         <<"mapFunction">> => ExpMapFun,
         <<"reduceFunction">> => null,
         <<"spatial">> => false
@@ -955,7 +956,7 @@ create_duplicated_views_on_remote_providers(Config) ->
     % get by shortened extended name
     ?assertEqual({ok, #{
         <<"viewOptions">> => Options1,
-        <<"providers">> => [Provider1, Provider2],
+        <<"providers">> => [Provider2, Provider1],
         <<"mapFunction">> => ExpMapFun,
         <<"reduceFunction">> => null,
         <<"spatial">> => false
@@ -971,7 +972,7 @@ create_duplicated_views_on_remote_providers(Config) ->
 
     ?assertEqual({ok, #{
         <<"viewOptions">> => Options1,
-        <<"providers">> => [Provider1, Provider2],
+        <<"providers">> => [Provider2, Provider1],
         <<"mapFunction">> => ExpMapFun,
         <<"reduceFunction">> => null,
         <<"spatial">> => false

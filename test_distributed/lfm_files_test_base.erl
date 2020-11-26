@@ -88,7 +88,8 @@
     lfm_open_failure_multiple_users/1,
     lfm_open_and_create_open_failure/1,
     lfm_copy_failure_multiple_users/1,
-    lfm_rmdir/1
+    lfm_rmdir/1,
+    sparse_files_should_be_created/2
 ]).
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -1412,7 +1413,7 @@ share_getattr(Config) ->
             name = <<"share_dir2">>,
             type = ?DIRECTORY_TYPE,
             guid = DirGuid,
-            parent_uuid = SpaceGuid,
+            parent_guid = SpaceGuid,
             owner_id = UserId,
             provider_id = ProviderId,
             shares = [ShareId2, ShareId1]}
@@ -1430,7 +1431,7 @@ share_getattr(Config) ->
                 guid = ShareGuid,
                 uid = ?SHARE_UID,
                 gid = ?SHARE_GID,
-                parent_uuid = undefined,      % share root should not point to any parent
+                parent_guid = undefined,      % share root should not point to any parent
                 owner_id = <<"unknown">>,
                 provider_id = <<"unknown">>,
                 shares = [ShareId1]}          % other shares shouldn't be shown
@@ -1520,7 +1521,7 @@ share_child_getattr(Config) ->
             name = <<"file">>,
             type = ?REGULAR_FILE_TYPE,
             guid = ShareChildGuid,
-            parent_uuid = ShareDirGuid,
+            parent_guid = ShareDirGuid,
             shares = []
         }},
         lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareChildGuid})
@@ -1680,7 +1681,7 @@ opening_file_should_increase_file_popularity(Config) ->
     ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
 
     % when
-    TimeBeforeFirstOpen = rpc:call(W, time_utils, timestamp_seconds, []) div 3600,
+    TimeBeforeFirstOpen = rpc:call(W, clock, timestamp_seconds, []) div 3600,
     {ok, Handle1} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
     lfm_proxy:close(W, Handle1),
 
@@ -1702,7 +1703,7 @@ opening_file_should_increase_file_popularity(Config) ->
     ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
     % when
-    TimeBeforeSecondOpen = rpc:call(W, time_utils, timestamp_seconds, []) div 3600,
+    TimeBeforeSecondOpen = rpc:call(W, clock, timestamp_seconds, []) div 3600,
     lists:foreach(fun(_) ->
         {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, read),
         lfm_proxy:close(W, Handle2)
@@ -1763,6 +1764,70 @@ file_popularity_should_have_correct_file_size(Config) ->
         rpc:call(W, file_popularity, get, [FileUuid])
     ).
 
+sparse_files_should_be_created(Config, ReadFun) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    ProviderId = rpc:call(W, oneprovider, get_id, []),
+
+    % Hole between not empty blocks
+    {ok, FileGuid1} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid1, 0),
+    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid1, 10),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid1, 11, [[0, 1], [10, 1]]),
+
+    % Hole before single block
+    {ok, FileGuid2} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid2, 10),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid2, 11, [[10, 1]]),
+
+    % Empty block write to not empty file
+    {ok, FileGuid3} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid3, 0),
+    file_ops_test_utils:empty_write_to_file(W, SessId1, FileGuid3, 10),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid3, 10, [[0, 1]]),
+
+    % Empty block write to empty file
+    {ok, FileGuid4} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    file_ops_test_utils:empty_write_to_file(W, SessId1, FileGuid4, 10),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid4, 10, []),
+
+    % Empty block write in the middle of not empty file
+    {ok, FileGuid5} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid5, 10),
+    file_ops_test_utils:empty_write_to_file(W, SessId1, FileGuid5, 5),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid5, 11, [[10, 1]]),
+
+    % Creation of hole using truncate on not empty file
+    {ok, FileGuid6} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid6, 0),
+    ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid6}, 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid6}, ProviderId)),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid6, 10, [[0, 1]]),
+
+    % Creation of hole using truncate on empty file
+    {ok, FileGuid7} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>, 8#755)),
+    ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid7}, 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid7}, ProviderId)),
+    verify_sparse_file(ReadFun, W, SessId1, FileGuid7, 10, []).
+
+verify_sparse_file(ReadFun, W, SessId, FileGuid, FileSize, ExpectedBlocks) ->
+    BlocksSize = lists:foldl(fun([_, Size], Acc) -> Acc + Size end, 0, ExpectedBlocks),
+    ?assertMatch({ok, [#{<<"blocks">> := ExpectedBlocks, <<"totalBlocksSize">> := BlocksSize}]},
+        lfm_proxy:get_file_distribution(W, SessId, {guid, FileGuid})),
+
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(W, SessId, {guid, FileGuid})),
+
+    ExpectedFileContent = file_ops_test_utils:get_sparse_file_content(ExpectedBlocks, FileSize),
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
+    ?assertMatch({ok, ExpectedFileContent}, lfm_proxy:ReadFun(W, Handle, 0, 100)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
 %%%===================================================================
 %%% Internal functions

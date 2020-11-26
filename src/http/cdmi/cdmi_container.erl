@@ -79,7 +79,7 @@ put_cdmi(Req, #cdmi_req{
     case {Attrs, CopyURI, MoveURI} of
         % create directory
         {undefined, undefined, undefined} ->
-            {ok, Guid} = ?check(lfm:mkdir(SessId, Path)),
+            {ok, Guid} = cdmi_lfm:create_dir(SessId, Path),
             cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
             prepare_create_dir_cdmi_response(Req, CdmiReq, Guid);
         % update metadata
@@ -93,20 +93,12 @@ put_cdmi(Req, #cdmi_req{
             {true, Req1, CdmiReq};
         % copy directory
         {undefined, CopyURI, undefined} ->
-            {ok, Guid} = ?check(lfm:cp(
-                SessId,
-                {path, filepath_utils:ensure_begins_with_slash(CopyURI)},
-                Path
-            )),
+            {ok, Guid} = cdmi_lfm:cp(SessId, CopyURI, Path),
             cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
             prepare_create_dir_cdmi_response(Req, CdmiReq, Guid);
         % move directory
         {undefined, undefined, MoveURI} ->
-            {ok, Guid} = ?check(lfm:mv(
-                SessId,
-                {path, filepath_utils:ensure_begins_with_slash(MoveURI)},
-                Path
-            )),
+            {ok, Guid} = cdmi_lfm:mv(SessId, MoveURI, Path),
             cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
             prepare_create_dir_cdmi_response(Req, CdmiReq, Guid)
     end.
@@ -119,8 +111,8 @@ put_cdmi(Req, #cdmi_req{
 %%--------------------------------------------------------------------
 -spec put_binary(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {true, cowboy_req:req(), cdmi_handler:cdmi_req()} | no_return().
-put_binary(Req, #cdmi_req{auth = Auth, file_path = Path} = CdmiReq) ->
-    ?check(lfm:mkdir(Auth#auth.session_id, Path)),
+put_binary(Req, #cdmi_req{auth = ?USER(_UserId, SessionId), file_path = Path} = CdmiReq) ->
+    cdmi_lfm:create_dir(SessionId, Path),
     {true, Req, CdmiReq}.
 
 
@@ -163,7 +155,10 @@ prepare_create_dir_cdmi_response(Req1, #cdmi_req{
 get_directory_info(RequestedInfo, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
     file_path = Path,
-    file_attrs = #file_attr{guid = Guid} = Attrs
+    file_attrs = #file_attr{
+        guid = Guid,
+        parent_guid = ParentGuid
+    } = Attrs
 }) ->
     lists:foldl(fun
         (<<"objectType">>, Acc) ->
@@ -184,10 +179,6 @@ get_directory_info(RequestedInfo, #cdmi_req{
                 <<"/">> ->
                     Acc;
                 _ ->
-                    {ok, #file_attr{guid = ParentGuid}} = ?check(lfm:stat(
-                        SessionId,
-                        {path, filepath_utils:parent_dir(Path)}
-                    )),
                     {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
                     Acc#{<<"parentID">> => ParentObjectId}
             end;
@@ -284,11 +275,9 @@ normalize_childrenrange(From, To, _ChildNum, MaxChildren) ->
 -spec distinguish_directories(session:id(), file_id:file_guid(),
     Name :: binary()) -> binary() | no_return().
 distinguish_directories(SessionId, Guid, Name) ->
-    case lfm:stat(SessionId, {guid, Guid}) of
+    case ?check(lfm:stat(SessionId, {guid, Guid})) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             filepath_utils:ensure_ends_with_slash(Name);
         {ok, _} ->
-            Name;
-        {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
+            Name
     end.

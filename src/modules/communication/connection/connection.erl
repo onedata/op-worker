@@ -137,10 +137,7 @@
 ).
 
 %% API
--export([
-    start_link/5, start_link/7,
-    close/1
-]).
+-export([start_link/5, start_link/7, close/1]).
 -export([send_msg/2, send_keepalive/1]).
 -export([rebuild_rib/1]).
 
@@ -227,8 +224,8 @@ send_keepalive(Pid) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Tries to send a message and provides feedback about success or
-%% eventual errors while serializing/sending.
+%% Informs connection process that it should rebuild it's rib as it
+%% may be obsolete (e.g. after node death).
 %% @end
 %%-------------------------------------------------------------------
 -spec rebuild_rib(pid()) -> ok | error().
@@ -328,7 +325,7 @@ handle_info({upgrade_protocol, Hostname}, State) ->
         {ok, NewState} ->
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, _Reason} ->
-            {stop, connection_attempt_failed, State}
+            {stop, termination_reason(connection_attempt_failed, State), State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Socket, ok = Ok} = State) ->
@@ -340,12 +337,12 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_protocol_upgrade_response'
             % so terminate gracefully as to not spam more error logs
-            {stop, connection_attempt_failed, State}
+            {stop, termination_reason(connection_attempt_failed, State), State}
     catch Type:Reason ->
         ?error_stacktrace("Unexpected error during protocol upgrade: ~p:~p", [
             Type, Reason
         ]),
-        {stop, connection_attempt_failed, State}
+        {stop, termination_reason(connection_attempt_failed, State), State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
@@ -358,12 +355,12 @@ handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = S
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_handshake' so
             % terminate gracefully as to not spam more error logs
-            {stop, connection_attempt_failed, State}
+            {stop, termination_reason(connection_attempt_failed, State), State}
     catch Type:Reason ->
         ?error_stacktrace("Unexpected error while performing handshake: ~p:~p", [
             Type, Reason
         ]),
-        {stop, connection_attempt_failed, State}
+        {stop, termination_reason(connection_attempt_failed, State), State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State) ->
@@ -930,3 +927,15 @@ maybe_stringify_msg({send_msg, Msg}) ->
     clproto_utils:msg_to_string(Msg);
 maybe_stringify_msg(Msg) ->
     Msg.
+
+
+%% @private
+-spec termination_reason(OriginalTerminationReason :: atom(), state()) ->
+    TerminationReason :: atom().
+termination_reason(_Reason, #state{type = incoming, status = Status}) when Status /= ready ->
+    % Concrete errors were already logged and in case of incoming connections
+    % no backoff is performed by server (as it is responsibility of a remote peer)
+    % so terminate with reason 'normal' to not spam with termination logs
+    normal;
+termination_reason(Reason, _State) ->
+    Reason.

@@ -18,7 +18,7 @@
 % possible types are: <<"minute">>, <<"hour">>, <<"day">> and <<"month">>.
 -type period() :: binary().
 -type histograms() :: #{od_provider:id() => histogram:histogram()}.
--type timestamp() :: non_neg_integer().
+-type timestamp() :: clock:seconds().
 -type timestamps() :: #{od_provider:id() => non_neg_integer()}.
 -type stats_record() ::
     transfer:transfer() |

@@ -41,6 +41,28 @@ routes() -> [
             scope = private
         }
     }},
+    %% Create file
+    {<<"/data/:id/children">>, rest_handler, #rest_req{
+        method = 'POST',
+        consumes = [<<"application/octet-stream">>],
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file,
+            id = ?OBJECTID_BINDING(id),
+            aspect = child, 
+            scope = private
+        }
+    }},
+    %% Remove file
+    {<<"/data/:id">>, rest_handler, #rest_req{
+        method = 'DELETE',
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = instance, 
+            scope = private
+        }
+    }},
     %% Get file attributes
     {<<"/data/:id">>, rest_handler, #rest_req{
         method = 'GET',
@@ -61,6 +83,28 @@ routes() -> [
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
             aspect = attrs, 
+            scope = private
+        }
+    }},
+    %% Download file content
+    {<<"/data/:id/content">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = content, 
+            scope = private
+        }
+    }},
+    %% Update file content
+    {<<"/data/:id/content">>, rest_handler, #rest_req{
+        method = 'PUT',
+        consumes = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = content, 
             scope = private
         }
     }}

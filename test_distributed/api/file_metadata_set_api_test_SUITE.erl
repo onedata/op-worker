@@ -433,6 +433,8 @@ set_file_xattrs_test(Config) ->
             ]},
             bad_values = [
                 {<<"metadata">>, <<"aaa">>, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)},
+                % It should be impossible to set something other than binary as rdf metadata
+                {<<"metadata">>, #{?RDF_METADATA_KEY => ?JSON_METADATA_4}, ?ERROR_POSIX(?EINVAL)},
                 % Keys with prefixes `cdmi_` and `onedata_` are forbidden with exception
                 % for those listed in above correct_values
                 {<<"metadata">>, #{<<"cdmi_attr">> => <<"val">>}, ?ERROR_POSIX(?EPERM)},
@@ -580,7 +582,7 @@ build_set_metadata_validate_gs_call_fun(GetExpResultFun) ->
     fun(TestCtx, Result) ->
         case GetExpResultFun(TestCtx) of
             ok ->
-                ?assertEqual({ok, undefined}, Result);
+                ?assertEqual(ok, Result);
             {error, _} = ExpError ->
                 ?assertEqual(ExpError, Result)
         end

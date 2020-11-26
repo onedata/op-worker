@@ -55,7 +55,8 @@
 -export([verify_provider_identity/1]).
 
 
--define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
+-define(PROVIDER_NODES_CACHE_TTL, 
+    application:get_env(?APP_NAME, provider_nodes_cache_ttl_seconds, 600)). % 10 minutes
 
 -compile([{no_auto_import, [get/0]}]).
 
@@ -386,12 +387,12 @@ get_nodes(ProviderId) ->
         % Call by ?MODULE to allow for CT testing
         case ?MODULE:get_domain(?ROOT_SESS_ID, ProviderId) of
             {ok, Domain} ->
-                {true, get_nodes(ProviderId, Domain), ?PROVIDER_NODES_CACHE_TTL};
+                {ok, get_nodes(ProviderId, Domain), ?PROVIDER_NODES_CACHE_TTL};
             {error, _} = Error ->
                 Error
         end
     end,
-    simple_cache:get({provider_nodes, ProviderId}, ResolveNodes).
+    node_cache:acquire({provider_nodes, ProviderId}, ResolveNodes).
 
 -spec get_nodes(od_provider:id(), od_provider:domain()) -> [binary()].
 get_nodes(ProviderId, Domain) ->
@@ -442,9 +443,9 @@ get_rtransfer_port(ProviderId) ->
                     [to_printable(ProviderId), ?RTRANSFER_PORT]),
                 ?RTRANSFER_PORT
         end,
-        {true, Port, ?PROVIDER_NODES_CACHE_TTL}
+        {ok, Port, ?PROVIDER_NODES_CACHE_TTL}
     end,
-    simple_cache:get({rtransfer_port, ProviderId}, ResolvePort).
+    node_cache:acquire({rtransfer_port, ProviderId}, ResolvePort).
 
 
 %%--------------------------------------------------------------------
@@ -656,7 +657,7 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
     })).
 
 
--spec get_zone_time() -> time_utils:millis() | no_return().
+-spec get_zone_time() -> clock:millis() | no_return().
 get_zone_time() ->
     {ok, Millis} = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,

@@ -175,14 +175,15 @@ emit_file_location_changed(Location, ExcludedSessions, Offset, OffsetEnd) ->
 %% emit_file_location_changed on each change.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_locations_changed([{file_ctx:ctx(), non_neg_integer() | undefined,
-    non_neg_integer() | undefined}], [session:id()]) ->
+-spec emit_file_locations_changed(replica_updater:location_changes_description(), [session:id()]) ->
     ok | {error, Reason :: term()}.
-emit_file_locations_changed(EventsList, ExcludedSessions) ->
-    EventsList2 = lists:map(fun({Location, Offset, OffsetEnd}) ->
+emit_file_locations_changed([], _ExcludedSessions) ->
+    ok;
+emit_file_locations_changed(LocationChangesDescription, ExcludedSessions) ->
+    EventsList = lists:map(fun({Location, Offset, OffsetEnd}) ->
         create_file_location_changed(Location, Offset, OffsetEnd)
-    end, EventsList),
-    event:emit({aggregated, EventsList2}, {exclude, ExcludedSessions}).
+    end, LocationChangesDescription),
+    event:emit({aggregated, EventsList}, {exclude, ExcludedSessions}).
 
 %%--------------------------------------------------------------------
 %% @doc

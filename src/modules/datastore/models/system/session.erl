@@ -22,8 +22,12 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API - basic model function
--export([create/1, save/1, get/1, exists/1, list/0,
-    update/2, update_doc_and_time/2, delete/1, delete_doc/1]).
+-export([
+    create/1, save/1, get/1, exists/1, list/0,
+    update/2, update_doc_and_time/2, delete/1, delete_doc/1
+]).
+-export([is_space_owner/2]).
+
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
@@ -78,7 +82,7 @@
 create(Doc = #document{value = Sess}) ->
     ?update_counter(?EXOMETER_NAME(active_sessions)),
     ?extract_key(datastore_model:create(?CTX, Doc#document{value = Sess#session{
-        accessed = time_utils:timestamp_seconds()
+        accessed = clock:timestamp_seconds()
     }})).
 
 %%--------------------------------------------------------------------
@@ -89,7 +93,7 @@ create(Doc = #document{value = Sess}) ->
 -spec save(doc()) -> {ok, id()} | {error, term()}.
 save(Doc = #document{value = Sess}) ->
     ?extract_key(datastore_model:save(?CTX, Doc#document{value = Sess#session{
-        accessed = time_utils:timestamp_seconds()
+        accessed = clock:timestamp_seconds()
     }})).
 
 %%--------------------------------------------------------------------
@@ -140,7 +144,7 @@ update_doc_and_time(SessId, Diff) when is_function(Diff) ->
         case Diff(Sess) of
             {ok, NewSess} ->
                 {ok, NewSess#session{
-                    accessed = time_utils:timestamp_seconds()
+                    accessed = clock:timestamp_seconds()
                 }};
             {error, Reason} ->
                 {error, Reason}
@@ -169,6 +173,11 @@ delete(SessId) ->
     session_handles:remove_handles(SessId),
     session_open_files:invalidate_entries(SessId),
     datastore_model:delete(?CTX, SessId).
+
+-spec is_space_owner(id() | record() | doc(), od_space:id()) -> boolean().
+is_space_owner(Session, SpaceId) ->
+    {ok, UserId} = get_user_id(Session),
+    space_logic:is_owner(SpaceId, UserId).
 
 %%%===================================================================
 %%% API - field access functions

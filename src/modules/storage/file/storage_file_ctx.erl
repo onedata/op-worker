@@ -74,7 +74,7 @@ new_with_stat(StorageFileId, FileName, SpaceId, StorageId, Stat) ->
         space_id = SpaceId,
         storage_id = StorageId,
         stat = Stat,
-        stat_timestamp = time_utils:timestamp_seconds()
+        stat_timestamp = clock:timestamp_seconds()
     }.
 
 -spec get_file_name_const(ctx()) -> helpers:file_id().
@@ -125,8 +125,8 @@ get_parent_ctx_const(#storage_file_ctx{
     space_id = SpaceId,
     storage_id = StorageId
 }) ->
-    {_, ParentStorageFileId} = fslogic_path:basename_and_parent(ChildStorageFileId),
-    {ParentName, _} = fslogic_path:basename_and_parent(ParentStorageFileId),
+    {_, ParentStorageFileId} = filepath_utils:basename_and_parent_dir(ChildStorageFileId),
+    {ParentName, _} = filepath_utils:basename_and_parent_dir(ParentStorageFileId),
     #storage_file_ctx{
         name = ParentName,
         storage_file_id = ParentStorageFileId,
@@ -158,12 +158,12 @@ get_handle_const(#storage_file_ctx{
 set_stat(StorageFileCtx, Statbuf) ->
     StorageFileCtx#storage_file_ctx{
         stat = Statbuf,
-        stat_timestamp = time_utils:timestamp_seconds()
+        stat_timestamp = clock:timestamp_seconds()
     }.
 
 -spec stat(ctx()) -> {helpers:stat(), ctx()}.
 stat(StorageFileCtx = #storage_file_ctx{stat = undefined}) ->
-    Timestamp = time_utils:timestamp_seconds(),
+    Timestamp = clock:timestamp_seconds(),
     SDHandle = get_handle_const(StorageFileCtx),
     case storage_driver:stat(SDHandle) of
         {ok, StatBuf} ->

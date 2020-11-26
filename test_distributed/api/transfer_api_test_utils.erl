@@ -57,7 +57,7 @@ build_env_with_started_transfer_setup_fun(TransferType, MemRef, DataSourceType, 
         SetupEnvFun(),
         TransferDetails = api_test_memory:get(MemRef, transfer_details),
 
-        CreationTime = time_utils:timestamp_millis() div 1000,
+        CreationTime = clock:timestamp_millis() div 1000,
         QueryViewParams = #{<<"descending">> => true},
         Callback = <<"callback">>,
 
@@ -153,7 +153,7 @@ build_create_view_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, Use
         sync_files_between_nodes(TransferType, SrcNode, DstNode, OtherFiles ++ FilesToTransfer),
 
         ObjectIds = api_test_utils:guids_to_object_ids(FilesToTransfer),
-        QueryViewParams = [{key, XattrValue}],
+        QueryViewParams = [{key, XattrValue}, {stale, false}],
 
         case TransferType of
             replication ->
@@ -226,12 +226,12 @@ rerun_transfer(Node, TransferId) ->
     RerunId.
 
 
-build_create_transfer_verify_fun(replication, MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
-    build_crate_replication_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config);
-build_create_transfer_verify_fun(eviction, MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
-    build_crate_eviction_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config);
-build_create_transfer_verify_fun(migration, MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
-    build_crate_migration_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config).
+build_create_transfer_verify_fun(replication, MemRef, Node, _UserId, SrcProvider, DstProvider, _Config) ->
+    build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider);
+build_create_transfer_verify_fun(eviction, MemRef, Node, _UserId, SrcProvider, DstProvider, _Config) ->
+    build_crate_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider);
+build_create_transfer_verify_fun(migration, MemRef, Node, _UserId, SrcProvider, DstProvider, _Config) ->
+    build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider).
 
 
 %%%===================================================================
@@ -280,7 +280,7 @@ sync_files_between_nodes(eviction, SrcNode, DstNode, Files) ->
     % Wait until file_distribution contains entries for both nodes
     % Otherwise some of them could be omitted from eviction (if data
     % replicas don't exist on other providers eviction for file is skipped).
-    assert_distribution(SrcNode, ?ROOT_SESS_ID, Files, [{SrcNode, ?BYTES_NUM}, {DstNode, ?BYTES_NUM}]);
+    api_test_utils:assert_distribution([SrcNode], Files, [{SrcNode, ?BYTES_NUM}, {DstNode, ?BYTES_NUM}]);
 
 sync_files_between_nodes(_TransferType, _SrcNode, DstNode, Files) ->
     lists:foreach(fun(Guid) ->
@@ -371,9 +371,7 @@ get_exp_transfer_stats(migration, <<"dir">>, SrcNode, DstNode, FilesToTransferNu
 
 
 %% @private
-build_crate_replication_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
-    SessId = ?SESS_ID(UserId, Node, Config),
-
+build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
     fun
         (expected_failure, _) ->
             #{
@@ -381,8 +379,8 @@ build_crate_replication_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvide
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            assert_distribution(
-                Node, SessId, _AllFiles = OtherFiles ++ FilesToTransfer,
+            api_test_utils:assert_distribution(
+                [Node], _AllFiles = OtherFiles ++ FilesToTransfer,
                 [{SrcProvider, ?BYTES_NUM}]
             ),
             true;
@@ -392,12 +390,12 @@ build_crate_replication_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvide
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            assert_distribution(
-                Node, SessId, OtherFiles,
+            api_test_utils:assert_distribution(
+                [Node], OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}]
             ),
-            assert_distribution(
-                Node, SessId, FilesToTransfer,
+            api_test_utils:assert_distribution(
+                [Node], FilesToTransfer,
                 [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
             ),
             true
@@ -405,9 +403,7 @@ build_crate_replication_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvide
 
 
 %% @private
-build_crate_eviction_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
-    SessId = ?SESS_ID(UserId, Node, Config),
-
+build_crate_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
     fun
         (expected_failure, _) ->
             #{
@@ -415,8 +411,8 @@ build_crate_eviction_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, 
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            assert_distribution(
-                Node, SessId, _AllFiles = OtherFiles ++ FilesToTransfer,
+            api_test_utils:assert_distribution(
+                [Node], _AllFiles = OtherFiles ++ FilesToTransfer,
                 [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
             ),
             true;
@@ -426,12 +422,12 @@ build_crate_eviction_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, 
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            assert_distribution(
-                Node, SessId, OtherFiles,
+            api_test_utils:assert_distribution(
+                [Node], OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
             ),
-            assert_distribution(
-                Node, SessId, FilesToTransfer,
+            api_test_utils:assert_distribution(
+                [Node], FilesToTransfer,
                 [{SrcProvider, 0}, {DstProvider, ?BYTES_NUM}]
             ),
             true
@@ -439,9 +435,7 @@ build_crate_eviction_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, 
 
 
 %% @private
-build_crate_migration_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider, Config) ->
-    SessId = ?SESS_ID(UserId, Node, Config),
-
+build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
     fun
         (expected_failure, _) ->
             #{
@@ -449,8 +443,8 @@ build_crate_migration_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider,
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            assert_distribution(
-                Node, SessId, _AllFiles = FilesToTransfer ++ OtherFiles,
+            api_test_utils:assert_distribution(
+                [Node], _AllFiles = FilesToTransfer ++ OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}]
             ),
             true;
@@ -460,39 +454,16 @@ build_crate_migration_verify_fun(MemRef, Node, UserId, SrcProvider, DstProvider,
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            assert_distribution(
-                Node, SessId, OtherFiles,
+            api_test_utils:assert_distribution(
+                [Node], OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}]
             ),
-            assert_distribution(
-                Node, SessId, FilesToTransfer,
+            api_test_utils:assert_distribution(
+                [Node], FilesToTransfer,
                 [{SrcProvider, 0}, {DstProvider, ?BYTES_NUM}]
             ),
             true
     end.
-
-
-%% @private
-assert_distribution(Node, SessId, Files, ExpSizePerProvider) ->
-    ExpDistribution = lists:sort(lists:map(fun({Provider, ExpSize}) ->
-        #{
-            <<"blocks">> => case ExpSize of
-                0 -> [];
-                _ -> [[0, ExpSize]]
-            end,
-            <<"providerId">> => transfers_test_utils:provider_id(Provider),
-            <<"totalBlocksSize">> => ExpSize
-        }
-    end, ExpSizePerProvider)),
-
-    FetchDistributionFun = fun(Guid) ->
-        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, SessId, {guid, Guid}),
-        lists:sort(Distribution)
-    end,
-
-    lists:foreach(fun(FileGuid) ->
-        ?assertEqual(ExpDistribution, FetchDistributionFun(FileGuid), ?ATTEMPTS)
-    end, Files).
 
 
 %% @private

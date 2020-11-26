@@ -897,6 +897,7 @@ check_result(ok) -> ok;
 check_result({ok, _} = Res) -> Res;
 check_result({ok, _, _} = Res) -> Res;
 check_result({ok, _, _, _} = Res) -> Res;
+check_result(?ERROR_NOT_FOUND) -> throw(?ERROR_NOT_FOUND);
 check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 
 %%--------------------------------------------------------------------

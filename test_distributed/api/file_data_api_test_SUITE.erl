@@ -250,9 +250,7 @@ get_attrs_on_provider_not_supporting_space_test(Config) ->
                     prepare_args_fun = build_get_attrs_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = ValidateGsCallResultFun
                 }
-            ],
-            randomly_select_scenarios = true,
-            data_spec = get_attrs_data_spec(normal_mode)
+            ]
         }
     ])).
 
@@ -618,7 +616,7 @@ set_file_mode_test(Config) ->
                     validate_result_fun = fun(TestCtx, Result) ->
                         case GetExpectedResultFun(TestCtx) of
                             ok ->
-                                ?assertEqual({ok, undefined}, Result);
+                                ?assertEqual(ok, Result);
                             {error, _} = ExpError ->
                                 ?assertEqual(ExpError, Result)
                         end
@@ -652,6 +650,9 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
     {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space1(Config),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
+    DataSpec = set_mode_data_spec(),
+    DataSpecWithoutBadValues = DataSpec#data_spec{bad_values = []},
+
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
         ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id)),
         ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody})
@@ -660,29 +661,25 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
         ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
     end,
 
+    VerifyFun = fun(_, _) ->
+        ?assertMatch(
+            {ok, #file_attr{mode = 8#777}},
+            api_test_utils:get_file_attrs(P1Node, FileGuid),
+            ?ATTEMPTS
+        ),
+        true
+    end,
+
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = [P2Node],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_1,
-            verify_fun = fun(_, _) ->
-                ?assertMatch(
-                    {ok, #file_attr{mode = 8#777}},
-                    api_test_utils:get_file_attrs(P1Node, FileGuid),
-                    ?ATTEMPTS
-                ),
-                true
-            end,
+            verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = build_set_mode_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
@@ -699,7 +696,17 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = set_mode_data_spec()
+            data_spec = DataSpecWithoutBadValues
+        },
+        #scenario_spec{
+            name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
+            type = rest_with_file_path,
+            target_nodes = [P2Node],
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_1,
+
+            prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
+            validate_result_fun = ValidateRestCallResultFun,
+            verify_fun = VerifyFun
         }
     ])).
 
@@ -749,8 +756,9 @@ build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
     onenv_api_test_runner:prepare_args_fun().
 build_set_mode_prepare_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ValidId, Data0),
-
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(
+            ValidId, utils:ensure_defined(Data0, #{})
+        ),
         RestPath = case Endpoint of
             new_id -> <<"data/", Id/binary>>;
             deprecated_path -> <<"metadata/attrs", Id/binary>>;
@@ -881,6 +889,7 @@ wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
 
 %% @private
 get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistribution, Config) ->
+    Providers = ?config(op_worker_nodes, Config),
     SortedExpDistribution = lists:usort(ExpDistribution),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -888,7 +897,12 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
         ?assertEqual({?HTTP_200_OK, SortedExpDistribution}, {RespCode, lists:usort(RespBody)})
     end,
 
-    ExpGsDistribution = file_gui_gs_translator:translate_distribution(SortedExpDistribution),
+    ExpGsDistribution = rpc:call(
+        lists_utils:random_element(Providers),
+        file_gui_gs_translator,
+        translate_distribution,
+        [FileGuid, SortedExpDistribution]
+    ),
 
     CreateValidateGsSuccessfulCallFun = fun(Type) ->
         ExpGsResponse = ExpGsDistribution#{

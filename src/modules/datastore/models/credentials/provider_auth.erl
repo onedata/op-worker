@@ -53,7 +53,7 @@
 % (they might expire before they are consumed), a new one will be generated.
 -define(MIN_TTL_FROM_CACHE, 15).
 
--define(NOW(), time_utils:timestamp_seconds()).
+-define(NOW(), clock:timestamp_seconds()).
 
 -define(FILE_COMMENT,
     <<"This file holds the Oneprovider root token "
@@ -97,14 +97,14 @@ save(ProviderId, RootToken) ->
 %%--------------------------------------------------------------------
 -spec get_provider_id() -> {ok, od_provider:id()} | {error, term()}.
 get_provider_id() ->
-    simple_cache:get(?PROVIDER_ID_CACHE_KEY, fun() ->
+    node_cache:acquire(?PROVIDER_ID_CACHE_KEY, fun() ->
         case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
             {error, not_found} ->
                 ?ERROR_UNREGISTERED_ONEPROVIDER;
             {error, _} = Error ->
                 Error;
             {ok, #document{value = #provider_auth{provider_id = Id}}} ->
-                {true, Id}
+                {ok, Id, infinity}
         end
     end).
 
@@ -116,7 +116,7 @@ get_provider_id() ->
 %%--------------------------------------------------------------------
 -spec clear_provider_id_cache() -> ok.
 clear_provider_id_cache() ->
-    simple_cache:clear(?PROVIDER_ID_CACHE_KEY).
+    node_cache:clear(?PROVIDER_ID_CACHE_KEY).
 
 
 %%--------------------------------------------------------------------
@@ -326,7 +326,7 @@ get_token(Type) ->
 
 %% @private
 -spec get_cached_token(access | identity, record()) ->
-    {ValidUntil :: time_utils:seconds(), tokens:serialized()}.
+    {ValidUntil :: clock:seconds(), tokens:serialized()}.
 get_cached_token(access, ProviderAuth) ->
     ProviderAuth#provider_auth.cached_access_token;
 get_cached_token(identity, ProviderAuth) ->

@@ -242,7 +242,7 @@ authorize_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    has_access_to_file(Auth, Guid);
+    middleware_utils:has_access_to_file(Auth, Guid);
 
 authorize_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % File path must have been resolved to guid by rest_handler already (to
@@ -266,7 +266,7 @@ validate_create(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_file_managed_locally(Guid);
+    middleware_utils:assert_file_managed_locally(Guid);
 
 validate_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % File path must have been resolved to guid by rest_handler already (to
@@ -503,7 +503,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= shares;
     As =:= download_url
 ->
-    has_access_to_file(Auth, Guid);
+    middleware_utils:has_access_to_file(Auth, Guid);
 
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = transfers}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -532,7 +532,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= file_qos_summary;
     As =:= download_url
 ->
-    assert_file_managed_locally(Guid).
+    middleware_utils:assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -550,7 +550,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}},
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
     {ok, Path} = ?check(lfm:get_file_path(SessionId, FileGuid)),
 
-    case lfm:stat(SessionId, {guid, FileGuid}) of
+    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
             {ok, Children} = ?check(lfm:get_children(SessionId, {guid, Guid}, Offset, Limit)),
             {ok, lists:map(fun({ChildGuid, ChildPath}) ->
@@ -559,9 +559,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}},
             end, Children)};
         {ok, #file_attr{guid = Guid}} ->
             {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-            {ok, [#{<<"id">> => ObjectId, <<"path">> => Path}]};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
+            {ok, [#{<<"id">> => ObjectId, <<"path">> => Path}]}
     end;
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
@@ -570,12 +568,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
-    case lfm:get_children(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
-        {ok, Children, _, _} ->
-            {ok, value, Children};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    {ok, Children, _, _} = ?check(lfm:get_children(
+        SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId)
+    ),
+    {ok, value, Children};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -583,12 +579,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
-    case lfm:get_children_details(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of
-        {ok, ChildrenDetails, _} ->
-            {ok, value, ChildrenDetails};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    {ok, ChildrenDetails, _} = ?check(lfm:get_children_details(
+        SessionId, {guid, FileGuid}, Offset, Limit, StartId
+    )),
+    {ok, value, ChildrenDetails};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, scope = Sc}}, _) ->
     RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
@@ -668,12 +662,8 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) -
     ?check(lfm:get_file_distribution(Auth#auth.session_id, {guid, FileGuid}));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
-    case lfm:stat(Auth#auth.session_id, {guid, FileGuid}) of
-        {ok, #file_attr{shares = Shares}} ->
-            {ok, Shares};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, {guid, FileGuid})),
+    {ok, FileAttrs#file_attr.shares};
 
 get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
     {ok, #{
@@ -693,18 +683,13 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
     end;
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, _) ->
-    SessionId = Auth#auth.session_id,
-    case lfm:get_effective_file_qos(SessionId, {guid, FileGuid}) of
-        {ok, {QosEntriesWithStatus, _AssignedEntries}} ->
-            {ok, #{
-                <<"requirements">> => QosEntriesWithStatus,
-                <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))
-            }};
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND;
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    {ok, {QosEntriesWithStatus, _AssignedEntries}} = ?check(lfm:get_effective_file_qos(
+        Auth#auth.session_id, {guid, FileGuid}
+    )),
+    {ok, #{
+        <<"requirements">> => QosEntriesWithStatus,
+        <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))
+    }};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -724,27 +709,29 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) -
 %% @private
 -spec update_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
-update_operation_supported(instance, private) -> true;
+update_operation_supported(instance, private) -> true;              % gs only
 update_operation_supported(acl, private) -> true;
 update_operation_supported(_, _) -> false.
 
 
 %% @private
 -spec data_spec_update(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
-data_spec_update(#gri{aspect = instance}) -> #{
-    required => #{id => {binary, guid}},
-    optional => #{
-        <<"posixPermissions">> => {binary,
-            fun(Mode) ->
-                try
-                    {true, binary_to_integer(Mode, 8)}
-                catch _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>))
-                end
+data_spec_update(#gri{aspect = instance}) ->
+    ModeParam = <<"posixPermissions">>,
+
+    #{required => #{
+        id => {binary, guid},
+        ModeParam => {binary, fun(Mode) ->
+            try binary_to_integer(Mode, 8) of
+                ValidMode when ValidMode >= 0 andalso ValidMode =< 8#777 ->
+                    {true, ValidMode};
+                _ ->
+                    throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(ModeParam, 0, 8#777))
+            catch _:_ ->
+                throw(?ERROR_BAD_VALUE_INTEGER(ModeParam))
             end
-        }
-    }
-};
+        end}
+    }};
 
 data_spec_update(#gri{aspect = acl}) -> #{
     required => #{
@@ -766,7 +753,7 @@ authorize_update(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= instance;
     As =:= acl
 ->
-    has_access_to_file(Auth, Guid).
+    middleware_utils:has_access_to_file(Auth, Guid).
 
 
 %% @private
@@ -775,7 +762,7 @@ validate_update(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= acl
 ->
-    assert_file_managed_locally(Guid).
+    middleware_utils:assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -807,7 +794,7 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 %% @private
 -spec delete_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
-delete_operation_supported(instance, private) -> true;
+delete_operation_supported(instance, private) -> true;              % gs only
 delete_operation_supported(xattrs, private) -> true;                % REST/gs
 delete_operation_supported(json_metadata, private) -> true;         % REST/gs
 delete_operation_supported(rdf_metadata, private) -> true;          % REST/gs
@@ -839,7 +826,7 @@ authorize_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    has_access_to_file(Auth, Guid).
+    middleware_utils:has_access_to_file(Auth, Guid).
 
 
 %% @private
@@ -850,7 +837,7 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_file_managed_locally(Guid).
+    middleware_utils:assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -859,8 +846,15 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
-delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
-    ?check(lfm:rm_recursive(Auth#auth.session_id, {guid, FileGuid}));
+delete(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{id = FileGuid, aspect = instance}}) ->
+    FileKey = {guid, FileGuid},
+
+    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+            ?check(lfm:rm_recursive(SessionId, FileKey));
+        {ok, _} ->
+            ?check(lfm:unlink(SessionId, FileKey, false))
+    end;
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
     lists:foreach(fun(XattrName) ->
@@ -877,46 +871,6 @@ delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) -
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks user membership in space containing specified file. Returns true
-%% in case of user root dir since it doesn't belong to any space.
-%% @end
-%%--------------------------------------------------------------------
--spec has_access_to_file(aai:auth(), file_id:file_guid()) -> boolean().
-has_access_to_file(?GUEST, _Guid) ->
-    false;
-has_access_to_file(?USER(UserId) = Auth, Guid) ->
-    case fslogic_uuid:user_root_dir_guid(UserId) of
-        Guid ->
-            true;
-        _ ->
-            SpaceId = file_id:guid_to_space_id(Guid),
-            middleware_utils:is_eff_space_member(Auth, SpaceId)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Asserts that space containing specified file is supported by this provider.
-%% Omit this check in case of user root dir which doesn't belong to any space
-%% and can be reached from any provider.
-%% @end
-%%--------------------------------------------------------------------
--spec assert_file_managed_locally(file_id:file_guid()) ->
-    ok | no_return().
-assert_file_managed_locally(FileGuid) ->
-    {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
-    case fslogic_uuid:is_root_dir_uuid(FileUuid) of
-        true ->
-            ok;
-        false ->
-            middleware_utils:assert_space_supported_locally(SpaceId)
-    end.
 
 
 %% @private
@@ -943,15 +897,13 @@ create_file(_, _, _, _, Counter, Attempts) when Counter >= Attempts ->
 create_file(SessId, ParentGuid, OriginalName, Type, Counter, Attempts) ->
     Name = maybe_add_file_suffix(OriginalName, Counter),
     case create_file(SessId, ParentGuid, Name, Type) of
-        {ok, Guid} ->
-            {ok, Guid};
         {error, ?EEXIST} ->
             create_file(
                 SessId, ParentGuid, OriginalName, Type,
                 Counter + 1, Attempts
             );
-        {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
+        Result ->
+            ?check(Result)
     end.
 
 

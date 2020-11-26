@@ -1929,12 +1929,11 @@ schedule_replication_of_100_regular_files_by_view(Config, Type) ->
 
 file_removed_during_replication(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    Size = 4 * 1024 * 1024 * 1024,
+    Size = 1024 * 1024 * 1024,
     Config2 = transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
                 size = Size,
-                truncate = true,
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
@@ -2123,7 +2122,7 @@ init_per_testcase(rtransfer_works_between_providers_with_different_ports, Config
     rpc:call(Worker1, application, set_env, [rtransfer_link, transfer, C1]),
     
     ProviderId1 = rpc:call(Worker1, oneprovider, get_id, []),
-    rpc:call(Worker2, simple_cache, clear, [{rtransfer_port, ProviderId1}]),
+    rpc:call(Worker2, node_cache, clear, [{rtransfer_port, ProviderId1}]),
     rpc:call(Worker1, rtransfer_config, restart_link, []),
     
     init_per_testcase(all, Config);

@@ -85,7 +85,8 @@
     lfm_open_failure_multiple_users_test/1,
     lfm_open_and_create_open_failure_test/1,
     lfm_copy_failure_multiple_users_test/1,
-    lfm_rmdir_test/1
+    lfm_rmdir_test/1,
+    sparse_files_should_be_created/1
 ]).
 
 -define(TEST_CASES, [
@@ -152,7 +153,8 @@
     lfm_open_failure_multiple_users_test,
     lfm_open_and_create_open_failure_test,
     lfm_copy_failure_multiple_users_test,
-    lfm_rmdir_test
+    lfm_rmdir_test,
+    sparse_files_should_be_created
 ]).
 
 -define(SPACE_ID, <<"space1">>).
@@ -358,6 +360,8 @@ opening_file_should_increase_file_popularity(Config) ->
 file_popularity_should_have_correct_file_size(Config) ->
     lfm_files_test_base:file_popularity_should_have_correct_file_size(Config).
 
+sparse_files_should_be_created(Config) ->
+    lfm_files_test_base:sparse_files_should_be_created(Config, check_size_and_read).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

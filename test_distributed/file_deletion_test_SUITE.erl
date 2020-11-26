@@ -398,7 +398,7 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
     SpaceId = <<"space1">>,
     ParentGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     FileName = generator:gen_name(),
-    FilePath = fslogic_path:join([<<"/">>, SpaceId, FileName]),
+    FilePath = filepath_utils:join([<<"/">>, SpaceId, FileName]),
     
     {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, FileName, 8#665),
     ok = lfm_proxy:unlink(Worker, SessId, {guid, G1}),

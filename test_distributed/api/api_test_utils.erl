@@ -16,16 +16,21 @@
 -include("file_api_test_utils.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include("test_utils/initializer.hrl").
 
 
 -export([load_module_from_test_distributed_dir/2]).
 
 -export([
+    build_rest_url/2,
+
     get_file_attrs/2,
 
     create_shared_file_in_space1/1,
     create_and_sync_shared_file_in_space2/2,
+    create_and_sync_shared_file_in_space2/3,
+    create_and_sync_shared_file_in_space2/4,
     create_file_in_space2_with_additional_metadata/4,
     create_file_in_space2_with_additional_metadata/5,
 
@@ -38,6 +43,7 @@
     fill_file_with_dummy_data/5,
     write_file/5,
     read_file/4,
+    assert_distribution/3,
 
     share_file_and_sync_file_attrs/4,
 
@@ -104,6 +110,13 @@ load_module_from_test_distributed_dir(Config, ModuleName) ->
     end.
 
 
+-spec build_rest_url(node(), [binary()]) -> binary().
+build_rest_url(Node, PathTokens) ->
+    list_to_binary(rpc:call(Node, oneprovider, get_rest_endpoint, [
+        string:trim(filename:join([<<"/">> | PathTokens]), leading, [$/])
+    ])).
+
+
 -spec get_file_attrs(node(), file_id:file_guid()) ->
     {ok, lfm_attrs:file_attributes()} | {error, times_not_synchronized}.
 get_file_attrs(Node, FileGuid) ->
@@ -136,6 +149,24 @@ create_shared_file_in_space1(Config) ->
 -spec create_and_sync_shared_file_in_space2(file_meta:mode(), api_test_runner:config()) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
 create_and_sync_shared_file_in_space2(Mode, Config) ->
+    FileType = randomly_choose_file_type_for_test(),
+    create_and_sync_shared_file_in_space2(FileType, Mode, Config).
+
+
+-spec create_and_sync_shared_file_in_space2(file_type(), file_meta:mode(), api_test_runner:config()) ->
+    {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
+create_and_sync_shared_file_in_space2(FileType, Mode, Config) ->
+    create_and_sync_shared_file_in_space2(FileType, ?RANDOM_FILE_NAME(), Mode, Config).
+
+
+-spec create_and_sync_shared_file_in_space2(
+    file_type(),
+    file_meta:name(),
+    file_meta:mode(),
+    api_test_runner:config()
+) ->
+    {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
+create_and_sync_shared_file_in_space2(FileType, FileName, Mode, Config) ->
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
 
@@ -143,8 +174,7 @@ create_and_sync_shared_file_in_space2(Mode, Config) ->
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
     UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
-    FileType = randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    FilePath = filename:join(["/", ?SPACE_2, FileName]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
@@ -286,6 +316,54 @@ read_file(Node, SessId, FileGuid, Size) ->
     {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, Size),
     ok = lfm_proxy:close(Node, ReadHandle),
     Content.
+
+
+-spec assert_distribution(
+    [node()],
+    file_id:file_guid() | [file_id:file_guid()],
+    [{node(), non_neg_integer()}]
+) ->
+    true | no_return().
+assert_distribution(NodesToVerify, Files, ExpSizePerProvider) when is_list(Files) ->
+    ExpDistribution = lists:sort(lists:map(fun
+        ({Node, Blocks}) when is_list(Blocks) ->
+            #{
+                <<"blocks">> => lists:foldr(fun
+                    (#file_block{offset = _Offset, size = 0}, Acc) ->
+                        Acc;
+                    (#file_block{offset = Offset, size = Size}, Acc) ->
+                        [[Offset, Size] | Acc]
+                end, [], Blocks),
+                <<"providerId">> => op_test_rpc:get_provider_id(Node),
+                <<"totalBlocksSize">> => lists:sum(lists:map(fun(#file_block{size = Size}) ->
+                    Size
+                end, Blocks))
+            };
+        ({Node, ExpSize}) when is_integer(ExpSize) ->
+            #{
+                <<"blocks">> => case ExpSize of
+                    0 -> [];
+                    _ -> [[0, ExpSize]]
+                end,
+                <<"providerId">> => op_test_rpc:get_provider_id(Node),
+                <<"totalBlocksSize">> => ExpSize
+            }
+    end, ExpSizePerProvider)),
+
+    FetchDistributionFun = fun(Node, Guid) ->
+        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, ?ROOT_SESS_ID, {guid, Guid}),
+        lists:sort(Distribution)
+    end,
+
+    lists:foreach(fun(FileGuid) ->
+        lists:foreach(fun(Node) ->
+            ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), ?ATTEMPTS)
+        end, NodesToVerify)
+    end, Files),
+
+    true;
+assert_distribution(NodesToVerify, File, ExpSizePerProvider) ->
+    assert_distribution(NodesToVerify, [File], ExpSizePerProvider).
 
 
 -spec share_file_and_sync_file_attrs(node(), session:id(), [node()], file_id:file_guid()) ->
@@ -449,7 +527,7 @@ guids_to_object_ids(Guids) ->
 file_details_to_gs_json(undefined, #file_details{
     file_attr = #file_attr{
         guid = FileGuid,
-        parent_uuid = ParentGuid,
+        parent_guid = ParentGuid,
         name = FileName,
         type = Type,
         mode = Mode,
@@ -497,7 +575,7 @@ file_details_to_gs_json(undefined, #file_details{
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{
         guid = FileGuid,
-        parent_uuid = ParentGuid,
+        parent_guid = ParentGuid,
         name = FileName,
         type = Type,
         mode = Mode,
@@ -733,7 +811,7 @@ get_invalid_file_id_errors() ->
 
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
-        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>)}},
+        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
         {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>)}},
 
         % Errors thrown by middleware and internal logic

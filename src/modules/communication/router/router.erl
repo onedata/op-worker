@@ -81,10 +81,10 @@ build_rib(SessionId) ->
         }}
     } = session:get(SessionId),
 
-    RespondVia = case AsyncReqManager of
-        _ when is_pid(AsyncReqManager) ->
+    RespondVia = case is_pid(AsyncReqManager) of
+        true ->
             {self(), AsyncReqManager, SessionId};
-        undefined when SessionType /= provider_incoming andalso SessionType /= fuse ->
+        false when SessionType /= provider_incoming andalso SessionType /= fuse ->
             undefined
     end,
 

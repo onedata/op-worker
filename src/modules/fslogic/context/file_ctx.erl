@@ -80,11 +80,11 @@
     get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
     get_logical_path/2,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
-    get_file_location_with_filled_gaps/2, fill_location_gaps/4,
+    get_file_location_with_filled_gaps/2,
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
@@ -146,7 +146,7 @@ new_by_partial_context(FileCtx = #file_ctx{}) ->
     {FileCtx, get_space_id_const(FileCtx)};
 new_by_partial_context(FilePartialCtx) ->
     {CanonicalPath, FilePartialCtx2} = file_partial_ctx:get_canonical_path(FilePartialCtx),
-    {ok, FileDoc} = fslogic_path:resolve(CanonicalPath),
+    {ok, FileDoc} = canonical_path:resolve(CanonicalPath),
     SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx2),
     {new_by_doc(FileDoc, SpaceId, undefined), SpaceId}.
 
@@ -274,7 +274,7 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
                 FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
-    {fslogic_path:split(Path), FileCtx}.
+    {filepath_utils:split(Path), FileCtx}.
 
 
 -spec get_uuid_based_path(ctx()) -> {file_meta:uuid_based_path(), ctx()}.
@@ -298,7 +298,7 @@ get_logical_path(FileCtx, UserCtx) ->
             {<<"/">>, FileCtx2};
         {Path, FileCtx2} ->
             {SpaceName, FileCtx3} = get_space_name(FileCtx2, UserCtx),
-            {ok, [<<"/">>, _SpaceId | Rest]} = fslogic_path:split_skipping_dots(Path),
+            {ok, [<<"/">>, _SpaceId | Rest]} = filepath_utils:split_and_skip_dots(Path),
             LogicalPath = filename:join([<<"/">>, SpaceName | Rest]),
             {LogicalPath, FileCtx3}
     end.
@@ -488,7 +488,7 @@ get_storage_file_id(FileCtx) ->
 get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
     case is_root_dir_const(FileCtx0) of
         true ->
-            StorageFileId = ?DIRECTORY_SEPARATOR_BINARY,
+            StorageFileId = <<?DIRECTORY_SEPARATOR>>,
             {StorageFileId, FileCtx0#file_ctx{storage_file_id = StorageFileId}};
         false ->
             case get_local_file_location_doc(FileCtx0, false) of
@@ -651,7 +651,7 @@ get_child(FileCtx, Name, UserCtx) ->
         _ ->
             SpaceId = get_space_id_const(FileCtx),
             {FileDoc, FileCtx2} = get_file_doc(FileCtx),
-            case fslogic_path:resolve(FileDoc, <<"/", Name/binary>>) of
+            case canonical_path:resolve(FileDoc, <<"/", Name/binary>>) of
                 {ok, ChildDoc} ->
                     ShareId = get_share_id_const(FileCtx2),
                     Child = new_by_doc(ChildDoc, SpaceId, ShareId),
@@ -660,18 +660,6 @@ get_child(FileCtx, Name, UserCtx) ->
                     throw(?ENOENT)
             end
     end.
-
-%%%-------------------------------------------------------------------
-%%% @doc
-%%% Returns CanonicalPath for child of ParentCtx with given FileName.
-%%% @end
-%%%-------------------------------------------------------------------
--spec get_child_canonical_path(ctx(), file_meta:name()) ->
-    {file_meta:name(), NewParenCtx :: ctx()}.
-get_child_canonical_path(ParentCtx, FileName) ->
-    {ParentPath, ParentCtx2} = get_canonical_path(ParentCtx),
-    CanonicalPath = filename:join(ParentPath, FileName),
-    {CanonicalPath, ParentCtx2}.
 
 
 %%--------------------------------------------------------------------
@@ -838,46 +826,10 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange)
     {Locations, FileCtx2} = get_file_location_docs(FileCtx),
     {FileLocationDoc, FileCtx3} =
         get_or_create_local_file_location_doc(FileCtx2),
-    {fill_location_gaps(ReqRange, FileLocationDoc, Locations,
+    {location_and_link_utils:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
         get_uuid_const(FileCtx3)), FileCtx3};
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     get_file_location_with_filled_gaps(FileCtx, [ReqRange]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns location that can be understood by client. It has gaps filled, and
-%% stores guid instead of uuid.
-%% @end
-%%--------------------------------------------------------------------
--spec fill_location_gaps(fslogic_blocks:blocks() | undefined, file_location:doc(),
-    [file_location:doc()], file_location:id()) -> #file_location{}.
-fill_location_gaps(ReqRange0, #document{value = FileLocation = #file_location{
-    size = Size}} = FileLocationDoc, Locations, Uuid) ->
-    ReqRange = utils:ensure_defined(ReqRange0, [#file_block{offset = 0, size = Size}]),
-    Blocks = fslogic_location_cache:get_blocks(FileLocationDoc,
-        #{overlapping_blocks => ReqRange}),
-
-    % find gaps
-    AllRanges = lists:foldl(
-        fun(Doc, Acc) ->
-            fslogic_blocks:merge(Acc, fslogic_location_cache:get_blocks(Doc,
-                #{overlapping_blocks => ReqRange}))
-        end, [], Locations),
-    ExtendedRequestedRange = lists:map(fun(RequestedRange) ->
-        case RequestedRange of
-            #file_block{offset = O, size = S} when O + S < Size ->
-                RequestedRange#file_block{size = Size - O};
-            _ -> RequestedRange
-        end
-    end, ReqRange),
-    Gaps = fslogic_blocks:consolidate(
-        fslogic_blocks:invalidate(ExtendedRequestedRange, AllRanges)
-    ),
-    BlocksWithFilledGaps = fslogic_blocks:merge(Blocks, Gaps),
-
-    % fill gaps transform uid and emit
-    fslogic_location_cache:set_final_blocks(FileLocation#file_location{
-        uuid = Uuid}, BlocksWithFilledGaps).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1355,13 +1307,21 @@ resolve_and_cache_path(FileCtx, Type) ->
     end,
     case FileType of
         ?DIRECTORY_TYPE ->
-            {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
-            {Path, FileCtx2};
+            case effective_value:get_or_calculate(CacheName, Doc, Callback) of
+                {ok, Path, _} ->
+                    {Path, FileCtx2};
+                {error, {file_meta_missing, _}} ->
+                    throw(?ERROR_NOT_FOUND)
+            end;
         _ ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
             {ok, ParentDoc} = file_meta:get_including_deleted(ParentUuid),
-            {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
-            {Path ++ [FilenameOrUuid], FileCtx2}
+            case effective_value:get_or_calculate(CacheName, ParentDoc, Callback) of
+                {ok, Path, _} ->
+                    {Path ++ [FilenameOrUuid], FileCtx2};
+                {error, {file_meta_missing, _}} ->
+                    throw(?ERROR_NOT_FOUND)
+            end
     end.
 
 %%--------------------------------------------------------------------

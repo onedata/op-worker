@@ -272,7 +272,7 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     ImportedSum = 1000,
     UpdatedSum = 2000,
     DeletedSum = 3000,
-    Timestamp = time_utils:timestamp_seconds(),
+    Timestamp = clock:timestamp_seconds(),
     HistLength = 12,
     EmptyMinHist = time_slot_histogram:new(Timestamp, 60 div HistLength , HistLength),
     EmptyHourHist = time_slot_histogram:new(Timestamp, 3600 div HistLength, HistLength),
@@ -313,15 +313,11 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
 
     SIMBase = #storage_import_monitoring{
         finished_scans = Scans,
-        to_process = ToProcess,
         created = Imported,
         modified = Updated,
         deleted = Deleted,
         failed = Failed,
-        other_processed = OtherProcessed,
-        created_sum = ImportedSum,
-        modified_sum = UpdatedSum,
-        deleted_sum = DeletedSum,
+        unmodified = 0,
         created_min_hist = EmptyMinHist,
         created_hour_hist = EmptyHourHist,
         created_day_hist = EmptyDayHist,
@@ -342,7 +338,8 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     },
     SIMDoc1 = #document{
         key = SpaceId1,
-        value = SIMBase#storage_import_monitoring{status = ?ENQUEUED}
+        value = SIMBase#storage_import_monitoring{status = ?ENQUEUED},
+        version = storage_import_monitoring:get_record_version()
     },
 
     ImportStartTime = 10,
@@ -355,9 +352,10 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     SIMDoc2 = #document{
         key = SpaceId2,
         value = SIMBase#storage_import_monitoring{
-            scan_start_time = ImportStartTime,
+            scan_start_time = ImportStartTime * 1000,
             status = ?RUNNING
-        }
+        },
+        version = storage_import_monitoring:get_record_version()
     },
 
     ImportFinishTime = 15,
@@ -371,10 +369,11 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     SIMDoc3 = #document{
         key = SpaceId3,
         value = SIMBase#storage_import_monitoring{
-            scan_start_time = ImportStartTime,
-            scan_stop_time = ImportFinishTime,
+            scan_start_time = ImportStartTime * 1000,
+            scan_stop_time = ImportFinishTime * 1000,
             status = ?COMPLETED
-        }
+        },
+        version = storage_import_monitoring:get_record_version()
     },
 
     LastUpdateStartTime = 20,
@@ -389,10 +388,11 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     SIMDoc4 = #document{
         key = SpaceId4,
         value = SIMBase#storage_import_monitoring{
-            scan_start_time = LastUpdateStartTime,
-            scan_stop_time = ImportFinishTime,
+            scan_start_time = LastUpdateStartTime * 1000,
+            scan_stop_time = ImportFinishTime * 1000,
             status = ?RUNNING
-        }
+        },
+        version = storage_import_monitoring:get_record_version()
     },
 
     LastUpdateStopTime = 25,
@@ -408,10 +408,11 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     SIMDoc5 = #document{
         key = SpaceId5,
         value = SIMBase#storage_import_monitoring{
-            scan_start_time = LastUpdateStartTime,
-            scan_stop_time = LastUpdateStopTime,
+            scan_start_time = LastUpdateStartTime * 1000,
+            scan_stop_time = LastUpdateStopTime * 1000,
             status = ?COMPLETED
-        }
+        },
+        version = storage_import_monitoring:get_record_version()
     },
 
     create_doc(Worker, SSMCtx, SSMDoc1),

@@ -228,7 +228,7 @@ code_change(_OldVsn, State, _Extra) ->
 should_start(undefined) ->
     true;
 should_start(NextRetryTimestamp) ->
-    time_utils:timestamp_seconds() >= NextRetryTimestamp.
+    clock:timestamp_seconds() >= NextRetryTimestamp.
 
 
 %%-------------------------------------------------------------------
@@ -322,7 +322,7 @@ maybe_retry(FileCtx, Params, Retries, Error) ->
 next_retry(#state{mod = Mod}, RetriesLeft) ->
     MaxRetries = Mod:max_transfer_retries(),
     MinSecsToWait = backoff(MaxRetries - RetriesLeft, MaxRetries),
-    time_utils:timestamp_seconds() + MinSecsToWait.
+    clock:timestamp_seconds() + MinSecsToWait.
 
 
 %%-------------------------------------------------------------------
