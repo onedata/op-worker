@@ -87,6 +87,7 @@
 -spec init(file_location:id()) -> ok.
 init(Uuid) ->
     put(?MAIN_KEY, Uuid),
+    % init with a dummy timer that is already expired (no flush is in progress)
     put(?FLUSH_TIMER, countdown_timer:start_millis(0)),
     put(?KEYS, []),
     put(?KEYS_MODIFIED,[]),
