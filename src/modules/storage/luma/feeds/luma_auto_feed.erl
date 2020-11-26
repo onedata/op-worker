@@ -67,7 +67,7 @@ acquire_user_storage_credentials(Storage, UserId) ->
 -spec acquire_default_posix_storage_credentials(storage:data(), od_space:id()) ->
     {ok, luma_posix_credentials:credentials()}.
 acquire_default_posix_storage_credentials(Storage, SpaceId) ->
-    StorageFileCtx = storage_file_ctx:new(?DIRECTORY_SEPARATOR_BINARY, SpaceId, storage:get_id(Storage)),
+    StorageFileCtx = storage_file_ctx:new(<<?DIRECTORY_SEPARATOR>>, SpaceId, storage:get_id(Storage)),
     {#statbuf{st_uid = Uid, st_gid = Gid}, _} = storage_file_ctx:stat(StorageFileCtx),
     {ok, luma_posix_credentials:new(Uid, Gid)}.
 

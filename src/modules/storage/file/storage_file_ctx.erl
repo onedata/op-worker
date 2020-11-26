@@ -127,8 +127,8 @@ get_parent_ctx_const(#storage_file_ctx{
     space_id = SpaceId,
     storage_id = StorageId
 }) ->
-    {_, ParentStorageFileId} = fslogic_path:basename_and_parent(ChildStorageFileId),
-    {ParentName, _} = fslogic_path:basename_and_parent(ParentStorageFileId),
+    {_, ParentStorageFileId} = filepath_utils:basename_and_parent_dir(ChildStorageFileId),
+    {ParentName, _} = filepath_utils:basename_and_parent_dir(ParentStorageFileId),
     #storage_file_ctx{
         name = ParentName,
         storage_file_id = ParentStorageFileId,

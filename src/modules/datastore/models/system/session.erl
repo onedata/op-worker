@@ -172,9 +172,9 @@ delete(SessId) ->
     session_open_files:invalidate_entries(SessId),
     datastore_model:delete(?CTX, SessId).
 
--spec is_space_owner(id(), od_space:id()) -> boolean().
-is_space_owner(SessId, SpaceId) ->
-    {ok, UserId} = get_user_id(SessId),
+-spec is_space_owner(id() | record() | doc(), od_space:id()) -> boolean().
+is_space_owner(Session, SpaceId) ->
+    {ok, UserId} = get_user_id(Session),
     space_logic:is_owner(SpaceId, UserId).
 
 %%%===================================================================

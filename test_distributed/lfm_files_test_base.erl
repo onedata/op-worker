@@ -1413,7 +1413,7 @@ share_getattr(Config) ->
             name = <<"share_dir2">>,
             type = ?DIRECTORY_TYPE,
             guid = DirGuid,
-            parent_uuid = SpaceGuid,
+            parent_guid = SpaceGuid,
             owner_id = UserId,
             provider_id = ProviderId,
             shares = [ShareId2, ShareId1]}
@@ -1431,7 +1431,7 @@ share_getattr(Config) ->
                 guid = ShareGuid,
                 uid = ?SHARE_UID,
                 gid = ?SHARE_GID,
-                parent_uuid = undefined,      % share root should not point to any parent
+                parent_guid = undefined,      % share root should not point to any parent
                 owner_id = <<"unknown">>,
                 provider_id = <<"unknown">>,
                 shares = [ShareId1]}          % other shares shouldn't be shown
@@ -1521,7 +1521,7 @@ share_child_getattr(Config) ->
             name = <<"file">>,
             type = ?REGULAR_FILE_TYPE,
             guid = ShareChildGuid,
-            parent_uuid = ShareDirGuid,
+            parent_guid = ShareDirGuid,
             shares = []
         }},
         lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareChildGuid})

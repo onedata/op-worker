@@ -35,6 +35,7 @@
     get_eff_spaces/1, get_session_id/1,
     get_credentials/1, get_data_constraints/1
 ]).
+-export([is_space_owner/2]).
 -export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/2]).
 
 %%%===================================================================
@@ -145,6 +146,10 @@ get_credentials(#user_ctx{session = Session}) ->
 -spec get_data_constraints(ctx()) -> data_constraints:constraints().
 get_data_constraints(#user_ctx{session = Session}) ->
     session:get_data_constraints(Session).
+
+-spec is_space_owner(ctx(), od_space:id()) -> boolean().
+is_space_owner(#user_ctx{session = SessionDoc}, SpaceId) ->
+    session:is_space_owner(SessionDoc, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -21,6 +21,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
@@ -286,29 +287,24 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance}}) ->
     EvictingProviderId = maps:get(<<"evictingProviderId">>, Data, undefined),
     Callback = maps:get(<<"callback">>, Data, undefined),
 
-    Result = case maps:get(<<"dataSourceType">>, Data) of
+    {ok, TransferId} = case maps:get(<<"dataSourceType">>, Data) of
         file ->
-            lfm:schedule_file_transfer(
+            ?check(lfm:schedule_file_transfer(
                 SessionId, maps:get(<<"fileId">>, Data),
                 ReplicatingProviderId, EvictingProviderId,
                 Callback
-            );
+            ));
         view ->
-            lfm:schedule_view_transfer(
+            ?check(lfm:schedule_view_transfer(
                 SessionId,
                 maps:get(<<"spaceId">>, Data),
                 maps:get(<<"viewName">>, Data),
                 maps:get(<<"queryViewParams">>, Data, []),
                 ReplicatingProviderId, EvictingProviderId,
                 Callback
-            )
+            ))
     end,
-    case Result of
-        {ok, TransferId} ->
-            {ok, value, TransferId};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    {ok, value, TransferId};
 
 create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}}) ->
     case transfer:rerun_ended(UserId, TransferId) of

@@ -14,6 +14,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% API
 -export([is_root_dir_uuid/1, is_user_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1, is_special_uuid/1]).
@@ -186,7 +187,7 @@ gen_path(Entry, SessionId, Tokens) ->
         {ok, #document{key = ?GLOBAL_ROOT_DIR_UUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Uuid),
             {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
+            {ok, filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
         {ok, #document{key = ParentUuid}} ->
             gen_path({uuid, ParentUuid}, SessionId, [Name | Tokens])
     end.
