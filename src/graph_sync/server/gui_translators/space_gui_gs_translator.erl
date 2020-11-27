@@ -38,7 +38,9 @@ translate_value(#gri{aspect = transfers}, #{<<"transfers">> := TransfersIds}) ->
 translate_value(#gri{aspect = transfers_active_channels}, ActiveChannels) ->
     ActiveChannels;
 translate_value(#gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
-    Charts.
+    Charts;
+translate_value(#gri{aspect = evaluate_qos_expression}, Result) ->
+    Result.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

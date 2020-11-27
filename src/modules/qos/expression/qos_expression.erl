@@ -22,9 +22,10 @@
 
 %% API
 -export([parse/1, to_infix/1, to_rpn/1]).
--export([filter_storages/2]).
 -export([to_json/1, from_json/1]).
 -export([convert_from_old_version_rpn/1]).
+
+-export([try_assigning_storages/3, get_matching_storages_in_space/2]).
 
 -type operator() :: binary(). % all possible listed in macro ?OPERATORS in qos.hrl
 -type comparator() :: binary(). % all possible listed in macro ?COMPARATORS in qos.hrl
@@ -49,7 +50,7 @@
 -export_type([expression/0, infix/0]).
 
 %%%===================================================================
-%%% API
+%%% Conversion related API
 %%%===================================================================
 
 -spec parse(infix()) -> expression() | no_return().
@@ -98,24 +99,6 @@ to_rpn({Op, Expr1, Expr2}) ->
     to_rpn(Expr1) ++ to_rpn(Expr2) ++ [Op].
 
 
--spec filter_storages(expression(), #{storage:id() => storage:qos_parameters()}) -> [storage:id()].
-filter_storages(<<?QOS_ANY_STORAGE>>, SM) ->
-    maps:keys(SM);
-filter_storages({<<"|">>, Expr1, Expr2}, SM) ->
-    lists_utils:union(filter_storages(Expr1, SM), filter_storages(Expr2, SM));
-filter_storages({<<"&">>, Expr1, Expr2}, SM) ->
-    lists_utils:intersect(filter_storages(Expr1, SM), filter_storages(Expr2, SM));
-filter_storages({<<"\\">>, Expr1, Expr2}, SM) ->
-    lists_utils:subtract(filter_storages(Expr1, SM), filter_storages(Expr2, SM));
-filter_storages({Comparator, ExprKey, ExprValue}, SM) ->
-    maps:keys(maps:filter(fun(_StorageId, StorageParams) ->
-        case maps:get(ExprKey, StorageParams, undefined) of
-            undefined -> false;
-            StorageValue -> eval_comparison(Comparator, StorageValue, ExprValue)
-        end
-    end, SM)).
-
-
 -spec to_json(expression()) -> json_utils:json_term().
 to_json(Binary) when is_binary(Binary) ->
     Binary;
@@ -148,6 +131,30 @@ convert_from_old_version_rpn(PreviousExpression) ->
     end, PreviousExpression)),
     % convert RPN to tree form
     from_rpn(SplitRpnTokens).
+
+
+%%%===================================================================
+%%% Storages related API
+%%%===================================================================
+
+-spec try_assigning_storages(od_space:id(), qos_expression:expression(), qos_entry:replicas_num()) ->
+    {true, [storage:id()]} | false.
+try_assigning_storages(SpaceId, QosExpression, ReplicasNum) ->
+    case get_matching_storages_in_space(SpaceId, QosExpression) of
+        TooFew when length(TooFew) < ReplicasNum ->
+            false;
+        MatchingStorages ->
+            {true, lists_utils:random_sublist(MatchingStorages, ReplicasNum, ReplicasNum)}
+    end.
+
+
+-spec get_matching_storages_in_space(od_space:id(), qos_expression:expression()) -> [storage:id()].
+get_matching_storages_in_space(SpaceId, QosExpression) ->
+    {ok, SpaceStorages} = space_logic:get_all_storage_ids(SpaceId),
+    AllStoragesWithParams = lists:foldl(fun(StorageId, Acc) ->
+        Acc#{StorageId => storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId)}
+    end, #{}, SpaceStorages),
+    filter_storages(QosExpression, AllStoragesWithParams).
 
 %%%===================================================================
 %%% Internal functions
@@ -195,6 +202,23 @@ strings_to_binaries({Op, Expr1, Expr2}) ->
         strings_to_binaries(Expr1),
         strings_to_binaries(Expr2)
     }.
+
+-spec filter_storages(expression(), #{storage:id() => storage:qos_parameters()}) -> [storage:id()].
+filter_storages(<<?QOS_ANY_STORAGE>>, SM) ->
+    maps:keys(SM);
+filter_storages({<<"|">>, Expr1, Expr2}, SM) ->
+    lists_utils:union(filter_storages(Expr1, SM), filter_storages(Expr2, SM));
+filter_storages({<<"&">>, Expr1, Expr2}, SM) ->
+    lists_utils:intersect(filter_storages(Expr1, SM), filter_storages(Expr2, SM));
+filter_storages({<<"\\">>, Expr1, Expr2}, SM) ->
+    lists_utils:subtract(filter_storages(Expr1, SM), filter_storages(Expr2, SM));
+filter_storages({Comparator, ExprKey, ExprValue}, SM) ->
+    maps:keys(maps:filter(fun(_StorageId, StorageParams) ->
+        case maps:get(ExprKey, StorageParams, undefined) of
+            undefined -> false;
+            StorageValue -> eval_comparison(Comparator, StorageValue, ExprValue)
+        end
+    end, SM)).
 
 %%--------------------------------------------------------------------
 %% @private

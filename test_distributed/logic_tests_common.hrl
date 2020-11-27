@@ -363,6 +363,7 @@ end).
 }}).
 
 -define(STORAGE_SHARED_DATA_MATCHER(__Storage, __Provider), #document{key = __Storage, value = #od_storage{
+    name = ?STORAGE_NAME(__Storage),
     provider = __Provider,
     qos_parameters = #{},
     readonly = false
@@ -534,6 +535,7 @@ end).
 -define(STORAGE_SHARED_DATA_VALUE(__StorageId), #{
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_storage, id = __StorageId, aspect = instance, scope = shared}),
+    <<"name">> => ?STORAGE_NAME(__StorageId),
     <<"provider">> => ?STORAGE_PROVIDER(__StorageId),
     <<"qosParameters">> => #{},
     <<"readonly">> => false
