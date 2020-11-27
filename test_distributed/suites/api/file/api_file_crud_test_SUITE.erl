@@ -9,10 +9,10 @@
 %%% This file contains tests concerning file crud API (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_crud_api_test_SUITE).
+-module(api_file_crud_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("file_api_test_utils.hrl").
+-include("api_file_test_utils.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").

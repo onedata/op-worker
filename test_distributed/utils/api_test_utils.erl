@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_test_runner.hrl").
--include("file_api_test_utils.hrl").
+-include("api_file_test_utils.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
