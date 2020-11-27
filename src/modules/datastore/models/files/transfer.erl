@@ -570,7 +570,12 @@ mark_data_replication_finished(undefined, SpaceId, BytesPerProvider) ->
     ),
     {ok, undefined};
 mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
-    space_transfer_stats:update(?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider),
+    case space_transfer_stats:update(?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider) of
+        ok ->
+            ok;
+        {error, _} = Error ->
+            ?error("Failed to update collective trasfer stats in space ~s due to ~p", [SpaceId, Error])
+    end,
 
     BytesTransferred = maps:fold(
         fun(_, Bytes, Acc) -> Acc + Bytes end, 0, BytesPerProvider
