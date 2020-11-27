@@ -31,7 +31,8 @@
 -type doc() :: datastore_doc:doc(record()).
 -type error() :: {error, term()}.
 -type token() :: binary().
--type expiration_time() :: clock:seconds().
+-type ttl() :: time:seconds().
+-type expiration_time() :: time:seconds().
 -type idp() :: binary().
 
 -export_type([token/0, expiration_time/0]).
@@ -89,14 +90,14 @@ fetch_and_cache(UserId, Client, IdP) ->
             Error2
     end.
 
--spec cache(id(), binary(), non_neg_integer()) ->
+-spec cache(id(), binary(), ttl()) ->
     ok | error().
 cache(Id, Token, TTL) ->
     ?extract_ok(datastore_model:save(?CTX, #document{
         key = Id,
         value = #idp_access_token{
             token = Token,
-            expiration_time = clock:timestamp_seconds() + TTL
+            expiration_time = global_clock:timestamp_seconds() + TTL
         }
     })).
 
@@ -104,11 +105,11 @@ cache(Id, Token, TTL) ->
 should_refresh(Doc) ->
     ?REFRESH_THRESHOLD > get_current_ttl(Doc).
 
--spec get_current_ttl(doc() | record()) -> non_neg_integer().
+-spec get_current_ttl(doc() | record()) -> ttl().
 get_current_ttl(#document{value = IdPAccessToken}) ->
     get_current_ttl(IdPAccessToken);
 get_current_ttl(#idp_access_token{expiration_time = ExpirationTime}) ->
-    ExpirationTime - clock:timestamp_seconds().
+    ExpirationTime - global_clock:timestamp_seconds().
 
 %%%===================================================================
 %%% datastore_model callbacks

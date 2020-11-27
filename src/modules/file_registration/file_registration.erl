@@ -114,7 +114,7 @@ create_missing_directory(ParentCtx, DirName, UserId) ->
     ok = dir_location:mark_dir_synced_from_storage(FileUuid, undefined),
     {ok, DirCtx} = storage_import_engine:create_file_meta_and_handle_conflicts(
         FileUuid, DirName, ?DEFAULT_DIR_PERMS, UserId, ParentUuid, SpaceId),
-    CurrentTime = clock:timestamp_seconds(),
+    CurrentTime = global_clock:timestamp_seconds(),
     times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime),
     {ok, DirCtx}.
 
@@ -362,7 +362,7 @@ ensure_stat_defined(Stat, DefaultStat) ->
 -spec get_default_file_stat(storage_file_ctx:ctx()) -> {helpers:stat(), storage_file_ctx:ctx()}.
 get_default_file_stat(StorageFileCtx) ->
     {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
-    CurrentTimestamp = clock:timestamp_seconds(),
+    CurrentTimestamp = global_clock:timestamp_seconds(),
     DefaultStat = #statbuf{
         % st_size is not set intentionally as we cannot assume default size
         st_mtime = CurrentTimestamp,

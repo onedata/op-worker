@@ -67,6 +67,7 @@
 -type diff() :: datastore_doc:diff(transfer()).
 % Status of transfer subtask - 'replication' or 'eviction' of data source
 % (replication and eviction consist of only 1 subtask while migration has 2).
+%% @formatter:off
 -type subtask_status() ::
     ?SCHEDULED_STATUS | ?ENQUEUED_STATUS | ?ACTIVE_STATUS | ?COMPLETED_STATUS |
     ?ABORTING_STATUS | ?FAILED_STATUS | ?CANCELLED_STATUS | ?SKIPPED_STATUS.
@@ -75,15 +76,16 @@
     ?SCHEDULED_STATUS | ?ENQUEUED_STATUS | ?REPLICATING_STATUS | ?EVICTING_STATUS |
     ?COMPLETED_STATUS | ?ABORTING_STATUS | ?FAILED_STATUS | ?CANCELLED_STATUS |
     ?SKIPPED_STATUS.
+%% @formatter:on
 -type callback() :: undefined | binary().
 -type transfer() :: #transfer{}.
 -type type() :: replication | eviction | migration.
 -type data_source_type() :: file | view.
 -type doc() :: datastore_doc:doc(transfer()).
--type timestamp() :: clock:seconds().
+-type timestamp() :: time:seconds().
 -type list_limit() :: non_neg_integer() | all.
 -type view_name() :: undefined | index:key().
--type query_view_params() :: undefined | index:query_options() .
+-type query_view_params() :: undefined | index:query_options().
 
 -export_type([
     id/0, transfer/0, type/0, data_source_type/0, subtask_status/0, callback/0, doc/0,
@@ -156,7 +158,7 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
         undefined -> ?SKIPPED_STATUS;
         _ -> ?SCHEDULED_STATUS
     end,
-    ScheduleTime = clock:timestamp_seconds(),
+    ScheduleTime = global_clock:timestamp_seconds(),
     SpaceId = file_id:guid_to_space_id(FileGuid),
     ToCreate = #document{
         scope = SpaceId,
@@ -568,10 +570,12 @@ mark_data_replication_finished(undefined, SpaceId, BytesPerProvider) ->
     ),
     {ok, undefined};
 mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
-    CurrentTime = clock:timestamp_seconds(),
-    ok = space_transfer_stats:update(
-        ?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider, CurrentTime
-    ),
+    case space_transfer_stats:update(?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider) of
+        ok ->
+            ok;
+        {error, _} = Error ->
+            ?error("Failed to update collective trasfer stats in space ~s due to ~p", [SpaceId, Error])
+    end,
 
     BytesTransferred = maps:fold(
         fun(_, Bytes, Acc) -> Acc + Bytes end, 0, BytesPerProvider
@@ -589,41 +593,33 @@ mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
             maps:get(ProviderId, LastUpdateMap, StartTime)
         end, maps:keys(BytesPerProvider)),
         LatestLastUpdate = lists:max(LastUpdates),
-        % Due to race between processes updating stats it is possible
-        % for LatestLastUpdate to be larger than CurrentTime, also because
-        % clock:timestamp_seconds() caches zone time locally it is
-        % possible for time of various provider nodes to differ by several
-        % seconds.
-        % So if the CurrentTime is less than LatestLastUpdate by no more than
-        % 5 sec accept it and update latest slot, otherwise silently reject it
-        case CurrentTime - LatestLastUpdate > -5 of
-            false ->
-                {ok, Transfer};
-            true ->
-                ApproxCurrentTime = max(CurrentTime, LatestLastUpdate),
-                NewTimestamps = maps:map(
-                    fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
-                {ok, Transfer#transfer{
-                    bytes_replicated = OldBytes + BytesTransferred,
-                    last_update = maps:merge(LastUpdateMap, NewTimestamps),
-                    min_hist = transfer_histograms:update(
-                        BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
-                        LastUpdateMap, StartTime, ApproxCurrentTime
-                    ),
-                    hr_hist = transfer_histograms:update(
-                        BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
-                        LastUpdateMap, StartTime, ApproxCurrentTime
-                    ),
-                    dy_hist = transfer_histograms:update(
-                        BytesPerProvider, DyHistograms, ?DAY_PERIOD,
-                        LastUpdateMap, StartTime, ApproxCurrentTime
-                    ),
-                    mth_hist = transfer_histograms:update(
-                        BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
-                        LastUpdateMap, StartTime, ApproxCurrentTime
-                    )
-                }}
-        end
+        % Due to race between processes updating stats it is possible for
+        % LatestLastUpdate to be larger than the current global time, plus the
+        % global time may warp backwards. In such cases, all updates will fall
+        % into the same histogram slot and a spike may be visible.
+        ApproxCurrentTime = global_clock:monotonic_timestamp_seconds(LatestLastUpdate),
+        NewTimestamps = maps:map(
+            fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
+        {ok, Transfer#transfer{
+            bytes_replicated = OldBytes + BytesTransferred,
+            last_update = maps:merge(LastUpdateMap, NewTimestamps),
+            min_hist = transfer_histograms:update(
+                BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
+                LastUpdateMap, StartTime, ApproxCurrentTime
+            ),
+            hr_hist = transfer_histograms:update(
+                BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
+                LastUpdateMap, StartTime, ApproxCurrentTime
+            ),
+            dy_hist = transfer_histograms:update(
+                BytesPerProvider, DyHistograms, ?DAY_PERIOD,
+                LastUpdateMap, StartTime, ApproxCurrentTime
+            ),
+            mth_hist = transfer_histograms:update(
+                BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
+                LastUpdateMap, StartTime, ApproxCurrentTime
+            )
+        }}
     end,
 
     update(TransferId, UpdateFun).

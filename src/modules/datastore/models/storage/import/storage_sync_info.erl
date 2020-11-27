@@ -62,7 +62,7 @@
 get(StorageFileId, SpaceId) ->
     datastore_model:get(?CTX, id(StorageFileId, SpaceId)).
 
--spec get_mtime(record() | doc()) -> non_neg_integer().
+-spec get_mtime(record() | doc()) -> times:m_time().
 get_mtime(#document{value = SSI}) ->
     get_mtime(SSI);
 get_mtime(#storage_sync_info{mtime = Mtime}) ->
@@ -104,7 +104,7 @@ init_batch_counters(StorageFileId, SpaceId) ->
         end
     )).
 
--spec update_mtime(helpers:file_id(), od_space:id(), non_neg_integer(), non_neg_integer()) -> ok.
+-spec update_mtime(helpers:file_id(), od_space:id(), times:m_time(), non_neg_integer()) -> ok.
 update_mtime(StorageFileId, SpaceId, NewMtime, StatTimestamp) ->
     ok = ?extract_ok(create_or_update(StorageFileId, SpaceId, fun(SSI) ->
         {ok, SSI#storage_sync_info{
@@ -125,11 +125,11 @@ increase_batches_to_process(StorageFileId, SpaceId, Number) ->
         end
     )).
 
--spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | non_neg_integer()) -> {ok, doc()}.
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | times:m_time()) -> {ok, doc()}.
 mark_processed_batch(StorageFileId, SpaceId, Mtime) ->
     mark_processed_batch(StorageFileId, SpaceId, Mtime, undefined, undefined, undefined, true).
 
--spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | non_neg_integer(),
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | times:m_time(),
     undefined | non_neg_integer(), undefined | non_neg_integer(), undefined | hash()) -> {ok, doc()}.
 mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, Length, BatchHash) ->
     mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, Length, BatchHash, true).
@@ -150,7 +150,7 @@ mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, Length, BatchHash) -
 %% mtime fields.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | non_neg_integer(), undefined | non_neg_integer(),
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | times:m_time(), undefined | non_neg_integer(),
     undefined | non_neg_integer(), undefined | hash(), boolean()) -> {ok, doc()}.
 mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, BatchSize, BatchHash, UpdateHashesOnFinish) ->
     update(StorageFileId, SpaceId, fun(SSI = #storage_sync_info{
@@ -187,12 +187,10 @@ mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, BatchSize, BatchHash
 %% It also update mtime field.
 %% @end
 %%-------------------------------------------------------------------
--spec update_hashes(helpers:file_id(), od_space:id(), non_neg_integer()) -> {ok, doc()}.
+-spec update_hashes(helpers:file_id(), od_space:id(), times:m_time()) -> {ok, doc()}.
 update_hashes(StorageFileId, SpaceId, Mtime) ->
     update(StorageFileId, SpaceId, fun(SSI = #storage_sync_info{
         % this function might be called only when counters are equal
-        batches_processed = BatchesToProcess,
-        batches_to_process = BatchesToProcess,
         children_hashes = ChildrenHashes,
         hashes_to_update = HashesToUpdate
     }) ->

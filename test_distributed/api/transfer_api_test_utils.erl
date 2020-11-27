@@ -57,7 +57,7 @@ build_env_with_started_transfer_setup_fun(TransferType, MemRef, DataSourceType, 
         SetupEnvFun(),
         TransferDetails = api_test_memory:get(MemRef, transfer_details),
 
-        CreationTime = clock:timestamp_millis() div 1000,
+        CreationTime = global_clock:timestamp_seconds(),
         QueryViewParams = #{<<"descending">> => true},
         Callback = <<"callback">>,
 

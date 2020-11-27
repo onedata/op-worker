@@ -263,7 +263,13 @@ init([]) ->
             gs_hooks:handle_deregistered_from_oz(),
             {stop, normal};
         {error, _} = Error ->
-            ?error("Failed to establish Onezone connection: ~w", [Error]),
+            ?debug("Failed to establish Onezone connection: ~w", [Error]),
+            utils:throttle(?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
+                ?warning(
+                    "Onezone connection cannot be established, is the service online (~ts)? "
+                    "Last error was: ~w. Retrying as long as it takes...", [oneprovider:get_oz_domain(), Error]
+                )
+            end),
             {stop, normal}
     end.
 

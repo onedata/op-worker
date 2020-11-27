@@ -23,9 +23,6 @@
 %% datastore_model callbacks
 -export([get_record_struct/1, get_ctx/0, get_record_version/0, upgrade_record/2]).
 
-%% exported for CT tests
--export([timestamp_hours/0]).
-
 -type id() :: file_meta:uuid().
 -type record() :: #file_popularity{}.
 -type doc() :: datastore_doc:doc(record()).
@@ -176,7 +173,7 @@ empty_file_popularity(FileCtx) ->
 increase_popularity(FileCtx, FilePopularity) ->
     {HourlyHistogram, DailyHistogram, MonthlyHistogram} =
         file_popularity_to_histograms(FilePopularity),
-    CurrentTimestampHours = file_popularity:timestamp_hours(),
+    CurrentTimestampHours = global_clock:timestamp_hours(),
     histograms_to_file_popularity(
         time_slot_histogram:increment(HourlyHistogram, CurrentTimestampHours),
         time_slot_histogram:increment(DailyHistogram, CurrentTimestampHours),
@@ -232,10 +229,6 @@ file_popularity_to_histograms(#file_popularity{
         time_slot_histogram:new(LastUpdate, ?DAY_TIME_WINDOW, DailyHistogram),
         time_slot_histogram:new(LastUpdate, ?MONTH_TIME_WINDOW, MonthlyHistogram)
     }.
-
--spec timestamp_hours() -> non_neg_integer().
-timestamp_hours() ->
-    clock:timestamp_seconds() div 3600.
 
 %%%===================================================================
 %%% datastore_model callbacks

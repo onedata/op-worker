@@ -74,7 +74,7 @@ create(SpaceId, BytesToRelease) ->
         value = #autocleaning_run{
             status = ?ACTIVE,
             space_id = SpaceId,
-            started_at = clock:timestamp_seconds(),
+            started_at = global_clock:timestamp_seconds(),
             bytes_to_release = BytesToRelease
         }
     },
@@ -111,8 +111,10 @@ mark_cancelling(ARId) ->
 -spec mark_finished(undefined | id()) -> ok | error().
 mark_finished(undefined) -> ok;
 mark_finished(ARId) ->
-    case update(ARId, fun(ACR) ->
-        ACR2 = ACR#autocleaning_run{stopped_at = clock:timestamp_seconds()},
+    case update(ARId, fun(ACR = #autocleaning_run{started_at = StartedAt}) ->
+        ACR2 = ACR#autocleaning_run{
+            stopped_at = global_clock:monotonic_timestamp_seconds(StartedAt)
+        },
         {ok, set_final_status(ACR2)}
     end) of
         {ok, #document{value = #autocleaning_run{space_id = SpaceId}}} ->
@@ -126,9 +128,9 @@ mark_finished(ARId) ->
 -spec mark_finished(undefined | id(), non_neg_integer(), non_neg_integer()) -> ok | error().
 mark_finished(undefined, _, _) -> ok;
 mark_finished(ARId, FinalReleasedFiles, FinalReleasedBytes) ->
-    case update(ARId, fun(ACR) ->
+    case update(ARId, fun(ACR = #autocleaning_run{started_at = StartedAt}) ->
         ACR2 = ACR#autocleaning_run{
-            stopped_at = clock:timestamp_seconds(),
+            stopped_at = global_clock:monotonic_timestamp_seconds(StartedAt),
             released_files = FinalReleasedFiles,
             released_bytes = FinalReleasedBytes
         },

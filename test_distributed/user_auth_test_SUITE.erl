@@ -51,7 +51,7 @@ all() -> ?ALL([
 -define(USER_ID_2, <<"test_id_2">>).
 -define(USER_FULL_NAME, <<"test_name">>).
 
--define(NOW(), clock:timestamp_seconds()).
+-define(NOW(), global_clock:timestamp_seconds()).
 
 -define(ATTEMPTS, 60).
 
@@ -545,7 +545,7 @@ mock_token_logic(Config) ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = ?SUB(user, UserId)} = Token} ->
                     Caveats = tokens:get_caveats(Token),
-                    case infer_ttl(Caveats) of
+                    case caveats:infer_ttl(Caveats) of
                         undefined ->
                             {ok, ?SUB(user, UserId), undefined};
                         TokenTTL when TokenTTL > 0 ->
@@ -576,18 +576,6 @@ verify_credentials(Worker, TokenCredentials) ->
 
 clear_auth_cache(Worker) ->
     rpc:call(Worker, ets, delete_all_objects, [auth_cache]).
-
-
--spec infer_ttl([caveats:caveat()]) -> undefined | clock:seconds().
-infer_ttl(Caveats) ->
-    ValidUntil = lists:foldl(fun
-        (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
-        (#cv_time{valid_until = ValidUntil}, Acc) -> min(ValidUntil, Acc)
-    end, undefined, caveats:filter([cv_time], Caveats)),
-    case ValidUntil of
-        undefined -> undefined;
-        _ -> ValidUntil - ?NOW()
-    end.
 
 
 get_auth_cache_size(Worker) ->
@@ -690,14 +678,14 @@ set_auth_cache_size_limit(Node, SizeLimit) ->
     ])).
 
 
--spec set_auth_cache_purge_delay(node(), Delay :: clock:millis()) -> ok.
+-spec set_auth_cache_purge_delay(node(), Delay :: time:millis()) -> ok.
 set_auth_cache_purge_delay(Node, Delay) ->
     ?assertMatch(ok, rpc:call(Node, application, set_env, [
         ?APP_NAME, auth_cache_purge_delay, Delay
     ])).
 
 
--spec set_auth_cache_default_ttl(node(), TTL :: clock:seconds()) -> ok.
+-spec set_auth_cache_default_ttl(node(), TTL :: time:seconds()) -> ok.
 set_auth_cache_default_ttl(Node, TTL) ->
     ?assertMatch(ok, rpc:call(Node, application, set_env, [
         ?APP_NAME, auth_cache_item_default_ttl, TTL

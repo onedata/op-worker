@@ -273,10 +273,9 @@ space_info_mock(Workers, SpaceName) ->
     end).
 
 exec_and_check_time(Mod, M, A) ->
-    BeforeProcessing = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     Ans = erlang:apply(Mod, M, A),
-    AfterProcessing = os:timestamp(),
-    {Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}.
+    {Ans, stopwatch:read_micros(Stopwatch)}.
 
 create_deep_tree(Worker, ParentPath, ParentUuid, 1) ->
     {{ok, #document{key = FileUuid}}, Time} = ?assertMatch(

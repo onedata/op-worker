@@ -805,7 +805,7 @@ create_times_from_stat_timestamps(FileUuid, StorageFileCtx) ->
 
 -spec create_times_from_current_time(file_meta:uuid(), od_space:id()) -> ok.
 create_times_from_current_time(FileUuid, SpaceId) ->
-    CurrentTime = clock:timestamp_seconds(),
+    CurrentTime = global_clock:timestamp_seconds(),
     times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime).
 
 %%-------------------------------------------------------------------

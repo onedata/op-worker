@@ -68,7 +68,7 @@ find_importing_provider(Config, SpaceId) ->
 -spec create_oz_temp_access_token(node(), UserId :: binary()) -> tokens:serialized().
 create_oz_temp_access_token(OzwNode, UserId) ->
     TimeCaveat = #cv_time{
-        valid_until = rpc:call(OzwNode, clock, timestamp_seconds, []) + 100000
+        valid_until = rpc:call(OzwNode, global_clock, timestamp_seconds, []) + 100000
     },
 
     {ok, AccessToken} = rpc:call(OzwNode, token_logic, create_user_temporary_token, [

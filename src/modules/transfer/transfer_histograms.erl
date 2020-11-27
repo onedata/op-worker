@@ -18,7 +18,7 @@
 % possible types are: <<"minute">>, <<"hour">>, <<"day">> and <<"month">>.
 -type period() :: binary().
 -type histograms() :: #{od_provider:id() => histogram:histogram()}.
--type timestamp() :: clock:seconds().
+-type timestamp() :: time:seconds().  % @TODO VFS-7020 Rework time measuring in histograms
 -type timestamps() :: #{od_provider:id() => non_neg_integer()}.
 -type stats_record() ::
     transfer:transfer() |

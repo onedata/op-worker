@@ -70,12 +70,11 @@ continuous_harvesting_test_base(Config) ->
         false ->
             NewFiles + NewDirs + BaseDirs
     end,
-    Start = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     % start harvesting_stream
     harvesting_stress_test_utils:revise_all_spaces(Worker),
     harvesting_stress_test_utils:harvesting_receive_loop(AllFiles),
-    Diff = clock:timestamp_millis() - Start,
-    DiffSec = Diff/1000,
+    DiffSec = stopwatch:read_seconds(Stopwatch, float),
     AvgRate =  AllFiles /DiffSec,
     ct:print("Harvesting ~p files took ~p s.~n"
     "Average rate was ~p files per second.", [AllFiles, DiffSec, AvgRate]),

@@ -169,21 +169,21 @@ takeover_service() ->
     start_service().
 
 
--spec healthcheck(clock:millis()) -> {ok, clock:millis()}.
+-spec healthcheck(time:millis()) -> {ok, time:millis()}.
 healthcheck(LastInterval) ->
     case {oneprovider:is_registered(), is_clock_sync_satisfied(), is_connected()} of
         {false, _, _} ->
-            ?debug("The provider is not registered - next Onezone connection attempt in ~B seconds.", [
-                ?GS_RECONNECT_BASE_INTERVAL div 1000
-            ]),
-            {ok, ?GS_RECONNECT_BASE_INTERVAL};
+            ?debug("Skipping Onezone connection as the provider is not registered."),
+            {ok, calculate_backoff(LastInterval)};
         {true, false, _} ->
-            NewInterval = calculate_backoff(LastInterval),
-            ?info(
-                "Deferring Onezone connection as the clock has not been yet synchronized with Onepanel "
-                "(see op_panel logs for details). Next check in ~B seconds.", [NewInterval div 1000]
-            ),
-            {ok, NewInterval};
+            ?debug("Deferring Onezone connection as the clock has not been yet synchronized with Onepanel"),
+            utils:throttle(?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
+                ?info(
+                    "Deferring Onezone connection as the clock has not been yet "
+                    "synchronized with Onepanel (see op_panel logs for details)."
+                )
+            end),
+            {ok, calculate_backoff(LastInterval)};
         {true, true, true} ->
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
         {true, true, false} ->
@@ -191,10 +191,8 @@ healthcheck(LastInterval) ->
                 ok ->
                     {ok, ?GS_RECONNECT_BASE_INTERVAL};
                 error ->
-                    NewInterval = calculate_backoff(LastInterval),
                     % specific errors are logged in gs_client_worker
-                    ?warning("Next Onezone connection attempt in ~B seconds.", [NewInterval div 1000]),
-                    {ok, NewInterval}
+                    {ok, calculate_backoff(LastInterval)}
             end
     end.
 
@@ -203,7 +201,7 @@ healthcheck(LastInterval) ->
 %%%===================================================================
 
 %% @private
--spec calculate_backoff(clock:millis()) -> clock:millis().
+-spec calculate_backoff(time:millis()) -> time:millis().
 calculate_backoff(LastInterval) ->
     min(?GS_RECONNECT_MAX_BACKOFF, round(LastInterval * ?GS_RECONNECT_BACKOFF_RATE)).
 
@@ -211,7 +209,7 @@ calculate_backoff(LastInterval) ->
 %% @private
 -spec is_clock_sync_satisfied() -> boolean().
 is_clock_sync_satisfied() ->
-    case clock:is_synchronized() of
+    case global_clock:is_synchronized() of
         true ->
             true;
         false ->

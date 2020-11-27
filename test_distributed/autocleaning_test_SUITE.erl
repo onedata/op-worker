@@ -553,7 +553,7 @@ restart_autocleaning_run_test(Config) ->
         value = #autocleaning_run{
             status = binary_to_atom(?ACTIVE, utf8),
             space_id = ?SPACE_ID,
-            started_at = StartTime = rpc:call(W1, clock, timestamp_seconds, []),
+            started_at = StartTime = rpc:call(W1, global_clock, timestamp_seconds, []),
             bytes_to_release = Size - Target
         },
         scope = ?SPACE_ID
@@ -613,7 +613,7 @@ autocleaning_should_evict_file_when_it_is_old_enough(Config) ->
     }},  W1, ?SPACE_ID),
 
     % pretend that file has not been opened for 2 hours
-    CurrentTimestamp = current_timestamp_hours(W1),
+    CurrentTimestamp = rpc:call(W1, global_clock, timestamp_hours, []),
     {ok, _} = change_last_open(W1, Guid, CurrentTimestamp - 2),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     ?assertOneOfReports({ok, #{
@@ -963,9 +963,6 @@ provider_id(Worker) ->
 
 current_size(Worker, SpaceId) ->
     rpc:call(Worker, space_quota, current_size, [SpaceId]).
-
-current_timestamp_hours(Worker) ->
-    rpc:call(Worker, clock, timestamp_seconds, []) div 3600.
 
 change_last_open(Worker, FileGuid, NewLastOpen) ->
     Uuid = file_id:guid_to_uuid(FileGuid),

@@ -70,7 +70,7 @@
 -type record() :: #storage_import_monitoring{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type timestamp() :: clock:seconds().
+-type timestamp() :: time:seconds().
 -type status() :: undefined | ?ENQUEUED | ?RUNNING | ?ABORTING | ?FAILED | ?COMPLETED | ?ABORTED.
 
 -type window() :: day | hour | minute.
@@ -117,7 +117,7 @@ prepare_new_scan(SpaceId) ->
             true ->
                 {error, already_started};
             false ->
-                Timestamp = clock:timestamp_millis(),
+                Timestamp = global_clock:timestamp_millis(),
                 TimestampSecs = Timestamp div 1000,
                 SIM2 = reset_queue_length_histograms(SIM, TimestampSecs),
                 SIM3 = increment_queue_length_histograms(SIM2, TimestampSecs, 1),
@@ -169,7 +169,7 @@ mark_started_scan(SpaceId) ->
 -spec increment_queue_length_histograms(key(), non_neg_integer()) -> ok.
 increment_queue_length_histograms(SpaceId, Value) ->
     ok = ?extract_ok(storage_import_monitoring:update(SpaceId, fun(SIM = #storage_import_monitoring{}) ->
-        Timestamp = clock:timestamp_seconds(),
+        Timestamp = global_clock:timestamp_seconds(),
         SIM2 = maybe_proceed_to_running_status(SIM),
         {ok, increment_queue_length_histograms(SIM2, Timestamp, Value)}
     end)).
@@ -186,7 +186,7 @@ mark_unmodified_files_and_increment_queue_length_histograms(SpaceId, NewUnmodifi
     ok = ?extract_ok(storage_import_monitoring:update(SpaceId, fun(SIM = #storage_import_monitoring{
         unmodified = CurrentUnmodifiedFilesNum
     }) ->
-        Timestamp = clock:timestamp_seconds(),
+        Timestamp = global_clock:timestamp_seconds(),
         SIM2 = maybe_proceed_to_running_status(SIM),
         SIM3 = SIM2#storage_import_monitoring{unmodified = CurrentUnmodifiedFilesNum + NewUnmodifiedFilesNum},
         {ok, increment_queue_length_histograms(SIM3, Timestamp, NewJobsToProcessNum)}
@@ -209,7 +209,7 @@ mark_created_file(SpaceId) ->
         created_hour_hist = HourHist,
         created_day_hist = DayHist
     }) ->
-        Timestamp = clock:timestamp_seconds(),
+        Timestamp = global_clock:timestamp_seconds(),
         SIM2 = SIM#storage_import_monitoring{
             created = CreatedFiles + 1,
             created_min_hist = time_slot_histogram:increment(MinHist, Timestamp),
@@ -238,7 +238,7 @@ mark_modified_file(SpaceId) ->
         modified_hour_hist = HourHist,
         modified_day_hist = DayHist
     }) ->
-        Timestamp = clock:timestamp_seconds(),
+        Timestamp = global_clock:timestamp_seconds(),
         SIM2 = SIM#storage_import_monitoring{
             modified = ModifiedFiles + 1,
             modified_min_hist = time_slot_histogram:increment(MinHist, Timestamp),
@@ -266,7 +266,7 @@ mark_deleted_file(SpaceId) ->
         deleted_hour_hist = HourHist,
         deleted_day_hist = DayHist
     }) ->
-        Timestamp = clock:timestamp_seconds(),
+        Timestamp = global_clock:timestamp_seconds(),
         SIM2 = SIM#storage_import_monitoring{
             deleted = DeletedFiles + 1,
             deleted_min_hist = time_slot_histogram:increment(MinHist, Timestamp),
@@ -298,7 +298,7 @@ mark_unmodified_files(SpaceId, NewUnmodifiedFilesNum) ->
     ok = ?extract_ok(storage_import_monitoring:update(SpaceId, fun(SIM = #storage_import_monitoring{
         unmodified = UnmodifiedFilesNum
     }) ->
-        Timestamp = clock:timestamp_seconds(),
+        Timestamp = global_clock:timestamp_seconds(),
         SIM2 = maybe_proceed_to_running_status(SIM),
         SIM3 = SIM2#storage_import_monitoring{unmodified = UnmodifiedFilesNum + NewUnmodifiedFilesNum},
         SIM4 = decrement_queue_length_histograms(SIM3, Timestamp, NewUnmodifiedFilesNum),
@@ -318,7 +318,7 @@ mark_failed_file(SpaceId) ->
     ok = ?extract_ok(storage_import_monitoring:update(SpaceId, fun(SIM = #storage_import_monitoring{
         failed = FilesFailed
     }) ->
-        Timestamp = clock:timestamp_seconds(),
+        Timestamp = global_clock:timestamp_seconds(),
         SIM2 = SIM#storage_import_monitoring{failed = FilesFailed + 1},
         SIM3 = maybe_proceed_to_running_status(SIM2),
         SIM4 = decrement_queue_length_histograms(SIM3, Timestamp),
@@ -335,7 +335,7 @@ mark_failed_file(SpaceId) ->
 -spec mark_processed_job(key()) -> ok.
 mark_processed_job(SpaceId) ->
     ok = ?extract_ok(storage_import_monitoring:update(SpaceId, fun(SIM = #storage_import_monitoring{}) ->
-        Timestamp = clock:timestamp_seconds(),
+        Timestamp = global_clock:timestamp_seconds(),
         SIM2 = maybe_proceed_to_running_status(SIM),
         SIM3 = decrement_queue_length_histograms(SIM2, Timestamp),
         {ok, SIM3}
@@ -468,7 +468,7 @@ get_finished_scans_num(SpaceId) ->
             Error
     end.
 
--spec get_scan_stop_time(doc() | record()) -> {ok, clock:millis()} | undefined.
+-spec get_scan_stop_time(doc() | record()) -> {ok, time:millis()} | undefined.
 get_scan_stop_time(#storage_import_monitoring{scan_stop_time = ScanStopTime}) ->
     {ok, ScanStopTime};
 get_scan_stop_time(#document{value = SIM}) ->
@@ -601,7 +601,7 @@ new_doc(SpaceId) ->
 
 -spec new_record() -> record().
 new_record() ->
-    Timestamp = clock:timestamp_seconds(),
+    Timestamp = global_clock:timestamp_seconds(),
     EmptyMinHist = time_slot_histogram:new(Timestamp, ?MIN_HIST_SLOT, ?HISTOGRAM_LENGTH),
     EmptyHourHist = time_slot_histogram:new(Timestamp, ?HOUR_HIST_SLOT, ?HISTOGRAM_LENGTH),
     EmptyDayHist = time_slot_histogram:new(Timestamp, ?DAY_HIST_SLOT, ?HISTOGRAM_LENGTH),
@@ -693,22 +693,23 @@ decrement_queue_length_histograms(SIM = #storage_import_monitoring{
 
 -spec mark_finished_scan_internal(record(), boolean()) -> record().
 mark_finished_scan_internal(SIM = #storage_import_monitoring{
+    scan_start_time = ScanStartTime,
     finished_scans = Scans,
     failed = Failed
 }, Aborted) ->
     case is_scan_in_progress(SIM) of
         true ->
-            Timestamp = clock:timestamp_millis(),
+            MonotonicTimestamp = global_clock:monotonic_timestamp_millis(ScanStartTime),
             SIM2 = SIM#storage_import_monitoring{
                 finished_scans = Scans + 1,
-                scan_stop_time = Timestamp,
+                scan_stop_time = MonotonicTimestamp,
                 status = case {Aborted, Failed > 0} of
                     {true, _} -> ?ABORTED;
                     {false, true} -> ?FAILED;
                     {false, false} -> ?COMPLETED
                 end
             },
-            reset_queue_length_histograms(SIM2, Timestamp div 1000);
+            reset_queue_length_histograms(SIM2, MonotonicTimestamp div 1000);
         false ->
             % this should never happen
             ?error("Unexpected attempt to mark scan as finished while it is not in progress."),
@@ -777,7 +778,7 @@ return_empty_histograms_and_timestamps(Types) ->
 %%-------------------------------------------------------------------
 -spec return_empty_histogram_and_timestamp() -> time_stats().
 return_empty_histogram_and_timestamp() ->
-    prepare(clock:timestamp_seconds(), histogram:new(?HISTOGRAM_LENGTH)).
+    prepare(global_clock:timestamp_seconds(), histogram:new(?HISTOGRAM_LENGTH)).
 
 
 -spec return_histograms_and_timestamps(record(), [plot_counter_type()], window()) ->
@@ -832,8 +833,8 @@ return_histogram_and_timestamp(SIM, ?QUEUE_LENGTH, day) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec prepare(time_slot_histogram:histogram()) -> time_stats().
-    prepare(TimeSlotHistogram) ->
-    Timestamp = clock:timestamp_seconds(),
+prepare(TimeSlotHistogram) ->
+    Timestamp = global_clock:timestamp_seconds(),
     TimeSlotHistogram2 = time_slot_histogram:increment(TimeSlotHistogram, Timestamp, 0),
     Values = time_slot_histogram:get_histogram_values(TimeSlotHistogram2),
     prepare(Timestamp, Values).
@@ -848,7 +849,7 @@ return_histogram_and_timestamp(SIM, ?QUEUE_LENGTH, day) ->
 -spec prepare(timestamp(), [integer()]) -> time_stats().
 prepare(Timestamp, Values) ->
     #{
-        lastValueDate => time_format:seconds_to_iso8601(Timestamp),
+        lastValueDate => time:seconds_to_iso8601(Timestamp),
         values => lists:reverse(Values)
     }.
 
