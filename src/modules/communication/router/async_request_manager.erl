@@ -223,7 +223,15 @@ delegate_and_supervise(WorkerRef, ReqOrHandlerFun, MsgId, RespondVia) ->
     {stop, Reason :: term()} | ignore.
 init([SessionId]) ->
     process_flag(trap_exit, true),
-    ok = session_connections:set_async_request_manager(SessionId, self()),
+
+    {ok, #document{value = #session{
+        connections = Cons
+    }}} = session_connections:set_async_request_manager(SessionId, self()),
+
+    % Make connection processes rebuild their rib as to include
+    % new async request manager (e.g. after node death and session restart).
+    lists:foreach(fun(Conn) -> connection:rebuild_rib(Conn) end, Cons),
+
     {ok, #state{session_id = SessionId}}.
 
 
