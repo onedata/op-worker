@@ -37,7 +37,7 @@
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
--export([get_name/1]).
+-export([get_name_of_local_storage/1, get_name_of_remote_storage/2]).
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([get_provider/2]).
 -export([get_spaces/1]).
@@ -171,12 +171,21 @@ revoke_space_support(StorageId, SpaceId) ->
     end).
 
 
--spec get_name(storage:id() | od_storage:doc()) -> {ok, storage:name()} | errors:error().
-get_name(#document{value = #od_storage{name = Name}}) ->
+-spec get_name_of_local_storage(storage:id() | od_storage:doc()) -> {ok, storage:name()} | errors:error().
+get_name_of_local_storage(#document{value = #od_storage{name = Name}}) ->
     {ok, Name};
-get_name(StorageId) ->
+get_name_of_local_storage(StorageId) ->
     case get(StorageId) of
-        {ok, Doc} -> get_name(Doc);
+        {ok, Doc} -> get_name_of_local_storage(Doc);
+        {error, _} = Error -> Error
+    end.
+
+
+-spec get_name_of_remote_storage(storage:id(), od_space:id()) -> 
+    {ok, storage:name()} | errors:error().
+get_name_of_remote_storage(StorageId, SpaceId) ->
+    case get_shared_data(StorageId, SpaceId) of
+        {ok, #document{value = #od_storage{name = Name}}} -> {ok, Name};
         {error, _} = Error -> Error
     end.
 

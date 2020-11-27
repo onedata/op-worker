@@ -308,11 +308,10 @@ traverse_and_execute_jobs_only_on_files_test_base(Config, SpaceId, Opts) ->
         StrippedTestFilesStructure, true),
     {_DirsNum, FilesNum} = count_files_and_dirs(TestFilesStructure, MaxDepth),
     FilesCounterRef = countdown_server:init_counter(W, FilesNum),
-    StartTime = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     run_traverse(W, SpaceId, StorageId, {CSPid, undefined, FilesCounterRef}, Opts),
     ReceivedFiles = countdown_server:await(W, FilesCounterRef, ?TIMEOUT),
-    EndTime = clock:timestamp_millis(),
-    ct:pal("Traverse took ~p seconds.", [(EndTime - StartTime) / 1000]),
+    ct:pal("Traverse took ~p seconds.", [stopwatch:read_seconds(Stopwatch, float)]),
     ?assertEqual(lists:usort(CreatedFiles), lists:usort(ReceivedFiles)).
 
 traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, SpaceId, Opts) ->
@@ -332,13 +331,12 @@ traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, SpaceId, Opts) ->
     {DirsNum, FilesNum} = count_files_and_dirs(TestFilesStructure, MaxDepth),
     FilesCounterRef = countdown_server:init_counter(W, FilesNum),
     DirsCounterRef = countdown_server:init_counter(W, DirsNum + 1), % job will be executed also on space directory
-    StartTime = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     run_traverse(W, SpaceId, StorageId, {CSPid, DirsCounterRef, FilesCounterRef},
         Opts#{execute_slave_on_dir => true}),
     ReceivedFiles = countdown_server:await(W, FilesCounterRef, ?TIMEOUT),
     ReceivedDirs = countdown_server:await(W, DirsCounterRef, ?TIMEOUT),
-    EndTime = clock:timestamp_millis(),
-    ct:pal("Traverse took ~p seconds.", [(EndTime - StartTime) / 1000]),
+    ct:pal("Traverse took ~p seconds.", [stopwatch:read_seconds(Stopwatch, float)]),
     ?assertEqual(lists:usort(CreatedFiles), lists:usort(ReceivedFiles)),
     ?assertEqual(lists:usort(CreatedDirs2), lists:usort(ReceivedDirs)).
 
@@ -358,7 +356,7 @@ custom_compute_test_base(Config, SpaceId, Opts, ExpectedComputeValue) ->
     {_DirsNum, FilesNum} = count_files_and_dirs(TestFilesStructure, MaxDepth),
     FilesCounterRef = countdown_server:init_counter(W, FilesNum),
     ComputeCounterRef = countdown_server:init_counter(W, ExpectedComputeValue),
-    StartTime = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     run_traverse(W, SpaceId, StorageId, {CSPid, undefined, FilesCounterRef, ComputeCounterRef},
         Opts#{
             fold_children_fun => fun(StorageFileCtx, _Info, Acc) -> {Acc + 1, StorageFileCtx} end,
@@ -366,8 +364,7 @@ custom_compute_test_base(Config, SpaceId, Opts, ExpectedComputeValue) ->
         }),
     ReceivedFiles = countdown_server:await(W, FilesCounterRef, ?TIMEOUT),
     countdown_server:await(W, ComputeCounterRef, ?TIMEOUT),
-    EndTime = clock:timestamp_millis(),
-    ct:pal("Traverse took ~p seconds.", [(EndTime - StartTime) / 1000]),
+    ct:pal("Traverse took ~p seconds.", [stopwatch:read_seconds(Stopwatch, float)]),
     ?assertEqual(lists:usort(CreatedFiles), lists:usort(ReceivedFiles)).
 
 %===================================================================

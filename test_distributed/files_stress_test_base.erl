@@ -120,10 +120,12 @@ single_dir_creation_test_base(Config, Clear) ->
                     case NewSum - LastLS >= 20000 of
                         true ->
                             put(last_ls, NewSum),
-                            T0 = os:timestamp(), % @TODO VFS-6841 switch to the clock module in all CT tests
-                            ls(Worker, SessId, Dir, undefined, false),
+                            LsTime = measure_execution_time(fun() ->
+                                ls(Worker, SessId, Dir, undefined, false)
+                            end),
+
                             ct:print("Save num ~p, sum ~p, ls time ~p",
-                                [SaveOk, NewSum, timer:now_diff(os:timestamp(), T0)]);
+                                [SaveOk, NewSum, LsTime]);
                         _ ->
                             ct:print("Save num ~p, sum ~p", [SaveOk, NewSum])
                     end
@@ -483,10 +485,9 @@ gather_answers(Answers, Num, Gathered, LastReport) ->
     end.
 
 measure_execution_time(Fun) ->
-    StartTime = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     Ans = Fun(),
-    Now = os:timestamp(),
-    {timer:now_diff(Now, StartTime), Ans}.
+    {stopwatch:read_micros(Stopwatch), Ans}.
 
 get_avg(Num, Timw) ->
     case Num of

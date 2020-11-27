@@ -146,7 +146,7 @@ migrate_to_v1({storage_sync_monitoring,
     }.
 
 
--spec timestamp_to_millis(clock:seconds() | undefined) -> clock:millis() | undefined.
+-spec timestamp_to_millis(time:seconds() | undefined) -> time:millis() | undefined.
 timestamp_to_millis(undefined) -> undefined;
 timestamp_to_millis(TimestampSecs) -> TimestampSecs * 1000.
 

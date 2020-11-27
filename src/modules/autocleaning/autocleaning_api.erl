@@ -252,12 +252,12 @@ get_run_report(ARId, #autocleaning_run{
 }) ->
     StoppedAt2 = case StoppedAt of
         undefined -> null;
-        StoppedAt -> time_format:seconds_to_iso8601(StoppedAt)
+        StoppedAt -> time:seconds_to_iso8601(StoppedAt)
     end,
     {ok, #{
         id => ARId,
         index => autocleaning_run_links:link_key(ARId, StartedAt),
-        started_at => time_format:seconds_to_iso8601(StartedAt),
+        started_at => time:seconds_to_iso8601(StartedAt),
         stopped_at => StoppedAt2,
         status => atom_to_binary(Status, utf8),
         released_bytes => ReleasedBytes,

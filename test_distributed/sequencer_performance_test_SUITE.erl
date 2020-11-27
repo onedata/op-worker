@@ -124,11 +124,11 @@ manager_test(Config) ->
     ok.
 
 manager_test_on_node(Manager, Messages) ->
-    Start = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     lists:foreach(fun(Msg) ->
         ok = sequencer_manager:handle(Manager, Msg)
     end, Messages),
-    {ok, timer:now_diff(os:timestamp(), Start)}.
+    {ok, stopwatch:read_micros(Stopwatch)}.
 
 route_message_should_forward_messages_in_right_order(Config) ->
   ?PERFORMANCE(Config, [

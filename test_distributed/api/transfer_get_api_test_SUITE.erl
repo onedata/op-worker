@@ -202,7 +202,7 @@ build_get_transfer_status_validate_rest_call_result_fun(TransferType, DataSource
         assert_proper_histograms_in_get_status_rest_response(TransferType, ExpState, Env, Body),
 
         CreationTime = maps:get(creation_time, Env),
-        Now = clock:timestamp_millis() div 1000,
+        Now = global_clock:timestamp_seconds(),
         assert_proper_times_in_get_status_rest_response(ExpState, CreationTime, Now, Body)
     end.
 
@@ -427,7 +427,7 @@ build_get_transfer_status_validate_gs_call_result_fun(DataSourceType, ExpState, 
                 ?assert(0 == StartTime orelse ScheduleTime =< StartTime),
                 ?assertEqual(null, FinishTime);
             ended ->
-                Now = clock:timestamp_millis() div 1000,
+                Now = global_clock:timestamp_seconds(),
 
                 ?assert(not IsOngoing),
                 ?assert(CreationTime =< ScheduleTime),

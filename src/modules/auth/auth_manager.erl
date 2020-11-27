@@ -61,7 +61,7 @@
 -type credentials() :: ?ROOT_CREDENTIALS | ?GUEST_CREDENTIALS | token_credentials().
 
 -type verification_result() ::
-    {ok, aai:auth(), TokenValidUntil :: undefined | clock:seconds()} |
+    {ok, aai:auth(), TokenValidUntil :: undefined | time:seconds()} |
     errors:error().
 
 -export_type([
@@ -70,7 +70,7 @@
     verification_result/0
 ]).
 
--define(NOW(), clock:timestamp_seconds()).
+-define(NOW(), global_clock:timestamp_seconds()).
 
 
 %%%===================================================================

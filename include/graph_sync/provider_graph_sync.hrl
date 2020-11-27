@@ -32,11 +32,14 @@
     graph_sync_request_timeout, timer:seconds(30))).
 
 -define(GS_RECONNECT_BASE_INTERVAL, application:get_env(?APP_NAME,
-    graph_sync_reconnect_base_interval, timer:seconds(4))).
+    graph_sync_reconnect_base_interval, timer:seconds(3))).
 -define(GS_RECONNECT_BACKOFF_RATE, application:get_env(?APP_NAME,
-    graph_sync_reconnect_backoff_rate, 1.5)).
+    graph_sync_reconnect_backoff_rate, 1.35)).
 -define(GS_RECONNECT_MAX_BACKOFF, application:get_env(?APP_NAME,
-    graph_sync_reconnect_max_backoff, timer:minutes(5))).
+    graph_sync_reconnect_max_backoff, timer:seconds(20))).
+
+% how often logs appear when waiting for Onezone connection
+-define(OZ_CONNECTION_AWAIT_LOG_INTERVAL, 300). % 5 minutes
 
 % Macros to strip results from create into simpler form.
 -define(CREATE_RETURN_ID(__Expr),

@@ -46,7 +46,6 @@
 -export([get_nodes/1, get_nodes/2]).
 -export([get_rtransfer_port/1]).
 -export([set_txt_record/3, remove_txt_record/1]).
--export([get_zone_time/0]).
 -export([zone_get_offline_access_idps/0]).
 -export([fetch_peer_version/1]).
 -export([assert_zone_compatibility/0]).
@@ -655,15 +654,6 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
             <<"groupId">> => IdpGroupId
         }
     })).
-
-
--spec get_zone_time() -> clock:millis() | no_return().
-get_zone_time() ->
-    {ok, Millis} = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_provider, id = undefined, aspect = current_time}
-    }),
-    Millis.
 
 
 %%--------------------------------------------------------------------

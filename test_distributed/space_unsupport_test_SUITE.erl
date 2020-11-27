@@ -148,7 +148,7 @@ cleanup_traverse_stage_test(Config) ->
     ok = rpc:call(Worker, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     rpc:call(Worker, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]),
     check_files_on_storage(Worker, AllPathsWithoutSpace, false, false),
-    assert_storage_cleaned_up(Worker, StorageId),
+    assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId)),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
     
@@ -183,10 +183,16 @@ cleanup_traverse_stage_with_import_test(Config) ->
     check_files_on_storage(Worker, AllPaths, true, true),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
-    
+
     ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G1}),
     ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G2}),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, DirGuid}).
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, DirGuid}),
+    
+    % files on storage have to be deleted manually as only file location documents have 
+    % been deleted during cleanup traverse on imported storage
+    ok = remove_storage_file(Worker, storage_file_path(Worker, ?SPACE_ID, F1Path, true)),
+    ok = remove_storage_file(Worker, storage_file_path(Worker, ?SPACE_ID, F2Path, true)),
+    ok = remove_storage_dir(Worker, storage_file_path(Worker, ?SPACE_ID, DirPath, true)).
 
 
 cleanup_traverse_stage_persistence_test(Config) ->
@@ -284,7 +290,7 @@ delete_local_documents_stage_test(Config) ->
     },
     ok = rpc:call(Worker, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
-    assert_local_documents_cleaned_up(Worker, ?SPACE_ID, StorageId).
+    assert_local_documents_cleaned_up(Worker, ?SPACE_ID).
 
 
 overall_test(Config) ->
@@ -320,8 +326,8 @@ overall_test(Config) ->
     
     % wait for documents to expire 
     timer:sleep(timer:seconds(70)),
-
-    assert_storage_cleaned_up(Worker, StorageId),
+    
+    assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId)),
     assert_synced_documents_cleaned_up(Worker, ?SPACE_ID),
     assert_local_documents_cleaned_up(Worker).
 
@@ -372,7 +378,8 @@ init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     lists:foreach(fun(Worker) ->
-        ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, {guid, SpaceGuid}, 0, 10), ?ATTEMPTS)
+        ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, {guid, SpaceGuid}, 0, 10), ?ATTEMPTS),
+        assert_space_on_storage_cleaned_up(Worker, initializer:get_supporting_storage_id(Worker, ?SPACE_ID), ?SPACE_ID)
     end, Workers),
     ct:timetrap({minutes, 30}),
     lfm_proxy:init(Config).
@@ -394,13 +401,23 @@ end_per_testcase(_, Config) ->
 %%% Assertion helper functions
 %%%===================================================================
 
-assert_storage_cleaned_up(Worker, StorageId) ->
-    Path = storage_mount_point(Worker, StorageId),
-    {ok, FileList} = rpc:call(Worker, file, list_dir_all, [Path]),
-    ?assertEqual([], FileList).
+assert_storage_cleaned_up(Worker, Path) ->
+    case check_exists_on_storage(Worker, Path) of
+        true ->
+            {ok, FileList} = rpc:call(Worker, file, list_dir_all, [Path]),
+            ?assertEqual([], FileList);
+        false -> ok
+    end.
 
 
-assert_local_documents_cleaned_up(Worker, SpaceId, StorageId) ->
+assert_space_on_storage_cleaned_up(Worker, StorageId, SpaceId) ->
+    case rpc:call(Worker, storage, is_imported, [StorageId]) of
+        true -> assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId));
+        false -> assert_storage_cleaned_up(Worker, filename:join(get_space_mount_point(Worker, SpaceId), SpaceId))
+    end.
+
+
+assert_local_documents_cleaned_up(Worker, SpaceId) ->
     ?assertEqual({error, not_found}, rpc:call(Worker, storage_import_config, get, [SpaceId])),
     ?assertEqual({error, not_found}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId])),
     ?assertEqual(undefined, rpc:call(Worker, autocleaning, get_config, [SpaceId])),
@@ -566,6 +583,12 @@ check_files_on_storage(Worker, FilesList, ShouldExist, IsImportedStorage) ->
 
 check_exists_on_storage(Worker, StorageFilePath) ->
     rpc:call(Worker, filelib, is_file, [StorageFilePath]).
+
+remove_storage_file(Worker, StorageFilePath) ->
+    rpc:call(Worker, file, delete, [StorageFilePath]).
+
+remove_storage_dir(Worker, StorageDirPath) ->
+    rpc:call(Worker, file, del_dir, [StorageDirPath]).
 
 storage_file_path(Worker, SpaceId, FilePath, true) ->
     SpaceMnt = get_space_mount_point(Worker, SpaceId),

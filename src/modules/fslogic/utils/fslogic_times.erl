@@ -18,6 +18,8 @@
 -export([update_atime/1, update_ctime/1, update_ctime/2, update_mtime_ctime/1,
     update_mtime_ctime/2, update_times_and_emit/2]).
 
+-define(NOW(), global_clock:timestamp_seconds()).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -29,8 +31,7 @@
 %%--------------------------------------------------------------------
 -spec update_atime(file_ctx:ctx()) -> ok.
 update_atime(FileCtx) ->
-    CurrentTime = clock:timestamp_seconds(),
-    case calculate_atime(FileCtx, CurrentTime) of
+    case calculate_atime(FileCtx, ?NOW()) of
         actual ->
             ok;
         NewATime ->
@@ -45,12 +46,12 @@ update_atime(FileCtx) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @equiv update_ctime(FileCtx, clock:timestamp_seconds()).
+%% @equiv update_ctime(FileCtx, ?NOW()).
 %% @end
 %%--------------------------------------------------------------------
 -spec update_ctime(file_ctx:ctx()) -> ok.
 update_ctime(FileCtx) ->
-    update_ctime(FileCtx, clock:timestamp_seconds()).
+    update_ctime(FileCtx, ?NOW()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -69,13 +70,13 @@ update_ctime(FileCtx, CurrentTime) ->
     end).
 
 %%--------------------------------------------------------------------
-%% @equiv update_mtime_ctime(FileCtx, clock:timestamp_seconds()).
+%% @equiv update_mtime_ctime(FileCtx, ?NOW()).
 %% @end
 %%--------------------------------------------------------------------
 -spec update_mtime_ctime(file_ctx:ctx()) ->
     ok.
 update_mtime_ctime(FileCtx) ->
-    update_mtime_ctime(FileCtx, clock:timestamp_seconds()).
+    update_mtime_ctime(FileCtx, ?NOW()).
 
 %%--------------------------------------------------------------------
 %% @doc

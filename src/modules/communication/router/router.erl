@@ -32,9 +32,6 @@
 %% information for routing messages. It should be created by connection process
 %% right after its start and used in following calls to router.
 -record(rib, {
-    % Sequencer manager pid. Available only for fuse and
-    % provider_outgoing session.
-    seq_manager = undefined :: undefined | pid(),
     % Used by worker processes to send responses to delegated requests.
     % This field is set only for incoming connection and left as undefined
     % for outgoing one (it is used for sending requests not handling and
@@ -75,24 +72,23 @@ effective_session_id(#client_message{effective_session_id = EffSessionId}) ->
 %% by connection process and used in subsequent calls to router.
 %% @end
 %%--------------------------------------------------------------------
--spec build_rib(session:id()) -> rib().
+-spec build_rib(session:id()) -> rib() | no_return().
 build_rib(SessionId) ->
     {ok, #document{
         value = #session{
-            sequencer_manager = SeqManager,
+            type = SessionType,
             async_request_manager = AsyncReqManager
         }}
     } = session:get(SessionId),
 
-    RespondVia = case AsyncReqManager of
-        undefined -> undefined;
-        _ -> {self(), AsyncReqManager, SessionId}
+    RespondVia = case is_pid(AsyncReqManager) of
+        true ->
+            {self(), AsyncReqManager, SessionId};
+        false when SessionType /= provider_incoming andalso SessionType /= fuse ->
+            undefined
     end,
 
-    #rib{
-        seq_manager = SeqManager,
-        respond_via = RespondVia
-    }.
+    #rib{respond_via = RespondVia}.
 
 
 %%--------------------------------------------------------------------

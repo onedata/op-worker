@@ -38,8 +38,8 @@
     get_id/1, get_block_size/1, get_helper/1, get_helper_name/1,
     get_luma_feed/1, get_luma_config/1
 ]).
--export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
-    fetch_qos_parameters_of_remote_storage/2]).
+-export([fetch_name/1, fetch_name_of_remote_storage/2, fetch_provider_id_of_remote_storage/2, 
+    fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2]).
 -export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
@@ -263,8 +263,20 @@ get_luma_config(StorageData) ->
 
 -spec fetch_name(id()) -> name().
 fetch_name(StorageId) when is_binary(StorageId) ->
-    {ok, Name} = ?throw_on_error(storage_logic:get_name(StorageId)),
+    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_local_storage(StorageId)),
     Name.
+
+
+-spec fetch_name_of_remote_storage(id(), od_space:id()) -> name().
+fetch_name_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
+    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_remote_storage(StorageId, SpaceId)),
+    Name.
+
+
+-spec fetch_provider_id_of_remote_storage(id(), od_space:id()) -> od_provider:id().
+fetch_provider_id_of_remote_storage(StorageId, SpaceId) ->
+    {ok, ProviderId} = ?throw_on_error(storage_logic:get_provider(StorageId, SpaceId)),
+    ProviderId.
 
 
 -spec fetch_qos_parameters_of_local_storage(id()) -> qos_parameters().
@@ -527,7 +539,7 @@ on_helper_changed(StorageId) ->
 is_name_occupied(Name) ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
     lists:member(Name, lists:map(fun(StorageId) ->
-        {ok, OccupiedName} = storage_logic:get_name(StorageId),
+        {ok, OccupiedName} = storage_logic:get_name_of_local_storage(StorageId),
         OccupiedName
     end, StorageIds)).
 

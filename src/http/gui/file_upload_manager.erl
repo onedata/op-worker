@@ -43,7 +43,7 @@
 -type state() :: #state{}.
 -type error() :: {error, Reason :: term()}.
 
--define(NOW, clock:timestamp_seconds()).
+-define(NOW(), global_clock:timestamp_seconds()).
 -define(INACTIVITY_PERIOD, 60).
 -define(UPLOADS_CHECKUP_INTERVAL, ?INACTIVITY_PERIOD * 1000).
 
@@ -145,7 +145,7 @@ init(_) ->
     {stop, Reason :: term(), NewState :: state()}.
 handle_call({register, UserId, FileGuid}, _, #state{uploads = Uploads} = State) ->
     {reply, ok, maybe_schedule_uploads_checkup(State#state{
-        uploads = Uploads#{FileGuid => {UserId, ?NOW + ?INACTIVITY_PERIOD}}
+        uploads = Uploads#{FileGuid => {UserId, ?NOW() + ?INACTIVITY_PERIOD}}
     })};
 handle_call({is_registered, UserId, FileGuid}, _, State) ->
     IsRegistered = case maps:find(FileGuid, State#state.uploads) of
@@ -256,7 +256,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec remove_stale_uploads(uploads()) -> uploads().
 remove_stale_uploads(Uploads) ->
-    Now = ?NOW,
+    Now = ?NOW(),
     maps:fold(fun
         (FileGuid, {UserId, CheckupTime}, Acc) when CheckupTime < Now ->
             case lfm:stat(?ROOT_SESS_ID, {guid, FileGuid}) of

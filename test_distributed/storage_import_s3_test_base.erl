@@ -131,11 +131,10 @@ create_subfiles_import_many_test(Config) ->
         ok = sd_test_utils:create_file(W1, SFMFileHandle, 8#664),
         {ok, _} = sd_test_utils:write_file(W1, SFMFileHandle, 0, ?TEST_DATA)
     end, lists:seq(1, DirsNumber)),
-    Start = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID, 60),
-    End = clock:timestamp_millis(),
-    ct:pal("Import took ~p", [(End - Start) / 1000]),
+    ct:pal("Import took ~p", [stopwatch:read_seconds(Stopwatch, float)]),
 
     storage_import_test_base:parallel_assert(storage_import_test_base, verify_file_in_dir, [W1, SessId, 60], lists:seq(1, DirsNumber), 60),
 
@@ -169,13 +168,12 @@ create_subfiles_import_many2_test(Config) ->
     RootSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
     storage_import_test_base:create_nested_directory_tree(W1, DirStructure, RootSDHandle),
     Files = storage_import_test_base:generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
-    Start = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
 
     Timeout = 600,
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID, Timeout),
-    End = clock:timestamp_millis(),
-    ct:pal("Import took ~p", [(End - Start) / 1000]),
+    ct:pal("Import took ~p", [stopwatch:read_seconds(Stopwatch, float)]),
     storage_import_test_base:parallel_assert(storage_import_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout),
 
     ?assertMonitoring(W1, #{
