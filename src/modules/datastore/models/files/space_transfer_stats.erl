@@ -15,12 +15,14 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
     key/2, key/3,
     get/1, get/2, get/3,
+    get_last_update/1,
     update/3, update_with_cache/3,
     delete/1, delete/2
 ]).
@@ -107,6 +109,13 @@ get(ProviderId, TransferType, SpaceId) ->
     ?MODULE:get(key(ProviderId, TransferType, SpaceId)).
 
 
+-spec get_last_update(space_transfer_stats()) -> transfer_histograms:timestamp().
+get_last_update(#space_transfer_stats{last_update = LastUpdateMap}) ->
+    maps:fold(fun(_ProviderId, LastUpdate, Acc) ->
+        max(LastUpdate, Acc)
+    end, ?START_TIME, LastUpdateMap).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Sends stats to onf_transfer_stats_aggregator process instead of updating doc
@@ -132,60 +141,51 @@ update_with_cache(?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider) ->
     ok | {error, term()}.
 update(TransferType, SpaceId, BytesPerProvider) ->
     Key = key(TransferType, SpaceId),
-    Diff = fun(SpaceTransfers = #space_transfer_stats{
-        last_update = LastUpdateMap,
+    Diff = fun(SpaceTransferStats = #space_transfer_stats{
+        last_update = LastUpdates,
         min_hist = MinHistograms,
         hr_hist = HrHistograms,
         dy_hist = DyHistograms,
         mth_hist = MthHistograms
     }) ->
-        LastUpdates = lists:map(fun(ProviderId) ->
-            maps:get(ProviderId, LastUpdateMap, ?START_TIME)
-        end, maps:keys(BytesPerProvider)),
-        LatestLastUpdate = lists:max(LastUpdates),
-        % Due to race between processes updating stats it is possible for
-        % LatestLastUpdate to be larger than the current global time, plus the
-        % global time may warp backwards. In such cases, all updates will fall
-        % into the same histogram slot and a spike may be visible.
-        ApproxCurrentTime = global_clock:monotonic_timestamp_seconds(LatestLastUpdate),
-        NewTimestamps = maps:map(fun(_, _) ->
-            ApproxCurrentTime
-        end, BytesPerProvider),
-        {ok, SpaceTransfers#space_transfer_stats{
-            last_update = maps:merge(LastUpdateMap, NewTimestamps),
+        CurrentMonotonicTime = transfer_histograms:get_current_monotonic_time(LastUpdates, ?START_TIME),
+        ApproxCurrentTime = transfer_histograms:monotonic_timestamp_value(CurrentMonotonicTime),
+        NewTimestamps = maps:map(fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
+        {ok, SpaceTransferStats#space_transfer_stats{
+            last_update = maps:merge(LastUpdates, NewTimestamps),
             min_hist = transfer_histograms:update(
                 BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
-                LastUpdateMap, ?START_TIME, ApproxCurrentTime
+                LastUpdates, ?START_TIME, CurrentMonotonicTime
             ),
             hr_hist = transfer_histograms:update(
                 BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
-                LastUpdateMap, ?START_TIME, ApproxCurrentTime
+                LastUpdates, ?START_TIME, CurrentMonotonicTime
             ),
             dy_hist = transfer_histograms:update(
                 BytesPerProvider, DyHistograms, ?DAY_PERIOD,
-                LastUpdateMap, ?START_TIME, ApproxCurrentTime
+                LastUpdates, ?START_TIME, CurrentMonotonicTime
             ),
             mth_hist = transfer_histograms:update(
                 BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
-                LastUpdateMap, ?START_TIME, ApproxCurrentTime
+                LastUpdates, ?START_TIME, CurrentMonotonicTime
             )
         }}
     end,
+    CurrentTime = transfer_histograms:monotonic_timestamp_value(
+        transfer_histograms:get_current_monotonic_time(?START_TIME)
+    ),
     Default = #document{
         scope = SpaceId,
         key = Key,
         value = #space_transfer_stats{
-            last_update = maps:map(fun(_, _) -> global_clock:timestamp_seconds() end, BytesPerProvider),
+            last_update = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
             min_hist = transfer_histograms:new(BytesPerProvider, ?MINUTE_PERIOD),
             hr_hist = transfer_histograms:new(BytesPerProvider, ?HOUR_PERIOD),
             dy_hist = transfer_histograms:new(BytesPerProvider, ?DAY_PERIOD),
             mth_hist = transfer_histograms:new(BytesPerProvider, ?MONTH_PERIOD)
         }
     },
-    case datastore_model:update(?CTX, Key, Diff, Default) of
-        {ok, _} -> ok;
-        Error -> Error
-    end.
+    ?extract_ok(datastore_model:update(?CTX, Key, Diff, Default)).
 
 
 %%-------------------------------------------------------------------

@@ -641,7 +641,7 @@ get(#op_req{data = Data, gri = #gri{
     StartTime = 0,
 
     #space_transfer_stats_cache{
-        timestamp = LastUpdate,
+        last_update = LastUpdate,
         stats_in = StatsIn,
         stats_out = StatsOut
     } = space_transfer_stats_cache:get(

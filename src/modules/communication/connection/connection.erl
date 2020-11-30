@@ -92,6 +92,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -338,11 +339,15 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
             % Concrete errors were already logged in 'handle_protocol_upgrade_response'
             % so terminate gracefully as to not spam more error logs
             {stop, termination_reason(connection_attempt_failed, State), State}
-    catch Type:Reason ->
-        ?error_stacktrace("Unexpected error during protocol upgrade: ~p:~p", [
-            Type, Reason
-        ]),
-        {stop, termination_reason(connection_attempt_failed, State), State}
+    catch
+        throw:{error, _} = Error ->
+            ?error("Protocol upgrade failed due to ~p", [Error]),
+            {stop, termination_reason(connection_attempt_failed, State), State};
+        Type:Reason ->
+            ?error_stacktrace("Unexpected error during protocol upgrade: ~p:~p", [
+                Type, Reason
+            ]),
+            {stop, termination_reason(connection_attempt_failed, State), State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
@@ -624,9 +629,9 @@ handle_protocol_upgrade_response(State, Data) ->
                 peer_id = ProviderId
             } = State,
             {ok, MsgId} = clproto_message_id:generate(self()),
-            {ok, Token} = provider_auth:get_identity_token_for_consumer(
+            {ok, Token} = ?throw_on_error(provider_auth:acquire_identity_token_for_consumer(
                 ?SUB(?ONEPROVIDER, ProviderId)
-            ),
+            )),
             ClientMsg = #client_message{
                 message_id = MsgId,
                 message_body = #provider_handshake_request{
