@@ -9,10 +9,10 @@
 %%% This file contains tests concerning file streaming API (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_stream_api_test_SUITE).
+-module(api_file_stream_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("file_api_test_utils.hrl").
+-include("api_file_test_utils.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").

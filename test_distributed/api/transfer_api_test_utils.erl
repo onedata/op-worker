@@ -15,7 +15,7 @@
 -include("api_test_runner.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("../transfers_test_mechanism.hrl").
+-include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 

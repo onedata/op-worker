@@ -16,7 +16,7 @@
 -module(permissions_test_runner).
 -author("Bartosz Walkowicz").
 
--include("../storage_files_test_SUITE.hrl").
+-include("storage_files_test_SUITE.hrl").
 -include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").

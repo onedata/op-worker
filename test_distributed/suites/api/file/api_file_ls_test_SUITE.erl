@@ -9,10 +9,10 @@
 %%% This file contains tests concerning file ls API (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_ls_api_test_SUITE).
+-module(api_file_ls_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("file_api_test_utils.hrl").
+-include("api_file_test_utils.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").

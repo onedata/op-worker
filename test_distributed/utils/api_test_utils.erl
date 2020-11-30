@@ -13,14 +13,12 @@
 -author("Bartosz Walkowicz").
 
 -include("api_test_runner.hrl").
--include("file_api_test_utils.hrl").
+-include("api_file_test_utils.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("test_utils/initializer.hrl").
 
-
--export([load_module_from_test_distributed_dir/2]).
 
 -export([
     build_rest_url/2,
@@ -80,34 +78,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
-%%% TODO VFS-6385 Reorganize and fix includes and loading modules from other dirs in tests
--spec load_module_from_test_distributed_dir(proplists:proplist(), module()) ->
-    ok.
-load_module_from_test_distributed_dir(Config, ModuleName) ->
-    DataDir = ?config(data_dir, Config),
-    ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
-        Token /= "test_distributed"
-    end, filename:split(DataDir))),
-    TestsRootDir = filename:join([ProjectRoot, "test_distributed"]),
-
-    code:add_pathz(TestsRootDir),
-
-    CompileOpts = [
-        verbose,report_errors,report_warnings,
-        {i, TestsRootDir},
-        {i, filename:join([TestsRootDir, "..", "include"])},
-        {i, filename:join([TestsRootDir, "..", "_build", "default", "lib"])}
-    ],
-    case compile:file(filename:join(TestsRootDir, ModuleName), CompileOpts) of
-        {ok, ModuleName} ->
-            code:purge(ModuleName),
-            code:load_file(ModuleName),
-            ok;
-        _ ->
-            ct:fail("Couldn't load module: ~p", [ModuleName])
-    end.
 
 
 -spec build_rest_url(node(), [binary()]) -> binary().

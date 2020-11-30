@@ -9,10 +9,10 @@
 %%% This file contains tests concerning file data basic API (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_data_api_test_SUITE).
+-module(api_file_attrs_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("file_api_test_utils.hrl").
+-include("api_file_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
