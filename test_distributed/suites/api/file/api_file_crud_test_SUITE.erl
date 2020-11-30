@@ -434,8 +434,8 @@ delete_file_instance_test(Config) ->
             target_nodes = Providers,
             client_spec = #client_spec{
                 correct = [
-                    user2  % space owner - doesn't need any perms
-%%                    user3  TODO VFS-6933 - fix rm shared file
+                    user2,  % space owner - doesn't need any perms
+                    user3
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
@@ -533,12 +533,20 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType, Config) ->
     [P1Node] = api_test_env:get_provider_nodes(p1, Config),
     [P2Node] = api_test_env:get_provider_nodes(p2, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
 
     fun() ->
         Path = filename:join([TopDirPath, ?RANDOM_FILE_NAME()]),
         {ok, Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
-        ?assertMatch({ok, _}, api_test_utils:get_file_attrs(P2Node, Guid), ?ATTEMPTS),
-
+        FileShares = case api_test_utils:randomly_create_share(P1Node, SpaceOwnerSessIdP1, Guid) of
+            undefined -> [];
+            ShareId -> [ShareId]
+        end,
+        ?assertMatch(
+            {ok, #file_attr{shares = FileShares}},
+            api_test_utils:get_file_attrs(P2Node, Guid),
+            ?ATTEMPTS
+        ),
         api_test_memory:set(MemRef, file_guid, Guid),
 
         case FileType of
