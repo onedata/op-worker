@@ -87,8 +87,13 @@ aggregate_file_read_events(OldEvt, NewEvt) ->
 -spec aggregate_file_written_events(OldEvt :: event:type(), NewEvt :: event:type()) ->
     NewEvt :: event:type().
 aggregate_file_written_events(OldEvt, NewEvt) ->
+    FileSize = case NewEvt#file_written_event.file_size of
+        undefined -> OldEvt#file_written_event.file_size;
+        NewSize -> NewSize
+    end,
     NewEvt#file_written_event{
         counter = OldEvt#file_written_event.counter + NewEvt#file_written_event.counter,
+        file_size = FileSize,
         size = OldEvt#file_written_event.size + NewEvt#file_written_event.size,
         blocks = fslogic_blocks:aggregate(
             OldEvt#file_written_event.blocks,
