@@ -324,6 +324,8 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, IncludeRepl
 ) ->
     fslogic_worker:fuse_response().
 get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWhiteList) ->
+    file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
+
     {Children, _NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, undefined, StartId, ChildrenWhiteList
     ),
