@@ -21,7 +21,7 @@
 
 %% Blocks API
 -export([merge/2, aggregate/2, consolidate/1, invalidate/2, upper/1, lower/1,
-    size/1]).
+    size/1, filter_or_trim_truncated/2]).
 
 %%%===================================================================
 %%% API
@@ -137,6 +137,13 @@ consolidate([
 consolidate([B | Rest]) ->
     [B | consolidate(Rest)].
 
+-spec filter_or_trim_truncated(blocks(), non_neg_integer()) -> blocks().
+filter_or_trim_truncated(Blocks, Limit) ->
+    lists:foldl(fun
+        (#file_block{offset = Offset}, Acc) when Offset >= Limit -> Acc;
+        (#file_block{offset = Offset, size = Size} = Block, Acc) when Offset + Size =< Limit -> [Block | Acc];
+        (#file_block{offset = Offset} = Block, Acc) -> [Block#file_block{size = Limit - Offset} | Acc]
+    end, [], Blocks).
 
 %%%===================================================================
 %%% Internal functions
