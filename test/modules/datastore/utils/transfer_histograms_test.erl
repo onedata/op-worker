@@ -29,67 +29,78 @@ new_transfer_histograms_test() ->
     ),
     ?assertEqual(ExpTransferHist, TransferHist).
 
-update_with_nonexistent_test() ->
-    Bytes = 50,
-    Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
-    ExpTransferHist = #{?PROVIDER1 => Histogram, ?PROVIDER2 => Histogram},
-    TransferHist1 = transfer_histograms:new(
-        #{?PROVIDER1 => Bytes}, ?MINUTE_PERIOD
-    ),
-    TransferHist2 = transfer_histograms:update(
-        #{?PROVIDER2 => Bytes}, TransferHist1, ?MINUTE_PERIOD, #{}, 0, 0
-    ),
-    assertEqualMaps(ExpTransferHist, TransferHist2).
+update_with_nonexistent_test_() ->
+    {setup, fun node_cache:init/0, fun(_) -> node_cache:destroy() end, fun() ->
+        Bytes = 50,
+        Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
+        ExpTransferHist = #{?PROVIDER1 => Histogram, ?PROVIDER2 => Histogram},
+        TransferHist1 = transfer_histograms:new(
+            #{?PROVIDER1 => Bytes}, ?MINUTE_PERIOD
+        ),
+        CurrentMonotonicTime = transfer_histograms:get_current_monotonic_time(0),
+        TransferHist2 = transfer_histograms:update(
+            #{?PROVIDER2 => Bytes}, TransferHist1, ?MINUTE_PERIOD, #{}, 0, CurrentMonotonicTime
+        ),
+        assertEqualMaps(ExpTransferHist, TransferHist2)
+    end}.
 
-update_with_existent_test() ->
-    Bytes = 50,
-    Histogram1 = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
-    TransferHist1 = #{?PROVIDER1 => Histogram1},
+update_with_existent_the_same_slot_test() ->
+    {setup, fun node_cache:init/0, fun(_) -> node_cache:destroy() end, fun() ->
+        Bytes = 50,
+        Histogram1 = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
+        TransferHist1 = #{?PROVIDER1 => Histogram1},
 
-    % Update within the same slot time as last_update and current_time
-    % should increment only head slot.
-    TransferHist2 = transfer_histograms:update(
-        #{?PROVIDER1 => Bytes}, TransferHist1, ?MINUTE_PERIOD, #{}, 0, 0
-    ),
-    Histogram2 = histogram:increment(Histogram1, Bytes),
-    ExpTransferHist2 = #{?PROVIDER1 => Histogram2},
-    assertEqualMaps(ExpTransferHist2, TransferHist2),
+        % Update within the same slot time as start time and current_time
+        % should increment only head slot.
+        StartMonotonicTime = transfer_histograms:get_current_monotonic_time(0),
+        StartTime = transfer_histograms:monotonic_timestamp_value(StartMonotonicTime),
+        TransferHist2 = transfer_histograms:update(
+            #{?PROVIDER1 => Bytes}, TransferHist1, ?MINUTE_PERIOD, #{}, StartTime, StartMonotonicTime
+        ),
+        Histogram2 = histogram:increment(Histogram1, Bytes),
+        ExpTransferHist2 = #{?PROVIDER1 => Histogram2},
+        assertEqualMaps(ExpTransferHist2, TransferHist2),
 
-    % Update not within the same slot time as last_update and current_time
-    % should shift histogram and then increment only head slot.
-    StartTime = 0,
-    CurrentTime = 10,
-    Window = ?FIVE_SEC_TIME_WINDOW,
-    TransferHist3 = transfer_histograms:update(#{?PROVIDER1 => Bytes},
-        TransferHist1, ?MINUTE_PERIOD, #{}, StartTime, CurrentTime
-    ),
-    ShiftSize = (CurrentTime div Window) - (StartTime div Window),
-    Histogram3 = histogram:increment(histogram:shift(Histogram1, ShiftSize), Bytes),
-    ExpTransferHist3 = #{?PROVIDER1 => Histogram3},
-    assertEqualMaps(ExpTransferHist3, TransferHist3).
+        % Update not within the same slot time as last_update and current_time
+        % should shift histogram and then increment only head slot (10 seconds - 2 slots).
+        Window = ?FIVE_SEC_TIME_WINDOW,
+        TimeDiff = 10,
+        CurrentMonotonicTime2 = transfer_histograms:get_current_monotonic_time(StartTime + TimeDiff),
+        TransferHist3 = transfer_histograms:update(#{?PROVIDER1 => Bytes},
+            TransferHist1, ?MINUTE_PERIOD, #{}, StartTime, CurrentMonotonicTime2
+        ),
+        ShiftSize = TimeDiff div Window,
+        Histogram3 = histogram:increment(histogram:shift(Histogram1, ShiftSize), Bytes),
+        ExpTransferHist3 = #{?PROVIDER1 => Histogram3},
+        assertEqualMaps(ExpTransferHist3, TransferHist3)
+    end}.
 
 pad_with_zeroes_test() ->
-    Bytes = 50,
-    Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
-    TransferHist = #{?PROVIDER1 => Histogram, ?PROVIDER2 => Histogram},
+    {setup, fun node_cache:init/0, fun(_) -> node_cache:destroy() end, fun() ->
+        Bytes = 50,
+        Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
+        TransferHist = #{?PROVIDER1 => Histogram, ?PROVIDER2 => Histogram},
 
-    % Histograms which last update is greater or equal to current time should
-    % be left intact, otherwise they should be shifted and padded with zeroes
-    Provider1LastUpdate = 80,
-    Provider2LastUpdate = 110,
-    CurrentTime = 100,
-    Window = ?FIVE_SEC_TIME_WINDOW,
-    ShiftSize = (CurrentTime div Window) - (Provider1LastUpdate div Window),
-    LastUpdates = #{
-        ?PROVIDER1 => Provider1LastUpdate, ?PROVIDER2 => Provider2LastUpdate
-    },
-    PaddedHistograms = transfer_histograms:pad_with_zeroes(
-        TransferHist, Window, LastUpdates, CurrentTime
-    ),
-    ExpPaddedHistograms = #{
-        ?PROVIDER1 => histogram:shift(Histogram, ShiftSize), ?PROVIDER2 => Histogram
-    },
-    assertEqualMaps(ExpPaddedHistograms, PaddedHistograms).
+        StartMonotonicTime = transfer_histograms:get_current_monotonic_time(0),
+        StartTime = transfer_histograms:monotonic_timestamp_value(StartMonotonicTime),
+        % Histograms which last update is greater or equal to current time should
+        % be left intact, otherwise they should be shifted and padded with zeroes
+        Provider1LastUpdate = 80,
+        Provider2LastUpdate = 110,
+        CurrentTime = 100,
+        Window = ?FIVE_SEC_TIME_WINDOW,
+        ShiftSize = (CurrentTime div Window) - (Provider1LastUpdate div Window),
+        LastUpdates = #{
+            ?PROVIDER1 => StartTime + Provider1LastUpdate, ?PROVIDER2 => StartTime + Provider2LastUpdate
+        },
+        PaddedHistograms = transfer_histograms:pad_with_zeroes(
+            TransferHist, Window, LastUpdates, transfer_histograms:get_current_monotonic_time(StartTime + CurrentTime)
+        ),
+        ExpPaddedHistograms = #{
+            ?PROVIDER1 => histogram:shift(Histogram, ShiftSize), ?PROVIDER2 => Histogram
+        },
+        assertEqualMaps(ExpPaddedHistograms, PaddedHistograms)
+    end}.
 
 trim_timestamp_test() ->
     % trim_timestamp remove always 6 recent slots from minute histogram
@@ -101,7 +112,7 @@ trim_timestamp_test() ->
 
     Timestamp2 = 64,
     TrimmedTimestamp2 = transfer_histograms:trim_timestamp(Timestamp2),
-    ExpTrimmedTimestamp2 = 64-30,
+    ExpTrimmedTimestamp2 = 64 - 30,
     ?assertEqual(ExpTrimmedTimestamp2, TrimmedTimestamp2).
 
 trim_min_histograms_test() ->
@@ -461,6 +472,6 @@ assertEqualMaps(Map1, Map2) when map_size(Map1) == map_size(Map2) ->
             error ->
                 false
         end
-              end, true, Map1);
+    end, true, Map1);
 assertEqualMaps(_, _) ->
     false.

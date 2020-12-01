@@ -621,7 +621,7 @@ mock_provider_ids(Config) ->
 -spec mock_provider_id([node()], od_provider:id(), binary(), binary()) -> ok.
 mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
     ok = test_utils:mock_new(Workers, provider_auth),
-    ok = test_utils:mock_expect(Workers, provider_auth, get_identity_token_for_consumer,
+    ok = test_utils:mock_expect(Workers, provider_auth, acquire_identity_token_for_consumer,
         fun(_Consumer) ->
             {ok, ?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)}
         end

@@ -583,41 +583,33 @@ mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
     UpdateFun = fun(Transfer = #transfer{
         bytes_replicated = OldBytes,
         start_time = StartTime,
-        last_update = LastUpdateMap,
+        last_update = LastUpdates,
         min_hist = MinHistograms,
         hr_hist = HrHistograms,
         dy_hist = DyHistograms,
         mth_hist = MthHistograms
     }) ->
-        LastUpdates = lists:map(fun(ProviderId) ->
-            maps:get(ProviderId, LastUpdateMap, StartTime)
-        end, maps:keys(BytesPerProvider)),
-        LatestLastUpdate = lists:max(LastUpdates),
-        % Due to race between processes updating stats it is possible for
-        % LatestLastUpdate to be larger than the current global time, plus the
-        % global time may warp backwards. In such cases, all updates will fall
-        % into the same histogram slot and a spike may be visible.
-        ApproxCurrentTime = global_clock:monotonic_timestamp_seconds(LatestLastUpdate),
-        NewTimestamps = maps:map(
-            fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
+        CurrentMonotonicTime = transfer_histograms:get_current_monotonic_time(LastUpdates, StartTime),
+        ApproxCurrentTime = transfer_histograms:monotonic_timestamp_value(CurrentMonotonicTime),
+        NewTimestamps = maps:map(fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
         {ok, Transfer#transfer{
             bytes_replicated = OldBytes + BytesTransferred,
-            last_update = maps:merge(LastUpdateMap, NewTimestamps),
+            last_update = maps:merge(LastUpdates, NewTimestamps),
             min_hist = transfer_histograms:update(
                 BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
-                LastUpdateMap, StartTime, ApproxCurrentTime
+                LastUpdates, StartTime, CurrentMonotonicTime
             ),
             hr_hist = transfer_histograms:update(
                 BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
-                LastUpdateMap, StartTime, ApproxCurrentTime
+                LastUpdates, StartTime, CurrentMonotonicTime
             ),
             dy_hist = transfer_histograms:update(
                 BytesPerProvider, DyHistograms, ?DAY_PERIOD,
-                LastUpdateMap, StartTime, ApproxCurrentTime
+                LastUpdates, StartTime, CurrentMonotonicTime
             ),
             mth_hist = transfer_histograms:update(
                 BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
-                LastUpdateMap, StartTime, ApproxCurrentTime
+                LastUpdates, StartTime, CurrentMonotonicTime
             )
         }}
     end,

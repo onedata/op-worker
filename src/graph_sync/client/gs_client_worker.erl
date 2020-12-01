@@ -410,7 +410,7 @@ start_gs_connection() ->
         Address = str_utils:format("wss://~s:~b~s", [oneprovider:get_oz_domain(), Port, ?GS_CHANNEL_PATH]),
         CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
-        {ok, AccessToken} = provider_auth:get_access_token(),
+        {ok, AccessToken} = provider_auth:acquire_access_token(),
         OpWorkerAccessToken = tokens:add_oneprovider_service_indication(?OP_WORKER, AccessToken),
 
         gs_client:start_link(
