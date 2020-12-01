@@ -93,7 +93,6 @@ new_cumulative(LastUpdate, TimeWindow, Size) when is_integer(Size) ->
 -spec new(StartTime :: timestamp(), LastUpdate :: timestamp(),
     window(), histogram:size() | values(), type()) -> histogram().
 new(StartTime, LastUpdate, TimeWindow, HistogramValues, Type) when is_list(HistogramValues) ->
-    {monotonic, LastUpdate} = ensure_monotonic_timestamp(LastUpdate, StartTime),
     #time_slot_histogram{
         start_time = StartTime,
         last_update_time = LastUpdate,

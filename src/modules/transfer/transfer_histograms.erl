@@ -30,9 +30,7 @@
 -type window() :: time:seconds().
 -type histograms() :: #{od_provider:id() => histogram:histogram()}.
 -type last_updates() :: #{od_provider:id() => timestamp()}.
--type stats_record() ::
-transfer:transfer() |
-space_transfer_stats:space_transfer_stats().
+-type stats_record() :: transfer:transfer() | space_transfer_stats:space_transfer_stats().
 
 -export_type([histograms/0, timestamp/0, window/0, monotonic_timestamp/0]).
 
