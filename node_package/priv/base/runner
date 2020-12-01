@@ -217,10 +217,62 @@ do_start() {
                 exit 0
             fi
         done
-        echo "${SCRIPT} failed to start within ${WAIT_FOR_ERLANG:-60} seconds,"
-        echo "see the output of '${SCRIPT} console' for more information."
+        NODE_HOSTNAME="${NAME_HOST:1}"
+        echo "Application ${SCRIPT} failed to start within ${WAIT_FOR_ERLANG:-60} seconds."
         echo "If you want to wait longer, set the environment variable"
         echo "WAIT_FOR_ERLANG to the number of seconds to wait."
+        echo " "
+        echo "------------------------------------------------------------------"
+        echo "In most cases, the cause of this error is one of:"
+        echo " "
+        echo "1) The application is crashing during start. Examine the logs"
+        echo "   (/var/log/${SCRIPT}) or try running '${SCRIPT} console'."
+        echo " "
+        echo "2) The application starts correctly, but the diagnostic tools"
+        echo "   fail to contact the corresponding Erlang node."
+        echo " "
+        echo "------------------------------------------------------------------"
+        echo "Troubleshooting checklist: "
+        echo " "
+        echo "* The node's hostname is '${NODE_HOSTNAME}' - is it resolvable and reachable?"
+        echo " "
+        echo "* The epmd port (4369) must be reachable from this machine under the above hostname"
+        echo "  (unless the port has been changed in config)."
+        echo " "
+        echo "* Ports 9100-9139 must be reachable from this machine under the above hostname"
+        echo "  (unless inet_dist_listen_* envs have been set differently)."
+        echo " "
+        echo "------------------------------------------------------------------"
+
+        MUTE=`pgrep ${SCRIPT} 2> /dev/null`
+        if [ "$?" -eq 0 ]; then
+            echo "NOTE: the '${SCRIPT}' process seems to be running, which probably indicates cause 2)."
+        else
+            echo "NOTE: it seems there is no '${SCRIPT}' process alive, which probably indicates cause 1)."
+        fi
+        echo " "
+
+        MUTE=`pgrep epmd 2> /dev/null`
+        if [ "$?" -eq 0 ]; then
+            echo "NOTE: epmd process seems to be running (which is expected)."
+        else
+            echo "WARNING: it seems there is no epmd process alive - this is definitely bad and unexpected."
+        fi
+        echo " "
+
+        IP_ADDRESS=`getent hosts ${NODE_HOSTNAME} 2> /dev/null`
+        if [ "$?" -ne 0 ]; then
+            echo "WARNING: command 'getent hosts ${NODE_HOSTNAME}' does not return any valid results!"
+            echo "         Is the hostname resolvable?!"
+        else
+            IP_ADDRESS=`echo ${IP_ADDRESS} | awk '{ print $1 }'`
+            if [[ ${IP_ADDRESS} == 127.* ]] ; then
+                echo "NOTE: the hostname '${NODE_HOSTNAME}' resolves to ${IP_ADDRESS} (localhost - seems OK)."
+            else
+                echo "WARNING: the hostname '${NODE_HOSTNAME}' resolves to ${IP_ADDRESS}, which is not a local address!!!"
+                echo "         In a typical setup, the node's hostname should resolve to localhost (127.0.0.0/8)."
+            fi
+        fi
         exit 1
     fi
 
