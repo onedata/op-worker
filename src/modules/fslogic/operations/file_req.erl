@@ -215,7 +215,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             include_size => false,
             name_conflicts_resolution_policy => allow_name_conflicts
         }),
-        FileAttr2 = FileAttr#file_attr{size = 0},
+        FileAttr2 = FileAttr#file_attr{size = 0, fully_replicated = true},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         #fuse_response{
         status = #status{code = ?OK},
@@ -304,7 +304,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             include_size => false,
             name_conflicts_resolution_policy => allow_name_conflicts
         }),
-        FileAttr2 = FileAttr#file_attr{size = 0},
+        FileAttr2 = FileAttr#file_attr{size = 0, fully_replicated = true},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         Ans#fuse_response{fuse_response = FileAttr2}
     catch
@@ -575,8 +575,8 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
             ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
             File = file_meta:new_doc(Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId),
-            {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, File), %todo pass file_ctx
-            CTime = time_utils:timestamp_seconds(),
+            {ok, #document{key = FileUuid}} = file_meta:create({uuid, ParentUuid}, File), %todo pass file_ctx
+            CTime = global_clock:timestamp_seconds(),
             {ok, _} = times:save(#document{key = FileUuid, value = #times{
                 mtime = CTime, atime = CTime, ctime = CTime
             }, scope = SpaceId}),

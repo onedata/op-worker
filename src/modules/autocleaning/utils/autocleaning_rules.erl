@@ -199,7 +199,7 @@ is_max_file_size_rule_satisfied(#file_popularity{size = Size},
 is_min_hours_since_last_open_rule_satisfied(#file_popularity{last_open = LastOpen},
     RuleSetting
 ) ->
-    CurrentTimeInHours = time_utils:timestamp_seconds() div 3600,
+    CurrentTimeInHours = global_clock:timestamp_hours(),
     autocleaning_rule_setting:is_greater_or_equal(CurrentTimeInHours - LastOpen,
         RuleSetting).
 

@@ -25,8 +25,7 @@
     storage_get_helper/1,
     storage_update_admin_ctx/2,
     storage_update_helper_args/2,
-    storage_set_imported_storage/2,
-    storage_set_readonly/2,
+    storage_update_readonly_and_imported/3,
     storage_set_qos_parameters/2,
     storage_update_luma_config/2,
     storage_update_name/2,
@@ -34,6 +33,7 @@
     storage_describe/1,
     storage_is_imported_storage/1,
     storage_get_luma_feed/1,
+    storage_verify_configuration/3,
     luma_clear_db/1,
     luma_storage_users_get_and_describe/2,
     luma_storage_users_store/3,
@@ -60,6 +60,8 @@
     verify_storage_on_all_nodes/2,
     prepare_helper_args/2,
     prepare_user_ctx_params/2,
+    get_helper_args/1,
+    get_helper_admin_ctx/1,
     space_logic_get_storage_ids/1,
     file_popularity_api_configure/2,
     file_popularity_api_get_configuration/1,
@@ -173,16 +175,10 @@ storage_update_helper_args(StorageId, Changes) ->
     storage:update_helper_args(StorageId, Changes).
 
 
--spec storage_set_imported_storage(storage:id(), boolean()) ->
+-spec storage_update_readonly_and_imported(storage:id(), boolean(), boolean()) ->
     ok | {error, term()}.
-storage_set_imported_storage(StorageId, Value) ->
-    storage:set_imported(StorageId, Value).
-
-
--spec storage_set_readonly(storage:id(), boolean()) ->
-    ok | {error, term()}.
-storage_set_readonly(StorageId, Value) ->
-    storage:set_readonly(StorageId, Value).
+storage_update_readonly_and_imported(StorageId, Readonly, Imported) ->
+    storage:update_readonly_and_imported(StorageId, Readonly, Imported).
 
 
 -spec storage_set_qos_parameters(storage:id(), storage:qos_parameters()) ->
@@ -220,6 +216,12 @@ storage_is_imported_storage(StorageId) ->
 -spec storage_get_luma_feed(storage:id() | storage:data()) -> luma:feed().
 storage_get_luma_feed(Storage) ->
     storage:get_luma_feed(Storage).
+
+
+-spec storage_verify_configuration(storage:id() | storage:name(), storage:config(), helpers:helper()) ->
+    ok | {error, term()}.
+storage_verify_configuration(IdOrName, Configuration, Helper) ->
+    storage:verify_configuration(IdOrName, Configuration, Helper).
 
 
 -spec luma_clear_db(storage:id()) -> ok.
@@ -366,6 +368,16 @@ prepare_user_ctx_params(HelperName, Params) ->
     helper_params:prepare_user_ctx_params(HelperName, Params).
 
 
+-spec get_helper_args(helpers:helper()) -> helper:args().
+get_helper_args(Helper) ->
+    helper:get_args(Helper).
+
+
+-spec get_helper_admin_ctx(helpers:helper()) -> helper:user_ctx().
+get_helper_admin_ctx(Helper) ->
+    helper:get_admin_ctx(Helper).
+
+
 -spec space_logic_get_storage_ids(od_space:id()) -> {ok, [storage:id()]}.
 space_logic_get_storage_ids(SpaceId) ->
     space_logic:get_local_storage_ids(SpaceId).
@@ -390,12 +402,12 @@ get_provider_id() ->
 
 -spec get_access_token() -> {ok, tokens:serialized()} | {error, term()}.
 get_access_token() ->
-    provider_auth:get_access_token().
+    provider_auth:acquire_access_token().
 
 
 -spec get_identity_token() -> {ok, tokens:serialized()} | {error, term()}.
 get_identity_token() ->
-    provider_auth:get_identity_token().
+    provider_auth:acquire_identity_token().
 
 
 -spec is_connected_to_oz() -> boolean().

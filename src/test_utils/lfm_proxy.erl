@@ -17,7 +17,7 @@
 
 
 %% API
--export([init/1, init/2, teardown/1]).
+-export([init/1, init/2, init/3, teardown/1]).
 -export([
     stat/3, get_fs_stats/3, get_details/3,
     resolve_guid/3, get_file_path/3,
@@ -33,7 +33,7 @@
     create_and_open/4, create_and_open/5,
     open/4,
     close/2, close_all/1,
-    read/4, silent_read/4,
+    read/4, silent_read/4, check_size_and_read/4,
     write/4, write_and_check/4,
     fsync/2, fsync/4,
     truncate/4,
@@ -94,21 +94,25 @@ init(Config) ->
 
 -spec init(Config :: list(), boolean()) -> list().
 init(Config, Link) ->
+    init(Config, Link, ?config(op_worker_nodes, Config)).
+
+-spec init(Config :: list(), boolean(), [node()]) -> list().
+init(Config, Link, Workers) ->
     Host = self(),
     ServerFun = fun() ->
+        register(lfm_proxy_server, self()),
         lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
         Host ! {self(), done},
         receive
             exit -> ok
         end
     end,
-    Servers = lists:map(
-        fun(W) ->
-            case Link of
-                true -> spawn_link(W, ServerFun);
-                false -> spawn(W, ServerFun)
-            end
-        end, lists:usort(?config(op_worker_nodes, Config))),
+    Servers = lists:map(fun(W) ->
+        case Link of
+            true -> spawn_link(W, ServerFun);
+            false -> spawn(W, ServerFun)
+        end
+    end, lists:usort(Workers)),
 
     lists:foreach(
         fun(Server) ->
@@ -119,15 +123,16 @@ init(Config, Link) ->
             end
         end, Servers),
 
-    [{servers, Servers} | Config].
+    Config.
 
 
 -spec teardown(Config :: list()) -> ok.
 teardown(Config) ->
     lists:foreach(
-        fun(Pid) ->
+        fun(Worker) ->
+            Pid = rpc:call(Worker, erlang, whereis, [lfm_proxy_server]),
             Pid ! exit
-        end, ?config(servers, Config)).
+        end, ?config(op_worker_nodes, Config)).
 
 
 %%%===================================================================
@@ -331,6 +336,21 @@ silent_read(Worker, TestHandle, Offset, Size) ->
         begin
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
             case lfm:silent_read(Handle, Offset, Size) of
+                {ok, NewHandle, Res}  ->
+                    ets:insert(lfm_handles, {TestHandle, NewHandle}),
+                    {ok, Res};
+                Other -> Other
+            end
+        end).
+
+
+-spec check_size_and_read(node(), lfm:handle(), integer(), integer()) ->
+    {ok, binary()} | lfm:error_reply().
+check_size_and_read(Worker, TestHandle, Offset, Size) ->
+    ?EXEC(Worker,
+        begin
+            [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
+            case lfm:check_size_and_read(Handle, Offset, Size) of
                 {ok, NewHandle, Res}  ->
                     ets:insert(lfm_handles, {TestHandle, NewHandle}),
                     {ok, Res};
@@ -747,8 +767,8 @@ get_effective_file_qos(Worker, SessId, FileKey) ->
 
 -spec add_qos_entry(node(), session:id(), lfm:file_key(), qos_expression:infix() | qos_expression:expression(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | lfm:error_reply().
-add_qos_entry(Worker, SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
-    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum)).
+add_qos_entry(Worker, SessId, FileKey, Expression, ReplicasNum) ->
+    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, Expression, ReplicasNum)).
 
 
 -spec get_qos_entry(node(), session:id(), qos_entry:id()) ->

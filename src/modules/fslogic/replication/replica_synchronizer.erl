@@ -167,7 +167,7 @@ request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
 %%--------------------------------------------------------------------
 -spec update_replica(file_ctx:ctx(), fslogic_blocks:blocks(),
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
-    {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
+    {ok, replica_updater:report()} | {error, Reason :: term()}.
 update_replica(FileCtx, Blocks, FileSize, BumpVersion) ->
     replica_updater:update(FileCtx, Blocks, FileSize, BumpVersion).
 
@@ -570,11 +570,11 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
         case ExistingRefs ++ NewRefs of
             [] ->
                 FileLocation =
-                    file_ctx:fill_location_gaps([Block], fslogic_cache:get_local_location(),
+                    location_and_link_utils:get_local_blocks_and_fill_location_gaps([Block], fslogic_cache:get_local_location(),
                         fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
-                {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
+                {ChangeOffset, ChangeEnd} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
                 FLC = #file_location_changed{file_location = FileLocation,
-                    change_beg_offset = EventOffset, change_end_offset = EventSize},
+                    change_beg_offset = ChangeOffset, change_end_offset = ChangeEnd},
                 case Type of
                     sync ->
                         {reply, {ok, FLC}, State, ?DIE_AFTER};
@@ -1241,7 +1241,9 @@ make_notify_fun(Self, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec make_complete_fun(Self :: pid()) -> rtransfer_link:on_complete_fun().
 make_complete_fun(Self) ->
-    fun(Ref, Status) -> Self ! {Ref, complete, Status} end.
+    fun(Ref, Status) ->
+        Self ! {Ref, complete, Status}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1389,7 +1391,7 @@ flush_blocks(State) ->
 %%--------------------------------------------------------------------
 -spec flush_blocks(#state{}, [session:id()], [{from(), block(), request_type()}],
     boolean()) -> {[{from(), #file_location_changed{}}], #state{}}.
-flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
+flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, ExcludeSessions,
     FinalBlocks, IsTransfer) ->
 
     FlushFinalBlocks = case IsTransfer of
@@ -1428,6 +1430,19 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
             ok
     end,
 
+    case fslogic_cache:get_local_location() of
+        #document{value = #file_location{size = Size}} = LocationDoc ->
+            case fslogic_location_cache:get_blocks(LocationDoc, #{count => 2}) of
+                [#file_block{offset = 0, size = Size}] ->
+                    fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, false, []);
+                _ ->
+                    ok
+            end;
+        _ ->
+            % There can be race with file deletion
+            ok
+    end,
+
     {Ans, set_events_timer(cancel_caching_blocks_timer(
         State#state{cached_blocks = []}))}.
 
@@ -1441,29 +1456,29 @@ flush_blocks(#state{cached_blocks = Blocks} = State, ExcludeSessions,
     | {threshold, non_neg_integer()}) -> #file_location_changed{}.
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
     #file_location{blocks = FinalBlocks} = Location =
-        file_ctx:fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
+        location_and_link_utils:get_local_blocks_and_fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
             fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
-    {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
+    {ChangeOffset, ChangeSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 
     case Flush of
         off ->
             ok;
         all ->
-            fslogic_cache:cache_event(ExcludeSessions,
-                {Location, EventOffset, EventSize});
+            fslogic_cache:cache_location_change(ExcludeSessions,
+                {Location, ChangeOffset, ChangeSize});
         {threshold, Bytes} ->
             BlocksSize = fslogic_blocks:size(FinalBlocks),
             case BlocksSize >= Bytes of
                 true ->
-                    fslogic_cache:cache_event(ExcludeSessions,
-                        {Location, EventOffset, EventSize});
+                    fslogic_cache:cache_location_change(ExcludeSessions,
+                        {Location, ChangeOffset, ChangeSize});
                 _ ->
                     ok
             end
     end,
 
     #file_location_changed{file_location = Location,
-        change_beg_offset = EventOffset, change_end_offset = EventSize}.
+        change_beg_offset = ChangeOffset, change_end_offset = ChangeSize}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1519,11 +1534,11 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
 %%--------------------------------------------------------------------
 -spec flush_events(#state{}) -> #state{}.
 flush_events(State) ->
-    lists:foreach(fun({ExcludedSessions, Events}) ->
+    lists:foreach(fun({ExcludedSessions, LocationChanges}) ->
         % TODO - catch error and repeat
         ok = fslogic_event_emitter:emit_file_locations_changed(
-            lists:reverse(Events), ExcludedSessions)
-    end, lists:reverse(fslogic_cache:clear_events())),
+            lists:reverse(LocationChanges), ExcludedSessions)
+    end, lists:reverse(fslogic_cache:clear_location_changes())),
     cancel_events_timer(State).
 
 -spec set_caching_timers(#state{}) -> #state{}.
@@ -1673,7 +1688,13 @@ try_to_clear_blocks_and_truncate(LocalFileLocId, LocationDoc, #state{file_ctx = 
         #fuse_response{status = #status{code = ?OK}} = truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
         %todo VFS-4433 file_popularity should be updated after updates on file_location, not in truncate_req
         State2 = flush_events(State),
-        {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2}
+        case Blocks of
+            [] ->
+                {ok, State2};
+            _ ->
+                fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, false, []),
+                {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2}
+        end
     catch
         E:R ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),

@@ -72,7 +72,7 @@
 
     until :: couchbase_changes:until(),
 
-    last_harvest_timestamp = time_utils:timestamp_seconds() :: time_utils:seconds(),
+    last_harvest_timestamp = global_clock:timestamp_seconds() :: time:seconds(),
 
     % fields used by main_harvesting_stream
     % destination with all indices, for which aux_harvesting_streams have been started

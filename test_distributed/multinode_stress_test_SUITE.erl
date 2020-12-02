@@ -88,7 +88,7 @@ single_dir_creation_test_base(Config) ->
     case CheckAns of
         {ok, DirUuid} ->
             Master = self(),
-            StartTime = os:timestamp(),
+            Stopwatch = stopwatch:start(),
 
             lists:foreach(fun({Num, Worker, SessId}) ->
                 spawn(fun() ->
@@ -124,7 +124,7 @@ single_dir_creation_test_base(Config) ->
                 end
             end, 0, WorkersWithSessions),
 
-            Time = timer:now_diff(os:timestamp(), StartTime),
+            Time = stopwatch:read_micros(Stopwatch),
             Sum = case get(ok_sum) of
                 undefined ->
                     0;

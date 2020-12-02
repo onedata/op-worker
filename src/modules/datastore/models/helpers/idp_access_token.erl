@@ -31,10 +31,11 @@
 -type doc() :: datastore_doc:doc(record()).
 -type error() :: {error, term()}.
 -type token() :: binary().
--type expires() :: non_neg_integer().
+-type ttl() :: time:seconds().
+-type expiration_time() :: time:seconds().
 -type idp() :: binary().
 
--export_type([token/0, expires/0]).
+-export_type([token/0, expiration_time/0]).
 
 -define(REFRESH_THRESHOLD, application:get_env(?APP_NAME,
     idp_access_token_refresh_threshold, 300)).
@@ -46,7 +47,7 @@
 %%%===================================================================
 
 -spec acquire(od_user:id(), gs_client_worker:client(), idp()) ->
-    {ok, {token(), expires()}} | error().
+    {ok, {token(), expiration_time()}} | error().
 acquire(UserId, Client, IdP) ->
     Id = id(UserId, IdP),
     case datastore_model:get(?CTX, Id) of
@@ -73,7 +74,7 @@ id(UserId, IdP) ->
     <<(UserId)/binary, (?ID_SEPARATOR)/binary, (IdP)/binary>>.
 
 -spec fetch_and_cache(od_user:id(), gs_client_worker:client(), idp()) ->
-    {ok, {token(), expires()}} | error().
+    {ok, {token(), expiration_time()}} | error().
 fetch_and_cache(UserId, Client, IdP) ->
     % todo VFS-5298 maybe add critical section?
     case user_logic:fetch_idp_access_token(Client, UserId, IdP) of
@@ -82,21 +83,21 @@ fetch_and_cache(UserId, Client, IdP) ->
             case cache(Id, Token, TTL) of
                 ok ->
                     {ok, {Token, TTL}};
-                Error->
+                Error ->
                     Error
             end;
         Error2 ->
             Error2
     end.
 
--spec cache(id(), binary(), non_neg_integer()) ->
+-spec cache(id(), binary(), ttl()) ->
     ok | error().
 cache(Id, Token, TTL) ->
     ?extract_ok(datastore_model:save(?CTX, #document{
         key = Id,
         value = #idp_access_token{
             token = Token,
-            expiration_time = time_utils:timestamp_seconds() + TTL
+            expiration_time = global_clock:timestamp_seconds() + TTL
         }
     })).
 
@@ -104,11 +105,11 @@ cache(Id, Token, TTL) ->
 should_refresh(Doc) ->
     ?REFRESH_THRESHOLD > get_current_ttl(Doc).
 
--spec get_current_ttl(doc() | record()) -> non_neg_integer().
+-spec get_current_ttl(doc() | record()) -> ttl().
 get_current_ttl(#document{value = IdPAccessToken}) ->
     get_current_ttl(IdPAccessToken);
-get_current_ttl(#idp_access_token{expiration_time = ExpirationTime })  ->
-    ExpirationTime - time_utils:timestamp_seconds().
+get_current_ttl(#idp_access_token{expiration_time = ExpirationTime}) ->
+    ExpirationTime - global_clock:timestamp_seconds().
 
 %%%===================================================================
 %%% datastore_model callbacks

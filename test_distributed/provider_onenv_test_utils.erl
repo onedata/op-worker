@@ -17,7 +17,9 @@
 %% API
 -export([
     initialize/1,
-    setup_sessions/1
+    setup_sessions/1,
+    find_importing_provider/2,
+    create_oz_temp_access_token/2
 ]).
 
 %%%===================================================================
@@ -44,9 +46,37 @@ setup_sessions(Config) ->
         end, Users)
     end, ProviderUsers),
     
-    test_config:set_many(Config, [
-        [sess_id, Sessions]
-    ]).
+    test_config:set_many(Config, [[sess_id, Sessions]]).
+
+
+-spec find_importing_provider(test_config:config(), od_space:id()) -> od_provider:id() | undefined.
+find_importing_provider(Config, SpaceId) ->
+    Providers = test_config:get_providers(Config),
+    lists:foldl(fun
+        (ProviderId, undefined) ->
+            [OpNode | _] = test_config:get_provider_nodes(Config, ProviderId),
+            {ok, StorageId} = rpc:call(OpNode, space_logic, get_local_storage_id, [SpaceId]),
+            case rpc:call(OpNode, storage, is_imported, [StorageId]) of
+                true -> ProviderId;
+                false -> undefined
+            end;
+        (_ProviderId, ImportingProviderId) ->
+            ImportingProviderId
+    end, undefined, Providers).
+
+
+-spec create_oz_temp_access_token(node(), UserId :: binary()) -> tokens:serialized().
+create_oz_temp_access_token(OzwNode, UserId) ->
+    TimeCaveat = #cv_time{
+        valid_until = rpc:call(OzwNode, global_clock, timestamp_seconds, []) + 100000
+    },
+
+    {ok, AccessToken} = rpc:call(OzwNode, token_logic, create_user_temporary_token, [
+        ?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}
+    ]),
+    {ok, SerializedAccessToken} = tokens:serialize(AccessToken),
+
+    SerializedAccessToken.
 
 
 %%%===================================================================
@@ -57,15 +87,11 @@ setup_sessions(Config) ->
 -spec setup_user_session(UserId :: binary(), OzwNode :: node(), OpwNode :: node()) ->
     {ok, SessId :: binary()}.
 setup_user_session(UserId, OzwNode, OpwNode) ->
-    TimeCaveat = #cv_time{valid_until = rpc:call(OzwNode, time_utils, timestamp_seconds, []) + 100000},
-    {ok, AccessToken} =
-        rpc:call(OzwNode, token_logic, create_user_temporary_token,
-            [?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}]),
-    {ok, SerializedAccessToken} = rpc:call(OzwNode, tokens, serialize, [AccessToken]),
+    AccessToken = create_oz_temp_access_token(OzwNode, UserId),
     Nonce = base64:encode(crypto:strong_rand_bytes(8)),
     Identity = ?SUB(user, UserId),
     Credentials =
         rpc:call(OpwNode, auth_manager, build_token_credentials,
-            [SerializedAccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
+            [AccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
     
     rpc:call(OpwNode, session_manager, reuse_or_create_fuse_session, [Nonce, Identity, Credentials]).

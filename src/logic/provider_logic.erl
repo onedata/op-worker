@@ -17,6 +17,7 @@
 -module(provider_logic).
 -author("Lukasz Opiola").
 
+-include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
@@ -46,7 +47,6 @@
 -export([get_nodes/1, get_nodes/2]).
 -export([get_rtransfer_port/1]).
 -export([set_txt_record/3, remove_txt_record/1]).
--export([get_zone_time/0]).
 -export([zone_get_offline_access_idps/0]).
 -export([fetch_peer_version/1]).
 -export([assert_zone_compatibility/0]).
@@ -55,7 +55,8 @@
 -export([verify_provider_identity/1]).
 
 
--define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
+-define(PROVIDER_NODES_CACHE_TTL,
+    application:get_env(?APP_NAME, provider_nodes_cache_ttl_seconds, 600)). % 10 minutes
 
 -compile([{no_auto_import, [get/0]}]).
 
@@ -386,12 +387,12 @@ get_nodes(ProviderId) ->
         % Call by ?MODULE to allow for CT testing
         case ?MODULE:get_domain(?ROOT_SESS_ID, ProviderId) of
             {ok, Domain} ->
-                {true, get_nodes(ProviderId, Domain), ?PROVIDER_NODES_CACHE_TTL};
+                {ok, get_nodes(ProviderId, Domain), ?PROVIDER_NODES_CACHE_TTL};
             {error, _} = Error ->
                 Error
         end
     end,
-    simple_cache:get({provider_nodes, ProviderId}, ResolveNodes).
+    node_cache:acquire({provider_nodes, ProviderId}, ResolveNodes).
 
 -spec get_nodes(od_provider:id(), od_provider:domain()) -> [binary()].
 get_nodes(ProviderId, Domain) ->
@@ -442,9 +443,9 @@ get_rtransfer_port(ProviderId) ->
                     [to_printable(ProviderId), ?RTRANSFER_PORT]),
                 ?RTRANSFER_PORT
         end,
-        {true, Port, ?PROVIDER_NODES_CACHE_TTL}
+        {ok, Port, ?PROVIDER_NODES_CACHE_TTL}
     end,
-    simple_cache:get({rtransfer_port, ProviderId}, ResolvePort).
+    node_cache:acquire({rtransfer_port, ProviderId}, ResolvePort).
 
 
 %%--------------------------------------------------------------------
@@ -656,15 +657,6 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
     })).
 
 
--spec get_zone_time() -> time_utils:millis() | no_return().
-get_zone_time() ->
-    {ok, Millis} = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_provider, id = undefined, aspect = current_time}
-    }),
-    Millis.
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns the list of IdPs in Onezone that support offline access.
@@ -706,10 +698,10 @@ zone_get_offline_access_idps() ->
 -spec verify_provider_identity(od_provider:id()) -> ok | {error, term()}.
 verify_provider_identity(TheirProviderId) ->
     try
-        {ok, Domain} = get_domain(TheirProviderId),
-        {ok, OurIdentityToken} = provider_auth:get_identity_token_for_consumer(
+        {ok, OurIdentityToken} = ?throw_on_error(provider_auth:acquire_identity_token_for_consumer(
             ?SUB(?ONEPROVIDER, TheirProviderId)
-        ),
+        )),
+        {ok, Domain} = get_domain(TheirProviderId),
         Headers = tokens:access_token_header(OurIdentityToken),
         URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
@@ -718,15 +710,18 @@ verify_provider_identity(TheirProviderId) ->
                 verify_provider_identity(TheirProviderId, TheirIdentityToken);
             {ok, Code, _, _} ->
                 {error, {bad_http_code, Code}};
-            {error, _} = Error ->
-                Error
+            {error, _} = Error1 ->
+                Error1
         end
-    catch Type:Reason ->
-        ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
-            provider_logic:to_printable(TheirProviderId),
-            Type, Reason
-        ]),
-        {error, Reason}
+    catch
+        throw:{error, _} = Error2 ->
+            Error2;
+        Type:Reason ->
+            ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
+                provider_logic:to_printable(TheirProviderId),
+                Type, Reason
+            ]),
+            {error, Reason}
     end.
 
 

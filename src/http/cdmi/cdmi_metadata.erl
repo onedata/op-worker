@@ -341,11 +341,11 @@ fill_cdmi_metadata(<<"cdmi_size">>, Metadata, _SessionId, _FileKey, Attrs) ->
     % todo clarify what should be written to cdmi_size for directories
     Metadata#{<<"cdmi_size">> => integer_to_binary(Attrs#file_attr.size)};
 fill_cdmi_metadata(<<"cdmi_atime">>, Metadata, _SessionId, _FileKey, Attrs) ->
-    Metadata#{<<"cdmi_atime">> => time_utils:seconds_to_iso8601(Attrs#file_attr.atime)};
+    Metadata#{<<"cdmi_atime">> => time:seconds_to_iso8601(Attrs#file_attr.atime)};
 fill_cdmi_metadata(<<"cdmi_mtime">>, Metadata, _SessionId, _FileKey, Attrs) ->
-    Metadata#{<<"cdmi_mtime">> => time_utils:seconds_to_iso8601(Attrs#file_attr.mtime)};
+    Metadata#{<<"cdmi_mtime">> => time:seconds_to_iso8601(Attrs#file_attr.mtime)};
 fill_cdmi_metadata(<<"cdmi_ctime">>, Metadata, _SessionId, _FileKey, Attrs) ->
-    Metadata#{<<"cdmi_ctime">> => time_utils:seconds_to_iso8601(Attrs#file_attr.ctime)};
+    Metadata#{<<"cdmi_ctime">> => time:seconds_to_iso8601(Attrs#file_attr.ctime)};
 fill_cdmi_metadata(<<"cdmi_owner">>, Metadata, _SessionId, _FileKey, Attrs) ->
     Metadata#{<<"cdmi_owner">> => Attrs#file_attr.owner_id};
 fill_cdmi_metadata(?ACL_XATTR_NAME, Metadata, SessionId, FileKey, _Attrs) ->

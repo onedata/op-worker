@@ -73,7 +73,8 @@
 -export([
     handle_enqueued/1, handle_active/1,
     handle_aborting/1, handle_completed/1,
-    handle_failed/2, handle_cancelled/1
+    handle_failed/2, handle_cancelled/1,
+    handle_restart/3
 ]).
 
 -type error() :: {error, term()}.
@@ -164,6 +165,34 @@ handle_cancelled(TransferId) ->
     ).
 
 
+-spec handle_restart(transfer:id(), transfer:id(), boolean()) -> {ok, transfer:doc()} | error().
+handle_restart(TransferId, NewTransferId, MarkTransferFailed) ->
+    case MarkTransferFailed of
+        true ->
+            UpdateFun = fun(Transfer) ->
+                case mark_failed_forced(Transfer) of
+                    {ok, UpdatedTransfer} -> {ok, UpdatedTransfer#transfer{rerun_id = NewTransferId}};
+                    Other -> Other
+                end
+            end,
+
+            UpdateAns = transfer:update_and_run(
+                TransferId,
+                UpdateFun,
+                fun transfer_links:move_to_ended_if_not_migration/1
+            ),
+
+            % Marking transfer can fail if transfer is already ended.
+            % In such case set only rerun_id.
+            case UpdateAns of
+                {ok, _} -> UpdateAns;
+                _ -> transfer:set_rerun_id(TransferId, NewTransferId)
+            end;
+        false ->
+            transfer:set_rerun_id(TransferId, NewTransferId)
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -176,7 +205,7 @@ mark_enqueued(T = #transfer{eviction_status = ?SCHEDULED_STATUS}) ->
         eviction_status = ?ENQUEUED_STATUS,
         start_time = case transfer:is_migration(T) of
             true -> T#transfer.start_time;
-            false -> time_utils:timestamp_seconds()
+            false -> global_clock:monotonic_timestamp_seconds(T#transfer.start_time)
         end
     }};
 mark_enqueued(#transfer{eviction_status = Status}) ->
@@ -196,7 +225,7 @@ mark_aborting(#transfer{eviction_status = Status}) ->
 mark_completed(T = #transfer{eviction_status = ?ACTIVE_STATUS}) ->
     {ok, T#transfer{
         eviction_status = ?COMPLETED_STATUS,
-        finish_time = time_utils:timestamp_seconds()
+        finish_time = global_clock:monotonic_timestamp_seconds(T#transfer.start_time)
     }};
 mark_completed(#transfer{eviction_status = Status}) ->
     {error, Status}.
@@ -219,7 +248,7 @@ mark_failed_forced(Transfer) ->
         false ->
             {ok, Transfer#transfer{
                 eviction_status = ?FAILED_STATUS,
-                finish_time = time_utils:timestamp_seconds()
+                finish_time = global_clock:monotonic_timestamp_seconds(Transfer#transfer.start_time)
             }}
     end.
 
@@ -235,7 +264,7 @@ mark_cancelled(Transfer) ->
         Status when Status == ?ENQUEUED_STATUS orelse Status == ?ABORTING_STATUS ->
             {ok, Transfer#transfer{
                 eviction_status = ?CANCELLED_STATUS,
-                finish_time = time_utils:timestamp_seconds()
+                finish_time = global_clock:monotonic_timestamp_seconds(Transfer#transfer.start_time)
             }};
         Status ->
             {error, Status}

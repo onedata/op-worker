@@ -217,8 +217,8 @@ restore_session_on_slave_node(SessId, NewSup, NewSupNode) ->
                 % All session processes but connection ones are on the same
                 % node as supervisor. If supervisor is dead so they are.
                 {ok, Sess#session{
-                    node = NewSup,
-                    supervisor = NewSupNode,
+                    node = NewSupNode,
+                    supervisor = NewSup,
                     event_manager = undefined,
                     watcher = undefined,
                     sequencer_manager = undefined,
@@ -417,12 +417,15 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
 -spec update_credentials_if_changed(auth_manager:token_credentials(), session:record()) -> ok.
 update_credentials_if_changed(Credentials, #session{credentials = Credentials}) ->
     ok;
-update_credentials_if_changed(NewCredentials, #session{watcher = SessionWatcher}) ->
+update_credentials_if_changed(NewCredentials, #session{watcher = SessionWatcher, proxy_via = <<_/binary>>}) ->
     incoming_session_watcher:update_credentials(
         SessionWatcher,
         auth_manager:get_access_token(NewCredentials),
         auth_manager:get_consumer_token(NewCredentials)
-    ).
+    );
+update_credentials_if_changed(_, _) ->
+    % not a proxy session
+    ok.
 
 
 %% @private

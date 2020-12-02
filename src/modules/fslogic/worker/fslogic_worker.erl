@@ -393,10 +393,9 @@ handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
     file_request = Req}}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
     ?update_counter(?EXOMETER_NAME(ReqName)),
-    Now = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     Ans = handle_file_request(UserCtx, Req, FileCtx),
-    Time = timer:now_diff(os:timestamp(), Now),
-    ?update_counter(?EXOMETER_TIME_NAME(ReqName), Time),
+    ?update_counter(?EXOMETER_TIME_NAME(ReqName), stopwatch:read_micros(Stopwatch)),
     Ans;
 handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
     handle_fuse_request(UserCtx, Req, FileCtx);
@@ -431,6 +430,8 @@ handle_request_remotely(UserCtx, Req, Providers) ->
 -spec handle_fuse_request(user_ctx:ctx(), fuse_request_type(), file_ctx:ctx() | undefined) ->
     fuse_response().
 handle_fuse_request(UserCtx, #resolve_guid{}, FileCtx) ->
+    guid_req:resolve_guid(UserCtx, FileCtx);
+handle_fuse_request(UserCtx, #resolve_guid_by_canonical_path{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
 handle_fuse_request(UserCtx, #get_helper_params{
     storage_id = StorageId,
@@ -470,12 +471,13 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec handle_file_request(user_ctx:ctx(), file_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_file_request(UserCtx, #get_file_attr{}, FileCtx) ->
-    attr_req:get_file_attr(UserCtx, FileCtx);
+handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus}, FileCtx) ->
+    attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus);
 handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
     attr_req:get_file_details(UserCtx, FileCtx);
-handle_file_request(UserCtx, #get_child_attr{name = Name}, ParentFileCtx) ->
-    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name);
+handle_file_request(UserCtx, #get_child_attr{name = Name,
+    include_replication_status = IncludeReplicationStatus}, ParentFileCtx) ->
+    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
@@ -492,8 +494,8 @@ handle_file_request(UserCtx, #get_file_children{
 }, FileCtx) ->
     dir_req:get_children(UserCtx, FileCtx, Offset, Size, Token, StartId);
 handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
-    size = Size, index_token = Token}, FileCtx) ->
-    dir_req:get_children_attrs(UserCtx, FileCtx, Offset, Size, Token);
+    size = Size, index_token = Token, include_replication_status = IncludeReplicationStatus}, FileCtx) ->
+    dir_req:get_children_attrs(UserCtx, FileCtx, Offset, Size, Token, IncludeReplicationStatus);
 handle_file_request(UserCtx, #get_file_children_details{
     offset = Offset,
     size = Size,
@@ -644,9 +646,9 @@ handle_provider_request(UserCtx, #create_share{name = Name, description = Descri
 handle_provider_request(UserCtx, #remove_share{share_id = ShareId}, FileCtx) ->
     share_req:remove_share(UserCtx, FileCtx, ShareId);
 handle_provider_request(UserCtx, #add_qos_entry{
-    expression = ExpressionInRpn, replicas_num = ReplicasNum, entry_type = EntryType
+    expression = Expression, replicas_num = ReplicasNum, entry_type = EntryType
 }, FileCtx) ->
-    qos_req:add_qos_entry(UserCtx, FileCtx, ExpressionInRpn, ReplicasNum, EntryType);
+    qos_req:add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType);
 handle_provider_request(UserCtx, #get_effective_file_qos{}, FileCtx) ->
     qos_req:get_effective_file_qos(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->

@@ -13,24 +13,67 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/storage/import/storage_import.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -export([
+    resolve_file_path/2,
+    switch_context_if_shared_file_request/1,
+    is_shared_file_request/3,
+
     is_eff_space_member/2,
     assert_space_supported_locally/1,
     assert_space_supported_by/2,
     assert_space_supported_with_storage/2,
-    assert_file_exists/2,
-    decode_object_id/2,
 
-    is_shared_file_request/3
+    decode_object_id/2,
+    assert_file_exists/2,
+    has_access_to_file/2,
+    assert_file_managed_locally/1
 ]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec resolve_file_path(session:id(), file_meta:path()) ->
+    {ok, file_id:file_guid()} | no_return().
+resolve_file_path(SessionId, Path) ->
+    ?check(remote_utils:call_fslogic(
+        SessionId,
+        fuse_request,
+        #resolve_guid_by_canonical_path{path = ensure_canonical_path(SessionId, Path)},
+        fun(#guid{guid = Guid}) -> {ok, Guid} end
+    )).
+
+
+-spec switch_context_if_shared_file_request(middleware:req()) -> middleware:req().
+switch_context_if_shared_file_request(#op_req{gri = #gri{
+    type = Type,
+    id = Id,
+    aspect = Aspect
+}} = OpReq) ->
+    case is_shared_file_request(Type, Aspect, Id) of
+        true -> OpReq#op_req{auth = ?GUEST};
+        false -> OpReq
+    end.
+
+
+-spec is_shared_file_request(gri:entity_type(), gri:aspect(), gri:entity_id()) ->
+    boolean().
+is_shared_file_request(op_file, _, Id) when is_binary(Id) ->
+    file_id:is_share_guid(Id);
+is_shared_file_request(op_replica, As, Id) when
+    As =:= instance;
+    As =:= distribution
+->
+    file_id:is_share_guid(Id);
+is_shared_file_request(_, _, _) ->
+    false.
 
 
 -spec is_eff_space_member(aai:auth(), od_space:id()) -> boolean().
@@ -66,17 +109,6 @@ assert_space_supported_with_storage(SpaceId, StorageId) ->
     end.
 
 
--spec assert_file_exists(aai:auth(), file_id:file_guid()) ->
-    ok | no_return().
-assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
-    case lfm:stat(SessionId, {guid, FileGuid}) of
-        {ok, _} ->
-            ok;
-        {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
-    end.
-
-
 -spec decode_object_id(file_id:objectid(), binary() | atom()) ->
     file_id:file_guid() | no_return().
 decode_object_id(ObjectId, Key) ->
@@ -89,14 +121,71 @@ decode_object_id(ObjectId, Key) ->
     end.
 
 
--spec is_shared_file_request(gri:entity_type(), gri:aspect(), gri:entity_id()) ->
-    boolean().
-is_shared_file_request(op_file, _, Id) when is_binary(Id) ->
-    file_id:is_share_guid(Id);
-is_shared_file_request(op_replica, As, Id) when
-    As =:= instance;
-    As =:= distribution
-    ->
-    file_id:is_share_guid(Id);
-is_shared_file_request(_, _, _) ->
-    false.
+-spec assert_file_exists(aai:auth(), file_id:file_guid()) ->
+    ok | no_return().
+assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
+    ?check(lfm:stat(SessionId, {guid, FileGuid})),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks user membership in space containing specified file. Returns true
+%% in case of user root dir since it doesn't belong to any space.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_access_to_file(aai:auth(), file_id:file_guid()) -> boolean().
+has_access_to_file(?GUEST, _Guid) ->
+    false;
+has_access_to_file(?USER(UserId) = Auth, Guid) ->
+    case fslogic_uuid:user_root_dir_guid(UserId) of
+        Guid ->
+            true;
+        _ ->
+            SpaceId = file_id:guid_to_space_id(Guid),
+            is_eff_space_member(Auth, SpaceId)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Asserts that space containing specified file is supported by this provider.
+%% Omit this check in case of user root dir which doesn't belong to any space
+%% and can be reached from any provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_file_managed_locally(file_id:file_guid()) ->
+    ok | no_return().
+assert_file_managed_locally(FileGuid) ->
+    {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
+    case fslogic_uuid:is_root_dir_uuid(FileUuid) of
+        true ->
+            ok;
+        false ->
+            assert_space_supported_locally(SpaceId)
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec ensure_canonical_path(session:id(), file_meta:path()) -> file_meta:path() | no_return().
+ensure_canonical_path(SessionId, Path) ->
+    case filepath_utils:split_and_skip_dots(Path) of
+        {ok, [<<"/">>]} ->
+            <<"/">>;
+        {ok, [<<"/">>, SpaceName | Rest]} ->
+            {ok, UserId} = session:get_user_id(SessionId),
+            case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
+                false ->
+                    throw(?ERROR_POSIX(?ENOENT));
+                {true, SpaceId} ->
+                    assert_space_supported_locally(SpaceId),
+                    filename:join([<<"/">>, SpaceId | Rest])
+            end;
+        _ ->
+            throw(?ERROR_POSIX(?ENOENT))
+    end.

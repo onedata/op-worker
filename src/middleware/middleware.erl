@@ -105,7 +105,7 @@ handle(OpReq) ->
 handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
     try
         ReqCtx0 = #req_ctx{
-            req = switch_context_if_shared_file_request(OpReq),
+            req = middleware_utils:switch_context_if_shared_file_request(OpReq),
             plugin = get_plugin(EntityType),
             versioned_entity = VersionedEntity
         },
@@ -167,15 +167,6 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec switch_context_if_shared_file_request(req()) -> req().
-switch_context_if_shared_file_request(#op_req{gri = #gri{type = Tp, aspect = As, id = Id}} = OpReq) ->
-    case middleware_utils:is_shared_file_request(Tp, As, Id) of
-        true -> OpReq#op_req{auth = ?GUEST};
-        false -> OpReq
-    end.
 
 
 %% @private

@@ -109,20 +109,18 @@ successful_replica_deletion_test_base(Config, FilesNum, JobsNum) ->
     mock_delete_blocks(W1),
     mock_process_result_success(W1, CSPid, TestFileSize),
 
-    StartTime0 = time_utils:timestamp_millis(),
+    Stopwatch0 = stopwatch:start(),
     CounterIds = lists:foldl(fun({Uuid, JobId}, CounterIdsAcc) ->
         Request = prepare_deletion_request(W1, Uuid, ProviderId2, [?BLOCK(0, TestFileSize)], ?VV),
         CounterId = countdown_server:init_counter(W1, 1, ?COUNTER_ID(Uuid, JobId)),
         request_deletion(W1, Request, ?SPACE_ID, JobId, ?DELETION_TYPE),
         [CounterId | CounterIdsAcc]
     end, [], UuidsAndJobIds),
-    EndTime0 = time_utils:timestamp_millis(),
-    ct:pal("Scheduled in: ~p s.", [(EndTime0 - StartTime0) / 1000]),
+    ct:pal("Scheduled in: ~p s.", [stopwatch:read_seconds(Stopwatch0, float)]),
 
-    StartTime = time_utils:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     countdown_server:await_all(W1, CounterIds, timer:seconds(600)),
-    EndTime = time_utils:timestamp_millis(),
-    ct:pal("Finished in: ~p s.", [(EndTime - StartTime) / 1000]),
+    ct:pal("Finished in: ~p s.", [stopwatch:read_seconds(Stopwatch, float)]),
 
     ?assertEqual(false, is_replica_deletion_master_alive(W1, ?SPACE_ID), 10).
 
@@ -137,20 +135,18 @@ failed_replica_deletion_test_base(Config, FilesNum, JobsNum) ->
     mock_replica_deletion_request_refusal(W2),
     mock_process_result_failure(W1, CSPid),
 
-    StartTime0 = time_utils:timestamp_millis(),
+    Stopwatch0 = stopwatch:start(),
     CounterIds = lists:foldl(fun({Uuid, JobId}, CounterIdsAcc) ->
         Request = prepare_deletion_request(W1, Uuid, ProviderId2, [?BLOCK(0, TestFileSize)], ?VV),
         CounterId = countdown_server:init_counter(W1, 1, ?COUNTER_ID(Uuid, JobId)),
         request_deletion(W1, Request, ?SPACE_ID, JobId, ?DELETION_TYPE),
         [CounterId | CounterIdsAcc]
     end, [], UuidsAndJobIds),
-    EndTime0 = time_utils:timestamp_millis(),
-    ct:pal("Scheduled in: ~p s.", [(EndTime0 - StartTime0) / 1000]),
+    ct:pal("Scheduled in: ~p s.", [stopwatch:read_seconds(Stopwatch0, float)]),
 
-    StartTime = time_utils:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     countdown_server:await_all(W1, CounterIds, timer:seconds(600)),
-    EndTime = time_utils:timestamp_millis(),
-    ct:pal("Finished in: ~p s.", [(EndTime - StartTime) / 1000]),
+    ct:pal("Finished in: ~p s.", [stopwatch:read_seconds(Stopwatch, float)]),
 
     ?assertEqual(false, is_replica_deletion_master_alive(W1, ?SPACE_ID), 10).
 
@@ -166,20 +162,18 @@ canceled_replica_deletion_test_base(Config, FilesNum, JobsNum) ->
     mock_process_result_cancel(W1, CSPid),
     mock_deletion_predicate(W1, false),
 
-    StartTime0 = time_utils:timestamp_millis(),
+    Stopwatch0 = stopwatch:start(),
     CounterIds = lists:foldl(fun({Uuid, JobId}, CounterIdsAcc) ->
         Request = prepare_deletion_request(W1, Uuid, ProviderId2, [?BLOCK(0, TestFileSize)], ?VV),
         CounterId = countdown_server:init_counter(W1, 1, ?COUNTER_ID(Uuid, JobId)),
         request_deletion(W1, Request, ?SPACE_ID, JobId, ?DELETION_TYPE),
         [CounterId | CounterIdsAcc]
     end, [], UuidsAndJobIds),
-    EndTime0 = time_utils:timestamp_millis(),
-    ct:pal("Scheduled in: ~p s.", [(EndTime0 - StartTime0) / 1000]),
+    ct:pal("Scheduled in: ~p s.", [stopwatch:read_seconds(Stopwatch0, float)]),
 
-    StartTime = time_utils:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     countdown_server:await_all(W1, CounterIds, timer:seconds(600)),
-    EndTime = time_utils:timestamp_millis(),
-    ct:pal("Finished in: ~p s.", [(EndTime - StartTime) / 1000]),
+    ct:pal("Finished in: ~p s.", [stopwatch:read_seconds(Stopwatch, float)]),
 
     ?assertEqual(false, is_replica_deletion_master_alive(W1, ?SPACE_ID), 10).
 
@@ -197,7 +191,7 @@ throttling_test_base(Config, FilesNum, JobsNum) ->
     mock_deletion_predicate(W1, true),
     mock_delete_blocks(W1),
 
-    StartTime0 = time_utils:timestamp_millis(),
+    Stopwatch0 = stopwatch:start(),
     ScheduledCounters = lists:foldl(fun({Uuid, JobId}, ScheduledCountersAcc) ->
         Request = prepare_deletion_request(W1, Uuid, ProviderId2, [?BLOCK(0, TestFileSize)], ?VV),
         % this counter will be decreased when request is scheduled
@@ -213,13 +207,11 @@ throttling_test_base(Config, FilesNum, JobsNum) ->
         end),
         [ScheduledCounterId | ScheduledCountersAcc]
     end, [], UuidsAndJobIds),
-    EndTime0 = time_utils:timestamp_millis(),
-    ct:pal("Scheduled in: ~p s.", [(EndTime0 - StartTime0) / 1000]),
+    ct:pal("Scheduled in: ~p s.", [stopwatch:read_seconds(Stopwatch0, float)]),
 
-    StartTime = time_utils:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     throttle_test_loop(W1, #{W1 => ScheduledCounters}, MaxParallelRequests),
-    EndTime = time_utils:timestamp_millis(),
-    ct:pal("Finished in: ~p s.", [(EndTime - StartTime) / 1000]),
+    ct:pal("Finished in: ~p s.", [stopwatch:read_seconds(Stopwatch, float)]),
 
     ?assertEqual(false, is_replica_deletion_master_alive(W1, ?SPACE_ID), 10).
 

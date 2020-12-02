@@ -182,23 +182,21 @@ validate(#op_req{operation = Op, gri = #gri{aspect = instance}},
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
-create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI} = Req) ->
     SessionId = Auth#auth.session_id,
-    Name = maps:get(<<"name">>, Req#op_req.data),
-    Description = maps:get(<<"description">>, Req#op_req.data, <<"">>),
-    FileGuid = maps:get(<<"fileId">>, Req#op_req.data),
+    FileKey = {guid, maps:get(<<"fileId">>, Req#op_req.data)},
 
-    case lfm:create_share(SessionId, {guid, FileGuid}, Name, Description) of
-        {ok, ShareId} ->
-            case share_logic:get(SessionId, ShareId) of
-                {ok, #document{value = ShareRec}} ->
-                    Share = share_to_json(ShareId, ShareRec),
-                    {ok, resource, {GRI#gri{id = ShareId}, Share}};
-                {error, _} = Error ->
-                    Error
-            end;
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
+    Name = maps:get(<<"name">>, Data),
+    Description = maps:get(<<"description">>, Data, <<"">>),
+
+    {ok, ShareId} = ?check(lfm:create_share(SessionId, FileKey, Name, Description)),
+
+    case share_logic:get(SessionId, ShareId) of
+        {ok, #document{value = ShareRec}} ->
+            Share = share_to_json(ShareId, ShareRec),
+            {ok, resource, {GRI#gri{id = ShareId}, Share}};
+        {error, _} = Error ->
+            Error
     end.
 
 

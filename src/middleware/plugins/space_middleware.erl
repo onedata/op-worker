@@ -51,6 +51,7 @@
     middleware:scope()) -> boolean().
 operation_supported(create, {view, _}, private) -> true;
 operation_supported(create, {view_reduce_function, _}, private) -> true;
+operation_supported(create, evaluate_qos_expression, private) -> true;
 
 operation_supported(get, list, private) -> true;
 operation_supported(get, instance, private) -> true;
@@ -103,6 +104,12 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = {view, _}}}) -> #{
 
 data_spec(#op_req{operation = create, gri = #gri{aspect = {view_reduce_function, _}}}) -> #{
     required => #{<<"reduceFunction">> => {binary, non_empty}}
+};
+
+data_spec(#op_req{operation = create, gri = #gri{aspect = evaluate_qos_expression}}) -> #{
+    required => #{
+        <<"expression">> => {binary, non_empty}
+    }
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = list}}) ->
@@ -246,6 +253,12 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_VIEWS);
 
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
+    id = SpaceId,
+    aspect = evaluate_qos_expression
+}}, _) ->
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_QOS);
+
 authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     % User is always authorized to list his spaces
     true;
@@ -350,9 +363,9 @@ validate(#op_req{operation = create, data = Data, gri = #gri{
             end, Providers)
     end;
 
+% for all other aspects check only that space is supported locally
 validate(#op_req{operation = create, gri = #gri{
-    id = SpaceId,
-    aspect = {view_reduce_function, _}
+    id = SpaceId
 }}, _) ->
     middleware_utils:assert_space_supported_locally(SpaceId);
 
@@ -447,7 +460,22 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
         Result ->
             Result
-    end.
+    end;
+
+create(#op_req{gri = #gri{id = SpaceId, aspect = evaluate_qos_expression}} = Req) ->
+    QosExpressionInfix = maps:get(<<"expression">>, Req#op_req.data),
+    QosExpression = qos_expression:parse(QosExpressionInfix),
+    StorageIds = qos_expression:get_matching_storages_in_space(SpaceId, QosExpression),
+    StoragesList = lists:map(fun(StorageId) ->
+        StorageName = storage:fetch_name_of_remote_storage(StorageId, SpaceId),
+        ProviderId = storage:fetch_provider_id_of_remote_storage(StorageId, SpaceId),
+        #{<<"id">> => StorageId, <<"name">> => StorageName, <<"providerId">> => ProviderId}
+    end, StorageIds),
+    {ok, value, #{
+        <<"expressionRpn">> => qos_expression:to_rpn(QosExpression),
+        %% @TODO VFS-6520 not needed when storage api is implemented
+        <<"matchingStorages">> => StoragesList 
+    }}.
 
 
 %%--------------------------------------------------------------------
@@ -460,16 +488,20 @@ get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
     case user_logic:get_eff_spaces(SessionId, UserId) of
         {ok, EffSpaces} ->
             {ok ,lists:map(fun(SpaceId) ->
+                SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
                 {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
+
                 #{
                     <<"spaceId">> => SpaceId,
-                    <<"fileId">> => fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                    <<"fileId">> => SpaceDirObjectId,
                     <<"name">> => SpaceName
                 }
             end, EffSpaces)};
         {error, _} = Error ->
             Error
     end;
+
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     case space_logic:get(Auth#auth.session_id, SpaceId) of
         {ok, #document{value = Space}} ->
@@ -609,7 +641,7 @@ get(#op_req{data = Data, gri = #gri{
     StartTime = 0,
 
     #space_transfer_stats_cache{
-        timestamp = LastUpdate,
+        last_update = LastUpdate,
         stats_in = StatsIn,
         stats_out = StatsOut
     } = space_transfer_stats_cache:get(
@@ -634,7 +666,7 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = available_qos_parameters}}, _) ->
     Res = lists:foldl(fun(StorageId, OuterAcc) ->
         QosParameters = storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId),
         maps:fold(fun(ParameterKey, Value, InnerAcc) ->
-            Key = case is_integer(Value) of
+            Key = case is_number(Value) of
                 true -> <<"numberValues">>;
                 false -> <<"stringValues">>
             end,

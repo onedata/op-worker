@@ -82,13 +82,20 @@ run_after(_Function, _Args, Result) ->
     Result.
 
 -spec run_after(doc()) -> {ok, doc()}.
-run_after(Doc = #document{key = SpaceId}) ->
-    ok = permissions_cache:invalidate(),
-    ok = qos_bounded_cache:ensure_exists_on_all_nodes(SpaceId),
-    ok = fslogic_worker:init_paths_caches(SpaceId),
-    emit_monitoring_event(Doc),
-    maybe_revise_space_harvesters(Doc),
-    ok = dbsync_worker:start_streams([SpaceId]),
+run_after(Doc = #document{key = SpaceId, value = #od_space{harvesters = Harvesters} = Space}) ->
+    case space_logic:is_supported(Space, oneprovider:get_id()) of
+        false ->
+            ok;
+        true ->
+            ok = permissions_cache:invalidate(),
+            ok = qos_bounded_cache:ensure_exists_on_all_nodes(SpaceId),
+            ok = fslogic_worker:init_paths_caches(SpaceId),
+            monitoring_event_emitter:emit_od_space_updated(SpaceId),
+            % run asynchronously as this requires the space record, which will be cached
+            % only after run_after finishes (running synchronously could cause an infinite loop)
+            spawn(main_harvesting_stream, revise_space_harvesters, [SpaceId, Harvesters]),
+            ok = dbsync_worker:start_streams([SpaceId])
+    end,
     {ok, Doc}.
 
 %%%===================================================================
@@ -113,35 +120,3 @@ get_ctx() ->
 -spec get_posthooks() -> [datastore_hooks:posthook()].
 get_posthooks() ->
     [fun run_after/3].
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends event informing about od_space update if provider supports the space.
-%% @end
-%%--------------------------------------------------------------------
--spec emit_monitoring_event(doc()) -> {ok, id()}.
-emit_monitoring_event(SpaceDoc = #document{key = SpaceId}) ->
-    case space_logic:is_supported(SpaceDoc, oneprovider:get_id_or_undefined()) of
-        true -> monitoring_event_emitter:emit_od_space_updated(SpaceId);
-        false -> ok
-    end,
-    {ok, SpaceId}.
-
--spec maybe_revise_space_harvesters(doc()) -> ok.
-maybe_revise_space_harvesters(#document{
-    key = SpaceId,
-    value = #od_space{harvesters = Harvesters}
-}) ->
-    case provider_logic:supports_space(SpaceId) of
-        true ->
-            spawn(fun() ->
-                main_harvesting_stream:revise_space_harvesters(SpaceId, Harvesters)
-            end);
-        false ->
-            ok
-    end.

@@ -23,9 +23,6 @@
 %% datastore_model callbacks
 -export([get_record_struct/1, get_ctx/0, get_record_version/0, upgrade_record/2]).
 
-%% exported for CT tests
--export([timestamp_hours/0]).
-
 -type id() :: file_meta:uuid().
 -type record() :: #file_popularity{}.
 -type doc() :: datastore_doc:doc(record()).
@@ -60,12 +57,12 @@ update_size(FileCtx, NewSize) ->
             DefaultFilePopularity = empty_file_popularity(FileCtx),
             DefaultToCreate = #document{
                 key = FileUuid,
-                value = DefaultFilePopularity#file_popularity{size=NewSize},
+                value = DefaultFilePopularity#file_popularity{size = NewSize},
                 scope = SpaceId
             },
             case
                 datastore_model:update(?CTX, FileUuid, fun(FilePopularity) ->
-                    {ok, FilePopularity#file_popularity{size=NewSize}}
+                    {ok, FilePopularity#file_popularity{size = NewSize}}
                 end, DefaultToCreate)
             of
                 {ok, _} ->
@@ -176,11 +173,11 @@ empty_file_popularity(FileCtx) ->
 increase_popularity(FileCtx, FilePopularity) ->
     {HourlyHistogram, DailyHistogram, MonthlyHistogram} =
         file_popularity_to_histograms(FilePopularity),
-    CurrentTimestampHours = file_popularity:timestamp_hours(),
+    CurrentTimestampHours = global_clock:timestamp_hours(),
     histograms_to_file_popularity(
-        time_slot_histogram:increment(HourlyHistogram, CurrentTimestampHours),
-        time_slot_histogram:increment(DailyHistogram, CurrentTimestampHours),
-        time_slot_histogram:increment(MonthlyHistogram, CurrentTimestampHours),
+        increment_histogram(HourlyHistogram, CurrentTimestampHours),
+        increment_histogram(DailyHistogram, CurrentTimestampHours),
+        increment_histogram(MonthlyHistogram, CurrentTimestampHours),
         FileCtx
     ).
 
@@ -233,9 +230,16 @@ file_popularity_to_histograms(#file_popularity{
         time_slot_histogram:new(LastUpdate, ?MONTH_TIME_WINDOW, MonthlyHistogram)
     }.
 
--spec timestamp_hours() -> non_neg_integer().
-timestamp_hours() ->
-    time_utils:timestamp_seconds() div 3600.
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec increment_histogram(time_slot_histogram:histogram(), time:hours()) ->
+    time_slot_histogram:histogram().
+increment_histogram(Histogram, CurrentTimeHours) ->
+    MonotonicTime = time_slot_histogram:ensure_monotonic_timestamp(Histogram, CurrentTimeHours),
+    time_slot_histogram:increment(Histogram, MonotonicTime).
 
 %%%===================================================================
 %%% datastore_model callbacks

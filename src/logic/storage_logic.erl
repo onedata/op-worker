@@ -28,7 +28,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/storage/storage.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -37,7 +37,7 @@
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
--export([get_name/1]).
+-export([get_name_of_local_storage/1, get_name_of_remote_storage/2]).
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([get_provider/2]).
 -export([get_spaces/1]).
@@ -46,7 +46,7 @@
 -export([supports_access_type/3]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
--export([set_imported/2, set_readonly/2]).
+-export([set_imported/2, update_readonly_and_imported/3]).
 -export([upgrade_legacy_support/2]).
 
 -compile({no_auto_import, [get/1]}).
@@ -171,12 +171,21 @@ revoke_space_support(StorageId, SpaceId) ->
     end).
 
 
--spec get_name(storage:id() | od_storage:doc()) -> {ok, storage:name()} | errors:error().
-get_name(#document{value = #od_storage{name = Name}}) ->
+-spec get_name_of_local_storage(storage:id() | od_storage:doc()) -> {ok, storage:name()} | errors:error().
+get_name_of_local_storage(#document{value = #od_storage{name = Name}}) ->
     {ok, Name};
-get_name(StorageId) ->
+get_name_of_local_storage(StorageId) ->
     case get(StorageId) of
-        {ok, Doc} -> get_name(Doc);
+        {ok, Doc} -> get_name_of_local_storage(Doc);
+        {error, _} = Error -> Error
+    end.
+
+
+-spec get_name_of_remote_storage(storage:id(), od_space:id()) -> 
+    {ok, storage:name()} | errors:error().
+get_name_of_remote_storage(StorageId, SpaceId) ->
+    case get_shared_data(StorageId, SpaceId) of
+        {ok, #document{value = #od_storage{name = Name}}} -> {ok, Name};
         {error, _} = Error -> Error
     end.
 
@@ -255,9 +264,9 @@ is_local_storage_supporting_space(StorageId, SpaceId) ->
 
 -spec supports_access_type(storage:id(), od_space:id(), SufficientAccessType :: storage:access_type()) ->
     boolean().
-supports_access_type(_StorageId, _SpaceId, ?READONLY_STORAGE) ->
+supports_access_type(_StorageId, _SpaceId, ?READONLY) ->
     true;
-supports_access_type(StorageId, SpaceId, ?READWRITE_STORAGE) ->
+supports_access_type(StorageId, SpaceId, ?READWRITE) ->
     not storage:is_storage_readonly(StorageId, SpaceId).
 
 
@@ -297,12 +306,14 @@ set_imported(StorageId, Imported) ->
     end).
 
 
--spec set_readonly(storage:id(), boolean()) -> ok | errors:error().
-set_readonly(StorageId, Readonly) ->
+update_readonly_and_imported(StorageId, Readonly, Imported) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        data = #{<<"readonly">> => Readonly}
+        data = #{
+            <<"imported">> => Imported,
+            <<"readonly">> => Readonly
+        }
     }),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_storage, StorageId)
@@ -321,7 +332,10 @@ set_readonly(StorageId, Readonly) ->
 %%--------------------------------------------------------------------
 -spec upgrade_legacy_support(storage:id(), od_space:id()) -> ok | errors:error().
 upgrade_legacy_support(StorageId, SpaceId) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_legacy_support, SpaceId}}
-    }).
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_space, SpaceId)
+    end).

@@ -22,7 +22,7 @@
     verify_flush_ans/3]).
 % File/UUID API
 -export([get_uuid/0, get_local_location/0, get_all_locations/0,
-    cache_event/2, clear_events/0]).
+    cache_location_change/2, clear_location_changes/0]).
 % Doc API
 -export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
     attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1]).
@@ -40,7 +40,7 @@
 
 -define(MAIN_KEY, fslogic_cache).
 
--define(FLUSH_TIME, fslogic_cache_flush_time).
+-define(FLUSH_TIMER, fslogic_cache_flush_timer).
 -define(IS_FLUSH_PLANNED, fslogic_cache_flush_planned).
 -define(CHECK_FLUSH, fslogic_cache_check_flush).
 -define(FLUSH_PID, fslogic_cache_flush_pid).
@@ -59,7 +59,7 @@
 -define(KEYS_BLOCKS_MODIFIED, fslogic_cache_modified_blocks_keys).
 -define(BLOCKS_IN_USE, fslogic_cache_blocks_in_use).
 
--define(EVENTS_CACHE, fslogic_cache_events).
+-define(LOCATION_CHANGES_CACHE, fslogic_location_changes).
 
 -define(SAVED_BLOCKS, fslogic_cache_saved_blocks).
 -define(DELETED_BLOCKS, fslogic_cache_deleted_blocks).
@@ -70,7 +70,7 @@
     application:get_env(?APP_NAME, local_blocks_store, doc)).
 -define(LOCAL_BLOCKS_FLUSH,
     application:get_env(?APP_NAME, local_blocks_flush, on_terminate)).
--define(BLOCKS_FLUSH_DELAY,
+-define(BLOCKS_FLUSH_DELAY_MILLIS,
     application:get_env(?APP_NAME, blocks_flush_delay, timer:seconds(3))).
 
 -type flush_type() :: sync | async | terminate.
@@ -87,7 +87,8 @@
 -spec init(file_location:id()) -> ok.
 init(Uuid) ->
     put(?MAIN_KEY, Uuid),
-    put(?FLUSH_TIME, {0,0,0}),
+    % init with a dummy timer that is already expired (flush will be triggered during next check)
+    put(?FLUSH_TIMER, countdown_timer:start_millis(0)),
     put(?KEYS, []),
     put(?KEYS_MODIFIED,[]),
     put(?KEYS_BLOCKS_MODIFIED,[]),
@@ -139,7 +140,7 @@ flush(Type) ->
     NewKBM = KBM -- Saved,
     put(?KEYS_MODIFIED, NewKM),
     put(?KEYS_BLOCKS_MODIFIED, NewKBM),
-    put(?FLUSH_TIME, os:timestamp()),
+    put(?FLUSH_TIMER, countdown_timer:start_millis(?BLOCKS_FLUSH_DELAY_MILLIS)),
     erase(?IS_FLUSH_PLANNED),
     case length(NewKM) + length(NewKBM) of
         0 ->
@@ -181,14 +182,12 @@ flush(Key, _FlushBlocks) ->
 %%-------------------------------------------------------------------
 -spec check_flush() -> ok.
 check_flush() ->
-    FlushTime = get(?FLUSH_TIME),
-    Now = os:timestamp(),
-    Delay = ?BLOCKS_FLUSH_DELAY,
-    case {timer:now_diff(Now, FlushTime) > Delay * 1000, get(?IS_FLUSH_PLANNED)} of
+    FlushTimer = get(?FLUSH_TIMER),
+    case {countdown_timer:is_expired(FlushTimer), get(?IS_FLUSH_PLANNED)} of
         {true, _} ->
             flush(async);
         {_, true} ->
-            erlang:send_after(Delay, self(), ?CHECK_FLUSH),
+            erlang:send_after(?BLOCKS_FLUSH_DELAY_MILLIS, self(), ?CHECK_FLUSH),
             ok;
         _ ->
             ok
@@ -257,34 +256,34 @@ get_all_locations() ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Caches events to be sent.
+%% Caches location change to be produce event in future.
 %% @end
 %%-------------------------------------------------------------------
--spec cache_event([session:id()], term()) -> ok.
-cache_event(SessionIds, Event) ->
-    case get(?EVENTS_CACHE) of
+-spec cache_location_change([session:id()], replica_updater:location_change_description()) -> ok.
+cache_location_change(SessionIds, LocationChange) ->
+    case get(?LOCATION_CHANGES_CACHE) of
         undefined ->
-            put(?EVENTS_CACHE, [{SessionIds, [Event]}]);
-        Events ->
-            TmpEvents = proplists:get_value(SessionIds, Events, []),
-            Events2 = proplists:delete(SessionIds, Events),
-            put(?EVENTS_CACHE, [{SessionIds, [Event | TmpEvents]} | Events2])
+            put(?LOCATION_CHANGES_CACHE, [{SessionIds, [LocationChange]}]);
+        CachedChanges ->
+            SessionCachedChanges = proplists:get_value(SessionIds, CachedChanges, []),
+            CachedChanges2 = proplists:delete(SessionIds, CachedChanges),
+            put(?LOCATION_CHANGES_CACHE, [{SessionIds, [LocationChange | SessionCachedChanges]} | CachedChanges2])
     end,
 
     ok.
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Clears events' cache and returns its content.
+%% Clears location changes' cache and returns its content.
 %% @end
 %%-------------------------------------------------------------------
--spec clear_events() -> list().
-clear_events() ->
-    Ans = case get(?EVENTS_CACHE) of
+-spec clear_location_changes() -> replica_updater:location_changes_description().
+clear_location_changes() ->
+    Ans = case get(?LOCATION_CHANGES_CACHE) of
         undefined -> [];
         Value -> Value
     end,
-    erase(?EVENTS_CACHE),
+    erase(?LOCATION_CHANGES_CACHE),
     Ans.
 
 %%%===================================================================
@@ -529,10 +528,11 @@ check_blocks(LocationDoc = #document{
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Marks blocks as "blocks in use".
+%% Marks blocks as "blocks in use". Argument is a list of blocks' lists because
+%% the blocks will be used in groups (each element of outer list at once).
 %% @end
 %%-------------------------------------------------------------------
--spec use_blocks(file_location:id(), fslogic_blocks:blocks()) -> ok.
+-spec use_blocks(file_location:id(), [fslogic_blocks:blocks()]) -> ok.
 use_blocks(Key, Blocks) ->
     put({?BLOCKS_IN_USE, Key}, Blocks),
     ok.
@@ -545,14 +545,20 @@ use_blocks(Key, Blocks) ->
 -spec finish_blocks_usage(file_location:id()) -> fslogic_blocks:blocks().
 finish_blocks_usage(Key) ->
     Ans = get({?BLOCKS_IN_USE, Key}),
-    erase({?BLOCKS_IN_USE, Key}),
     case Ans of
         undefined ->
             ?warning("Attepmted to finish usage of blocks that were not previously "
                 "declared for the key ~p", [Key]),
             [];
-        _ ->
-            Ans
+        [] ->
+            ?warning("Empty list of blocks to use declared for the key ~p", [Key]),
+            [];
+        [Head] ->
+            erase({?BLOCKS_IN_USE, Key}),
+            Head;
+        [Head | Tail] ->
+            use_blocks(Key, Tail),
+            Head
     end.
 
 %%-------------------------------------------------------------------
@@ -617,7 +623,7 @@ set_local_change(false) ->
 set_local_change(Value) ->
     put(?LOCAL_CHANGES, Value),
     UpdatedDoc = file_location:set_last_replication_timestamp(
-        get_local_location(), time_utils:timestamp_seconds()),
+        get_local_location(), global_clock:timestamp_seconds()),
     save_doc(UpdatedDoc),
     ok.
 
@@ -677,7 +683,7 @@ init_flush_check() ->
     case get(?IS_FLUSH_PLANNED) of
         undefined ->
             put(?IS_FLUSH_PLANNED, true),
-            erlang:send_after(?BLOCKS_FLUSH_DELAY, self(), ?CHECK_FLUSH),
+            erlang:send_after(?BLOCKS_FLUSH_DELAY_MILLIS, self(), ?CHECK_FLUSH),
             ok;
         _ ->
             ok
@@ -711,9 +717,9 @@ flush_key(Key, Type) ->
                             _ -> Size0
                         end,
                         SizeThreshold = application:get_env(?APP_NAME,
-                            public_block_size_treshold, 104857600),
+                            public_block_size_threshold, 104857600),
                         PercentThreshold = application:get_env(?APP_NAME,
-                            public_block_percent_treshold, 10),
+                            public_block_percent_threshold, 10),
 
                         SavedBlocks = get_set({?SAVED_BLOCKS, Key}),
                         PublicBlocks = get({?PUBLIC_BLOCKS, Key}),

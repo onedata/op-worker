@@ -89,7 +89,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
     SpaceId = <<"space_id1">>,
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
-    CTime = time_utils:timestamp_micros(),
+    CTime = global_clock:timestamp_millis(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #document{value = #file_meta{
         mode = 8#777,
@@ -97,7 +97,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
         type = ?REGULAR_FILE_TYPE,
         owner = UserId
     }},
-    {ok, FileUuid} = ?assertMatch(
+    {ok, #document{key = FileUuid}} = ?assertMatch(
         {ok, _},
         rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])
     ),
@@ -139,7 +139,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
-    CTime = time_utils:timestamp_micros(),
+    CTime = global_clock:timestamp_millis(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
@@ -147,7 +147,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
         type = ?REGULAR_FILE_TYPE,
         owner = UserId
     },
-    {ok, FileUuid} = ?assertMatch(
+    {ok, #document{key = FileUuid}} = ?assertMatch(
         {ok, _},
         rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, #document{value = FileMeta}])
     ),
@@ -204,7 +204,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     ExternalUser = <<"external_user_id">>,
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
-    CTime = time_utils:timestamp_micros(),
+    CTime = global_clock:timestamp_millis(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
@@ -212,7 +212,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         type = ?REGULAR_FILE_TYPE,
         owner = ExternalUser
     },
-    {ok, FileUuid} = ?assertMatch(
+    {ok, #document{key = FileUuid}} = ?assertMatch(
         {ok, _},
         rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, #document{value = FileMeta}])
     ),
@@ -895,13 +895,13 @@ remote_change_of_blocks_should_notify_clients(Config) ->
 
     % mock events
     test_utils:mock_new(W1, [fslogic_cache], [passthrough]),
-    test_utils:mock_expect(W1, fslogic_cache, cache_event, fun(_, _) -> ok end),
+    test_utils:mock_expect(W1, fslogic_cache, cache_location_change, fun(_, _) -> ok end),
 
     % when
     rpc:call(W1, dbsync_events, change_replicated, [SpaceId, UpdatedRemoteLocationDoc]),
 
     % then
-    ?assert(rpc:call(W1, meck, called, [fslogic_cache, cache_event, 2])),
+    ?assert(rpc:call(W1, meck, called, [fslogic_cache, cache_location_change, 2])),
     test_utils:mock_validate_and_unload(W1, fslogic_cache).
 
 remote_irrelevant_change_should_not_notify_clients(Config) ->

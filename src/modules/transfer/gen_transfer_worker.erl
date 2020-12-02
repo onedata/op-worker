@@ -224,11 +224,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%  * otherwise replication can be started
 %% @end
 %%-------------------------------------------------------------------
--spec should_start(undefined | non_neg_integer()) -> boolean().
+-spec should_start(undefined | time:seconds()) -> boolean().
 should_start(undefined) ->
     true;
 should_start(NextRetryTimestamp) ->
-    time_utils:timestamp_seconds() >= NextRetryTimestamp.
+    global_clock:timestamp_seconds() >= NextRetryTimestamp.
 
 
 %%-------------------------------------------------------------------
@@ -322,7 +322,7 @@ maybe_retry(FileCtx, Params, Retries, Error) ->
 next_retry(#state{mod = Mod}, RetriesLeft) ->
     MaxRetries = Mod:max_transfer_retries(),
     MinSecsToWait = backoff(MaxRetries - RetriesLeft, MaxRetries),
-    time_utils:timestamp_seconds() + MinSecsToWait.
+    global_clock:timestamp_seconds() + MinSecsToWait.
 
 
 %%-------------------------------------------------------------------

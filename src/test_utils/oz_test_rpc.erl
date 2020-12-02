@@ -31,9 +31,9 @@
 %%% API
 %%%===================================================================
 
--spec timestamp_seconds(node()) -> time_utils:seconds().
+-spec timestamp_seconds(node()) -> time:seconds().
 timestamp_seconds(OzNode) ->
-    rpc:call(OzNode, time_utils, timestamp_seconds, []).
+    rpc:call(OzNode, global_clock, timestamp_seconds, []).
 
 
 -spec get_user_protected_data(node(), od_user:id()) -> {ok, map()} | no_return().

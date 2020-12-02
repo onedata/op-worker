@@ -203,7 +203,7 @@ all() ->
 -define(assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout),
     (
         (fun AssertFun(__SpaceId, __Destination, __Batch, __ProviderId, __Timeout) ->
-            Start = time_utils:timestamp_seconds(),
+            Stopwatch = stopwatch:start(),
             __TimeoutInMillis = timer:seconds(__Timeout),
             receive
                 __HM = ?HARVEST_METADATA(
@@ -212,7 +212,7 @@ all() ->
                     __ReceivedBatch,
                     __ProviderId
                 ) ->
-                    ElapsedTime = time_utils:timestamp_seconds() - Start,
+                    ElapsedTime = stopwatch:read_seconds(Stopwatch),
                     case subtract_batches(__Batch, __ReceivedBatch) of
                         __Batch ->
                             AssertFun(__SpaceId, __Destination, __Batch, __ProviderId, max(__Timeout - ElapsedTime, 0));

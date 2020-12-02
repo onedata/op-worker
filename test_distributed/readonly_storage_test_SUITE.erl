@@ -73,7 +73,7 @@
 -define(SPACE_PATH, ?PATH(<<"">>)).
 -define(SESS_ID(W, Config), ?SESS_ID(W, ?USER1, Config)).
 -define(SESS_ID(W, User, Config), ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config)).
--define(PATH(FileRelativePath), fslogic_path:join([<<"/">>, ?SPACE_NAME, FileRelativePath])).
+-define(PATH(FileRelativePath), filepath_utils:join([<<"/">>, ?SPACE_NAME, FileRelativePath])).
 -define(FILE_NAME, <<"file_", (?RAND_NAME)/binary>>).
 -define(DIR_NAME, <<"dir_", (?RAND_NAME)/binary>>).
 -define(RAND_NAME,
@@ -199,7 +199,7 @@ rename_should_fail(Config) ->
 
     % target file shouldn't have been created on storage
     ?assertMatch({ok, [FileName]}, sd_test_utils:ls(W1, SpaceDirSDHandle, 0, 10)),
-    TargetFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetName])),
+    TargetFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, filepath_utils:join([<<"/">>, TargetName])),
     ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, TargetFileSDHandle)).
 
 
@@ -210,17 +210,21 @@ mv_should_fail(Config) ->
     FileName = ?FILE_NAME,
     TargetFileName = ?FILE_NAME,
     TargetDir = ?DIR_NAME,
-    TargetPath = fslogic_path:join([TargetDir, TargetFileName]),
+    TargetPath = filepath_utils:join([TargetDir, TargetFileName]),
 
     {Guid, SDHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     % create directory in W2
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId2, ?PATH(TargetDir))),
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId2, ?PATH(TargetDir))),
     % wait for the directory to be synchronized to W1
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?PATH(TargetDir)}), ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, TargetDir}, {Guid, FileName}]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % wait for the file to be synchronized to W2
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {path, ?PATH(FileName)}), ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, TargetDir}, {Guid, FileName}]},
+        lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % mv should fail
     ?assertMatch({error, ?EROFS}, lfm_proxy:mv(W1, SessId, {guid, Guid}, ?PATH(TargetPath))),
@@ -231,9 +235,9 @@ mv_should_fail(Config) ->
     % target file shouldn't have been created on storage
     SpaceDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, <<"">>),
     ?assertMatch({ok, [FileName]}, sd_test_utils:ls(W1, SpaceDirSDHandle, 0, 10)),
-    DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetDir])),
+    DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, filepath_utils:join([<<"/">>, TargetDir])),
     ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, DirSDHandle)),
-    TargetFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetPath])),
+    TargetFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, filepath_utils:join([<<"/">>, TargetPath])),
     ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, TargetFileSDHandle)).
 
 
@@ -242,7 +246,7 @@ unlink_should_succeed_but_should_leave_files_on_storage(Config) ->
     SessId = ?SESS_ID(W1, Config),
     FileName = ?FILE_NAME,
     DirName = ?DIR_NAME,
-    FileRelativePath = fslogic_path:join([DirName, FileName]),
+    FileRelativePath = filepath_utils:join([DirName, FileName]),
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileRelativePath, ?TEST_DATA),
 
     % it should be possible to remove the file (only its metadata)
@@ -252,7 +256,7 @@ unlink_should_succeed_but_should_leave_files_on_storage(Config) ->
 
     % it should be possible to remove the directory (only its metadata)
     ?assertEqual(ok, lfm_proxy:unlink(W1, SessId, {path, ?PATH(DirName)})),
-    StorageDirId = fslogic_path:join([<<"/">>, DirName]),
+    StorageDirId = filepath_utils:join([<<"/">>, DirName]),
     SDDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageDirId),
     % directory should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDDirHandle)).
@@ -263,7 +267,7 @@ recursive_rm_should_succeed_but_should_leave_files_on_storage(Config) ->
     SessId = ?SESS_ID(W1, Config),
     FileName = ?FILE_NAME,
     DirName = ?DIR_NAME,
-    FileRelativePath = fslogic_path:join([DirName, FileName]),
+    FileRelativePath = filepath_utils:join([DirName, FileName]),
     {_Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileRelativePath, ?TEST_DATA),
 
     % it should be possible to remove the file (only its metadata)
@@ -272,7 +276,7 @@ recursive_rm_should_succeed_but_should_leave_files_on_storage(Config) ->
     % file should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDFileHandle)),
 
-    StorageDirId = fslogic_path:join([<<"/">>, DirName]),
+    StorageDirId = filepath_utils:join([<<"/">>, DirName]),
     SDDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageDirId),
     % directory should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDDirHandle)).
@@ -321,6 +325,7 @@ remote_rename_should_not_rename_file_on_storage(Config) ->
 
     % wait for file to be synchronized to W2
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, [{Guid, FileName}]}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, read), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, 100), ?ATTEMPTS),
@@ -343,7 +348,7 @@ remote_rename_should_not_rename_file_on_storage(Config) ->
     ok = lfm_proxy:close(W1, H2),
 
     SpaceDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, <<"">>),
-    NewFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetFileName])),
+    NewFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, filepath_utils:join([<<"/">>, TargetFileName])),
     % file should still be visible on storage with old name
     ?assertMatch({ok, [FileName]}, sd_test_utils:ls(W1, SpaceDirSDHandle, 0, 10)),
     ?assertMatch({ok, _}, sd_test_utils:stat(W1, SDHandle)),
@@ -358,18 +363,22 @@ remote_move_should_not_rename_file_on_storage(Config) ->
     FileName = ?FILE_NAME,
     TargetDir = ?DIR_NAME,
     TargetFileName = ?FILE_NAME,
-    TargetPath = fslogic_path:join([TargetDir, TargetFileName]),
+    TargetPath = filepath_utils:join([TargetDir, TargetFileName]),
 
     {Guid, SDHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
 
     % create directory in W2
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId2, ?PATH(TargetDir))),
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId2, ?PATH(TargetDir))),
     % wait for the directory to be synchronized to W1
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?PATH(TargetDir)}), ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, TargetDir}, {Guid, FileName}]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % wait for file to be synchronized to W2
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, TargetDir}, {Guid, FileName}]},
+        lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % move file
     ?assertEqual({ok, Guid}, lfm_proxy:mv(W2, SessId2, {guid, Guid}, ?PATH(TargetPath))),
@@ -394,9 +403,9 @@ remote_move_should_not_rename_file_on_storage(Config) ->
     ?assertMatch({ok, _}, sd_test_utils:stat(W1, SDHandle)),
 
     % new files shouldn't have been created
-    DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetDir])),
+    DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, filepath_utils:join([<<"/">>, TargetDir])),
     ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, DirSDHandle)),
-    NewFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, fslogic_path:join([<<"/">>, TargetPath])),
+    NewFileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, filepath_utils:join([<<"/">>, TargetPath])),
     ?assertMatch({error, ?ENOENT}, sd_test_utils:stat(W1, NewFileSDHandle)).
 
 
@@ -406,11 +415,13 @@ remote_unlink_should_not_trigger_unlinking_files_on_local_storage(Config) ->
     SessId2 = ?SESS_ID(W2, Config),
     FileName = ?FILE_NAME,
     DirName = ?DIR_NAME,
-    FileRelativePath = fslogic_path:join([DirName, FileName]),
+    FileRelativePath = filepath_utils:join([DirName, FileName]),
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileRelativePath, ?TEST_DATA),
 
     % wait for file to be synchronized to W2
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, [{_, DirName}]}, lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, [{Guid, FileName}]}, lfm_proxy:get_children(W2, SessId2, {path, ?PATH(DirName)}, 0, 10), ?ATTEMPTS),
 
     ?assertEqual(ok, lfm_proxy:unlink(W2, SessId2, {guid, Guid})),
 
@@ -421,14 +432,19 @@ remote_unlink_should_not_trigger_unlinking_files_on_local_storage(Config) ->
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDFileHandle)),
 
     % wait for dir to be synchronized to W2
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {path, ?PATH(DirName)}), ?ATTEMPTS),
+    {ok, #file_attr{guid = DirGuid}} =
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {path, ?PATH(DirName)}), ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, DirName}]}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
     % it should be possible to remove the directory (only its metadata)
     ?assertEqual(ok, lfm_proxy:unlink(W2, SessId2, {path, ?PATH(DirName)})),
 
     % wait for dir to be unlinked
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, DirGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(W1, SessId, {guid, DirGuid}, 0, 10), ?ATTEMPTS),
 
-    StorageDirId = fslogic_path:join([<<"/">>, DirName]),
+    StorageDirId = filepath_utils:join([<<"/">>, DirName]),
     SDDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageDirId),
     % directory should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDDirHandle)).
@@ -440,7 +456,7 @@ remote_recursive_rm_should_not_trigger_removal_of_files_on_local_storage(Config)
     SessId2 = ?SESS_ID(W2, Config),
     FileName = ?FILE_NAME,
     DirName = ?DIR_NAME,
-    FileRelativePath = fslogic_path:join([DirName, FileName]),
+    FileRelativePath = filepath_utils:join([DirName, FileName]),
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileRelativePath, ?TEST_DATA),
 
     % wait for file to be synchronized to W2
@@ -455,7 +471,7 @@ remote_recursive_rm_should_not_trigger_removal_of_files_on_local_storage(Config)
     % file should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDFileHandle)),
 
-    StorageDirId = fslogic_path:join([<<"/">>, DirName]),
+    StorageDirId = filepath_utils:join([<<"/">>, DirName]),
     SDDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageDirId),
     % directory should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDDirHandle)).
@@ -669,7 +685,7 @@ create_file_on_storage(Worker, StorageFileId, TestData) ->
     SDFileHandle.
 
 create_file_on_storage_and_register(Worker, SessionId, SpaceId, FileRelativePath, TestData) ->
-    StorageFileId = fslogic_path:join([<<"/">>, FileRelativePath]),
+    StorageFileId = filepath_utils:join([<<"/">>, FileRelativePath]),
     ensure_parent_dirs_created_on_storage(Worker, SpaceId, StorageFileId),
     SDFileHandle = create_file_on_storage(Worker, StorageFileId, TestData),
     StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
@@ -678,7 +694,7 @@ create_file_on_storage_and_register(Worker, SessionId, SpaceId, FileRelativePath
     {Guid, SDFileHandle}.
 
 ensure_parent_dirs_created_on_storage(Worker, SpaceId, StorageFileId) ->
-    {_BaseName, ParentStorageFileId} = fslogic_path:basename_and_parent(StorageFileId),
+    {_BaseName, ParentStorageFileId} = filepath_utils:basename_and_parent_dir(StorageFileId),
     ParentSDHandle = sd_test_utils:new_handle(Worker, SpaceId, ParentStorageFileId, ?RW_STORAGE_ID),
     sd_test_utils:mkdir(Worker, ParentSDHandle, ?DEFAULT_DIR_PERMS).
 

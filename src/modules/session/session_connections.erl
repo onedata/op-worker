@@ -64,11 +64,11 @@ list(SessId) ->
     end.
 
 
--spec set_async_request_manager(session:id(), pid()) -> ok | error().
+-spec set_async_request_manager(session:id(), pid()) -> {ok, session:doc()} | error().
 set_async_request_manager(SessionId, AsyncReqManager) ->
-    ?extract_ok(session:update(SessionId, fun(#session{} = Session) ->
+    session:update(SessionId, fun(#session{} = Session) ->
         {ok, Session#session{async_request_manager = AsyncReqManager}}
-    end)).
+    end).
 
 
 %%--------------------------------------------------------------------

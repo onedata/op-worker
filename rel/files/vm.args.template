@@ -24,6 +24,10 @@
 # To terminate the node, use 'q().' or 'init:stop().'
 +Bc
 
+# The recommended time correction options (enable time warp and clock correction)
++C multi_time_warp
++c
+
 ## Configure schedulers
 ## Important: if couchbase is at the same node set number of scheduler equal
 ## to half of cores' number

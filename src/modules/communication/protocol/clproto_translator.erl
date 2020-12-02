@@ -225,6 +225,14 @@ translate_from_protobuf(#'FileAttrChangedSubscription'{
         file_guid = FileGuid,
         time_threshold = TimeThreshold
     };
+translate_from_protobuf(#'ReplicaStatusChangedSubscription'{
+    file_uuid = FileGuid,
+    time_threshold = TimeThreshold
+}) ->
+    #replica_status_changed_subscription{
+        file_guid = FileGuid,
+        time_threshold = TimeThreshold
+    };
 translate_from_protobuf(#'FileLocationChangedSubscription'{
     file_uuid = FileGuid,
     time_threshold = TimeThreshold
@@ -404,13 +412,15 @@ translate_from_protobuf(#'FileRequest'{
         context_guid = ContextGuid,
         file_request = translate_from_protobuf(Record)
     };
-translate_from_protobuf(#'GetFileAttr'{}) ->
-    #get_file_attr{};
+translate_from_protobuf(#'GetFileAttr'{include_replication_status = IRS}) ->
+    #get_file_attr{include_replication_status = IRS};
 translate_from_protobuf(#'GetChildAttr'{
-    name = Name
+    name = Name,
+    include_replication_status = IRS
 }) ->
     #get_child_attr{
-        name = Name
+        name = Name,
+        include_replication_status = IRS
     };
 translate_from_protobuf(#'GetFileChildren'{
     offset = Offset,
@@ -427,12 +437,14 @@ translate_from_protobuf(#'GetFileChildren'{
 translate_from_protobuf(#'GetFileChildrenAttrs'{
     offset = Offset,
     size = Size,
-    index_token = Token
+    index_token = Token,
+    include_replication_status = IRS
 }) ->
     #get_file_children_attrs{
         offset = Offset,
         size = Size,
-        index_token = Token
+        index_token = Token,
+        include_replication_status = IRS
     };
 translate_from_protobuf(#'CreateDir'{
     name = Name,
@@ -565,7 +577,7 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         guid = FileAttr#'FileAttr'.uuid,
         name = FileAttr#'FileAttr'.name,
         mode = FileAttr#'FileAttr'.mode,
-        parent_uuid = FileAttr#'FileAttr'.parent_uuid,
+        parent_guid = FileAttr#'FileAttr'.parent_uuid,
         uid = FileAttr#'FileAttr'.uid,
         gid = FileAttr#'FileAttr'.gid,
         atime = FileAttr#'FileAttr'.atime,
@@ -575,7 +587,8 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         size = FileAttr#'FileAttr'.size,
         provider_id = FileAttr#'FileAttr'.provider_id,
         shares = FileAttr#'FileAttr'.shares,
-        owner_id = FileAttr#'FileAttr'.owner_id
+        owner_id = FileAttr#'FileAttr'.owner_id,
+        fully_replicated = FileAttr#'FileAttr'.fully_replicated
     };
 translate_from_protobuf(#'FileChildren'{
     child_links = FileEntries,
@@ -1289,6 +1302,14 @@ translate_to_protobuf(#file_attr_changed_subscription{
         file_uuid = FileGuid,
         time_threshold = TimeThreshold
     }};
+translate_to_protobuf(#replica_status_changed_subscription{
+    file_guid = FileGuid,
+    time_threshold = TimeThreshold
+}) ->
+    {replica_status_changed, #'ReplicaStatusChangedSubscription'{
+        file_uuid = FileGuid,
+        time_threshold = TimeThreshold
+    }};
 translate_to_protobuf(#file_location_changed_subscription{
     file_guid = FileGuid,
     time_threshold = TimeThreshold
@@ -1450,10 +1471,10 @@ translate_to_protobuf(#file_request{
         context_guid = ContextGuid,
         file_request = translate_to_protobuf(Record)}
     };
-translate_to_protobuf(#get_file_attr{}) ->
-    {get_file_attr, #'GetFileAttr'{}};
-translate_to_protobuf(#get_child_attr{name = Name}) ->
-    {get_child_attr, #'GetChildAttr'{name = Name}};
+translate_to_protobuf(#get_file_attr{include_replication_status = IRS}) ->
+    {get_file_attr, #'GetFileAttr'{include_replication_status = IRS}};
+translate_to_protobuf(#get_child_attr{name = Name, include_replication_status = IRS}) ->
+    {get_child_attr, #'GetChildAttr'{name = Name, include_replication_status = IRS}};
 translate_to_protobuf(#get_file_children{
     offset = Offset,
     size = Size,
@@ -1469,12 +1490,14 @@ translate_to_protobuf(#get_file_children{
 translate_to_protobuf(#get_file_children_attrs{
     offset = Offset,
     size = Size,
-    index_token = Token
+    index_token = Token,
+    include_replication_status = IRS
 }) ->
     {get_file_children_attrs, #'GetFileChildrenAttrs'{
         offset = Offset,
         size = Size,
-        index_token = Token
+        index_token = Token,
+        include_replication_status = IRS
     }};
 translate_to_protobuf(#create_dir{
     name = Name,
@@ -1594,7 +1617,7 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         uuid = FileAttr#file_attr.guid,
         name = FileAttr#file_attr.name,
         mode = FileAttr#file_attr.mode,
-        parent_uuid = FileAttr#file_attr.parent_uuid,
+        parent_uuid = FileAttr#file_attr.parent_guid,
         uid = FileAttr#file_attr.uid,
         gid = FileAttr#file_attr.gid,
         atime = FileAttr#file_attr.atime,
@@ -1604,7 +1627,8 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         size = FileAttr#file_attr.size,
         provider_id = FileAttr#file_attr.provider_id,
         shares = FileAttr#file_attr.shares,
-        owner_id = FileAttr#file_attr.owner_id
+        owner_id = FileAttr#file_attr.owner_id,
+        fully_replicated = FileAttr#file_attr.fully_replicated
     }};
 translate_to_protobuf(#file_children{
     child_links = FileEntries,

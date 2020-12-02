@@ -223,7 +223,15 @@ delegate_and_supervise(WorkerRef, ReqOrHandlerFun, MsgId, RespondVia) ->
     {stop, Reason :: term()} | ignore.
 init([SessionId]) ->
     process_flag(trap_exit, true),
-    ok = session_connections:set_async_request_manager(SessionId, self()),
+
+    {ok, #document{value = #session{
+        connections = Cons
+    }}} = session_connections:set_async_request_manager(SessionId, self()),
+
+    % Make connection processes rebuild their rib as to include
+    % new async request manager (e.g. after node death and session restart).
+    lists:foreach(fun(Conn) -> connection:rebuild_rib(Conn) end, Cons),
+
     {ok, #state{session_id = SessionId}}.
 
 
@@ -374,9 +382,11 @@ code_change(_OldVsn, State, _Extra) ->
 delegate_request_insecure(proc, HandlerFun, ReqId, RespondVia) ->
     delegate_proc_request_insecure(node(), HandlerFun, ReqId, RespondVia);
 
+
 delegate_request_insecure({proc, Key}, HandlerFun, ReqId, RespondVia) ->
     Node = datastore_key:any_responsible_node(Key),
     delegate_proc_request_insecure(Node, HandlerFun, ReqId, RespondVia);
+
 
 delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
     ReplyFun =
@@ -396,6 +406,7 @@ delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
             Error
     end.
 
+
 %% @private
 -spec delegate_proc_request_insecure(node(), term(), req_id(), respond_via()) ->
     ok | error().
@@ -413,6 +424,7 @@ delegate_proc_request_insecure(Node, HandlerFun, ReqId, RespondVia) ->
         respond(RespondVia, ReqId, Response)
     end),
     report_pending_request(RespondVia, Pid, ReqId).
+
 
 %% @private
 -spec report_pending_request(respond_via(), pid(), req_id()) -> ok.

@@ -28,7 +28,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chmod/3, rename/7]).
+-export([chmod/2, chmod/3, rename/7]).
 -export([create_deferred/1, create_deferred/4, mkdir_deferred/2]).
 -export([delete/2, unlink/2, rmdir/2]).
 
@@ -43,23 +43,39 @@
 %%% API
 %%%===================================================================
 
+-spec chmod(file_ctx:ctx(), file_meta:posix_permissions()) ->
+    {ok, file_ctx:ctx()} | {error, Reason :: term()} | no_return().
+chmod(FileCtx, Mode) ->
+    chmod(user_ctx:new(?ROOT_SESS_ID), FileCtx, Mode).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Change mode of storage files related with given file_meta.
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(user_ctx:ctx(), file_ctx:ctx(),
-    file_meta:posix_permissions()) -> ok | {error, Reason :: term()} | no_return().
+    file_meta:posix_permissions()) -> {ok, file_ctx:ctx()} | {error, Reason :: term()} | no_return().
 chmod(UserCtx, FileCtx, Mode) ->
-    SessId = user_ctx:get_session_id(UserCtx),
-    case storage_driver:new_handle(SessId, FileCtx, false) of
-        {undefined, _} ->
-            ok;
-        {SDHandle, _} ->
-            case storage_driver:chmod(SDHandle, Mode) of
-                ok -> ok;
-                {error, ?ENOENT} -> ok;
-                {error, ?EROFS} -> {error, ?EROFS}
+    {IsReadonly, FileCtx2} = file_ctx:is_readonly_storage(FileCtx),
+    case IsReadonly of
+        true ->
+            {ok, FileCtx2};
+        false ->
+            SessId = user_ctx:get_session_id(UserCtx),
+            try
+                case storage_driver:new_handle(SessId, FileCtx2, false) of
+                    {undefined, FileCtx3} ->
+                        {ok, FileCtx3};
+                    {SDHandle, FileCtx3} ->
+                        case storage_driver:chmod(SDHandle, Mode) of
+                            ok -> {ok, FileCtx3};
+                            {error, ?ENOENT} -> {ok, FileCtx3};
+                            {error, ?EROFS} -> {error, ?EROFS}
+                        end
+                end
+            catch
+                throw:?ERROR_NOT_FOUND ->
+                    {ok, FileCtx}
             end
     end.
 
@@ -329,15 +345,39 @@ create_storage_file(SDHandle, FileCtx) ->
     FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx),
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     Mode = file_meta:get_mode(FileDoc),
-    Result = case file_meta:get_type(FileDoc) of
+    case file_meta:get_type(FileDoc) of
         ?REGULAR_FILE_TYPE ->
-            storage_driver:create(SDHandle, Mode);
+            case storage_driver:create(SDHandle, Mode) of
+                ok ->
+                    truncate_created_file(FileCtx);
+                Other ->
+                    Other
+            end;
         ?DIRECTORY_TYPE ->
-            storage_driver:mkdir(SDHandle, Mode)
-    end,
-    case Result of
-        ok -> {ok, FileCtx3};
-        Error -> Error
+            case storage_driver:mkdir(SDHandle, Mode) of
+                ok -> {ok, FileCtx3};
+                Error -> Error
+            end
+    end.
+
+-spec truncate_created_file(file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+truncate_created_file(FileCtx) ->
+    try
+        case file_ctx:get_file_size(FileCtx) of
+            {0, FileCtx2} ->
+                {ok, FileCtx2};
+            {Size, FileCtx2} ->
+                {SDHandle, FileCtx3} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx2),
+                {ok, Handle} = storage_driver:open(SDHandle, write),
+                ok = storage_driver:truncate(Handle, Size, 0),
+                storage_driver:release(Handle),
+                {ok, FileCtx3}
+        end
+    catch
+        Error:Reason ->
+            ?warning_stacktrace("Error truncating newly created storage file ~p: ~p:~p",
+                [file_ctx:get_guid_const(FileCtx), Error, Reason]),
+            {ok, FileCtx}
     end.
 
 %%--------------------------------------------------------------------

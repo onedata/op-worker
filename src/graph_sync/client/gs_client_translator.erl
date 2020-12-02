@@ -15,7 +15,7 @@
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("global_definitions.hrl").
--include("modules/storage/storage.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -107,10 +107,10 @@ translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private
             #{};
         true ->
             lists:foldl(fun(StorageId, Acc) ->
-                {ok, ProviderId} = storage_logic:get_provider(StorageId, SpaceId),
+                ProviderId = storage:fetch_provider_id_of_remote_storage(StorageId, SpaceId),
                 AccessType = case storage:is_storage_readonly(StorageId, SpaceId) of
-                    true -> ?READONLY_STORAGE;
-                    false -> ?READWRITE_STORAGE
+                    true -> ?READONLY;
+                    false -> ?READWRITE
                 end,
                 maps:update_with(ProviderId, fun(ProviderStorages) ->
                     ProviderStorages#{StorageId => AccessType}
@@ -273,6 +273,7 @@ translate(#gri{type = od_storage, id = Id, aspect = instance, scope = shared}, R
     #document{
         key = Id,
         value = #od_storage{
+            name = maps:get(<<"name">>, Result),
             provider = maps:get(<<"provider">>, Result),
             qos_parameters = maps:get(<<"qosParameters">>, Result),
             readonly = maps:get(<<"readonly">>, Result)
@@ -381,7 +382,6 @@ apply_scope_mask(Doc = #document{value = Handle = #od_handle{}}, public) ->
 apply_scope_mask(Doc = #document{value = Storage = #od_storage{}}, shared) ->
     Doc#document{
         value = Storage#od_storage{
-            name = undefined,
             spaces = [],
             imported = undefined
         }

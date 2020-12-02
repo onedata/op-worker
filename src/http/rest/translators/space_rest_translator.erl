@@ -16,12 +16,23 @@
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
 
--export([get_response/2]).
+-export([create_response/4, get_response/2]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link rest_translator_behaviour} callback create_response/4.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_response(gri:gri(), middleware:auth_hint(),
+    middleware:data_format(), Result :: term() | {gri:gri(), term()} |
+    {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
+create_response(#gri{aspect = evaluate_qos_expression}, _, value, Result) ->
+    ?OK_REPLY(maps:with([<<"matchingStorages">>], Result)).
 
 
 %%--------------------------------------------------------------------
@@ -34,6 +45,9 @@ get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
     name = Name,
     providers = ProvidersIds
 }) ->
+    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
+
     Providers = lists:map(fun(ProviderId) ->
         {ok, ProviderName} = provider_logic:get_name(ProviderId),
         #{
@@ -41,11 +55,12 @@ get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
             <<"providerName">> => ProviderName
         }
     end, maps:keys(ProvidersIds)),
+
     ?OK_REPLY(#{
         <<"name">> => Name,
-        <<"providers">> => Providers,
         <<"spaceId">> => SpaceId,
-        <<"fileId">> => fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)
+        <<"fileId">> => SpaceDirObjectId,
+        <<"providers">> => Providers
     });
 get_response(_, SpaceData) ->
     ?OK_REPLY(SpaceData).

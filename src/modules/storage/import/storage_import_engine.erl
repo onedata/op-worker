@@ -25,7 +25,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([find_direct_parent_and_sync_file/2, sync_file/2]).
+-export([find_direct_parent_and_sync_file/2, sync_file/2, create_file_meta_and_handle_conflicts/6]).
 
 % exported for mocking in CT tests
 -export([import_file_unsafe/2, check_location_and_maybe_sync/3]).
@@ -36,7 +36,7 @@
 -define(OWNER_ATTR_NAME, owner).
 -define(NFS4_ACL_ATTR_NAME, nfs4_acl).
 
--type result() :: ?FILE_CREATED | ?FILE_MODIFIED | ?FILE_PROCESSED | ?FILE_PROCESSING_FAILED.
+-type result() :: ?FILE_CREATED | ?FILE_MODIFIED | ?FILE_UNMODIFIED | ?FILE_PROCESSING_FAILED.
 %% @formatter:off
 -type file_attr_name() :: ?FILE_LOCATION_ATTR_NAME | ?MODE_ATTR_NAME | ?TIMESTAMPS_ATTR_NAME |
                           ?OWNER_ATTR_NAME | ?NFS4_ACL_ATTR_NAME.
@@ -83,7 +83,7 @@ find_direct_parent_and_sync_file(StorageFileCtx, Info) ->
         {ok, Info2} ->
             sync_file(StorageFileCtx, Info2);
         {error, ?ENOENT} ->
-            {?FILE_PROCESSED, undefined, StorageFileCtx}
+            {?FILE_UNMODIFIED, undefined, StorageFileCtx}
     end.
 
 -spec sync_file(storage_file_ctx:ctx(), info()) -> {result(),
@@ -145,7 +145,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                         {ok, _FileUuid} ->
                             % deletion_link exists, it means that deletion of the file has been scheduled
                             % we may ignore this file
-                            {?FILE_PROCESSED, undefined, StorageFileCtx}
+                            {?FILE_UNMODIFIED, undefined, StorageFileCtx}
                     end;
                 {ok, ResolvedUuid} ->
                     FileUuid2 = utils:ensure_defined(FileUuid, ResolvedUuid),
@@ -155,10 +155,15 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                             FileCtx = file_ctx:new_by_guid(FileGuid),
                             storage_import_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
                         {ok, _} ->
-                            {?FILE_PROCESSED, undefined, StorageFileCtx}
+                            {?FILE_UNMODIFIED, undefined, StorageFileCtx}
                     end
             end
     end.
+
+-spec create_file_meta_and_handle_conflicts(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(), file_meta:uuid(),
+    od_space:id()) -> {ok, file_ctx:ctx()} | {error, term()}.
+create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
+    create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId, #{}).
 
 %%%===================================================================
 %%% Internal functions
@@ -177,11 +182,11 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_s
             % This is caused by the fact that on object storages, file structure is flat
             % and all files are "direct" children of the space directory.
             {ParentStorageFileId, ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
-            ParentStorageFileIdTokens = fslogic_path:split(ParentStorageFileId),
+            ParentStorageFileIdTokens = filepath_utils:split(ParentStorageFileId),
             % Path to the direct parent of the child can be acquired from the file's path.
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             DirectParentStorageFileId = filename:dirname(StorageFileId),
-            DirectParentStorageFileIdTokens = fslogic_path:split(DirectParentStorageFileId),
+            DirectParentStorageFileIdTokens = filepath_utils:split(DirectParentStorageFileId),
             % compare tokens of both parents' paths
             MissingParentTokens = DirectParentStorageFileIdTokens -- ParentStorageFileIdTokens,
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -217,7 +222,8 @@ ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info)
 
 -spec ensure_parent_exist_and_is_dir(file_meta:name(), storage_file_ctx:ctx(), info(), InCriticalSection :: boolean()) ->
     file_ctx:ctx() | undefined.
-ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info = #{parent_ctx := ParentCtx}, false) ->
+ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info, false) ->
+    ParentCtx = maps:get(parent_ctx, Info),
     case get_child_safe(ParentCtx, MissingParentName) of
         {ok, MissingParentCtx} ->
             % MissingParentName is child of ParentCtx
@@ -233,7 +239,8 @@ ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info 
         {error, ?ENOENT} ->
             ensure_missing_parent_exist(MissingParentName, MissingParentStorageCtx, Info)
     end;
-ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info = #{parent_ctx := ParentCtx}, true) ->
+ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info, true) ->
+    ParentCtx = maps:get(parent_ctx, Info),
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     ?CREATE_MISSING_PARENT_CRITICAL_SECTION(ParentUuid, MissingParentName, fun() ->
         % check whether directory was not created by other process before entering critical section
@@ -368,7 +375,7 @@ check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsD
             case {FileId =:= StorageFileId, RenameSrcFileId =:= StorageFileId} of
                 {_, true} ->
                     % file is being renamed at the moment, ignore it
-                    {?FILE_PROCESSED, FileCtx, StorageFileCtx};
+                    {?FILE_UNMODIFIED, FileCtx, StorageFileCtx};
                 {true, false} ->
                     case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
                         [#file_block{offset = 0, size = Size}] ->
@@ -381,7 +388,7 @@ check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsD
                             check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, true);
                         _ ->
                             % file is not fully replicated (not in one block), ignore it
-                            {?FILE_PROCESSED, FileCtx, StorageFileCtx}
+                            {?FILE_UNMODIFIED, FileCtx, StorageFileCtx}
                     end;
                 {false, false} ->
                     % This may happen in 2 cases:
@@ -426,7 +433,7 @@ check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated
     try
         case get_attr_including_deleted(FileCtx) of
             {ok, _FileAttr, true} ->
-                {?FILE_PROCESSED, undefined, StorageFileCtx};
+                {?FILE_UNMODIFIED, undefined, StorageFileCtx};
             {ok, FileAttr, false} ->
                 check_file_type_and_maybe_sync(StorageFileCtx, FileAttr, FileCtx, Info, StorageFileCreated);
             {error, ?ENOENT} ->
@@ -454,7 +461,7 @@ check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = File
         {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, false} ->
             maybe_import_file(StorageFileCtx2, Info);
         {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE, false} ->
-            {?FILE_PROCESSED, undefined, StorageFileCtx2}
+            {?FILE_UNMODIFIED, undefined, StorageFileCtx2}
     end.
 
 -spec import_file_recreated_with_different_type(storage_file_ctx:ctx(), file_ctx:ctx(), info()) ->
@@ -462,7 +469,7 @@ check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = File
 import_file_recreated_with_different_type(StorageFileCtx, FileCtx, Info) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
+    storage_import_monitoring:increment_queue_length_histograms(SpaceId, 1),
     storage_import_deletion:delete_file_and_update_counters(FileCtx, SpaceId, StorageId),
     maybe_import_file(StorageFileCtx, Info).
 
@@ -470,7 +477,7 @@ import_file_recreated_with_different_type(StorageFileCtx, FileCtx, Info) ->
 %% @private
 %% @doc
 %% This functions is used to create missing parent on object storages.
-%% It's used when sync detected that regular file was deleted from
+%% It's used when import detected that regular file was deleted from
 %% storage and directory was created with the same name.
 %% It first deletes the stalled file and then creates metadata for
 %% directory.
@@ -481,7 +488,7 @@ import_file_recreated_with_different_type(StorageFileCtx, FileCtx, Info) ->
 delete_stalled_file_and_create_missing_parent(StorageFileCtx, FileCtx, Info) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    storage_import_monitoring:increase_to_process_counter(SpaceId, 1),
+    storage_import_monitoring:increment_queue_length_histograms(SpaceId, 1),
     storage_import_deletion:delete_file_and_update_counters(FileCtx, SpaceId, StorageId),
     create_missing_parent(StorageFileCtx, Info).
 
@@ -505,7 +512,7 @@ maybe_import_file(StorageFileCtx, Info) ->
         true ->
             case storage_driver:exists(SDHandle) of
                 true -> import_file(StorageFileCtx, Info);
-                false -> {?FILE_PROCESSED, undefined, StorageFileCtx}
+                false -> {?FILE_UNMODIFIED, undefined, StorageFileCtx}
             end;
         false ->
             import_file(StorageFileCtx, Info)
@@ -518,7 +525,7 @@ import_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
         storage_import_engine:import_file_unsafe(StorageFileCtx, Info)
     catch
         throw:?ENOENT ->
-            cleanup_file(ParentCtx, StorageFileCtx),
+            rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, ?ENOENT};
         Error:Reason ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
@@ -526,7 +533,7 @@ import_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
                 [FileName, StorageId, SpaceId, Error, Reason]),
-            cleanup_file(ParentCtx, StorageFileCtx),
+            rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, Reason}
     end.
 
@@ -538,7 +545,7 @@ create_missing_parent(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
         create_missing_parent_unsafe(StorageFileCtx, Info)
     catch
         throw:?ENOENT ->
-            cleanup_file(ParentCtx, StorageFileCtx),
+            rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, ?ENOENT};
         Error:Reason ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
@@ -546,36 +553,57 @@ create_missing_parent(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
                 [FileName, StorageId, SpaceId, Error, Reason]),
-            cleanup_file(ParentCtx, StorageFileCtx),
+            rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, Reason}
     end.
 
 
--spec cleanup_file(file_ctx:ctx(), storage_file_ctx:ctx()) -> ok.
-cleanup_file(ParentCtx, StorageFileCtx) ->
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+-spec rollback_file_creation(file_ctx:ctx(), storage_file_ctx:ctx()) -> ok.
+rollback_file_creation(ParentCtx, StorageFileCtx) ->
+    % importing file has crashed, perform best effort cleanup
+    % try to delete both normal as also as conflicting file name
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+    FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
+    try_to_delete_file(ParentCtx, FileName),
+    try_to_delete_file(ParentCtx, FileName2).
+
+
+-spec try_to_delete_file(file_ctx:ctx(), file_meta:name()) -> ok.
+try_to_delete_file(ParentCtx, ChildName) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        {FileCtx, _} = file_ctx:get_child(ParentCtx, FileName, UserCtx),
+        {FileCtx, _} = file_ctx:get_child(ParentCtx, ChildName, UserCtx),
         fslogic_delete:handle_file_deleted_on_imported_storage(FileCtx)
     catch
-        throw:?ENOENT -> ok
+        throw:?ENOENT ->
+            ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+            SpaceId = file_ctx:get_space_id_const(ParentCtx),
+            case canonical_path:to_uuid(ParentUuid, ChildName) of
+                {ok, FileUuid} ->
+                    file_meta:delete_child_link(ParentUuid, SpaceId, FileUuid, ChildName);
+                {error, not_found} ->
+                    ok
+            end
     end.
 
 -spec import_file_unsafe(storage_file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
 import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {OwnerId, StorageFileCtx2} = get_owner_id(StorageFileCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
     {ok, StorageFileCtx3} = create_location(FileUuid, StorageFileCtx2, OwnerId),
-    {ok, FileCtx, StorageFileCtx4} = create_file_meta(FileUuid, StorageFileCtx3, OwnerId, ParentUuid, Info),
+    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
+    {#statbuf{st_mode = Mode}, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
+    {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
+        ParentUuid, SpaceId, Info),
     {ok, StorageFileCtx5} = create_times_from_stat_timestamps(FileUuid, StorageFileCtx4),
     {ok, StorageFileCtx6} = maybe_import_nfs4_acl(FileCtx, StorageFileCtx5, Info),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    storage_import_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
     {?FILE_CREATED, FileCtx2, StorageFileCtx6}.
 
 %%-------------------------------------------------------------------
@@ -595,7 +623,7 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
     create_times_from_current_time(FileUuid, SpaceId),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    storage_import_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
     {?FILE_CREATED, FileCtx2}.
 
 
@@ -676,33 +704,91 @@ get_attr_including_deleted(FileCtx) ->
             {error, Error}
     end.
 
--spec create_file_meta(file_meta:uuid(), storage_file_ctx:ctx(), od_user:id(), file_meta:uuid(),
-    storage_sync_traverse:info()) -> {ok, file_ctx:ctx(), storage_file_ctx:ctx()} | {error, term()}.
-create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid, #{iterator_type := IteratorType}) ->
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
-    {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+
+-spec create_file_meta_and_handle_conflicts(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(),
+    file_meta:uuid(), od_space:id(), storage_sync_traverse:info()) -> {ok, file_ctx:ctx()} | {error, term()}.
+create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId, Info) ->
     FileType = file_meta:type(Mode),
-    FileMetaDoc = file_meta:new_doc(FileUuid, FileName, FileType, Mode band 8#1777,
-        OwnerId, ParentUuid, SpaceId),
-    {ok, FinalDoc} = case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
-        {error, already_exists} when IteratorType =:= ?FLAT_ITERATOR andalso FileType =:= ?DIRECTORY_TYPE ->
+    IteratorType = maps:get(iterator_type, Info, undefined),
+    FileDoc = prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId),
+    CreationResult = case file_meta:create({uuid, ParentUuid}, FileDoc) of
+        {error, already_exists}
+            when IteratorType =:= ?FLAT_ITERATOR
+            andalso FileType =:= ?DIRECTORY_TYPE
+        ->
             % TODO VFS-6476 how to prevent conflicts on creating directories on s3?
-            {ok, FileMetaDoc};
+            {ok, FileDoc};
         {error, already_exists} ->
-            % there was race with creating file by lfm
-            % file will be imported with suffix
-            FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
-            FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, file_meta:type(Mode), Mode band 8#1777,
-                OwnerId, ParentUuid, SpaceId),
-            {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, FileMetaDoc2),
-            {ok, FileMetaDoc2};
-        {ok, FileUuid} ->
-            {ok, FileMetaDoc}
+            % There are 2 cases possible here:
+            %  * there was race with creating file by lfm
+            %  * there is a stalled link
+
+            % resolve existing uuid
+            {ok, FileUuid2, TreeId} = file_meta:get_child_uuid_and_tree_id(ParentUuid, FileName),
+            case file_meta:get({uuid, FileUuid2}) of
+                {ok, _ConflictingFileDoc} ->
+                    create_conflicting_file_meta(FileDoc, ParentUuid);
+                {error, not_found} ->
+                    case TreeId =:= oneprovider:get_id() of
+                        true ->
+                            % FileUuid2 was found in local links tree
+                            % which means that it is a stalled link because file_meta should be created
+                            % before adding the link.
+                            ?warning(
+                                "Stalled file_meta link ~p from parent ~p pointing to uuid ~p detected. "
+                                "The link will be deleted", [FileName, ParentUuid, FileUuid2]),
+                            ok = file_meta:delete_child_link(ParentUuid, SpaceId, FileUuid2, FileName),
+                            stalled_link;
+                        false ->
+                            % FileUuid2 was found in a remote links tree.
+                            % There are 2 cases possible here:
+                            %  * file_meta hasn't been synchronized yet
+                            %  * there is a stalled link in a remote provider's tree
+                            % Currently we cannot distinguish above 2 situations so we assume that there is a
+                            % conflicting file.
+                            % It would be possible when we fetching remote document on demand is implemented.
+                            % TODO VFS-6509 fetch file_meta from remote provider to distinguish aforementioned situations
+                            create_conflicting_file_meta(FileDoc, ParentUuid)
+                    end
+            end;
+        {ok, FinalDoc} ->
+            {ok, FinalDoc}
     end,
-    FileCtx = file_ctx:new_by_doc(FinalDoc, SpaceId, undefined),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-    {ok, FileCtx, StorageFileCtx2}.
+    case CreationResult of
+        {ok, FinalDoc2} ->
+            FileCtx = file_ctx:new_by_doc(FinalDoc2, SpaceId, undefined),
+            ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, true, []),
+            {ok, FileCtx};
+        stalled_link ->
+            create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId, Info)
+    end.
+
+
+-spec create_conflicting_file_meta(file_meta:doc(), file_meta:uuid()) -> {ok, file_meta:doc()}.
+create_conflicting_file_meta(FileDoc, ParentUuid) ->
+    create_conflicting_file_meta(FileDoc, ParentUuid, ?IMPORTED_CONFLICTING_FILE_DEFAULT_NUMBER).
+
+
+-spec create_conflicting_file_meta(file_meta:doc(), file_meta:uuid(), non_neg_integer()) -> {ok, file_meta:doc()}.
+create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber) ->
+    OriginalName = file_meta:get_name(FileDoc),
+    FileDoc2 = file_meta:set_name(FileDoc, ?IMPORTED_CONFLICTING_FILE_NAME(OriginalName, oneprovider:get_id(), ConflictNumber)),
+    % do not check for conflicting links in other providers' trees
+    case file_meta:create({uuid, ParentUuid}, FileDoc2) of
+        {ok, FileDocFinal} ->
+            {ok, FileDocFinal};
+        {error, already_exists} ->
+            % if there was conflict on creating file with suffix, bump the ConflictNumber and try again
+            create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber + 1)
+    end.
+
+
+-spec prepare_file_meta_doc(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(),
+    file_meta:uuid(), od_space:id()) -> file_meta:doc().
+prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
+    Type = file_meta:type(Mode),
+    file_meta:new_doc(FileUuid, FileName, Type, Mode band 8#1777, OwnerId, ParentUuid, SpaceId).
+
 
 -spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->
     {ok, storage_file_ctx:ctx()}.
@@ -719,7 +805,7 @@ create_times_from_stat_timestamps(FileUuid, StorageFileCtx) ->
 
 -spec create_times_from_current_time(file_meta:uuid(), od_space:id()) -> ok.
 create_times_from_current_time(FileUuid, SpaceId) ->
-    CurrentTime = time_utils:timestamp_seconds(),
+    CurrentTime = global_clock:timestamp_seconds(),
     times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime).
 
 %%-------------------------------------------------------------------
@@ -792,15 +878,15 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
 -spec maybe_update_file(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(),
     info()) -> {result(), file_ctx:ctx(), storage_file_ctx:ctx()} | {error, term()}.
 maybe_update_file(StorageFileCtx, _FileAttr, FileCtx, #{detect_modifications := false}) ->
-    {?FILE_PROCESSED, FileCtx, StorageFileCtx};
+    {?FILE_UNMODIFIED, FileCtx, StorageFileCtx};
 maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
     try
         maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info)
     catch
         error:{badmatch, {error, not_found}} ->
-            {?FILE_PROCESSED, FileCtx, StorageFileCtx};
+            {?FILE_UNMODIFIED, FileCtx, StorageFileCtx};
         throw:?ENOENT ->
-            {?FILE_PROCESSED, FileCtx, StorageFileCtx};
+            {?FILE_UNMODIFIED, FileCtx, StorageFileCtx};
         Error:Reason ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -838,14 +924,14 @@ maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
 
     case UpdatedAttrs of
         [] ->
-            {?FILE_PROCESSED, FileCtx2, StorageFileCtx2};
+            {?FILE_UNMODIFIED, FileCtx2, StorageFileCtx2};
         UpdatedAttrs ->
             SpaceId = file_ctx:get_space_id_const(FileCtx2),
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx2),
             {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
             FileUuid = file_ctx:get_uuid_const(FileCtx3),
-            storage_import_logger:log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
-            fslogic_event_emitter:emit_file_attr_changed(FileCtx3, []),
+            storage_import_logger:log_modification(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
+            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
             {?FILE_MODIFIED, FileCtx3, StorageFileCtx2}
     end.
 

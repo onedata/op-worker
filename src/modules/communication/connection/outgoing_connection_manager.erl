@@ -184,7 +184,7 @@ handle_info(?RENEW_CONNECTIONS_REQ, #state{session_id = SessionId} = State) ->
 handle_info({'EXIT', _ConnPid, timeout}, #state{session_id = SessionId} = State) ->
     terminate_session(SessionId, State);
 
-handle_info({'EXIT', ConnPid, handshake_failed}, #state{
+handle_info({'EXIT', ConnPid, connection_attempt_failed}, #state{
     connections = AllConnections,
     renewal_interval = Interval,
     session_id = SessionId

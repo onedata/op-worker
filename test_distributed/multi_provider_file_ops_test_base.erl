@@ -53,7 +53,7 @@
     transfer_files_to_source_provider/1,
     proxy_session_token_update_test_base/3
 ]).
--export([init_env/1, teardown_env/1, mock_sync_errors/1]).
+-export([init_env/1, teardown_env/1, mock_sync_and_rtransfer_errors/1, unmock_sync_and_rtransfer_errors/1]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, create_location/4]).
@@ -327,9 +327,9 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
             get({file, SeparateBlocks})
     end,
 
-    Start1 = os:timestamp(),
+    Stopwatch1 = stopwatch:start(),
     OpenAns2 = lfm_proxy:open(Worker1, SessId(Worker1), {path, FilePath}, rdwr),
-    OpenTime = timer:now_diff(os:timestamp(), Start1),
+    OpenTime = stopwatch:read_micros(Stopwatch1),
     ?assertMatch({ok, _}, OpenAns2),
     {ok, Handle2} = OpenAns2,
 
@@ -350,9 +350,9 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
 
     ReadTime1 = read_blocks(Worker1, Handle2, BlockSize, Blocks),
     ReadTime2 = read_blocks(Worker1, Handle2, BlockSize, Blocks),
-    Start2 = os:timestamp(),
+    Stopwatch2 = stopwatch:start(),
     ?assertEqual(ok, lfm_proxy:close(Worker1, Handle2)),
-    CloseTime = timer:now_diff(os:timestamp(), Start2),
+    CloseTime = stopwatch:read_micros(Stopwatch2),
 
     case PrintAns of
         true ->
@@ -487,7 +487,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     ok = test_utils:mock_new(Workers2, transfer, [passthrough]),
     ok = test_utils:mock_new(Workers2, replica_updater, [passthrough]),
 
-    Start = time_utils:timestamp_seconds(),
+    Stopwatch = stopwatch:start(),
     Result = try
         verify_workers(Workers2, fun(W) ->
             read_big_file(Config, FileSize, Level2File, W, TransferTimeout, true)
@@ -498,7 +498,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     end,
     ?assertMatch(ok, Result),
 
-    Duration = time_utils:timestamp_seconds() - Start,
+    Duration = stopwatch:read_seconds(Stopwatch),
     TransferUpdates = lists:sum(mock_get_num_calls(
         Workers2, transfer, mark_data_transfer_finished, '_')),
     TUPS = TransferUpdates / Duration,
@@ -649,7 +649,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
 
-    Timestamp0 = rpc:call(Worker1, time_utils, timestamp_seconds, []),
+    Timestamp0 = rpc:call(Worker1, global_clock, timestamp_seconds, []),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -1575,15 +1575,14 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     timer:sleep(timer:seconds(2)),
     ct:pal("Transfers started"),
 
-    Start = time_utils:timestamp_millis(),
+    StopwatchTotal = stopwatch:start(),
     Times = lists:map(fun(User) ->
         SessionId = SessId(User, Worker1),
-        Start1 = time_utils:timestamp_millis(),
+        StopwatchPerUser = stopwatch:start(),
         cancel_transfers_for_session_and_file_sync(Worker1, SessionId, FileCtx),
-        End1 = time_utils:timestamp_millis(),
-        End1-Start1
+        stopwatch:read_millis(StopwatchPerUser)
     end, Users),
-    End = time_utils:timestamp_millis(),
+    TotalTime = stopwatch:read_millis(StopwatchTotal),
 
     ct:pal("Transfers canceled"),
 
@@ -1592,7 +1591,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
            "Number of users: ~p~n"
            "Total time[ms]: ~p~n"
            "Average time per user[ms]: ~p",
-        [BlockSize, BlocksCount, UserCount, End-Start, lists:sum(Times)/length(Times)]).
+        [BlockSize, BlocksCount, UserCount, TotalTime, lists:sum(Times)/length(Times)]).
 
 cancel_synchronizations_for_session_test_base(Config0) ->
     ct:timetrap({minutes, 240}),
@@ -1643,7 +1642,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     timer:sleep(timer:seconds(5)),
     ct:pal("Transfers started"),
 
-    Start = time_utils:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     lists:foreach(fun(User) ->
         SessionId = SessId(User, Worker1),
         cancel_transfers_for_session_and_file(Worker1, SessionId, FileCtx)
@@ -1661,7 +1660,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     end, {0,0}, Promises),
 
     ?assertEqual(0, rpc:call(Worker1, ets, info, [rtransfer_link_requests, size]), 500),
-    End = time_utils:timestamp_millis(),
+    TimeSeconds = stopwatch:read_seconds(Stopwatch, float),
 
     ct:pal("Block size: ~p~n"
     "Block count: ~p~n"
@@ -1669,7 +1668,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     "Total time[s]: ~p~n"
     "Finished transfers: ~p~n"
     "Cancelled transfers: ~p~n",
-        [BlockSize, BlocksCount, UserCount, (End-Start)/1000, OkCount, CancelCount]).
+        [BlockSize, BlocksCount, UserCount, TimeSeconds, OkCount, CancelCount]).
 
 % @TODO VFS-6617 fix fsync failing on timeout
 transfer_files_to_source_provider(Config0) ->
@@ -1692,8 +1691,7 @@ transfer_files_to_source_provider(Config0) ->
 
     ct:pal("~p files created", [FilesNum]),
 
-    Start = time_utils:timestamp_millis(),
-
+    StopwatchTransfers = stopwatch:start(),
     TidsAndGuids = lists_utils:pmap(fun(Guid) ->
         {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
         {Tid, Guid}
@@ -1708,10 +1706,9 @@ transfer_files_to_source_provider(Config0) ->
                 F({Tid, Guid})
         end
     end, TidsAndGuids),
+    TransfersTimeSec = stopwatch:read_seconds(StopwatchTransfers, float),
 
-    End = time_utils:timestamp_millis(),
-
-    StartGui = time_utils:timestamp_millis(),
+    StopwatchGui = stopwatch:start(),
     lists_utils:pforeach(fun(Num) ->
         Data = #{
             <<"state">> => ?ENDED_TRANSFERS_STATE,
@@ -1725,12 +1722,12 @@ transfer_files_to_source_provider(Config0) ->
         )),
         ?assertMatch(100, length(List))
     end, lists:seq(1, FilesNum div 100)),
-    EndGui = time_utils:timestamp_millis(),
+    TimeSecGui = stopwatch:read_seconds(StopwatchGui, float),
 
     ct:pal("Transfer time[s]: ~p~n"
            "Average time per file[ms]: ~p~n"
            "GUI time [s]: ~p",
-        [(End-Start)/1000, (End-Start)/FilesNum, (EndGui-StartGui)/1000]).
+        [TransfersTimeSec, TransfersTimeSec * 1000 / FilesNum, TimeSecGui]).
 
 
 proxy_session_token_update_test_base(Config, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
@@ -1810,13 +1807,15 @@ teardown_env(Config) ->
     hackney:stop(),
     ssl:stop().
 
-mock_sync_errors(Config) ->
+mock_sync_and_rtransfer_errors(Config) ->
+    % TODO - consider creation of separate tests mocking sync and rtransfer errors
+    % limit test with rtransfer errors to single file check
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     RequestDelay = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
     test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(1)),
 
-    test_utils:mock_new(Workers, [dbsync_in_stream_worker, dbsync_communicator], [passthrough]),
+    test_utils:mock_new(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config], [passthrough]),
 
     test_utils:mock_expect(Workers, dbsync_in_stream_worker, handle_info, fun
         ({batch_applied, {Since, Until}, Timestamp, Ans} = Info, State) ->
@@ -1847,7 +1846,28 @@ mock_sync_errors(Config) ->
             meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs])
         end),
 
+    test_utils:mock_expect(Workers, rtransfer_config, get_connection_secret,
+        fun(ProviderId, HostAndPort) ->
+            Counter = case get(test_counter) of
+                undefined -> 1;
+                Val -> Val
+            end,
+            case Counter < 4 of
+                true ->
+                    put(test_counter, Counter + 1),
+                    throw(connection_error);
+                _ ->
+                    meck:passthrough([ProviderId, HostAndPort])
+            end
+        end),
+
     [{request_delay, RequestDelay} | Config].
+
+unmock_sync_and_rtransfer_errors(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config]),
+    RequestDelay = ?config(request_delay, Config),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay).
 
 %%%===================================================================
 %%% Internal functions
@@ -1929,7 +1949,7 @@ get_locations(W, FileUuid, SpaceId) ->
 create_doc(Doc = #document{value = FileMeta}, #document{key = ParentUuid}, _LocId, _Path) ->
     SpaceId = Doc#document.scope,
     DocWithParentUuid = Doc#document{value = FileMeta#file_meta{parent_uuid = ParentUuid}},
-    {ok, FileUuid} = file_meta:save(DocWithParentUuid),
+    {ok, #document{key = FileUuid}} = file_meta:save(DocWithParentUuid),
     {ok, _} = times:save(#document{key = FileUuid, value = #times{},
         scope = SpaceId}),
     ok.
@@ -2159,12 +2179,12 @@ read_big_file(Config, _FileSize, File, Worker, Attempts, true) ->
     Worker1 = ?config(worker1, Config),
 
     ProviderId = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
-    Start = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     {ok, TransferID} = ?assertMatch({ok, _},
         lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
             {path, File}, ProviderId)),
     await_replication_end(Worker1 ,TransferID, Attempts),
-    timer:now_diff(os:timestamp(), Start);
+    stopwatch:read_micros(Stopwatch);
 read_big_file(Config, FileSize, File, Worker, _Attempts, _) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
@@ -2178,9 +2198,9 @@ read_big_file_loop(FileSize, File, Worker, SessId, Attempts, _LastAns, TimeSum) 
     Ans = case lfm:open(SessId(Worker), {path, File}, rdwr) of
         {ok, Handle} ->
             ReadAns = try
-                Start = os:timestamp(),
+                Stopwatch = stopwatch:start(),
                 {ok, _, Bytes} = lfm:read(Handle, 0, FileSize),
-                {ok, timer:now_diff(os:timestamp(), Start), FileSize == size(Bytes)}
+                {ok, stopwatch:read_micros(Stopwatch), FileSize == size(Bytes)}
             catch
                 E1:E2 ->
                     {read, E1, E2}
@@ -2328,9 +2348,9 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
 read_blocks(Worker, Handle, BlockSize, Blocks) ->
     lists:foldl(fun(BlockNum, Acc) ->
-        Start = os:timestamp(),
+        Stopwatch = stopwatch:start(),
         ReadAns = lfm_proxy:silent_read(Worker, Handle, BlockNum, BlockSize),
-        Time = timer:now_diff(os:timestamp(), Start),
+        Time = stopwatch:read_micros(Stopwatch),
         ?assertMatch({ok, _}, ReadAns),
         Acc + Time
     end, 0, Blocks).
@@ -2341,10 +2361,10 @@ sync_blocks(Worker, SessionID, FileCtx, BlockSize, Blocks) ->
 sync_blocks(SessionID, FileCtx, BlockSize, Blocks) ->
     UserCtx = user_ctx:new(SessionID),
     FinalTime = lists:foldl(fun(BlockNum, Acc) ->
-        Start = os:timestamp(),
+        Stopwatch = stopwatch:start(),
         SyncAns = replica_synchronizer:synchronize(UserCtx, FileCtx,
             #file_block{offset = BlockNum, size = BlockSize}, false, undefined, 32),
-        Time = timer:now_diff(os:timestamp(), Start),
+        Time = stopwatch:read_micros(Stopwatch),
         ?assertMatch({ok, _}, SyncAns),
         Acc + Time
     end, 0, Blocks),
@@ -2352,7 +2372,7 @@ sync_blocks(SessionID, FileCtx, BlockSize, Blocks) ->
 
 do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
     Master = self(),
-    Start = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     lists:foreach(fun(FileCtx) ->
         spawn(fun() ->
             try
@@ -2381,7 +2401,7 @@ do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
         end
     end, 0, FileCtxs),
 
-    SyncTime_2 = timer:now_diff(os:timestamp(), Start),
+    SyncTime_2 = stopwatch:read_micros(Stopwatch),
     {SyncTime / length(FileCtxs), SyncTime_2}.
 
 get_seq_and_timestamp_or_error(Worker, SpaceId, ProviderId) ->

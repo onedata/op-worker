@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
--include_lib("cluster_worker/include/elements/node_manager/node_manager.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
@@ -31,7 +30,6 @@
 -export([on_db_and_workers_ready/0]).
 -export([listeners/0]).
 -export([renamed_models/0]).
--export([synchronize_clock/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 -export([master_node_down/1, master_node_up/1, master_node_ready/1]).
 
@@ -116,29 +114,6 @@ renamed_models() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:synchronize_clock/0}.
-%% @end
-%%--------------------------------------------------------------------
--spec synchronize_clock() -> ok | ignored | error.
-synchronize_clock() ->
-    % during cluster setup, before the database is ready the registration status check will crash
-    IsReadyAndRegistered = try oneprovider:is_registered() catch _:_ -> false end,
-    case IsReadyAndRegistered of
-        false ->
-            node_manager_plugin_default:synchronize_clock();
-        true ->
-            case gs_channel_service:is_connected() of
-                false ->
-                    % if the Oneprovider is registered, but not connected, do not
-                    % re-synchronize the clock - it will be done upon reconnection
-                    ignored;
-                true ->
-                    time_utils:synchronize_with_remote_clock(fun provider_logic:get_zone_time/0)
-            end
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Overrides {@link node_manager_plugin_default:before_init/0}.
 %% This callback is executed on all cluster nodes.
 %% @end
@@ -210,7 +185,7 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, rtransfer_worker:supervisor_flags()},
         {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}
     ]},
-    {storage_import_worker, []},
+    {auto_storage_import_worker, []},
     {harvesting_worker, [
         {supervisor_flags, harvesting_worker:supervisor_flags()},
         {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}

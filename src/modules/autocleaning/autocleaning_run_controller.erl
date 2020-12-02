@@ -87,6 +87,7 @@
 
 -record(state, {
     run_id :: run_id(),
+    task_id :: view_traverse:task_id(),
     space_id :: od_space:id(),
     config :: autocleaning:config(),
     batch_size :: non_neg_integer(),
@@ -434,9 +435,10 @@ init([ARId, SpaceId, AutocleaningRun, Config]) ->
     ACRules = autocleaning_config:get_rules(Config),
     BatchSize = ?BATCH_SIZE,
     case autocleaning_view_traverse:run(SpaceId, ARId, ACRules, BatchSize, NextBatchToken) of
-        {ok, _} ->
+        {ok, TaskId} ->
             {ok, #state{
                 run_id = ARId,
+                task_id = TaskId,
                 space_id = SpaceId,
                 config = Config,
                 batch_size = BatchSize,
@@ -485,6 +487,7 @@ handle_call(_Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(#message{type = MessageType, run_id = ARId}, State = #state{
     run_id = ARId,
+    task_id = TaskId,
     space_id = SpaceId,
     batches_counters = BatchesCounters
 }) ->
@@ -492,11 +495,14 @@ handle_cast(#message{type = MessageType, run_id = ARId}, State = #state{
         handle_cast_internal(MessageType, State)
     catch
         E:R ->
+            ?error_stacktrace("autocleaning_run_controller of run ~p failed unexpectedly due to ~p:~p",
+                [ARId, E, R]
+            ),
             lists:foreach(fun(BatchNo) ->
                 cancel_replica_deletion_request(SpaceId, ARId, BatchNo)
             end, maps:keys(BatchesCounters)),
-            autocleaning_view_traverse:cancel(SpaceId, ARId),
-            {stop, {error, {E, R}}}
+            autocleaning_view_traverse:cancel(TaskId),
+            {stop, {error, {E, R}}, State}
     end;
 handle_cast(#message{type = _MessageType, run_id = _OtherAutocleaningRunId},
     State = #state{run_id = _AutocleaningRunId}
@@ -530,22 +536,13 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> ok.
-terminate(Reason, #state{
+terminate(_Reason, #state{
     run_id = ARId,
     released_files = ReleasedFiles,
     released_bytes = ReleasedBytes,
     space_id = SpaceId,
     report_terminate_to = ReportTo
 }) ->
-    case Reason of
-        normal ->
-            ok;
-        {error, Reason} ->
-            ?error_stacktrace("autocleaning_run_controller of run ~p failed unexpectedly due to ~p",
-                [ARId, Reason]
-            )
-    end,
-
     autocleaning_run:mark_finished(ARId, ReleasedFiles, ReleasedBytes),
     ok = internal_services_manager:report_service_stop(?MODULE, SpaceId, SpaceId),
 
@@ -664,6 +661,7 @@ maybe_stop_cleaning(State = #state{
     State;
 maybe_stop_cleaning(State = #state{
     run_id = ARId,
+    task_id = TaskId,
     space_id = SpaceId,
     bytes_to_release = BytesToRelease,
     released_bytes = ReleasedBytes,
@@ -676,7 +674,7 @@ maybe_stop_cleaning(State = #state{
         true ->
             ok;
         false ->
-            autocleaning_view_traverse:cancel(SpaceId, ARId)
+            autocleaning_view_traverse:cancel(TaskId)
     end,
     lists:foreach(fun(BatchNo) ->
         cancel_replica_deletion_request(SpaceId, ARId, BatchNo)
@@ -694,7 +692,7 @@ maybe_update_doc_counters(State = #state{
     released_bytes = ReleasedBytes,
     released_files = ReleasedFiles
 }) ->
-    Timestamp = time_utils:timestamp_millis(),
+    Timestamp = global_clock:timestamp_millis(),
     case Timestamp - PreviousTimestamp > ?UPDATE_DOC_COUNTERS_MAX_INTERVAL of
         true ->
             autocleaning_run:update_counters(ARId, ReleasedFiles, ReleasedBytes),

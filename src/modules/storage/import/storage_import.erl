@@ -34,9 +34,9 @@
 %%% storage_import_config module.
 %%%
 %%%
-%%% storage_import_worker is the process which is responsible for
+%%% auto_storage_import_worker is the process which is responsible for
 %%% scheduling auto scans of storages that support spaces with ?AUTO mode.
-%%% For more info go to storage_import_worker module.
+%%% For more info go to auto_storage_import_worker module.
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
@@ -53,7 +53,7 @@
 -export([set_manual_mode/1, set_or_configure_auto_mode/2]).
 -export([start_auto_scan/1, stop_auto_scan/1]).
 -export([get_mode/1, get_configuration/1]).
--export([get_info/1, get_stats/3]).
+-export([get_info/1, get_stats/3, is_auto_imported/1]).
 -export([get_manual_example/1]).
 -export([clean_up/1]).
 -export([assert_manual_import_mode/1]).
@@ -101,7 +101,7 @@ set_or_configure_auto_mode(SpaceId, ScanConfigMap) ->
         case storage_import_config:configure_auto_mode(SpaceId, ScanConfigMap) of
             ok ->
                 storage_import_monitoring:ensure_created(SpaceId),
-                storage_import_worker:notify_space_with_auto_import_configured(SpaceId),
+                auto_storage_import_worker:notify_space_with_auto_import_configured(SpaceId),
                 ok;
             {error, _} = Error -> Error
         end
@@ -194,6 +194,14 @@ get_manual_example(SpaceId) ->
         )}
     end).
 
+
+-spec is_auto_imported(od_space:id()) -> boolean().
+is_auto_imported(SpaceId) ->
+    case get_configuration(SpaceId) of
+        {ok, Config} -> maps:get(mode, Config) =:= ?AUTO_IMPORT;
+        {error, not_found} -> false
+    end.
+
 %%%===================================================================
 %%% Migrate from space_strategies
 %%%===================================================================
@@ -245,7 +253,8 @@ migrate_storage_sync_monitoring() ->
                 case storage_sync_monitoring:get(SpaceId, StorageId) of
                     {ok, #document{value = SSM}} ->
                         SIMV1 = storage_import_monitoring:migrate_to_v1(SSM),
-                        case storage_import_monitoring:create(SpaceId, SIMV1) of
+                        {_, SIM} = datastore_versions:upgrade_record(1, storage_import_monitoring, SIMV1),
+                        case storage_import_monitoring:create(SpaceId, SIM) of
                             {ok, _} ->
                                 ?info("storage_sync_monitoring migration procedure for space ~s finished succesfully.", [SpaceId]),
                                 ok;
@@ -304,7 +313,7 @@ assert_manual_storage_import_supported(SpaceId) ->
                 true ->
                     ok;
                 false ->
-                    throw(?ERROR_FILE_REGISTRATION_NOT_SUPPORTED(StorageId, ?OBJECT_HELPERS))
+                    throw(?ERROR_STORAGE_IMPORT_NOT_SUPPORTED(StorageId, ?OBJECT_HELPERS))
             end;
         Error ->
             throw(Error)

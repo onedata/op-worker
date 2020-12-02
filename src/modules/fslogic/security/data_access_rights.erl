@@ -51,10 +51,11 @@
 -spec assert_granted(user_ctx:ctx(), file_ctx:ctx(), [requirement()]) ->
     file_ctx:ctx() | no_return().
 assert_granted(UserCtx, FileCtx0, AccessRequirements0) ->
-    UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx0),
+    IsSpaceOwner = user_ctx:is_space_owner(UserCtx, SpaceId),
+    IsSpaceDir = file_ctx:is_space_dir_const(FileCtx0),
 
-    case user_ctx:is_root(UserCtx) orelse space_logic:is_owner(SpaceId, UserId) of
+    case user_ctx:is_root(UserCtx) orelse (IsSpaceOwner andalso not IsSpaceDir) of
         true ->
             FileCtx0;
         false ->

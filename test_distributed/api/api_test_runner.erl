@@ -139,7 +139,7 @@ get_scenario_specific_error_for_invalid_clients(rest_with_file_path, InvalidClie
 ->
     % Error thrown by rest_handler (before middleware auth checks could be performed)
     % as invalid clients who doesn't belong to space can't resolve file path to guid
-    ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
+    ?ERROR_POSIX(?ENOENT);
 get_scenario_specific_error_for_invalid_clients(_ScenarioType, unauthorized) ->
     ?ERROR_UNAUTHORIZED;
 get_scenario_specific_error_for_invalid_clients(_ScenarioType, forbidden_not_in_space) ->
@@ -726,6 +726,8 @@ make_gs_request(_Config, Node, Client, #gs_args{
     case connect_via_gs(Node, Client) of
         {ok, GsClient} ->
             case gs_client:graph_request(GsClient, GRI, Operation, Data, false, AuthHint) of
+                {ok, ?GS_RESP(undefined)} ->
+                    ok;
                 {ok, ?GS_RESP(Result)} ->
                     {ok, Result};
                 {error, _} = Error ->
@@ -799,7 +801,7 @@ make_rest_request(_Config, Node, Client, #rest_args{
     URL = get_rest_endpoint(Node, Path),
     HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
     CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
-    Opts = [{ssl_options, [{cacerts, CaCerts}]}],
+    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 10000}],
 
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
         {ok, RespCode, RespHeaders, RespBody} ->

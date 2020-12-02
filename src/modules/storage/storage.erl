@@ -21,9 +21,9 @@
 -module(storage).
 -author("Michal Stanisz").
 
+-include("middleware/middleware.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
--include("modules/storage/storage.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -39,15 +39,16 @@
     get_id/1, get_block_size/1, get_helper/1, get_helper_name/1,
     get_luma_feed/1, get_luma_config/1
 ]).
--export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
-    fetch_qos_parameters_of_remote_storage/2]).
+-export([fetch_name/1, fetch_name_of_remote_storage/2, fetch_provider_id_of_remote_storage/2, 
+    fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2]).
 -export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
+-export([verify_configuration/3]).
 
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
--export([set_imported/2, set_qos_parameters/2, set_readonly/2]).
+-export([set_qos_parameters/2, update_readonly_and_imported/3]).
 -export([update_helper_args/2, update_helper_admin_ctx/2,
     update_helper/2]).
 
@@ -75,19 +76,22 @@
 -type qos_parameters() :: od_storage:qos_parameters().
 -type luma_feed() :: luma:feed().
 -type luma_config() :: luma_config:config().
--type access_type() :: ?READONLY_STORAGE | ?READWRITE_STORAGE.
+-type access_type() :: ?READONLY | ?READWRITE.
 -type imported() :: boolean().
 -type readonly() :: boolean().
 
+%% @formatter:off
+-type config() :: #{
+    readonly => readonly(),
+    importedStorage => imported(),
+    skipStorageDetection => boolean()
+}.
+%% @formatter:on
+
 -export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0, access_type/0,
-    imported/0, readonly/0]).
+    imported/0, readonly/0, config/0]).
 
 -compile({no_auto_import, [get/1]}).
-
--define(throw_on_error(Res), case Res of
-    {error, _} = Error -> throw(Error);
-    _ -> Res
-end).
 
 
 %%%===================================================================
@@ -105,30 +109,6 @@ create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
                 create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters)
         end
     end).
-
-
-%% @private
--spec create_insecure(name(), helpers:helper(), luma_config(),
-    imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
-create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly) of
-        {ok, Id} ->
-            case storage_config:create(Id, Helper, LumaConfig) of
-                {ok, Id} ->
-                    on_storage_created(Id, QosParameters),
-                    {ok, Id};
-                StorageConfigError ->
-                    case storage_logic:delete_in_zone(Id) of
-                        ok -> ok;
-                        {error, _} = Error ->
-                            ?error("Could not revert creation of storage ~p in Onezone: ~p",
-                                [Id, Error])
-                    end,
-                    StorageConfigError
-            end;
-        StorageLogicError ->
-            StorageLogicError
-    end.
 
 
 -spec get(id() | data()) -> {ok, data()} | {error, term()}.
@@ -174,7 +154,7 @@ describe_luma_config(StorageId) when is_binary(StorageId) ->
         {ok, StorageData} -> describe(StorageData);
         {error, _} = Error -> Error
     end;
-describe_luma_config(StorageData)  ->
+describe_luma_config(StorageData) ->
     LumaConfig = get_luma_config(StorageData),
     {ok, luma_config:describe(LumaConfig)}.
 
@@ -227,6 +207,16 @@ clear_storages() ->
     storage_config:delete_all().
 
 
+-spec verify_configuration(id() | name(), config(), helpers:helper()) -> ok | {error, term()}.
+verify_configuration(IdOrName, Config, Helper) ->
+    try
+        sanitize_readonly_option(IdOrName, Config),
+        check_helper_against_readonly_option(Config, Helper),
+        check_helper_against_imported_option(Config, Helper)
+    catch
+        throw:Error -> Error
+    end.
+
 %%%===================================================================
 %%% Functions to retrieve storage details
 %%%===================================================================
@@ -250,11 +240,11 @@ get_block_size(StorageId) ->
 
 
 -spec get_helper(data() | id()) -> helpers:helper().
-get_helper(StorageDataOrId)  ->
+get_helper(StorageDataOrId) ->
     storage_config:get_helper(StorageDataOrId).
 
 -spec get_helper_name(data() | id()) -> helper:name().
-get_helper_name(StorageDataOrId)  ->
+get_helper_name(StorageDataOrId) ->
     Helper = storage_config:get_helper(StorageDataOrId),
     helper:get_name(Helper).
 
@@ -269,8 +259,20 @@ get_luma_config(StorageData) ->
 
 -spec fetch_name(id()) -> name().
 fetch_name(StorageId) when is_binary(StorageId) ->
-    {ok, Name} = ?throw_on_error(storage_logic:get_name(StorageId)),
+    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_local_storage(StorageId)),
     Name.
+
+
+-spec fetch_name_of_remote_storage(id(), od_space:id()) -> name().
+fetch_name_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
+    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_remote_storage(StorageId, SpaceId)),
+    Name.
+
+
+-spec fetch_provider_id_of_remote_storage(id(), od_space:id()) -> od_provider:id().
+fetch_provider_id_of_remote_storage(StorageId, SpaceId) ->
+    {ok, ProviderId} = ?throw_on_error(storage_logic:get_provider(StorageId, SpaceId)),
+    ProviderId.
 
 
 -spec fetch_qos_parameters_of_local_storage(id()) -> qos_parameters().
@@ -358,13 +360,9 @@ update_luma_config(StorageId, Diff) ->
     end.
 
 
--spec set_imported(id(), imported()) -> ok | {error, term()}.
-set_imported(StorageId, Imported) ->
-    storage_logic:set_imported(StorageId, Imported).
-
--spec set_readonly(id(), readonly()) -> ok | {error, term()}.
-set_readonly(StorageId, Readonly) ->
-    storage_logic:set_readonly(StorageId, Readonly).
+-spec update_readonly_and_imported(id(), readonly(), imported()) -> ok | {error, term()}.
+update_readonly_and_imported(StorageId, Readonly, Imported) ->
+    storage_logic:update_readonly_and_imported(StorageId, Readonly, Imported).
 
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
@@ -454,8 +452,8 @@ validate_support_request(SerializedToken) ->
                 false -> ok
             end;
         {ok, #token{type = ReceivedType}} ->
-           ?ERROR_BAD_VALUE_TOKEN(<<"token">>,
-               ?ERROR_NOT_AN_INVITE_TOKEN(?SUPPORT_SPACE, ReceivedType));
+            ?ERROR_BAD_VALUE_TOKEN(<<"token">>,
+                ?ERROR_NOT_AN_INVITE_TOKEN(?SUPPORT_SPACE, ReceivedType));
         {error, _} = Error ->
             ?ERROR_BAD_VALUE_TOKEN(<<"token">>, Error)
     end.
@@ -519,7 +517,7 @@ on_space_supported(SpaceId, StorageId) ->
 -spec on_space_unsupported(od_space:id(), id()) -> ok.
 on_space_unsupported(SpaceId, StorageId) ->
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
-    storage_import_worker:notify_space_unsupported(SpaceId),
+    auto_storage_import_worker:notify_space_unsupported(SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
 
@@ -537,7 +535,7 @@ on_helper_changed(StorageId) ->
 is_name_occupied(Name) ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
     lists:member(Name, lists:map(fun(StorageId) ->
-        {ok, OccupiedName} = storage_logic:get_name(StorageId),
+        {ok, OccupiedName} = storage_logic:get_name_of_local_storage(StorageId),
         OccupiedName
     end, StorageIds)).
 
@@ -552,6 +550,78 @@ lock_on_storage_by_id(Identifier, Fun) ->
 -spec lock_on_storage_by_name(name(), fun(() -> Result)) -> Result.
 lock_on_storage_by_name(Identifier, Fun) ->
     critical_section:run({storage_name, Identifier}, Fun).
+
+
+%% @private
+-spec create_insecure(name(), helpers:helper(), luma_config(),
+    imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
+create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
+    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly) of
+        {ok, Id} ->
+            case storage_config:create(Id, Helper, LumaConfig) of
+                {ok, Id} ->
+                    on_storage_created(Id, QosParameters),
+                    {ok, Id};
+                StorageConfigError ->
+                    case storage_logic:delete_in_zone(Id) of
+                        ok -> ok;
+                        {error, _} = Error ->
+                            ?error("Could not revert creation of storage ~p in Onezone: ~p",
+                                [Id, Error])
+                    end,
+                    StorageConfigError
+            end;
+        StorageLogicError ->
+            StorageLogicError
+    end.
+
+
+%% @private
+-spec check_helper_against_readonly_option(config(), helpers:helper()) -> ok.
+check_helper_against_readonly_option(#{readonly := true}, _Helper) ->
+    ok;
+check_helper_against_readonly_option(#{readonly := false}, Helper) ->
+    case helper:supports_storage_access_type(Helper, ?READWRITE) of
+        false ->
+            HelperName = helper:get_name(Helper),
+            throw(?ERROR_REQUIRES_READONLY_STORAGE(HelperName));
+        true ->
+            ok
+    end.
+
+%% @private
+-spec check_helper_against_imported_option(config(), helpers:helper()) -> ok.
+check_helper_against_imported_option(#{importedStorage := false}, _Helper) ->
+    ok;
+check_helper_against_imported_option(#{importedStorage := true}, Helper) ->
+    case helper:is_import_supported(Helper) of
+        false ->
+            HelperName = helper:get_name(Helper),
+            throw(?ERROR_STORAGE_IMPORT_NOT_SUPPORTED(HelperName, ?OBJECT_HELPERS));
+        true ->
+            ok
+    end.
+
+
+%% @private
+-spec sanitize_readonly_option(id() | name(), config()) -> ok.
+sanitize_readonly_option(IdOrName, #{
+    skipStorageDetection := SkipStorageDetection,
+    readonly := Readonly,
+    importedStorage := Imported
+}) ->
+    case {ensure_boolean(Readonly), ensure_boolean(SkipStorageDetection), ensure_boolean(Imported)} of
+        {false, _, _} -> ok;
+        {true, false, _} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(skipStorageDetection, [true]));
+        {true, true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
+        {true, true, true} -> ok
+    end.
+
+
+-spec ensure_boolean(binary() | boolean()) -> boolean().
+ensure_boolean(<<"true">>) -> true;
+ensure_boolean(<<"false">>) -> false;
+ensure_boolean(Boolean) when is_boolean(Boolean) -> Boolean.
 
 
 %%%===================================================================
@@ -828,7 +898,7 @@ upgrade_record(3, {_, Name, Helpers, Readonly, LumaConfig}) ->
         Readonly,
         LumaConfig
     }};
-upgrade_record(4, {_, Name, Helpers, Readonly, LumaConfig}) ->
+upgrade_record(4, {_, Name, Helpers, Readonly, {luma_config, Url, _CacheTimeout, ApiKey}}) ->
     {5, {storage,
         Name,
         [
@@ -843,5 +913,5 @@ upgrade_record(4, {_, Name, Helpers, Readonly, LumaConfig}) ->
             ExtendedDirectIO} <- Helpers
         ],
         Readonly,
-        LumaConfig
+        {luma_config, Url, ApiKey}
     }}.

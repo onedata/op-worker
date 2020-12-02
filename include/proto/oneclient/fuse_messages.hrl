@@ -34,13 +34,15 @@
 }).
 
 -record(get_file_attr, {
+    include_replication_status :: undefined | boolean()
 }).
 
 -record(get_file_details, {
 }).
 
 -record(get_child_attr, {
-    name :: file_meta:name()
+    name :: file_meta:name(),
+    include_replication_status :: undefined | boolean()
 }).
 
 -record(get_file_children, {
@@ -53,7 +55,8 @@
 -record(get_file_children_attrs, {
     offset :: file_meta:offset(),
     size :: file_meta:size(),
-    index_token :: undefined | binary()
+    index_token :: undefined | binary(),
+    include_replication_status :: undefined | boolean()
 }).
 
 -record(get_file_children_details, {
@@ -183,6 +186,10 @@
     path :: file_meta:path()
 }).
 
+-record(resolve_guid_by_canonical_path, {
+    path :: file_meta:path()
+}).
+
 -record(get_helper_params, {
     storage_id :: storage:id(),
     space_id :: od_space:id(),
@@ -206,7 +213,8 @@
 }).
 
 -type fuse_request_type() ::
-    #resolve_guid{} | #get_helper_params{} | #create_storage_test_file{} |
+    #resolve_guid{} | #resolve_guid_by_canonical_path{} |
+    #get_helper_params{} | #create_storage_test_file{} |
     #verify_storage_test_file{} | #file_request{} | #get_fs_stats{}.
 
 -record(fuse_request, {

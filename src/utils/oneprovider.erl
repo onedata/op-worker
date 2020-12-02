@@ -210,9 +210,9 @@ get_oz_url() ->
 get_oz_version() ->
     GetOzVersion = fun() ->
         {ok, OzVersion} = provider_logic:fetch_peer_version(onezone),
-        {true, OzVersion, ?OZ_VERSION_CACHE_TTL}
+        {ok, OzVersion, ?OZ_VERSION_CACHE_TTL}
     end,
-    {ok, OzVersion} = simple_cache:get(cached_oz_version, GetOzVersion),
+    {ok, OzVersion} = node_cache:acquire(cached_oz_version, GetOzVersion),
     OzVersion.
 
 
@@ -282,7 +282,8 @@ set_up_service_in_onezone() ->
                 {error, _} = Error ->
                     ?alert(
                         "Oneprovider worker service could not be successfully set "
-                        "up in Onezone due to an error during GUI upload: ~p",
+                        "up in Onezone due to an error during GUI package upload: ~w. "
+                        "The Web GUI might be non-functional.",
                         [Error]
                     )
             end
