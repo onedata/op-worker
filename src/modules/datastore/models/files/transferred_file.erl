@@ -332,8 +332,8 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
             end, MergedPastDoc, AllAdded)
     end,
 
-    case ResultDoc of
-        PrevDoc -> ignore;
+    case ResultDoc#document.value of
+        PrevRecord -> default;
         _ -> {true, ResultDoc}
     end.
 
