@@ -139,11 +139,11 @@ consolidate([B | Rest]) ->
 
 -spec filter_or_trim_truncated(blocks(), non_neg_integer()) -> blocks().
 filter_or_trim_truncated(Blocks, Limit) ->
-    lists:foldl(fun
-        (#file_block{offset = Offset}, Acc) when Offset >= Limit -> Acc;
-        (#file_block{offset = Offset, size = Size} = Block, Acc) when Offset + Size =< Limit -> [Block | Acc];
-        (#file_block{offset = Offset} = Block, Acc) -> [Block#file_block{size = Limit - Offset} | Acc]
-    end, [], Blocks).
+    lists:filtermap(fun
+        (#file_block{offset = Offset}) when Offset >= Limit -> false;
+        (#file_block{offset = Offset, size = Size} = Block) when Offset + Size =< Limit -> {true, Block};
+        (#file_block{offset = Offset} = Block) -> {true, Block#file_block{size = Limit - Offset}}
+    end, Blocks).
 
 %%%===================================================================
 %%% Internal functions

@@ -91,6 +91,7 @@ aggregate_file_written_events(OldEvt, NewEvt) ->
         undefined ->
             {OldEvt#file_written_event.file_size, OldEvt#file_written_event.blocks};
         NewSize ->
+            % file_size is set only during file truncate - filter blocks written before truncate
             {NewSize, fslogic_blocks:filter_or_trim_truncated(OldEvt#file_written_event.blocks, NewSize)}
     end,
 

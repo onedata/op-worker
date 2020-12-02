@@ -1263,6 +1263,7 @@ lfm_truncate_and_write(Config) ->
     % Test truncate between writes - blocks should not be aggregated
     % and first block should be trimmed
     % Truncate only with event to prevent events flush when truncating storage file
+    % As a result only metadata is changed by truncate - data on storage system remains
     ?assertMatch({ok, 4}, lfm_proxy:write(W, Handle, 11, <<"bcde">>)),
     ?assertMatch(ok, produce_truncate_event(W, SessId, FileKey, 13)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle, 15, <<"fgh">>)),
@@ -1273,6 +1274,8 @@ lfm_truncate_and_write(Config) ->
 
     % Test truncate between writes - blocks should not be aggregated
     % and first block should not be included in final result
+    % Truncate only with event to prevent events flush when truncating storage file
+    % As a result only metadata is changed by truncate - data on storage system remains
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle, 18, <<"ijk">>)),
     ?assertMatch(ok, produce_truncate_event(W, SessId, FileKey, 18)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W, Handle, 19, <<"xy">>)),
