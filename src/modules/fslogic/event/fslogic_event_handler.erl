@@ -87,13 +87,19 @@ aggregate_file_read_events(OldEvt, NewEvt) ->
 -spec aggregate_file_written_events(OldEvt :: event:type(), NewEvt :: event:type()) ->
     NewEvt :: event:type().
 aggregate_file_written_events(OldEvt, NewEvt) ->
+    {FileSize, OldBlocks} = case NewEvt#file_written_event.file_size of
+        undefined ->
+            {OldEvt#file_written_event.file_size, OldEvt#file_written_event.blocks};
+        NewSize ->
+            % file_size is set only during file truncate - filter blocks written before truncate
+            {NewSize, fslogic_blocks:filter_or_trim_truncated(OldEvt#file_written_event.blocks, NewSize)}
+    end,
+
     NewEvt#file_written_event{
         counter = OldEvt#file_written_event.counter + NewEvt#file_written_event.counter,
+        file_size = FileSize,
         size = OldEvt#file_written_event.size + NewEvt#file_written_event.size,
-        blocks = fslogic_blocks:aggregate(
-            OldEvt#file_written_event.blocks,
-            NewEvt#file_written_event.blocks
-        )
+        blocks = fslogic_blocks:aggregate(OldBlocks, NewEvt#file_written_event.blocks)
     }.
 
 %%--------------------------------------------------------------------
