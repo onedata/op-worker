@@ -272,8 +272,9 @@ build_get_instance_validate_gs_call_fun(ExpJsonDetails) ->
 %% @private
 -spec get_space_dir_details(node(), file_id:file_guid(), od_space:name()) -> #file_details{}.
 get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
-    {ok, SpaceAttrs} = api_test_utils:get_file_attrs(Node, SpaceDirGuid),
-
+    {ok, SpaceAttrs} = ?assertMatch(
+        {ok, _}, file_test_utils:get_attrs(Node, SpaceDirGuid), ?ATTEMPTS
+    ),
     #file_details{
         file_attr = SpaceAttrs#file_attr{name = SpaceName},
         index_startid = file_id:guid_to_space_id(SpaceDirGuid),
@@ -298,7 +299,7 @@ update_file_instance_test(Config) ->
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     GetMode = fun(Node) ->
-        {ok, #file_attr{mode = Mode}} = api_test_utils:get_file_attrs(Node, FileGuid),
+        {ok, #file_attr{mode = Mode}} = file_test_utils:get_attrs(Node, FileGuid),
         Mode
     end,
 
@@ -359,7 +360,7 @@ update_file_instance_on_provider_not_supporting_space_test(Config) ->
             verify_fun = fun(_, _) ->
                 ?assertMatch(
                     {ok, #file_attr{mode = 8#777}},
-                    api_test_utils:get_file_attrs(P1Node, FileGuid),
+                    file_test_utils:get_attrs(P1Node, FileGuid),
                     ?ATTEMPTS
                 ),
                 true
@@ -514,7 +515,7 @@ delete_file_instance_on_provider_not_supporting_space_test(Config) ->
                 ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
             end,
             verify_fun = fun(_, _) ->
-                ?assertMatch({ok, _}, api_test_utils:get_file_attrs(P1Node, FileGuid), ?ATTEMPTS),
+                ?assertMatch({ok, _}, file_test_utils:get_attrs(P1Node, FileGuid), ?ATTEMPTS),
                 true
             end
         }
@@ -537,7 +538,7 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType, Config) ->
     fun() ->
         Path = filename:join([TopDirPath, ?RANDOM_FILE_NAME()]),
         {ok, Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
-        ?assertMatch({ok, _}, api_test_utils:get_file_attrs(P2Node, Guid), ?ATTEMPTS),
+        file_test_utils:wait_for_sync(P2Node, Guid),
 
         api_test_memory:set(MemRef, file_guid, Guid),
 

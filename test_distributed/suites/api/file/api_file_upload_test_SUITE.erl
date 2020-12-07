@@ -51,7 +51,6 @@ create_file_test(Config) ->
 
     SpaceOwnerId = api_test_env:get_user_id(user2, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
     {_, DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
         <<"dir">>, 8#704, Config
@@ -61,7 +60,7 @@ create_file_test(Config) ->
     UsedFileName = ?RANDOM_FILE_NAME(),
     FilePath = filename:join([DirPath, UsedFileName]),
     {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#777),
-    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
+    file_test_utils:wait_for_sync(P2Node, FileGuid),
 
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -220,7 +219,7 @@ build_create_file_verify_fun(MemRef, DirGuid, Providers) ->
                     lists:foreach(fun(Provider) ->
                         ?assertMatch(
                             {ok, #file_attr{name = ExpName, type = ExpType, mode = ExpMode}},
-                            api_test_utils:get_file_attrs(Provider, FileGuid),
+                            file_test_utils:get_attrs(Provider, FileGuid),
                             ?ATTEMPTS
                         )
                     end, Providers),
@@ -333,7 +332,7 @@ build_update_file_content_setup_fun(MemRef, Content, Config) ->
         {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
 
         api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
-        ?assertMatch({ok, #file_attr{size = FileSize}}, api_test_utils:get_file_attrs(P2Node, FileGuid), ?ATTEMPTS),
+        file_test_utils:assert_size(P2Node, FileGuid, FileSize),
         api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]),
 
         api_test_memory:set(MemRef, file_guid, FileGuid)
@@ -420,7 +419,7 @@ verify_file_content_update(
     case Offset of
         undefined ->
             % File was truncated and new data written at offset 0
-            assert_file_size(AllProviders, FileGuid, DataSentSize),
+            file_test_utils:assert_size(AllProviders, FileGuid, DataSentSize),
 
             ExpDist = case UpdateNode == CreationNode of
                 true ->
@@ -430,9 +429,10 @@ verify_file_content_update(
             end,
             api_test_utils:assert_distribution(AllProviders, FileGuid, ExpDist),
 
-            assert_file_content(AllProviders, FileGuid, DataSent);
+            file_test_utils:assert_content(AllProviders, FileGuid, DataSent);
         Offset ->
-            assert_file_size(AllProviders, FileGuid, max(OriginalFileSize, Offset + DataSentSize)),
+            ExpSize = max(OriginalFileSize, Offset + DataSentSize),
+            file_test_utils:assert_size(AllProviders, FileGuid, ExpSize),
 
             ExpDist = case UpdateNode == CreationNode of
                 true ->
@@ -476,7 +476,7 @@ verify_file_content_update(
                         << <<"\0">> || _ <- lists:seq(1, 50) >>,
                         DataSent
                     ]),
-                    assert_file_content(AllProviders, FileGuid, Offset - 50, ExpContent);
+                    file_test_utils:assert_content(AllProviders, FileGuid, ExpContent, Offset - 50);
                 false ->
                     ExpContent = case Offset =< OriginalFileSize of
                         true ->
@@ -492,7 +492,7 @@ verify_file_content_update(
                                 DataSent
                             ])
                     end,
-                    assert_file_content(AllProviders, FileGuid, ExpContent)
+                    file_test_utils:assert_content(AllProviders, FileGuid, ExpContent)
             end
     end,
     true.
@@ -510,48 +510,6 @@ slice_binary(Bin, Offset, _Len) when Offset >= byte_size(Bin) ->
     <<>>;
 slice_binary(Bin, Offset, Len) ->
     binary:part(Bin, Offset, min(Len, byte_size(Bin) - Offset)).
-
-
-%% @private
--spec assert_file_size([node()], file_id:file_guid(), non_neg_integer()) -> ok.
-assert_file_size(AllProviders, FileGuid, ExpFileSize) ->
-    lists:foreach(fun(Provider) ->
-        ?assertMatch(
-            {ok, #file_attr{size = ExpFileSize}},
-            api_test_utils:get_file_attrs(Provider, FileGuid),
-            ?ATTEMPTS
-        )
-    end, AllProviders).
-
-
-%% @private
--spec assert_file_content([node()], file_id:file_guid(), ExpContent :: binary()) -> ok.
-assert_file_content(Nodes, FileGuid, ExpContent) ->
-    assert_file_content(Nodes, FileGuid, 0, ExpContent).
-
-
-%% @private
--spec assert_file_content(
-    [node()],
-    file_id:file_guid(),
-    Offset :: non_neg_integer(),
-    ExpContent :: binary()
-) ->
-    ok.
-assert_file_content(Nodes, FileGuid, Offset, ExpContent) ->
-    lists:foreach(fun(Node) ->
-        ?assertEqual({ok, ExpContent}, get_file_content(Node, FileGuid, Offset), ?ATTEMPTS)
-    end, Nodes).
-
-
-%% @private
--spec get_file_content(node(), file_id:file_guid(), Offset :: non_neg_integer()) -> binary().
-get_file_content(Node, FileGuid, Offset) ->
-    FileKey = {guid, FileGuid},
-
-    {ok, #file_attr{size = FileSize}} = lfm_proxy:stat(Node, ?ROOT_SESS_ID, FileKey),
-    {ok, FileHandle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, FileKey, read),
-    lfm_proxy:read(Node, FileHandle, Offset, FileSize).
 
 
 %%%===================================================================

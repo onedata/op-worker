@@ -574,8 +574,9 @@ get_user_root_dir_children_test(Config) ->
 %% @private
 -spec get_space_dir_details(node(), file_id:file_guid(), od_space:name()) -> #file_details{}.
 get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
-    {ok, SpaceAttrs} = api_test_utils:get_file_attrs(Node, SpaceDirGuid),
-
+    {ok, SpaceAttrs} = ?assertMatch(
+        {ok, _}, file_test_utils:get_attrs(Node, SpaceDirGuid), ?ATTEMPTS
+    ),
     #file_details{
         file_attr = SpaceAttrs#file_attr{name = SpaceName},
         index_startid = file_id:guid_to_space_id(SpaceDirGuid),

@@ -269,7 +269,7 @@ create_view(TransferType, SpaceId, XattrName, SrcNode, DstNode) ->
 sync_files_between_nodes(eviction, SrcNode, DstNode, Files) ->
     lists:foreach(fun(Guid) ->
         % Read file on DstNode to force rtransfer
-        api_test_utils:wait_for_file_sync(DstNode, ?ROOT_SESS_ID, Guid),
+        file_test_utils:wait_for_sync(DstNode, Guid),
         ExpContent = api_test_utils:read_file(SrcNode, ?ROOT_SESS_ID, Guid, ?BYTES_NUM),
         ?assertMatch(
             ExpContent,
@@ -284,7 +284,7 @@ sync_files_between_nodes(eviction, SrcNode, DstNode, Files) ->
 
 sync_files_between_nodes(_TransferType, _SrcNode, DstNode, Files) ->
     lists:foreach(fun(Guid) ->
-        api_test_utils:wait_for_file_sync(DstNode, ?ROOT_SESS_ID, Guid)
+        file_test_utils:wait_for_sync(DstNode, Guid)
     end, Files).
 
 

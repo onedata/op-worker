@@ -565,7 +565,7 @@ build_download_file_setup_fun(MemRef, Content, Config) ->
 
         ?assertMatch(
             {ok, #file_attr{size = FileSize, shares = [ShareId]}},
-            api_test_utils:get_file_attrs(P2Node, FileGuid),
+            file_test_utils:get_attrs(P2Node, FileGuid),
             ?ATTEMPTS
         ),
         api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]),

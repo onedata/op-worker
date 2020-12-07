@@ -112,13 +112,12 @@ create_file_migration(Config) ->
 create_file_transfer(Config, Type) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?SESS_ID(?USER_IN_SPACE_2, P1, Config),
-    SessIdP2 = ?SESS_ID(?USER_IN_SPACE_2, P2, Config),
 
     % Shared file will be used to assert that shared file transfer will be forbidden
     % (it will be added to '#data_spec.bad_values')
     FileGuid = transfer_api_test_utils:create_file(P1, SessIdP1, filename:join(["/", ?SPACE_2])),
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
-    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+    file_test_utils:wait_for_sync(P2, FileGuid),
 
     RequiredPrivs = create_file_transfer_required_privs(Type),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),

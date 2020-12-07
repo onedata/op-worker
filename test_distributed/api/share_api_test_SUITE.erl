@@ -56,12 +56,11 @@ all() ->
 create_share_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
-    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+    file_test_utils:wait_for_sync(P2, FileGuid),
 
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -189,7 +188,6 @@ build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, Conf
 get_share_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
@@ -198,7 +196,7 @@ get_share_test(Config) ->
     ShareName = <<"share">>,
     Description = <<"# Collection ABC\nThis collection contains elements.">>,
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, ShareName, Description),
-    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+    file_test_utils:wait_for_sync(P2, FileGuid),
 
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
@@ -283,7 +281,6 @@ build_get_share_prepare_gs_args_fun(ShareId, Scope) ->
 update_share_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
@@ -292,7 +289,7 @@ update_share_test(Config) ->
     OriginalDescription = <<"### Nested heading at the beginning - total markdown anarchy.">>,
     OriginalShareName = <<"share">>,
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, OriginalShareName, OriginalDescription),
-    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+    file_test_utils:wait_for_sync(P2, FileGuid),
 
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, previous_name, OriginalShareName),
@@ -389,7 +386,6 @@ build_update_share_prepare_gs_args_fun(ShareId) ->
 delete_share_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
@@ -400,7 +396,7 @@ delete_share_test(Config) ->
         ShareId
     end, lists:seq(1, 4))),
 
-    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+    file_test_utils:wait_for_sync(P2, FileGuid),
 
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, shares, ShareIds),
