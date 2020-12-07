@@ -38,7 +38,6 @@
     fill_file_with_dummy_data/5,
     write_file/5,
     read_file/4,
-    assert_distribution/3,
 
     share_file_and_sync_file_attrs/4,
 
@@ -263,54 +262,6 @@ read_file(Node, SessId, FileGuid, Size) ->
     {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, Size),
     ok = lfm_proxy:close(Node, ReadHandle),
     Content.
-
-
--spec assert_distribution(
-    [node()],
-    file_id:file_guid() | [file_id:file_guid()],
-    [{node(), non_neg_integer()}]
-) ->
-    true | no_return().
-assert_distribution(NodesToVerify, Files, ExpSizePerProvider) when is_list(Files) ->
-    ExpDistribution = lists:sort(lists:map(fun
-        ({Node, Blocks}) when is_list(Blocks) ->
-            #{
-                <<"blocks">> => lists:foldr(fun
-                    (#file_block{offset = _Offset, size = 0}, Acc) ->
-                        Acc;
-                    (#file_block{offset = Offset, size = Size}, Acc) ->
-                        [[Offset, Size] | Acc]
-                end, [], Blocks),
-                <<"providerId">> => op_test_rpc:get_provider_id(Node),
-                <<"totalBlocksSize">> => lists:sum(lists:map(fun(#file_block{size = Size}) ->
-                    Size
-                end, Blocks))
-            };
-        ({Node, ExpSize}) when is_integer(ExpSize) ->
-            #{
-                <<"blocks">> => case ExpSize of
-                    0 -> [];
-                    _ -> [[0, ExpSize]]
-                end,
-                <<"providerId">> => op_test_rpc:get_provider_id(Node),
-                <<"totalBlocksSize">> => ExpSize
-            }
-    end, ExpSizePerProvider)),
-
-    FetchDistributionFun = fun(Node, Guid) ->
-        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, ?ROOT_SESS_ID, {guid, Guid}),
-        lists:sort(Distribution)
-    end,
-
-    lists:foreach(fun(FileGuid) ->
-        lists:foreach(fun(Node) ->
-            ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), ?ATTEMPTS)
-        end, NodesToVerify)
-    end, Files),
-
-    true;
-assert_distribution(NodesToVerify, File, ExpSizePerProvider) ->
-    assert_distribution(NodesToVerify, [File], ExpSizePerProvider).
 
 
 -spec share_file_and_sync_file_attrs(node(), session:id(), [node()], file_id:file_guid()) ->

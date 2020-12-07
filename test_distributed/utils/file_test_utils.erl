@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
@@ -22,8 +23,9 @@
 ]).
 -export([wait_for_sync/2]).
 -export([
-    assert_size/3,
-    assert_content/3, assert_content/4
+    await_size/3,
+    await_content/3, await_content/4,
+    await_distribution/3
 ]).
 
 -type offset() :: non_neg_integer().
@@ -72,39 +74,88 @@ get_attrs(Node, FileGuid) ->
     end.
 
 
--spec wait_for_sync(node() | [node()], file_id:file_guid()) -> ok.
-wait_for_sync(Nodes, FileGuid) ->
+-spec wait_for_sync(node() | [node()], file_id:file_guid() | [file_id:file_guid()]) ->
+    ok | no_return().
+wait_for_sync(Nodes, Files) ->
     Attempts = get_attempts(),
 
     lists:foreach(fun(Node) ->
-        ?assertMatch({ok, _}, get_attrs(Node, FileGuid), Attempts)
+        lists:foreach(fun(FileGuid) ->
+            ?assertMatch({ok, _}, get_attrs(Node, FileGuid), Attempts)
+        end, utils:ensure_list(Files))
     end, utils:ensure_list(Nodes)).
 
 
--spec assert_size(node() | [node()], file_id:file_guid(), file_meta:size()) ->
+-spec await_size(node() | [node()], file_id:file_guid(), file_meta:size()) ->
     ok | no_return().
-assert_size(NodesToVerify, FileGuid, ExpFileSize) ->
+await_size(Nodes, FileGuid, ExpFileSize) ->
     Attempts = get_attempts(),
 
     lists:foreach(fun(Provider) ->
         ?assertMatch({ok, #file_attr{size = ExpFileSize}}, get_attrs(Provider, FileGuid), Attempts)
-    end, utils:ensure_list(NodesToVerify)).
+    end, utils:ensure_list(Nodes)).
 
 
--spec assert_content(node() | [node()], file_id:file_guid(), ExpContent :: binary()) ->
+-spec await_content(node() | [node()], file_id:file_guid(), ExpContent :: binary()) ->
     ok | no_return().
-assert_content(Nodes, FileGuid, ExpContent) ->
-    assert_content(Nodes, FileGuid, ExpContent, 0).
+await_content(Nodes, FileGuid, ExpContent) ->
+    await_content(Nodes, FileGuid, ExpContent, 0).
 
 
--spec assert_content(node() | [node()], file_id:file_guid(), ExpContent :: binary(), offset()) ->
+-spec await_content(node() | [node()], file_id:file_guid(), ExpContent :: binary(), offset()) ->
     ok | no_return().
-assert_content(Nodes, FileGuid, ExpContent, Offset) ->
+await_content(Nodes, FileGuid, ExpContent, Offset) ->
     Attempts = get_attempts(),
 
     lists:foreach(fun(Node) ->
         ?assertEqual({ok, ExpContent}, get_content(Node, FileGuid, Offset), Attempts)
     end, utils:ensure_list(Nodes)).
+
+
+-spec await_distribution(
+    node() | [node()],
+    file_id:file_guid() | [file_id:file_guid()],
+    [{node(), file_meta:size() | [fslogic_blocks:blocks()]}]
+) ->
+    ok | no_return().
+await_distribution(Nodes, Files, ExpSizeOrBlocksPerProvider) ->
+    Attempts = get_attempts(),
+
+    ExpDistribution = lists:sort(lists:map(fun
+        ({Node, ExpSize}) when is_integer(ExpSize) ->
+            #{
+                <<"blocks">> => case ExpSize of
+                    0 -> [];
+                    _ -> [[0, ExpSize]]
+                end,
+                <<"providerId">> => op_test_rpc:get_provider_id(Node),
+                <<"totalBlocksSize">> => ExpSize
+            };
+        ({Node, Blocks}) when is_list(Blocks) ->
+            #{
+                <<"blocks">> => lists:foldr(fun
+                    (#file_block{offset = _Offset, size = 0}, Acc) ->
+                        Acc;
+                    (#file_block{offset = Offset, size = Size}, Acc) ->
+                        [[Offset, Size] | Acc]
+                end, [], Blocks),
+                <<"providerId">> => op_test_rpc:get_provider_id(Node),
+                <<"totalBlocksSize">> => lists:sum(lists:map(fun(#file_block{size = Size}) ->
+                    Size
+                end, Blocks))
+            }
+    end, ExpSizeOrBlocksPerProvider)),
+
+    FetchDistributionFun = fun(Node, FileGuid) ->
+        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, ?ROOT_SESS_ID, {guid, FileGuid}),
+        lists:sort(Distribution)
+    end,
+
+    lists:foreach(fun(FileGuid) ->
+        lists:foreach(fun(Node) ->
+            ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), Attempts)
+        end, utils:ensure_list(Nodes))
+    end, utils:ensure_list(Files)).
 
 
 %%%===================================================================

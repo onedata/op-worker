@@ -429,7 +429,8 @@ run_exp_error_testcase(
             RequestResult = make_request(Config, TargetNode, Client, Args),
             try
                 validate_error_result(ScenarioType, ExpError, RequestResult),
-                VerifyFun(expected_failure, TestCaseCtx)
+                VerifyFun(expected_failure, TestCaseCtx),
+                true
             catch T:R ->
                 log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R),
                 false
@@ -460,7 +461,8 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, SupportedClient
                             ScenarioType, ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED), Result
                         ),
                         VerifyFun(expected_failure, TestCaseCtx)
-                end
+                end,
+                true
             catch T:R ->
                 log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R),
                 false

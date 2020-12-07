@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests concerning file upload API (REST + gs).
+%%% This file contains tests concerning file upload API (REST + gs + GUI).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(api_file_upload_test_SUITE).
@@ -353,8 +353,8 @@ build_rest_update_file_content_setup_fun(MemRef, Content, Config) ->
         {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
 
         api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
-        file_test_utils:assert_size(P2Node, FileGuid, FileSize),
-        api_test_utils:assert_distribution(Providers, FileGuid, [{P1Node, FileSize}]),
+        file_test_utils:await_size(P2Node, FileGuid, FileSize),
+        file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]),
 
         api_test_memory:set(MemRef, file_guid, FileGuid)
     end.
@@ -406,7 +406,7 @@ build_rest_update_file_content_verify_fun(MemRef, OriginalFileContent, Config) -
     fun
         (expected_failure, _) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
-            api_test_utils:assert_distribution(AllProviders, FileGuid, [{P1Node, OriginalFileSize}]);
+            file_test_utils:await_distribution(AllProviders, FileGuid, [{P1Node, OriginalFileSize}]);
         (expected_success, #api_test_ctx{node = UpdateNode, data = Data}) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
             Offset = maps:get(<<"offset">>, Data, undefined),
@@ -440,7 +440,7 @@ verify_rest_file_content_update(
     case Offset of
         undefined ->
             % File was truncated and new data written at offset 0
-            file_test_utils:assert_size(AllProviders, FileGuid, DataSentSize),
+            file_test_utils:await_size(AllProviders, FileGuid, DataSentSize),
 
             ExpDist = case UpdateNode == CreationNode of
                 true ->
@@ -448,12 +448,12 @@ verify_rest_file_content_update(
                 false ->
                     [{CreationNode, 0}, {UpdateNode, DataSentSize}]
             end,
-            api_test_utils:assert_distribution(AllProviders, FileGuid, ExpDist),
+            file_test_utils:await_distribution(AllProviders, FileGuid, ExpDist),
 
-            file_test_utils:assert_content(AllProviders, FileGuid, DataSent);
+            file_test_utils:await_content(AllProviders, FileGuid, DataSent);
         Offset ->
             ExpSize = max(OriginalFileSize, Offset + DataSentSize),
-            file_test_utils:assert_size(AllProviders, FileGuid, ExpSize),
+            file_test_utils:await_size(AllProviders, FileGuid, ExpSize),
 
             ExpDist = case UpdateNode == CreationNode of
                 true ->
@@ -486,7 +486,7 @@ verify_rest_file_content_update(
                             ]
                     end
             end,
-            api_test_utils:assert_distribution(AllProviders, FileGuid, ExpDist),
+            file_test_utils:await_distribution(AllProviders, FileGuid, ExpDist),
 
             case Offset > 1024*1024*1024 of  % 1 GB
                 true ->
@@ -497,7 +497,7 @@ verify_rest_file_content_update(
                         << <<"\0">> || _ <- lists:seq(1, 50) >>,
                         DataSent
                     ]),
-                    file_test_utils:assert_content(AllProviders, FileGuid, ExpContent, Offset - 50);
+                    file_test_utils:await_content(AllProviders, FileGuid, ExpContent, Offset - 50);
                 false ->
                     ExpContent = case Offset =< OriginalFileSize of
                         true ->
@@ -513,7 +513,7 @@ verify_rest_file_content_update(
                                 DataSent
                             ])
                     end,
-                    file_test_utils:assert_content(AllProviders, FileGuid, ExpContent)
+                    file_test_utils:await_content(AllProviders, FileGuid, ExpContent)
             end
     end,
     true.
@@ -687,7 +687,6 @@ gui_upload_with_time_warps_test(Config) ->
 
     FileKey = {guid, FileGuid},
     CurrTime = time_test_utils:get_frozen_time_seconds(),
-    ct:pal("~p", [CurrTime]),
     ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
 
