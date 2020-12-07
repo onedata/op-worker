@@ -12,12 +12,8 @@
 -module(file_test_utils).
 -author("Bartosz Walkowicz").
 
--include("api_test_runner.hrl").
--include("api_file_test_utils.hrl").
--include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/common_messages.hrl").
--include("test_utils/initializer.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 
 -export([
@@ -64,7 +60,7 @@ get_content(Node, FileGuid, Offset) ->
 
 
 -spec get_attrs(node(), file_id:file_guid()) ->
-    {ok, lfm_attrs:file_attributes()} | {error, times_not_synchronized}.
+    {ok, lfm_attrs:file_attributes()} | error().
 get_attrs(Node, FileGuid) ->
     case lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, FileGuid}) of
         % File attrs are constructed from several records so it is possible that
@@ -82,7 +78,7 @@ wait_for_sync(Nodes, FileGuid) ->
 
     lists:foreach(fun(Node) ->
         ?assertMatch({ok, _}, get_attrs(Node, FileGuid), Attempts)
-    end, as_list(Nodes)).
+    end, utils:ensure_list(Nodes)).
 
 
 -spec assert_size(node() | [node()], file_id:file_guid(), file_meta:size()) ->
@@ -92,7 +88,7 @@ assert_size(NodesToVerify, FileGuid, ExpFileSize) ->
 
     lists:foreach(fun(Provider) ->
         ?assertMatch({ok, #file_attr{size = ExpFileSize}}, get_attrs(Provider, FileGuid), Attempts)
-    end, as_list(NodesToVerify)).
+    end, utils:ensure_list(NodesToVerify)).
 
 
 -spec assert_content(node() | [node()], file_id:file_guid(), ExpContent :: binary()) ->
@@ -108,7 +104,7 @@ assert_content(Nodes, FileGuid, ExpContent, Offset) ->
 
     lists:foreach(fun(Node) ->
         ?assertEqual({ok, ExpContent}, get_content(Node, FileGuid, Offset), Attempts)
-    end, as_list(Nodes)).
+    end, utils:ensure_list(Nodes)).
 
 
 %%%===================================================================
@@ -120,9 +116,3 @@ assert_content(Nodes, FileGuid, ExpContent, Offset) ->
 -spec get_attempts() -> non_neg_integer().
 get_attempts() ->
     node_cache:get(attempts, ?DEFAULT_ATTEMPTS).
-
-
-%% @private
--spec as_list(term()) -> list().
-as_list(Term) when is_list(Term) -> Term;
-as_list(Term) -> [Term].
