@@ -9,7 +9,7 @@
 %%% GUI file upload tests
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_upload_test_SUITE).
+-module(api_file_upload_via_gui_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("modules/fslogic/fslogic_common.hrl").
