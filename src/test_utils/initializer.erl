@@ -1196,6 +1196,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 
     test_utils:mock_expect(Workers, space_logic, get, GetSpaceFun),
 
+    test_utils:mock_expect(Workers, space_logic, get_name, fun(SpaceId) ->
+        {ok, #document{value = #od_space{name = Name}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
+        {ok, Name}
+    end),
+
     test_utils:mock_expect(Workers, space_logic, get_name, fun(Client, SpaceId) ->
         {ok, #document{value = #od_space{name = Name}}} = GetSpaceFun(Client, SpaceId),
         {ok, Name}

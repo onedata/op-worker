@@ -119,15 +119,15 @@
 -define(SPACE_HARVESTERS(__Space), [?HARVESTER_1, ?HARVESTER_2]).
 -define(SPACE_STORAGES_VALUE(__Space), #{?STORAGE_1 => 1000000000, ?STORAGE_2 => 1000000000}).
 -define(SPACE_STORAGES_MATCHER(__Space), #{?STORAGE_1 := 1000000000, ?STORAGE_2 := 1000000000}).
--define(SPACE_SUPPORT_PARAMETERS_PER_PROVIDER_VALUE(__Space), #{
+-define(SPACE_SUPPORT_PARAMETERS_REGISTRY_VALUE(__Space), #{
     ?PROVIDER_1 => #{<<"dataWrite">> => <<"global">>, <<"metadataReplication">> => <<"lazy">>},
     ?PROVIDER_2 => #{<<"dataWrite">> => <<"none">>, <<"metadataReplication">> => <<"eager">>}
 }).
--define(SPACE_SUPPORT_PARAMETERS_PER_PROVIDER_MATCHER(__Space), #{
+-define(SPACE_SUPPORT_PARAMETERS_REGISTRY_MATCHER(__Space), #{
     ?PROVIDER_1 := {space_support_parameters, global, lazy},
     ?PROVIDER_2 := {space_support_parameters, none, eager}
 }).
--define(SPACE_SUPPORT_STAGE_PER_PROVIDER_VALUE(__Space), #{
+-define(SPACE_SUPPORT_STAGE_REGISTRY_VALUE(__Space), #{
     ?PROVIDER_1 => #{
         <<"providerStage">> => <<"active">>,
         <<"perStorage">> => #{
@@ -142,7 +142,7 @@
         }
     }
 }).
--define(SPACE_SUPPORT_STAGE_PER_PROVIDER_MATCHER(__Space), #{
+-define(SPACE_SUPPORT_STAGE_REGISTRY_MATCHER(__Space), #{
     ?PROVIDER_1 := #support_stage_details{
         provider_stage = active,
         per_storage = #{
@@ -304,8 +304,8 @@ end).
     shares = ?SPACE_SHARES(__Space),
     harvesters = ?SPACE_HARVESTERS(__Space),
     storages = ?SPACE_STORAGES_MATCHER(__Space),
-    support_parameters_per_provider = ?SPACE_SUPPORT_PARAMETERS_PER_PROVIDER_MATCHER(__Space),
-    support_stage_per_provider = ?SPACE_SUPPORT_STAGE_PER_PROVIDER_MATCHER(__Space)
+    support_parameters_registry = ?SPACE_SUPPORT_PARAMETERS_REGISTRY_MATCHER(__Space),
+    support_stage_registry = ?SPACE_SUPPORT_STAGE_REGISTRY_MATCHER(__Space)
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
@@ -455,8 +455,8 @@ end).
     <<"gri">> => gri:serialize(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
     <<"name">> => ?SPACE_NAME(__SpaceId),
     <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
-    <<"supportParametersPerProvider">> => ?SPACE_SUPPORT_PARAMETERS_PER_PROVIDER_VALUE(__SpaceId),
-    <<"supportStagePerProvider">> => ?SPACE_SUPPORT_STAGE_PER_PROVIDER_VALUE(__SpaceId)
+    <<"supportParametersRegistry">> => ?SPACE_SUPPORT_PARAMETERS_REGISTRY_VALUE(__SpaceId),
+    <<"supportStageRegistry">> => ?SPACE_SUPPORT_STAGE_REGISTRY_VALUE(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{

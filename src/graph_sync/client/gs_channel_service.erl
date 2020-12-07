@@ -185,8 +185,7 @@ healthcheck(LastInterval) ->
             end),
             {ok, calculate_backoff(LastInterval)};
         {true, true, true} ->
-            %% @TODO VFS-6309 make this an independent periodic task with configurable interval
-            report_provider_sync_progress(),
+            gs_hooks:handle_successful_healthcheck(),
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
         {true, true, false} ->
             case start_gs_client_worker() of
@@ -260,24 +259,3 @@ run_on_connect_to_oz_procedures() ->
             force_terminate_connection(),
             error
     end.
-
-
-%% @private
--spec report_provider_sync_progress() -> ok.
-report_provider_sync_progress() ->
-    try
-        {ok, Spaces} = provider_logic:get_spaces(),
-        lists:foreach(fun report_provider_sync_progress/1, Spaces)
-    catch Class:Reason ->
-        ?error_stacktrace("Failed to report provider sync progress to Onezone due to ~w:~p", [Class, Reason])
-    end.
-
-
-%% @private
--spec report_provider_sync_progress(od_space:id()) -> ok.
-report_provider_sync_progress(SpaceId) ->
-    {ok, Providers} = space_logic:get_provider_ids(SpaceId),
-    ProviderSyncProgress = lists:foldl(fun(ProviderId, Acc) ->
-        Acc#{ProviderId => dbsync_state:get_seq_and_timestamp(SpaceId, ProviderId)}
-    end, #{}, Providers),
-    space_logic:report_provider_sync_progress(SpaceId, ProviderSyncProgress).

@@ -11,7 +11,8 @@
 {application, op_worker,
     [
         {description, "Application starts node of oneprovider cluster"},
-        {vsn, "20.02.3"},
+        % NOTE: prematurely bump the version for the sake of the future software line
+        {vsn, "21.02.0-alpha1"},
         {registered, [op_worker_sup]},
         {applications, [
             kernel,

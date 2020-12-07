@@ -27,7 +27,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([get/2, get_protected_data/2]).
--export([get_name/2]).
+-export([get_name/1, get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
 -export([is_owner/2]).
@@ -82,8 +82,12 @@ get_protected_data(SessionId, SpaceId) ->
     }).
 
 
--spec get_name(gs_client_worker:client(), od_space:id()) ->
-    {ok, od_space:name()} | errors:error().
+
+-spec get_name(od_space:id()) -> {ok, od_space:name()} | errors:error().
+get_name(SpaceId) ->
+    get_name(?ROOT_SESS_ID, SpaceId).
+
+-spec get_name(gs_client_worker:client(), od_space:id()) -> {ok, od_space:name()} | errors:error().
 get_name(SessionId, SpaceId) ->
     case get_protected_data(SessionId, SpaceId) of
         {ok, #document{value = #od_space{name = Name}}} ->
@@ -398,12 +402,14 @@ get_harvesters(SpaceId) ->
     end.
 
 
--spec report_provider_sync_progress(od_space:id(), provider_sync_progress:stats()) -> ok | errors:error().
-report_provider_sync_progress(SpaceId, ProviderSyncProgress) ->
+-spec report_provider_sync_progress(od_space:id(), provider_sync_progress:collective_report()) -> ok | errors:error().
+report_provider_sync_progress(SpaceId, CollectiveReport) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
         gri = #gri{type = space_stats, id = SpaceId, aspect = {provider_sync_progress, oneprovider:get_id()}},
-        data = #{<<"providerSyncProgress">> => provider_sync_progress:to_json(ProviderSyncProgress)}
+        data = #{
+            <<"providerSyncProgressReport">> => provider_sync_progress:collective_report_to_json(CollectiveReport)
+        }
     }).
 
 
