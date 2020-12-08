@@ -53,7 +53,7 @@
 
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
--export([reset/1, new_by_partial_context/1, add_file_location/2, set_file_id/2,
+-export([reset/1, new_by_partial_context/1, set_file_location/2, set_file_id/2,
     set_is_dir/2]).
 
 %% Functions that do not modify context
@@ -159,15 +159,10 @@ new_by_partial_context(FilePartialCtx) ->
 reset(FileCtx) ->
     new_by_guid(get_guid_const(FileCtx)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds file location to context record
-%% @end
-%%--------------------------------------------------------------------
--spec add_file_location(ctx(), file_location:id()) -> ctx().
-add_file_location(FileCtx = #file_ctx{file_location_ids = undefined}, _LocationId) ->
+-spec set_file_location(ctx(), file_location:id()) -> ctx().
+set_file_location(FileCtx = #file_ctx{file_location_ids = undefined}, _LocationId) ->
     FileCtx;
-add_file_location(FileCtx = #file_ctx{file_location_ids = Locations}, LocationId) ->
+set_file_location(FileCtx = #file_ctx{file_location_ids = Locations}, LocationId) ->
     FileCtx#file_ctx{
         file_location_ids = [LocationId | Locations]
     }.
@@ -491,21 +486,38 @@ get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate)
             StorageFileId = <<?DIRECTORY_SEPARATOR>>,
             {StorageFileId, FileCtx0#file_ctx{storage_file_id = StorageFileId}};
         false ->
-            case get_local_file_location_doc(FileCtx0, false) of
-                {#document{value = #file_location{file_id = ID, storage_file_created = SFC}}, FileCtx}
-                    when ID =/= undefined andalso (SFC or Generate) ->
-                    {ID, FileCtx};
-                {_, FileCtx} ->
-                    % Check if id should be generated
-                    {Continue, FileCtx2} = case Generate of
-                        true -> {true, FileCtx};
-                        _ -> is_dir(FileCtx)
+            {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+            case IsDir of
+                true ->
+                    StorageFileIdOrUndefined = case get_dir_location_doc_const(FileCtx1) of
+                        undefined ->
+                            undefined;
+                        DirLocation ->
+                            dir_location:get_storage_file_id(DirLocation)
                     end,
-                    case Continue of
-                        true ->
-                            get_new_storage_file_id(FileCtx2);
-                        _ ->
-                            {undefined, FileCtx2}
+                    case StorageFileIdOrUndefined of
+                        undefined ->
+                            get_new_storage_file_id(FileCtx1);
+                        StorageFileId ->
+                            {StorageFileId, FileCtx1#file_ctx{storage_file_id = StorageFileId}}
+                    end;
+                false ->
+                    case get_local_file_location_doc(FileCtx1, false) of
+                        {#document{
+                            value = #file_location{file_id = StorageFileId, storage_file_created = SFC}
+                        }, FileCtx2}
+                            when StorageFileId =/= undefined
+                            andalso (SFC or Generate)
+                        ->
+                            {StorageFileId, FileCtx2#file_ctx{storage_file_id = StorageFileId}};
+                        {_, FileCtx2} ->
+                            % Check if id should be generated
+                            case Generate of
+                                true ->
+                                    get_new_storage_file_id(FileCtx2);
+                                _ ->
+                                    {undefined, FileCtx2}
+                            end
                     end
             end
     end;
@@ -516,14 +528,18 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
 get_new_storage_file_id(FileCtx) ->
     {Storage, FileCtx2} = get_storage(FileCtx),
     Helper = storage:get_helper(Storage),
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
     case helper:get_storage_path_type(Helper) of
         ?FLAT_STORAGE_PATH ->
-            {FileId, FileCtx3} = storage_file_id:flat(FileCtx2),
+            FileUuid = file_ctx:get_uuid_const(FileCtx2),
+            StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
             % TODO - do not get_canonical_path (fix acceptance tests before)
-            {_, FileCtx4} = get_canonical_path(FileCtx3),
-            {FileId, FileCtx4#file_ctx{storage_file_id = FileId}};
+            {_, FileCtx3} = get_canonical_path(FileCtx2),
+            {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}};
         ?CANONICAL_STORAGE_PATH ->
-            {StorageFileId, FileCtx3} = storage_file_id:canonical(FileCtx2),
+            {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+            StorageId = storage:get_id(Storage),
+            StorageFileId = storage_file_id:canonical(CanonicalPath, SpaceId, StorageId),
             {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}}
     end.
 
@@ -1340,7 +1356,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true) ->
             {Location, FileCtx2}
     end;
 get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocationExists) ->
-    case location_and_link_utils:get_new_file_location_doc(FileCtx, false, false) of
+    case location_and_link_utils:create_new_file_location_doc(FileCtx, false, false) of
         {{ok, _}, FileCtx2} ->
             {LocationDocs, FileCtx3} = get_file_location_docs(FileCtx2, true, false),
             lists:foreach(fun(ChangedLocation) ->

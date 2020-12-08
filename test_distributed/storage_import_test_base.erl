@@ -63,8 +63,7 @@
     create_directory_import_many_test/1,
     create_empty_file_import_test/1,
     create_file_import_test/1,
-    create_delete_import_test_read_both/1,
-    create_delete_import_test_read_remote_only/1,
+    create_delete_import_test/1,
     create_file_import_check_user_id_test/1,
     create_file_import_check_user_id_error_test/1,
     create_file_in_dir_import_test/1,
@@ -78,6 +77,8 @@
     create_file_import_race_test/1,
     close_file_import_race_test/2,
     delete_file_reimport_race_test/2,
+    remote_delete_file_reimport_race_test/2,
+    remote_delete_file_reimport_race2_test/2,
     delete_opened_file_reimport_race_test/2,
 
     % tests of update
@@ -91,7 +92,7 @@
     sync_should_update_blocks_of_recreated_file_with_suffix_on_storage/2,
     sync_should_not_import_replicated_file_with_suffix_on_storage/2,
     sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed/1,
-    create_delete_import2_test/2,
+    create_delete_import2_test/1,
     create_subfiles_and_delete_before_import_is_finished_test/1,
     create_file_in_dir_update_test/1,
     changing_max_depth_test/1,
@@ -558,13 +559,7 @@ create_file_import_test(Config) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
 
-create_delete_import_test_read_both(Config) ->
-    create_delete_import_test(Config, true).
-
-create_delete_import_test_read_remote_only(Config) ->
-    create_delete_import_test(Config, false).
-
-create_delete_import_test(Config, ReadBoth) ->
+create_delete_import_test(Config) ->
     [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
     Attempts = 60,
 
@@ -602,12 +597,7 @@ create_delete_import_test(Config, ReadBoth) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID, ?ATTEMPTS),
 
-    ReadWorkers = case ReadBoth of
-        true -> Workers;
-        _ -> [W2]
-    end,
-
-    multi_provider_file_ops_test_base:verify_workers(ReadWorkers, fun(W) ->
+    multi_provider_file_ops_test_base:verify_workers(Workers, fun(W) ->
         ?assertMatch({ok, ?TEST_DATA},
             begin
                 SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W)}}, Config),
@@ -630,10 +620,10 @@ create_delete_import_test(Config, ReadBoth) ->
     ?assertEqual({ok, ?TEST_DATA}, sd_test_utils:read_file(W2, SDHandle2, 0, ?TEST_DATA_SIZE)),
 
     SessIdW2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    {ok, #file_attr{guid = GUID}} = ?assertMatch({ok, #file_attr{}},
+    {ok, #file_attr{guid = Guid}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
-    ?assertMatch(ok, lfm_proxy:unlink(W2, ?ROOT_SESS_ID, {guid, GUID})),
+    ?assertMatch(ok, lfm_proxy:unlink(W2, ?ROOT_SESS_ID, {guid, Guid})),
     ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W2, SDHandle2, 0, ?TEST_DATA_SIZE), Attempts),
     ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W1, SDHandle, 0, ?TEST_DATA_SIZE), Attempts),
     ok.
@@ -959,7 +949,7 @@ create_remote_dir_import_race_test(Config) ->
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
     {ok, _} = rpc:call(W2, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),
-    ?assertMatch({ok, _, _}, rpc:call(W1, file_meta, get_child_uuid_and_tree_id, [SpaceUuid, ?TEST_DIR]), ?ATTEMPTS),
+    ?assertMatch({ok, _, _}, get_link(W1, SpaceUuid, ?TEST_DIR), ?ATTEMPTS),
 
     % storage import should import directory with conflicting name
     ProviderId1 = provider_id(W1),
@@ -1020,7 +1010,7 @@ create_remote_file_import_race_test(Config) ->
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
     {ok, _} = rpc:call(W2, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_FILE1, FileUuid}]),
-    ?assertMatch({ok, _, _}, rpc:call(W1, file_meta, get_child_uuid_and_tree_id, [SpaceUuid, ?TEST_FILE1]), ?ATTEMPTS),
+    ?assertMatch({ok, _, _}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
 
     % storage import should import file with conflicting name
     ProviderId1 = provider_id(W1),
@@ -1372,6 +1362,140 @@ delete_file_reimport_race_test(Config, StorageType) ->
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 1), ?ATTEMPTS).
+
+
+remote_delete_file_reimport_race_test(Config, StorageType) ->
+    % in this test, we check whether storage import does not reimport file that is deleted
+    % by a remote provider and if only deletion of link is synchronized when scan is performed
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+    RDWRStorage = get_rdwr_storage(Config, W1),
+
+    %% Create file
+    {ok, FileGuid} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, 8#644),
+    {ok, Handle1} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(W1, Handle1, 0, ?TEST_DATA),
+    ok = lfm_proxy:close(W1, Handle1),
+
+    %% Replicate file to remote provider
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, FileGuid}, read), ?ATTEMPTS),
+    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, Handle2, 0, 10), ?ATTEMPTS),
+
+    % pretend that only synchronization of deletion of link has happened
+    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    {FileUuid, _} = file_id:unpack_guid(FileGuid),
+    remove_link(W2, SpaceUuid, ?TEST_FILE1, FileUuid),
+
+    % wait till deletion of link is synchronized
+    ?assertMatch({error, not_found}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+
+    timer:sleep(timer:seconds(1)),
+    ?EXEC_ON_POSIX_ONLY(fun() ->
+        % touch space dir to ensure that it will be scanned
+        RDWRStorageMountPoint = get_mount_point(RDWRStorage),
+        ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
+        touch(W1, ContainerStorageSpacePath)
+    end, StorageType),
+
+    enable_initial_scan(Config, ?SPACE_ID),
+    assertInitialScanFinished(W1, ?SPACE_ID),
+
+    %% Check if file was not reimported on W1
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"createdMinHist">> => 0,
+        <<"createdHourHist">> => 0,
+        <<"createdDayHist">> => 0,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
+    }, ?SPACE_ID),
+
+    %% Check if file was deleted on W2
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 1), ?ATTEMPTS).
+
+
+remote_delete_file_reimport_race2_test(Config, StorageType) ->
+    % in this test, we check whether storage import does not reimport file that is deleted
+    % by a remote provider and if only deletion of link is synchronized when scan is performed
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+    RDWRStorage = get_rdwr_storage(Config, W1),
+
+    %% Create file in remote provider
+    {ok, FileGuid} = lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH1, 8#644),
+    {ok, Handle1} = lfm_proxy:open(W2, SessId2, {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(W2, Handle1, 0, ?TEST_DATA),
+    ok = lfm_proxy:close(W2, Handle1),
+
+    %% Replicate file to local provider
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, FileGuid}, read), ?ATTEMPTS),
+    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W1, Handle2, 0, 10), ?ATTEMPTS),
+
+    % pretend that only synchronization of deletion of link has happened
+    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    {FileUuid, _} = file_id:unpack_guid(FileGuid),
+    remove_link(W2, SpaceUuid, ?TEST_FILE1, FileUuid),
+
+    % wait till deletion of link is synchronized
+    ?assertMatch({error, not_found}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+
+    timer:sleep(timer:seconds(1)),
+    ?EXEC_ON_POSIX_ONLY(fun() ->
+        % touch space dir to ensure that it will be scanned
+        RDWRStorageMountPoint = get_mount_point(RDWRStorage),
+        ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
+        touch(W1, ContainerStorageSpacePath)
+    end, StorageType),
+
+
+    enable_initial_scan(Config, ?SPACE_ID),
+    assertInitialScanFinished(W1, ?SPACE_ID),
+
+    %% Check if file was not reimported on W1
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"createdMinHist">> => 0,
+        <<"createdHourHist">> => 0,
+        <<"createdDayHist">> => 0,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
+    }, ?SPACE_ID),
+
+    %% Check if file was deleted on W2
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 1), ?ATTEMPTS).
+
 
 delete_opened_file_reimport_race_test(Config, StorageType) ->
     % in this test, we check whether storage import does not reimport file that is deleted while still opened,
@@ -2182,7 +2306,7 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
-create_delete_import2_test(Config, ReadBoth) ->
+create_delete_import2_test(Config) ->
     [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
     Attempts = 60,
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -2196,12 +2320,7 @@ create_delete_import2_test(Config, ReadBoth) ->
     Size = byte_size(?TEST_DATA),
     enable_initial_scan(Config, ?SPACE_ID),
 
-    ReadWorkers = case ReadBoth of
-        true -> Workers;
-        _ -> [W2]
-    end,
-
-    multi_provider_file_ops_test_base:verify_workers(ReadWorkers, fun(W) ->
+    multi_provider_file_ops_test_base:verify_workers(Workers, fun(W) ->
         ?assertMatch({ok, ?TEST_DATA},
             begin
                 SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W)}}, Config),
@@ -2227,9 +2346,10 @@ create_delete_import2_test(Config, ReadBoth) ->
     SessIdW1 = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessIdW2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
 
-    {ok, #file_attr{guid = GUID}} = ?assertMatch({ok, #file_attr{}},
+    {ok, #file_attr{guid = Guid}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    ?assertMatch(ok, lfm_proxy:unlink(W2, <<"0">>, {guid, GUID})),
+    
+    ?assertMatch(ok, lfm_proxy:unlink(W2, <<"0">>, {guid, Guid})),
 
     ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W1, SDHandle, 0, ?TEST_DATA_SIZE), Attempts),
     ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W2, SDHandle2, 0, ?TEST_DATA_SIZE), Attempts),
@@ -4332,7 +4452,7 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config)
     StatTime = get_last_stat_timestamp(W1, StorageFileId, ?SPACE_ID),
     %pretend that there were 2 modifications at the same time and that the second
     %was after storage import performed stat on the file
-    {ok, _} = rpc:call(W1, storage_sync_info, create_or_update,
+    ok = rpc:call(W1, storage_sync_info, create_or_update,
         [StorageTestFilePath, ?SPACE_ID, fun(SSI) -> {ok, SSI#storage_sync_info{last_stat = StatTime}} end]),
     {ok, _} = sd_test_utils:write_file(W1, SDHandle, ?CHANGED_BYTE_OFFSET, ?CHANGED_BYTE),
     change_time(HostStorageTestFilePath, StatTime),
@@ -5580,12 +5700,20 @@ disable_storage_sync(Config) ->
     assertNoScanInProgress(W1, ?SPACE_ID, 600),
     ok = rpc:call(W1, storage_import_config, delete, [?SPACE_ID]).
 
+clean_not_imported_storage(Config) ->
+    [_W1, W2 | _] = ?config(op_worker_nodes, Config),
+    Storage = initializer:get_supporting_storage_id(W2, ?SPACE_ID),
+    clean_storage(W2, Storage, false).
+
 clean_synced_storage(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     Storage = get_rdwr_storage(Config, W1),
-    SpaceDir = provider_storage_path(?SPACE_ID, <<"">>),
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, SpaceDir, Storage),
-    ok = sd_test_utils:recursive_rm(W1, SDHandle, true).
+    clean_storage(W1, Storage, true).
+
+clean_storage(Worker, Storage, ImportedStorage) ->
+    SpaceDir = provider_storage_path(?SPACE_ID, <<"">>, ImportedStorage),
+    SDHandle = sd_test_utils:new_handle(Worker, ?SPACE_ID, SpaceDir, Storage),
+    ok = sd_test_utils:recursive_rm(Worker, SDHandle, true).
 
 clean_space(Config) ->
     [W, W2 | _] = ?config(op_worker_nodes, Config),
@@ -5951,10 +6079,16 @@ storage_import_monitoring_description(SSM) ->
 provider_id(Worker) ->
     rpc:call(Worker, oneprovider, get_id, []).
 
+get_link(Worker, ParentUuid, FileName) ->
+    rpc:call(Worker, file_meta, get_child_uuid_and_tree_id, [ParentUuid, FileName]).
+
 remove_link(Worker, ParentUuid, FileName) ->
     Ctx = rpc:call(Worker, file_meta, get_ctx, []),
     TreeId = provider_id(Worker),
     ok = rpc:call(Worker, datastore_model, delete_links, [Ctx#{scope => ?SPACE_ID}, ParentUuid, TreeId, FileName]).
+
+remove_link(Worker, ParentUuid, FileName, FileUuid) ->
+    ok = rpc:call(Worker, file_meta, delete_child_link, [ParentUuid, ?SPACE_ID, FileUuid, FileName]).
 
 remove_deletion_link(Worker, SpaceId, FileName, ParentCtx) ->
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
@@ -6274,6 +6408,15 @@ end_per_testcase(create_remote_file_import_race_test, Config) ->
     remove_link(W2, SpaceUuid, ?TEST_FILE1),
     end_per_testcase(default, Config);
 
+end_per_testcase(Case, Config)
+    when Case =:= remote_delete_file_reimport_race_test;
+    Case =:= remote_delete_file_reimport_race2_test
+->
+    [W1| _] = ?config(op_worker_nodes, Config),
+    StorageFileId = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, ?TEST_FILE1]),
+    rpc:call(W1, storage_sync_info, delete, [StorageFileId, ?SPACE_ID]),
+    end_per_testcase(default, Config);
+
 end_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage, Config) ->
     [W1| _] = ?config(op_worker_nodes, Config),
     % remove stalled deletion link
@@ -6307,6 +6450,7 @@ end_per_testcase(_Case, Config) ->
     clean_traverse_tasks(W1),
     clean_space(Config),
     clean_synced_storage(Config),
+    clean_not_imported_storage(Config),
     cleanup_storage_import_monitoring_model(W1, ?SPACE_ID),
     test_utils:mock_unload(Workers, [storage_import_engine, storage_import_hash, link_utils,
         storage_sync_traverse, storage_import_deletion, storage_driver, helpers]),

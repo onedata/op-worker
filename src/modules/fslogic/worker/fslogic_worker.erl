@@ -169,6 +169,7 @@ init(_Args) ->
 
     transfer:init(),
     replica_deletion_master:init_workers_pool(),
+    file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
 
@@ -265,6 +266,7 @@ handle(_Request) ->
 cleanup() ->
     transfer:cleanup(),
     autocleaning_view_traverse:stop_pool(),
+    file_registration:stop_pool(),
     replica_deletion_master:stop_workers_pool(),
     replica_synchronizer:terminate_all(),
     ok.

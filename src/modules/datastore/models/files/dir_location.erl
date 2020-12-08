@@ -15,10 +15,11 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([mark_dir_created_on_storage/1, mark_dir_synced_from_storage/2,
+-export([mark_dir_created_on_storage/2,
+    mark_dir_synced_from_storage/3,
     mark_deleted_from_storage/1,
     is_storage_file_created/1, get_synced_gid/1, get/1,
-    delete/1]).
+    delete/1, get_storage_file_id/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2]).
@@ -35,21 +36,25 @@
 %%% API
 %%%===================================================================
 
--spec mark_dir_created_on_storage(key()) -> ok | {error, term()}.
-mark_dir_created_on_storage(FileUuid) ->
+-spec mark_dir_created_on_storage(key(), helpers:file_id()) -> ok | {error, term()}.
+mark_dir_created_on_storage(FileUuid, StorageFileId) ->
     Diff = fun(DirLocation) ->
-        {ok, DirLocation#dir_location{storage_file_created = true}}
+        {ok, DirLocation#dir_location{
+            storage_file_created = true,
+            storage_file_id = StorageFileId
+        }}
     end,
     {ok, Default} = Diff(#dir_location{}),
     ?extract_ok(datastore_model:update(?CTX, FileUuid, Diff, Default)).
 
--spec mark_dir_synced_from_storage(key(), luma:gid() | undefined) ->
+-spec mark_dir_synced_from_storage(key(), helpers:file_id(), luma:gid() | undefined) ->
     ok | {error, term()}.
-mark_dir_synced_from_storage(FileUuid, SyncedGid) ->
+mark_dir_synced_from_storage(FileUuid, StorageFileId, SyncedGid) ->
     Doc = #document{
         key = FileUuid,
         value = #dir_location{
             storage_file_created = true,
+            storage_file_id = StorageFileId,
             synced_gid = SyncedGid
         }
     },
@@ -66,6 +71,13 @@ mark_deleted_from_storage(FileUuid) ->
 -spec get(key()) -> {ok, doc()} | {error, term()}.
 get(Key)  ->
     datastore_model:get(?CTX, Key).
+
+
+-spec get_storage_file_id(dir_location() | doc()) -> helpers:file_id() | undefined.
+get_storage_file_id(#document{value = DirLocation}) ->
+    get_storage_file_id(DirLocation);
+get_storage_file_id(#dir_location{storage_file_id = StorageFileId}) ->
+    StorageFileId.
 
 
 -spec is_storage_file_created(doc() | dir_location()) -> boolean().
@@ -105,7 +117,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -121,6 +133,14 @@ get_record_struct(1) ->
 get_record_struct(2) ->
     {record, [
         {storage_file_created, boolean},
+        % field synced_gid was added in this version
+        {synced_gid, integer}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {storage_file_created, boolean},
+        % field storage_file_id was added in this version
+        {storage_file_id, string},
         {synced_gid, integer}
     ]}.
 
@@ -132,4 +152,7 @@ get_record_struct(2) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, StorageFileCreated}) ->
-    {2, {?MODULE, StorageFileCreated, undefined}}.
+    {2, {?MODULE, StorageFileCreated, undefined}};
+upgrade_record(2, {?MODULE, StorageFileCreated, SyncedGid}) ->
+    % field storage_file_id was added in this version
+    {3, {?MODULE, StorageFileCreated, undefined, SyncedGid}}.

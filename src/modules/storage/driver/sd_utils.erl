@@ -470,11 +470,13 @@ mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
     {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
     Result = case storage_driver:mkdir(SDHandle, Mode, false) of
         ok ->
-            case dir_location:mark_dir_created_on_storage(FileUuid) of
-                ok -> {ok, FileCtx3};
+            FileCtx4 = maybe_set_guid_in_storage_sync_info(FileCtx3),
+            {StorageFileId, FileCtx5} = file_ctx:get_storage_file_id(FileCtx4),
+            case dir_location:mark_dir_created_on_storage(FileUuid, StorageFileId) of
+                ok -> {ok, FileCtx5};
                 % helpers on ceph and s3 always return ok on mkdir operation
                 % so we have to handle situation when doc is already in db
-                {error, already_exists} -> {ok, FileCtx3}
+                {error, already_exists} -> {ok, FileCtx5}
             end;
         {error, ?EEXIST} ->
             {ok, FileCtx3};
@@ -578,7 +580,9 @@ should_chown(UserCtx, FileCtx) ->
 -spec mark_parent_dirs_created_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok.
 mark_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
     ParentCtxs = get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, []),
-    mark_parent_dirs_created_on_storage(ParentCtxs).
+    {IsImported, DirCtx2} = file_ctx:is_imported_storage(DirCtx),
+    {StorageId, _DirCtx3} = file_ctx:get_storage_id(DirCtx2),
+    mark_parent_dirs_created_on_storage(ParentCtxs, StorageId, IsImported).
 
 -spec get_parent_dirs_not_created_on_storage(file_ctx:ctx(), user_ctx:ctx(), [file_ctx:ctx()]) -> [file_ctx:ctx()].
 get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, ParentCtxs) ->
@@ -595,10 +599,29 @@ get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, ParentCtxs) ->
             end
     end.
 
--spec mark_parent_dirs_created_on_storage([file_ctx:ctx()]) -> ok.
-mark_parent_dirs_created_on_storage([]) ->
+-spec mark_parent_dirs_created_on_storage([file_ctx:ctx()], storage:id(), IsImportedStorage :: boolean()) -> ok.
+mark_parent_dirs_created_on_storage([], _StorageId, _IsImportedStorage) ->
     ok;
-mark_parent_dirs_created_on_storage([DirCtx | RestCtxs]) ->
+mark_parent_dirs_created_on_storage([DirCtx | RestCtxs], StorageId, IsImportedStorage) ->
     Uuid = file_ctx:get_uuid_const(DirCtx),
-    dir_location:mark_dir_created_on_storage(Uuid),
-    mark_parent_dirs_created_on_storage(RestCtxs).
+    {StorageFileId, DirCtx2} = file_ctx:get_storage_file_id(DirCtx),
+    case IsImportedStorage of
+        true ->
+            SpaceId = file_ctx:get_space_id_const(DirCtx2),
+            FileGuid = file_ctx:get_guid_const(DirCtx2),
+            storage_sync_info:maybe_set_guid(StorageFileId, SpaceId, StorageId, FileGuid);
+        false ->
+            ok
+    end,
+    dir_location:mark_dir_created_on_storage(Uuid, StorageFileId),
+    mark_parent_dirs_created_on_storage(RestCtxs, StorageId, IsImportedStorage).
+
+
+-spec maybe_set_guid_in_storage_sync_info(file_ctx:ctx()) -> file_ctx:ctx().
+maybe_set_guid_in_storage_sync_info(FileCtx) ->
+    {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    FileGuid = file_ctx:get_space_id_const(FileCtx2),
+    {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    storage_sync_info:maybe_set_guid(StorageFileId, SpaceId, StorageId, FileGuid),
+    FileCtx3.

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_new_file_location_doc/3, is_location_created/2,
+-export([create_new_file_location_doc/3, is_location_created/2,
     mark_location_created/3]).
 -export([create_imported_file_location/7, update_imported_file_location/2]).
 -export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1,
@@ -40,11 +40,12 @@
 %% Creates file location of storage file
 %% @end
 %%--------------------------------------------------------------------
--spec get_new_file_location_doc(file_ctx:ctx(), StorageFileCreated :: boolean(),
+-spec create_new_file_location_doc(file_ctx:ctx(), StorageFileCreated :: boolean(),
     GeneratedKey :: boolean()) -> {{ok, file_location:record()} | {error, already_exists}, file_ctx:ctx()}.
-get_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
+create_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
     {StorageFileId, FileCtx2} = file_ctx:get_new_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
     {Size, FileCtx4} = file_ctx:get_file_size_from_remote_locations(FileCtx3),
@@ -57,13 +58,14 @@ get_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
         storage_file_created = StorageFileCreated,
         size = Size
     },
+    storage_sync_info:maybe_set_guid(StorageFileId, SpaceId, StorageId, FileGuid),
     LocId = file_location:local_id(FileUuid),
     case fslogic_location_cache:create_location(#document{
         key = LocId,
         value = Location
     }, GeneratedKey) of
         {ok, _LocId} ->
-            FileCtx5 = file_ctx:add_file_location(FileCtx4, LocId),
+            FileCtx5 = file_ctx:set_file_location(FileCtx4, LocId),
             {{ok, Location}, FileCtx5};
         {error, already_exists} = Error ->
             {Error, FileCtx4}

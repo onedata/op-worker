@@ -24,6 +24,8 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 -export([
     operation_supported/3,
@@ -278,7 +280,7 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     StorageId = maps:get(<<"storageId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId),
     middleware_utils:assert_space_supported_with_storage(SpaceId, StorageId),
-    storage_import:assert_manual_import_mode(SpaceId).
+    storage_import:assert_imported_storage(StorageId).
 
 
 %%--------------------------------------------------------------------
@@ -345,17 +347,20 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     DestinationPath = maps:get(<<"destinationPath">>, Data),
     StorageId = maps:get(<<"storageId">>, Data),
     StorageFileId = maps:get(<<"storageFileId">>, Data),
-    {ok, FileGuid} = try
-        file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data)
+    try
+        case file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data) of
+            {ok, FileGuid} ->
+                {ok, FileId} = file_id:guid_to_objectid(FileGuid),
+                {ok, value, FileId};
+            Error2 ->
+                throw(Error2)
+end
     catch
         throw:{error, _} = Error ->
             throw(Error);
         throw:PosixErrno ->
             throw(?ERROR_POSIX(PosixErrno))
-    end,
-    {ok, FileId} = file_id:guid_to_objectid(FileGuid),
-    {ok, value, FileId}.
-
+    end.
 
 %%%===================================================================
 %%% GET SECTION

@@ -42,9 +42,19 @@
 -export_type([key/0, doc/0, record/0, hashes/0]).
 
 %% API
--export([get/2, get_mtime/1, get_batch_hash/3, are_all_batches_processed/1, delete/2, init_batch_counters/2,
-    update_mtime/4, increase_batches_to_process/2, increase_batches_to_process/3, update_hashes/3,
-    mark_processed_batch/3, mark_processed_batch/6, mark_processed_batch/7]).
+-export([
+    get/2,
+    get_mtime/1, get_batch_hash/3, get_guid/1,
+    are_all_batches_processed/1,
+    update_mtime/5,
+    delete/2
+]).
+-export([
+    maybe_set_guid/4, set_guid/3,
+    init_batch_counters/2,
+    increase_batches_to_process/2, increase_batches_to_process/3,
+    mark_processed_batch/4, mark_processed_batch/7, mark_processed_batch/8
+]).
 
 % exported for CT tests
 -export([create_or_update/3]).
@@ -62,19 +72,44 @@
 get(StorageFileId, SpaceId) ->
     datastore_model:get(?CTX, id(StorageFileId, SpaceId)).
 
+
 -spec get_mtime(record() | doc()) -> times:m_time().
 get_mtime(#document{value = SSI}) ->
     get_mtime(SSI);
 get_mtime(#storage_sync_info{mtime = Mtime}) ->
     Mtime.
 
+
 -spec get_batch_hash(non_neg_integer(), non_neg_integer(), doc()) -> hash() | undefined.
 get_batch_hash(Offset, BatchSize, #document{value = #storage_sync_info{children_hashes = Hashes}}) ->
     maps:get(batch_key(Offset, BatchSize), Hashes, undefined).
 
+-spec maybe_set_guid(helpers:file_id(), od_space:id(), storage:id(), file_id:file_guid()) -> ok.
+maybe_set_guid(StorageFileId, SpaceId, StorageId, Guid) ->
+    case storage:is_imported(StorageId) of
+        true -> set_guid(StorageFileId, SpaceId, Guid);
+        false -> ok
+    end.
+
+
+-spec set_guid(helpers:file_id(), od_space:id(), file_id:file_guid()) -> ok.
+set_guid(StorageFileId, SpaceId, Guid) ->
+    create_or_update(StorageFileId, SpaceId, fun(SSI) ->
+        {ok, SSI#storage_sync_info{guid = Guid}}
+    end).
+
+
+-spec get_guid(record() | doc()) -> file_id:file_guid() | undefined.
+get_guid(#document{value = StorageSyncInfo}) ->
+    get_guid(StorageSyncInfo);
+get_guid(#storage_sync_info{guid = GuidOrUndefined}) ->
+    GuidOrUndefined.
+
+
 -spec delete(helpers:file_id(), od_space:id()) -> ok | error().
 delete(StorageFileId, SpaceId) ->
     datastore_model:delete(?CTX, id(StorageFileId, SpaceId)).
+
 
 -spec are_all_batches_processed(record() | doc()) -> boolean().
 are_all_batches_processed(#document{value = SSI}) ->
@@ -85,6 +120,7 @@ are_all_batches_processed(#storage_sync_info{
 }) ->
     BatchesToProcess =:= BatchesProcessed.
 
+
 %%-------------------------------------------------------------------
 %% @doc
 %% This function is called before scheduling job for processing first
@@ -94,24 +130,25 @@ are_all_batches_processed(#storage_sync_info{
 %%-------------------------------------------------------------------
 -spec init_batch_counters(helpers:file_id(), od_space:id()) -> ok.
 init_batch_counters(StorageFileId, SpaceId) ->
-    ok = ?extract_ok(create_or_update(StorageFileId, SpaceId,
-        fun(SSI) ->
-            {ok, SSI#storage_sync_info{
-                batches_to_process = 1,
-                batches_processed = 0,
-                hashes_to_update = #{}
-            }}
-        end
-    )).
-
--spec update_mtime(helpers:file_id(), od_space:id(), times:m_time(), non_neg_integer()) -> ok.
-update_mtime(StorageFileId, SpaceId, NewMtime, StatTimestamp) ->
-    ok = ?extract_ok(create_or_update(StorageFileId, SpaceId, fun(SSI) ->
+    create_or_update(StorageFileId, SpaceId, fun(SSI) ->
         {ok, SSI#storage_sync_info{
+            batches_to_process = 1,
+            batches_processed = 0,
+            hashes_to_update = #{}
+        }}
+    end).
+
+
+-spec update_mtime(helpers:file_id(), od_space:id(), file_id:file_guid(), times:m_time(), non_neg_integer()) -> ok.
+update_mtime(StorageFileId, SpaceId, Guid, NewMtime, StatTimestamp) ->
+    create_or_update(StorageFileId, SpaceId, fun(SSI) ->
+        {ok, SSI#storage_sync_info{
+            guid = Guid,
             mtime = NewMtime,
             last_stat = StatTimestamp
         }}
-    end)).
+    end).
+
 
 -spec increase_batches_to_process(helpers:file_id(), od_space:id()) -> ok.
 increase_batches_to_process(StorageFileId, SpaceId) ->
@@ -119,20 +156,22 @@ increase_batches_to_process(StorageFileId, SpaceId) ->
 
 -spec increase_batches_to_process(helpers:file_id(), od_space:id(), non_neg_integer()) -> ok.
 increase_batches_to_process(StorageFileId, SpaceId, Number) ->
-    ok = ?extract_ok(create_or_update(StorageFileId, SpaceId,
+    create_or_update(StorageFileId, SpaceId,
         fun(SSI = #storage_sync_info{batches_to_process = ToProcess}) ->
             {ok, SSI#storage_sync_info{batches_to_process = ToProcess + Number}}
         end
-    )).
+    ).
 
--spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | times:m_time()) -> {ok, doc()}.
-mark_processed_batch(StorageFileId, SpaceId, Mtime) ->
-    mark_processed_batch(StorageFileId, SpaceId, Mtime, undefined, undefined, undefined, true).
 
--spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | times:m_time(),
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), file_id:file_guid(),
+    undefined | times:m_time()) -> {ok, doc()}.
+mark_processed_batch(StorageFileId, SpaceId, Guid, Mtime) ->
+    mark_processed_batch(StorageFileId, SpaceId, Guid, Mtime, undefined, undefined, undefined, true).
+
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), file_id:file_guid(), undefined | times:m_time(),
     undefined | non_neg_integer(), undefined | non_neg_integer(), undefined | hash()) -> {ok, doc()}.
-mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, Length, BatchHash) ->
-    mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, Length, BatchHash, true).
+mark_processed_batch(StorageFileId, SpaceId, Guid, Mtime, Offset, Length, BatchHash) ->
+    mark_processed_batch(StorageFileId, SpaceId, Guid, Mtime, Offset, Length, BatchHash, true).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -150,9 +189,9 @@ mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, Length, BatchHash) -
 %% mtime fields.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | times:m_time(), undefined | non_neg_integer(),
-    undefined | non_neg_integer(), undefined | hash(), boolean()) -> {ok, doc()}.
-mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, BatchSize, BatchHash, UpdateHashesOnFinish) ->
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), file_id:file_guid(), undefined | times:m_time(),
+    undefined | non_neg_integer(), undefined | non_neg_integer(), undefined | hash(), boolean()) -> {ok, doc()}.
+mark_processed_batch(StorageFileId, SpaceId, Guid, Mtime, Offset, BatchSize, BatchHash, UpdateHashesOnFinish) ->
     update(StorageFileId, SpaceId, fun(SSI = #storage_sync_info{
         mtime = OldMtime,
         batches_processed = BatchesProcessed,
@@ -162,43 +201,22 @@ mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, BatchSize, BatchHash
     }) ->
         BatchesProcessed2 = BatchesProcessed + 1,
         HashesToUpdate2 = update_hashes_map(Offset, BatchSize, BatchHash, HashesToUpdate),
+        SSI2 = SSI#storage_sync_info{
+            guid = Guid,
+            batches_processed = BatchesProcessed2
+        },
         case UpdateHashesOnFinish and (BatchesProcessed2 =:= BatchesToProcess) of
             true ->
-                {ok, SSI#storage_sync_info{
-                    batches_processed = BatchesProcessed2,
+                {ok, SSI2#storage_sync_info{
                     hashes_to_update = #{},
                     children_hashes = maps:merge(ChildrenHashes, HashesToUpdate),
                     mtime = utils:ensure_defined(Mtime, OldMtime)
                 }};
             false ->
-                {ok, SSI#storage_sync_info{
-                    batches_processed = BatchesProcessed2,
+                {ok, SSI2#storage_sync_info{
                     hashes_to_update = HashesToUpdate2
                 }}
         end
-    end).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% This function might be called only after batches_processed counter
-%% reached batched_to_process.
-%% It is used to update children_hashes map according to values stored
-%% in hashes_to_update.
-%% It also update mtime field.
-%% @end
-%%-------------------------------------------------------------------
--spec update_hashes(helpers:file_id(), od_space:id(), times:m_time()) -> {ok, doc()}.
-update_hashes(StorageFileId, SpaceId, Mtime) ->
-    update(StorageFileId, SpaceId, fun(SSI = #storage_sync_info{
-        % this function might be called only when counters are equal
-        children_hashes = ChildrenHashes,
-        hashes_to_update = HashesToUpdate
-    }) ->
-        {ok, SSI#storage_sync_info{
-           mtime = Mtime,
-            children_hashes = maps:merge(ChildrenHashes, HashesToUpdate),
-            hashes_to_update = #{}
-        }}
     end).
 
 %%===================================================================
@@ -213,7 +231,7 @@ id(StorageFileId, SpaceId) ->
 create_or_update(StorageFileId, SpaceId, Diff) ->
     Id = id(StorageFileId, SpaceId),
     DefaultDoc = default_doc(Id, Diff, SpaceId),
-    datastore_model:update(?CTX, Id, Diff, DefaultDoc).
+    ok = ?extract_ok(datastore_model:update(?CTX, Id, Diff, DefaultDoc)).
 
 %%===================================================================
 %% Internal functions
@@ -259,7 +277,7 @@ batch_key(Offset, Length) -> Offset div Length.
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -301,6 +319,17 @@ get_record_struct(4) ->
         {batches_to_process, integer},
         {batches_processed, integer},
         {hashes_to_update, #{integer => binary}}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        % field guid has been added in this version
+        {guid, string},
+        {children_hashes, #{integer => binary}},
+        {mtime, integer},
+        {last_stat, integer},
+        {batches_to_process, integer},
+        {batches_processed, integer},
+        {hashes_to_update, #{integer => binary}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -314,12 +343,22 @@ upgrade_record(1, {?MODULE, ChildrenAttrsHash, MTime}) ->
     {2, {?MODULE, ChildrenAttrsHash, MTime}};
 upgrade_record(2, {?MODULE, ChildrenAttrsHash, MTime}) ->
     {3, {?MODULE, ChildrenAttrsHash, MTime, MTime + 1}};
-upgrade_record(3, {?MODULE, ChildrenAttrsHash, MTime, LastSTat}) ->
+upgrade_record(3, {?MODULE, ChildrenAttrsHash, MTime, LastStat}) ->
     {4, #storage_sync_info{
         children_hashes = ChildrenAttrsHash,
         mtime = MTime,
-        last_stat = LastSTat,
+        last_stat = LastStat,
         batches_to_process = 0,
         batches_processed = 0,
         hashes_to_update = #{}
+    }};
+upgrade_record(4, {?MODULE, ChildrenAttrsHash, MTime, LastStat, BatchesToProcess, BatchesProcessed, HashesToUpdate}) ->
+    {5, #storage_sync_info{
+        guid = undefined,
+        children_hashes = ChildrenAttrsHash,
+        mtime = MTime,
+        last_stat = LastStat,
+        batches_to_process = BatchesToProcess,
+        batches_processed = BatchesProcessed,
+        hashes_to_update = HashesToUpdate
     }}.
