@@ -122,7 +122,7 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
         normal_mode ->
             {undefined, ?CLIENT_SPEC_FOR_SPACE_2}
     end,
-    file_test_utils:wait_for_sync(P2Node, FileGuid),
+    file_test_utils:await_sync(P2Node, FileGuid),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
         FileGuid, ShareId, undefined
@@ -305,7 +305,7 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode, Config) ->
         do_not_set_direct_json ->
             ok
     end,
-    file_test_utils:wait_for_sync(P2Node, FileLayer5Guid),
+    file_test_utils:await_sync(P2Node, FileLayer5Guid),
 
     {FileLayer5Path, FileLayer5Guid, ShareId}.
 
@@ -549,7 +549,7 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode, Config) ->
         do_not_set_direct_xattr ->
             ok
     end,
-    file_test_utils:wait_for_sync(P2Node, FileLayer3Guid),
+    file_test_utils:await_sync(P2Node, FileLayer3Guid),
 
     {FileLayer3Path, FileLayer3Guid, ShareId}.
 

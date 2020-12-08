@@ -79,7 +79,7 @@ rest_create_file_test(Config) ->
     UsedFileName = ?RANDOM_FILE_NAME(),
     FilePath = filename:join([DirPath, UsedFileName]),
     {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#777),
-    file_test_utils:wait_for_sync(P2Node, FileGuid),
+    file_test_utils:await_sync(P2Node, FileGuid),
 
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 

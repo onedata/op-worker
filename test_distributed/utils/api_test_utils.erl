@@ -130,7 +130,7 @@ create_and_sync_shared_file_in_space2(FileType, FileName, Mode, Config) ->
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
-    file_test_utils:wait_for_sync(P2Node, FileGuid),
+    file_test_utils:await_sync(P2Node, FileGuid),
 
     {FileType, FilePath, FileGuid, ShareId}.
 

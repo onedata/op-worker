@@ -813,7 +813,7 @@ get_file_distribution_test(Config) ->
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
-    file_test_utils:wait_for_sync(P2Node, FileGuid),
+    file_test_utils:await_sync(P2Node, FileGuid),
 
     api_test_utils:fill_file_with_dummy_data(P1Node, UserSessIdP1, FileGuid, 0, 20),
     ExpDist1 = [#{
@@ -855,7 +855,7 @@ get_dir_distribution_test(Config) ->
     DirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, DirGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, DirGuid}, <<"share">>),
-    file_test_utils:wait_for_sync(P2Node, DirGuid),
+    file_test_utils:await_sync(P2Node, DirGuid),
 
     ExpDist = [],
     wait_for_file_location_sync(P2Node, UserSessIdP2, DirGuid, ExpDist),

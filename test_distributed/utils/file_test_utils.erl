@@ -21,7 +21,7 @@
     get_content/2, get_content/3,
     get_attrs/2
 ]).
--export([wait_for_sync/2]).
+-export([await_sync/2]).
 -export([
     await_size/3,
     await_content/3, await_content/4,
@@ -74,9 +74,9 @@ get_attrs(Node, FileGuid) ->
     end.
 
 
--spec wait_for_sync(node() | [node()], file_id:file_guid() | [file_id:file_guid()]) ->
+-spec await_sync(node() | [node()], file_id:file_guid() | [file_id:file_guid()]) ->
     ok | no_return().
-wait_for_sync(Nodes, Files) ->
+await_sync(Nodes, Files) ->
     Attempts = get_attempts(),
 
     lists:foreach(fun(Node) ->

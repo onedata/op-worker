@@ -538,7 +538,7 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType, Config) ->
     fun() ->
         Path = filename:join([TopDirPath, ?RANDOM_FILE_NAME()]),
         {ok, Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
-        file_test_utils:wait_for_sync(P2Node, Guid),
+        file_test_utils:await_sync(P2Node, Guid),
 
         api_test_memory:set(MemRef, file_guid, Guid),
 

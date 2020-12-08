@@ -60,7 +60,7 @@ create_share_test(Config) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
-    file_test_utils:wait_for_sync(P2, FileGuid),
+    file_test_utils:await_sync(P2, FileGuid),
 
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -196,7 +196,7 @@ get_share_test(Config) ->
     ShareName = <<"share">>,
     Description = <<"# Collection ABC\nThis collection contains elements.">>,
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, ShareName, Description),
-    file_test_utils:wait_for_sync(P2, FileGuid),
+    file_test_utils:await_sync(P2, FileGuid),
 
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
@@ -289,7 +289,7 @@ update_share_test(Config) ->
     OriginalDescription = <<"### Nested heading at the beginning - total markdown anarchy.">>,
     OriginalShareName = <<"share">>,
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, OriginalShareName, OriginalDescription),
-    file_test_utils:wait_for_sync(P2, FileGuid),
+    file_test_utils:await_sync(P2, FileGuid),
 
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, previous_name, OriginalShareName),
@@ -396,7 +396,7 @@ delete_share_test(Config) ->
         ShareId
     end, lists:seq(1, 4))),
 
-    file_test_utils:wait_for_sync(P2, FileGuid),
+    file_test_utils:await_sync(P2, FileGuid),
 
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, shares, ShareIds),
