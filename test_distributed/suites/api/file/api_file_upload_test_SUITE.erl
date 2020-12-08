@@ -683,47 +683,42 @@ gui_upload_with_time_warps_test(Config) ->
     UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
     [Worker] = api_test_env:get_provider_nodes(p1, Config),
 
+    CurrTime = time_test_utils:get_frozen_time_seconds(),
     {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
 
     FileKey = {guid, FileGuid},
-    CurrTime = time_test_utils:get_frozen_time_seconds(),
     ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
-    ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
 
-    AssertUploadStatusAfterStaleUploadsRemoval = fun(ExpMTime, ExpStatus) ->
-        ?assertMatch(
-            {ok, #file_attr{mtime = ExpMTime}},
-            lfm_proxy:stat(Worker, UserSessId, FileKey),
-            ?ATTEMPTS
-        ),
-        force_stale_gui_uploads_removal(Worker),
-        case ExpStatus of
-            ongoing ->
-                ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
-                ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, FileKey));
-            removed ->
-                ?assertMatch(false, is_gui_upload_registered(UserId, FileGuid, Worker)),
-                ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, FileKey))
-        end
-    end,
-    AssertUploadStatusAfterStaleUploadsRemoval(CurrTime, ongoing),
+    ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
+    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
 
     % upload should not be canceled if time warps backward (whether write occurred or not)
     PastTime = time_test_utils:simulate_seconds_passing(-1000),
 
-    AssertUploadStatusAfterStaleUploadsRemoval(CurrTime, ongoing),
+    ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
+    force_stale_gui_uploads_removal(Worker),
+    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
+
     do_multipart(Worker, ?USER(UserId, UserSessId), 5, 10, 1, FileGuid),
-    AssertUploadStatusAfterStaleUploadsRemoval(PastTime, ongoing),
+    ?assertMatch({ok, #file_attr{mtime = PastTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey), ?ATTEMPTS),
+    force_stale_gui_uploads_removal(Worker),
+    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
 
     % in case of forward time warp if next chunk was written to file (this updates file mtime)
-    % it should be left. Otherwise it will be deleted as obsolete upload.
+    % it should be left. Otherwise it will be deleted as stale upload.
     FutureTime = time_test_utils:simulate_seconds_passing(3000),
 
     do_multipart(Worker, ?USER(UserId, UserSessId), 5, 10, 1, FileGuid),
-    AssertUploadStatusAfterStaleUploadsRemoval(FutureTime, ongoing),
+    ?assertMatch({ok, #file_attr{mtime = FutureTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey), ?ATTEMPTS),
+    force_stale_gui_uploads_removal(Worker),
+    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
 
     time_test_utils:simulate_seconds_passing(2000),
-    AssertUploadStatusAfterStaleUploadsRemoval(FutureTime, removed).
+
+    ?assertMatch({ok, #file_attr{mtime = FutureTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
+    force_stale_gui_uploads_removal(Worker),
+    ?assertMatch(false, is_gui_upload_registered(UserId, FileGuid, Worker)),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, FileKey), ?ATTEMPTS).
 
 
 %% @private

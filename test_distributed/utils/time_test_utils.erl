@@ -48,6 +48,6 @@ get_frozen_time_seconds() ->
     clock_freezer_mock:current_time_seconds().
 
 
--spec simulate_seconds_passing(time:seconds()) -> ok.
+-spec simulate_seconds_passing(time:seconds()) -> time:seconds().
 simulate_seconds_passing(Seconds) ->
     clock_freezer_mock:simulate_seconds_passing(Seconds).
