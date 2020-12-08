@@ -180,12 +180,15 @@ effective_value_test(Config) ->
         ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], []])),
 
     ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
+    % Sleep to be sure that next operations are perceived as following after invalidation,
+    % not parallel to invalidation (millisecond clock is used by effective value)
+    timer:sleep(5),
     ?assertEqual({ok, <<"dir1">>, [{<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
         ?CALL_CACHE(Worker, get_or_calculate, [Doc1, Callback, [], []])),
     ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>}]},
         ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, [], []])),
 
-    Timestamp = bounded_cache:get_timestamp(),
+    Timestamp = rpc:call(Worker, bounded_cache, get_timestamp, []),
     ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
     ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
         {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},

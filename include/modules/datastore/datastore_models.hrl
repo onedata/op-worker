@@ -861,12 +861,12 @@
     mth_hist = #{} :: #{od_provider:id() => histogram:histogram()}
 }).
 
-%% Model that holds statistics about all transfers for given space.
+%% Model that holds statistics about all transfers for given space (memory only and node-wide).
 -record(space_transfer_stats_cache, {
     % Time at which the cache record will expire.
-    expires = 0 :: time:millis(),
-    % Time of last update for stats.
-    timestamp = 0 :: time:seconds(),
+    expiration_timer = countdown_timer:start_millis(0) :: countdown_timer:instance(),
+    % Timestamp of last update for stats.
+    last_update = 0 :: time:seconds(),
     % Mapping of providers to their data input and sources
     stats_in = #{} :: #{od_provider:id() => histogram:histogram()},
     % Mapping of providers to their data output and destinations

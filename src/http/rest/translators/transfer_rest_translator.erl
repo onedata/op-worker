@@ -135,7 +135,7 @@ get_response(#gri{aspect = instance, id = TransferId}, #transfer{
         <<"filesEvicted">> => FilesEvicted,
         % TODO VFS-6365 remove deprecated transfer
         <<"failedFiles">> => FailedFiles,
-        <<"failesFailed">> => FailedFiles,
+        <<"filesFailed">> => FailedFiles,
 
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,

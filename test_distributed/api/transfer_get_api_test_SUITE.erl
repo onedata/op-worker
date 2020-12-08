@@ -181,7 +181,7 @@ build_get_transfer_status_validate_rest_call_result_fun(TransferType, DataSource
         <<"filesToProcess">>, <<"filesProcessed">>,
         <<"filesReplicated">>, <<"bytesReplicated">>,
         <<"fileReplicasEvicted">>, <<"filesEvicted">>,
-        <<"failedFiles">>, <<"failesFailed">>,
+        <<"failedFiles">>, <<"filesFailed">>,
 
         <<"scheduleTime">>, <<"startTime">>, <<"finishTime">>,
         <<"lastUpdate">>, <<"minHist">>, <<"hrHist">>, <<"dyHist">>, <<"mthHist">>
@@ -287,7 +287,7 @@ assert_proper_file_stats_in_get_status_rest_response(ExpState, Env, #{
     <<"fileReplicasEvicted">> := FilesEvicted,
     <<"filesEvicted">> := FilesEvicted,
     <<"failedFiles">> := FailedFiles,
-    <<"failesFailed">> := FailedFiles
+    <<"filesFailed">> := FailedFiles
 }) ->
     #{
         files_to_process := ExpFilesToProcess,

@@ -38,6 +38,7 @@
     lfm_get_details_test/1,
     lfm_synch_stat_test/1,
     lfm_truncate_test/1,
+    lfm_truncate_and_write/1,
     lfm_acl_test/1,
     rm_recursive_test/1,
     file_gap_test/1,
@@ -113,6 +114,7 @@
     lfm_get_details_test,
     lfm_synch_stat_test,
     lfm_truncate_test,
+    lfm_truncate_and_write,
     lfm_acl_test,
     rm_recursive_test,
     file_gap_test,
@@ -238,6 +240,10 @@ lfm_synch_stat_test(Config) ->
 
 lfm_truncate_test(Config) ->
     lfm_files_test_base:lfm_truncate(Config).
+
+
+lfm_truncate_and_write(Config) ->
+    lfm_files_test_base:lfm_truncate_and_write(Config).
 
 
 lfm_acl_test(Config) ->

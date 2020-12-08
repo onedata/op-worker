@@ -17,6 +17,7 @@
 -module(provider_logic).
 -author("Lukasz Opiola").
 
+-include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
@@ -54,7 +55,7 @@
 -export([verify_provider_identity/1]).
 
 
--define(PROVIDER_NODES_CACHE_TTL, 
+-define(PROVIDER_NODES_CACHE_TTL,
     application:get_env(?APP_NAME, provider_nodes_cache_ttl_seconds, 600)). % 10 minutes
 
 -compile([{no_auto_import, [get/0]}]).
@@ -697,10 +698,10 @@ zone_get_offline_access_idps() ->
 -spec verify_provider_identity(od_provider:id()) -> ok | {error, term()}.
 verify_provider_identity(TheirProviderId) ->
     try
-        {ok, Domain} = get_domain(TheirProviderId),
-        {ok, OurIdentityToken} = provider_auth:get_identity_token_for_consumer(
+        {ok, OurIdentityToken} = ?throw_on_error(provider_auth:acquire_identity_token_for_consumer(
             ?SUB(?ONEPROVIDER, TheirProviderId)
-        ),
+        )),
+        {ok, Domain} = get_domain(TheirProviderId),
         Headers = tokens:access_token_header(OurIdentityToken),
         URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
@@ -709,15 +710,18 @@ verify_provider_identity(TheirProviderId) ->
                 verify_provider_identity(TheirProviderId, TheirIdentityToken);
             {ok, Code, _, _} ->
                 {error, {bad_http_code, Code}};
-            {error, _} = Error ->
-                Error
+            {error, _} = Error1 ->
+                Error1
         end
-    catch Type:Reason ->
-        ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
-            provider_logic:to_printable(TheirProviderId),
-            Type, Reason
-        ]),
-        {error, Reason}
+    catch
+        throw:{error, _} = Error2 ->
+            Error2;
+        Type:Reason ->
+            ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
+                provider_logic:to_printable(TheirProviderId),
+                Type, Reason
+            ]),
+            {error, Reason}
     end.
 
 

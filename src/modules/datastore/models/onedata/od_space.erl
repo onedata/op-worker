@@ -82,8 +82,8 @@ run_after(_Function, _Args, Result) ->
     Result.
 
 -spec run_after(doc()) -> {ok, doc()}.
-run_after(Doc = #document{key = SpaceId, value = #od_space{harvesters = Harvesters}}) ->
-    case provider_logic:supports_space(SpaceId) of
+run_after(Doc = #document{key = SpaceId, value = #od_space{harvesters = Harvesters} = Space}) ->
+    case space_logic:is_supported(Space, oneprovider:get_id()) of
         false ->
             ok;
         true ->

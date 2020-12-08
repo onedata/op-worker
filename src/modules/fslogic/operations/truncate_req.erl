@@ -66,6 +66,9 @@ truncate_insecure(UserCtx, FileCtx1, Size, UpdateTimes, CreateFileIfNotExist) ->
             {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
             case storage_driver:open(SDHandle, write) of
                 {ok, Handle} ->
+                    % Flush events queue to get proper file size
+                    catch lfm_event_controller:flush_event_queue(
+                        SessId, oneprovider:get_id(), file_ctx:get_uuid_const(FileCtx3)),
                     {CurrentSize, _} = file_ctx:get_file_size(FileCtx3),
                     case storage_driver:truncate(Handle, Size, CurrentSize) of
                         ok ->
