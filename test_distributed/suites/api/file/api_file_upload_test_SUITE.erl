@@ -35,7 +35,6 @@
     gui_not_registered_upload_should_fail/1,
     gui_upload_test/1,
     gui_stale_upload_file_should_be_deleted/1,
-    gui_finished_upload_file_should_be_left_intact/1,
     gui_upload_with_time_warps_test/1
 ]).
 
@@ -49,7 +48,6 @@ all() -> [
     gui_not_registered_upload_should_fail,
     gui_upload_test,
     gui_stale_upload_file_should_be_deleted,
-    gui_finished_upload_file_should_be_left_intact,
     gui_upload_with_time_warps_test
 ].
 
@@ -647,35 +645,8 @@ gui_stale_upload_file_should_be_deleted(Config) ->
     ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
 
     % but if upload is not resumed or finished before INACTIVITY_PERIOD then file should be deleted
-    timer:sleep(timer:seconds(100)),
-    ?assertMatch(false, is_gui_upload_registered(UserId, FileGuid, Worker), ?ATTEMPTS),
+    ?assertMatch(false, is_gui_upload_registered(UserId, FileGuid, Worker), 100),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid}), ?ATTEMPTS).
-
-
-gui_finished_upload_file_should_be_left_intact(Config) ->
-    UserId = api_test_env:get_user_id(user3, Config),
-    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
-    [Worker] = api_test_env:get_provider_nodes(p1, Config),
-
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
-
-    ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
-    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
-
-    % file being uploaded shouldn't be deleted after only 30s of inactivity
-    timer:sleep(timer:seconds(30)),
-    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
-
-    % uploaded files shouldn't be deleted automatically after INACTIVITY_PERIOD
-    ?assertMatch({ok, _}, finalize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
-    ?assertMatch(false, is_gui_upload_registered(UserId, FileGuid, Worker), ?ATTEMPTS),
-
-    timer:sleep(timer:seconds(100)),
-
-    ?assertMatch(false, is_gui_upload_registered(UserId, FileGuid, Worker), ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})).
 
 
 gui_upload_with_time_warps_test(Config) ->
