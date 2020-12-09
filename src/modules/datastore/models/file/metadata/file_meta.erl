@@ -76,7 +76,6 @@
 -type offset() :: file_meta_links:offset().
 -type non_neg_offset() :: file_meta_links:non_neg_offset().
 -type limit() :: file_meta_links:limit().
--type list_opts() :: file_meta_links:list_opts().
 -type list_extended_info() :: file_meta_links:list_extended_info().
 
 -export_type([
@@ -322,7 +321,7 @@ delete_without_link(FileUuid) ->
 
 -spec delete_doc_if_not_special(uuid()) -> ok.
 delete_doc_if_not_special(FileUuid) ->
-    case fslogic_uuid:is_special_uuid(FileUuid) of
+    case fslogic_uuid:is_protected_uuid(FileUuid) of
         true -> ok;
         false -> delete_without_link(FileUuid)
     end.
@@ -425,7 +424,7 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
 -spec list_children(entry(), limit()) ->
     {ok, [link()], list_extended_info()} | {error, term()}.
 list_children(Entry, Limit) ->
-    list_children_internal(Entry, #{size => Limit, token => #link_token{}}).
+    list_children(Entry, undefined, Limit, #link_token{}, undefined, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -436,7 +435,7 @@ list_children(Entry, Limit) ->
 -spec list_children(entry(), offset(), limit()) ->
     {ok, [link()], list_extended_info()} | {error, term()}.
 list_children(Entry, Offset, Limit) ->
-    list_children_internal(Entry, #{offset => Offset, size => Limit}).
+    list_children(Entry, Offset, Limit, undefined, undefined, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -475,35 +474,18 @@ list_children(Entry, Offset, Limit, Token, PrevLinkKey) ->
 %%--------------------------------------------------------------------
 -spec list_children(
     Entry :: entry(),
-    Offset :: offset(),
+    Offset :: undefined | offset(),
     Limit :: limit(),
     Token :: undefined | datastore_links_iter:token(),
     PrevLinkKey :: undefined | name(),
-    PrevTreeID :: undefined | oneprovider:id()
+    PrevTreeId :: undefined | oneprovider:id()
 ) ->
     {ok, [link()], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTreeID) ->
-    Opts = case Offset of
-        0 -> #{size => Limit};
-        _ -> #{offset => Offset, size => Limit}
-    end,
-
-    Opts2 = case Token of
-        undefined -> Opts;
-        _ -> Opts#{token => Token}
-    end,
-
-    Opts3 = case PrevLinkKey of
-        undefined -> Opts2;
-        _ -> Opts2#{prev_link_name => PrevLinkKey}
-    end,
-
-    Opts4 = case PrevTreeID of
-        undefined -> Opts3;
-        _ -> Opts3#{prev_tree_id => PrevTreeID}
-    end,
-
-    list_children_internal(Entry, Opts4).
+list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTreeId) ->
+    ?run(begin
+        {ok, FileUuid} = get_uuid(Entry),
+        file_meta_links:list(FileUuid, Offset, Limit, Token, PrevLinkKey, PrevTreeId)
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -1003,21 +985,6 @@ get_uuid(FileUuid) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Lists children of given #file_meta using different listing options (see datastore_links_iter.erl in cluster_worker)
-%% @end
-%%--------------------------------------------------------------------
--spec list_children_internal(entry(), list_opts()) ->
-    {ok, [file_meta_links:link()], list_extended_info()} | {error, term()}.
-list_children_internal(Entry, Opts) ->
-    ?run(begin
-        {ok, FileUuid} = get_uuid(Entry),
-        file_meta_links:list(FileUuid, Opts)
-    end).
-
 
 %%--------------------------------------------------------------------
 %% @private

@@ -60,9 +60,9 @@
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_guid_const/1, get_uuid_const/1, get_dir_location_doc_const/1
 ]).
--export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
-    is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
-    is_in_user_space_const/2]).
+-export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_protected_const/1,
+    is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
+    is_in_user_space_const/2, assert_not_protected_const/1]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -1156,14 +1156,28 @@ is_file_ctx_const(#file_ctx{}) ->
 is_file_ctx_const(_) ->
     false.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if file is a space root dir.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec is_space_dir_const(ctx()) -> boolean().
 is_space_dir_const(#file_ctx{guid = Guid}) ->
     fslogic_uuid:is_space_dir_guid(Guid).
+
+
+-spec is_trash_dir_const(ctx()) -> boolean().
+is_trash_dir_const(#file_ctx{guid = Guid}) ->
+    fslogic_uuid:is_trash_dir_guid(Guid).
+
+
+-spec is_protected_const(ctx()) -> boolean().
+is_protected_const(#file_ctx{guid = Guid}) ->
+    fslogic_uuid:is_protected_guid(Guid).
+
+
+-spec assert_not_protected_const(ctx()) -> ok.
+assert_not_protected_const(FileCtx) ->
+    case is_protected_const(FileCtx) of
+        true -> throw(?EPERM);
+        false -> ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1189,8 +1203,7 @@ is_user_root_dir_const(#file_ctx{}, _UserCtx) ->
 is_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
     true;
 is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
-    Uuid = file_id:guid_to_uuid(Guid),
-    fslogic_uuid:is_root_dir_uuid(Uuid);
+    fslogic_uuid:is_root_dir_guid(Guid);
 is_root_dir_const(#file_ctx{}) ->
     false.
 

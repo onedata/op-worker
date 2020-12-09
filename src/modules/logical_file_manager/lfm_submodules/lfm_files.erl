@@ -18,7 +18,7 @@
 
 %% API
 %% Functions operating on directories or files
--export([unlink/3, rm/2, mv/3, mv/4, cp/3, cp/4, get_parent/2, get_file_path/2,
+-export([unlink/3, rm/2, rm_using_trash/2, mv/3, mv/4, cp/3, cp/4, get_parent/2, get_file_path/2,
     get_file_guid/2,
     schedule_file_transfer/5, schedule_view_transfer/7,
     schedule_file_replication/4, schedule_replica_eviction/4,
@@ -66,7 +66,26 @@ unlink(SessId, FileEntry, Silent) ->
 -spec rm(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | lfm:error_reply().
 rm(SessId, FileKey) ->
-    remove_utils:rm(SessId, FileKey).
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
+    case is_dir(SessId, Guid) of
+        true ->
+            lfm_files:rm_using_trash(SessId, {guid, Guid});
+        false ->
+            lfm_files:unlink(SessId, {guid, Guid}, false);
+        {error, ?ENOENT} ->
+            ok;
+        Error ->
+            Error
+    end.
+
+
+-spec rm_using_trash(session:id(), fslogic_worker:ext_file()) ->
+    ok | lfm:error_reply().
+rm_using_trash(SessId, FileEntry) ->
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileEntry),
+    remote_utils:call_fslogic(SessId, file_request, Guid, #delete_using_trash{},
+        fun(_) -> ok end
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -814,4 +833,20 @@ maybe_retry_sync(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum, Erro
             SleepTime = round(?SYNC_MIN_BACKOFF * math:pow(?SYNC_BACKOFF_RATE, RetryNum)),
             timer:sleep(min(SleepTime, ?SYNC_MAX_BACKOFF)),
             sync_block(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum + 1)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if a file is directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_dir(session:id(), Guid :: fslogic_worker:file_guid()) ->
+    true | false | lfm:error_reply().
+is_dir(SessId, Guid) ->
+    case lfm_attrs:stat(SessId, {guid, Guid}) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
+        {ok, _} -> false;
+        Error -> Error
     end.

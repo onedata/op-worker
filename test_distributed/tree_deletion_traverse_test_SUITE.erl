@@ -86,7 +86,7 @@ delete_files_structure_test_base(Config, FilesStructure) ->
     RootDirCtx = file_ctx:new_by_guid(RootGuid),
     UserCtx = rpc:call(W1, user_ctx, new, [?SESS_ID(W1, Config)]),
 
-    {ok, TaskId} = rpc:call(W1, tree_deletion_traverse, start, [RootDirCtx, UserCtx]),
+    {ok, TaskId} = rpc:call(W1, tree_deletion_traverse, start, [RootDirCtx, UserCtx, false]),
     await_traverse_finished(TaskId),
 
     ?assertMatch({ok, []}, lfm_proxy:get_children(W1, ?SESS_ID(W1, Config), {guid, ?SPACE_GUID}, 0, 10000)),

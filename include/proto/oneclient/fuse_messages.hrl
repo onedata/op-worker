@@ -315,8 +315,11 @@
     fuse_response :: fuse_response_type()
 }).
 
--define(FUSE_OK_RESP(__RESPONSE), #fuse_response{
-    status = #status{code = ?OK},
+-define(FUSE_OK_RESP, #fuse_response{
+    status = #status{code = ?OK}
+}).
+
+-define(FUSE_OK_RESP(__RESPONSE), (?FUSE_OK_RESP)#fuse_response{
     fuse_response = __RESPONSE
 }).
 

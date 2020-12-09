@@ -20,7 +20,7 @@
 
 
 %% API
--export([init_pool/0, stop_pool/0, start/2]).
+-export([init_pool/0, stop_pool/0, start/3]).
 
 %% Traverse behaviour callbacks
 -export([
@@ -38,7 +38,8 @@
 %@formatter:off
 -type info() :: #{
     user_ctx := user_ctx:ctx(),
-    root_guid := file_id:file_guid()
+    root_guid := file_id:file_guid(),
+    silent := boolean()
 }.
 %@formatter:on
 
@@ -59,15 +60,16 @@ stop_pool() ->
     tree_traverse:stop(?POOL_NAME).
 
 
--spec start(file_ctx:ctx(), user_ctx:ctx()) -> {ok, id()}.
-start(RootDirCtx, UserCtx) ->
+-spec start(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> {ok, id()}.
+start(RootDirCtx, UserCtx, Silent) ->
     Options = #{
         track_subtree_status => true,
         children_master_jobs_mode => async,
         use_token => false,
         traverse_info => #{
             user_ctx => UserCtx,
-            root_guid => file_ctx:get_guid_const(RootDirCtx)
+            root_guid => file_ctx:get_guid_const(RootDirCtx),
+            silent => Silent
         }
     },
     % todo trzeba ogarnac rozne runy dla tego samego katalopgu
@@ -117,9 +119,10 @@ do_master_job(Job = #tree_traverse{
 do_slave_job(#tree_traverse_slave{
     file_ctx = FileCtx,
     traverse_info = TraverseInfo = #{
-        user_ctx := UserCtx
+        user_ctx := UserCtx,
+        silent := Silent
 }}, TaskId) ->
-    fslogic_delete:delete_file_locally(UserCtx, FileCtx, false),
+    fslogic_delete:delete_file_locally(UserCtx, FileCtx, Silent),
     file_processed(FileCtx, TaskId, TraverseInfo).
 
 %%%===================================================================
@@ -147,9 +150,10 @@ maybe_delete_dir(?SUBTREE_NOT_PROCESSED, _FileCtx, _TaskId, _TraverseInfo) ->
 -spec delete_dir(file_ctx:ctx(), id(), info()) -> ok.
 delete_dir(FileCtx, TaskId, TraverseInfo = #{
     user_ctx := UserCtx,
-    root_guid := RootGuid
+    root_guid := RootGuid,
+    silent := Silent
 }) ->
-    fslogic_delete:delete_file_locally(UserCtx, FileCtx, false),
+    fslogic_delete:delete_file_locally(UserCtx, FileCtx, Silent),
     tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
     case file_ctx:get_guid_const(FileCtx) =:= RootGuid of
         true ->

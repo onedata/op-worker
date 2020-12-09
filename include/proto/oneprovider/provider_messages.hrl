@@ -155,6 +155,10 @@
     qos_id :: qos_entry:id()
 }).
 
+-record(delete_using_trash, {
+    silent = false :: boolean()
+}).
+
 -type provider_request_type() ::
 #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
 #get_transfer_encoding{} | #set_transfer_encoding{} |

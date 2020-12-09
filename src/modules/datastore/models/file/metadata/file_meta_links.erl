@@ -18,7 +18,7 @@
 
 -export([get/3, add/4, check_and_add/5]).
 -export([delete/4, delete_local/4, delete_remote/5]).
--export([list/2, list_whitelisted/4]).
+-export([list/6, list_whitelisted/4]).
 -export([get_trees/1]).
 -export([check_name_and_get_conflicting_files/4]).
 
@@ -49,8 +49,10 @@
 -type limit() :: non_neg_integer().
 -type token() :: datastore_links_iter:token().
 -type list_opts() :: #{
+    % required keys
+    size := limit(),
+    % optional keys
     token => token() | undefined,
-    size => limit(),
     offset => offset(),
     prev_link_name => link_name(),
     prev_tree_id => od_provider:id()
@@ -72,8 +74,6 @@
 -define(LINK(FileName, FileUuid), {FileName, FileUuid}).
 
 -define(MINIMAL_TREE_ID_SUFFIX_LEN, 4).
-
-% dodac obsluge listowania katalogu kosza (ponad nim i w nim)
 
 %%%===================================================================
 %%% API
@@ -128,18 +128,21 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
     ok = datastore_model:mark_links_deleted(?CTX(Scope), ParentUuid, TreeId, {FileName, Revision}).
 
 
--spec list(key(), list_opts()) -> {ok, [link()], list_extended_info()} | {error, term()}.
-list(ParentUuid, Opts) ->
+-spec list(key(), offset() | undefined, limit(), token() | undefined, link_name() | undefined,
+    tree_id() | undefined) -> {ok, [link()], list_extended_info()} | {error, term()}.
+list(ParentUuid, Offset, Limit, Token, PrevLinkKey, PrevTreeId) ->
+
+    ListOpts = prepare_opts(Offset, Limit, Token, PrevLinkKey, PrevTreeId),
     Result = fold(ParentUuid, fun(Link = #link{name = Name}, Acc) ->
         case {file_meta:is_hidden(Name), file_meta:is_deletion_link(Name)} of
             {false, false} -> {ok, [Link | Acc]};
             _ -> {ok, Acc}
         end
-    end, [], Opts),
+    end, [], ListOpts),
 
     case Result of
-        {{ok, ReversedLinks}, Token} ->
-            prepare_list_result(ReversedLinks, Token);
+        {{ok, ReversedLinks}, NewToken} ->
+            prepare_list_result(ReversedLinks, NewToken);
         {ok, ReversedLinks} ->
             prepare_list_result(ReversedLinks, undefined);
         {error, Reason} ->
@@ -161,7 +164,7 @@ list_whitelisted(ParentUuid, NonNegOffset, Limit, ChildrenWhiteListed) ->
     case NonNegOffset < length(ValidLinks) of
         true ->
             RequestedLinks = lists:sublist(ValidLinks, NonNegOffset + 1, Limit),
-            {ok, tag_ambiguous_files(RequestedLinks)};
+            {ok, tag_ambiguous(RequestedLinks)};
         false ->
             {ok, []}
     end.
@@ -201,7 +204,7 @@ check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProvide
                 _ ->
                     Links
             end,
-            TaggedLinks = tag_ambiguous_files(Links2),
+            TaggedLinks = tag_ambiguous(Links2),
             {NameAns, OtherFiles} = lists:foldl(fun
                 (?LINK(TaggedName, Uuid), {_NameAcc, OtherAcc}) when Uuid =:= FileUuid ->
                     {TaggedName, OtherAcc};
@@ -225,6 +228,34 @@ get_all(ParentUuid, Name) ->
 %%% Internal functions
 %%%===================================================================
 
+-spec prepare_opts(offset() | undefined, limit(), token() | undefined,
+    link_name() | undefined, tree_id() | undefined) -> list_opts().
+prepare_opts(Offset, Limit, Token, PrevLinkKey, PrevTreeId)
+    when is_integer(Limit) andalso Limit >= 0
+    % at lease one of below options must be defined so that we know where to start listing
+    andalso (Offset /= undefined orelse Token /= undefined orelse PrevLinkKey /= undefined)
+->
+    validate_starting_opts(Offset, PrevLinkKey, Token),
+    Opts1 = #{size => Limit},
+    Opts2 = maps_utils:put_if_defined(Opts1, offset, Offset),
+    Opts3 = maps_utils:put_if_defined(Opts2, token, Token),
+    Opts4 = maps_utils:put_if_defined(Opts3, prev_link_name, PrevLinkKey),
+    maps_utils:put_if_defined(Opts4, prev_tree_id, PrevTreeId).
+
+
+-spec validate_starting_opts(offset() | undefined, link_name() | undefined, token() | undefined) -> ok.
+validate_starting_opts(_, _, #link_token{}) ->
+    ok;
+validate_starting_opts(Offset, undefined, undefined) when Offset >= 0 ->
+    ok;
+validate_starting_opts(Offset, undefined, undefined) when Offset < 0 ->
+    throw(?ERROR_BAD_VALUE_TOO_LOW(offset, 0));
+validate_starting_opts(undefined, LastName, undefined) when is_binary(LastName) ->
+    ok;
+validate_starting_opts(Offset, LastName, undefined) when is_binary(LastName) andalso is_integer(Offset) ->
+    ok.
+
+
 -spec fold(key(), fold_fun(), fold_acc(), list_opts()) ->
     {ok, fold_acc()} | {{ok, fold_acc()}, datastore_links_iter:token()} | {error, term()}.
 fold(ParentUuid, Fun, AccIn, Opts) ->
@@ -238,7 +269,7 @@ fold(ParentUuid, Fun, AccIn, Opts) ->
 %% preparing list_extended_info() structure.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_list_result([datastore_links:link()], token() | undefined) ->
+-spec prepare_list_result([internal_link()], token() | undefined) ->
     {ok, [link()], list_extended_info()}.
 prepare_list_result(ReversedLinks, TokenOrUndefined) ->
     ExtendedInfo = case TokenOrUndefined =/= undefined of
@@ -251,7 +282,7 @@ prepare_list_result(ReversedLinks, TokenOrUndefined) ->
         _ ->
             ExtendedInfo#{last_name => undefined, last_tree => undefined}
     end,
-    {ok, tag_ambiguous_files(lists:reverse(ReversedLinks)), ExtendedInfo2}.
+    {ok, tag_ambiguous(lists:reverse(ReversedLinks)), ExtendedInfo2}.
 
 
 %%--------------------------------------------------------------------
@@ -260,10 +291,11 @@ prepare_list_result(ReversedLinks, TokenOrUndefined) ->
 %% Adds links tree ids suffix to children names with ambiguous names.
 %% @end
 %%--------------------------------------------------------------------
--spec tag_ambiguous_files([internal_link()]) -> [link()].
-tag_ambiguous_files([]) ->
+-spec tag_ambiguous([internal_link()]) -> [link()].
+tag_ambiguous([]) ->
     [];
-tag_ambiguous_files(Links) ->
+tag_ambiguous(Links) ->
+    LocalTreeId = ?LOCAL_TREE_ID,
     Groups = group_by_name(Links),
     lists:foldl(fun
         ([#link{name = Name, target = FileUuid}], ChildrenAcc) ->
@@ -274,7 +306,6 @@ tag_ambiguous_files(Links) ->
             % we will add suffix which is part of the links tree id to each file
             % from the remote trees so that they can be distinguished
             SuffixLength = calculate_suffix_length(Group),
-            LocalTreeId = ?LOCAL_TREE_ID,
             lists:foldl(fun(Link = #link{}, ChildrenAcc2) ->
                 [tag_remote_files(Link, LocalTreeId, SuffixLength) | ChildrenAcc2]
             end, ChildrenAcc, Group)
@@ -299,6 +330,17 @@ group_by_name(Links) ->
     {LastGroup, FinalGroupsAcc} = lists:foldl(fun
         (Link = #link{}, {[], GroupsAcc}) ->
             {[Link], GroupsAcc};
+        (#link{name = Name, target = Uuid},
+            {SpecialLinkGroup = [#link{name = SpecialLinkName, target = SpecialLinkUuid} | _], GroupsAcc}
+        ) when Name =:= SpecialLinkName
+          andalso Uuid =:= SpecialLinkUuid ->
+            % Link has the same Name as link in the SpecialLinkGroup but both links point to the same
+            % Uuid which means that these aren't ambiguous files.
+            % It's the same, special file which only has many links (created by many providers).
+            % This may happen only for special files with predefined Uuids such as space directories
+            % or trash directories.
+            % We'll merge duplicated links so that only one is presented.
+            {SpecialLinkGroup, GroupsAcc};
         (Link = #link{name = Name}, {CurrentGroup = [#link{name = NameInGroup} | _], GroupsAcc})
             when Name =:= NameInGroup
         ->

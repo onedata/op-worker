@@ -350,6 +350,9 @@ list_children(#tree_traverse{
 generate_children_jobs(MasterJob = #tree_traverse{execute_slave_on_dir = ExecOnDir}, TaskId, Children) ->
     {SlaveJobsReversed, MasterJobsReversed} = lists:foldl(fun(ChildCtx, {SlavesAcc, MastersAcc} = Acc) ->
         try
+            % TODO handle case when doc is missing
+            % TODO * callback
+            % TODO * albo zwracania jakiegos specjalnego joba?
             {ChildDoc, ChildCtx2} = file_ctx:get_file_doc(ChildCtx),
             case file_meta:get_type(ChildDoc) of
                 ?DIRECTORY_TYPE ->

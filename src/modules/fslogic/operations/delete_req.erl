@@ -17,7 +17,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([delete/3]).
+-export([delete/3, delete_using_trash/3]).
 
 
 %%%===================================================================
@@ -36,10 +36,29 @@
 delete(UserCtx, FileCtx, Silent) ->
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
+            file_ctx:assert_not_protected_const(FileCtx2),
+            % TODO czemu tutaj jest delete katalogu? ??
             delete_dir(UserCtx, FileCtx2, Silent);
         {false, FileCtx2} ->
             delete_file(UserCtx, FileCtx2, Silent)
     end.
+
+
+-spec delete_using_trash(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
+    fslogic_worker:fuse_response().
+delete_using_trash(UserCtx, FileCtx0, Silent) ->
+    file_ctx:assert_not_protected_const(FileCtx0),
+
+    {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+    FileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx1,
+        [traverse_ancestors, ?delete, ?list_container]
+    ),
+    fslogic_authz:ensure_authorized(
+        UserCtx, FileParentCtx,
+        [traverse_ancestors, ?delete_subcontainer]
+    ),
+    delete_using_trash_insecure(UserCtx, FileCtx2, Silent).
 
 
 %%%===================================================================
@@ -86,6 +105,14 @@ delete_file(UserCtx, FileCtx0, Silent) ->
     delete_insecure(UserCtx, FileCtx2, Silent).
 
 
+-spec delete_using_trash_insecure(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
+    fslogic_worker:fuse_response().
+delete_using_trash_insecure(UserCtx, FileCtx, Silent) ->
+    ok = trash:move_to_trash(FileCtx),
+    {ok, _} = trash:delete_from_trash(FileCtx, UserCtx, Silent),
+    ?FUSE_OK_RESP.
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -117,4 +144,4 @@ delete_insecure(UserCtx, FileCtx, Silent) ->
         {ok, FileMeta#file_meta{deleted = true}}
     end),
     fslogic_delete:delete_file_locally(UserCtx, FileCtx, Silent),
-    #fuse_response{status = #status{code = ?OK}}.
+    ?FUSE_OK_RESP.
