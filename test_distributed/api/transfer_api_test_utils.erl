@@ -269,7 +269,7 @@ create_view(TransferType, SpaceId, XattrName, SrcNode, DstNode) ->
 sync_files_between_nodes(eviction, SrcNode, DstNode, Files) ->
     lists:foreach(fun(Guid) ->
         % Read file on DstNode to force rtransfer
-        api_test_utils:wait_for_file_sync(DstNode, ?ROOT_SESS_ID, Guid),
+        file_test_utils:await_sync(DstNode, Guid),
         ExpContent = api_test_utils:read_file(SrcNode, ?ROOT_SESS_ID, Guid, ?BYTES_NUM),
         ?assertMatch(
             ExpContent,
@@ -280,11 +280,13 @@ sync_files_between_nodes(eviction, SrcNode, DstNode, Files) ->
     % Wait until file_distribution contains entries for both nodes
     % Otherwise some of them could be omitted from eviction (if data
     % replicas don't exist on other providers eviction for file is skipped).
-    api_test_utils:assert_distribution([SrcNode], Files, [{SrcNode, ?BYTES_NUM}, {DstNode, ?BYTES_NUM}]);
+    file_test_utils:await_distribution(SrcNode, Files, [
+        {SrcNode, ?BYTES_NUM}, {DstNode, ?BYTES_NUM}
+    ]);
 
 sync_files_between_nodes(_TransferType, _SrcNode, DstNode, Files) ->
     lists:foreach(fun(Guid) ->
-        api_test_utils:wait_for_file_sync(DstNode, ?ROOT_SESS_ID, Guid)
+        file_test_utils:await_sync(DstNode, Guid)
     end, Files).
 
 
@@ -379,26 +381,24 @@ build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            api_test_utils:assert_distribution(
-                [Node], _AllFiles = OtherFiles ++ FilesToTransfer,
+            file_test_utils:await_distribution(
+                Node, _AllFiles = OtherFiles ++ FilesToTransfer,
                 [{SrcProvider, ?BYTES_NUM}]
-            ),
-            true;
+            );
         (expected_success, _) ->
             #{
                 files_to_transfer := FilesToTransfer,
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            api_test_utils:assert_distribution(
-                [Node], OtherFiles,
+            file_test_utils:await_distribution(
+                Node, OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}]
             ),
-            api_test_utils:assert_distribution(
-                [Node], FilesToTransfer,
+            file_test_utils:await_distribution(
+                Node, FilesToTransfer,
                 [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
-            ),
-            true
+            )
     end.
 
 
@@ -411,26 +411,24 @@ build_crate_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            api_test_utils:assert_distribution(
-                [Node], _AllFiles = OtherFiles ++ FilesToTransfer,
+            file_test_utils:await_distribution(
+                Node, _AllFiles = OtherFiles ++ FilesToTransfer,
                 [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
-            ),
-            true;
+            );
         (expected_success, _) ->
             #{
                 files_to_transfer := FilesToTransfer,
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            api_test_utils:assert_distribution(
-                [Node], OtherFiles,
+            file_test_utils:await_distribution(
+                Node, OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
             ),
-            api_test_utils:assert_distribution(
-                [Node], FilesToTransfer,
+            file_test_utils:await_distribution(
+                Node, FilesToTransfer,
                 [{SrcProvider, 0}, {DstProvider, ?BYTES_NUM}]
-            ),
-            true
+            )
     end.
 
 
@@ -443,26 +441,24 @@ build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            api_test_utils:assert_distribution(
-                [Node], _AllFiles = FilesToTransfer ++ OtherFiles,
+            file_test_utils:await_distribution(
+                Node, _AllFiles = FilesToTransfer ++ OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}]
-            ),
-            true;
+            );
         (expected_success, _) ->
             #{
                 files_to_transfer := FilesToTransfer,
                 other_files := OtherFiles
             } = api_test_memory:get(MemRef, transfer_details),
 
-            api_test_utils:assert_distribution(
-                [Node], OtherFiles,
+            file_test_utils:await_distribution(
+                Node, OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}]
             ),
-            api_test_utils:assert_distribution(
-                [Node], FilesToTransfer,
+            file_test_utils:await_distribution(
+                Node, FilesToTransfer,
                 [{SrcProvider, 0}, {DstProvider, ?BYTES_NUM}]
-            ),
-            true
+            )
     end.
 
 
