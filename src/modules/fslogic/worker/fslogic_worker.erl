@@ -719,6 +719,8 @@ periodical_spaces_autocleaning_check() ->
             end, SpaceIds);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
             ?debug("Skipping spaces cleanup due to unregistered provider");
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+            ?debug("Skipping spaces cleanup due to no connection to Onezone");
         Error = {error, _} ->
             ?error("Unable to trigger spaces auto-cleaning check due to: ~p", [Error])
     catch
