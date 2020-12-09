@@ -173,9 +173,12 @@ get_started_at(ARId) ->
     {ok, #document{value = AR}} = autocleaning_run:get(ARId),
     get_started_at(AR).
 
--spec get_status(record()) -> status().
+
+-spec get_status(record() | doc()) -> status().
 get_status(#autocleaning_run{status = Status}) ->
-    Status.
+    Status;
+get_status(#document{value = AR}) ->
+    get_status(AR).
 
 
 -spec is_active(id() | record() | doc()) -> boolean().
