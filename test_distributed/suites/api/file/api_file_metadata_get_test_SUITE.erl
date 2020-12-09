@@ -100,7 +100,6 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
 
     SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
@@ -123,8 +122,7 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
         normal_mode ->
             {undefined, ?CLIENT_SPEC_FOR_SPACE_2}
     end,
-
-    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
+    file_test_utils:await_sync(P2Node, FileGuid),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
         FileGuid, ShareId, undefined
@@ -276,7 +274,6 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode, Config) ->
 
     SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
     TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath, 8#777),
@@ -308,8 +305,7 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode, Config) ->
         do_not_set_direct_json ->
             ok
     end,
-
-    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileLayer5Guid),
+    file_test_utils:await_sync(P2Node, FileLayer5Guid),
 
     {FileLayer5Path, FileLayer5Guid, ShareId}.
 
@@ -529,7 +525,6 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode, Config) ->
 
     SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
     TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath, 8#777),
@@ -554,8 +549,7 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode, Config) ->
         do_not_set_direct_xattr ->
             ok
     end,
-
-    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileLayer3Guid),
+    file_test_utils:await_sync(P2Node, FileLayer3Guid),
 
     {FileLayer3Path, FileLayer3Guid, ShareId}.
 

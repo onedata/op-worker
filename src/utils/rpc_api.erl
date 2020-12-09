@@ -567,7 +567,7 @@ autocleaning_get_run_report(RunId) ->
 
 -spec autocleaning_status(od_space:id()) -> map().
 autocleaning_status(SpaceId) ->
-    autocleaning_api:status(SpaceId).
+    autocleaning_api:get_status(SpaceId).
 
 
 -spec autocleaning_force_run(od_space:id()) ->
