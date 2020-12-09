@@ -118,8 +118,8 @@
 
     harvesters = [] :: [od_harvester:id()],
 
-    support_parameters_per_provider = #{} :: support_parameters:per_provider(),
-    support_stage_per_provider = #{} :: support_stage:per_provider(),
+    support_parameters_registry = #{} :: support_parameters:registry(),
+    support_stage_registry = #{} :: support_stage:registry(),
 
     cache_state = #{} :: cache_state()
 }).

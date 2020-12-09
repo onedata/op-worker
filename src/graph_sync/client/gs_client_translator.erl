@@ -91,8 +91,8 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
         value = #od_space{
             name = maps:get(<<"name">>, Result),
             providers = maps:get(<<"providers">>, Result),
-            support_parameters_per_provider = support_parameters:per_provider_from_json(maps:get(<<"supportParametersPerProvider">>, Result)),
-            support_stage_per_provider = support_stage:per_provider_from_json(maps:get(<<"supportStagePerProvider">>, Result))
+            support_parameters_registry = support_parameters:registry_from_json(maps:get(<<"supportParametersRegistry">>, Result)),
+            support_stage_registry = support_stage:registry_from_json(maps:get(<<"supportStageRegistry">>, Result))
         }
     };
 
@@ -138,8 +138,8 @@ translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private
             shares = maps:get(<<"shares">>, Result),
             harvesters = maps:get(<<"harvesters">>, Result),
 
-            support_parameters_per_provider = support_parameters:per_provider_from_json(maps:get(<<"supportParametersPerProvider">>, Result)),
-            support_stage_per_provider = support_stage:per_provider_from_json(maps:get(<<"supportStagePerProvider">>, Result))
+            support_parameters_registry = support_parameters:registry_from_json(maps:get(<<"supportParametersRegistry">>, Result)),
+            support_stage_registry = support_stage:registry_from_json(maps:get(<<"supportStageRegistry">>, Result))
         }
     };
 
