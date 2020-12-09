@@ -24,6 +24,7 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/space_support/support_stage.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -export([get/2, get_protected_data/2]).
@@ -42,6 +43,8 @@
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
 -export([report_provider_sync_progress/2]).
+-export([get_support_stage_registry/1]).
+-export([get_latest_emitted_seq/2]).
 -export([on_space_supported/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
@@ -410,6 +413,25 @@ report_provider_sync_progress(SpaceId, CollectiveReport) ->
         data = #{
             <<"providerSyncProgressReport">> => provider_sync_progress:collective_report_to_json(CollectiveReport)
         }
+    }).
+
+
+-spec get_support_stage_registry(od_space:id()) -> {ok, support_stage:registry()} | errors:error().
+get_support_stage_registry(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{support_stage_registry = SupportStageRegistry}}} ->
+            {ok, SupportStageRegistry};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_latest_emitted_seq(od_space:id(), od_provider:id()) ->
+    {ok, provider_sync_progress:seen_seq()} | errors:error().
+get_latest_emitted_seq(SpaceId, ProviderId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = space_stats, id = SpaceId, aspect = {latest_emitted_seq, ProviderId}}
     }).
 
 

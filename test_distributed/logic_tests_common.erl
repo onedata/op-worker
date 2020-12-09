@@ -521,6 +521,13 @@ mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, Aut
             ?ERROR_FORBIDDEN
     end;
 
+mock_graph_get(GRI = #gri{type = space_stats, aspect = {latest_emitted_seq, _}}, _, _) ->
+    {ok, #gs_resp_graph{data_format = resource, data = #{
+        <<"revision">> => 1,
+        <<"gri">> => gri:serialize(GRI),
+        <<"seq">> => ?SPACE_MOCKED_LATEST_EMITTED_SEQ
+    }}};
+
 mock_graph_get(GRI = #gri{type = od_share, id = ShareId, aspect = instance}, AuthOverride, _) ->
     Authorized = case {AuthOverride, GRI#gri.scope} of
         {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)}, private} ->
