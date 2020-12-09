@@ -30,6 +30,7 @@
 %% todo zabezpieczyc przed usuwaniem atalogi protected
 %% todo zabezpieczyc przed mv atalogi protected
 %% todo zabezpieczyc kosz przed replikacja !!!
+%% TODO TESTY !!!!!!!!
 
 %% zlecania usuwania z sesją usera, ktory przeniósł do kosza
 %% usuwanie całego kosza - poszczegolne elementy z sesjami userów, którzy przeniesli do kosza

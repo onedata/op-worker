@@ -62,7 +62,7 @@
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_protected_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
-    is_in_user_space_const/2, assert_not_protected_const/1]).
+    is_in_user_space_const/2, assert_not_protected_const/1, assert_is_dir/1, assert_is_not_dir/1]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -1278,6 +1278,21 @@ is_dir(FileCtx = #file_ctx{is_dir = undefined}) ->
     {IsDir, FileCtx2#file_ctx{is_dir = IsDir}};
 is_dir(FileCtx = #file_ctx{is_dir = IsDir}) ->
     {IsDir, FileCtx}.
+
+
+-spec assert_is_dir(ctx()) -> ctx().
+assert_is_dir(FileCtx) ->
+    case is_dir(FileCtx) of
+        {false, _} -> throw(?ENOTDIR);
+        {true, FileCtx2} -> FileCtx2
+    end.
+
+-spec assert_is_not_dir(ctx()) -> ctx().
+assert_is_not_dir(FileCtx) ->
+    case is_dir(FileCtx) of
+        {true, _} -> throw(?EISDIR);
+        {false, FileCtx2} -> FileCtx2
+    end.
 
 -spec is_readonly_storage(ctx()) -> {boolean(), ctx()}.
 is_readonly_storage(FileCtx) ->

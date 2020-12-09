@@ -188,7 +188,7 @@ rename_into_itself(FileGuid) ->
 -spec rename_into_different_place_within_space(user_ctx:ctx(),
     SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
-    TargetFileType :: file_meta:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
+    TargetFileType :: file_meta:type() | undefined, TargetParentFileCtx :: file_ctx:ctx() | undefined) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx,
     TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
@@ -215,7 +215,7 @@ rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFil
 -spec rename_into_different_place_within_posix_space(user_ctx:ctx(),
     SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
-    TargetFileType :: file_meta:type(), TargetFileCtx :: file_ctx:ctx()) ->
+    TargetFileType :: file_meta:type() | undefined, TargetFileCtx :: file_ctx:ctx() | undefined) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?DIRECTORY_TYPE, undefined, _
@@ -230,7 +230,7 @@ rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetFileCtx
 ) ->
     #fuse_response{status = #status{code = ?OK}} =
-        delete_req:delete(UserCtx, TargetFileCtx, false),
+        delete_req:delete_using_trash(UserCtx, TargetFileCtx, false),
     rename_dir(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, TargetFileCtx
