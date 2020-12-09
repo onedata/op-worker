@@ -194,6 +194,7 @@ restart_session_if_dead(SessId) ->
         {error, {supervisor_dead, SessType}} ->
             restart_session(SessId, SessType),
             ok;
+        % Fix session document async as it cannot be done from the inside of tp process
         {error, internal_call} ->
             ?warning("Internal call cleaning dead connections for session ~p", [SessId]),
             spawn(fun() ->
