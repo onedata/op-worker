@@ -733,7 +733,7 @@ mock_file_meta_save(Worker, FileName) ->
     end).
 
 unmock_file_meta_save(Worker) ->
-    test_utils:mock_unload(Worker, file_meta).
+    ok = test_utils:mock_unload(Worker, file_meta).
 
 wait_until_saving_file_meta_is_frozen() ->
     receive saving_file_meta_frozen -> ok end.
