@@ -194,6 +194,12 @@ restart_session_if_dead(SessId) ->
         {error, {supervisor_dead, SessType}} ->
             restart_session(SessId, SessType),
             ok;
+        {error, internal_call} = InternalCallError ->
+            ?warning("Internal call cleaning dead connections for session ~p", [SessId]),
+            spawn(fun() ->
+                restart_session_if_dead(SessId)
+            end),
+            InternalCallError;
         {error, Reason} ->
             ?error("Unexpected error cleaning dead connections for session ~p: ~p", [SessId, Reason]),
             ok
