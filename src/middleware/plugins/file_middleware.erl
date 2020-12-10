@@ -354,7 +354,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
                 {ok, value, FileId};
             Error2 ->
                 throw(Error2)
-end
+        end
     catch
         throw:{error, _} = Error ->
             throw(Error);
