@@ -157,6 +157,7 @@
         }
     }
 }).
+-define(SPACE_MOCKED_LATEST_EMITTED_SEQ, 83246190).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
