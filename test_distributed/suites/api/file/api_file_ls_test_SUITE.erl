@@ -529,15 +529,15 @@ get_user_root_dir_children_test(Config) ->
                     validate_result_fun = fun(#api_test_ctx{node = Node, data = Data}, {ok, Result}) ->
                         validate_listed_files(Result, gs, undefined, Data, GetAllSpacesInfoFun(Node))
                     end
-                %% TODO VFS-7001 fix failing test case after changes to od_space:run_after
-%%                },
-%%                #scenario_template{
-%%                    name = <<"List user4 root dir children details using gs api">>,
-%%                    type = gs,
-%%                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(User4RootDirGuid, private),
-%%                    validate_result_fun = fun(#api_test_ctx{node = Node, data = Data}, {ok, Result}) ->
-%%                        validate_listed_files(Result, gs_with_details, undefined, Data, GetAllSpacesInfoFun(Node))
-%%                    end
+                },
+                #scenario_template{
+                    name = <<"List user4 root dir children details using gs api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(User4RootDirGuid, private),
+                    validate_result_fun = fun(_, Result) ->
+                        % Listing children details for user root dir is not supported
+                        ?assertEqual(?ERROR_POSIX(?ENOTSUP), Result)
+                    end
                 }
             ],
             randomly_select_scenarios = true,
@@ -574,8 +574,9 @@ get_user_root_dir_children_test(Config) ->
 %% @private
 -spec get_space_dir_details(node(), file_id:file_guid(), od_space:name()) -> #file_details{}.
 get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
-    {ok, SpaceAttrs} = api_test_utils:get_file_attrs(Node, SpaceDirGuid),
-
+    {ok, SpaceAttrs} = ?assertMatch(
+        {ok, _}, file_test_utils:get_attrs(Node, SpaceDirGuid), ?ATTEMPTS
+    ),
     #file_details{
         file_attr = SpaceAttrs#file_attr{name = SpaceName},
         index_startid = file_id:guid_to_space_id(SpaceDirGuid),

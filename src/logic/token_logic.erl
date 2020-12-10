@@ -12,6 +12,7 @@
 -module(token_logic).
 -author("Bartosz Walkowicz").
 
+-include("middleware/middleware.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -220,5 +221,5 @@ build_verification_payload(AccessToken, ConsumerToken, PeerIp, Interface, DataAc
 %% @private
 -spec op_worker_identity_token() -> tokens:serialized().
 op_worker_identity_token() ->
-    {ok, IdentityToken} = provider_auth:get_identity_token(),
+    {ok, IdentityToken} = ?throw_on_error(provider_auth:acquire_identity_token()),
     tokens:add_oneprovider_service_indication(?OP_WORKER, IdentityToken).

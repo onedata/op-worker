@@ -38,6 +38,7 @@
     lfm_get_details/1,
     lfm_synch_stat/1,
     lfm_truncate/1,
+    lfm_truncate_and_write/1,
     lfm_acl/1,
     rm_recursive/1,
     file_gap/1,
@@ -1213,6 +1214,77 @@ lfm_truncate(Config) ->
     ?assertMatch({ok, #file_attr{size = 5}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test7">>}), 10),
     verify_file_content(Config, Handle11, <<"aabc">>, 0, 4).
 
+lfm_truncate_and_write(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId, _UserId} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    FilePath = <<"/space_name2/lfm_truncate_and_write1">>,
+    FileKey = {path, FilePath},
+
+    % Prepare file
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, FilePath, 8#755)),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, FileKey, rdwr)),
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId, FileKey)),
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle, 0, <<"abc">>)),
+    ?assertMatch({ok, #file_attr{size = 3}}, lfm_proxy:stat(W, SessId, FileKey), 10),
+
+    % Test write right after truncate
+    % (aggregation of write and truncate resulted in wrong file size before fixing it)
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId, FileKey, 0)),
+    ?assertMatch({ok, 1}, lfm_proxy:write(W, Handle, 0, <<"a">>)),
+    ?assertMatch({ok, #file_attr{size = 1}}, lfm_proxy:stat(W, SessId, FileKey), 10),
+    verify_file_content(Config, Handle, <<"a">>),
+    ?assertMatch({ok, [#{<<"blocks">> := [[0, 1]], <<"totalBlocksSize">> := 1}]},
+        lfm_proxy:get_file_distribution(W, SessId, FileKey)),
+
+    % Test truncate between writes - blocks should not be aggregated
+    % and first block should be trimmed
+    ?assertMatch({ok, 4}, lfm_proxy:write(W, Handle, 1, <<"bcde">>)),
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId, FileKey, 3)),
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle, 5, <<"fgh">>)),
+    ?assertMatch({ok, #file_attr{size = 8}}, lfm_proxy:stat(W, SessId, FileKey), 10),
+    verify_file_content(Config, Handle, <<"abc\0\0fgh">>),
+    ?assertMatch({ok, [#{<<"blocks">> := [[0, 3], [5, 3]], <<"totalBlocksSize">> := 6}]},
+        lfm_proxy:get_file_distribution(W, SessId, FileKey)),
+
+    % Test truncate between writes - blocks should not be aggregated
+    % and first block should not be included in final result
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle, 8, <<"ijk">>)),
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId, FileKey, 8)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W, Handle, 9, <<"xy">>)),
+    ?assertMatch({ok, #file_attr{size = 11}}, lfm_proxy:stat(W, SessId, FileKey), 10),
+    verify_file_content(Config, Handle, <<"abc\0\0fgh\0xy">>),
+
+    ?assertMatch({ok, [#{<<"blocks">> := [[0, 3], [5, 3], [9, 2]], <<"totalBlocksSize">> := 8}]},
+        lfm_proxy:get_file_distribution(W, SessId, FileKey), 10),
+
+    % Test truncate between writes - blocks should not be aggregated
+    % and first block should be trimmed
+    % Truncate only with event to prevent events flush when truncating storage file
+    % As a result only metadata is changed by truncate - data on storage system remains
+    ?assertMatch({ok, 4}, lfm_proxy:write(W, Handle, 11, <<"bcde">>)),
+    ?assertMatch(ok, produce_truncate_event(W, SessId, FileKey, 13)),
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle, 15, <<"fgh">>)),
+    ?assertMatch({ok, #file_attr{size = 18}}, lfm_proxy:stat(W, SessId, FileKey), 10),
+    verify_file_content(Config, Handle, <<"abc\0\0fgh\0xybcdefgh">>),
+    ?assertMatch({ok, [#{<<"blocks">> := [[0, 3], [5, 3], [9, 4], [15, 3]], <<"totalBlocksSize">> := 13}]},
+        lfm_proxy:get_file_distribution(W, SessId, FileKey)),
+
+    % Test truncate between writes - blocks should not be aggregated
+    % and first block should not be included in final result
+    % Truncate only with event to prevent events flush when truncating storage file
+    % As a result only metadata is changed by truncate - data on storage system remains
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle, 18, <<"ijk">>)),
+    ?assertMatch(ok, produce_truncate_event(W, SessId, FileKey, 18)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W, Handle, 19, <<"xy">>)),
+    ?assertMatch({ok, #file_attr{size = 21}}, lfm_proxy:stat(W, SessId, FileKey), 10),
+    verify_file_content(Config, Handle, <<"abc\0\0fgh\0xybcdefghixy">>),
+
+    ?assertMatch({ok, [#{<<"blocks">> := [[0, 3], [5, 3], [9, 4], [15, 3], [19, 2]], <<"totalBlocksSize">> := 15}]},
+        lfm_proxy:get_file_distribution(W, SessId, FileKey), 10).
+
 lfm_acl(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
@@ -2049,3 +2121,7 @@ verify_file_content(Config, Handle, FileContent) ->
 verify_file_content(Config, Handle, FileContent, From, To) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual({ok, FileContent}, lfm_proxy:read(Worker, Handle, From, To)).
+
+produce_truncate_event(Worker, SessId, FileKey, Size) ->
+    {guid, FileGuid} = rpc:call(Worker, guid_utils, ensure_guid, [SessId, FileKey]),
+    ok = rpc:call(Worker, lfm_event_emitter, emit_file_truncated, [FileGuid, Size, SessId]).

@@ -71,40 +71,27 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                     }
                 } ->
                     FirstLocalBlocksBeforeAppend = fslogic_location_cache:get_blocks(Location, #{count => 2}),
-                    {UpdatedLocation, LocationChanges} = append(Location, Blocks, BumpVersion),
-                    case FileSize of
-                        undefined ->
-                            UpdateDescription = #{location_changes => LocationChanges},
-                            fslogic_location_cache:save_location(UpdatedLocation),
-                            #document{value = #file_location{size = UpdatedSize}} = UpdatedLocation,
-                            FirstLocalBlocks = fslogic_location_cache:get_blocks(UpdatedLocation, #{count => 2}),
-                            ReplicaStatusChanged = has_replica_status_changed(
-                                FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, UpdatedSize),
-                            case {ReplicaStatusChanged, UpdatedSize > OldSize} of
-                                {true, SizeChanged} -> 
-                                    {ok, UpdateDescription#{size_changed => SizeChanged, replica_status_changed => true}};
-                                {_, true} ->
-                                    {ok, UpdateDescription#{size_changed => true}};
-                                _ -> 
-                                    {ok, UpdateDescription}
-                            end;
+                    {TruncatedLocation, LocationTruncateChanges} = do_local_truncate(FileSize, Location),
+
+                    {UpdatedLocation, LocationAppendChanges} = append(TruncatedLocation, Blocks, BumpVersion),
+                    UpdateDescription = #{location_changes => LocationTruncateChanges ++ LocationAppendChanges},
+                    fslogic_location_cache:save_location(UpdatedLocation),
+                    #document{value = #file_location{size = UpdatedSize}} = UpdatedLocation,
+                    FirstLocalBlocks = fslogic_location_cache:get_blocks(UpdatedLocation, #{count => 2}),
+                    ReplicaStatusChanged = has_replica_status_changed(
+                        FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, UpdatedSize),
+                    case {ReplicaStatusChanged, UpdatedSize =/= OldSize} of
+                        {true, SizeChanged} ->
+                            {ok, UpdateDescription#{size_changed => SizeChanged, replica_status_changed => true}};
+                        {_, true} ->
+                            {ok, UpdateDescription#{size_changed => true}};
                         _ ->
-                            {TruncatedLocation, LocationChanges2} = do_local_truncate(FileSize, UpdatedLocation),
-                            UpdateDescription = #{
-                                size_changed => true,
-                                location_changes => LocationChanges ++ LocationChanges2
-                            },
-                            fslogic_location_cache:save_location(TruncatedLocation),
-                            FirstLocalBlocks = fslogic_location_cache:get_blocks(TruncatedLocation, #{count => 2}),
-                            ReplicaStatusChanged = has_replica_status_changed(
-                                FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, FileSize),
-                            {ok, UpdateDescription#{replica_status_changed => ReplicaStatusChanged}}
+                            {ok, UpdateDescription}
                     end;
                 Error ->
                     Error
             end
         end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -165,8 +152,10 @@ has_replica_status_changed(ReplicaUpdateResult) ->
 %% Truncates blocks from given location. Works for both shrinking and growing file.
 %% @end
 %%--------------------------------------------------------------------
--spec do_local_truncate(FileSize :: non_neg_integer(), file_location:doc()) ->
+-spec do_local_truncate(FileSize :: non_neg_integer() | undefined, file_location:doc()) ->
     {file_location:doc(), location_changes_description()}.
+do_local_truncate(undefined, Doc) ->
+    {Doc, []};
 do_local_truncate(FileSize, Doc = #document{value = #file_location{size = FileSize}}) ->
     {Doc, []};
 do_local_truncate(FileSize, Doc = #document{value = Record = #file_location{size = LocalSize}}) when LocalSize < FileSize ->

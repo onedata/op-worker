@@ -21,6 +21,7 @@
 -module(storage).
 -author("Michal Stanisz").
 
+-include("middleware/middleware.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -91,11 +92,6 @@
     imported/0, readonly/0, config/0]).
 
 -compile({no_auto_import, [get/1]}).
-
--define(throw_on_error(Res), case Res of
-    {error, _} = Error -> throw(Error);
-    _ -> Res
-end).
 
 
 %%%===================================================================

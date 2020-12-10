@@ -212,9 +212,9 @@ mark_created_file(SpaceId) ->
         Timestamp = global_clock:timestamp_seconds(),
         SIM2 = SIM#storage_import_monitoring{
             created = CreatedFiles + 1,
-            created_min_hist = time_slot_histogram:increment(MinHist, Timestamp),
-            created_hour_hist = time_slot_histogram:increment(HourHist, Timestamp),
-            created_day_hist = time_slot_histogram:increment(DayHist, Timestamp)
+            created_min_hist = increment_histogram(MinHist, Timestamp),
+            created_hour_hist = increment_histogram(HourHist, Timestamp),
+            created_day_hist = increment_histogram(DayHist, Timestamp)
         },
         SIM3 = maybe_proceed_to_running_status(SIM2),
         SIM4 = decrement_queue_length_histograms(SIM3, Timestamp),
@@ -241,9 +241,9 @@ mark_modified_file(SpaceId) ->
         Timestamp = global_clock:timestamp_seconds(),
         SIM2 = SIM#storage_import_monitoring{
             modified = ModifiedFiles + 1,
-            modified_min_hist = time_slot_histogram:increment(MinHist, Timestamp),
-            modified_hour_hist = time_slot_histogram:increment(HourHist, Timestamp),
-            modified_day_hist = time_slot_histogram:increment(DayHist, Timestamp)
+            modified_min_hist = increment_histogram(MinHist, Timestamp),
+            modified_hour_hist = increment_histogram(HourHist, Timestamp),
+            modified_day_hist = increment_histogram(DayHist, Timestamp)
         },
         SIM3 = maybe_proceed_to_running_status(SIM2),
         SIM4 = decrement_queue_length_histograms(SIM3, Timestamp),
@@ -269,9 +269,9 @@ mark_deleted_file(SpaceId) ->
         Timestamp = global_clock:timestamp_seconds(),
         SIM2 = SIM#storage_import_monitoring{
             deleted = DeletedFiles + 1,
-            deleted_min_hist = time_slot_histogram:increment(MinHist, Timestamp),
-            deleted_hour_hist = time_slot_histogram:increment(HourHist, Timestamp),
-            deleted_day_hist = time_slot_histogram:increment(DayHist, Timestamp)
+            deleted_min_hist = increment_histogram(MinHist, Timestamp),
+            deleted_hour_hist = increment_histogram(HourHist, Timestamp),
+            deleted_day_hist = increment_histogram(DayHist, Timestamp)
         },
         SIM3 = maybe_proceed_to_running_status(SIM2),
         SIM4 = decrement_queue_length_histograms(SIM3, Timestamp),
@@ -395,7 +395,7 @@ get_info(SpaceId) ->
     case storage_import_monitoring:get(SpaceId) of
         {ok, Doc} ->
             get_info(Doc);
-        {error, _} = Error->
+        {error, _} = Error ->
             Error
     end.
 
@@ -464,7 +464,7 @@ get_finished_scans_num(SpaceId) ->
     case storage_import_monitoring:get(SpaceId) of
         {ok, Doc} ->
             get_finished_scans_num(Doc);
-        Error = {error, _}->
+        Error = {error, _} ->
             Error
     end.
 
@@ -590,6 +590,7 @@ delete(SpaceId) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec new_doc(key()) -> doc().
 new_doc(SpaceId) ->
     #document{
@@ -599,6 +600,7 @@ new_doc(SpaceId) ->
     }.
 
 
+%% @private
 -spec new_record() -> record().
 new_record() ->
     Timestamp = global_clock:timestamp_seconds(),
@@ -659,9 +661,9 @@ increment_queue_length_histograms(SIM = #storage_import_monitoring{
     queue_length_day_hist = DayHist
 }, Timestamp, Value) ->
     SIM#storage_import_monitoring{
-        queue_length_min_hist = time_slot_histogram:increment(MinHist, Timestamp, Value),
-        queue_length_hour_hist = time_slot_histogram:increment(HourHist, Timestamp, Value),
-        queue_length_day_hist = time_slot_histogram:increment(DayHist, Timestamp, Value)
+        queue_length_min_hist = increment_histogram(MinHist, Timestamp, Value),
+        queue_length_hour_hist = increment_histogram(HourHist, Timestamp, Value),
+        queue_length_day_hist = increment_histogram(DayHist, Timestamp, Value)
     }.
 
 
@@ -685,9 +687,9 @@ decrement_queue_length_histograms(SIM = #storage_import_monitoring{
     queue_length_day_hist = DayHist
 }, Timestamp, Value) ->
     SIM#storage_import_monitoring{
-        queue_length_min_hist = time_slot_histogram:decrement(MinHist, Timestamp, Value),
-        queue_length_hour_hist = time_slot_histogram:decrement(HourHist, Timestamp, Value),
-        queue_length_day_hist = time_slot_histogram:decrement(DayHist, Timestamp, Value)
+        queue_length_min_hist = decrement_histogram(MinHist, Timestamp, Value),
+        queue_length_hour_hist = decrement_histogram(HourHist, Timestamp, Value),
+        queue_length_day_hist = decrement_histogram(DayHist, Timestamp, Value)
     }.
 
 
@@ -752,9 +754,9 @@ reset_queue_length_histograms(SIM = #storage_import_monitoring{
     queue_length_hour_hist = QueueLengthHourHist,
     queue_length_day_hist = QueueLengthDayHist
 }, Timestamp) ->
-    QueueLengthMinHist2 = time_slot_histogram:reset_cumulative(QueueLengthMinHist, Timestamp),
-    QueueLengthHourHist2 = time_slot_histogram:reset_cumulative(QueueLengthHourHist, Timestamp),
-    QueueLengthDayHist2 = time_slot_histogram:reset_cumulative(QueueLengthDayHist, Timestamp),
+    QueueLengthMinHist2 = reset_cumulative_histogram(QueueLengthMinHist, Timestamp),
+    QueueLengthHourHist2 = reset_cumulative_histogram(QueueLengthHourHist, Timestamp),
+    QueueLengthDayHist2 = reset_cumulative_histogram(QueueLengthDayHist, Timestamp),
     SIM#storage_import_monitoring{
         queue_length_min_hist = QueueLengthMinHist2,
         queue_length_hour_hist = QueueLengthHourHist2,
@@ -824,7 +826,6 @@ return_histogram_and_timestamp(SIM, ?QUEUE_LENGTH, day) ->
     prepare(SIM#storage_import_monitoring.queue_length_day_hist).
 
 
-
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -835,7 +836,7 @@ return_histogram_and_timestamp(SIM, ?QUEUE_LENGTH, day) ->
 -spec prepare(time_slot_histogram:histogram()) -> time_stats().
 prepare(TimeSlotHistogram) ->
     Timestamp = global_clock:timestamp_seconds(),
-    TimeSlotHistogram2 = time_slot_histogram:increment(TimeSlotHistogram, Timestamp, 0),
+    TimeSlotHistogram2 = increment_histogram(TimeSlotHistogram, Timestamp, 0),
     Values = time_slot_histogram:get_histogram_values(TimeSlotHistogram2),
     prepare(Timestamp, Values).
 
@@ -859,6 +860,36 @@ maybe_proceed_to_running_status(SIM = #storage_import_monitoring{status = ?ENQUE
     SIM#storage_import_monitoring{status = ?RUNNING};
 maybe_proceed_to_running_status(SIM) ->
     SIM.
+
+
+%% @private
+-spec increment_histogram(time_slot_histogram:histogram(), time:seconds()) ->
+    time_slot_histogram:histogram().
+increment_histogram(Histogram, CurrentTimeSeconds) ->
+    increment_histogram(Histogram, CurrentTimeSeconds, 1).
+
+%% @private
+-spec increment_histogram(time_slot_histogram:histogram(), time:seconds(), non_neg_integer()) ->
+    time_slot_histogram:histogram().
+increment_histogram(Histogram, CurrentTimeSeconds, Value) ->
+    MonotonicTime = time_slot_histogram:ensure_monotonic_timestamp(Histogram, CurrentTimeSeconds),
+    time_slot_histogram:increment(Histogram, MonotonicTime, Value).
+
+
+%% @private
+-spec decrement_histogram(time_slot_histogram:histogram(), time:seconds(), non_neg_integer()) ->
+    time_slot_histogram:histogram().
+decrement_histogram(Histogram, CurrentTimeSeconds, Value) ->
+    MonotonicTime = time_slot_histogram:ensure_monotonic_timestamp(Histogram, CurrentTimeSeconds),
+    time_slot_histogram:decrement(Histogram, MonotonicTime, Value).
+
+
+%% @private
+-spec reset_cumulative_histogram(time_slot_histogram:histogram(), time:seconds()) ->
+    time_slot_histogram:histogram().
+reset_cumulative_histogram(Histogram, CurrentTimeSeconds) ->
+    MonotonicTime = time_slot_histogram:ensure_monotonic_timestamp(Histogram, CurrentTimeSeconds),
+    time_slot_histogram:reset_cumulative(Histogram, MonotonicTime).
 
 %%%===================================================================
 %%% Migration functions

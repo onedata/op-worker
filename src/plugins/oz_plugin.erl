@@ -98,7 +98,7 @@ auth_to_rest_client(none) ->
     none;
 
 auth_to_rest_client(provider) ->
-    {ok, ProviderAccessToken} = provider_auth:get_access_token(),
+    {ok, ProviderAccessToken} = provider_auth:acquire_access_token(),
     {provider, ProviderAccessToken};
 
 auth_to_rest_client(?ROOT_SESS_ID) ->

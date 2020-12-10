@@ -29,7 +29,8 @@
 -export([save/2, delete/0]).
 -export([get_provider_id/0, is_registered/0]).
 -export([clear_provider_id_cache/0]).
--export([get_access_token/0, get_identity_token/0, get_identity_token_for_consumer/1]).
+-export([acquire_access_token/0]).
+-export([acquire_identity_token/0, acquire_identity_token_for_consumer/1]).
 -export([get_root_token_file_path/0]).
 -export([backup_to_file/1]).
 
@@ -133,14 +134,14 @@ is_registered() ->
     end.
 
 
--spec get_access_token() -> {ok, tokens:serialized()} | {error, term()}.
-get_access_token() ->
-    get_token(access).
+-spec acquire_access_token() -> {ok, tokens:serialized()} | {error, term()}.
+acquire_access_token() ->
+    acquire_token(access).
 
 
--spec get_identity_token() -> {ok, tokens:serialized()} | {error, term()}.
-get_identity_token() ->
-    get_token(identity).
+-spec acquire_identity_token() -> {ok, tokens:serialized()} | {error, term()}.
+acquire_identity_token() ->
+    acquire_token(identity).
 
 
 %%--------------------------------------------------------------------
@@ -151,11 +152,13 @@ get_identity_token() ->
 %% TTL for security.
 %% @end
 %%--------------------------------------------------------------------
--spec get_identity_token_for_consumer(aai:consumer_spec()) ->
+-spec acquire_identity_token_for_consumer(aai:consumer_spec()) ->
     {ok, tokens:serialized()} | {error, term()}.
-get_identity_token_for_consumer(Consumer) ->
-    {ok, Token} = get_identity_token(),
-    {ok, tokens:confine(Token, #cv_consumer{whitelist = [Consumer]})}.
+acquire_identity_token_for_consumer(Consumer) ->
+    case acquire_identity_token() of
+        {ok, Token} -> {ok, tokens:confine(Token, #cv_consumer{whitelist = [Consumer]})};
+        {error, _} = Error -> Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -295,8 +298,8 @@ write_to_file(ProviderId, RootToken, Nodes) ->
     end.
 
 %% @private
--spec get_token(access | identity) -> {ok, tokens:serialized()} | {error, term()}.
-get_token(Type) ->
+-spec acquire_token(access | identity) -> {ok, tokens:serialized()} | {error, term()}.
+acquire_token(Type) ->
     case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
         {error, not_found} ->
             ?ERROR_UNREGISTERED_ONEPROVIDER;
@@ -304,21 +307,9 @@ get_token(Type) ->
             Error;
         {ok, #document{value = ProviderAuth}} ->
             {ValidUntil, CachedToken} = get_cached_token(Type, ProviderAuth),
-            Now = ?NOW(),
-            case ValidUntil - Now > ?MIN_TTL_FROM_CACHE of
-                true ->
-                    {ok, CachedToken};
-                false ->
-                    Token = case Type of
-                        access ->
-                            ProviderAuth#provider_auth.root_token;
-                        identity ->
-                            {ok, IdentityToken} = token_logic:create_identity_token(Now + ?TOKEN_TTL),
-                            IdentityToken
-                    end,
-                    ConfinedToken = tokens:confine(Token, caveats_for_token(Type)),
-                    cache_token(Type, ConfinedToken),
-                    {ok, ConfinedToken}
+            case ValidUntil - ?NOW() > ?MIN_TTL_FROM_CACHE of
+                true -> {ok, CachedToken};
+                false -> create_and_cache_token(Type, ProviderAuth)
             end
     end.
 
@@ -330,6 +321,27 @@ get_cached_token(access, ProviderAuth) ->
     ProviderAuth#provider_auth.cached_access_token;
 get_cached_token(identity, ProviderAuth) ->
     ProviderAuth#provider_auth.cached_identity_token.
+
+
+%% @private
+-spec create_and_cache_token(access | identity, record()) -> {ok, tokens:serialized()} | {error, term()}.
+create_and_cache_token(Type, ProviderAuth) ->
+    case get_base_token(Type, ProviderAuth) of
+        {error, _} = Error ->
+            Error;
+        {ok, BaseToken} ->
+            ConfinedToken = tokens:confine(BaseToken, caveats_for_token(Type)),
+            cache_token(Type, ConfinedToken),
+            {ok, ConfinedToken}
+    end.
+
+
+%% @private
+-spec get_base_token(access | identity, record()) -> {ok, tokens:serialized()} | {error, term()}.
+get_base_token(access, ProviderAuth) ->
+    {ok, ProviderAuth#provider_auth.root_token};
+get_base_token(identity, _ProviderAuth) ->
+    token_logic:create_identity_token(?NOW() + ?TOKEN_TTL).
 
 
 %% @private
@@ -354,6 +366,7 @@ caveats_for_token(access) -> [
 caveats_for_token(identity) -> [
 ].
 
--spec critical_section(fun (() -> Result :: term())) -> Result :: term().
+
+-spec critical_section(fun(() -> Result)) -> Result.
 critical_section(Fun) ->
     critical_section:run([?MODULE], Fun).
