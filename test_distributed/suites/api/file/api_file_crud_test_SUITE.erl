@@ -569,7 +569,7 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType, Config) ->
             {ok, #file_attr{shares = Shares}} = file_test_utils:get_attrs(P2Node, FileGuid),
             Shares ++ SharesAcc
         end, [], AllFiles),
-        api_test_memory:set(MemRef, shares, lists:usort(AllShares))
+        api_test_memory:set(MemRef, all_shares, lists:usort(AllShares))
     end.
 
 
@@ -581,6 +581,7 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType, Config) ->
     onenv_api_test_runner:setup_fun().
 build_delete_instance_verify_fun(MemRef, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
+    RandomNode = lists_utils:random_element(Nodes),
 
     fun(Expectation, _) ->
         ExpResult = case Expectation of
@@ -588,15 +589,15 @@ build_delete_instance_verify_fun(MemRef, Config) ->
             expected_success -> {error, ?ENOENT}
         end,
 
-        lists:foreach(fun(Node) ->
-            lists:foreach(fun(Guid) ->
-                ?assertMatch(ExpResult, ?extract_ok(file_test_utils:get_attrs(Node, Guid)), ?ATTEMPTS)
-            end, api_test_memory:get(MemRef, all_files)),
+        lists:foreach(fun(ShareId) ->
+            ?assertMatch({ok, _}, get_share(RandomNode, ShareId), ?ATTEMPTS)
+        end, api_test_memory:get(MemRef, all_shares)),
 
-            lists:foreach(fun(ShareId) ->
-                ?assertMatch({ok, _}, get_share(Node, ShareId), ?ATTEMPTS)
-            end, api_test_memory:get(MemRef, shares))
-        end, Nodes)
+        lists:foreach(fun(Guid) ->
+            lists:foreach(fun(Node) ->
+                ?assertMatch(ExpResult, ?extract_ok(file_test_utils:get_attrs(Node, Guid)), ?ATTEMPTS)
+            end, Nodes)
+        end, api_test_memory:get(MemRef, all_files))
     end.
 
 
