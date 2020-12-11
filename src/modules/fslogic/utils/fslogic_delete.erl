@@ -349,10 +349,15 @@ update_parent_timestamps(UserCtx, FileCtx) ->
 -spec delete_storage_sync_info(file_ctx:ctx()) -> file_ctx:ctx().
 delete_storage_sync_info(FileCtx) ->
     try
-        {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-        SpaceId = file_ctx:get_space_id_const(FileCtx2),
-        storage_sync_info:delete(StorageFileId, SpaceId),
-        FileCtx2
+        case file_ctx:is_imported_storage(FileCtx) of
+            {true, FileCtx2} ->
+                {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+                SpaceId = file_ctx:get_space_id_const(FileCtx3),
+                storage_sync_info:delete(StorageFileId, SpaceId),
+                FileCtx3;
+            {false, FileCtx2} ->
+                FileCtx2
+        end
     catch
         error:{badmatch, {error, not_found}} ->
             FileCtx
