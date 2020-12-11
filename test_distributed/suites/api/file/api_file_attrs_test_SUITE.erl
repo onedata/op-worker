@@ -70,7 +70,7 @@ get_file_attrs_test(Config) ->
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    {ok, FileAttrs} = api_test_utils:get_file_attrs(P2Node, FileGuid),
+    {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
     JsonAttrs = attrs_to_json(undefined, FileAttrs),
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
@@ -157,7 +157,7 @@ get_shared_file_attrs_test(Config) ->
 
     {ok, FileAttrs} = ?assertMatch(
         {ok, #file_attr{shares = [ShareId2, ShareId1]}},
-        api_test_utils:get_file_attrs(P2Node, FileGuid),
+        file_test_utils:get_attrs(P2Node, FileGuid),
         ?ATTEMPTS
     ),
     JsonAttrs = attrs_to_json(ShareId1, FileAttrs),
@@ -567,7 +567,7 @@ set_file_mode_test(Config) ->
     end,
 
     GetMode = fun(Node) ->
-        {ok, #file_attr{mode = Mode}} = api_test_utils:get_file_attrs(Node, FileGuid),
+        {ok, #file_attr{mode = Mode}} = file_test_utils:get_attrs(Node, FileGuid),
         Mode
     end,
 
@@ -664,7 +664,7 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
     VerifyFun = fun(_, _) ->
         ?assertMatch(
             {ok, #file_attr{mode = 8#777}},
-            api_test_utils:get_file_attrs(P1Node, FileGuid),
+            file_test_utils:get_attrs(P1Node, FileGuid),
             ?ATTEMPTS
         ),
         true
@@ -813,7 +813,7 @@ get_file_distribution_test(Config) ->
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
-    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
+    file_test_utils:await_sync(P2Node, FileGuid),
 
     api_test_utils:fill_file_with_dummy_data(P1Node, UserSessIdP1, FileGuid, 0, 20),
     ExpDist1 = [#{
@@ -855,7 +855,7 @@ get_dir_distribution_test(Config) ->
     DirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, DirGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, DirGuid}, <<"share">>),
-    api_test_utils:wait_for_file_sync(P2Node, UserSessIdP2, DirGuid),
+    file_test_utils:await_sync(P2Node, DirGuid),
 
     ExpDist = [],
     wait_for_file_location_sync(P2Node, UserSessIdP2, DirGuid, ExpDist),

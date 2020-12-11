@@ -23,8 +23,6 @@
 -export([
     build_rest_url/2,
 
-    get_file_attrs/2,
-
     create_shared_file_in_space1/1,
     create_and_sync_shared_file_in_space2/2,
     create_and_sync_shared_file_in_space2/3,
@@ -35,13 +33,11 @@
     randomly_choose_file_type_for_test/0,
     randomly_choose_file_type_for_test/1,
     create_file/4, create_file/5,
-    wait_for_file_sync/3,
 
     fill_file_with_dummy_data/4,
     fill_file_with_dummy_data/5,
     write_file/5,
     read_file/4,
-    assert_distribution/3,
 
     share_file_and_sync_file_attrs/4,
 
@@ -87,19 +83,6 @@ build_rest_url(Node, PathTokens) ->
     ])).
 
 
--spec get_file_attrs(node(), file_id:file_guid()) ->
-    {ok, lfm_attrs:file_attributes()} | {error, times_not_synchronized}.
-get_file_attrs(Node, FileGuid) ->
-    case ?assertMatch({ok, _}, lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, FileGuid}), ?ATTEMPTS) of
-        % File attrs are constructed from several records so it is possible that
-        % even if 'file_meta' (the main doc) was synchronized 'times' doc wasn't
-        {ok, #file_attr{mtime = 0}} ->
-            {error, times_not_synchronized};
-        Result ->
-            Result
-    end.
-
-
 -spec create_shared_file_in_space1(api_test_runner:config()) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
 create_shared_file_in_space1(Config) ->
@@ -142,13 +125,12 @@ create_and_sync_shared_file_in_space2(FileType, FileName, Mode, Config) ->
 
     SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
     UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
 
     FilePath = filename:join(["/", ?SPACE_2, FileName]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
-    wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
+    file_test_utils:await_sync(P2Node, FileGuid),
 
     {FileType, FilePath, FileGuid, ShareId}.
 
@@ -201,7 +183,7 @@ create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileTyp
     end,
     {ok, FileAttrs} = ?assertMatch(
         {ok, #file_attr{size = Size, shares = FileShares}},
-        get_file_attrs(P2Node, FileGuid),
+        file_test_utils:get_attrs(P2Node, FileGuid),
         ?ATTEMPTS
     ),
 
@@ -250,12 +232,6 @@ create_file(<<"dir">>, Node, SessId, Path, Mode) ->
     lfm_proxy:mkdir(Node, SessId, Path, Mode).
 
 
--spec wait_for_file_sync(node(), session:id(), file_id:file_guid()) -> ok.
-wait_for_file_sync(Node, SessId, FileGuid) ->
-    ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, {guid, FileGuid}), ?ATTEMPTS),
-    ok.
-
-
 -spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
     WrittenContent :: binary().
 fill_file_with_dummy_data(Node, SessId, FileGuid, Size) ->
@@ -288,54 +264,6 @@ read_file(Node, SessId, FileGuid, Size) ->
     Content.
 
 
--spec assert_distribution(
-    [node()],
-    file_id:file_guid() | [file_id:file_guid()],
-    [{node(), non_neg_integer()}]
-) ->
-    true | no_return().
-assert_distribution(NodesToVerify, Files, ExpSizePerProvider) when is_list(Files) ->
-    ExpDistribution = lists:sort(lists:map(fun
-        ({Node, Blocks}) when is_list(Blocks) ->
-            #{
-                <<"blocks">> => lists:foldr(fun
-                    (#file_block{offset = _Offset, size = 0}, Acc) ->
-                        Acc;
-                    (#file_block{offset = Offset, size = Size}, Acc) ->
-                        [[Offset, Size] | Acc]
-                end, [], Blocks),
-                <<"providerId">> => op_test_rpc:get_provider_id(Node),
-                <<"totalBlocksSize">> => lists:sum(lists:map(fun(#file_block{size = Size}) ->
-                    Size
-                end, Blocks))
-            };
-        ({Node, ExpSize}) when is_integer(ExpSize) ->
-            #{
-                <<"blocks">> => case ExpSize of
-                    0 -> [];
-                    _ -> [[0, ExpSize]]
-                end,
-                <<"providerId">> => op_test_rpc:get_provider_id(Node),
-                <<"totalBlocksSize">> => ExpSize
-            }
-    end, ExpSizePerProvider)),
-
-    FetchDistributionFun = fun(Node, Guid) ->
-        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, ?ROOT_SESS_ID, {guid, Guid}),
-        lists:sort(Distribution)
-    end,
-
-    lists:foreach(fun(FileGuid) ->
-        lists:foreach(fun(Node) ->
-            ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), ?ATTEMPTS)
-        end, NodesToVerify)
-    end, Files),
-
-    true;
-assert_distribution(NodesToVerify, File, ExpSizePerProvider) ->
-    assert_distribution(NodesToVerify, [File], ExpSizePerProvider).
-
-
 -spec share_file_and_sync_file_attrs(node(), session:id(), [node()], file_id:file_guid()) ->
     od_share:id().
 share_file_and_sync_file_attrs(CreationNode, SessionId, SyncNodes, FileGuid) ->
@@ -347,7 +275,7 @@ share_file_and_sync_file_attrs(CreationNode, SessionId, SyncNodes, FileGuid) ->
     lists:foreach(fun(Node) ->
         ?assertMatch(
             {ok, #file_attr{shares = [ShareId | _]}},
-            get_file_attrs(Node, FileGuid),
+            file_test_utils:get_attrs(Node, FileGuid),
             ?ATTEMPTS
         )
     end, SyncNodes),

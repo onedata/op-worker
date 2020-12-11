@@ -87,9 +87,11 @@
 -type teardown_fun() :: fun(() -> ok).
 % Function called after testcase. Can be used to check if test had desired effect
 % on environment (e.g. check if resource deleted during test was truly deleted).
+% If not it should throw an error.
 % First argument tells whether request made during testcase should succeed
 -type verify_fun() :: fun(
-    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) -> boolean()
+    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) ->
+        term() | no_return()
 ).
 
 -type rest_args() :: #rest_args{}.
@@ -572,7 +574,8 @@ run_exp_error_testcase(TargetNode, Client, DataSet, ScenarioError, VerifyFun, #s
             RequestResult = make_request(Config, TargetNode, Client, Args),
             try
                 validate_error_result(ScenarioType, ExpError, RequestResult),
-                VerifyFun(expected_failure, TestCaseCtx)
+                VerifyFun(expected_failure, TestCaseCtx),
+                true
             catch T:R ->
                 log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R, Config),
                 false
@@ -605,7 +608,8 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_templ
                             ScenarioType, ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED), Result
                         ),
                         VerifyFun(expected_failure, TestCaseCtx)
-                end
+                end,
+                true
             catch T:R ->
                 log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R, Config),
                 false
