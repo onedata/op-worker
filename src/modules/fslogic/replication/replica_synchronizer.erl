@@ -569,9 +569,9 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
         {_, NewRefs, _} = lists:unzip3(NewTransfers),
         case ExistingRefs ++ NewRefs of
             [] ->
-                FileLocation =
-                    location_and_link_utils:get_local_blocks_and_fill_location_gaps([Block], fslogic_cache:get_local_location(),
-                        fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
+                FileLocation = location_and_link_utils:get_local_blocks_and_fill_location_gaps([Block],
+                    fslogic_cache:get_local_location(), fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()
+                ),
                 {ChangeOffset, ChangeEnd} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
                 FLC = #file_location_changed{file_location = FileLocation,
                     change_beg_offset = ChangeOffset, change_end_offset = ChangeEnd},
