@@ -278,9 +278,9 @@ renew_connections(#state{
     NewState = try
         renew_connections_insecure(State)
     catch Type:Reason ->
-        ?debug("Failed to establish connection with provider ~ts.~n"
+        ?debug("Failed to establish connection with provider ~ts due to ~p:~p.~n"
                "Next retry not sooner than ~B s.", [
-            provider_logic:to_printable(PeerId),
+            provider_logic:to_printable(PeerId), Type, Reason,
             Interval div 1000
         ]),
         utils:throttle({?MODULE, SessionId}, ?CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
@@ -367,33 +367,37 @@ schedule_next_renewal(State) ->
 -spec log_error(state(), Type :: throw | error | exit, Reason :: term()) ->
     ok.
 log_error(State, throw, {cannot_verify_peer_op_identity, Reason}) ->
-    ?warning("Discarding connections renewal to provider ~ts because "
-             "its identity cannot be verified due to ~w.~n", [
-        provider_logic:to_printable(State#state.peer_id),
+    log_error(State, str_utils:format("peer identity cannot be verified due to ~w", [
         Reason
-    ]);
+    ]));
 log_error(State, throw, {cannot_check_peer_op_version, HTTPErrorCode}) ->
-    ?warning("Discarding connections renewal to provider ~ts because "
-             "its version cannot be determined (HTTP ~B).~n", [
-        provider_logic:to_printable(State#state.peer_id),
+    log_error(State, str_utils:format("peer version cannot be determined (HTTP ~B)", [
         HTTPErrorCode
-    ]);
+    ]));
 log_error(State, throw, {incompatible_peer_op_version, PeerOpVersion, PeerCompOpVersions}) ->
     Version = oneprovider:get_version(),
     {ok, CompatibleOpVersions} = compatibility:get_compatible_versions(
         ?ONEPROVIDER, Version, ?ONEPROVIDER
     ),
-    ?warning("Discarding connections renewal to provider ~ts "
-             "because of incompatible version.~n"
-             "Local version: ~s, supports providers: ~s~n"
-             "Remote version: ~s, supports providers: ~s~n", [
-        provider_logic:to_printable(State#state.peer_id),
-        Version, str_utils:join_binary(CompatibleOpVersions, <<", ">>),
-        PeerOpVersion, str_utils:join_binary(PeerCompOpVersions, <<", ">>)
-    ]);
+    log_error(State, str_utils:format(
+        "peer is of incompatible version.~n"
+        "Local version: ~s, supports providers: ~s~n"
+        "Remote version: ~s, supports providers: ~s", [
+            Version, str_utils:join_binary(CompatibleOpVersions, <<", ">>),
+            PeerOpVersion, str_utils:join_binary(PeerCompOpVersions, <<", ">>)
+        ]
+    ));
 log_error(State, Type, Reason) ->
-    ?warning("Failed to renew connections to provider ~ts~n"
-             "Error was: ~w:~p.~n", [
-        provider_logic:to_printable(State#state.peer_id),
-        Type, Reason
-    ]).
+    log_error(State, str_utils:format("~w:~p", [Type, Reason])).
+
+
+%% @private
+-spec log_error(state(), ReasonString :: string()) -> ok.
+log_error(#state{peer_id = PeerId}, ReasonString) ->
+    ?warning(
+        "Failed to renew connections to provider ~ts, retrying in the background..."
+        "Last error was: ~ts.", [
+            provider_logic:to_printable(PeerId),
+            ReasonString
+        ]
+    ).
