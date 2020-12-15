@@ -189,7 +189,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
 
         case DeleteMode of
             ?SINGLE_STEP_DEL(?ALL_DOCS) ->
-                FileCtx4 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
+                FileCtx4 = update_parent_timestamps(UserCtx, FileCtx3),
                 {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
                 FileCtx6 = delete_storage_sync_info(FileCtx5),
                 % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
@@ -200,7 +200,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult, ?ALL_DOCS);
             ?TWO_STEP_DEL_INIT ->
                 % TODO VFS-6114 maybe delete file_meta and associated documents here?
-                FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
+                FileCtx5 = update_parent_timestamps(UserCtx, FileCtx3),
                 delete_storage_sync_info(FileCtx5),
                 ok;
             ?TWO_STEP_DEL_FIN(DocsDeletionScope) ->
@@ -335,31 +335,16 @@ maybe_remove_file_on_storage(FileCtx, UserCtx) ->
             {error, Reason}
     end.
 
--spec delete_shares_and_update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
-delete_shares_and_update_parent_timestamps(UserCtx, FileCtx) ->
+-spec update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
+update_parent_timestamps(UserCtx, FileCtx) ->
     try
-        FileCtx2 = delete_shares(UserCtx, FileCtx),
-        {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+        {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
         fslogic_times:update_mtime_ctime(ParentCtx),
-        FileCtx3
+        FileCtx2
     catch
         error:{badmatch, {error, not_found}} ->
             FileCtx
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes shares from oz and db.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_shares(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
-delete_shares(UserCtx, FileCtx) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    Shares = file_meta:get_shares(FileDoc),
-    SessionId = user_ctx:get_session_id(UserCtx),
-    [ok = share_logic:delete(SessionId, ShareId) || ShareId <- Shares],
-    FileCtx2.
 
 -spec delete_storage_sync_info(file_ctx:ctx()) -> file_ctx:ctx().
 delete_storage_sync_info(FileCtx) ->
