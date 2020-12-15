@@ -72,21 +72,21 @@ all() -> [
 incoming_session_watcher_should_not_remove_session_with_connections(Config) ->
     SessId = ?config(session_id, Config),
 
-    ?assertNotReceivedMatch({remove_session, SessId}, ?TIMEOUT).
+    ?assertNotReceivedMatch({termination_request, SessId}, ?TIMEOUT).
 
 
 incoming_session_watcher_should_remove_session_without_connections(Config) ->
     SessId = ?config(session_id, Config),
 
     close_connections(Config),
-    ?assertReceivedMatch({remove_session, SessId}, ?TIMEOUT).
+    ?assertReceivedMatch({termination_request, SessId}, ?TIMEOUT).
 
 
 incoming_session_watcher_should_remove_inactive_session(Config) ->
     SessId = ?config(session_id, Config),
 
     set_session_status(Config, inactive),
-    ?assertReceivedMatch({remove_session, SessId}, ?TIMEOUT).
+    ?assertReceivedMatch({termination_request, SessId}, ?TIMEOUT).
 
 
 incoming_session_watcher_should_remove_session_on_error(Config) ->
@@ -94,16 +94,16 @@ incoming_session_watcher_should_remove_session_on_error(Config) ->
     [Worker] = ?config(op_worker_nodes, Config),
 
     ?assertEqual(ok, ?call(Worker, delete, [SessId])),
-    ?assertReceivedMatch({remove_session, SessId}, ?TIMEOUT).
+    ?assertReceivedMatch({termination_request, SessId}, ?TIMEOUT).
 
 
 incoming_session_watcher_should_retry_session_removal(Config) ->
     SessId = ?config(session_id, Config),
 
     set_session_status(Config, inactive),
-    ?assertReceivedMatch({remove_session, SessId}, ?TIMEOUT),
+    ?assertReceivedMatch({termination_request, SessId}, ?TIMEOUT),
     % Longer timeout including session removal retry delay
-    ?assertReceivedMatch({remove_session, SessId}, timer:seconds(20)).
+    ?assertReceivedMatch({termination_request, SessId}, timer:seconds(20)).
 
 
 incoming_session_watcher_should_work_properly_with_forward_time_warps(Config) ->
@@ -115,17 +115,17 @@ incoming_session_watcher_should_work_properly_with_forward_time_warps(Config) ->
 
     % Session shouldn't be removed until grace period has passed
     force_session_activity_check(Config),
-    ?assertNotReceivedMatch({remove_session, SessId}, ?TIMEOUT),
+    ?assertNotReceivedMatch({termination_request, SessId}, ?TIMEOUT),
 
     time_test_utils:set_current_time_seconds(CurrTime + ?LONG_GRACE_PERIOD div 2),
     force_session_activity_check(Config),
     ?assertEqual(CurrTime, get_session_access_time(Config)),
-    ?assertNotReceivedMatch({remove_session, SessId}, ?TIMEOUT),
+    ?assertNotReceivedMatch({termination_request, SessId}, ?TIMEOUT),
 
     % And should be removed immediately after that period passes
     time_test_utils:set_current_time_seconds(CurrTime + ?LONG_GRACE_PERIOD + 1),
     force_session_activity_check(Config),
-    ?assertReceivedMatch({remove_session, SessId}, ?TIMEOUT).
+    ?assertReceivedMatch({termination_request, SessId}, ?TIMEOUT).
 
 
 incoming_session_watcher_should_work_properly_with_backward_time_warps(Config) ->
@@ -137,24 +137,29 @@ incoming_session_watcher_should_work_properly_with_backward_time_warps(Config) -
 
     % Session shouldn't be removed until grace period has passed
     force_session_activity_check(Config),
-    ?assertNotReceivedMatch({remove_session, SessId}, ?TIMEOUT),
+    ?assertNotReceivedMatch({termination_request, SessId}, ?TIMEOUT),
 
     PastTime = CurrTime - ?LONG_GRACE_PERIOD div 2,
     time_test_utils:set_current_time_seconds(PastTime),
     force_session_activity_check(Config),
-    ?assertEqual(PastTime, get_session_access_time(Config), ?ATTEMPTS),
-    ?assertNotReceivedMatch({remove_session, SessId}, ?TIMEOUT),
 
-    % And should be removed immediately after that period passes
+    % In case of backward time warp session last access time is set to the new
+    % "current" time (past to the previous time). With this the passage of grace
+    % period will be checked against this new access time
+    ?assertEqual(PastTime, get_session_access_time(Config), ?ATTEMPTS),
+    ?assertNotReceivedMatch({termination_request, SessId}, ?TIMEOUT),
+
+    % And immediately after that period passes (starting from PastTime)
+    % session should be removed
     time_test_utils:set_current_time_seconds(PastTime + ?LONG_GRACE_PERIOD - 1),
     force_session_activity_check(Config),
     ?assertEqual(PastTime, get_session_access_time(Config)),
-    ?assertNotReceivedMatch({remove_session, SessId}, ?TIMEOUT),
+    ?assertNotReceivedMatch({termination_request, SessId}, ?TIMEOUT),
 
     time_test_utils:set_current_time_seconds(PastTime + ?LONG_GRACE_PERIOD + 1),
     force_session_activity_check(Config),
     ?assertEqual(PastTime, get_session_access_time(Config)),
-    ?assertReceivedMatch({remove_session, SessId}, ?TIMEOUT).
+    ?assertReceivedMatch({termination_request, SessId}, ?TIMEOUT).
 
 
 session_create_or_reuse_session_should_update_session_access_time(Config) ->
@@ -163,7 +168,7 @@ session_create_or_reuse_session_should_update_session_access_time(Config) ->
     [Worker] = ?config(op_worker_nodes, Config),
 
     Accessed1 = get_session_access_time(Config),
-    time_test_utils:simulate_seconds_passing(1),
+    time_test_utils:simulate_seconds_passing(100),
     ?assertMatch(
         {ok, SessId},
         fuse_test_utils:reuse_or_create_fuse_session(
@@ -171,7 +176,7 @@ session_create_or_reuse_session_should_update_session_access_time(Config) ->
         )
     ),
     Accessed2 = get_session_access_time(Config),
-    ?assertEqual(1, Accessed2 - Accessed1).
+    ?assertEqual(100, Accessed2 - Accessed1).
 
 
 session_update_should_update_session_access_time(Config) ->
@@ -179,13 +184,13 @@ session_update_should_update_session_access_time(Config) ->
     [Worker] = ?config(op_worker_nodes, Config),
 
     Accessed1 = get_session_access_time(Config),
-    time_test_utils:simulate_seconds_passing(1),
+    time_test_utils:simulate_seconds_passing(432),
     ?assertMatch(
         {ok, #document{key = SessId}},
         ?call(Worker, update_doc_and_time, [SessId, fun(Sess) -> {ok, Sess} end])
     ),
     Accessed2 = get_session_access_time(Config),
-    ?assertEqual(1, Accessed2 - Accessed1).
+    ?assertEqual(432, Accessed2 - Accessed1).
 
 
 session_save_should_update_session_access_time(Config) ->
@@ -193,10 +198,10 @@ session_save_should_update_session_access_time(Config) ->
     [Worker] = ?config(op_worker_nodes, Config),
 
     Accessed1 = get_session_access_time(Config),
-    time_test_utils:simulate_seconds_passing(1),
+    time_test_utils:simulate_seconds_passing(123),
     ?assertMatch({ok, SessId}, ?call(Worker, save, [get_session_doc(Config)])),
     Accessed2 = get_session_access_time(Config),
-    ?assertEqual(1, Accessed2 - Accessed1).
+    ?assertEqual(123, Accessed2 - Accessed1).
 
 
 session_create_should_set_session_access_time(Config) ->
@@ -240,19 +245,14 @@ end_per_suite(Config) ->
 
 init_per_testcase(Case, Config) when
     Case =:= incoming_session_watcher_should_work_properly_with_forward_time_warps;
-    Case =:= incoming_session_watcher_should_work_properly_with_backward_time_warps
-->
-    ok = time_test_utils:freeze_time(Config),
-    init_per_testcase(?DEFAULT_CASE(Case), [{grace_period, ?LONG_GRACE_PERIOD} | Config]);
-
-init_per_testcase(Case, Config) when
+    Case =:= incoming_session_watcher_should_work_properly_with_backward_time_warps;
     Case =:= session_create_or_reuse_session_should_update_session_access_time;
     Case =:= session_update_should_update_session_access_time;
     Case =:= session_save_should_update_session_access_time;
     Case =:= session_create_should_set_session_access_time
 ->
     ok = time_test_utils:freeze_time(Config),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
+    init_per_testcase(?DEFAULT_CASE(Case), [{grace_period, ?LONG_GRACE_PERIOD} | Config]);
 
 init_per_testcase(_Case, Config) ->
     initializer:remove_pending_messages(),
@@ -303,7 +303,7 @@ mock_session_manager(Config) ->
 
     test_utils:mock_new(Worker, session_manager),
     test_utils:mock_expect(Worker, session_manager, terminate_session, fun
-        (SessID) -> Self ! {remove_session, SessID}, ok
+        (SessID) -> Self ! {termination_request, SessID}, ok
     end).
 
 

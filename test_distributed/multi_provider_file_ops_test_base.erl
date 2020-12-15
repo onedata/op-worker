@@ -1679,6 +1679,7 @@ transfer_files_to_source_provider(Config0) ->
     Worker = ?config(worker1, Config),
     FilesNum = ?config(files_num, Config),
     Size = ?config(file_size, Config),
+    Attempts = 60,
 
     Guids = lists_utils:pmap(fun(Num) ->
         FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
@@ -1707,6 +1708,13 @@ transfer_files_to_source_provider(Config0) ->
         end
     end, TidsAndGuids),
     TransfersTimeSec = stopwatch:read_seconds(StopwatchTransfers, float),
+
+    % Await all transfers links are added to ended tree
+    ListAllTransfersFun = fun() ->
+        {ok, List} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceName, undefined, 0, FilesNum]),
+        lists:usort(List)
+    end,
+    ?assertEqual(FilesNum, length(ListAllTransfersFun()), Attempts),
 
     StopwatchGui = stopwatch:start(),
     lists_utils:pforeach(fun(Num) ->

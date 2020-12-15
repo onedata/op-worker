@@ -351,7 +351,6 @@ mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
     Diff = fun
         (#session{status = active, accessed = LastAccessTimestamp} = Sess) ->
             Now = global_clock:timestamp_seconds(),
-            % TODO VFS-7050 maybe add some threshold in case when a lot of small warps happen often?
             case Now >= LastAccessTimestamp of
                 true ->
                     InactivityPeriod = Now - LastAccessTimestamp,
@@ -363,8 +362,9 @@ mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
                     end;
                 false ->
                     % backward time warp has happened and it is impossible to tell if grace period
-                    % or not. To not let session unnecessarily exist until global time catches
-                    % to previous value, set `accessed` field to Now and check once again later.
+                    % has passed or not. To not let session unnecessarily exist until global time
+                    % catches to previous value, set `accessed` field to Now and check once again
+                    % later.
                     {ok, Sess#session{accessed = Now}}
             end;
         (#session{} = Sess) ->
