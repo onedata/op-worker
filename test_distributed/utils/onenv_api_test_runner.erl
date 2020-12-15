@@ -47,26 +47,26 @@
 -type ct_config() :: proplists:proplist().
 
 -type scenario_type() ::
-    % Standard rest scenario - using fileId in path so that no lookup
-    % takes place
-    rest |
-    % Rest scenario using file path in URL - causes fileId lookup in
-    % rest_handler. If path can't be resolved (this file/space is not
-    % supported by specific provider) rather then concrete error a
-    % ?ERROR_POSIX(?ENOENT) will be returned
-    rest_with_file_path |
-    % Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
-    % of request auth and parameters.
-    rest_not_supported |
-    % Standard graph sync scenario
-    gs |
-    % Gs scenario with gri.scope == private and gri.id == SharedGuid.
-    % Such requests should be rejected at auth steps resulting in
-    % ?ERROR_UNAUTHORIZED.
-    gs_with_shared_guid_and_aspect_private |
-    % Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
-    % of test case due to for example invalid aspect.
-    gs_not_supported.
+% Standard rest scenario - using fileId in path so that no lookup
+% takes place
+rest |
+% Rest scenario using file path in URL - causes fileId lookup in
+% rest_handler. If path can't be resolved (this file/space is not
+% supported by specific provider) rather then concrete error a
+% ?ERROR_POSIX(?ENOENT) will be returned
+rest_with_file_path |
+% Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
+% of request auth and parameters.
+rest_not_supported |
+% Standard graph sync scenario
+gs |
+% Gs scenario with gri.scope == private and gri.id == SharedGuid.
+% Such requests should be rejected at auth steps resulting in
+% ?ERROR_UNAUTHORIZED.
+gs_with_shared_guid_and_aspect_private |
+% Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
+% of test case due to for example invalid aspect.
+gs_not_supported.
 
 % List of nodes to which api calls can be directed. However only one node
 % from this list will be chosen (randomly) for each test case.
@@ -90,8 +90,8 @@
 % If not it should throw an error.
 % First argument tells whether request made during testcase should succeed
 -type verify_fun() :: fun(
-    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) ->
-        term() | no_return()
+(RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) ->
+    term() | no_return()
 ).
 
 -type rest_args() :: #rest_args{}.
@@ -181,11 +181,11 @@ run_tests(Config, SpecTemplates) ->
 -spec run_suite(ct_config(), suite_spec()) -> HasAllTestsPassed :: boolean().
 run_suite(Config, SuiteSpec) ->
     run_invalid_clients_test_cases(Config, unauthorized, SuiteSpec)
-    and run_invalid_clients_test_cases(Config, forbidden_not_in_space, SuiteSpec)
-    and run_invalid_clients_test_cases(Config, forbidden_in_space, SuiteSpec)
-    and run_malformed_data_test_cases(Config, SuiteSpec)
-    and run_missing_required_data_test_cases(Config, SuiteSpec)
-    and run_expected_success_test_cases(Config, SuiteSpec).
+        and run_invalid_clients_test_cases(Config, forbidden_not_in_space, SuiteSpec)
+        and run_invalid_clients_test_cases(Config, forbidden_in_space, SuiteSpec)
+        and run_malformed_data_test_cases(Config, SuiteSpec)
+        and run_missing_required_data_test_cases(Config, SuiteSpec)
+        and run_expected_success_test_cases(Config, SuiteSpec).
 
 
 %% @private
@@ -256,7 +256,7 @@ get_scenario_specific_error_for_invalid_client(gs_not_supported, _ClientType, Cl
 get_scenario_specific_error_for_invalid_client(rest_with_file_path, ClientType, ClientAndError) when
     ClientType =:= unauthorized;
     ClientType =:= forbidden_not_in_space
-->
+    ->
     % Error thrown by rest_handler (before middleware auth checks could be performed)
     % as invalid clients who doesn't belong to space can't resolve file path to guid
     {extract_client(ClientAndError), ?ERROR_POSIX(?ENOENT)};
@@ -273,7 +273,7 @@ get_scenario_specific_error_for_invalid_client(_ScenarioType, forbidden_in_space
 %% @private
 -spec extract_client(aai:auth() | {aai:auth(), errors:error()}) -> aai:auth().
 extract_client({Client, {error, _}}) -> Client;
-extract_client(Client)               -> Client.
+extract_client(Client) -> Client.
 
 
 %% @private
@@ -333,12 +333,12 @@ run_malformed_data_test_cases(Config, #suite_spec{
     scenario_type()
 ) ->
     boolean().
-is_data_error_applicable_to_scenario({error, _}, _)                          -> true;
-is_data_error_applicable_to_scenario({Scenario, _}, Scenario)                -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, rest)                -> true;
+is_data_error_applicable_to_scenario({error, _}, _) -> true;
+is_data_error_applicable_to_scenario({Scenario, _}, Scenario) -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest) -> true;
 is_data_error_applicable_to_scenario({rest_handler, _}, rest_with_file_path) -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, rest_not_supported)  -> true;
-is_data_error_applicable_to_scenario(_, _)                                   -> false.
+is_data_error_applicable_to_scenario({rest_handler, _}, rest_not_supported) -> true;
+is_data_error_applicable_to_scenario(_, _) -> false.
 
 
 %% @private
@@ -561,7 +561,7 @@ run_exp_error_testcase(TargetNode, Client, DataSet, ScenarioError, VerifyFun, #s
     type = ScenarioType,
     prepare_args_fun = PrepareArgsFun
 }, Config) ->
-    ExpError = case is_client_supported_by_node(Client, TargetNode, Config) of
+    ExpError = case is_client_supported_by_node(Client, TargetNode) of
         true -> ScenarioError;
         false -> ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED)
     end,
@@ -599,7 +599,7 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_templ
         Args ->
             Result = make_request(Config, TargetNode, Client, Args),
             try
-                case is_client_supported_by_node(Client, TargetNode, Config) of
+                case is_client_supported_by_node(Client, TargetNode) of
                     true ->
                         ValidateResultFun(TestCaseCtx, Result),
                         VerifyFun(expected_success, TestCaseCtx);
@@ -628,7 +628,7 @@ validate_error_result(Type, ExpError, {ok, RespCode, _RespHeaders, RespBody}) wh
     Type == rest;
     Type == rest_with_file_path;
     Type == rest_not_supported
-->
+    ->
     ?assertEqual(
         {errors:to_http_code(ExpError), ?REST_ERROR(ExpError)},
         {RespCode, RespBody}
@@ -638,7 +638,7 @@ validate_error_result(Type, ExpError, Result) when
     Type == gs;
     Type == gs_with_shared_guid_and_aspect_private;
     Type == gs_not_supported
-->
+    ->
     ?assertEqual(ExpError, Result).
 
 
@@ -674,7 +674,7 @@ log_failure(
     "Stacktrace: ~p~n", [
         ScenarioName,
         TargetNode,
-        client_to_placeholder(Client, Config),
+        client_to_placeholder(Client),
         io_lib_pretty:print(Args, fun get_record_def/2),
         Expected,
         Got,
@@ -851,7 +851,7 @@ substitute_client_placeholders(ClientsAndPlaceholders, Config) ->
 substitute_client_placeholder(#auth{} = AaiClient, _Config) ->
     AaiClient;
 substitute_client_placeholder(Placeholder, Config) ->
-    placeholder_to_client(Placeholder, Config).
+    placeholder_to_client(Placeholder).
 
 
 %% @private
@@ -892,19 +892,19 @@ scenario_spec_to_suite_spec(#scenario_spec{
 
 
 %% @private
--spec placeholder_to_client(client_placeholder(), ct_config()) -> aai:auth().
-placeholder_to_client(nobody, _Config) ->
+-spec placeholder_to_client(client_placeholder()) -> aai:auth().
+placeholder_to_client(nobody) ->
     ?NOBODY;
-placeholder_to_client(Username, Config) when is_atom(Username) ->
-    ?USER(api_test_env:get_user_id(Username, Config)).
+placeholder_to_client(Username) when is_atom(Username) ->
+    ?USER(oct_background:get_user_id(Username)).
 
 
 %% @private
--spec client_to_placeholder(aai:auth(), ct_config()) -> client_placeholder().
-client_to_placeholder(?NOBODY, _Config) ->
+-spec client_to_placeholder(aai:auth()) -> client_placeholder().
+client_to_placeholder(?NOBODY) ->
     nobody;
-client_to_placeholder(?USER(UserId), Config) ->
-    api_test_env:to_entity_placeholder(UserId, Config).
+client_to_placeholder(?USER(UserId)) ->
+    oct_background:to_entity_placeholder(UserId).
 
 
 %% @private
@@ -921,13 +921,13 @@ build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet) ->
 
 
 %% @private
--spec is_client_supported_by_node(aai:auth(), node(), ct_config()) ->
+-spec is_client_supported_by_node(aai:auth(), node()) ->
     boolean().
-is_client_supported_by_node(?NOBODY, _Node, _Config) ->
+is_client_supported_by_node(?NOBODY, _Node) ->
     true;
-is_client_supported_by_node(?USER(UserId), Node, Config) ->
+is_client_supported_by_node(?USER(UserId), Node) ->
     ProvId = op_test_rpc:get_provider_id(Node),
-    lists:member(UserId, api_test_env:get_provider_eff_users(ProvId, Config)).
+    lists:member(UserId, oct_background:get_provider_eff_users(ProvId)).
 
 
 %% @private
@@ -950,7 +950,7 @@ make_gs_request(Config, Node, Client, #gs_args{
     auth_hint = AuthHint,
     data = Data
 }) ->
-    case connect_via_gs(Node, Client, Config) of
+    case connect_via_gs(Node, Client) of
         {ok, GsClient} ->
             case gs_client:graph_request(GsClient, GRI, Operation, Data, false, AuthHint) of
                 {ok, ?GS_RESP(undefined)} ->
@@ -966,14 +966,14 @@ make_gs_request(Config, Node, Client, #gs_args{
 
 
 %% @private
--spec connect_via_gs(node(), aai:auth(), ct_config()) ->
+-spec connect_via_gs(node(), aai:auth()) ->
     {ok, GsClient :: pid()} | errors:error().
-connect_via_gs(Node, Client, Config) ->
+connect_via_gs(Node, Client) ->
     {Auth, ExpIdentity} = case Client of
         ?NOBODY ->
             {undefined, ?SUB(nobody)};
         ?USER(UserId) ->
-            TokenAuth = {token, api_test_env:get_user_access_token(UserId, Config)},
+            TokenAuth = {token, oct_background:get_user_access_token(UserId)},
             {TokenAuth, ?SUB(user, UserId)}
     end,
     GsEndpoint = gs_endpoint(Node),
@@ -1010,7 +1010,7 @@ make_rest_request(Config, Node, Client, #rest_args{
     body = Body
 }) ->
     URL = get_rest_endpoint(Node, Path),
-    HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client, Config)),
+    HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
     CaCerts = op_test_rpc:get_cert_chain_pems(Node),
     Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 10000}],
 
@@ -1028,11 +1028,11 @@ make_rest_request(Config, Node, Client, #rest_args{
 
 
 %% @private
--spec get_rest_auth_headers(aai:auth(), ct_config()) -> AuthHeaders :: map().
-get_rest_auth_headers(?NOBODY, _Config) ->
+-spec get_rest_auth_headers(aai:auth()) -> AuthHeaders :: map().
+get_rest_auth_headers(?NOBODY) ->
     #{};
-get_rest_auth_headers(?USER(UserId), Config) ->
-    #{?HDR_X_AUTH_TOKEN => api_test_env:get_user_access_token(UserId, Config)}.
+get_rest_auth_headers(?USER(UserId)) ->
+    #{?HDR_X_AUTH_TOKEN => oct_background:get_user_access_token(UserId)}.
 
 
 %% @private

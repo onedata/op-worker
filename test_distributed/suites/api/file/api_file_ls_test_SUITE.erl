@@ -58,7 +58,7 @@ all() -> [
 
 
 get_dir_children_test(Config) ->
-    {DirPath, DirGuid, _ShareId, Files} = create_get_children_tests_env(Config, normal_mode),
+    {DirPath, DirGuid, _ShareId, Files} = create_get_children_tests_env(normal_mode),
 
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
@@ -72,7 +72,7 @@ get_dir_children_test(Config) ->
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
             scenario_templates = [
                 #scenario_template{
                     name = <<"List normal dir using /data/ rest endpoint">>,
@@ -142,7 +142,7 @@ get_dir_children_test(Config) ->
 
 
 get_shared_dir_children_test(Config) ->
-    {_DirPath, DirGuid, ShareId, Files} = create_get_children_tests_env(Config, share_mode),
+    {_DirPath, DirGuid, ShareId, Files} = create_get_children_tests_env(share_mode),
 
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
     {ok, ShareDirObjectId} = file_id:guid_to_objectid(ShareDirGuid),
@@ -214,21 +214,21 @@ get_shared_dir_children_test(Config) ->
 
 
 %% @private
--spec create_get_children_tests_env(api_test_runner:config(), TestMode :: normal_mode | share_mode) ->
+-spec create_get_children_tests_env(TestMode :: normal_mode | share_mode) ->
     {
         DirPath :: file_meta:path(),
         DirGuid :: file_id:file_guid(),
         ShareId :: undefined | od_share:id(),
         Files :: files()
     }.
-create_get_children_tests_env(Config, TestMode) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+create_get_children_tests_env(TestMode) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
 
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
 
     DirName = ?RANDOM_FILE_NAME(),
-    DirPath = filename:join(["/", ?SPACE_2, DirName]),
+    DirPath = filename:join(["/", ?SPACE_KRK_PAR, DirName]),
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirPath, 8#707),
     HasParentQos = api_test_utils:randomly_add_qos([P1Node], DirGuid, <<"key=value1">>, 2),
 
@@ -248,8 +248,8 @@ create_get_children_tests_env(Config, TestMode) ->
                 guid = FileGuid,
                 name = FileName
             }
-        } = FileDetails} = api_test_utils:create_file_in_space2_with_additional_metadata(
-            DirPath, HasParentQos, <<"file_or_dir_", Num>>, Config
+        } = FileDetails} = api_test_utils:create_file_in_space_krk_par_with_additional_metadata(
+            DirPath, HasParentQos, <<"file_or_dir_", Num>>
         ),
         {FileGuid, FileName, FilePath, FileDetails}
     end, [$0, $1, $2, $3, $4]),
@@ -263,8 +263,8 @@ get_file_children_test(Config) ->
             guid = FileGuid,
             name = FileName
         }
-    } = FileDetails} = api_test_utils:create_file_in_space2_with_additional_metadata(
-        <<"/", ?SPACE_2/binary>>, false, <<"file">>, ?RANDOM_FILE_NAME(), Config
+    } = FileDetails} = api_test_utils:create_file_in_space_krk_par_with_additional_metadata(
+        <<"/", ?SPACE_KRK_PAR/binary>>, false, <<"file">>, ?RANDOM_FILE_NAME()
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -282,9 +282,9 @@ get_file_children_test(Config) ->
             client_spec = #client_spec{
                 correct = [
                     user2,  % space owner - doesn't need any perms
-                    user3,  % files owner (see fun create_file_in_space2_with_additional_metadata/1)
+                    user3,  % files owner (see fun create_file_in_space_krk_par_with_additional_metadata/1)
                     user4   % space member - any space member can see file stats (as long as he can
-                            %                traverse to it) no matter perms set on this file
+                    %                traverse to it) no matter perms set on this file
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1]
@@ -369,11 +369,11 @@ get_file_children_test(Config) ->
 
 
 get_shared_file_children_test(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
 
     {_FileType, _FilePath, FileGuid, #file_details{
         file_attr = FileAttrs = #file_attr{
@@ -381,8 +381,8 @@ get_shared_file_children_test(Config) ->
             name = FileName,
             shares = Shares
         }
-    } = FileDetails0} = api_test_utils:create_file_in_space2_with_additional_metadata(
-        <<"/", ?SPACE_2/binary>>, false, <<"file">>, ?RANDOM_FILE_NAME(), Config
+    } = FileDetails0} = api_test_utils:create_file_in_space_krk_par_with_additional_metadata(
+        <<"/", ?SPACE_KRK_PAR/binary>>, false, <<"file">>, ?RANDOM_FILE_NAME()
     ),
 
     ShareId = api_test_utils:share_file_and_sync_file_attrs(
@@ -469,15 +469,15 @@ get_shared_file_children_test(Config) ->
 
 
 get_user_root_dir_children_test(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P2Node, P1Node],
 
     % Space dir docs are not synchronized between providers but kept locally. Because of that
     % file attrs differs between responses from various providers and it is necessary to get attrs
     % corresponding to concrete provider.
     GetSpaceInfoFun = fun(SpacePlaceholder, Node) ->
-        SpaceId = api_test_env:get_space_id(SpacePlaceholder, Config),
+        SpaceId = oct_background:get_space_id(SpacePlaceholder),
         SpaceName = atom_to_binary(SpacePlaceholder, utf8),
         SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
         {SpaceGuid, SpaceName, <<"/", SpaceName/binary>>, get_space_dir_details(
@@ -485,12 +485,12 @@ get_user_root_dir_children_test(Config) ->
         )}
     end,
     GetAllSpacesInfoFun = fun(Node) ->
-        [GetSpaceInfoFun(space1, Node), GetSpaceInfoFun(space2, Node)]
+        [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node)]
     end,
 
-    User1Id = api_test_env:get_user_id(user1, Config),
-    User2Id = api_test_env:get_user_id(user2, Config),
-    User4Id = api_test_env:get_user_id(user4, Config),
+    User1Id = oct_background:get_user_id(user1),
+    User2Id = oct_background:get_user_id(user2),
+    User4Id = oct_background:get_user_id(user4),
 
     User4RootDirGuid = fslogic_uuid:user_root_dir_guid(User4Id),
     {ok, User4RootDirObjectId} = file_id:guid_to_objectid(User4RootDirGuid),
@@ -560,8 +560,8 @@ get_user_root_dir_children_test(Config) ->
                 data = Data
             }, {ok, ?HTTP_200_OK, _, Response}) ->
                 ClientSpaces = case Client of
-                    ?USER(User1Id) -> [GetSpaceInfoFun(space1, TestNode)];
-                    ?USER(User2Id) -> [GetSpaceInfoFun(space2, TestNode)];
+                    ?USER(User1Id) -> [GetSpaceInfoFun(space_krk, TestNode)];
+                    ?USER(User2Id) -> [GetSpaceInfoFun(space_krk_par, TestNode)];
                     _ -> GetAllSpacesInfoFun(TestNode)
                 end,
                 validate_listed_files(Response, deprecated_rest, undefined, Data, ClientSpaces)
@@ -588,10 +588,10 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
 
 
 get_dir_children_on_provider_not_supporting_space_test(Config) ->
-    P2Id = api_test_env:get_provider_id(p2, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    P2Id = oct_background:get_provider_id(paris),
+    [P2Node] = oct_background:get_provider_nodes(paris),
 
-    Space1Id = api_test_env:get_space_id(space1, Config),
+    Space1Id = oct_background:get_space_id(space_krk),
     Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(Space1Id),
     {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
 
@@ -608,7 +608,7 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = [P2Node],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_1,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
             scenario_templates = [
                 #scenario_template{
                     name = <<"List dir on provider not supporting space using /data/ rest endpoint">>,
@@ -619,7 +619,7 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
                 #scenario_template{
                     name = <<"List dir on provider not supporting space using /files/ rest endpoint">>,
                     type = rest_with_file_path,
-                    prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(<<"/", ?SPACE_1/binary>>),
+                    prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(<<"/", ?SPACE_KRK/binary>>),
                     validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpaceFun
                 },
                 #scenario_template{
@@ -757,7 +757,7 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
         true ->
             [];
         false ->
-            lists:sublist(AllFiles, Offset+1, Limit)
+            lists:sublist(AllFiles, Offset + 1, Limit)
     end,
 
     ExpFiles2 = lists:map(fun({Guid, Name, Path, Details}) ->
@@ -805,7 +805,7 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
+    oct_background:init_per_suite(Config, #onenv_test_config{envs = [
         {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
     ]}).
 

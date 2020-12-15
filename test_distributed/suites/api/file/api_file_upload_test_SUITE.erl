@@ -29,13 +29,13 @@
     rest_create_file_test/1,
     rest_update_file_content_test/1,
 
-    gui_registering_upload_for_directory_should_fail/1,
-    gui_registering_upload_for_non_empty_file_should_fail/1,
-    gui_registering_upload_for_not_owned_file_should_fail/1,
-    gui_not_registered_upload_should_fail/1,
-    gui_upload_test/1,
-    gui_stale_upload_file_should_be_deleted/1,
-    gui_upload_with_time_warps_test/1
+    gui_registering_upload_for_directory_should_fail/0,
+    gui_registering_upload_for_non_empty_file_should_fail/0,
+    gui_registering_upload_for_not_owned_file_should_fail/0,
+    gui_not_registered_upload_should_fail/0,
+    gui_upload_test/0,
+    gui_stale_upload_file_should_be_deleted/0,
+    gui_upload_with_time_warps_test/0
 ]).
 
 all() -> [
@@ -52,7 +52,7 @@ all() -> [
 ].
 
 
--define(SPACE_ID, <<"space2">>).
+-define(SPACE_ID, <<"space_krk_par">>).
 -define(FILE_PATH, <<"/", ?SPACE_ID/binary, "/", (str_utils:rand_hex(12))/binary>>).
 
 -define(ATTEMPTS, 30).
@@ -64,15 +64,15 @@ all() -> [
 
 
 rest_create_file_test(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
-    SpaceOwnerId = api_test_env:get_user_id(user2, Config),
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SpaceOwnerId = oct_background:get_user_id(user2),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
-    {_, DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        <<"dir">>, 8#704, Config
+    {_, DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(
+        <<"dir">>, 8#704
     ),
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
@@ -272,9 +272,7 @@ ls(Node, DirGuid) ->
 rest_update_file_content_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
 
-    {_, _DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        <<"dir">>, 8#704, Config
-    ),
+    {_, _DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(<<"dir">>, 8#704),
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
     OriginalFileSize = 300,
@@ -300,10 +298,10 @@ rest_update_file_content_test(Config) ->
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
-            setup_fun = build_rest_update_file_content_setup_fun(MemRef, OriginalFileContent, Config),
+            setup_fun = build_rest_update_file_content_setup_fun(MemRef, OriginalFileContent),
             prepare_args_fun = build_rest_update_file_content_prepare_args_fun(MemRef),
             validate_result_fun = build_rest_update_file_content_validate_call_fun(),
-            verify_fun = build_rest_update_file_content_verify_fun(MemRef, OriginalFileContent, Config),
+            verify_fun = build_rest_update_file_content_verify_fun(MemRef, OriginalFileContent),
 
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
@@ -334,20 +332,19 @@ rest_update_file_content_test(Config) ->
 %% @private
 -spec build_rest_update_file_content_setup_fun(
     api_test_memory:mem_ref(),
-    FileContent :: binary(),
-    onenv_api_test_runner:ct_config()
+    FileContent :: binary()
 ) ->
     onenv_api_test_runner:setup_fun().
-build_rest_update_file_content_setup_fun(MemRef, Content, Config) ->
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+build_rest_update_file_content_setup_fun(MemRef, Content) ->
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
     FileSize = size(Content),
 
     fun() ->
-        FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+        FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
         {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
 
         api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
@@ -390,13 +387,12 @@ build_rest_update_file_content_validate_call_fun() ->
 %% @private
 -spec build_rest_update_file_content_verify_fun(
     api_test_memory:mem_ref(),
-    OriginalFileContent :: binary(),
-    onenv_api_test_runner:ct_config()
+    OriginalFileContent :: binary()
 ) ->
     boolean().
-build_rest_update_file_content_verify_fun(MemRef, OriginalFileContent, Config) ->
-    [CreationNode = P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+build_rest_update_file_content_verify_fun(MemRef, OriginalFileContent) ->
+    [CreationNode = P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     AllProviders = [P1Node, P2Node],
 
     OriginalFileSize = byte_size(OriginalFileContent),
@@ -486,13 +482,13 @@ verify_rest_file_content_update(
             end,
             file_test_utils:await_distribution(AllProviders, FileGuid, ExpDist),
 
-            case Offset > 1024*1024*1024 of  % 1 GB
+            case Offset > 1024 * 1024 * 1024 of  % 1 GB
                 true ->
                     % In case of too big files to verify entire content (it will not fit into memory
                     % and reading it chunk by chunk will take too much time as we are speaking about
                     % PB of data) assert only the last fragment
                     ExpContent = str_utils:join_binary([
-                        << <<"\0">> || _ <- lists:seq(1, 50) >>,
+                        <<<<"\0">> || _ <- lists:seq(1, 50)>>,
                         DataSent
                     ]),
                     file_test_utils:await_content(AllProviders, FileGuid, ExpContent, Offset - 50);
@@ -507,7 +503,7 @@ verify_rest_file_content_update(
                         false ->
                             str_utils:join_binary([
                                 OriginalContent,
-                                << <<"\0">> || _ <- lists:seq(OriginalFileSize, Offset - 1) >>,
+                                <<<<"\0">> || _ <- lists:seq(OriginalFileSize, Offset - 1)>>,
                                 DataSent
                             ])
                     end,
@@ -536,10 +532,10 @@ slice_binary(Bin, Offset, Len) ->
 %%%===================================================================
 
 
-gui_registering_upload_for_directory_should_fail(Config) ->
-    UserId = api_test_env:get_user_id(user3, Config),
-    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
-    [Worker] = api_test_env:get_provider_nodes(p1, Config),
+gui_registering_upload_for_directory_should_fail() ->
+    UserId = oct_background:get_user_id(user3),
+    UserSessId = oct_background:get_user_session_id(user3, krakow),
+    [Worker] = oct_background:get_provider_nodes(krakow),
 
     {ok, DirGuid} = lfm_proxy:mkdir(Worker, UserSessId, ?FILE_PATH),
 
@@ -549,10 +545,10 @@ gui_registering_upload_for_directory_should_fail(Config) ->
     ).
 
 
-gui_registering_upload_for_non_empty_file_should_fail(Config) ->
-    UserId = api_test_env:get_user_id(user3, Config),
-    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
-    [Worker] = api_test_env:get_provider_nodes(p1, Config),
+gui_registering_upload_for_non_empty_file_should_fail() ->
+    UserId = oct_background:get_user_id(user3),
+    UserSessId = oct_background:get_user_session_id(user3, krakow),
+    [Worker] = oct_background:get_provider_nodes(krakow),
 
     {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
     {ok, FileHandle} = lfm_proxy:open(Worker, UserSessId, {guid, FileGuid}, write),
@@ -566,12 +562,12 @@ gui_registering_upload_for_non_empty_file_should_fail(Config) ->
     ).
 
 
-gui_registering_upload_for_not_owned_file_should_fail(Config) ->
-    User1Id = api_test_env:get_user_id(user3, Config),
-    User1SessId = api_test_env:get_user_session_id(user3, p1, Config),
-    [Worker] = api_test_env:get_provider_nodes(p1, Config),
+gui_registering_upload_for_not_owned_file_should_fail() ->
+    User1Id = oct_background:get_user_id(user3),
+    User1SessId = oct_background:get_user_session_id(user3, krakow),
+    [Worker] = oct_background:get_provider_nodes(krakow),
 
-    User2SessId = api_test_env:get_user_session_id(user4, p1, Config),
+    User2SessId = oct_background:get_user_session_id(user4, krakow),
     {ok, FileGuid} = lfm_proxy:create(Worker, User2SessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
 
     ?assertMatch(
@@ -580,10 +576,10 @@ gui_registering_upload_for_not_owned_file_should_fail(Config) ->
     ).
 
 
-gui_not_registered_upload_should_fail(Config) ->
-    UserId = api_test_env:get_user_id(user3, Config),
-    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
-    [Worker] = api_test_env:get_provider_nodes(p1, Config),
+gui_not_registered_upload_should_fail() ->
+    UserId = oct_background:get_user_id(user3),
+    UserSessId = oct_background:get_user_session_id(user3, krakow),
+    [Worker] = oct_background:get_provider_nodes(krakow),
 
     {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
 
@@ -601,10 +597,10 @@ gui_not_registered_upload_should_fail(Config) ->
     ).
 
 
-gui_upload_test(Config) ->
-    UserId = api_test_env:get_user_id(user3, Config),
-    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
-    [Worker] = api_test_env:get_provider_nodes(p1, Config),
+gui_upload_test() ->
+    UserId = oct_background:get_user_id(user3),
+    UserSessId = oct_background:get_user_session_id(user3, krakow),
+    [Worker] = oct_background:get_provider_nodes(krakow),
 
     {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
@@ -628,10 +624,10 @@ gui_upload_test(Config) ->
     lfm_proxy:close(Worker, FileHandle).
 
 
-gui_stale_upload_file_should_be_deleted(Config) ->
-    UserId = api_test_env:get_user_id(user3, Config),
-    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
-    [Worker] = api_test_env:get_provider_nodes(p1, Config),
+gui_stale_upload_file_should_be_deleted() ->
+    UserId = oct_background:get_user_id(user3),
+    UserSessId = oct_background:get_user_session_id(user3, krakow),
+    [Worker] = oct_background:get_provider_nodes(krakow),
 
     {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
@@ -649,10 +645,10 @@ gui_stale_upload_file_should_be_deleted(Config) ->
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid}), ?ATTEMPTS).
 
 
-gui_upload_with_time_warps_test(Config) ->
-    UserId = api_test_env:get_user_id(user3, Config),
-    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
-    [Worker] = api_test_env:get_provider_nodes(p1, Config),
+gui_upload_with_time_warps_test() ->
+    UserId = oct_background:get_user_id(user3),
+    UserSessId = oct_background:get_user_session_id(user3, krakow),
+    [Worker] = oct_background:get_provider_nodes(krakow),
 
     CurrTime = time_test_utils:get_frozen_time_seconds(),
     {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
@@ -729,7 +725,7 @@ force_stale_gui_uploads_removal(Worker) ->
 do_multipart(Worker, Auth, PartsNumber, PartSize, ChunksNumber, FileGuid) ->
     Params = #{
         <<"guid">> => FileGuid,
-        <<"resumableChunkSize">> => integer_to_binary(PartsNumber*PartSize)
+        <<"resumableChunkSize">> => integer_to_binary(PartsNumber * PartSize)
     },
     lists_utils:pforeach(fun(Chunk) ->
         rpc:call(Worker, page_file_upload, handle_multipart_req, [
@@ -760,9 +756,9 @@ mock_cowboy_multipart(Config) ->
     ok = test_utils:mock_expect(Workers, cowboy_req, read_part_body,
         fun
             (#{left := 1, size := Size} = Req, _) ->
-                {ok, << <<$a>> || _ <- lists:seq(1, Size) >>, Req#{done => true}};
+                {ok, <<<<$a>> || _ <- lists:seq(1, Size)>>, Req#{done => true}};
             (#{left := Left, size := Size} = Req, _) ->
-                {more, << <<$a>> || _ <- lists:seq(1, Size) >>, Req#{left => Left-1}}
+                {more, <<<<$a>> || _ <- lists:seq(1, Size)>>, Req#{left => Left - 1}}
         end
     ).
 
@@ -783,10 +779,8 @@ unmock_cowboy_multipart(Config) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
-        {op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60}
-        ]}
+    oct_background:init_per_suite(Config, #onenv_test_config{envs = [
+        {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
     ]}).
 
 
@@ -798,7 +792,7 @@ end_per_suite(_Config) ->
 init_per_testcase(Case, Config) when
     Case =:= gui_not_registered_upload_should_fail;
     Case =:= gui_upload_test
-->
+    ->
     mock_cowboy_multipart(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -814,7 +808,7 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(Case, Config) when
     Case =:= gui_not_registered_upload_should_fail;
     Case =:= gui_upload_test
-->
+    ->
     unmock_cowboy_multipart(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 

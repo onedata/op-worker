@@ -20,7 +20,7 @@
 -define(CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(__CONFIG), #client_spec{
     correct = [?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [?NOBODY],
-    forbidden_not_in_space = [?USER_IN_SPACE_1_AUTH],
+    forbidden_not_in_space = [?USER_IN_SPACE_KRK_AUTH],
     forbidden_in_space = [
         % forbidden by lack of privileges (even though being owner of files)
         ?USER_IN_SPACE_2_AUTH

@@ -138,8 +138,8 @@ delete_metadata_test_base(
     MetadataType, Metadata, TestSetupVariant, DataSpec, RandomlySelectScenario, Config
 ) ->
     Nodes = ?config(op_worker_nodes, Config),
-    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        8#707, Config
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(
+        8#707
     ),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
@@ -149,7 +149,7 @@ delete_metadata_test_base(
             target_nodes = Nodes,
             setup_fun = build_setup_fun(TestSetupVariant, FileGuid, MetadataType, Metadata, Nodes),
             verify_fun = build_verify_fun(TestSetupVariant, FileGuid, MetadataType, Metadata, Nodes),
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
             scenario_templates = [
                 #scenario_template{
                     name = str_utils:format("Delete ~s metadata for ~s using gs private api", [
@@ -322,7 +322,7 @@ build_delete_metadata_prepare_rest_args_fun(MetadataType, FileGuid) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
+    oct_background:init_per_suite(Config, #onenv_test_config{envs = [
         {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
     ]}).
 

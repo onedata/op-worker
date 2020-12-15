@@ -20,13 +20,13 @@
 -include("modules/fslogic/metadata.hrl").
 
 
--define(CLIENT_SPEC_FOR_SPACE_1, #client_spec{
+-define(CLIENT_SPEC_FOR_SPACE_KRK, #client_spec{
     correct = [user1, user3, user4],
     unauthorized = [nobody],
     forbidden_not_in_space = [user2]
 }).
 
--define(CLIENT_SPEC_FOR_SPACE_2, #client_spec{
+-define(CLIENT_SPEC_FOR_SPACE_KRK_PAR, #client_spec{
     correct = [
         user2, % space owner - doesn't need any perms
         user3  % files owner (see fun create_shared_file/1)

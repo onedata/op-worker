@@ -60,14 +60,11 @@ all() -> [
 %%% Get attrs test functions
 %%%===================================================================
 
-
 get_file_attrs_test(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
 
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        8#707, Config
-    ),
+    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
@@ -81,7 +78,7 @@ get_file_attrs_test(Config) ->
                     user2,  % space owner - doesn't need any perms
                     user3,  % files owner
                     user4   % space member - should succeed as getting attrs doesn't require any perms
-                            % TODO VFS-6766 revoke ?SPACE_VIEW priv and see that list of shares is empty
+                    % TODO VFS-6766 revoke ?SPACE_VIEW priv and see that list of shares is empty
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1]
@@ -138,15 +135,15 @@ get_file_attrs_test(Config) ->
 
 
 get_shared_file_attrs_test(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
-    SpaceOwnerSessId = api_test_env:get_user_session_id(user2, p1, Config),
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SpaceOwnerSessId = oct_background:get_user_session_id(user2, krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
 
     ShareId1 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
@@ -208,9 +205,9 @@ get_shared_file_attrs_test(Config) ->
 
 
 get_attrs_on_provider_not_supporting_space_test(Config) ->
-    P2Id = api_test_env:get_provider_id(p2, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space1(Config),
+    P2Id = oct_background:get_provider_id(paris),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
@@ -224,7 +221,7 @@ get_attrs_on_provider_not_supporting_space_test(Config) ->
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = [P2Node],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_1,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " on provider not supporting user using /data/ rest endpoint">>,
@@ -459,15 +456,13 @@ get_attrs_exp_result(#api_test_ctx{data = Data}, JsonAttrs, ShareId) ->
 
 
 get_file_shares_test(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
 
-    {FileType, _FilePath, FileGuid, ShareId1} = api_test_utils:create_and_sync_shared_file_in_space2(
-        8#707, Config
-    ),
+    {FileType, _FilePath, FileGuid, ShareId1} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     ShareGuid1 = file_id:guid_to_share_guid(FileGuid, ShareId1),
 
     ShareId2 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessIdP1, [P2Node], FileGuid),
@@ -492,7 +487,7 @@ get_file_shares_test(Config) ->
                     user2,  % space owner - doesn't need any perms
                     user3,  % files owner
                     user4   % space member - should succeed as getting attrs doesn't require any perms
-                            % TODO VFS-6766 revoke ?SPACE_VIEW priv and see that list of shares is empty
+                    % TODO VFS-6766 revoke ?SPACE_VIEW priv and see that list of shares is empty
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1]
@@ -541,12 +536,10 @@ build_get_shares_prepare_gs_args_fun(FileGuid, Scope) ->
 
 set_file_mode_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    User2Id = api_test_env:get_user_id(user2, Config),
-    User3Id = api_test_env:get_user_id(user3, Config),
+    User2Id = oct_background:get_user_id(user2),
+    User3Id = oct_background:get_user_id(user3),
 
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        8#707, Config
-    ),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
@@ -556,7 +549,7 @@ set_file_mode_test(Config) ->
         (_) ->
             ?ERROR_POSIX(?EACCES)
     end,
-    ValidateRestSuccessfulCallFun =  fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+    ValidateRestSuccessfulCallFun = fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         {ExpCode, ExpBody} = case GetExpectedResultFun(TestCtx) of
             ok ->
                 {?HTTP_204_NO_CONTENT, #{}};
@@ -574,7 +567,7 @@ set_file_mode_test(Config) ->
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
             verify_fun = fun
                 (expected_failure, #api_test_ctx{node = TestNode}) ->
                     ?assertMatch(8#707, GetMode(TestNode), ?ATTEMPTS),
@@ -644,10 +637,10 @@ set_file_mode_test(Config) ->
 
 
 set_mode_on_provider_not_supporting_space_test(Config) ->
-    P2Id = api_test_env:get_provider_id(p2, Config),
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space1(Config),
+    P2Id = oct_background:get_provider_id(paris),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     DataSpec = set_mode_data_spec(),
@@ -673,7 +666,7 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = [P2Node],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_1,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
             verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
@@ -702,7 +695,7 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
             name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
             type = rest_with_file_path,
             target_nodes = [P2Node],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_1,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
 
             prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
             validate_result_fun = ValidateRestCallResultFun,
@@ -798,18 +791,18 @@ build_set_mode_prepare_gs_args_fun(FileGuid, Scope) ->
 
 
 get_file_distribution_test(Config) ->
-    P1Id = api_test_env:get_provider_id(p1, Config),
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+    P1Id = oct_background:get_provider_id(krakow),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
 
-    P2Id = api_test_env:get_provider_id(p2, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    P2Id = oct_background:get_provider_id(paris),
+    [P2Node] = oct_background:get_provider_nodes(paris),
 
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
     FileType = <<"file">>,
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
@@ -844,15 +837,15 @@ get_file_distribution_test(Config) ->
 
 
 get_dir_distribution_test(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
 
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
     FileType = <<"dir">>,
-    DirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    DirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, DirGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, DirGuid}, <<"share">>),
     file_test_utils:await_sync(P2Node, DirGuid),
@@ -893,7 +886,7 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
     SortedExpDistribution = lists:usort(ExpDistribution),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ValidateRestSuccessfulCallFun =  fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+    ValidateRestSuccessfulCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ?assertEqual({?HTTP_200_OK, SortedExpDistribution}, {RespCode, lists:usort(RespBody)})
     end,
 
@@ -919,7 +912,7 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get distribution for ", FileType/binary, " using /data/FileId/distribution rest endpoint">>,
@@ -1032,7 +1025,7 @@ build_get_replicas_prepare_gs_args_fun(FileGuid, Scope) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
+    oct_background:init_per_suite(Config, #onenv_test_config{envs = [
         {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
     ]}).
 
