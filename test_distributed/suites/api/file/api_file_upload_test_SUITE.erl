@@ -29,13 +29,13 @@
     rest_create_file_test/1,
     rest_update_file_content_test/1,
 
-    gui_registering_upload_for_directory_should_fail/0,
-    gui_registering_upload_for_non_empty_file_should_fail/0,
-    gui_registering_upload_for_not_owned_file_should_fail/0,
-    gui_not_registered_upload_should_fail/0,
-    gui_upload_test/0,
-    gui_stale_upload_file_should_be_deleted/0,
-    gui_upload_with_time_warps_test/0
+    gui_registering_upload_for_directory_should_fail/1,
+    gui_registering_upload_for_non_empty_file_should_fail/1,
+    gui_registering_upload_for_not_owned_file_should_fail/1,
+    gui_not_registered_upload_should_fail/1,
+    gui_upload_test/1,
+    gui_stale_upload_file_should_be_deleted/1,
+    gui_upload_with_time_warps_test/1
 ]).
 
 all() -> [
@@ -532,7 +532,7 @@ slice_binary(Bin, Offset, Len) ->
 %%%===================================================================
 
 
-gui_registering_upload_for_directory_should_fail() ->
+gui_registering_upload_for_directory_should_fail(_Config) ->
     UserId = oct_background:get_user_id(user3),
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
@@ -545,7 +545,7 @@ gui_registering_upload_for_directory_should_fail() ->
     ).
 
 
-gui_registering_upload_for_non_empty_file_should_fail() ->
+gui_registering_upload_for_non_empty_file_should_fail(_Config) ->
     UserId = oct_background:get_user_id(user3),
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
@@ -562,7 +562,7 @@ gui_registering_upload_for_non_empty_file_should_fail() ->
     ).
 
 
-gui_registering_upload_for_not_owned_file_should_fail() ->
+gui_registering_upload_for_not_owned_file_should_fail(_Config) ->
     User1Id = oct_background:get_user_id(user3),
     User1SessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
@@ -576,7 +576,7 @@ gui_registering_upload_for_not_owned_file_should_fail() ->
     ).
 
 
-gui_not_registered_upload_should_fail() ->
+gui_not_registered_upload_should_fail(_Config) ->
     UserId = oct_background:get_user_id(user3),
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
@@ -597,7 +597,7 @@ gui_not_registered_upload_should_fail() ->
     ).
 
 
-gui_upload_test() ->
+gui_upload_test(_Config) ->
     UserId = oct_background:get_user_id(user3),
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
@@ -624,7 +624,7 @@ gui_upload_test() ->
     lfm_proxy:close(Worker, FileHandle).
 
 
-gui_stale_upload_file_should_be_deleted() ->
+gui_stale_upload_file_should_be_deleted(_Config) ->
     UserId = oct_background:get_user_id(user3),
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
@@ -645,7 +645,7 @@ gui_stale_upload_file_should_be_deleted() ->
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid}), ?ATTEMPTS).
 
 
-gui_upload_with_time_warps_test() ->
+gui_upload_with_time_warps_test(_Config) ->
     UserId = oct_background:get_user_id(user3),
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
