@@ -435,8 +435,8 @@ delete_file_instance_test(Config) ->
             target_nodes = Providers,
             client_spec = #client_spec{
                 correct = [
-                    user2  % space owner - doesn't need any perms
-%%                    user3  TODO VFS-6933 - fix rm shared file
+                    user2,  % space owner - doesn't need any perms
+                    user3
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
@@ -536,12 +536,19 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType) ->
 
     fun() ->
         Path = filename:join([TopDirPath, ?RANDOM_FILE_NAME()]),
-        {ok, Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
-        file_test_utils:await_sync(P2Node, Guid),
+        {ok, RootFileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
+        RootFileShares = case api_test_utils:randomly_create_share(P1Node, SpaceOwnerSessIdP1, RootFileGuid) of
+            undefined -> [];
+            ShareId -> [ShareId]
+        end,
+        ?assertMatch(
+            {ok, #file_attr{shares = RootFileShares}},
+            file_test_utils:get_attrs(P2Node, RootFileGuid),
+            ?ATTEMPTS
+        ),
+        api_test_memory:set(MemRef, file_guid, RootFileGuid),
 
-        api_test_memory:set(MemRef, file_guid, Guid),
-
-        case FileType of
+        AllFiles = case FileType of
             <<"dir">> ->
                 Files = lists_utils:pmap(fun(Num) ->
                     {_, _, FileGuid, _} = api_test_utils:create_file_in_space_krk_par_with_additional_metadata(
@@ -550,22 +557,29 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType) ->
                     FileGuid
                 end, [$0, $1, $2, $3, $4]),
 
-                api_test_memory:set(MemRef, files_in_dir, Files);
+                [RootFileGuid | SubFiles];
             _ ->
-                ok
-        end
+                [RootFileGuid]
+        end,
+        api_test_memory:set(MemRef, all_files, AllFiles),
+
+        AllShares = lists:foldl(fun(FileGuid, SharesAcc) ->
+            {ok, #file_attr{shares = Shares}} = file_test_utils:get_attrs(P2Node, FileGuid),
+            Shares ++ SharesAcc
+        end, [], AllFiles),
+        api_test_memory:set(MemRef, all_shares, lists:usort(AllShares))
     end.
 
 
 %% @private
 -spec build_delete_instance_verify_fun(
     api_test_memory:mem_ref(),
-    api_test_utils:file_type(),
     onenv_api_test_runner:ct_config()
 ) ->
     onenv_api_test_runner:setup_fun().
-build_delete_instance_verify_fun(MemRef, FileType, Config) ->
+build_delete_instance_verify_fun(MemRef, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
+    RandomNode = lists_utils:random_element(Nodes),
 
     fun(Expectation, _) ->
         ExpResult = case Expectation of
@@ -573,32 +587,22 @@ build_delete_instance_verify_fun(MemRef, FileType, Config) ->
             expected_success -> {error, ?ENOENT}
         end,
 
-        FileGuid = api_test_memory:get(MemRef, file_guid),
-        lists:foreach(fun(Node) ->
-            ?assertMatch(
-                ExpResult,
-                ?extract_ok(lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, FileGuid})),
-                ?ATTEMPTS
-            )
-        end, Nodes),
+        lists:foreach(fun(ShareId) ->
+            ?assertMatch({ok, _}, get_share(RandomNode, ShareId), ?ATTEMPTS)
+        end, api_test_memory:get(MemRef, all_shares)),
 
-        case FileType of
-            <<"dir">> ->
-                lists:foreach(fun(Guid) ->
-                    lists:foreach(fun(Node) ->
-                        ?assertMatch(
-                            ExpResult,
-                            ?extract_ok(lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, Guid})),
-                            ?ATTEMPTS
-                        )
-                    end, Nodes)
-                end, api_test_memory:get(MemRef, files_in_dir));
-            _ ->
-                ok
-        end,
-
-        true
+        lists:foreach(fun(Guid) ->
+            lists:foreach(fun(Node) ->
+                ?assertMatch(ExpResult, ?extract_ok(file_test_utils:get_attrs(Node, Guid)), ?ATTEMPTS)
+            end, Nodes)
+        end, api_test_memory:get(MemRef, all_files))
     end.
+
+
+%% @private
+-spec get_share(node(), od_share:id()) -> {ok, od_share:doc()} | errors:error().
+get_share(Node, ShareId) ->
+    rpc:call(Node, share_logic, get, [?ROOT_SESS_ID, ShareId]).
 
 
 %% @private
@@ -655,7 +659,6 @@ init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{envs = [
         {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
     ]}).
-
 
 
 end_per_suite(_Config) ->

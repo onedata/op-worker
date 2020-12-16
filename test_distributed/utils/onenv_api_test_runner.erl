@@ -1012,7 +1012,7 @@ make_rest_request(Config, Node, Client, #rest_args{
     URL = get_rest_endpoint(Node, Path),
     HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
     CaCerts = op_test_rpc:get_cert_chain_pems(Node),
-    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 10000}],
+    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 15000}],
 
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
         {ok, RespCode, RespHeaders, RespBody} ->

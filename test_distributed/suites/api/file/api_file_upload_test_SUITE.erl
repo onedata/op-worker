@@ -216,7 +216,7 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
     fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
             ExpFilesInDir = api_test_memory:get(MemRef, files),
-            ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid)),
+            ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{node = TestNode, data = Data}) ->
             case api_test_memory:get(MemRef, success) of
@@ -225,7 +225,7 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
                     OtherFilesInDir = api_test_memory:get(MemRef, files),
                     AllFilesInDir = lists:sort([FileGuid | OtherFilesInDir]),
 
-                    ?assertEqual(AllFilesInDir, ls(TestNode, DirGuid)),
+                    ?assertEqual(AllFilesInDir, ls(TestNode, DirGuid), ?ATTEMPTS),
                     api_test_memory:set(MemRef, files, AllFilesInDir),
 
                     ExpName = api_test_memory:get(MemRef, name),
@@ -261,12 +261,14 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
 
 
 %% @private
--spec ls(node(), file_id:file_guid()) -> [file_id:file_guid()].
+-spec ls(node(), file_id:file_guid()) -> [file_id:file_guid()] | {error, term()}.
 ls(Node, DirGuid) ->
-    {ok, Children} = ?assertMatch(
-        {ok, _}, lfm_proxy:get_children(Node, ?ROOT_SESS_ID, {guid, DirGuid}, 0, 10000), ?ATTEMPTS
-    ),
-    lists:sort(lists:map(fun({Guid, _Name}) -> Guid end, Children)).
+    case lfm_proxy:get_children(Node, ?ROOT_SESS_ID, {guid, DirGuid}, 0, 10000) of
+        {ok, Children} ->
+            lists:sort(lists:map(fun({Guid, _Name}) -> Guid end, Children));
+        {error, _} = Error ->
+            Error
+    end.
 
 
 rest_update_file_content_test(Config) ->
