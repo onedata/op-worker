@@ -17,6 +17,7 @@
 -include("distribution_assert.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 %% API
 -export([all/0]).
@@ -48,7 +49,7 @@ all() -> [
 
 failure_test(Config) ->
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
-    onenv_test_utils:disable_panel_healthcheck(Config),
+    oct_environment:disable_panel_healthcheck(Config),
 
     InitialData = create_initial_data_structure(Config),
     UpdatedConfig = test_base(Config, InitialData, true),
@@ -58,9 +59,9 @@ failure_test(Config) ->
 
 test_base(Config, InitialData, StopAppBeforeKill) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
 
-    TestData = prepare(Config, InitialData, StopAppBeforeKill),
+    TestData = prepare(InitialData, StopAppBeforeKill),
     ct:pal("Test data prepared"),
 
     case StopAppBeforeKill of
@@ -76,7 +77,7 @@ test_base(Config, InitialData, StopAppBeforeKill) ->
     UpdatedConfig = failure_test_utils:restart_nodes(Config, FailingNode),
     ct:pal("Node restarted"),
 
-    verify(UpdatedConfig, InitialData, TestData),
+    verify( InitialData, TestData),
     ct:pal("Verification finished"),
     UpdatedConfig.
 
@@ -85,12 +86,13 @@ test_base(Config, InitialData, StopAppBeforeKill) ->
 %%%===================================================================
 
 create_initial_data_structure(Config) ->
-    Providers = [P1, P2] = test_config:get_providers(Config),
-    [WorkerP1] = test_config:get_provider_nodes(Config, P1),
-    [WorkerP2] = test_config:get_provider_nodes(Config, P2),
-    [User1] = test_config:get_provider_users(Config, P1),
-    SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
-    [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
+    Providers = [P1, P2] = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
+    [WorkerP1] = oct_background:get_provider_nodes(krakow),
+    [WorkerP2] = oct_background:get_provider_nodes(paris),
+    SessId = fun(P) ->
+        oct_background:get_user_session_id(user1, P)
+    end,
+    [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
     ConflictingDirName = generator:gen_name(),
@@ -118,36 +120,36 @@ create_initial_data_structure(Config) ->
         space_id => SpaceId
     }.
 
-prepare(Config, InitialData, StopAppBeforeKill) ->
+prepare(InitialData, StopAppBeforeKill) ->
     TestData = #{stop_app_before_kill => StopAppBeforeKill},
     % take sessions from config because they were updated after restart
-    InitialData2 = add_session_ids(Config, InitialData),
+    InitialData2 = add_session_ids(InitialData),
     lists:foldl(fun(TestPreparationFunction, TestDataAcc) ->
-        TestPreparationFunction(Config, InitialData2, TestDataAcc)
+        TestPreparationFunction(InitialData2, TestDataAcc)
     end, TestData, [
-        fun prepare_files/3,
-        fun prepare_import/3,
-        fun prepare_auto_cleaning/3,
-        fun prepare_replication_transfer/3,
-        fun prepare_eviction_transfer/3,
-        fun prepare_outgoing_migration_transfer/3,
-        fun prepare_incoming_migration_transfer/3
+        fun prepare_files/2,
+        fun prepare_import/2,
+        fun prepare_auto_cleaning/2,
+        fun prepare_replication_transfer/2,
+        fun prepare_eviction_transfer/2,
+        fun prepare_outgoing_migration_transfer/2,
+        fun prepare_incoming_migration_transfer/2
     ]).
 
 
-verify(Config, InitialData, TestData) ->
+verify(InitialData, TestData) ->
     % take sessions from config because they were updated after restart
-    InitialData2 = add_session_ids(Config, InitialData),
+    InitialData2 = add_session_ids(InitialData),
     lists:foreach(fun(TestVerificationFunction) ->
-        TestVerificationFunction(Config, InitialData2, TestData)
+        TestVerificationFunction(InitialData2, TestData)
     end, [
-        fun verify_files/3,
-        fun verify_import/3,
-        fun verify_auto_cleaning/3,
-        fun verify_replication_transfer/3,
-        fun verify_eviction_transfer/3,
-        fun verify_outgoing_migration_transfer/3,
-        fun verify_incoming_migration_transfer/3
+        fun verify_files/2,
+        fun verify_import/2,
+        fun verify_auto_cleaning/2,
+        fun verify_replication_transfer/2,
+        fun verify_eviction_transfer/2,
+        fun verify_outgoing_migration_transfer/2,
+        fun verify_incoming_migration_transfer/2
     ]).
 
 
@@ -158,11 +160,11 @@ verify_all_files_and_dirs_created_by_provider(Worker, SessId, TestData, Provider
         verify_files_and_dirs(Worker, SessId, FilesAndDirs)
     end, undefined, FilesAndDirsMap).
 
-test_new_files_and_dirs_creation(Config, InitialData, Dir) ->
+test_new_files_and_dirs_creation(InitialData, Dir) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
-    [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
+    [HealthyNode | _] = oct_background:get_provider_nodes(HealthyProvider),
 
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
@@ -184,7 +186,10 @@ verify_files_and_dirs(Worker, SessId, DirsAndFiles) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    failure_test_utils:init_per_suite(Config, "2op").
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "2op",
+        posthook = fun provider_onenv_test_utils:setup_sessions/1
+    }).
 
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config, false).
@@ -200,10 +205,10 @@ end_per_suite(_Config) ->
 %%% Preparation functions
 %%%===================================================================
 
-prepare_files(Config, InitialData, TestData) ->
-    [P1, P2] = test_config:get_providers(Config),
-    [WorkerP1] = test_config:get_provider_nodes(Config, P1),
-    [WorkerP2] = test_config:get_provider_nodes(Config, P2),
+prepare_files(InitialData, TestData) ->
+    [P1, P2] = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
+    [WorkerP1] = oct_background:get_provider_nodes(krakow),
+    [WorkerP2] = oct_background:get_provider_nodes(paris),
     SessId1 = kv_utils:get([session_ids, P1], InitialData),
     SessId2 = kv_utils:get([session_ids, P2], InitialData),
     SpaceId = kv_utils:get(space_id, InitialData),
@@ -226,9 +231,9 @@ prepare_files(Config, InitialData, TestData) ->
         }
     }.
 
-prepare_import(Config, InitialData, TestData) ->
+prepare_import(InitialData, TestData) ->
     ImportingProvider = kv_utils:get(failing_provider, InitialData),
-    [ImportingOpNode | _] = test_config:get_provider_nodes(Config, ImportingProvider),
+    [ImportingOpNode | _] = oct_background:get_provider_nodes(ImportingProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
 
     % check whether initial scan has been finished
@@ -247,9 +252,9 @@ prepare_import(Config, InitialData, TestData) ->
     TestData#{finished_scans => FinishedScans}.
 
 
-prepare_auto_cleaning(Config, InitialData, TestData) ->
+prepare_auto_cleaning(InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
     SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
@@ -275,11 +280,11 @@ prepare_auto_cleaning(Config, InitialData, TestData) ->
     TestData#{autocleaning_run_id => ARId}.
 
 
-prepare_replication_transfer(Config, InitialData, TestData) ->
+prepare_replication_transfer(InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
-    [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
+    [HealthyNode | _] = oct_background:get_provider_nodes(HealthyProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
@@ -299,11 +304,11 @@ prepare_replication_transfer(Config, InitialData, TestData) ->
         }
     }.
 
-prepare_eviction_transfer(Config, InitialData, TestData) ->
+prepare_eviction_transfer(InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
-    [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
+    [HealthyNode | _] = oct_background:get_provider_nodes(HealthyProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
@@ -332,11 +337,11 @@ prepare_eviction_transfer(Config, InitialData, TestData) ->
         }
     }.
 
-prepare_outgoing_migration_transfer(Config, InitialData, TestData) ->
+prepare_outgoing_migration_transfer(InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
-    [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
+    [HealthyNode | _] = oct_background:get_provider_nodes(HealthyProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
@@ -362,11 +367,11 @@ prepare_outgoing_migration_transfer(Config, InitialData, TestData) ->
         }
     }.
 
-prepare_incoming_migration_transfer(Config, InitialData, TestData) ->
+prepare_incoming_migration_transfer(InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
-    [HealthyNode | _] = test_config:get_provider_nodes(Config, HealthyProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
+    [HealthyNode | _] = oct_background:get_provider_nodes(HealthyProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
@@ -396,15 +401,15 @@ prepare_incoming_migration_transfer(Config, InitialData, TestData) ->
 %%% Verification functions
 %%%===================================================================
 
-verify_files(Config, InitialData, TestData) ->
+verify_files(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
-    [FailingNode] = test_config:get_provider_nodes(Config, FailingProvider),
-    [HealthyNode] = test_config:get_provider_nodes(Config, HealthyProvider),
+    [FailingNode] =oct_background:get_provider_nodes(FailingProvider),
+    [HealthyNode] = oct_background:get_provider_nodes(HealthyProvider),
     verify_all_files_and_dirs_created_by_provider(HealthyNode, SessIdHealthyProvider, TestData, HealthyProvider),
     StopAppBeforeKill = kv_utils:get(stop_app_before_kill, TestData),
 
@@ -424,14 +429,14 @@ verify_files(Config, InitialData, TestData) ->
             % but operations on dirs should be possible,
             P1DirGuid = kv_utils:get([test_dirs, FailingProvider], InitialData),
             P2DirGuid = kv_utils:get([test_dirs, HealthyProvider], InitialData),
-            test_new_files_and_dirs_creation(Config, InitialData, SpaceGuid),
-            test_new_files_and_dirs_creation(Config, InitialData, P1DirGuid),
-            test_new_files_and_dirs_creation(Config, InitialData, P2DirGuid)
+            test_new_files_and_dirs_creation(InitialData, SpaceGuid),
+            test_new_files_and_dirs_creation(InitialData, P1DirGuid),
+            test_new_files_and_dirs_creation(InitialData, P2DirGuid)
     end.
 
-verify_import(Config, InitialData, TestData) ->
+verify_import(InitialData, TestData) ->
     ImportingProvider = kv_utils:get(failing_provider, InitialData),
-    [ImportingOpNode | _] = test_config:get_provider_nodes(Config, ImportingProvider),
+    [ImportingOpNode | _] = oct_background:get_provider_nodes(ImportingProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
 
     % check whether scan is correctly restarted after node restart
@@ -441,9 +446,9 @@ verify_import(Config, InitialData, TestData) ->
     ?assertEqual(Scans0 + 1, storage_import_test_base:get_finished_scans_num(ImportingOpNode, SpaceId), ?ATTEMPTS).
 
 
-verify_auto_cleaning(Config, InitialData, TestData) ->
+verify_auto_cleaning(InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
 
     ARId1 = kv_utils:get(autocleaning_run_id, TestData),
@@ -457,10 +462,10 @@ verify_auto_cleaning(Config, InitialData, TestData) ->
     ?assertMatch({ok, #{status := <<"failed">>}}, get_auto_cleaning_run_report(FailingNode, ARId2), ?ATTEMPTS).
 
 
-verify_replication_transfer(Config, InitialData, TestData) ->
+verify_replication_transfer(InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
     TransferId = kv_utils:get([replication, transfer_id], TestData),
@@ -479,10 +484,10 @@ verify_replication_transfer(Config, InitialData, TestData) ->
     ?assertNotInScheduledList(FailingNode, SpaceId, [TransferId, RerunId]),
     ?assertInEndedList(FailingNode, SpaceId, [TransferId, RerunId]).
 
-verify_eviction_transfer(Config, InitialData, TestData) ->
+verify_eviction_transfer(InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
     TransferId = kv_utils:get([eviction, transfer_id], TestData),
@@ -504,10 +509,10 @@ verify_eviction_transfer(Config, InitialData, TestData) ->
     ?assertNotInScheduledList(FailingNode, SpaceId, [TransferId, RerunId]),
     ?assertInEndedList(FailingNode, SpaceId, [TransferId, RerunId]).
 
-verify_outgoing_migration_transfer(Config, InitialData, TestData) ->
+verify_outgoing_migration_transfer(InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
     TransferId = kv_utils:get([outgoing_migration, transfer_id], TestData),
@@ -530,10 +535,10 @@ verify_outgoing_migration_transfer(Config, InitialData, TestData) ->
     ?assertInEndedList(FailingNode, SpaceId, [TransferId, RerunId]).
 
 
-verify_incoming_migration_transfer(Config, InitialData, TestData) ->
+verify_incoming_migration_transfer(InitialData, TestData) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
-    [FailingNode | _] = test_config:get_provider_nodes(Config, FailingProvider),
+    [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
     TransferId = kv_utils:get([incoming_migration, transfer_id], TestData),
@@ -625,10 +630,11 @@ list_scheduled_transfers(Node, SpaceId) ->
     {ok, ScheduledTransfers} = rpc:call(Node, transfer, list_waiting_transfers, [SpaceId]),
     ScheduledTransfers.
 
-add_session_ids(Config, InitialData) ->
-    [P1, P2] = test_config:get_providers(Config),
-    [User1] = test_config:get_provider_users(Config, P1),
-    SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
+add_session_ids(InitialData) ->
+    [P1, P2] = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
+    SessId = fun(P) ->
+        oct_background:get_user_session_id(user1, P)
+    end,
     InitialData#{
         session_ids => #{
             P1 => SessId(P1),

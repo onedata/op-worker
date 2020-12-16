@@ -16,6 +16,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 %% export for ct
 -export([
@@ -138,7 +139,10 @@ session_create_should_set_session_access_time(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
+    oct_background:init_per_suite([{?LOAD_MODULES, [initializer, fuse_test_utils]} | Config], #onenv_test_config{
+        onenv_scenario = "2op"
+    }).
+
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

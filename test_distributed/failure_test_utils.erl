@@ -30,12 +30,12 @@ kill_nodes(Config, [Node | Nodes]) ->
     kill_nodes(Config, Node),
     kill_nodes(Config, Nodes);
 kill_nodes(Config, Node) ->
-    ok = onenv_test_utils:kill_node(Config, Node),
+    ok = oct_environment:kill_node(Config, Node),
     ?assertEqual({badrpc, nodedown}, rpc:call(Node, oneprovider, get_id, []), 10).
 
 restart_nodes(Config, Nodes) when is_list(Nodes) ->
     lists:foreach(fun(Node) ->
-        ok = onenv_test_utils:start_node(Config, Node)
+        ok = oct_environment:start_node(Config, Node)
     end, Nodes),
 
     lists:foreach(fun(Node) ->

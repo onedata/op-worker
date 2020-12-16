@@ -139,12 +139,18 @@
 
 -define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
 
+-define(SPACE_1, <<"space1">>).
+-define(SPACE_2, <<"space2">>).
 -define(SPACE_KRK, <<"space_krk">>).
 -define(SPACE_KRK_PAR, <<"space_krk_par">>).
 
+-define(USER_IN_SPACE_1, <<"user1">>).
+-define(USER_IN_SPACE_1_AUTH, ?USER(?USER_IN_SPACE_1)).
 -define(USER_IN_SPACE_KRK, <<"user1">>).
 -define(USER_IN_SPACE_KRK_AUTH, ?USER(?USER_IN_SPACE_KRK)).
 
+-define(USER_IN_SPACE_2, <<"user3">>).
+-define(USER_IN_SPACE_2_AUTH, ?USER(?USER_IN_SPACE_2)).
 -define(USER_IN_SPACE_KRK_PAR, <<"user3">>).
 -define(USER_IN_SPACE_KRK_PAR_AUTH, ?USER(?USER_IN_SPACE_KRK_PAR)).
 
@@ -169,6 +175,12 @@ end)()).
     correct = [?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [?NOBODY],
     forbidden_not_in_space = [?USER_IN_SPACE_KRK_AUTH],
+    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
+}).
+-define(CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(__CONFIG), #client_spec{
+    correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+    unauthorized = [?NOBODY],
+    forbidden_not_in_space = [?USER_IN_SPACE_1_AUTH],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
 }).
 % Special case -> any user can make requests for shares but if request is

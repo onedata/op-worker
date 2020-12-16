@@ -17,6 +17,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 %% API
 -export([all/0]).
@@ -36,13 +37,12 @@ all() -> [
 %%%===================================================================
 
 failure_test(Config) ->
-    [P1, P2] = test_config:get_providers(Config),
-    [Worker1P1 | _] = WorkersP1 = test_config:get_provider_nodes(Config, P1),
-    [Worker1P2 | _] = WorkersP2 = test_config:get_provider_nodes(Config, P2),
-    [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
+    [Worker1P1 | _] = WorkersP1 = oct_background:get_provider_nodes(krakow),
+    [Worker1P2 | _] = WorkersP2 = oct_background:get_provider_nodes(paris),
+    [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
 
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
-    ok = onenv_test_utils:disable_panel_healthcheck(Config),
+    ok = oct_environment:disable_panel_healthcheck(Config),
 
     enable_ha(Config),
 
@@ -89,13 +89,12 @@ failure_test(Config) ->
 % Basic test - creates dirs and files and checks if they can be used after node failure
 % Creates also dirs and files when node is down and checks if they can be used after node recovery
 test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
-    [OzNode | _ ] = test_config:get_all_oz_worker_nodes(Config),
-    [P1, P2] = test_config:get_providers(Config),
-    [User1] = test_config:get_provider_users(Config, P1),
-    SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
-    WorkersP1 = test_config:get_provider_nodes(Config, P1),
-    WorkersP2 = test_config:get_provider_nodes(Config, P2),
-    [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
+    P1 = oct_background:get_provider_id(krakow),
+    P2 = oct_background:get_provider_id(paris),
+    SessId = fun(P) -> oct_background:get_user_session_id(user1, P) end,
+    WorkersP1 = oct_background:get_provider_nodes(krakow),
+    WorkersP2 = oct_background:get_provider_nodes(paris),
+    [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     Attempts = 60,
 
@@ -152,8 +151,10 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    failure_test_utils:init_per_suite(Config, "2op-2nodes").
-
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "2op-2nodes",
+        posthook = fun provider_onenv_test_utils:setup_sessions/1
+    }).
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config, false).
 
@@ -170,10 +171,8 @@ end_per_suite(_Config) ->
 %%%===================================================================
 
 enable_ha(Config) ->
-    [P1, P2] = test_config:get_providers(Config),
-    Workers = test_config:get_all_op_worker_nodes(Config),
-    CM_P1 = test_config:get_custom(Config, [primary_cm, P1]),
-    CM_P2 = test_config:get_custom(Config, [primary_cm, P2]),
+    Workers = oct_background:get_provider_nodes(krakow) ++ oct_background:get_provider_nodes(paris),
+    [_, _, CM_P1, _, CM_P2 | _] = test_config:get_custom(Config, [cm_nodes]),
     ClusterManagerNodes = [CM_P1, CM_P2],
 
     lists:foreach(fun(Worker) ->
