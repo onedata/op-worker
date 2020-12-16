@@ -47,26 +47,26 @@
 -type ct_config() :: proplists:proplist().
 
 -type scenario_type() ::
-% Standard rest scenario - using fileId in path so that no lookup
-% takes place
-rest |
-% Rest scenario using file path in URL - causes fileId lookup in
-% rest_handler. If path can't be resolved (this file/space is not
-% supported by specific provider) rather then concrete error a
-% ?ERROR_POSIX(?ENOENT) will be returned
-rest_with_file_path |
-% Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
-% of request auth and parameters.
-rest_not_supported |
-% Standard graph sync scenario
-gs |
-% Gs scenario with gri.scope == private and gri.id == SharedGuid.
-% Such requests should be rejected at auth steps resulting in
-% ?ERROR_UNAUTHORIZED.
-gs_with_shared_guid_and_aspect_private |
-% Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
-% of test case due to for example invalid aspect.
-gs_not_supported.
+    % Standard rest scenario - using fileId in path so that no lookup
+    % takes place
+    rest |
+    % Rest scenario using file path in URL - causes fileId lookup in
+    % rest_handler. If path can't be resolved (this file/space is not
+    % supported by specific provider) rather then concrete error a
+    % ?ERROR_POSIX(?ENOENT) will be returned
+    rest_with_file_path |
+    % Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
+    % of request auth and parameters.
+    rest_not_supported |
+    % Standard graph sync scenario
+    gs |
+    % Gs scenario with gri.scope == private and gri.id == SharedGuid.
+    % Such requests should be rejected at auth steps resulting in
+    % ?ERROR_UNAUTHORIZED.
+    gs_with_shared_guid_and_aspect_private |
+    % Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
+    % of test case due to for example invalid aspect.
+    gs_not_supported.
 
 % List of nodes to which api calls can be directed. However only one node
 % from this list will be chosen (randomly) for each test case.
@@ -90,8 +90,8 @@ gs_not_supported.
 % If not it should throw an error.
 % First argument tells whether request made during testcase should succeed
 -type verify_fun() :: fun(
-(RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) ->
-    term() | no_return()
+    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) ->
+        term() | no_return()
 ).
 
 -type rest_args() :: #rest_args{}.
@@ -181,11 +181,11 @@ run_tests(Config, SpecTemplates) ->
 -spec run_suite(ct_config(), suite_spec()) -> HasAllTestsPassed :: boolean().
 run_suite(Config, SuiteSpec) ->
     run_invalid_clients_test_cases(Config, unauthorized, SuiteSpec)
-        and run_invalid_clients_test_cases(Config, forbidden_not_in_space, SuiteSpec)
-        and run_invalid_clients_test_cases(Config, forbidden_in_space, SuiteSpec)
-        and run_malformed_data_test_cases(Config, SuiteSpec)
-        and run_missing_required_data_test_cases(Config, SuiteSpec)
-        and run_expected_success_test_cases(Config, SuiteSpec).
+    and run_invalid_clients_test_cases(Config, forbidden_not_in_space, SuiteSpec)
+    and run_invalid_clients_test_cases(Config, forbidden_in_space, SuiteSpec)
+    and run_malformed_data_test_cases(Config, SuiteSpec)
+    and run_missing_required_data_test_cases(Config, SuiteSpec)
+    and run_expected_success_test_cases(Config, SuiteSpec).
 
 
 %% @private
@@ -256,7 +256,7 @@ get_scenario_specific_error_for_invalid_client(gs_not_supported, _ClientType, Cl
 get_scenario_specific_error_for_invalid_client(rest_with_file_path, ClientType, ClientAndError) when
     ClientType =:= unauthorized;
     ClientType =:= forbidden_not_in_space
-    ->
+->
     % Error thrown by rest_handler (before middleware auth checks could be performed)
     % as invalid clients who doesn't belong to space can't resolve file path to guid
     {extract_client(ClientAndError), ?ERROR_POSIX(?ENOENT)};
@@ -273,7 +273,7 @@ get_scenario_specific_error_for_invalid_client(_ScenarioType, forbidden_in_space
 %% @private
 -spec extract_client(aai:auth() | {aai:auth(), errors:error()}) -> aai:auth().
 extract_client({Client, {error, _}}) -> Client;
-extract_client(Client) -> Client.
+extract_client(Client)               -> Client.
 
 
 %% @private
@@ -333,12 +333,12 @@ run_malformed_data_test_cases(Config, #suite_spec{
     scenario_type()
 ) ->
     boolean().
-is_data_error_applicable_to_scenario({error, _}, _) -> true;
-is_data_error_applicable_to_scenario({Scenario, _}, Scenario) -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, rest) -> true;
+is_data_error_applicable_to_scenario({error, _}, _)                          -> true;
+is_data_error_applicable_to_scenario({Scenario, _}, Scenario)                -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest)                -> true;
 is_data_error_applicable_to_scenario({rest_handler, _}, rest_with_file_path) -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, rest_not_supported) -> true;
-is_data_error_applicable_to_scenario(_, _) -> false.
+is_data_error_applicable_to_scenario({rest_handler, _}, rest_not_supported)  -> true;
+is_data_error_applicable_to_scenario(_, _)                                   -> false.
 
 
 %% @private
@@ -628,7 +628,7 @@ validate_error_result(Type, ExpError, {ok, RespCode, _RespHeaders, RespBody}) wh
     Type == rest;
     Type == rest_with_file_path;
     Type == rest_not_supported
-    ->
+->
     ?assertEqual(
         {errors:to_http_code(ExpError), ?REST_ERROR(ExpError)},
         {RespCode, RespBody}
@@ -638,7 +638,7 @@ validate_error_result(Type, ExpError, Result) when
     Type == gs;
     Type == gs_with_shared_guid_and_aspect_private;
     Type == gs_not_supported
-    ->
+->
     ?assertEqual(ExpError, Result).
 
 

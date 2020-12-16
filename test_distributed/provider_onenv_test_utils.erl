@@ -34,13 +34,13 @@ initialize(Config) ->
 
 -spec setup_sessions(test_config:config()) -> test_config:config().
 setup_sessions(Config) ->
-    ProviderUsers = maps:fold(fun(_, Details, Acc) ->
-        Acc#{maps:get(id, Details) => maps:get(users, Details)}
-    end, #{}, kv_utils:get([oneproviders], node_cache:get(oct_mapping))),
+    ProviderUsers = lists:foldl(fun(ProviderId, Acc) ->
+        Acc#{ProviderId => oct_background:get_provider_eff_users(ProviderId)}
+    end, #{}, oct_background:get_provider_ids()),
 
-    NodesPerProvider = maps:fold(fun(_, Details, Acc) ->
-        Acc#{maps:get(id, Details) => maps:get(nodes, Details)}
-    end, #{}, kv_utils:get([oneproviders], node_cache:get(oct_mapping))),
+    NodesPerProvider = lists:foldl(fun(ProviderId, Acc) ->
+        Acc#{ProviderId => oct_background:get_provider_nodes(ProviderId)}
+    end, #{}, oct_background:get_provider_ids()),
 
     [OzNode | _] = test_config:get_all_oz_worker_nodes(Config),
     Sessions = maps:map(fun(ProviderId, Users) ->

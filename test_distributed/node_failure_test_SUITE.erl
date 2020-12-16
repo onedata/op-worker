@@ -172,7 +172,8 @@ end_per_suite(_Config) ->
 
 enable_ha(Config) ->
     Workers = oct_background:get_provider_nodes(krakow) ++ oct_background:get_provider_nodes(paris),
-    [_, _, CM_P1, _, CM_P2 | _] = test_config:get_custom(Config, [cm_nodes]),
+    [CM_P1] = get_primary_cm_node(Config, krakow),
+    [CM_P2] = get_primary_cm_node(Config, paris),
     ClusterManagerNodes = [CM_P1, CM_P2],
 
     lists:foreach(fun(Worker) ->
@@ -282,3 +283,14 @@ assert_proper_connections_rib(SessId, AsyncReqManager, Cons) ->
 
 get_connection_rib(Conn) ->
     element(15, element(4, sys:get_state(Conn))).
+
+
+%% @private
+-spec get_primary_cm_node(test_config:config(), atom()) -> [node()].
+get_primary_cm_node(Config, ProviderPlaceholder) ->
+    lists:foldl(fun(CMNode, CMAcc) ->
+        case string:str(atom_to_list(CMNode), atom_to_list(ProviderPlaceholder) ++ "-0") > 0 of
+            true -> [CMNode];
+            false -> CMAcc
+        end
+    end, [], test_config:get_custom(Config, [cm_nodes])).
