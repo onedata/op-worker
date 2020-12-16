@@ -56,7 +56,17 @@
     terminate/2, code_change/3
 ]).
 
--type timestamp() :: time:seconds().
+-type expiration_marker() ::
+    undefined |
+    % Used mainly for caching token verification errors like e.g. revoked token
+    % or lack of connection to oz. Such errors are cached to not overflow oz with
+    % requests that will probably end with error. However, such errors may be
+    % temporary and as such those entries should be kept only for some,
+    % preferably short and independent of time warps, period of time
+    {interval, countdown_timer:instance()} |
+    % Used to cache entries for tokens with time caveats (explicit ttl) which
+    % depend on global clock
+    {timestamp, time:seconds()}.
 
 -type token_ref() ::
     {named, tokens:id()} |
@@ -68,8 +78,9 @@
 
     token_ref :: undefined | token_ref(),
     token_revoked = false :: boolean(),
-    cache_expiration :: undefined | timestamp()
+    cache_expiration :: expiration_marker()
 }).
+-type cache_entry() :: #cache_entry{}.
 
 -record(state, {
     cache_purge_timer = undefined :: undefined | reference()
@@ -115,6 +126,13 @@
 -define(TEMP_TOKENS_DELETED_MSG(__UserId),
     {temporary_tokens_deleted, __UserId}
 ).
+
+-define(EXPIRATION_INTERVAL(__Timer), {interval, __Timer}).
+-define(EXPIRATION_TIMESTAMP(__Timestamp), {timestamp, __Timestamp}).
+
+-define(DEFAULT_EXPIRATION_INTERVAL(), ?EXPIRATION_INTERVAL(countdown_timer:start_seconds(
+    ?CACHE_ITEM_DEFAULT_TTL
+))).
 
 -define(NOW(), global_clock:timestamp_seconds()).
 
@@ -163,17 +181,16 @@ get_token_ref(#token{
 -spec get_token_credentials_verification_result(auth_manager:token_credentials()) ->
     {ok, auth_manager:verification_result()} | ?ERROR_NOT_FOUND.
 get_token_credentials_verification_result(TokenCredentials) ->
-    Now = ?NOW(),
     try ets:lookup(?CACHE_NAME, TokenCredentials) of
-        [#cache_entry{cache_expiration = Expiration} = Item] when
-            Expiration == undefined;
-            (is_integer(Expiration) andalso Now < Expiration)
-        ->
-            case Item#cache_entry.token_revoked of
+        [#cache_entry{} = Entry] ->
+            case has_cache_entry_expired(Entry) of
                 true ->
-                    {ok, ?ERROR_TOKEN_REVOKED};
+                    ?ERROR_NOT_FOUND;
                 false ->
-                    {ok, Item#cache_entry.verification_result}
+                    case Entry#cache_entry.token_revoked of
+                        true -> {ok, ?ERROR_TOKEN_REVOKED};
+                        false -> {ok, Entry#cache_entry.verification_result}
+                    end
             end;
         _ ->
             ?ERROR_NOT_FOUND
@@ -326,7 +343,7 @@ handle_cast(?MONITOR_TOKEN_REQ(TokenCredentials, TokenRef), State) ->
                 verification_result = Error,
 
                 token_ref = TokenRef,
-                cache_expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL
+                cache_expiration = ?DEFAULT_EXPIRATION_INTERVAL()
             })
     end,
     {noreply, State};
@@ -346,7 +363,7 @@ handle_cast(?TOKEN_STATUS_CHANGED_MSG(TokenId), State) ->
                 }
             end));
         {error, _} = Error ->
-            Expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL,
+            Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
             ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
                 token_ref = {named, Id}
             } = CacheEntry) when Id == TokenId ->
@@ -362,7 +379,7 @@ handle_cast(?TOKEN_STATUS_CHANGED_MSG(TokenId), State) ->
 handle_cast(?TOKEN_DELETED_MSG(TokenId), State) ->
     ?debug("Received token deleted event for token ~s", [TokenId]),
 
-    Expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL,
+    Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         token_ref = {named, Id}
     } = CacheEntry) when Id == TokenId ->
@@ -378,7 +395,8 @@ handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
     ?debug("Received temporary tokens generation changed (gen: ~p) event for user ~s", [
         UserId, Generation
     ]),
-    Expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL,
+
+    Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         verification_result = {ok, _, _},
         token_ref = {temporary, Id, OldGeneration}
@@ -394,7 +412,7 @@ handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
 handle_cast(?TEMP_TOKENS_DELETED_MSG(UserId), State) ->
     ?debug("Received temporary tokens deleted event for user ~s", [UserId]),
 
-    Expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL,
+    Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         token_ref = {temporary, Id, _Generation}
     } = CacheEntry) when Id == UserId ->
@@ -502,22 +520,38 @@ subscribe_for_token_changes({temporary, UserId, Generation}) ->
 
 
 %% @private
--spec infer_cache_entry_expiration(auth_manager:token_credentials(),
-    auth_manager:verification_result()) -> undefined | timestamp().
+-spec infer_cache_entry_expiration(
+    auth_manager:token_credentials(),
+    auth_manager:verification_result()
+) ->
+    expiration_marker().
 infer_cache_entry_expiration(_TokenCredentials, {error, _}) ->
-    ?NOW() + ?CACHE_ITEM_DEFAULT_TTL;
+    ?DEFAULT_EXPIRATION_INTERVAL();
 infer_cache_entry_expiration(TokenCredentials, {ok, _, Expiration}) ->
     case auth_manager:get_consumer_token(TokenCredentials) of
         undefined ->
-            Expiration;
+            case Expiration of
+                undefined -> undefined;
+                _ -> ?EXPIRATION_TIMESTAMP(Expiration)
+            end;
         _ ->
             % Consumer token may come from subject not supported by this
             % provider and as such cannot be monitored (subscription in
             % oz for token issued by such subjects). That is why verification
             % result for token_credentials with consumer token should be
             % cached only for short period of time.
-            ?NOW() + ?CACHE_ITEM_DEFAULT_TTL
+            ?DEFAULT_EXPIRATION_INTERVAL()
     end.
+
+
+%% @private
+-spec has_cache_entry_expired(cache_entry()) -> boolean().
+has_cache_entry_expired(#cache_entry{cache_expiration = undefined}) ->
+    false;
+has_cache_entry_expired(#cache_entry{cache_expiration = ?EXPIRATION_INTERVAL(Timer)}) ->
+    countdown_timer:is_expired(Timer);
+has_cache_entry_expired(#cache_entry{cache_expiration = ?EXPIRATION_TIMESTAMP(Timestamp)}) ->
+    ?NOW() > Timestamp.
 
 
 %%--------------------------------------------------------------------
