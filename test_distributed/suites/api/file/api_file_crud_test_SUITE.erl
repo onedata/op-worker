@@ -444,7 +444,7 @@ delete_file_instance_test(Config) ->
             },
 
             setup_fun = build_delete_instance_setup_fun(MemRef, TopDirPath, FileType),
-            verify_fun = build_delete_instance_verify_fun(MemRef, FileType, Config),
+            verify_fun = build_delete_instance_verify_fun(MemRef, Config),
 
             scenario_templates = [
                 #scenario_template{
@@ -533,6 +533,7 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
 
     fun() ->
         Path = filename:join([TopDirPath, ?RANDOM_FILE_NAME()]),
@@ -550,7 +551,7 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType) ->
 
         AllFiles = case FileType of
             <<"dir">> ->
-                Files = lists_utils:pmap(fun(Num) ->
+                SubFiles = lists_utils:pmap(fun(Num) ->
                     {_, _, FileGuid, _} = api_test_utils:create_file_in_space_krk_par_with_additional_metadata(
                         Path, false, <<"file_or_dir_", Num>>
                     ),
