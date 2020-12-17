@@ -551,7 +551,7 @@ has_cache_entry_expired(#cache_entry{cache_expiration = undefined}) ->
 has_cache_entry_expired(#cache_entry{cache_expiration = ?EXPIRATION_INTERVAL(Timer)}) ->
     countdown_timer:is_expired(Timer);
 has_cache_entry_expired(#cache_entry{cache_expiration = ?EXPIRATION_TIMESTAMP(Timestamp)}) ->
-    ?NOW() > Timestamp.
+    ?NOW() >= Timestamp.
 
 
 %%--------------------------------------------------------------------
