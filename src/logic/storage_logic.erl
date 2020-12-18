@@ -32,7 +32,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([create_in_zone/4, create_in_zone/4, delete_in_zone/1]).
+-export([create_in_zone/4, create_in_zone/5, delete_in_zone/1]).
 -export([get/1, get_shared_data/2]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).

@@ -653,7 +653,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage = #storage{name 
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, unknown, false, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(Name, unknown, false, #{}, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).
