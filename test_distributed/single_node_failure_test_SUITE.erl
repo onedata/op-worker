@@ -75,6 +75,7 @@ test_base(Config, InitialData, StopAppBeforeKill) ->
     failure_test_utils:kill_nodes(Config, FailingNode),
     ct:pal("Node killed"),
     UpdatedConfig = failure_test_utils:restart_nodes(Config, FailingNode),
+    oct_background:update_background_config(Config),
     ct:pal("Node restarted"),
 
     verify( InitialData, TestData),
@@ -187,8 +188,7 @@ verify_files_and_dirs(Worker, SessId, DirsAndFiles) ->
 
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
-        onenv_scenario = "2op",
-        posthook = fun provider_onenv_test_utils:setup_sessions/1
+        onenv_scenario = "2op"
     }).
 
 init_per_testcase(_Case, Config) ->
