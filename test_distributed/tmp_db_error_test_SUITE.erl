@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 %% API
 -export([all/0]).
@@ -36,15 +37,15 @@ all() -> [
 %%%===================================================================
 
 db_error_test(Config) ->
-    [Worker] = test_config:get_all_op_worker_nodes(Config),
-    [ProviderId] = test_config:get_providers(Config),
-    [User1] = test_config:get_provider_users(Config, ProviderId),
-    SessId = test_config:get_user_session_id_on_provider(Config, User1, ProviderId),
-    [SpaceId | _] = test_config:get_provider_spaces(Config, ProviderId),
+    [Worker] = oct_background:get_provider_nodes(krakow),
+    ProviderId = oct_background:get_provider_id(krakow),
+    [User1] = oct_background:get_provider_eff_users(krakow),
+    SessId = oct_background:get_user_session_id(joe, krakow),
+    [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
-    onenv_test_utils:disable_panel_healthcheck(Config),
+    oct_environment:disable_panel_healthcheck(Config),
 
     DirsAndFiles = file_ops_test_utils:create_files_and_dirs(Worker, SessId, SpaceGuid, 20, 50),
     enable_db_error_emulation(),
@@ -145,7 +146,11 @@ mock_cberl(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    failure_test_utils:init_per_suite(Config, "1op").
+    oct_background:init_per_suite(Config,#onenv_test_config{
+        onenv_scenario = "1op",
+        posthook = fun provider_onenv_test_utils:setup_sessions/1
+    }).
+
 
 init_per_testcase(_Case, Config) ->
     mock_cberl(Config),

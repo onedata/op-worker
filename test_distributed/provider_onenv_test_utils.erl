@@ -28,16 +28,21 @@
 
 -spec initialize(test_config:config()) -> test_config:config().
 initialize(Config) ->
-    NewConfig = onenv_test_utils:prepare_base_test_config(Config),
+    NewConfig = oct_background:prepare_base_test_config(Config),
     setup_sessions(NewConfig).
 
 
 -spec setup_sessions(test_config:config()) -> test_config:config().
 setup_sessions(Config) ->
-    ProviderUsers = test_config:get_custom(Config, users),
-    NodesPerProvider = test_config:get_custom(Config, provider_nodes),
-    
-    [OzNode | _ ] = test_config:get_all_oz_worker_nodes(Config),
+    ProviderUsers = lists:foldl(fun(ProviderId, Acc) ->
+        Acc#{ProviderId => oct_background:get_provider_eff_users(ProviderId)}
+    end, #{}, oct_background:get_provider_ids()),
+
+    NodesPerProvider = lists:foldl(fun(ProviderId, Acc) ->
+        Acc#{ProviderId => oct_background:get_provider_nodes(ProviderId)}
+    end, #{}, oct_background:get_provider_ids()),
+
+    [OzNode | _] = test_config:get_all_oz_worker_nodes(Config),
     Sessions = maps:map(fun(ProviderId, Users) ->
         [Node | _] = maps:get(ProviderId, NodesPerProvider),
         lists:map(fun(UserId) ->
@@ -45,16 +50,16 @@ setup_sessions(Config) ->
             {UserId, SessId}
         end, Users)
     end, ProviderUsers),
-    
+
     test_config:set_many(Config, [[sess_id, Sessions]]).
 
 
 -spec find_importing_provider(test_config:config(), od_space:id()) -> od_provider:id() | undefined.
 find_importing_provider(Config, SpaceId) ->
-    Providers = test_config:get_providers(Config),
+    Providers = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
     lists:foldl(fun
         (ProviderId, undefined) ->
-            [OpNode | _] = test_config:get_provider_nodes(Config, ProviderId),
+            [OpNode | _] = oct_background:get_provider_nodes(ProviderId),
             {ok, StorageId} = rpc:call(OpNode, space_logic, get_local_storage_id, [SpaceId]),
             case rpc:call(OpNode, storage, is_imported, [StorageId]) of
                 true -> ProviderId;
@@ -93,5 +98,5 @@ setup_user_session(UserId, OzwNode, OpwNode) ->
     Credentials =
         rpc:call(OpwNode, auth_manager, build_token_credentials,
             [AccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
-    
+
     rpc:call(OpwNode, session_manager, reuse_or_create_fuse_session, [Nonce, Identity, Credentials]).
