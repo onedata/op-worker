@@ -480,16 +480,10 @@ supports_any_space(StorageId) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
     rtransfer_config:add_storage(StorageId).
-
-
-%% @private
--spec on_storage_created(id(), qos_parameters()) -> ok.
-on_storage_created(StorageId, QosParameters) ->
-    ok = set_qos_parameters(StorageId, QosParameters),
-    on_storage_created(StorageId).
 
 
 %% @private
@@ -544,11 +538,11 @@ lock_on_storage_by_name(Identifier, Fun) ->
 -spec create_insecure(name(), helpers:helper(), luma_config(),
     imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly) of
+    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
         {ok, Id} ->
             case storage_config:create(Id, Helper, LumaConfig) of
                 {ok, Id} ->
-                    on_storage_created(Id, QosParameters),
+                    on_storage_created(Id),
                     {ok, Id};
                 StorageConfigError ->
                     case storage_logic:delete_in_zone(Id) of
