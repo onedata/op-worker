@@ -301,7 +301,13 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
     ATime :: file_meta:time() | undefined,
     MTime :: file_meta:time() | undefined,
     CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
-update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
+update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
+    % Flush events queue to prevent race with file_written_event
+    % TODO VFS-7139: This is temporary solution to be removed after fixing oneclient
+    SessId = user_ctx:get_session_id(UserCtx),
+    catch lfm_event_controller:flush_event_queue(
+        SessId, oneprovider:get_id(), file_ctx:get_uuid_const(FileCtx)),
+
     TimesDiff1 = fun
         (Times = #times{}) when ATime == undefined -> Times;
         (Times = #times{}) -> Times#times{atime = ATime}
