@@ -45,7 +45,8 @@ restart_nodes(Config, Nodes) when is_list(Nodes) ->
     end, Nodes),
 
     UpdatedConfig = provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
-    lfm_proxy:init(UpdatedConfig, false, Nodes);
+    lfm_proxy:init(UpdatedConfig, false, Nodes),
+    oct_background:update_background_config(UpdatedConfig);
 restart_nodes(Config, Node) ->
     restart_nodes(Config, [Node]).
 

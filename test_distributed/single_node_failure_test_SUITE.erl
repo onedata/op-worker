@@ -75,7 +75,6 @@ test_base(Config, InitialData, StopAppBeforeKill) ->
     failure_test_utils:kill_nodes(Config, FailingNode),
     ct:pal("Node killed"),
     UpdatedConfig = failure_test_utils:restart_nodes(Config, FailingNode),
-    oct_background:update_background_config(Config),
     ct:pal("Node restarted"),
 
     verify( InitialData, TestData),
