@@ -86,6 +86,9 @@
 -export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2,
     get_effective_file_qos/2, check_qos_status/2, check_qos_status/3]).
 
+%% Function exported only for use in tests
+-export([rmdir/2]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -114,7 +117,8 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes a directory with all its children.
+%% Deletes a directory with all its children asynchronously, moving
+%% the directory to trash.
 %% @end
 %%--------------------------------------------------------------------
 -spec rm_recursive(session:id(), fslogic_worker:file_guid_or_path()) ->
@@ -963,3 +967,15 @@ check_qos_status(SessId, QosEntryId) ->
     {ok, qos_status:summary()} | error_reply().
 check_qos_status(SessId, QosEntryId, FileKey) ->
     ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId, FileKey) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes an empty directory.
+%% NOTE!!!
+%% This function should only be used in cleanup of tests!!!
+%% @end
+%%--------------------------------------------------------------------
+-spec rmdir(session:id(), fslogic_worker:file_guid_or_path()) ->
+    ok | error_reply().
+rmdir(SessId, FileKey) ->
+    ?run(fun() -> lfm_files:rm(SessId, FileKey, true) end).

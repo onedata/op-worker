@@ -1317,6 +1317,7 @@ end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).
 
 init_per_testcase(Config) ->
+    ct:timetrap({minutes, 5}),
     init_per_testcase(default, Config).
 
 init_per_testcase(default, Config) ->
@@ -1346,7 +1347,7 @@ get_supported_spaces(Worker) ->
 clean_spaces(Workers = [W1 | _]) ->
     {ok, SpaceIds} = rpc:call(W1, provider_logic, get_spaces, []),
     lists:foreach(fun(SpaceId) ->
-        lfm_test_utils:clean_space(Workers, SpaceId, 30)
+        lfm_test_utils:clean_space(W1, Workers, SpaceId, 30)
     end, SpaceIds).
 
 clean_posix_storage_mountpoints(Worker) ->

@@ -397,7 +397,7 @@ delete_regular_file_and_update_counters(FileCtx, SpaceId) ->
 delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
-    {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, 0, ChunkSize, SpaceId, StorageId),
+    {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, 0, ChunkSize, #link_token{}, SpaceId, StorageId),
     delete_file(FileCtx2).
 
 %%-------------------------------------------------------------------
@@ -407,19 +407,21 @@ delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec delete_children(file_ctx:ctx(), user_ctx:ctx(), non_neg_integer(), non_neg_integer(),
+    file_meta_links:token() | undefined,
     od_space:id(), storage:id()) -> {ok, file_ctx:ctx()}.
-delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId) ->
+delete_children(FileCtx, UserCtx, Offset, ChunkSize, Token, SpaceId, StorageId) ->
     try
-        {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, ChunkSize),
+        {ChildrenCtxs, #{token := Token2}, FileCtx2} =
+            file_ctx:get_file_children(FileCtx, UserCtx, Offset, ChunkSize, Token),
         storage_import_monitoring:increment_queue_length_histograms(SpaceId, length(ChildrenCtxs)),
         lists:foreach(fun(ChildCtx) ->
             delete_file_and_update_counters(ChildCtx, SpaceId, StorageId)
         end, ChildrenCtxs),
-        case length(ChildrenCtxs) < ChunkSize of
+        case Token2#link_token.is_last of
             true ->
                 {ok, FileCtx2};
             false ->
-                delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize, SpaceId, StorageId)
+                delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize, Token2, SpaceId, StorageId)
         end
     catch
         throw:?ENOENT ->

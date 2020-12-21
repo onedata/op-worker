@@ -49,6 +49,8 @@
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
 create_file(UserCtx, ParentFileCtx0, Name, Mode, Flag) ->
+    % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
+    file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_object]
@@ -77,6 +79,8 @@ storage_file_created(UserCtx, FileCtx0) ->
 -spec make_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
+    % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
+    file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_object]

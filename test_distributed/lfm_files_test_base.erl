@@ -30,6 +30,7 @@
     lfm_create_and_access/1,
     lfm_create_failure/1,
     lfm_basic_rename/1,
+    lfm_renaming_space_directory_should_fail/1,
     lfm_basic_rdwr/1,
     lfm_basic_rdwr_opens_file_once/1,
     lfm_basic_rdwr_after_file_delete/1,
@@ -40,7 +41,10 @@
     lfm_truncate/1,
     lfm_truncate_and_write/1,
     lfm_acl/1,
+    lfm_rmdir/1,
+    lfm_rmdir_fails_with_eperm_on_space_directory/1,
     rm_recursive/1,
+    rm_recursive_fails_with_eperm_on_space_directory/1,
     file_gap/1,
     ls/1, ls_base/1,
     ls_with_stats/1, ls_with_stats_base/1,
@@ -89,7 +93,6 @@
     lfm_open_failure_multiple_users/1,
     lfm_open_and_create_open_failure/1,
     lfm_copy_failure_multiple_users/1,
-    lfm_rmdir/1,
     sparse_files_should_be_created/2
 ]).
 
@@ -113,14 +116,6 @@ end).
 %%%====================================================================
 %%% Test function
 %%%====================================================================
-
-lfm_rmdir(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    DirPath = <<"/space_name1/dir1">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, DirPath, 8#755)),
-    ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, DirPath})).
 
 lfm_recreate_handle(Config, CreatePerms, DeleteAfterOpen) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -422,32 +417,28 @@ readdir_plus_should_work_with_token(Config) ->
     Token = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
     Token2 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
     Token3 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    Token4 = verify_attrs_with_token(Config, MainDirPath, Files, 1, 3, 9, true, Token3),
-    ?assertEqual(<<"">>, Token4).
+    verify_attrs_with_token(Config, MainDirPath, Files, 1, 3, 9, true, Token3).
 
 readdir_plus_should_work_with_token2(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 12),
     Token = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
     Token2 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
     Token3 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    Token4 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3),
-    ?assertEqual(<<"">>, Token4).
+    verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3).
 
 readdir_should_work_with_token(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 10),
     Token = verify_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
     Token2 = verify_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
     Token3 = verify_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    Token4 = verify_with_token(Config, MainDirPath, Files, 1, 3, 9, true, Token3),
-    ?assertEqual(<<"">>, Token4).
+    verify_with_token(Config, MainDirPath, Files, 1, 3, 9, true, Token3).
 
 readdir_should_work_with_token2(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 12),
     Token = verify_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
     Token2 = verify_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
     Token3 = verify_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    Token4 = verify_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3),
-    ?assertEqual(<<"">>, Token4).
+    verify_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3).
 
 readdir_should_work_with_startid(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 10),
@@ -984,6 +975,13 @@ lfm_basic_rename(Config) ->
     {ok, Stats} = ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId1, {guid, FileGuid})),
     ?assertEqual({ok, Stats}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name1/test_rename2">>})).
 
+lfm_renaming_space_directory_should_fail(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    ?assertMatch({error, ?EPERM},
+        lfm_proxy:mv(W, SessId1, {path, <<"/space_name1">>}, <<"/other_space_name">>)).
+
 lfm_basic_rdwr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
@@ -1307,8 +1305,24 @@ lfm_acl(Config) ->
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, Acl)),
     ?assertEqual({ok, Acl}, lfm_proxy:get_acl(W, SessId1, {guid, FileGUID})).
 
+lfm_rmdir(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    DirPath = <<"/space_name1/dir1">>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, DirPath, 8#755)),
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, DirPath})).
+
+lfm_rmdir_fails_with_eperm_on_space_directory(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    ?assertMatch({error, ?EPERM}, lfm_proxy:rmdir(W, SessId1, {path, <<"/space_name1">>})).
+
+
 rm_recursive(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
+    Attempts = 10,
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     DirA = <<"/space_name1/a">>,
     DirB = <<"/space_name1/a/b">>,
@@ -1322,33 +1336,42 @@ rm_recursive(Config) ->
     DirX = <<"/space_name1/a/x">>,
     FileJ = <<"/space_name1/a/x/j">>,
     {ok, DirAGuid} = lfm_proxy:mkdir(W, SessId, DirA, 8#700),
-    {ok, DirBGuid} = lfm_proxy:mkdir(W, SessId, DirB, 8#300),
+    {ok, DirBGuid} = lfm_proxy:mkdir(W, SessId, DirB, 8#300), % B won't be deleted as user doesn't have permissions to list it
     {ok, DirCGuid} = lfm_proxy:mkdir(W, SessId, DirC, 8#700),
     {ok, DirDGuid} = lfm_proxy:mkdir(W, SessId, DirD, 8#700),
-    {ok, DirEGuid} = lfm_proxy:mkdir(W, SessId, DirE, 8#000),
+    {ok, DirEGuid} = lfm_proxy:mkdir(W, SessId, DirE, 8#000), % E won't be deleted as user doesn't have permissions to list it
     {ok, DirXGuid} = lfm_proxy:mkdir(W, SessId, DirX, 8#700),
     {ok, FileFGuid} = lfm_proxy:create(W, SessId, FileF, 8#000),
     {ok, FileGGuid} = lfm_proxy:create(W, SessId, FileG, 8#000),
     {ok, FileHGuid} = lfm_proxy:create(W, SessId, FileH, 8#000),
     {ok, FileIGuid} = lfm_proxy:create(W, SessId, FileI, 8#000),
     {ok, FileJGuid} = lfm_proxy:create(W, SessId, FileJ, 8#000),
-    ok = lfm_proxy:set_perms(W, SessId, {guid, DirXGuid}, 8#500),
+    ok = lfm_proxy:set_perms(W, SessId, {guid, DirXGuid}, 8#500), % X won't be deleted as user doesn't have permissions to remove it's children
 
     % when
-    ?assertEqual({error, ?EACCES}, lfm_proxy:rm_recursive(W, SessId, {guid, DirAGuid})),
+    ?assertEqual(ok, lfm_proxy:rm_recursive(W, SessId, {guid, DirAGuid})),
+    % rm_recursive returns ok, despite tha fact that
+    % some files won't be deleted as user doesn't have perms to remove or even list them.
+    % That is because rm_recursive moves files to the trash and tries to delete them asynchronously.
 
     % then
-    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirAGuid})),
-    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirBGuid})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, DirCGuid})),
-    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirDGuid})),
-    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirEGuid})),
-    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirXGuid})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileFGuid})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileGGuid})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileHGuid})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileIGuid})),
-    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, FileJGuid})).
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirAGuid}), Attempts),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirBGuid}), Attempts),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, DirCGuid}), Attempts),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirDGuid}), Attempts),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirEGuid}), Attempts),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirXGuid}), Attempts),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileFGuid}), Attempts),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileGGuid}), Attempts),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileHGuid}), Attempts),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileIGuid}), Attempts),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, FileJGuid}), Attempts).
+
+rm_recursive_fails_with_eperm_on_space_directory(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    ?assertMatch({error, ?EPERM}, lfm_proxy:rm_recursive(W, SessId1, {path, <<"/space_name1">>})).
 
 file_gap(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1889,6 +1912,10 @@ sparse_files_should_be_created(Config, ReadFun) ->
     ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid7}, ProviderId)),
     verify_sparse_file(ReadFun, W, SessId1, FileGuid7, 10, []).
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 verify_sparse_file(ReadFun, W, SessId, FileGuid, FileSize, ExpectedBlocks) ->
     BlocksSize = lists:foldl(fun([_, Size], Acc) -> Acc + Size end, 0, ExpectedBlocks),
     ?assertMatch({ok, [#{<<"blocks">> := ExpectedBlocks, <<"totalBlocksSize">> := BlocksSize}]},
@@ -1900,10 +1927,6 @@ verify_sparse_file(ReadFun, W, SessId, FileGuid, FileSize, ExpectedBlocks) ->
     {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, ExpectedFileContent}, lfm_proxy:ReadFun(W, Handle, 0, 100)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 open_failure_mock(Worker) ->
     % mock for open error - note that error is raised after

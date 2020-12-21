@@ -25,7 +25,7 @@
     check_perms/4,
     set_perms/4,
     update_times/6,
-    unlink/3, rm_recursive/3,
+    unlink/3, rm_recursive/3, rmdir/3,
     mv/4, mv/5,
 
     get_file_location/3,
@@ -206,7 +206,17 @@ unlink(Worker, SessId, FileKey) ->
 -spec rm_recursive(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
     ok | lfm:error_reply().
 rm_recursive(Worker, SessId, FileKey) ->
-    ?EXEC_TIMEOUT(Worker, lfm:rm_recursive(SessId, uuid_to_guid(Worker, FileKey)), timer:minutes(5)).
+    ?EXEC(Worker, lfm:rm_recursive(SessId, uuid_to_guid(Worker, FileKey))).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes empty directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec rmdir(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+    ok | lfm:error_reply().
+rmdir(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:rmdir(SessId, uuid_to_guid(Worker, FileKey))).
 
 
 -spec mv(node(), session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->

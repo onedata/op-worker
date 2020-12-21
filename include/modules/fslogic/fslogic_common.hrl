@@ -79,6 +79,5 @@
 
 % Trash associated macros
 -define(TRASH_DIR_NAME, <<".trash">>).
--define(TRASH_DIR_PERMS, 8#555).
 
 -endif.

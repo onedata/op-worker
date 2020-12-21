@@ -30,7 +30,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% Main API
--export([init/4, init/5, stop/1, run/2, run/3, cancel/2]).
+-export([init/4, init/5, stop/1, run/3, run/4, cancel/2]).
 % Getters API
 -export([get_traverse_info/1, set_traverse_info/2, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
@@ -60,7 +60,7 @@
     execute_slave_on_dir => execute_slave_on_dir(),
     % flag determining whether token should be used for iterating over file_meta links
     % token shouldn't be used when links may be deleted from tree
-    use_token => boolean,
+    use_token => boolean(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode => children_master_jobs_mode(),
     % With this option enabled, tree_traverse_status will be
@@ -114,20 +114,27 @@ stop(Pool) when is_atom(Pool) ->
 stop(Pool) ->
     traverse:stop_pool(Pool).
 
--spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx()) -> {ok, id()}.
-run(Pool, DocOrCtx) ->
-    run(Pool, DocOrCtx, #{}).
 
 -spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), run_options()) -> {ok, id()}.
-run(Pool, DocOrCtx, Opts) when is_atom(Pool) ->
-    run(atom_to_binary(Pool, utf8), DocOrCtx, Opts);
-run(Pool, FileDoc = #document{scope = SpaceId, value = #file_meta{}}, Opts) ->
+run(Pool, DocOrCtx, Opts)  ->
+    run(Pool, DocOrCtx, undefined, Opts).
+
+-spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), user_ctx:ctx() | undefined, run_options()) ->
+    {ok, id()}.
+run(Pool, DocOrCtx, UserCtx, Opts) when is_atom(Pool) ->
+    run(atom_to_binary(Pool, utf8), DocOrCtx, UserCtx, Opts);
+run(Pool, FileDoc = #document{scope = SpaceId, value = #file_meta{}}, UserCtx, Opts) ->
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    run(Pool, FileCtx, Opts);
-run(Pool, FileCtx, Opts) ->
+    run(Pool, FileCtx, UserCtx, Opts);
+run(Pool, FileCtx, UserCtx, Opts) ->
     TaskId = case maps:get(task_id, Opts, undefined) of
         undefined -> datastore_key:new();
         Id -> Id
+    end,
+    % TODO VFS-7101 use offline access token in tree_traverse
+    UserCtx2 = case UserCtx =/= undefined of
+        true -> UserCtx;
+        false -> user_ctx:new(?ROOT_SESS_ID)
     end,
     BatchSize = maps:get(batch_size, Opts, ?DEFAULT_BATCH_SIZE),
     ExecuteSlaveOnDir = maps:get(execute_slave_on_dir, Opts, ?DEFAULT_EXECS_SLAVE_ON_DIR),
@@ -158,6 +165,7 @@ run(Pool, FileCtx, Opts) ->
 
     Job = #tree_traverse{
         file_ctx = FileCtx,
+        user_ctx = UserCtx2,
         token = Token,
         execute_slave_on_dir = ExecuteSlaveOnDir,
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -295,9 +303,9 @@ do_master_job(Job = #tree_traverse{
     {ok, traverse:job_id()}  | {error, term()}.
 update_job_progress(Id, Job, Pool, TaskId, Status, CallbackModule) when Status =:= waiting ; Status =:= on_pool ->
     tree_traverse_job:save_master_job(Id, Job, Pool, TaskId, CallbackModule);
-update_job_progress(Id, #tree_traverse{file_ctx = FileCtx}, _, _, _, _) ->
+update_job_progress(Id, Job = #tree_traverse{file_ctx = FileCtx}, _, _, _, CallbackModule) ->
     Scope = file_ctx:get_space_id_const(FileCtx),
-    ok = tree_traverse_job:delete_master_job(Id, Scope),
+    ok = tree_traverse_job:delete_master_job(Id, Job, Scope, CallbackModule),
     {ok, Id}.
 
 
@@ -332,27 +340,36 @@ get_timestamp() ->
 %%% Internal functions
 %%%===================================================================
 
+-spec report_child_processed(id(), file_meta:uuid()) -> tree_traverse_progress:status().
+report_child_processed(TaskId, ParentUuid) ->
+    tree_traverse_progress:report_child_processed(TaskId, ParentUuid).
+
+
+-spec delete_subtree_status_doc(id(), file_meta:uuid()) -> ok | {error, term()}.
+delete_subtree_status_doc(TaskId, Uuid) ->
+    tree_traverse_progress:delete(TaskId, Uuid).
+
+%%%===================================================================
+%% Tracking subtree progress status API
+%%%===================================================================
 
 -spec list_children(master_job()) ->
     {Children :: [file_ctx:ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: file_ctx:ctx()}.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
+    user_ctx = UserCtx,
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
     batch_size = BatchSize
 }) ->
-    UserCtx = user_ctx:new(<<"0">>),
-    file_ctx:get_file_children(FileCtx, UserCtx, 0, BatchSize, Token, LastName, LastTree).
+    dir_req:get_children_ctxs(UserCtx, FileCtx, 0, BatchSize, Token, LastName, LastTree).
 
 
 -spec generate_children_jobs(master_job(), id(), [file_ctx:ctx()]) -> {[slave_job()], [master_job()]}.
 generate_children_jobs(MasterJob = #tree_traverse{execute_slave_on_dir = ExecOnDir}, TaskId, Children) ->
     {SlaveJobsReversed, MasterJobsReversed} = lists:foldl(fun(ChildCtx, {SlavesAcc, MastersAcc} = Acc) ->
         try
-            % TODO handle case when doc is missing
-            % TODO * callback
-            % TODO * albo zwracania jakiegos specjalnego joba?
             {ChildDoc, ChildCtx2} = file_ctx:get_file_doc(ChildCtx),
             case file_meta:get_type(ChildDoc) of
                 ?DIRECTORY_TYPE ->
@@ -394,6 +411,7 @@ get_child_slave_job(#tree_traverse{
     }.
 
 
+-spec maybe_create_status_doc(master_job(), id()) -> ok | {error, term()}.
 maybe_create_status_doc(#tree_traverse{
     file_ctx = FileCtx,
     track_subtree_status = true
@@ -404,6 +422,8 @@ maybe_create_status_doc(_, _) ->
     ok.
 
 
+-spec maybe_report_children_jobs_to_process(master_job(), id(), non_neg_integer(), boolean()) ->
+    tree_traverse_progress:status() | undefined.
 maybe_report_children_jobs_to_process(#tree_traverse{
     file_ctx = FileCtx,
     track_subtree_status = true
@@ -412,14 +432,6 @@ maybe_report_children_jobs_to_process(#tree_traverse{
     tree_traverse_progress:report_children_to_process(TaskId, Uuid, ChildrenCount, AllBatchesListed);
 maybe_report_children_jobs_to_process(_, _, _, _) ->
     undefined.
-
-
-report_child_processed(TaskId, ParentUuid) ->
-    tree_traverse_progress:report_child_processed(TaskId, ParentUuid).
-
-
-delete_subtree_status_doc(TaskId, Uuid) ->
-    tree_traverse_progress:delete(TaskId, Uuid).
 
 
 -spec reset_list_options(master_job()) -> master_job().

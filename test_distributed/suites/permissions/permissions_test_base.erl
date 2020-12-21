@@ -1254,9 +1254,9 @@ set_perms_test(Config) ->
 
     % but even space owner cannot perform write operation on space dir
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(<<"space1">>),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#000)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#555)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#777)),
+    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#000)),
+    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#555)),
+    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#777)),
 
     % users outside of space shouldn't even see the file
     permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),

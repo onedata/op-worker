@@ -69,6 +69,10 @@
     silent = false :: boolean()
 }).
 
+-record(delete_using_trash, {
+    silent = false :: boolean()
+}).
+
 -record(update_times, {
     atime :: file_meta:time(),
     mtime :: file_meta:time(),
@@ -163,7 +167,7 @@
 -type file_request_type() ::
     #get_file_attr{} | #get_file_children{} | #get_file_children_attrs{} |
     #get_file_details{} | #get_file_children_details{} |
-    #create_dir{} | #delete_file{} |
+    #create_dir{} | #delete_file{} | #delete_using_trash{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |

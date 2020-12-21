@@ -19,11 +19,6 @@
 -ifndef(FSLOGIC_SUFFIX_HRL).
 -define(FSLOGIC_SUFFIX_HRL, 1).
 
--define(FILE_DELETION_LINK_SUFFIX, <<"####TO_DELETE">>).
--define(FILE_DELETION_LINK_NAME(Name),
-    <<(Name)/binary, (?FILE_DELETION_LINK_SUFFIX)/binary>>).
-
-
 -define(CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR, <<"%%%%">>).
 -define(CONFLICTING_STORAGE_FILE_NAME(Filename,Uuid), <<Filename/binary,
     (?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR)/binary, Uuid/binary>>).

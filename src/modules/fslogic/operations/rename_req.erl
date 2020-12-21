@@ -38,6 +38,8 @@
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
+    file_ctx:assert_not_protected_const(SourceFileCtx),
+    file_ctx:assert_not_trash_dir_const(TargetParentFileCtx, TargetName),
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
     TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
     case SourceSpaceId =:= TargetSpaceId of
@@ -230,7 +232,7 @@ rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetFileCtx
 ) ->
     #fuse_response{status = #status{code = ?OK}} =
-        delete_req:delete_using_trash(UserCtx, TargetFileCtx, false),
+        delete_req:delete(UserCtx, TargetFileCtx, false),
     rename_dir(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, TargetFileCtx

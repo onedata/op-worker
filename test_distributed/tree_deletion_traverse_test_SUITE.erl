@@ -45,6 +45,8 @@ all() -> ?ALL([
 ]).
 
 -define(SPACE_ID, <<"space1">>).
+-define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID)).
+-define(SPACE_UUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
 -define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID)).
 -define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
 -define(USER1, <<"user1">>).
@@ -86,7 +88,7 @@ delete_files_structure_test_base(Config, FilesStructure) ->
     RootDirCtx = file_ctx:new_by_guid(RootGuid),
     UserCtx = rpc:call(W1, user_ctx, new, [?SESS_ID(W1, Config)]),
 
-    {ok, TaskId} = rpc:call(W1, tree_deletion_traverse, start, [RootDirCtx, UserCtx, false]),
+    {ok, TaskId} = rpc:call(W1, tree_deletion_traverse, start, [RootDirCtx, UserCtx, false, ?SPACE_UUID]),
     await_traverse_finished(TaskId),
 
     ?assertMatch({ok, []}, lfm_proxy:get_children(W1, ?SESS_ID(W1, Config), {guid, ?SPACE_GUID}, 0, 10000)),

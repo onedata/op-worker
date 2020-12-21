@@ -269,9 +269,11 @@ recursive_rm_should_succeed_but_should_leave_files_on_storage(Config) ->
     DirName = ?DIR_NAME,
     FileRelativePath = filepath_utils:join([DirName, FileName]),
     {_Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileRelativePath, ?TEST_DATA),
+    {ok, #file_attr{guid = DirGuid}} = lfm_proxy:stat(W1, SessId, {path, ?PATH(DirName)}),
 
     % it should be possible to remove the file (only its metadata)
     ?assertEqual(ok, lfm_proxy:rm_recursive(W1, SessId, {path, ?PATH(DirName)})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, DirGuid}), ?ATTEMPTS),
 
     % file should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDFileHandle)),
@@ -460,12 +462,13 @@ remote_recursive_rm_should_not_trigger_removal_of_files_on_local_storage(Config)
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileRelativePath, ?TEST_DATA),
 
     % wait for file to be synchronized to W2
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    {ok, #file_attr{parent_guid = DirGuid}} =
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
 
     ?assertEqual(ok, lfm_proxy:rm_recursive(W2, SessId2, {path, ?PATH(DirName)})),
 
     % wait for files to be removed
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?PATH(DirName)}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, DirGuid}), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
 
     % file should still exist on storage
@@ -659,8 +662,8 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 end_per_testcase(_Case, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    lfm_test_utils:clean_space(W1, ?SPACE_ID, ?ATTEMPTS),
+    [W1 | _] = Workers = ?config(op_worker_nodes, Config),
+    lfm_test_utils:clean_space(W1, Workers, ?SPACE_ID, ?ATTEMPTS),
     clean_storage(W1, ?SPACE_ID, ?RW_STORAGE_ID),
     lfm_proxy:teardown(Config).
 

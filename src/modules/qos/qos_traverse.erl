@@ -199,7 +199,7 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
-    
+
     {ok, #{
         <<"task_type">> := TaskType
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),

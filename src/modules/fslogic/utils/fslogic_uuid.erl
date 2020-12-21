@@ -135,7 +135,7 @@ is_trash_dir_uuid(<<?TRASH_DIR_UUID_PREFIX, _SpaceId/binary>>) -> true;
 is_trash_dir_uuid(_) -> false.
 
 
--spec is_trash_dir_guid(fslogic_worker:guid()) -> boolean().
+-spec is_trash_dir_guid(file_id:file_guid()) -> boolean().
 is_trash_dir_guid(FileGuid) ->
     is_trash_dir_uuid(file_id:guid_to_uuid(FileGuid)).
 

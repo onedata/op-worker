@@ -186,6 +186,7 @@ get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus) ->
 -spec chmod(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
 chmod(UserCtx, FileCtx0, Mode) ->
+    file_ctx:assert_not_protected_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, owner]

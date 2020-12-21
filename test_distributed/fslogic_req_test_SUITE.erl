@@ -493,7 +493,8 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
-                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?file_req(Worker, SessId, Guid, #delete_file{}))
+                    ?assertMatch(#fuse_response{status = #status{code = ?EPERM}},
+                        ?file_req(Worker, SessId, Guid, #delete_file{}))
                 end, SessIds)
 
         end, [
@@ -510,8 +511,8 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
-
-                    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?file_req(Worker, SessId, Guid, #delete_file{}))
+                    ?assertMatch(#fuse_response{status = #status{code = ?EPERM}},
+                        ?file_req(Worker, SessId, Guid, #delete_file{}))
                 end, SessIds)
 
         end, [
@@ -589,6 +590,7 @@ default_permissions_test(Config) ->
             {mkdir, <<"/space_name1">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/space_name1/test">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/space_name1/test/test">>, <<"test">>, 8#777, [SessId1], ?OK},
+            {mkdir, <<"/space_name1">>, ?TRASH_DIR_NAME, 8#777, [SessId1], ?EPERM}, % TODO-7064 change to EEXIST
             {get_attr, <<"/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {get_attr, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {get_attr, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
@@ -596,7 +598,9 @@ default_permissions_test(Config) ->
             {delete, <<"/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {delete, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {delete, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {delete, <<"/space_name1">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {delete, <<"/space_name1">>, [SessId2, SessId3, SessId4], ?EPERM},
+            % TODO-7064 uncomment after adding link to trash directory
+            % {delete, filename:join([<<"/space_name1">>, ?TRASH_DIR_NAME]), [SessId1, SessId2, SessId3, SessId4], ?EPERM},
             {mkdir, <<"/space_name4">>, <<"test">>, 8#740, [SessId4], ?OK},
             {mkdir, <<"/space_name4/test">>, <<"test">>, 8#1770, [SessId4], ?OK},
             {mkdir, <<"/space_name4/test/test">>, <<"test">>, 8#730, [SessId4], ?OK},
@@ -608,11 +612,13 @@ default_permissions_test(Config) ->
             {delete, <<"/space_name4/test/test">>, [SessId4], ?OK},
             {delete, <<"/space_name4/test">>, [SessId1], ?OK},
             {get_attr, <<"/space_name4/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {chmod, <<"/">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
-            {chmod, <<"/space_name1">>, 8#123, [SessId1], ?EACCES},
-            {chmod, <<"/space_name2">>, 8#123, [SessId1, SessId2], ?EACCES},
-            {chmod, <<"/space_name3">>, 8#123, [SessId1, SessId2, SessId3], ?EACCES},
-            {chmod, <<"/space_name4">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
+            {chmod, <<"/">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EPERM},
+            {chmod, <<"/space_name1">>, 8#123, [SessId1], ?EPERM},
+            {chmod, <<"/space_name2">>, 8#123, [SessId1, SessId2], ?EPERM},
+            {chmod, <<"/space_name3">>, 8#123, [SessId1, SessId2, SessId3], ?EPERM},
+            {chmod, <<"/space_name4">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EPERM},
+            % TODO-7064 uncomment after adding link to trash directory
+            % {chmod, filename:join([<<"/space_name1">>, ?TRASH_DIR_NAME]), 8#777, [SessId1], ?EPERM},
             {mkdir, <<"/space_name4">>, <<"test">>, 8#740, [SessId3], ?OK},
             {chmod, <<"/space_name4/test">>, 8#123, [SessId1, SessId2], ?EACCES},
             {chmod, <<"/space_name4/test">>, 8#123, [SessId4], ?EACCES},

@@ -28,9 +28,9 @@
 %% How many entries shall be processed in one batch for set_scope operation.
 -define(SET_SCOPE_BATCH_SIZE, 100).
 
--export([save/1, create/2, save/2, get/1, exists/1, update/2, delete/1,
-    delete_without_link/1]).
--export([delete_child_link/4]).
+-export([save/1, create/2, save/2, get/1, exists/1, update/2]).
+-export([delete/1, delete_without_link/1]).
+-export([]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
@@ -288,7 +288,7 @@ delete(#document{
     }
 }) ->
     ?run(begin
-        ok = delete_child_link(ParentUuid, Scope, FileName, FileUuid),
+        ok = file_meta_links:delete(ParentUuid, Scope, FileName, FileUuid),
         delete_without_link(FileUuid)
     end);
 delete({path, Path}) ->
@@ -311,9 +311,7 @@ delete(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_without_link(uuid() | doc()) -> ok | {error, term()}.
-delete_without_link(#document{
-    key = FileUuid
-}) ->
+delete_without_link(#document{key = FileUuid}) ->
     delete_without_link(FileUuid);
 delete_without_link(FileUuid) ->
     ?run(begin datastore_model:delete(?CTX, FileUuid) end).
@@ -325,17 +323,6 @@ delete_doc_if_not_special(FileUuid) ->
         true -> ok;
         false -> delete_without_link(FileUuid)
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes link from parent to child
-%% @end
-%%--------------------------------------------------------------------
--spec delete_child_link(ParentUuid :: uuid(), Scope :: datastore_doc:scope(),
-    FileName :: name(), FileUuid :: uuid()) -> ok.
-delete_child_link(ParentUuid, Scope, FileName, FileUuid) ->
-    file_meta_links:delete(ParentUuid, Scope, FileName, FileUuid).
 
 
 %%--------------------------------------------------------------------
@@ -539,21 +526,19 @@ get_locations_by_uuid(FileUuid) ->
 %% Rename file_meta and change link targets
 %% @end
 %%--------------------------------------------------------------------
--spec rename(doc(), doc(), doc(), name()) -> ok.
-rename(SourceDoc, SourceParentDoc, TargetParentDoc, TargetName) ->
-    #document{key = FileUuid, value = #file_meta{name = FileName}} = SourceDoc,
-    #document{key = SourceParentUuid, scope = SourceScope} = SourceParentDoc,
-    #document{key = TargetParentUuid, scope = TargetScope} = TargetParentDoc,
-
+-spec rename(doc(), doc() | uuid(), doc() | uuid(), name()) -> ok.
+rename(SourceDoc, #document{key = SourceParentUuid}, #document{key = TargetParentUuid}, TargetName) ->
+    rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName);
+rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
+    #document{key = FileUuid, value = #file_meta{name = FileName}, scope = Scope} = SourceDoc,
     {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{
             name = TargetName,
             parent_uuid = TargetParentUuid
         }}
     end),
-
-    ok = file_meta_links:add(SourceParentUuid, TargetScope, TargetName, FileUuid),
-    ok = delete_child_link(SourceParentUuid, SourceScope, FileName, FileUuid).
+    ok = file_meta_links:add(TargetParentUuid, Scope, TargetName, FileUuid),
+    ok = file_meta_links:delete(SourceParentUuid, Scope, FileName, FileUuid).
 
 
 %%--------------------------------------------------------------------
@@ -841,12 +826,15 @@ is_hidden(FileName) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if given link is a deletion link.
+%% NOTE:
+%% Deletion links are deprecated. This function is left
+%% only to filter out deletion links from the result of list operation.
 %% @end
 %%--------------------------------------------------------------------
 -spec is_deletion_link(binary()) -> boolean().
 is_deletion_link(LinkName) ->
-    % TODO JK co z deletion linkami, ktore mogly zostac? olewamy?
-    case binary:match(LinkName, ?FILE_DELETION_LINK_SUFFIX) of
+    DeletionLinkSuffix = <<"####TO_DELETE">>,
+    case binary:match(LinkName, DeletionLinkSuffix) of
         nomatch -> false;
         _ -> true
     end.

@@ -18,8 +18,10 @@
 
 %% API
 %% Functions operating on directories or files
--export([unlink/3, rm/2, rm_using_trash/2, mv/3, mv/4, cp/3, cp/4, get_parent/2, get_file_path/2,
-    get_file_guid/2,
+-export([
+    unlink/3, rm/2, rm/3, rm_using_trash/2,
+    mv/3, mv/4, cp/3, cp/4,
+    get_parent/2, get_file_path/2, get_file_guid/2,
     schedule_file_transfer/5, schedule_view_transfer/7,
     schedule_file_replication/4, schedule_replica_eviction/4,
     schedule_replication_by_view/6, schedule_replica_eviction_by_view/6
@@ -60,32 +62,40 @@ unlink(SessId, FileEntry, Silent) ->
     remote_utils:call_fslogic(SessId, file_request, Guid, #delete_file{silent = Silent},
         fun(_) -> ok end).
 
-%%--------------------------------------------------------------------
-%% @equiv remove_utils:rm(SessId, FileKey).
-%%--------------------------------------------------------------------
+
 -spec rm(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | lfm:error_reply().
 rm(SessId, FileKey) ->
+    rm(SessId, FileKey, false).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes a file or directory.
+%% Flag SynchronousDirDeletion determines whether directory will be deleted
+%% asynchronously (using trash) or synchronously.
+%%
+%% NOTE!!!
+%% Synchronous deletion should only be used in cleanup of tests!!!
+%% @end
+%%--------------------------------------------------------------------
+-spec rm(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    SynchronousDirDeletion :: boolean()) -> ok | lfm:error_reply().
+rm(SessId, FileKey, SynchronousDirDeletion) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     case is_dir(SessId, Guid) of
+        true when not SynchronousDirDeletion->
+            rm_using_trash(SessId, {guid, Guid});
         true ->
-            lfm_files:rm_using_trash(SessId, {guid, Guid});
+            unlink(SessId, {guid, Guid}, false);
         false ->
-            lfm_files:unlink(SessId, {guid, Guid}, false);
+            unlink(SessId, {guid, Guid}, false);
         {error, ?ENOENT} ->
             ok;
         Error ->
             Error
     end.
 
-
--spec rm_using_trash(session:id(), fslogic_worker:ext_file()) ->
-    ok | lfm:error_reply().
-rm_using_trash(SessId, FileEntry) ->
-    {guid, Guid} = guid_utils:ensure_guid(SessId, FileEntry),
-    remote_utils:call_fslogic(SessId, file_request, Guid, #delete_using_trash{},
-        fun(_) -> ok end
-    ).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -850,3 +860,18 @@ is_dir(SessId, Guid) ->
         {ok, _} -> false;
         Error -> Error
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Deletes directory and all its children by moving it to trash.
+%% @end
+%%--------------------------------------------------------------------
+-spec rm_using_trash(session:id(), fslogic_worker:ext_file()) ->
+    ok | lfm:error_reply().
+rm_using_trash(SessId, FileEntry) ->
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileEntry),
+    remote_utils:call_fslogic(SessId, file_request, Guid, #delete_using_trash{},
+        fun(_) -> ok end
+    ).

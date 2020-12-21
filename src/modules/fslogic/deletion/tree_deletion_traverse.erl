@@ -6,7 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% This module implements traverse_behaviour.
+%%% It is used to traverse tree rooted in filed associated with
+%%% passed RootCtx and deletes whole tree.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(tree_deletion_traverse).
@@ -20,7 +22,7 @@
 
 
 %% API
--export([init_pool/0, stop_pool/0, start/3]).
+-export([init_pool/0, stop_pool/0, start/4]).
 
 %% Traverse behaviour callbacks
 -export([
@@ -39,9 +41,13 @@
 -type info() :: #{
     user_ctx := user_ctx:ctx(),
     root_guid := file_id:file_guid(),
-    silent := boolean()
+    silent := boolean(),
+    root_original_parent_uuid := file_meta:uuid(),
+    root_storage_file_basename := file_meta:name()
 }.
 %@formatter:on
+
+-export_type([id/0]).
 
 %%%===================================================================
 %%% API functions
@@ -60,8 +66,9 @@ stop_pool() ->
     tree_traverse:stop(?POOL_NAME).
 
 
--spec start(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> {ok, id()}.
-start(RootDirCtx, UserCtx, Silent) ->
+-spec start(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) -> {ok, id()}.
+start(RootDirCtx, UserCtx, Silent, RootOriginalParentUuid) ->
+    {StorageFileId, RootDirCtx2} = file_ctx:get_storage_file_id(RootDirCtx),
     Options = #{
         track_subtree_status => true,
         children_master_jobs_mode => async,
@@ -69,12 +76,14 @@ start(RootDirCtx, UserCtx, Silent) ->
         traverse_info => #{
             user_ctx => UserCtx,
             root_guid => file_ctx:get_guid_const(RootDirCtx),
-            silent => Silent
+            silent => Silent,
+            % TODO VFS-7133 after extending file_meta with field for storing source parent
+            % there will be no need to store below 2 values
+            root_original_parent_uuid => RootOriginalParentUuid,
+            root_storage_file_basename => filename:basename(StorageFileId)
         }
     },
-    % todo trzeba ogarnac rozne runy dla tego samego katalopgu
-    % todo moze w addistional_info trzymac sciezke do katalogu, zeby w razie czego wiedziec gdzie był?
-    tree_traverse:run(?POOL_NAME, RootDirCtx, Options).
+    tree_traverse:run(?POOL_NAME, RootDirCtx2, Options).
 
 
 %%%===================================================================
@@ -122,7 +131,7 @@ do_slave_job(#tree_traverse_slave{
         user_ctx := UserCtx,
         silent := Silent
 }}, TaskId) ->
-    fslogic_delete:delete_file_locally(UserCtx, FileCtx, Silent),
+    delete_req:delete(UserCtx, FileCtx, Silent),
     file_processed(FileCtx, TaskId, TraverseInfo).
 
 %%%===================================================================
@@ -151,13 +160,17 @@ maybe_delete_dir(?SUBTREE_NOT_PROCESSED, _FileCtx, _TaskId, _TraverseInfo) ->
 delete_dir(FileCtx, TaskId, TraverseInfo = #{
     user_ctx := UserCtx,
     root_guid := RootGuid,
-    silent := Silent
+    silent := Silent,
+    root_original_parent_uuid := RootOriginalParentUuid,
+    root_storage_file_basename := RootStorageFileBasename
 }) ->
-    fslogic_delete:delete_file_locally(UserCtx, FileCtx, Silent),
+    delete_req:delete(UserCtx, FileCtx, Silent),
     tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
     case file_ctx:get_guid_const(FileCtx) =:= RootGuid of
         true ->
-            ok;
+            % TODO VFS-7133 after extending file_meta with field for storing source parent
+            % there will be no need to delete deletion_marker here, it may be deleted in fslogic_delete
+            deletion_marker:remove_by_name(RootOriginalParentUuid, RootStorageFileBasename);
         false ->
             file_processed(FileCtx, TaskId, TraverseInfo)
     end.

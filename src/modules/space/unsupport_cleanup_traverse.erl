@@ -163,10 +163,7 @@ cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
     tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
     case file_ctx:is_space_dir_const(FileCtx) of
         true -> ok;
-        false ->
-            UserCtx = user_ctx:new(?ROOT_SESS_ID),
-            {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
-            file_processed(TaskId, ParentFileCtx, RemoveStorageFiles)
+        false -> file_processed(TaskId, FileCtx, RemoveStorageFiles)
     end.
 
 

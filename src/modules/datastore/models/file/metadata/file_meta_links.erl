@@ -11,6 +11,7 @@
 -module(file_meta_links).
 -author("Jakub Kudzia").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -37,8 +38,7 @@
 % list of links with the same name
 -type group() :: [internal_link()].
 -type fold_acc() :: term().
--type fold_fun() :: datastore_model:fold_fun(internal_link(), fold_acc()).
-
+-type fold_fun() :: fun((internal_link(), fold_acc()) -> {ok | stop, fold_acc()} | {error, term()}).
 -type link() :: {link_name(), link_target()}.
 
 
@@ -74,6 +74,7 @@
 -define(LINK(FileName, FileUuid), {FileName, FileUuid}).
 
 -define(MINIMAL_TREE_ID_SUFFIX_LEN, 4).
+-define(DEFAULT_LS_CHUNK_SIZE, application:get_env(?APP_NAME, ls_chunk_size, 5000)).
 
 %%%===================================================================
 %%% API
@@ -134,8 +135,8 @@ list(ParentUuid, Offset, Limit, Token, PrevLinkKey, PrevTreeId) ->
 
     ListOpts = prepare_opts(Offset, Limit, Token, PrevLinkKey, PrevTreeId),
     Result = fold(ParentUuid, fun(Link = #link{name = Name}, Acc) ->
-        case {file_meta:is_hidden(Name), file_meta:is_deletion_link(Name)} of
-            {false, false} -> {ok, [Link | Acc]};
+        case not (file_meta:is_hidden(Name) orelse file_meta:is_deletion_link(Name)) of
+            true -> {ok, [Link | Acc]};
             _ -> {ok, Acc}
         end
     end, [], ListOpts),
@@ -228,15 +229,15 @@ get_all(ParentUuid, Name) ->
 %%% Internal functions
 %%%===================================================================
 
--spec prepare_opts(offset() | undefined, limit(), token() | undefined,
+-spec prepare_opts(offset() | undefined, limit() | undefined, token() | undefined,
     link_name() | undefined, tree_id() | undefined) -> list_opts().
 prepare_opts(Offset, Limit, Token, PrevLinkKey, PrevTreeId)
-    when is_integer(Limit) andalso Limit >= 0
+    when ((is_integer(Limit) andalso Limit >= 0) orelse (Limit =:= undefined))
     % at lease one of below options must be defined so that we know where to start listing
     andalso (Offset /= undefined orelse Token /= undefined orelse PrevLinkKey /= undefined)
 ->
     validate_starting_opts(Offset, PrevLinkKey, Token),
-    Opts1 = #{size => Limit},
+    Opts1 = #{size => utils:ensure_defined(Limit, ?DEFAULT_LS_CHUNK_SIZE)},
     Opts2 = maps_utils:put_if_defined(Opts1, offset, Offset),
     Opts3 = maps_utils:put_if_defined(Opts2, token, Token),
     Opts4 = maps_utils:put_if_defined(Opts3, prev_link_name, PrevLinkKey),
@@ -322,7 +323,12 @@ calculate_suffix_length(Group) ->
 -spec get_remote_tree_ids(group()) -> tree_ids().
 get_remote_tree_ids(Group) ->
     LocalTreeId = ?LOCAL_TREE_ID,
-    lists:filter(fun(#link{tree_id = TreeId}) -> TreeId =/= LocalTreeId end, Group).
+    lists:filtermap(fun(#link{tree_id = TreeId}) ->
+        case TreeId =/= LocalTreeId of
+            true -> {true, TreeId};
+            false -> false
+        end
+    end, Group).
 
 
 -spec group_by_name([internal_link()]) -> [group()].

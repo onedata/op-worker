@@ -155,21 +155,18 @@
     qos_id :: qos_entry:id()
 }).
 
--record(delete_using_trash, {
-    silent = false :: boolean()
-}).
 
 -type provider_request_type() ::
-#get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
-#get_transfer_encoding{} | #set_transfer_encoding{} |
-#get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
-#get_mimetype{} | #set_mimetype{} | #get_file_path{} |
-#get_file_distribution{} |
-#schedule_file_transfer{} | #schedule_view_transfer{} |
-#schedule_file_replication{} | #schedule_replica_invalidation{} |
-#get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
-#create_share{} | #remove_share{} |
-#add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{}.
+    #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
+    #get_transfer_encoding{} | #set_transfer_encoding{} |
+    #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
+    #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
+    #get_file_distribution{} |
+    #schedule_file_transfer{} | #schedule_view_transfer{} |
+    #schedule_file_replication{} | #schedule_replica_invalidation{} |
+    #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
+    #create_share{} | #remove_share{} |
+    #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{}.
 
 -record(transfer_encoding, {
     value :: binary()
