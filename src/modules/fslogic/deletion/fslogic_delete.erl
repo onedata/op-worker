@@ -258,22 +258,14 @@ delete_storage_file(FileCtx, UserCtx) ->
                 % child that is still opened or in case of race on remote deletion
                 Error;
             {error, _} = OtherError ->
-                ?error(delete_storage_file_error_msg(FileCtx, OtherError)),
+                {Format, Args} = storage_file_deletion_error_log_format_and_args(FileCtx, OtherError),
+                ?error(Format, Args),
                 OtherError
         end
     catch
         Class:Reason ->
-            % fetching stacktrace before log is ugly but
-            % io_lib:format called by delete_storage_file_error_msg
-            % messes with stacktrace which causes log to be irrelevant
-            Stacktrace = erlang:get_stacktrace(),
-            ?error(delete_storage_file_error_msg(FileCtx, {Class, Reason}) ++ "~nStacktrace:~n    ~p", [Stacktrace]),
-%%            {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-%%            {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-%%            FileGuid = file_ctx:get_guid_const(FileCtx3),
-%%            ?error_stacktrace("Deleting file ~s on storage ~s with guid ~s failed due to ~p:~p.", [
-%%                StorageFileId, StorageId, FileGuid, Error, Reason
-%%            ]),
+            {Format2, Args2} = storage_file_deletion_error_log_format_and_args(FileCtx, {Class, Reason}),
+            ?error_stacktrace(Format2, Args2),
             {error, Reason}
     end.
 
@@ -282,7 +274,7 @@ delete_storage_file(FileCtx, UserCtx) ->
 delete_file_metadata(FileCtx, UserCtx, DeletionSpec, StorageFileDeleted) ->
     case DeletionSpec of
         ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS) ->
-            FileCtx2 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx),
+            FileCtx2 = update_parent_timestamps(UserCtx, FileCtx),
             % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
             FileCtx3 = delete_location(FileCtx2),
             FileCtx4 = delete_file_meta(FileCtx3),
@@ -291,7 +283,7 @@ delete_file_metadata(FileCtx, UserCtx, DeletionSpec, StorageFileDeleted) ->
             maybe_try_to_delete_parent(FileCtx8, UserCtx, ?ALL_DOCS);
         ?SPEC(?TWO_STEP_DEL_INIT, _DocsDeletionScope) ->
             % TODO VFS-6114 maybe delete file_meta and associated documents here?
-            delete_shares_and_update_parent_timestamps(UserCtx, FileCtx),
+            update_parent_timestamps(UserCtx, FileCtx),
             ok;
         ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope) ->
             {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
@@ -385,16 +377,6 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
     FileCtx4.
 
 
--spec delete_storage_file_error_msg(file_ctx:ctx(), term()) -> string().
-delete_storage_file_error_msg(FileCtx, Error) ->
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-    FileGuid = file_ctx:get_guid_const(FileCtx3),
-    str_utils:format("Deleting file ~s on storage ~s with guid ~s failed due to ~p.", [
-        StorageFileId, StorageId, FileGuid, Error
-    ]).
-
-
 -spec delete_file_meta(file_ctx:ctx()) -> file_ctx:ctx().
 delete_file_meta(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
@@ -402,32 +384,16 @@ delete_file_meta(FileCtx) ->
     FileCtx2.
 
 
--spec delete_shares_and_update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
-delete_shares_and_update_parent_timestamps(UserCtx, FileCtx) ->
+-spec update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
+update_parent_timestamps(UserCtx, FileCtx) ->
     try
-        FileCtx2 = delete_shares(UserCtx, FileCtx),
-        {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+        {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
         fslogic_times:update_mtime_ctime(ParentCtx),
-        FileCtx3
+        FileCtx2
     catch
         error:{badmatch, {error, not_found}} ->
             FileCtx
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes shares from oz and db.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_shares(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
-delete_shares(UserCtx, FileCtx) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    Shares = file_meta:get_shares(FileDoc),
-    SessionId = user_ctx:get_session_id(UserCtx),
-    [ok = share_logic:delete(SessionId, ShareId) || ShareId <- Shares],
-    FileCtx2.
 
 
 -spec maybe_delete_storage_sync_info(file_ctx:ctx(), StorageFileDeleted :: boolean()) -> file_ctx:ctx().
@@ -616,3 +582,11 @@ delete_location(FileCtx) ->
             ok = fslogic_location_cache:delete_local_location(FileUuid)
     end,
     FileCtx2.
+
+
+-spec storage_file_deletion_error_log_format_and_args(file_ctx:ctx(), term()) -> {string(), [term()]}.
+storage_file_deletion_error_log_format_and_args(FileCtx, Error) ->
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
+    FileGuid = file_ctx:get_guid_const(FileCtx3),
+    {"Deleting file ~s on storage ~s with guid ~s failed due to ~p.", [StorageFileId, StorageId, FileGuid, Error]}.

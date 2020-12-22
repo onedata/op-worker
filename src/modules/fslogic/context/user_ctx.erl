@@ -56,7 +56,7 @@ new(SessId) ->
             % TODO VFS-6586 - refactor rest session expiration
             {ok, UpdatedSession} = case Now > LastAccess + 0.6 * TTL of
                 true ->
-                    session:update(SessId, fun(Rec) -> {ok, Rec} end);
+                    session:update_doc_and_time(SessId, fun(Rec) -> {ok, Rec} end);
                 false ->
                     {ok, Session}
             end,
@@ -67,7 +67,7 @@ new(SessId) ->
             % TODO VFS-6586 - refactor gui session expiration
             {ok, UpdatedSession} = case Now > LastAccess + 0.6 * TTL of
                 true ->
-                    session:update(SessId, fun(Rec) -> {ok, Rec} end);
+                    session:update_doc_and_time(SessId, fun(Rec) -> {ok, Rec} end);
                 false ->
                     {ok, Session}
             end,

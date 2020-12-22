@@ -54,17 +54,12 @@ space_dir_id(SpaceId, StorageId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec flat(file_meta:uuid(), od_space:id()) -> helpers:file_id().
-flat(FileUuid, _SpaceId) ->
+flat(FileUuid, SpaceId) ->
     case fslogic_uuid:is_root_dir_uuid(FileUuid) of
         true ->
             <<?DIRECTORY_SEPARATOR>>;
         false ->
-            % There was a bug introduced which resulted in generating wrong
-            % storage file ids.
-            % Below value should be [?DIRECTORY_SEPARATOR_BINARY, SpaceId]
-            % as flat storages are never imported
-            % TODO VFS-7067 fix this bug and upgrade persisted storage file ids
-            PathTokens = [<<?DIRECTORY_SEPARATOR>>],
+            PathTokens = [<<?DIRECTORY_SEPARATOR>>, SpaceId],
             case fslogic_uuid:is_space_dir_uuid(FileUuid) of
                 true ->
                     filepath_utils:join(PathTokens);
@@ -99,7 +94,7 @@ canonical(FslogicCanonicalPath, SpaceId, StorageId) ->
         true ->
             filter_space_id(FslogicCanonicalPath, SpaceId);
         false ->
-            FslogicCanonicalPath
+            ensure_starts_with_space_id(FslogicCanonicalPath, SpaceId)
     end.
 
 %%%===================================================================
@@ -113,4 +108,14 @@ filter_space_id(FilePath, SpaceId) ->
             filepath_utils:join([Sep | Path]);
         _ ->
             FilePath
+    end.
+
+
+-spec ensure_starts_with_space_id(file_meta:path(), od_space:id()) -> file_meta:path().
+ensure_starts_with_space_id(FilePath, SpaceId) ->
+    case filepath_utils:split(FilePath) of
+        [Sep, SpaceId | Path] ->
+            FilePath;
+        [Sep | Path] ->
+            filepath_utils:join([Sep, SpaceId | Path])
     end.

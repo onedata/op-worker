@@ -1367,86 +1367,39 @@ delete_file_reimport_race_test(Config, StorageType) ->
 remote_delete_file_reimport_race_test(Config, StorageType) ->
     % in this test, we check whether storage import does not reimport file that is deleted
     % by a remote provider and if only deletion of link is synchronized when scan is performed
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-
-    %% Create file
-    {ok, FileGuid} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, 8#644),
-    {ok, Handle1} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, write),
-    {ok, _} = lfm_proxy:write(W1, Handle1, 0, ?TEST_DATA),
-    ok = lfm_proxy:close(W1, Handle1),
-
-    %% Replicate file to remote provider
-    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, FileGuid}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, Handle2, 0, 10), ?ATTEMPTS),
-
-    % pretend that only synchronization of deletion of link has happened
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
-    {FileUuid, _} = file_id:unpack_guid(FileGuid),
-    remove_link(W2, SpaceUuid, ?TEST_FILE1, FileUuid),
-
-    % wait till deletion of link is synchronized
-    ?assertMatch({error, not_found}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-
-    timer:sleep(timer:seconds(1)),
-    ?EXEC_ON_POSIX_ONLY(fun() ->
-        % touch space dir to ensure that it will be scanned
-        RDWRStorageMountPoint = get_mount_point(RDWRStorage),
-        ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
-        touch(W1, ContainerStorageSpacePath)
-    end, StorageType),
-
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    %% Check if file was not reimported on W1
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if file was deleted on W2
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 1), ?ATTEMPTS).
-
+    % This case tests situation when file was created in the importing provider.
+    [W1, _W2 | _] = ?config(op_worker_nodes, Config),
+    remote_delete_file_reimport_race_test_base(Config, StorageType, W1).
 
 remote_delete_file_reimport_race2_test(Config, StorageType) ->
     % in this test, we check whether storage import does not reimport file that is deleted
     % by a remote provider and if only deletion of link is synchronized when scan is performed
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    % This case tests situation when file was created in the remote (not-importing) provider.
+    [_W1, W2 | _] = ?config(op_worker_nodes, Config),
+    remote_delete_file_reimport_race_test_base(Config, StorageType, W2).
+
+
+remote_delete_file_reimport_race_test_base(Config, StorageType, CreatingNode) ->
+    % in this test, we check whether storage import does not reimport file that is deleted
+    % by a remote provider and if only deletion of link is synchronized when scan is performed
+    [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
 
-    %% Create file in remote provider
-    {ok, FileGuid} = lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH1, 8#644),
-    {ok, Handle1} = lfm_proxy:open(W2, SessId2, {guid, FileGuid}, write),
-    {ok, _} = lfm_proxy:write(W2, Handle1, 0, ?TEST_DATA),
-    ok = lfm_proxy:close(W2, Handle1),
+    [ReplicatingNode] = Workers -- [CreatingNode],
 
-    %% Replicate file to local provider
-    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, FileGuid}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W1, Handle2, 0, 10), ?ATTEMPTS),
+    %% Create file
+    CreatorSessId = ?config({session_id, {?USER1, ?GET_DOMAIN(CreatingNode)}}, Config),
+    {ok, FileGuid} = lfm_proxy:create(CreatingNode, CreatorSessId, ?SPACE_TEST_FILE_PATH1, 8#644),
+    {ok, Handle1} = lfm_proxy:open(CreatingNode, CreatorSessId, {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(CreatingNode, Handle1, 0, ?TEST_DATA),
+    ok = lfm_proxy:close(CreatingNode, Handle1),
+
+    %% Replicate file to remote provider
+    ReplicatorSessId = ?config({session_id, {?USER1, ?GET_DOMAIN(ReplicatingNode)}}, Config),
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(ReplicatingNode, ReplicatorSessId, {guid, FileGuid}, read), ?ATTEMPTS),
+    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(ReplicatingNode, Handle2, 0, 10), ?ATTEMPTS),
 
     % pretend that only synchronization of deletion of link has happened
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
@@ -1465,7 +1418,6 @@ remote_delete_file_reimport_race2_test(Config, StorageType) ->
         ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
         touch(W1, ContainerStorageSpacePath)
     end, StorageType),
-
 
     enable_initial_scan(Config, ?SPACE_ID),
     assertInitialScanFinished(W1, ?SPACE_ID),

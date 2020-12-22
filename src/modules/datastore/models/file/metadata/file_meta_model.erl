@@ -291,15 +291,15 @@ upgrade_record(9, {
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), file_meta:doc(), file_meta:doc()) -> default.
 resolve_conflict(_Ctx,
-    #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = NewSpaceId},
-    #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}, scope = PrevSpaceId}
+    #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
+    #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}
 ) ->
     case NewName =/= PrevName of
         true ->
             spawn(fun() ->
-                FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, NewSpaceId)),
-                OldParentGuid = file_id:pack_guid(PrevParentUuid, PrevSpaceId),
-                NewParentGuid = file_id:pack_guid(NewParentUuid, NewSpaceId),
+                FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
+                OldParentGuid = file_id:pack_guid(PrevParentUuid, SpaceId),
+                NewParentGuid = file_id:pack_guid(NewParentUuid, SpaceId),
                 fslogic_event_emitter:emit_file_renamed_no_exclude(
                     FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName)
             end);

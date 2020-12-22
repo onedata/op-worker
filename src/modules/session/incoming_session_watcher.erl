@@ -349,20 +349,32 @@ get_session_grace_period(_) ->
     true | {false, RemainingTime :: time:seconds()}.
 mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
     Diff = fun
-        (#session{status = active, accessed = Accessed} = Sess) ->
-            InactivityPeriod = global_clock:timestamp_seconds() - Accessed,
-            case InactivityPeriod >= GracePeriod of
+        (#session{status = active, accessed = LastAccessTimestamp} = Sess) ->
+            Now = global_clock:timestamp_seconds(),
+            case Now >= LastAccessTimestamp of
                 true ->
-                    {ok, Sess#session{status = inactive}};
+                    InactivityPeriod = Now - LastAccessTimestamp,
+                    case InactivityPeriod >= GracePeriod of
+                        true ->
+                            {ok, Sess#session{status = inactive}};
+                        false ->
+                            {error, {grace_period_not_exceeded, GracePeriod - InactivityPeriod}}
+                    end;
                 false ->
-                    {error, {grace_period_not_exceeded, GracePeriod - InactivityPeriod}}
+                    % backward time warp has happened and it is impossible to tell if grace period
+                    % has passed or not. To not let session unnecessarily exist until global time
+                    % catches to previous value, set `accessed` field to Now and check once again
+                    % later.
+                    {ok, Sess#session{accessed = Now}}
             end;
         (#session{} = Sess) ->
             {ok, Sess#session{status = inactive}}
     end,
     case session:update(SessionId, Diff) of
-        {ok, _} ->
+        {ok, #document{value = #session{status = inactive}}} ->
             true;
+        {ok, _} ->
+            {false, GracePeriod};
         {error, {grace_period_not_exceeded, RemainingTime}} ->
             {false, RemainingTime};
         {error, _} ->

@@ -87,9 +87,11 @@
 -type teardown_fun() :: fun(() -> ok).
 % Function called after testcase. Can be used to check if test had desired effect
 % on environment (e.g. check if resource deleted during test was truly deleted).
+% If not it should throw an error.
 % First argument tells whether request made during testcase should succeed
 -type verify_fun() :: fun(
-    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) -> boolean()
+    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) ->
+        term() | no_return()
 ).
 
 -type rest_args() :: #rest_args{}.
@@ -559,7 +561,7 @@ run_exp_error_testcase(TargetNode, Client, DataSet, ScenarioError, VerifyFun, #s
     type = ScenarioType,
     prepare_args_fun = PrepareArgsFun
 }, Config) ->
-    ExpError = case is_client_supported_by_node(Client, TargetNode, Config) of
+    ExpError = case is_client_supported_by_node(Client, TargetNode) of
         true -> ScenarioError;
         false -> ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED)
     end,
@@ -572,7 +574,8 @@ run_exp_error_testcase(TargetNode, Client, DataSet, ScenarioError, VerifyFun, #s
             RequestResult = make_request(Config, TargetNode, Client, Args),
             try
                 validate_error_result(ScenarioType, ExpError, RequestResult),
-                VerifyFun(expected_failure, TestCaseCtx)
+                VerifyFun(expected_failure, TestCaseCtx),
+                true
             catch T:R ->
                 log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R, Config),
                 false
@@ -596,7 +599,7 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_templ
         Args ->
             Result = make_request(Config, TargetNode, Client, Args),
             try
-                case is_client_supported_by_node(Client, TargetNode, Config) of
+                case is_client_supported_by_node(Client, TargetNode) of
                     true ->
                         ValidateResultFun(TestCaseCtx, Result),
                         VerifyFun(expected_success, TestCaseCtx);
@@ -605,7 +608,8 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_templ
                             ScenarioType, ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED), Result
                         ),
                         VerifyFun(expected_failure, TestCaseCtx)
-                end
+                end,
+                true
             catch T:R ->
                 log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R, Config),
                 false
@@ -670,7 +674,7 @@ log_failure(
     "Stacktrace: ~p~n", [
         ScenarioName,
         TargetNode,
-        client_to_placeholder(Client, Config),
+        client_to_placeholder(Client),
         io_lib_pretty:print(Args, fun get_record_def/2),
         Expected,
         Got,
@@ -847,7 +851,7 @@ substitute_client_placeholders(ClientsAndPlaceholders, Config) ->
 substitute_client_placeholder(#auth{} = AaiClient, _Config) ->
     AaiClient;
 substitute_client_placeholder(Placeholder, Config) ->
-    placeholder_to_client(Placeholder, Config).
+    placeholder_to_client(Placeholder).
 
 
 %% @private
@@ -888,19 +892,19 @@ scenario_spec_to_suite_spec(#scenario_spec{
 
 
 %% @private
--spec placeholder_to_client(client_placeholder(), ct_config()) -> aai:auth().
-placeholder_to_client(nobody, _Config) ->
+-spec placeholder_to_client(client_placeholder()) -> aai:auth().
+placeholder_to_client(nobody) ->
     ?NOBODY;
-placeholder_to_client(Username, Config) when is_atom(Username) ->
-    ?USER(api_test_env:get_user_id(Username, Config)).
+placeholder_to_client(Username) when is_atom(Username) ->
+    ?USER(oct_background:get_user_id(Username)).
 
 
 %% @private
--spec client_to_placeholder(aai:auth(), ct_config()) -> client_placeholder().
-client_to_placeholder(?NOBODY, _Config) ->
+-spec client_to_placeholder(aai:auth()) -> client_placeholder().
+client_to_placeholder(?NOBODY) ->
     nobody;
-client_to_placeholder(?USER(UserId), Config) ->
-    api_test_env:to_entity_placeholder(UserId, Config).
+client_to_placeholder(?USER(UserId)) ->
+    oct_background:to_entity_placeholder(UserId).
 
 
 %% @private
@@ -917,13 +921,13 @@ build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet) ->
 
 
 %% @private
--spec is_client_supported_by_node(aai:auth(), node(), ct_config()) ->
+-spec is_client_supported_by_node(aai:auth(), node()) ->
     boolean().
-is_client_supported_by_node(?NOBODY, _Node, _Config) ->
+is_client_supported_by_node(?NOBODY, _Node) ->
     true;
-is_client_supported_by_node(?USER(UserId), Node, Config) ->
+is_client_supported_by_node(?USER(UserId), Node) ->
     ProvId = op_test_rpc:get_provider_id(Node),
-    lists:member(UserId, api_test_env:get_provider_eff_users(ProvId, Config)).
+    lists:member(UserId, oct_background:get_provider_eff_users(ProvId)).
 
 
 %% @private
@@ -946,7 +950,7 @@ make_gs_request(Config, Node, Client, #gs_args{
     auth_hint = AuthHint,
     data = Data
 }) ->
-    case connect_via_gs(Node, Client, Config) of
+    case connect_via_gs(Node, Client) of
         {ok, GsClient} ->
             case gs_client:graph_request(GsClient, GRI, Operation, Data, false, AuthHint) of
                 {ok, ?GS_RESP(undefined)} ->
@@ -962,14 +966,14 @@ make_gs_request(Config, Node, Client, #gs_args{
 
 
 %% @private
--spec connect_via_gs(node(), aai:auth(), ct_config()) ->
+-spec connect_via_gs(node(), aai:auth()) ->
     {ok, GsClient :: pid()} | errors:error().
-connect_via_gs(Node, Client, Config) ->
+connect_via_gs(Node, Client) ->
     {Auth, ExpIdentity} = case Client of
         ?NOBODY ->
             {undefined, ?SUB(nobody)};
         ?USER(UserId) ->
-            TokenAuth = {token, api_test_env:get_user_access_token(UserId, Config)},
+            TokenAuth = {token, oct_background:get_user_access_token(UserId)},
             {TokenAuth, ?SUB(user, UserId)}
     end,
     GsEndpoint = gs_endpoint(Node),
@@ -1006,9 +1010,9 @@ make_rest_request(Config, Node, Client, #rest_args{
     body = Body
 }) ->
     URL = get_rest_endpoint(Node, Path),
-    HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client, Config)),
+    HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
     CaCerts = op_test_rpc:get_cert_chain_pems(Node),
-    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 10000}],
+    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 15000}],
 
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
         {ok, RespCode, RespHeaders, RespBody} ->
@@ -1024,11 +1028,11 @@ make_rest_request(Config, Node, Client, #rest_args{
 
 
 %% @private
--spec get_rest_auth_headers(aai:auth(), ct_config()) -> AuthHeaders :: map().
-get_rest_auth_headers(?NOBODY, _Config) ->
+-spec get_rest_auth_headers(aai:auth()) -> AuthHeaders :: map().
+get_rest_auth_headers(?NOBODY) ->
     #{};
-get_rest_auth_headers(?USER(UserId), Config) ->
-    #{?HDR_X_AUTH_TOKEN => api_test_env:get_user_access_token(UserId, Config)}.
+get_rest_auth_headers(?USER(UserId)) ->
+    #{?HDR_X_AUTH_TOKEN => oct_background:get_user_access_token(UserId)}.
 
 
 %% @private
