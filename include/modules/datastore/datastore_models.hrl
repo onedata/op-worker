@@ -372,7 +372,7 @@
 
 
 % An empty model used for creating deletion_markers
-% For more information see deletion_markers.erl
+% For more information see deletion_marker.erl
 -record(deletion_marker, {}).
 
 

@@ -790,13 +790,13 @@ end_per_testcase(cancel_autocleaning_run, Config) ->
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [W | _] = Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:close_all(W),
     ensure_controller_stopped(W, ?SPACE_ID),
     clean_autocleaning_run_model(W, ?SPACE_ID),
     delete_file_popularity_config(W, ?SPACE_ID),
     delete_auto_cleaning_config(W, ?SPACE_ID),
-    lfm_test_utils:clean_space(W, ?SPACE_ID, ?ATTEMPTS),
+    lfm_test_utils:clean_space(W, Workers, ?SPACE_ID, ?ATTEMPTS),
     ok = test_utils:set_env(W, op_worker, autocleaning_view_batch_size, 1000),
     ok = test_utils:set_env(W, op_worker, replica_deletion_max_parallel_requests, 1000),
 %%    ensure_space_empty(?SPACE_ID, Config),

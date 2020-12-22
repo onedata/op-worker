@@ -81,6 +81,7 @@ move_to_trash(FileCtx) ->
     % they names are suffixed with Uuid to avoid conflicts
     TrashUuid = fslogic_uuid:spaceid_to_trash_dir_uuid(SpaceId),
     % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
+    % TODO jk clean up na innych providerach?
     file_qos:clean_up(FileCtx),
     file_meta:rename(FileDoc, ParentUuid, TrashUuid, ?NAME_IN_TRASH(Name, Uuid)),
     FileCtx5.
