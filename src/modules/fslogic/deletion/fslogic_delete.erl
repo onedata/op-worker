@@ -31,7 +31,10 @@
 -export([delete_parent_link/2, get_open_file_handling_method/1]).
 
 
--type opened_file_handling_method() :: ?RENAME_HANDLING_METHOD | ?MARKER_HANDLING_METHOD.
+% below type determines how deletion of opened files is handled
+% ?RENAME means that an opened file is moved to a special directory with name ?DELETED_OPENED_FILES_DIR
+% ?DELETION_MARKER means that a deletion_marker is added for the file (see deletion_marker.erl)
+-type opened_file_deletion_method() :: ?RENAME | ?DELETION_MARKER.
 
 %% Macros defining scopes of deleting docs associated with file.
 % ?LOCAL_DOCS scope is used in case of remote deletion
@@ -51,8 +54,7 @@
 % Record describing specification of deletion procedure
 -record(deletion_spec, {
     type :: deletion_type(),
-    scope :: docs_deletion_scope() % todo a moze jednak info czy remote czy local zlecenie?
-    % below flag determines whether deletion is performed as a result of child deletion
+    scope :: docs_deletion_scope()
 }).
 
 -define(SPEC(Type, Scope), #deletion_spec{
@@ -183,18 +185,18 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
 %% in returned FileCtx.
 %% @end
 %%--------------------------------------------------------------------
--spec custom_handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), opened_file_handling_method()) ->
+-spec custom_handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), opened_file_deletion_method()) ->
     file_ctx:ctx().
-custom_handle_opened_file(FileCtx, UserCtx, DocsDeletionScope, ?RENAME_HANDLING_METHOD) ->
+custom_handle_opened_file(FileCtx, UserCtx, DocsDeletionScope, ?RENAME) ->
     FileCtx3 = case maybe_rename_storage_file(FileCtx) of
         {ok, FileCtx2} -> FileCtx2;
         {error, _} -> FileCtx
     end,
     % TODO VFS-6114 maybe we should call maybe_try_to_delete_parent/3 here?
     maybe_delete_parent_link(FileCtx3, UserCtx, DocsDeletionScope == ?LOCAL_DOCS);
-custom_handle_opened_file(FileCtx, UserCtx, ?LOCAL_DOCS, ?MARKER_HANDLING_METHOD) ->
+custom_handle_opened_file(FileCtx, UserCtx, ?LOCAL_DOCS, ?DELETION_MARKER) ->
     maybe_add_deletion_marker(FileCtx, UserCtx);
-custom_handle_opened_file(FileCtx, UserCtx, _DocsDeletionScope, ?MARKER_HANDLING_METHOD) ->
+custom_handle_opened_file(FileCtx, UserCtx, _DocsDeletionScope, ?DELETION_MARKER) ->
     FileCtx2 = maybe_add_deletion_marker(FileCtx, UserCtx),
     delete_parent_link(FileCtx2, UserCtx).
 
@@ -432,13 +434,13 @@ maybe_emit_event(_FileCtx, _UserCtx, _) ->
     ok.
 
 
--spec get_open_file_handling_method(file_ctx:ctx()) -> {opened_file_handling_method(), file_ctx:ctx()}.
+-spec get_open_file_handling_method(file_ctx:ctx()) -> {opened_file_deletion_method(), file_ctx:ctx()}.
 get_open_file_handling_method(FileCtx) ->
     {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
     Helper = storage:get_helper(Storage),
     case helper:is_rename_supported(Helper) of
-        true -> {?RENAME_HANDLING_METHOD, FileCtx2};
-        _ -> {?MARKER_HANDLING_METHOD, FileCtx2}
+        true -> {?RENAME, FileCtx2};
+        _ -> {?DELETION_MARKER, FileCtx2}
     end.
 
 

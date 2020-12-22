@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of tree_deletion_traverse.
+%%% Tests of trash.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(trash_test_SUITE).
@@ -15,14 +15,9 @@
 -include("lfm_test_utils.hrl").
 -include("rest_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
-%%-include("modules/storage/traverse/storage_traverse.hrl").
-%%-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/http/codes.hrl").
-%%-include_lib("ctool/include/test/assertions.hrl").
-%%-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
-%%-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -90,11 +85,6 @@ all() -> ?ALL([
 -define(USER_1_AUTH_HEADERS(Config), ?USER_1_AUTH_HEADERS(Config, [])).
 -define(USER_1_AUTH_HEADERS(Config, OtherHeaders),
     ?USER_AUTH_HEADERS(Config, <<"user1">>, OtherHeaders)).
-
-% TODO jk testy z importem
-% TODO jk, ze nie da sie usunac trasha gdzies powinien byc
-% TODO jk, ze nie da sie zreplikowac trasha
-% TODO jk, ze nie da sie zmovovać
 
 %%%===================================================================
 %%% Test functions

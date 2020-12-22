@@ -6067,7 +6067,7 @@ unmock_import_file_error(Worker) ->
 mock_link_handling_method(Workers) ->
     ok = test_utils:mock_new(Workers, fslogic_delete),
     ok = test_utils:mock_expect(Workers, fslogic_delete, get_open_file_handling_method, fun(Ctx) ->
-        {?MARKER_HANDLING_METHOD, Ctx}
+        {?DELETION_MARKER, Ctx}
     end).
 
 block_syncing_process(TestProcess) ->

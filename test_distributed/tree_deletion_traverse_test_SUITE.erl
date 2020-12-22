@@ -12,6 +12,8 @@
 -module(tree_deletion_traverse_test_SUITE).
 -author("Jakub Kudzia").
 
+% TODO jk dodać suite na bamboo
+
 -include("lfm_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/traverse/storage_traverse.hrl").

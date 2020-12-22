@@ -7,8 +7,25 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% API module for trash management.
-%%% WRITEME napisac, ze kosz ma konkretną nazwę i uuid
-%%% WRITEME napisac, ze kosz ma miec docelowo zduplikowane linki i ze beda filtrowane w momencie rozwiazywania konfliktow przy ls
+%%% Trash is a special directory where files are moved as a result
+%%% of fslogic #delete_using_trash operation.
+%%% Trash directory is created for each space, it has
+%%% a predefined uuid (see fslogic_uuid) and a predefined name.
+%%% Trash directory is child of a space directory.
+%%%
+%%% TODO VFS-7064 below paragraph will be true after adding link from space directory to trash in 21.02
+%%% Each provider adds link from space to trash to its own file_meta_links
+%%% tree. The links are not listed as conflicting because file_meta_links
+%%% module detects that they point to the same uuid.
+%%%
+%%% Currently, deletion using trash is performed on directories via GUI
+%%% and REST/CDMI interfaces.
+%%% After moving the subtree rooted in given directory to the trash
+%%% a tree_deletion_traverse is scheduled on given subtree to
+%%% asynchronously delete whole subtree.
+%%%
+%%% Directories moved to trash become direct children of the trash directory.
+%%% Therefore, their names are suffixed with their uuid to avoid conflicts.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(trash).
@@ -22,14 +39,10 @@
 %% API
 -export([create/1, move_to_trash/1, delete_from_trash/4]).
 
-% todo dodac test do usuwania w trakcie importu
-
-%% TODO TESTY !!!!!!!!
-% TODO pamietac o branchu w CW !!!!!
-% TODO co z harvestowaniem kosza????
-% TODO co z ustawianiem metadanych pod CMDI? (cdmi_metadata_req) Czy blokujemy?
-% todo Czy pozwalamy zrobić share'a z kosza?
-% todo Czy zakazujemy ustawiać QoS na koszu?
+% TODO jk Co z harvestowaniem kosza?
+% TODO jk Co z ustawianiem metadanych pod CMDI? (cdmi_metadata_req) Czy blokujemy?
+% TODO jk Czy pozwalamy zrobić share'a z kosza?
+% TODO jk Czy zakazujemy ustawiać QoS na koszu?
 
 -define(NAME_UUID_SEPARATOR, "@@").
 -define(NAME_IN_TRASH(FileName, FileUuid), <<FileName/binary, ?NAME_UUID_SEPARATOR, FileUuid/binary>>).
@@ -46,8 +59,8 @@ create(SpaceId) ->
         SpaceUuid, SpaceId
     ),
     % TODO VFS-7064 use file_meta:create so that link to the trash directory will be added
-    % TODO * remember to filter trash from list result in storage_import_deletion or replica_controller, tree_traverse, etc
-    % TODO * maybe there should be option passed to file_meta_links:list that would exclude trash from the result
+    %  * remember to filter trash from list result in storage_import_deletion or replica_controller, tree_traverse, etc
+    %  * maybe there should be option passed to file_meta_links:list that would exclude trash from the result
     %% {ok, _} = file_meta:create({uuid, SpaceUuid}, TrashDoc),
     {ok, _} = file_meta:save(TrashDoc),
     ok.
@@ -64,10 +77,10 @@ move_to_trash(FileCtx) ->
     FileCtx3 = maybe_add_deletion_marker(ParentUuid, FileCtx2),
     {Name, FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
     {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
-    % files moved to trash are children of trash directory
+    % files moved to trash are direct children of trash directory
     % they names are suffixed with Uuid to avoid conflicts
     TrashUuid = fslogic_uuid:spaceid_to_trash_dir_uuid(SpaceId),
-    % TODO VFS-7133 save original parent after extending file_meta
+    % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
     file_qos:clean_up(FileCtx),
     file_meta:rename(FileDoc, ParentUuid, TrashUuid, ?NAME_IN_TRASH(Name, Uuid)),
     FileCtx5.

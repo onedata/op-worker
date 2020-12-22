@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% This module is responsible for management of paths caches.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(paths_cache).

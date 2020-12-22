@@ -5,7 +5,14 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc WRITEME
+%%% @doc
+%%% This module is responsible for management of file_meta links.
+%%% The assumptions are as follows:
+%%%  * for each directory (identified by ParentUuid) in given scope (SpaceId)
+%%%    there is a links forest
+%%%  * each tree in the forest is assigned to the provider supporting the space
+%%%  * the trees are identified by oneprovider:id()
+%%%  * provider is allowed to modify only its own tree
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_links).
@@ -27,7 +34,7 @@
 -export([get_all/2]).
 
 
--type key() :: file_meta:uuid().
+-type forest() :: file_meta:uuid().
 -type link_name() :: file_meta:name().
 -type link_target() :: file_meta:uuid().
 -type link_revision() :: datastore_links:link_rev().
@@ -80,25 +87,25 @@
 %%% API
 %%%===================================================================
 
--spec get(key(), tree_ids(), link_name() | [link_name()]) ->
+-spec get(forest(), tree_ids(), link_name() | [link_name()]) ->
     {ok, [internal_link()]} | [{ok, [link()]}] | {error, term()}.
 get(ParentUuid, TreeIds, FileNames) ->
     % Scope is not passed to this function as it's irrelevant for get operations
     datastore_model:get_links(?CTX, ParentUuid, TreeIds, FileNames).
 
 
--spec add(key(), scope(), link_name(), link_target()) -> ok | {error, term()}.
+-spec add(forest(), scope(), link_name(), link_target()) -> ok | {error, term()}.
 add(ParentUuid, Scope, FileName, FileUuid) ->
     ?extract_ok(datastore_model:add_links(?CTX(Scope), ParentUuid, ?LOCAL_TREE_ID, ?LINK(FileName, FileUuid))).
 
 
--spec check_and_add(key(), scope(), tree_ids(), link_name(), link_target()) -> ok | {error, term()}.
+-spec check_and_add(forest(), scope(), tree_ids(), link_name(), link_target()) -> ok | {error, term()}.
 check_and_add(ParentUuid, Scope, TreesToCheck, FileName, FileUuid) ->
     ?extract_ok(datastore_model:check_and_add_links(?CTX(Scope), ParentUuid, ?LOCAL_TREE_ID, TreesToCheck,
         ?LINK(FileName, FileUuid))).
 
 
--spec delete(key(), scope(), link_name(), link_target()) -> ok.
+-spec delete(forest(), scope(), link_name(), link_target()) -> ok.
 delete(ParentUuid, Scope, FileName, FileUuid) ->
     case get(ParentUuid, all, FileName) of
         {ok, Links} ->
@@ -119,17 +126,17 @@ delete(ParentUuid, Scope, FileName, FileUuid) ->
     end.
 
 
--spec delete_local(key(), scope(), link_name(), link_revision()) -> ok.
+-spec delete_local(forest(), scope(), link_name(), link_revision()) -> ok.
 delete_local(ParentUuid, Scope, FileName, Revision) ->
     ok = datastore_model:delete_links(?CTX(Scope), ParentUuid, ?LOCAL_TREE_ID, {FileName, Revision}).
 
 
--spec delete_remote(key(), scope(), tree_id(), link_name(), link_revision()) -> ok.
+-spec delete_remote(forest(), scope(), tree_id(), link_name(), link_revision()) -> ok.
 delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
     ok = datastore_model:mark_links_deleted(?CTX(Scope), ParentUuid, TreeId, {FileName, Revision}).
 
 
--spec list(key(), offset() | undefined, limit(), token() | undefined, link_name() | undefined,
+-spec list(forest(), offset() | undefined, limit(), token() | undefined, link_name() | undefined,
     tree_id() | undefined) -> {ok, [link()], list_extended_info()} | {error, term()}.
 list(ParentUuid, Offset, Limit, Token, PrevLinkKey, PrevTreeId) ->
 
@@ -151,7 +158,7 @@ list(ParentUuid, Offset, Limit, Token, PrevLinkKey, PrevTreeId) ->
     end.
 
 
--spec list_whitelisted(key(), non_neg_offset(), limit(), [link_name()]) -> {ok, [link()]}.
+-spec list_whitelisted(forest(), non_neg_offset(), limit(), [link_name()]) -> {ok, [link()]}.
 list_whitelisted(ParentUuid, NonNegOffset, Limit, ChildrenWhiteListed) ->
     ValidLinks = lists:flatmap(fun
         ({ok, L}) ->
@@ -171,7 +178,7 @@ list_whitelisted(ParentUuid, NonNegOffset, Limit, ChildrenWhiteListed) ->
     end.
 
 
--spec get_trees(key()) -> {ok, tree_ids()} | {error, term()}.
+-spec get_trees(forest()) -> {ok, tree_ids()} | {error, term()}.
 get_trees(ParentUuid) ->
     datastore_model:get_links_trees(?CTX, ParentUuid).
 
@@ -184,12 +191,12 @@ get_trees(ParentUuid) ->
 %% files also with tagged names.
 %%%
 %% NOTE !!!
-%% Sometimes ParentUuid and Name cannot be got from document as this
+%% Sometimes ParentUuid and Name cannot be taken from document as this
 %% function may be used as a result of conflict resolving that involve
 %% renamed file document.
 %% @end
 %%--------------------------------------------------------------------
--spec check_name_and_get_conflicting_files(key(), link_name(), link_target(), od_provider:id()) ->
+-spec check_name_and_get_conflicting_files(forest(), link_name(), link_target(), od_provider:id()) ->
     ok | {conflicting, TaggedName :: file_meta:name(), Conflicts :: [link()]}.
 check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId) ->
     case file_meta_links:get_all(ParentUuid, FileName) of
@@ -221,7 +228,7 @@ check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProvide
 %%% Exported for CT tests
 %%%===================================================================
 
--spec get_all(key(), link_name()) -> {ok, [internal_link()]} | {error, term()}.
+-spec get_all(forest(), link_name()) -> {ok, [internal_link()]} | {error, term()}.
 get_all(ParentUuid, Name) ->
     get(ParentUuid, all, Name).
 
@@ -257,7 +264,7 @@ validate_starting_opts(Offset, LastName, undefined) when is_binary(LastName) and
     ok.
 
 
--spec fold(key(), fold_fun(), fold_acc(), list_opts()) ->
+-spec fold(forest(), fold_fun(), fold_acc(), list_opts()) ->
     {ok, fold_acc()} | {{ok, fold_acc()}, datastore_links_iter:token()} | {error, term()}.
 fold(ParentUuid, Fun, AccIn, Opts) ->
     datastore_model:fold_links(?CTX, ParentUuid, all, Fun, AccIn, Opts).
@@ -341,10 +348,9 @@ group_by_name(Links) ->
         ) when Name =:= SpecialLinkName
           andalso Uuid =:= SpecialLinkUuid ->
             % Link has the same Name as link in the SpecialLinkGroup but both links point to the same
-            % Uuid which means that these aren't ambiguous files.
+            % Uuid which means that these ARE NOT ambiguous files.
             % It's the same, special file which only has many links (created by many providers).
-            % This may happen only for special files with predefined Uuids such as space directories
-            % or trash directories.
+            % This may happen only for special files with predefined Uuids such as space or trash directories.
             % We'll merge duplicated links so that only one is presented.
             {SpecialLinkGroup, GroupsAcc};
         (Link = #link{name = Name}, {CurrentGroup = [#link{name = NameInGroup} | _], GroupsAcc})

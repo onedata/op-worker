@@ -134,8 +134,8 @@ get_children(UserCtx, FileCtx0, Offset, Limit, EncodedToken, StartId, StartTree)
 
 %%--------------------------------------------------------------------
 %% @doc
-%% WRITEME
-% TODO add TODO zeby zrefaktorwoac i dac do innego modulu !!!!!
+%% list_children/8 with permissions_check
+%% TODO VFS-7149 untangle permissions_check and fslogic_worker
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_ctxs(

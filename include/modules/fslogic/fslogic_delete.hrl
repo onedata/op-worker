@@ -19,8 +19,7 @@
 -define(REMOTE_REMOVE, remote_remove).
 
 % Macros defining methods of handling opened files
--define(RENAME_HANDLING_METHOD, rename).
--define(MARKER_HANDLING_METHOD, deletion_marker).
-
+-define(RENAME, rename).
+-define(DELETION_MARKER, deletion_marker).
 
 -endif.

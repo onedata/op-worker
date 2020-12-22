@@ -5,7 +5,26 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% This module implements persistent map which associates name of
+%%% a storage file with its uuid.
+%%% It is implemented using datastore links.
+%%% Exactly one links forest (with only one tree) is associated with
+%%% one directory.
+%%% The map is used to mark that given storage file is associated with
+%%% certain logical file (file in Onedata file system) that has been
+%%% deleted or is currently being deleted.
+%%%
+%%% Deletion markers allow storage import to determine that given
+%%% storage file should not be imported, to prevent re-imports.
+%%%
+%%% Deletion markers are added in 2 cases:
+%%%  * when an opened file is deleted and storage on which the file is
+%%%    located supports ?DELETION_MARKER method for handling deletion of
+%%%    opened files (see fslogic_delete and opened_file_deletion_method() type)
+%%%  * when a directory is moved to trash
+%%%
+%%% As deletion markers are used only by the storage import, they are
+%%% added only on the imported storages.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(deletion_marker).

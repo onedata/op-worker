@@ -350,7 +350,7 @@ open_delete_race_test_base(Config, MockDeletionLink) ->
             check_dir_init(W),
             test_utils:mock_new(W, fslogic_delete, [passthrough]),
             test_utils:mock_expect(W, fslogic_delete, get_open_file_handling_method,
-                fun(Ctx) -> {?MARKER_HANDLING_METHOD, Ctx} end);
+                fun(Ctx) -> {?DELETION_MARKER, Ctx} end);
         _ ->
             check_dir_init(W, [?DELETED_OPENED_FILES_DIR_STRING])
     end,
