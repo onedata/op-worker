@@ -135,8 +135,11 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                                                 undefined ->
                                                     maybe_import_file(StorageFileCtx, Info);
                                                 Guid ->
-                                                    FileCtx = file_ctx:new_by_guid(Guid),
-                                                    check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info)
+                                                    % todo jk check whether we should sync file here or ignore
+                                                    {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+%%                                                    ,
+%%                                                    FileCtx = file_ctx:new_by_guid(Guid),
+%%                                                    check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info)
                                             end
                                     end
                             end;
