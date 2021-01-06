@@ -62,7 +62,9 @@
     prepare_user_ctx_params/2,
     get_helper_args/1,
     get_helper_admin_ctx/1,
+    space_logic_get_storage_id/1,
     space_logic_get_storage_ids/1,
+    space_logic_get_provider_ids/1,
     file_popularity_api_configure/2,
     file_popularity_api_get_configuration/1,
     autocleaning_configure/2,
@@ -90,6 +92,7 @@
     set_delegated_subdomain/1,
     set_domain/1,
     space_quota_current_size/1,
+    get_space_support_size/1,
     update_space_support_size/2,
     update_subdomain_delegation_ips/0,
     force_oz_connection_start/0,
@@ -188,7 +191,7 @@ storage_set_qos_parameters(StorageId, QosParameters) ->
 
 
 -spec storage_update_luma_config(storage:id(),
-    Changes :: luma_config:config() | luma_config:diff() ) -> ok | {error, term()}.
+    Changes :: luma_config:config() | luma_config:diff()) -> ok | {error, term()}.
 storage_update_luma_config(StorageId, Changes) ->
     storage:update_luma_config(StorageId, Changes).
 
@@ -299,7 +302,7 @@ luma_onedata_users_store_by_uid(Storage, Uid, OnedataUser) ->
     luma_onedata_users:store_by_uid(Storage, Uid, OnedataUser).
 
 
--spec luma_onedata_users_delete_uid_mapping(storage:id(), luma:uid()) ->  ok | {error, term()}.
+-spec luma_onedata_users_delete_uid_mapping(storage:id(), luma:uid()) -> ok | {error, term()}.
 luma_onedata_users_delete_uid_mapping(Storage, Uid) ->
     luma_onedata_users:delete_uid_mapping(Storage, Uid).
 
@@ -315,12 +318,12 @@ luma_onedata_users_store_by_acl_user(Storage, AclUser, OnedataUser) ->
     luma_onedata_users:store_by_acl_user(Storage, AclUser, OnedataUser).
 
 
--spec luma_onedata_users_delete_acl_user_mapping(storage:id(), luma:acl_who()) ->  ok | {error, term()}.
+-spec luma_onedata_users_delete_acl_user_mapping(storage:id(), luma:acl_who()) -> ok | {error, term()}.
 luma_onedata_users_delete_acl_user_mapping(Storage, AclUser) ->
     luma_onedata_users:delete_acl_user_mapping(Storage, AclUser).
 
 
--spec luma_onedata_groups_get_and_describe(storage:id() | storage:data(), luma:acl_who()) -> 
+-spec luma_onedata_groups_get_and_describe(storage:id() | storage:data(), luma:acl_who()) ->
     {ok, luma_onedata_group:group_map()} | {error, term()}.
 luma_onedata_groups_get_and_describe(Storage, AclGroup) ->
     luma_onedata_groups:get_and_describe(Storage, AclGroup).
@@ -332,7 +335,7 @@ luma_onedata_groups_store(Storage, AclGroup, OnedataGroup) ->
     luma_onedata_groups:store(Storage, AclGroup, OnedataGroup).
 
 
--spec luma_onedata_groups_delete(storage:id(), luma:acl_who()) ->  ok | {error, term()}.
+-spec luma_onedata_groups_delete(storage:id(), luma:acl_who()) -> ok | {error, term()}.
 luma_onedata_groups_delete(Storage, AclGroup) ->
     luma_onedata_groups:delete(Storage, AclGroup).
 
@@ -378,9 +381,19 @@ get_helper_admin_ctx(Helper) ->
     helper:get_admin_ctx(Helper).
 
 
+-spec space_logic_get_storage_id(od_space:id()) -> {ok, storage:id()}.
+space_logic_get_storage_id(SpaceId) ->
+    space_logic:get_local_storage_id(SpaceId).
+
+
 -spec space_logic_get_storage_ids(od_space:id()) -> {ok, [storage:id()]}.
 space_logic_get_storage_ids(SpaceId) ->
     space_logic:get_local_storage_ids(SpaceId).
+
+
+-spec space_logic_get_provider_ids(od_space:id()) -> {ok, [od_provider:id()]}.
+space_logic_get_provider_ids(SpaceId) ->
+    space_logic:get_provider_ids(SpaceId).
 
 
 -spec file_popularity_api_configure(file_popularity_config:id(), map()) ->
@@ -526,6 +539,11 @@ set_domain(Domain) ->
 -spec space_quota_current_size(space_quota:id()) -> non_neg_integer().
 space_quota_current_size(SpaceId) ->
     space_quota:current_size(SpaceId).
+
+
+-spec get_space_support_size(od_space:id()) -> {ok, integer()} | errors:error().
+get_space_support_size(SpaceId) ->
+    provider_logic:get_support_size(SpaceId).
 
 
 -spec update_space_support_size(od_space:id(), NewSupportSize :: integer()) ->
