@@ -118,7 +118,8 @@ get_record_struct(1) ->
         {space_id, string},
         {storage_id, string},
         {substask_id, {custom, string, {?MODULE, encode_subtask_id, decode_subtask_id}}},
-        {slave_job_pid, {custom, string, {?MODULE, encode_slave_job_pid, decode_slave_job_pid}}}
+        {slave_job_pid, {custom, string, {?MODULE, encode_slave_job_pid, decode_slave_job_pid}}},
+        {forced_unsupport, boolean}
     ]}.
 
 

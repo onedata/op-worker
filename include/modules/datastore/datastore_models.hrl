@@ -395,11 +395,9 @@
     feed :: luma:feed()
 }).
 
-%% Model that maps space to storage
-%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
--record(space_storage, {
-    storage_ids = [] :: [storage:id()],
-    mounted_in_root = [] :: [storage:id()]
+
+-record(supported_spaces, {
+    supports = #{} :: #{od_space:id() => [storage:id()]}
 }).
 
 -record(space_unsupport_job, {
@@ -412,7 +410,10 @@
     subtask_id = undefined :: space_unsupport:subtask_id() | undefined,
     % Id of process waiting to be notified of task finish.
     % NOTE: should be updated after provider restart
-    slave_job_pid  = undefined :: pid() | undefined
+    slave_job_pid  = undefined :: pid() | undefined,
+    % If set to true some unsupport stages (like data replication) will be omitted, as it means 
+    % that provider is no longer supporting this space and is merely performing cleanup
+    forced_unsupport = false :: boolean()
 }).
 
 %% Model that holds information necessary to tell whether whole subtree

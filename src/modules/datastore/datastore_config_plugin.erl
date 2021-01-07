@@ -83,10 +83,7 @@ get_models() -> [
     storage_import_config,
     storage_import_monitoring,
     process_handles,
-
-    %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
-    space_storage,
-    storage,
+    supported_spaces,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
     space_strategies,

@@ -22,6 +22,7 @@
 -include("modules/rtransfer/rtransfer.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -53,6 +54,7 @@
 -export([provider_connection_ssl_opts/1]).
 -export([assert_provider_compatibility/1]).
 -export([verify_provider_identity/1]).
+-export([revise_supported_spaces/0]).
 
 
 -define(PROVIDER_NODES_CACHE_TTL,
@@ -832,6 +834,22 @@ assert_provider_compatibility(Domain) ->
             error(Error)
     end.
 
+
+-spec revise_supported_spaces() -> ok.
+revise_supported_spaces() ->
+    {ok, SupportedSpaces} = provider_logic:get_spaces(),
+    ActualSupports = lists:flatten(lists:map(fun(SpaceId) ->
+        {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
+        lists:map(fun(StorageId) -> {SpaceId, StorageId} end, StorageIds)
+    end, SupportedSpaces)),
+    PersistedSupports = supported_spaces:get_supports(),
+    PersistedSupportsList = lists:flatten(maps:fold(fun(SpaceId, StorageIds, Acc) ->
+        lists:map(fun(StorageId) -> {SpaceId, StorageId} end, StorageIds) ++ Acc
+    end, [], PersistedSupports)),
+        
+    lists:foreach(fun({SpaceId, StorageId}) ->
+        ok = ?ok_if_exists(space_unsupport:run(SpaceId, StorageId, true))
+    end, lists_utils:subtract(PersistedSupportsList, ActualSupports)).
 
 %%%===================================================================
 %%% Internal functions

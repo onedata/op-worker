@@ -30,7 +30,7 @@
 -behaviour(traverse_behaviour).
 
 %% API
--export([init_pools/0, run/2]).
+-export([init_pools/0, run/2, run/3]).
 -export([report_cleanup_traverse_finished/2]).
 -export([get_all_stages/0]).
 -export([cleanup_local_documents/2]).
@@ -66,13 +66,18 @@ init_pools() ->
 
 -spec run(od_space:id(), storage:id()) -> ok.
 run(SpaceId, StorageId) ->
+    run(SpaceId, StorageId, false).
+
+-spec run(od_space:id(), storage:id(), boolean()) -> ok.
+run(SpaceId, StorageId, ForcedUnsupport) ->
     %% @TODO VFS-7167 handle last unsupport
-    ok = storage_logic:init_unsupport(StorageId, SpaceId),
     % ensure that file_meta doc for space is created, so it is not needed to always 
     % check if it exists when doing operations on files
     file_meta:make_space_exist(SpaceId),
-    ?ok_if_exists(traverse:run(?POOL_NAME, datastore_key:new_from_digest([SpaceId, StorageId]), 
-        #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, stage = init})).
+    ?ok_if_exists(traverse:run(?POOL_NAME, datastore_key:new_from_digest([SpaceId, StorageId]),
+        #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, stage = init, 
+            forced_unsupport = ForcedUnsupport})).
+
 
 -spec report_cleanup_traverse_finished(od_space:id(), storage:id()) -> ok.
 report_cleanup_traverse_finished(SpaceId, StorageId) ->
@@ -80,6 +85,7 @@ report_cleanup_traverse_finished(SpaceId, StorageId) ->
         space_unsupport_job:get(SpaceId, StorageId, cleanup_traverse),
     Pid ! cleanup_traverse_finished,
     ok.
+
 
 -spec get_all_stages() -> [stage()].
 get_all_stages() -> 
@@ -91,6 +97,17 @@ get_all_stages() ->
         delete_synced_documents, 
         delete_local_documents
     ].
+
+
+-spec cleanup_local_documents(od_space:id(), storage:id()) -> ok.
+cleanup_local_documents(SpaceId, StorageId) ->
+    file_popularity_api:disable(SpaceId),
+    file_popularity_api:delete_config(SpaceId),
+    autocleaning_api:disable(SpaceId),
+    autocleaning_api:delete_config(SpaceId),
+    storage_import:clean_up(SpaceId),
+    space_quota:delete(SpaceId),
+    luma:clear_db(StorageId, SpaceId).
 
 %%%===================================================================
 %%% Traverse behaviour callbacks
@@ -150,7 +167,9 @@ get_next_jobs_base(delete_local_documents) -> [].
 
 %% @private
 -spec execute_stage(space_unsupport_job:record()) -> ok.
-execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
+execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId, storage_id = StorageId}) ->
+    supported_spaces:remove(SpaceId, StorageId),
+    ok = storage_logic:init_unsupport(StorageId, SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId),
     storage_import:stop_auto_scan(SpaceId),
     auto_storage_import_worker:notify_space_unsupported(SpaceId),
@@ -160,6 +179,9 @@ execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
     %% @TODO VFS-6208 Cancel sync and auto-cleaning traverse and clean up ended tasks when unsupporting
     ok;
 
+execute_stage(#space_unsupport_job{stage = replicate, forced_unsupport = true}) ->
+    % can not replicate data as space is no longer supported
+    ok;
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
@@ -196,6 +218,9 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
     end,
     ok = storage_logic:complete_unsupport_purge(StorageId, SpaceId);
 
+execute_stage(#space_unsupport_job{stage =  wait_for_dbsync, forced_unsupport = true}) ->
+    % no need to wait for dbsync as this space is no longer supported by this provider
+    ok;
 execute_stage(#space_unsupport_job{stage = wait_for_dbsync} = _Job) ->
     %% @TODO VFS-6164 wait for all documents to be saved on disc
     %% @TODO VFS-7164 wait until all other providers are up to date with dbsync changes
@@ -301,15 +326,3 @@ expire_links(Model, RoutingKey, Doc) ->
     },
     datastore_model:save_with_routing_key(Ctx1, Doc),
     ok.
-
-
-%% @private
--spec cleanup_local_documents(od_space:id(), storage:id()) -> ok.
-cleanup_local_documents(SpaceId, StorageId) ->
-    file_popularity_api:disable(SpaceId),
-    file_popularity_api:delete_config(SpaceId),
-    autocleaning_api:disable(SpaceId),
-    autocleaning_api:delete_config(SpaceId),
-    storage_import:clean_up(SpaceId),
-    space_quota:delete(SpaceId),
-    luma:clear_db(StorageId, SpaceId).

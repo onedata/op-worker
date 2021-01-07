@@ -412,11 +412,15 @@ update_helper(StorageId, UpdateFun) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize) ->
     case validate_support_request(SerializedToken) of
-        ok ->
+        {ok, SpaceId} ->
+            % remove possible remnants of previous support 
+            % (when space was unsupported in Onezone without provider knowledge)
+            ok = space_unsupport:cleanup_local_documents(SpaceId, StorageId),
             case storage_logic:init_space_support(StorageId, SerializedToken, SupportSize) of
                 {ok, SpaceId} ->
-                    %% @TODO VFS-6136 add in proper space lifecycle
-                    on_space_supported(SpaceId, StorageId),
+                    on_init_support(SpaceId, StorageId),
+                    %% @TODO VFS-7170 Run only after space became active
+                    on_finalize_support(SpaceId),
                     {ok, SpaceId};
                 {error, _} = Error ->
                     Error
@@ -434,7 +438,7 @@ support_space(StorageId, SerializedToken, SupportSize) ->
 %% @TODO VFS-5497 This check will not be needed when multisupport is implemented
 %% @end
 %%--------------------------------------------------------------------
--spec validate_support_request(tokens:serialized()) -> ok | errors:error().
+-spec validate_support_request(tokens:serialized()) -> {ok, od_space:id()} | errors:error().
 validate_support_request(SerializedToken) ->
     case tokens:deserialize(SerializedToken) of
         {ok, #token{type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId)}} ->
@@ -443,7 +447,7 @@ validate_support_request(SerializedToken) ->
                     ?ERROR_RELATION_ALREADY_EXISTS(
                         od_space, SpaceId, od_provider, oneprovider:get_id()
                     );
-                false -> ok
+                false -> {ok, SpaceId}
             end;
         {ok, #token{type = ReceivedType}} ->
             ?ERROR_BAD_VALUE_TOKEN(<<"token">>,
@@ -493,6 +497,7 @@ upgrade_supports_to_21_02() ->
     lists:foreach(fun(SpaceId) ->
         {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
         {ok, Name} = space_logic:get_name(SpaceId),
+        ok = supported_spaces:add(SpaceId, StorageId),
         ok = storage_logic:upgrade_support_to_21_02(StorageId, SpaceId),
         ?info("  * space '~ts' (~ts) OK", [Name, SpaceId])
     end, Spaces),
@@ -513,13 +518,14 @@ on_storage_created(StorageId, QosParameters) ->
     ok = set_qos_parameters(StorageId, QosParameters),
     on_storage_created(StorageId).
 
+%% @private
+-spec on_init_support(od_space:id(), id()) -> ok.
+on_init_support(SpaceId, StorageId) ->
+    supported_spaces:add(SpaceId, StorageId).
 
 %% @private
--spec on_space_supported(od_space:id(), id()) -> ok.
-on_space_supported(SpaceId, StorageId) ->
-    % remove possible remnants of previous support 
-    % (when space was unsupported in Onezone without provider knowledge)
-    space_unsupport:cleanup_local_documents(SpaceId, StorageId),
+-spec on_finalize_support(od_space:id()) -> ok.
+on_finalize_support(SpaceId) ->
     space_logic:on_space_supported(SpaceId).
 
 

@@ -145,7 +145,8 @@ on_connect_to_oz() ->
     ok = rtransfer_config:add_storages(),
     ok = auto_storage_import_worker:notify_connection_to_oz(),
     ok = dbsync_worker:start_streams(),
-    ok = qos_worker:init_retry_failed_files().
+    ok = qos_worker:init_retry_failed_files(),
+    ok = provider_logic:revise_supported_spaces().
 
 
 %% @private

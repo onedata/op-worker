@@ -309,7 +309,7 @@ overall_test(Config) ->
     lists:foreach(fun(Stage) ->
         test_utils:mock_assert_num_calls(
             Worker, space_unsupport, do_slave_job,
-            [{space_unsupport_job, Stage, '_', ?SPACE_ID, StorageId, '_', '_'}, '_'],
+            [{space_unsupport_job, Stage, '_', ?SPACE_ID, StorageId, '_', '_', '_'}, '_'],
             1, 1
         )
     end, space_unsupport:get_all_stages()),
@@ -435,7 +435,8 @@ assert_local_documents_cleaned_up(Worker) ->
                               %% which is not cleaned up during unsupport
             dbsync_state,
             file_local_blocks, %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
-            luma_db % These documents are associated with storage, not with space support
+            luma_db, % These documents are associated with storage, not with space support
+            supported_spaces % one document per provider, holds information of all supports, only one entry there is deleted
         ],
     assert_documents_cleaned_up(Worker, <<>>, ModelsToCheck).
 
