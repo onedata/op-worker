@@ -190,7 +190,8 @@ init_per_suite(Config) ->
         envs = [
             {op_worker, op_worker, [{session_validity_check_interval_seconds, 1800}]},
             {op_worker, op_worker, [{fuse_session_grace_period_seconds, 1800}]}
-        ]}).
+        ]
+    }).
 
 
 init_per_testcase(_Case, Config) ->

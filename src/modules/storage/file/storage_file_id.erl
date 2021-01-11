@@ -114,7 +114,7 @@ filter_space_id(FilePath, SpaceId) ->
 -spec ensure_starts_with_space_id(file_meta:path(), od_space:id()) -> file_meta:path().
 ensure_starts_with_space_id(FilePath, SpaceId) ->
     case filepath_utils:split(FilePath) of
-        [Sep, SpaceId | Path] ->
+        [_Sep, SpaceId | _Path] ->
             FilePath;
         [Sep | Path] ->
             filepath_utils:join([Sep, SpaceId | Path])

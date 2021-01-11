@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Library module for oneprovider-wide operations.
+%%% Utility functions related to the Oneprovider service (part of which is the
+%%% op-worker application).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(oneprovider).
@@ -23,20 +24,18 @@
 -export_type([id/0]).
 
 %% API
--export([get_domain/0, get_node_ip/0, get_rest_endpoint/1]).
+-export([get_domain/0, get_rest_endpoint/1, get_node_ip/0]).
 -export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
--export([get_version/0, get_build/0]).
 -export([trusted_ca_certs/0]).
--export([get_oz_domain/0, replicate_oz_domain_to_node/1, get_oz_url/0, get_oz_version/0]).
+-export([get_oz_domain/0, replicate_oz_domain_to_node/1]).
+-export([get_oz_url/0, get_oz_url/1]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([set_up_service_in_onezone/0]).
 
 % Developer functions
 -export([register_in_oz_dev/3]).
 
--define(GUI_PACKAGE_PATH, begin
-    {ok, __Path} = application:get_env(?APP_NAME, gui_package_path), __Path
-end).
+-define(GUI_PACKAGE_PATH, op_worker:get_env(gui_package_path)).
 -define(OZ_VERSION_CACHE_TTL, timer:minutes(5)).
 
 %%%===================================================================
@@ -56,6 +55,13 @@ get_domain() ->
     end.
 
 
+-spec get_rest_endpoint(binary() | string()) -> binary().
+get_rest_endpoint(Path) ->
+    Port = https_listener:port(),
+    Host = get_domain(),
+    str_utils:format_bin("https://~s:~B/api/v3/oneprovider/~s", [Host, Port, Path]).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns the IP of the node, retrieved from node_manager, which has
@@ -65,18 +71,6 @@ get_domain() ->
 -spec get_node_ip() -> inet:ip4_address().
 get_node_ip() ->
     node_manager:get_ip_address().
-
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns full provider rest endpoint URL.
-%% @end
-%%-------------------------------------------------------------------
--spec get_rest_endpoint(binary() | string()) -> string().
-get_rest_endpoint(Path) ->
-    Port = https_listener:port(),
-    Host = get_domain(),
-    str_utils:format("https://~s:~B/api/v3/oneprovider/~s", [Host, Port, Path]).
 
 
 %%--------------------------------------------------------------------
@@ -133,32 +127,6 @@ is_registered() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns current Oneprovider version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_version() -> binary().
-get_version() ->
-    {_AppId, _AppName, OpVersion} = lists:keyfind(
-        ?APP_NAME, 1, application:loaded_applications()
-    ),
-    list_to_binary(OpVersion).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns current Oneprovider build.
-%% @end
-%%--------------------------------------------------------------------
--spec get_build() -> binary().
-get_build() ->
-    case application:get_env(?APP_NAME, build_version, "unknown") of
-        "" -> <<"unknown">>;
-        Build -> list_to_binary(Build)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns CA certs trusted by this provider in DER format.
 %% @end
 %%--------------------------------------------------------------------
@@ -167,89 +135,44 @@ trusted_ca_certs() ->
     cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the domain of OZ, which is specified in env.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_oz_domain() -> binary().
 get_oz_domain() ->
-    case application:get_env(?APP_NAME, oz_domain) of
-        {ok, Domain} when is_binary(Domain) -> Domain;
-        {ok, Domain} when is_list(Domain) -> str_utils:to_binary(Domain);
-        _ -> error({missing_env_variable, oz_domain})
-    end.
+    str_utils:to_binary(op_worker:get_env(oz_domain)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets the domain of OZ in env on specified node.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec replicate_oz_domain_to_node(node()) -> ok | no_return().
 replicate_oz_domain_to_node(Node) ->
-    {ok, Domain} = application:get_env(?APP_NAME, oz_domain),
-    ok = rpc:call(Node, application, set_env, [?APP_NAME, oz_domain, Domain]).
+    Domain = op_worker:get_env(oz_domain),
+    ok = rpc:call(Node, op_worker, set_env, [oz_domain, Domain]).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the URL to OZ.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_oz_url() -> binary().
 get_oz_url() ->
     <<"https://", (get_oz_domain())/binary>>.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the OZ application version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_oz_version() -> binary().
-get_oz_version() ->
-    GetOzVersion = fun() ->
-        {ok, OzVersion} = provider_logic:fetch_peer_version(onezone),
-        {ok, OzVersion, ?OZ_VERSION_CACHE_TTL}
-    end,
-    {ok, OzVersion} = node_cache:acquire(cached_oz_version, GetOzVersion),
-    OzVersion.
+-spec get_oz_url(Path :: binary() | string()) -> binary().
+get_oz_url(Path) when is_list(Path) ->
+    get_oz_url(list_to_binary(Path));
+get_oz_url(<<"/", _/binary>> = Path) ->
+    <<(get_oz_url())/binary, Path/binary>>;
+get_oz_url(Path) ->
+    get_oz_url(<<"/", Path/binary>>).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the URL to OZ login page.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_oz_login_page() -> binary().
 get_oz_login_page() ->
-    {ok, Page} = application:get_env(?APP_NAME, oz_login_page),
-    % Page is in format '/page_name.html'
-    str_utils:format_bin("https://~s~s", [get_oz_domain(), Page]).
+    get_oz_url(op_worker:get_env(oz_login_page)).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the URL to OZ logout page.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_oz_logout_page() -> binary().
 get_oz_logout_page() ->
-    {ok, Page} = application:get_env(?APP_NAME, oz_logout_page),
-    % Page is in format '/page_name.html'
-    str_utils:format_bin("https://~s~s", [get_oz_domain(), Page]).
+    get_oz_url(op_worker:get_env(oz_logout_page)).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the URL to OZ logout page.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_oz_providers_page() -> binary().
 get_oz_providers_page() ->
-    {ok, Page} = application:get_env(?APP_NAME, oz_providers_page),
-    % Page is in format '/page_name.html'
-    str_utils:format_bin("https://~s~s", [get_oz_domain(), Page]).
+    get_oz_url(op_worker:get_env(oz_providers_page)).
 
 
 %%--------------------------------------------------------------------
@@ -264,8 +187,8 @@ get_oz_providers_page() ->
 -spec set_up_service_in_onezone() -> ok.
 set_up_service_in_onezone() ->
     ?info("Setting up Oneprovider worker service in Onezone"),
-    Release = get_version(),
-    Build = get_build(),
+    Release = op_worker:get_release_version(),
+    Build = op_worker:get_build_version(),
     {ok, GuiHash} = gui:package_hash(?GUI_PACKAGE_PATH),
 
     case cluster_logic:update_version_info(Release, Build, GuiHash) of

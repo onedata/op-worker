@@ -87,8 +87,12 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_expect(Nodes, provider_logic, update_subdomain_delegation_ips, fun() ->
         ok
     end),
-    ok = test_utils:mock_expect(Nodes, provider_logic, assert_zone_compatibility, fun() ->
-        ok
+    % mock Onezone version and compatibility registry to be the same as provider's
+    ok = test_utils:mock_expect(Nodes, provider_logic, fetch_service_configuration, fun(onezone) ->
+        {ok, #{
+            <<"version">> => op_worker:get_release_version(),
+            <<"compatibilityRegistryRevision">> => element(2, {ok, _} = compatibility:peek_current_registry_revision())
+        }}
     end),
     ok = test_utils:mock_expect(Nodes, provider_logic, has_eff_user, fun(UserId) ->
         lists:member(UserId, [?USER_1, ?USER_2, ?USER_3, ?USER_INCREASING_REV])
@@ -377,7 +381,7 @@ mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, #auth
             none;
         {ok, Description} ->
             case is_binary(Description) of
-                true -> ok; 
+                true -> ok;
                 false -> bad
             end
     end,

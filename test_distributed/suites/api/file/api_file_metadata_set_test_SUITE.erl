@@ -172,10 +172,10 @@ set_file_json_metadata_test(Config) ->
                 <<"filter_type">> => [<<"keypath">>],
                 <<"filter">> => [
                     <<"[1]">>,                  % Test creating placeholder array for nonexistent
-                                                % previously json
+                    % previously json
                     <<"[1].attr1.[1]">>,        % Test setting attr in existing array
                     <<"[1].attr1.[2].attr22">>, % Test error when trying to set subjson to binary
-                                                % (<<"val">> in ExampleJson)
+                    % (<<"val">> in ExampleJson)
                     <<"[1].attr1.[5]">>,        % Test setting attr beyond existing array
                     <<"[1].attr2.[2]">>         % Test setting attr in nonexistent array
                 ]
@@ -452,7 +452,7 @@ set_file_xattrs_test(Config) ->
             node = TestNode,
             client = Client,
             data = #{<<"metadata">> := Xattrs
-        }}) ->
+            }}) ->
             case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
                 {?USER(UserId), true} when UserId /= User2Id andalso UserId /= User3Id ->
                     % Only owner (?USER_IN_BOTH_SPACES) can set acl in posix mode
@@ -765,9 +765,10 @@ build_set_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    oct_background:init_per_suite(Config, #onenv_test_config{envs = [
-        {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
-    ]}).
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "api_tests",
+        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+    }).
 
 
 end_per_suite(_Config) ->

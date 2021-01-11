@@ -130,13 +130,6 @@
     data_spec = undefined :: undefined | onenv_api_test_runner:data_spec()
 }).
 
--record(onenv_test_config, {
-    % name of yaml file in test_distributed/onenv_scenarios
-    onenv_scenario = "api_tests" :: binary(),
-    envs :: [{Service :: atom(), Application :: atom(), Env :: [term()]}],
-    posthook = fun(Config) -> Config end :: fun((api_test_runner:config()) -> api_test_runner:config())
-}).
-
 -define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
 
 -define(SPACE_1, <<"space1">>).

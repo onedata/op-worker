@@ -18,6 +18,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -export([gather_configuration/0]).
 
@@ -56,10 +57,11 @@ gather_configuration() ->
         undefined -> undefined;
         _ -> oneprovider:get_oz_domain()
     end,
-    Version = oneprovider:get_version(),
-    {ok, CompOzVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONEZONE),
-    {ok, CompOpVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONEPROVIDER),
-    {ok, CompOcVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONECLIENT),
+    Version = op_worker:get_release_version(),
+    CompatibilityRegistryRevision = query_compatibility_registry(peek_current_registry_revision, []),
+    CompOzVersions = query_compatibility_registry(get_compatible_versions, [?ONEPROVIDER, Version, ?ONEZONE]),
+    CompOpVersions = query_compatibility_registry(get_compatible_versions, [?ONEPROVIDER, Version, ?ONEPROVIDER]),
+    CompOcVersions = query_compatibility_registry(get_compatible_versions, [?ONEPROVIDER, Version, ?ONECLIENT]),
 
     #{
         <<"providerId">> => utils:undefined_to_null(ProviderId),
@@ -67,8 +69,9 @@ gather_configuration() ->
         <<"domain">> => utils:undefined_to_null(Domain),
         <<"onezoneDomain">> => utils:undefined_to_null(OnezoneDomain),
         <<"version">> => Version,
-        <<"build">> => oneprovider:get_build(),
+        <<"build">> => op_worker:get_build_version(),
         <<"rtransferPort">> => ?RTRANSFER_PORT,
+        <<"compatibilityRegistryRevision">> => CompatibilityRegistryRevision,
         <<"compatibleOnezoneVersions">> => CompOzVersions,
         <<"compatibleOneproviderVersions">> => CompOpVersions,
         <<"compatibleOneclientVersions">> => CompOcVersions
@@ -205,3 +208,18 @@ update(_) ->
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec query_compatibility_registry(Fun :: atom(), Args :: [term()]) -> term().
+query_compatibility_registry(Fun, Args) ->
+    case apply(compatibility, Fun, Args) of
+        {ok, SuccessfulResult} ->
+            SuccessfulResult;
+        {error, _} = Error->
+            ?debug("Error querying registry - ~w:~w(~p) -> ~p", [compatibility, Fun, Args, Error]),
+            <<"unknown">>
+    end.

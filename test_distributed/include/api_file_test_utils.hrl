@@ -18,6 +18,7 @@
 -include("api_test_runner.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 
 -define(CLIENT_SPEC_FOR_SPACE_KRK, #client_spec{
