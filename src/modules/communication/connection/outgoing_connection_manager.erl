@@ -54,7 +54,7 @@
 -define(MAX_RENEWAL_INTERVAL, 180000).  % 3 minutes
 
 % how often logs appear when waiting for peer provider connection
--define(CONNECTION_AWAIT_LOG_INTERVAL, 21600).  % 6 hours
+-define(CONNECTION_AWAIT_LOG_INTERVAL_SEC, 21600).  % 6 hours
 
 -define(RENEW_CONNECTIONS_REQ, renew_connections).
 -define(SUCCESSFUL_HANDSHAKE, handshake_succeeded).
@@ -282,7 +282,7 @@ renew_connections(#state{
             provider_logic:to_printable(PeerId), Type, Reason,
             Interval div 1000
         ]),
-        utils:throttle({?MODULE, SessionId}, ?CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
+        utils:throttle({?MODULE, SessionId}, ?CONNECTION_AWAIT_LOG_INTERVAL_SEC, fun() ->
             log_error(State, Type, Reason)
         end),
         schedule_next_renewal(State)
@@ -347,10 +347,13 @@ schedule_next_renewal(#state{
     renewal_interval = Interval
 } = State) ->
     TimerRef = erlang:send_after(Interval, self(), ?RENEW_CONNECTIONS_REQ),
-    NextRenewalInterval = min(
-        ?MAX_RENEWAL_INTERVAL,
-        round(Interval * ?RENEWAL_INTERVAL_BACKOFF_RATE)
-    ),
+    NextRenewalInterval = case Interval of
+        ?MAX_RENEWAL_INTERVAL ->
+            round(Interval * ?RENEWAL_INTERVAL_BACKOFF_RATE);
+        _ ->
+            min(round(Interval * ?RENEWAL_INTERVAL_BACKOFF_RATE),
+                ?MAX_RENEWAL_INTERVAL)
+    end,
     State#state{
         renewal_timer = TimerRef,
         renewal_interval = NextRenewalInterval

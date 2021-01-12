@@ -17,6 +17,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 
 -record(client_spec, {
