@@ -20,8 +20,10 @@
 -author("Lukasz Opiola").
 
 -include("graph_sync/provider_graph_sync.hrl").
--include_lib("ctool/include/logging.hrl").
+-include("http/gui_paths.hrl").
+-include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([setup_internal_service/0]).
@@ -38,6 +40,8 @@
 -define(REQUIRE_CLOCK_SYNC_FOR_CONNECTION, application:get_env(
     ?APP_NAME, graph_sync_require_clock_sync_for_connection, true
 )).
+
+-define(THROTTLE_LOG(Log), utils:throttle(?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() -> Log end)).
 
 %%%===================================================================
 %%% API
@@ -78,25 +82,19 @@ is_connected() ->
 %%--------------------------------------------------------------------
 -spec force_start_connection() -> boolean().
 force_start_connection() ->
-    case {oneprovider:is_registered(), is_clock_sync_satisfied(), is_connected()} of
-        {false, _, _} ->
-            ?warning("Ignoring attempt to force start Onezone connection - Oneprovider is not registered."),
+    case {oneprovider:is_registered(), is_connected()} of
+        {false, _} ->
+            ?warning("Ignoring attempt to force start Onezone connection - Oneprovider is not registered"),
             false;
-        {true, false, _} ->
-            ?warning(
-                "Ignoring attempt to force start Onezone connection - the clock has not been yet "
-                "synchronized by Onepanel (see op_panel logs for details)."
-            ),
-            false;
-        {true, true, true} ->
-            ?info("Ignoring attempt to force start Onezone connection - already started."),
+        {true, true} ->
+            ?info("Ignoring attempt to force start Onezone connection - already started"),
             true;
-        {true, true, false} ->
+        {true, false} ->
             ResponsibleNode = responsible_node(),
             case node() of
                 ResponsibleNode ->
                     ?info("Attempting to start Onezone connection (forced)..."),
-                    case start_gs_client_worker() of
+                    case try_to_start_connection() of
                         ok ->
                             internal_services_manager:reschedule_healthcheck(
                                 ?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME,
@@ -171,27 +169,18 @@ takeover_service() ->
 
 -spec healthcheck(time:millis()) -> {ok, time:millis()}.
 healthcheck(LastInterval) ->
-    case {oneprovider:is_registered(), is_clock_sync_satisfied(), is_connected()} of
-        {false, _, _} ->
-            ?debug("Skipping Onezone connection as the provider is not registered."),
+    case {oneprovider:is_registered(), is_connected()} of
+        {false, _} ->
+            ?debug("Skipping Onezone connection as the provider is not registered"),
             {ok, calculate_backoff(LastInterval)};
-        {true, false, _} ->
-            ?debug("Deferring Onezone connection as the clock has not been yet synchronized with Onepanel"),
-            utils:throttle(?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
-                ?info(
-                    "Deferring Onezone connection as the clock has not been yet "
-                    "synchronized with Onepanel (see op_panel logs for details)."
-                )
-            end),
-            {ok, calculate_backoff(LastInterval)};
-        {true, true, true} ->
+        {true, true} ->
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
-        {true, true, false} ->
-            case start_gs_client_worker() of
+        {true, false} ->
+            case try_to_start_connection() of
                 ok ->
                     {ok, ?GS_RECONNECT_BASE_INTERVAL};
                 error ->
-                    % specific errors are logged in gs_client_worker
+                    % specific errors are already logged
                     {ok, calculate_backoff(LastInterval)}
             end
     end.
@@ -207,26 +196,30 @@ calculate_backoff(LastInterval) ->
 
 
 %% @private
--spec is_clock_sync_satisfied() -> boolean().
-is_clock_sync_satisfied() ->
-    case global_clock:is_synchronized() of
-        true ->
-            true;
-        false ->
-            case ?REQUIRE_CLOCK_SYNC_FOR_CONNECTION of
-                false ->
-                    ?notice("Ignoring unsynchronized clock for Onezone GS connection (forced in config)"),
-                    true;
-                _ ->
-                    false
-            end
-    end.
-
-
-%% @private
 -spec responsible_node() -> node().
 responsible_node() ->
     internal_services_manager:get_processing_node(?GS_CHANNEL_SERVICE_NAME).
+
+
+%% @private
+-spec try_to_start_connection() -> ok | error.
+try_to_start_connection() ->
+    case check_compatibility_with_onezone() of
+        false ->
+            error;
+        true ->
+            case is_clock_sync_satisfied() of
+                true ->
+                    start_gs_client_worker();
+                false ->
+                    ?debug("Deferring Onezone connection as the clock has not been yet synchronized with Onepanel"),
+                    ?THROTTLE_LOG(?info(
+                        "Deferring Onezone connection as the clock has not been yet "
+                        "synchronized with Onepanel (see op_panel logs for details)"
+                    )),
+                    error
+            end
+    end.
 
 
 %% @private
@@ -259,3 +252,94 @@ run_on_connect_to_oz_procedures() ->
             error
     end.
 
+
+%% @private
+-spec is_clock_sync_satisfied() -> boolean().
+is_clock_sync_satisfied() ->
+    case global_clock:is_synchronized() of
+        true ->
+            true;
+        false ->
+            case ?REQUIRE_CLOCK_SYNC_FOR_CONNECTION of
+                false ->
+                    ?THROTTLE_LOG(?notice(
+                        "Ignoring unsynchronized clock for Onezone GS connection (forced in config)"
+                    )),
+                    true;
+                _ ->
+                    false
+            end
+    end.
+
+
+%% @private
+-spec check_compatibility_with_onezone() -> boolean().
+check_compatibility_with_onezone() ->
+    case provider_logic:fetch_service_configuration(onezone) of
+        {ok, OzConfiguration} ->
+            check_for_compatibility_registry_updates(OzConfiguration),
+            OzVersion = maps:get(<<"version">>, OzConfiguration, <<"unknown">>),
+            OpVersion = op_worker:get_release_version(),
+            case compatibility:check_products_compatibility(?ONEPROVIDER, OpVersion, ?ONEZONE, OzVersion) of
+                true ->
+                    true;
+                {false, CompOzVersions} ->
+                    ?THROTTLE_LOG(?critical(
+                        "This Oneprovider is not compatible with its Onezone service.~n"
+                        "Oneprovider version: ~s, supports zones: ~s~n"
+                        "Onezone version: ~s~n"
+                        "The service will not be operational until the problem is resolved "
+                        "(may require Oneprovider / Onezone upgrade or compatibility registry refresh).", [
+                            OpVersion, str_utils:join_binary(CompOzVersions, <<", ">>), OzVersion
+                        ])),
+                    false;
+                {error, Error} ->
+                    ?THROTTLE_LOG(?critical(
+                        "Cannot check Oneprovider's compatibility due to ~p~n."
+                        "The service will not be operational until the problem is resolved.", [
+                            {error, Error}
+                        ])),
+                    false
+            end;
+        {error, {bad_response, Code, ResponseBody}} ->
+            ?THROTTLE_LOG(?critical(
+                "Failure while checking Onezone version. "
+                "The service will not be operational until the problem is resolved.~n"
+                "HTTP response: ~B ~s", [
+                    Code, ResponseBody
+                ])),
+            false;
+        {error, _} = Error ->
+            ?THROTTLE_LOG(?warning(
+                "Onezone is not reachable, is the service online (~ts)? "
+                "Last error was: ~w. Retrying as long as it takes...", [oneprovider:get_oz_domain(), Error]
+            )),
+            false
+    end.
+
+
+%% @private
+-spec check_for_compatibility_registry_updates(json_utils:json_term()) -> ok.
+check_for_compatibility_registry_updates(OzConfiguration) ->
+    case maps:get(<<"compatibilityRegistryRevision">>, OzConfiguration, <<"unknown">>) of
+        RemoteRevision when is_integer(RemoteRevision) ->
+            LocalRevision = case compatibility:peek_current_registry_revision() of
+                {ok, R} -> R;
+                _ -> 0
+            end,
+            case RemoteRevision > LocalRevision of
+                true ->
+                    compatibility:check_for_updates([
+                        oneprovider:get_oz_url(?ZONE_COMPATIBILITY_REGISTRY_PATH)
+                    ]);
+                false ->
+                    ?debug(
+                        "Local compatibility registry (v. ~s) is not older than Onezone's (v. ~s)",
+                        [LocalRevision, RemoteRevision]
+                    )
+            end;
+        Other ->
+            ?THROTTLE_LOG(?warning(
+                "Cannot check Onezone's compatibility registry revision - got '~w'", [Other]
+            ))
+    end.

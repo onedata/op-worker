@@ -148,9 +148,9 @@ build_create_share_validate_rest_call_result_fun(MemRef, Providers, FileType, Sp
 
         api_test_memory:set(MemRef, shares, [ShareId | api_test_memory:get(MemRef, shares, [])]),
 
-        ExpLocation = list_to_binary(rpc:call(Node, oneprovider, get_rest_endpoint, [
+        ExpLocation = rpc:call(Node, oneprovider, get_rest_endpoint, [
             string:trim(filename:join([<<"/">>, <<"shares">>, ShareId]), leading, [$/])
-        ])),
+        ]),
         ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers)),
 
         verify_share_doc(

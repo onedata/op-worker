@@ -263,7 +263,7 @@ connect_via_token(Node, SocketOpts, Nonce) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
 connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
     % given
-    OpVersion = rpc:call(Node, oneprovider, get_version, []),
+    OpVersion = rpc:call(Node, op_worker, get_release_version, []),
     {ok, [Version | _]} = rpc:call(
         Node, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),

@@ -330,7 +330,7 @@ handle_cast(?OZ_CONNECTION_TERMINATED_MSG, State) ->
     {noreply, schedule_cache_purge(State)};
 
 handle_cast(?MONITOR_TOKEN_REQ(TokenCredentials, TokenRef), State) ->
-    ?debug("Received request to monitor token (~s)", [TokenRef]),
+    ?debug("Received request to monitor token ~p", [TokenRef]),
 
     case subscribe_for_token_changes(TokenRef) of
         {ok, IsTokenRevoked} ->

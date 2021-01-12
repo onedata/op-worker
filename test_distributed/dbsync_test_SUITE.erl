@@ -395,10 +395,6 @@ init_per_testcase(_Case, Config) ->
         Workers, <<"p1">>, <<"access-token">>, <<"identity-token">>
     ),
 
-    test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
-        ok
-    end),
-
     test_utils:mock_expect(Worker, dbsync_utils, get_spaces, fun() ->
         [<<"s1">>, <<"s2">>, <<"s3">>]
     end),
