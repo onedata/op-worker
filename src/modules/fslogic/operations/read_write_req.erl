@@ -132,7 +132,10 @@ create_handle(UserCtx, FileCtx, HandleId, Operation) ->
     try
         create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file)
     catch
-        _:?EACCES ->
+        _:Reason
+            when Reason =:= ?EACCES
+            orelse Reason =:= ?EROFS
+        ->
             case file_handles:get_creation_handle(file_ctx:get_uuid_const(FileCtx)) of
                 % opening file with handle received from creation procedure
                 % (should open even if the user does not have permissions)

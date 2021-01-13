@@ -404,8 +404,6 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, gs_client:client_ref(), gs_protocol:handshake_resp()} | errors:error().
 start_gs_connection() ->
     try
-        provider_logic:assert_zone_compatibility(),
-
         Port = ?GS_CHANNEL_PORT,
         Address = str_utils:format("wss://~s:~b~s", [oneprovider:get_oz_domain(), Port, ?GS_CHANNEL_PATH]),
         CaCerts = oneprovider:trusted_ca_certs(),

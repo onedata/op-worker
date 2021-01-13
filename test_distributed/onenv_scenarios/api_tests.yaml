@@ -76,7 +76,7 @@ users:
 
 
 spaces:
-  - name: space1  # space used mainly for testing ?ERROR_SPACE_NOT_SUPPORTED_BY
+  - name: space_krk  # space used mainly for testing ?ERROR_SPACE_NOT_SUPPORTED_BY
     user: *user1
     users:
       - user: *user3
@@ -85,7 +85,7 @@ spaces:
       - provider: "oneprovider-1"
         storage_name: "posix"
         size: '1073741824'
-  - name: space2  # space that should be used for testing anything but ?ERROR_SPACE_NOT_SUPPORTED_BY
+  - name: space_krk_par  # space that should be used for testing anything but ?ERROR_SPACE_NOT_SUPPORTED_BY
     user: *user2
     users:
       - user: *user3

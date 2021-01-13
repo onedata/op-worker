@@ -58,8 +58,8 @@
     remote_recursive_rm_should_not_trigger_removal_of_files_on_local_storage/1,
     remote_truncate_should_not_trigger_truncate_on_storage/1,
     replication_on_the_fly_should_fail/1,
-    remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged/1,
-    remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged2/1,
+    remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged/1,
+    remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged2/1,
     replication_job_should_fail/1,
     eviction_job_should_succeed/1,
     migration_job_should_fail/1]).
@@ -106,8 +106,8 @@ all() -> [
     remote_recursive_rm_should_not_trigger_removal_of_files_on_local_storage,
     remote_truncate_should_not_trigger_truncate_on_storage,
     replication_on_the_fly_should_fail,
-    remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged,
-    remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged2,
+    remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged,
+    remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged2,
     replication_job_should_fail,
     eviction_job_should_succeed,
     migration_job_should_fail
@@ -523,7 +523,7 @@ replication_on_the_fly_should_fail(Config) ->
     ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
     ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, {guid, Guid}, read)).
 
-remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged(Config) ->
+remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(W1, Config),
     SessId2 = ?SESS_ID(W2, Config),
@@ -546,7 +546,7 @@ remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged(Conf
     ?assertMatch({ok, #file_attr{size = TestDataSize2}}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, sd_test_utils:read_file(W1, SDFileHandle, 0, TestDataSize)).
 
-remote_change_should_invalidate_local_fail_but_leave_storage_file_unchanged2(Config) ->
+remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged2(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(W1, Config),
     SessId2 = ?SESS_ID(W2, Config),
@@ -672,11 +672,6 @@ sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
 
-register_file(Worker, SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
-    rpc:call(Worker, file_registration, register,
-        [SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec]
-    ).
-
 create_file_on_storage(Worker, StorageFileId, TestData) ->
     % create file on ?RW_STORAGE_ID
     SDFileHandle = sd_test_utils:new_handle(Worker, ?SPACE_ID, StorageFileId, ?RW_STORAGE_ID),
@@ -688,10 +683,20 @@ create_file_on_storage_and_register(Worker, SessionId, SpaceId, FileRelativePath
     StorageFileId = filepath_utils:join([<<"/">>, FileRelativePath]),
     ensure_parent_dirs_created_on_storage(Worker, SpaceId, StorageFileId),
     SDFileHandle = create_file_on_storage(Worker, StorageFileId, TestData),
-    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
-    {ok, Guid} = register_file(Worker, SessionId, SpaceId, FileRelativePath, StorageId, StorageFileId,
-        #{<<"size">> => byte_size(TestData)}),
+    {ok, Guid} = register_file(Worker, SessionId, SpaceId, FileRelativePath, byte_size(TestData)),
     {Guid, SDFileHandle}.
+
+register_file(Worker, SessionId, SpaceId, FileRelativePath, Size) ->
+    StorageFileId = filepath_utils:join([<<"/">>, FileRelativePath]),
+    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
+    register_file(Worker, SessionId, SpaceId, FileRelativePath, StorageId, StorageFileId, #{<<"size">> => Size}).
+
+
+register_file(Worker, SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
+    rpc:call(Worker, file_registration, register,
+        [SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec]
+    ).
+
 
 ensure_parent_dirs_created_on_storage(Worker, SpaceId, StorageFileId) ->
     {_BaseName, ParentStorageFileId} = filepath_utils:basename_and_parent_dir(StorageFileId),

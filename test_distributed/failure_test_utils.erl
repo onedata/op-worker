@@ -30,12 +30,12 @@ kill_nodes(Config, [Node | Nodes]) ->
     kill_nodes(Config, Node),
     kill_nodes(Config, Nodes);
 kill_nodes(Config, Node) ->
-    ok = onenv_test_utils:kill_node(Config, Node),
+    ok = oct_environment:kill_node(Config, Node),
     ?assertEqual({badrpc, nodedown}, rpc:call(Node, oneprovider, get_id, []), 10).
 
 restart_nodes(Config, Nodes) when is_list(Nodes) ->
     lists:foreach(fun(Node) ->
-        ok = onenv_test_utils:start_node(Config, Node)
+        ok = oct_environment:start_node(Config, Node)
     end, Nodes),
 
     lists:foreach(fun(Node) ->
@@ -45,7 +45,8 @@ restart_nodes(Config, Nodes) when is_list(Nodes) ->
     end, Nodes),
 
     UpdatedConfig = provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
-    lfm_proxy:init(UpdatedConfig, false, Nodes);
+    lfm_proxy:init(UpdatedConfig, false, Nodes),
+    oct_background:update_background_config(UpdatedConfig);
 restart_nodes(Config, Node) ->
     restart_nodes(Config, [Node]).
 

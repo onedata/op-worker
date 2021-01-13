@@ -56,7 +56,7 @@
 -export([get_info/1, get_stats/3, is_auto_imported/1]).
 -export([get_manual_example/1]).
 -export([clean_up/1]).
--export([assert_manual_import_mode/1]).
+-export([assert_imported_storage/1]).
 
 %% migration API
 -export([migrate_space_strategies/0, migrate_storage_sync_monitoring/0]).
@@ -181,11 +181,9 @@ get_stats(SpaceId, Type, Window) ->
 -spec get_manual_example(od_space:id()) -> {ok, binary()}.
 get_manual_example(SpaceId) ->
     ?RUN_AND_HANDLE_EXCEPTION(fun() ->
-        assert_manual_import_mode(SpaceId),
-
         {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+        assert_imported_storage(StorageId),
         Domain = oneprovider:get_domain(),
-
         {ok, str_utils:format_bin(
             "curl -X POST -H \"X-Auth-Token:$TOKEN\" -H \"content-type:application/json\" \ "
             "-d '{\"storageId\":\"~s\", \"spaceId\":\"~s\", \"storageFileId\":\"$STORAGE_FILE_ID\", \"destinationPath\":\"'$DESTINATION_PATH'\"}' \ "
@@ -200,6 +198,16 @@ is_auto_imported(SpaceId) ->
     case get_configuration(SpaceId) of
         {ok, Config} -> maps:get(mode, Config) =:= ?AUTO_IMPORT;
         {error, not_found} -> false
+    end.
+
+
+-spec assert_imported_storage(storage:id()) -> ok.
+assert_imported_storage(StorageId) ->
+    case storage:is_imported(StorageId) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_REQUIRES_IMPORTED_STORAGE(StorageId))
     end.
 
 %%%===================================================================
@@ -331,28 +339,9 @@ assert_auto_import_mode(SpaceId) ->
     end.
 
 
--spec assert_manual_import_mode(od_space:id()) -> ok.
-assert_manual_import_mode(SpaceId) ->
-    assert_space_supported_with_imported_storage(SpaceId),
-    case storage_import:get_mode(SpaceId) of
-        {ok, ?MANUAL_IMPORT} ->
-            ok;
-        {ok, ?AUTO_IMPORT} ->
-            throw(?ERROR_REQUIRES_MANUAL_STORAGE_IMPORT_MODE)
-    end.
-
-
 -spec assert_space_supported_with_imported_storage(od_space:id()) -> ok.
 assert_space_supported_with_imported_storage(SpaceId) ->
     case space_logic:get_local_storage_id(SpaceId) of
         {ok, StorageId} -> assert_imported_storage(StorageId);
         Error -> throw(Error)
-    end.
-
-
--spec assert_imported_storage(storage:id()) -> ok.
-assert_imported_storage(StorageId) ->
-    case storage:is_imported(StorageId) of
-        true -> ok;
-        false -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(StorageId))
     end.

@@ -94,15 +94,15 @@ get_shared_file_rdf_metadata_without_rdf_set_test(Config) ->
 %% @private
 get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
     MetadataType = <<"rdf">>,
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
 
     GetExpCallResultFun = case SetRdfPolicy of
@@ -120,7 +120,7 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
             ),
             {ShId, ?CLIENT_SPEC_FOR_SHARES};
         normal_mode ->
-            {undefined, ?CLIENT_SPEC_FOR_SPACE_2}
+            {undefined, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR}
     end,
     file_test_utils:await_sync(P2Node, FileGuid),
 
@@ -139,13 +139,13 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
 
 
 get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
-    P2Id = api_test_env:get_provider_id(p2, Config),
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    P2Id = oct_background:get_provider_id(paris),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
 
-    SessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space1(Config),
+    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     lfm_proxy:set_metadata(P1Node, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
@@ -155,7 +155,7 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
         FileType, FilePath, FileGuid, undefined,
         build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
         build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
-        [P2Node], ?CLIENT_SPEC_FOR_SPACE_1, _DataSpec = undefined, _QsParams = [],
+        [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, _DataSpec = undefined, _QsParams = [],
         _RandomlySelectScenario = false,
         Config
     ).
@@ -186,11 +186,11 @@ get_shared_file_json_metadata_without_json_set_test(Config) ->
 get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     {FileLayer5Path, FileLayer5Guid, ShareId} = create_get_json_metadata_tests_env(
-        FileType, SetDirectJsonPolicy, TestMode, Config
+        FileType, SetDirectJsonPolicy, TestMode
     ),
 
     GetExpCallResultFun = create_get_json_call_exp_result_fun(
-        ShareId, SetDirectJsonPolicy, Config
+        ShareId, SetDirectJsonPolicy
     ),
 
     ClientSpec = case TestMode of
@@ -202,7 +202,7 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
                     user2, % space owner - doesn't need any perms
                     user3, % files owner
                     user4  % space member (depending on params combination may
-                           % be forbidden but in general is permitted)
+                    % be forbidden but in general is permitted)
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1]
@@ -266,16 +266,16 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
 %%                          |-- FileLayer5 (posix: 777) - ?JSON_METADATA_5
 %% @end
 %%--------------------------------------------------------------------
-create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode, Config) ->
+create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode) ->
     MetadataType = <<"json">>,
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Nodes = [P1Node, P2Node],
 
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
-    TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    TopDirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath, 8#777),
     api_test_utils:set_and_sync_metadata(Nodes, TopDirGuid, MetadataType, ?JSON_METADATA_1),
 
@@ -315,11 +315,11 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode, Config) ->
 %% @doc
 %% Creates function returning expected result from get json metadata
 %% rest/gs call taking into account env created by
-%% create_get_json_metadata_tests_env/4.
+%% create_get_json_metadata_tests_env/3.
 %% @end
 %%--------------------------------------------------------------------
-create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy, Config) ->
-    User4Auth = ?USER(api_test_env:get_user_id(user4, Config)),
+create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy) ->
+    User4Auth = ?USER(oct_background:get_user_id(user4)),
 
     fun(#api_test_ctx{client = Client, data = Data}) ->
         try
@@ -396,13 +396,13 @@ create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy, Config) ->
 
 
 get_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
-    P2Id = api_test_env:get_provider_id(p2, Config),
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    P2Id = oct_background:get_provider_id(paris),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
 
-    SessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space1(Config),
+    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     lfm_proxy:set_metadata(P1Node, SessIdP1, {guid, FileGuid}, json, ?JSON_METADATA_2, []),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
@@ -412,7 +412,7 @@ get_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
         FileType, FilePath, FileGuid, undefined,
         build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
         build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
-        [P2Node], ?CLIENT_SPEC_FOR_SPACE_1, _DataSpec = undefined, _QsParams = [],
+        [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, _DataSpec = undefined, _QsParams = [],
         _RandomlySelectScenario = false,
         Config
     ).
@@ -444,11 +444,11 @@ get_shared_file_xattrs_without_xattrs_set_test(Config) ->
 get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     {FileLayer3Path, FileLayer3Guid, ShareId} = create_get_xattrs_tests_env(
-        FileType, SetDirectXattrsPolicy, TestMode, Config
+        FileType, SetDirectXattrsPolicy, TestMode
     ),
     NotSetXattrKey = <<"not_set_xattr">>,
     GetExpCallResultFun = create_get_xattrs_call_exp_result_fun(
-        ShareId, SetDirectXattrsPolicy, NotSetXattrKey, Config
+        ShareId, SetDirectXattrsPolicy, NotSetXattrKey
     ),
 
     ClientSpec = case TestMode of
@@ -460,7 +460,7 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
                     user2, % space owner - doesn't need any perms
                     user3, % files owner
                     user4  % space member, (depending on params combination may
-                           % be forbidden but in general is permitted)
+                    % be forbidden but in general is permitted)
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1]
@@ -517,16 +517,16 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
 %%            |-- FileLayer3 (posix: 777) - ?ALL_METADATA_SET_2
 %% @end
 %%--------------------------------------------------------------------
-create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode, Config) ->
+create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode) ->
     MetadataType = <<"xattrs">>,
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Nodes = [P1Node, P2Node],
 
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
-    TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    TopDirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath, 8#777),
     api_test_utils:set_and_sync_metadata(Nodes, TopDirGuid, MetadataType, ?ALL_METADATA_SET_1),
 
@@ -559,11 +559,11 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode, Config) ->
 %% @doc
 %% Creates function returning expected result from get xattrs
 %% rest/gs call taking into account env created by
-%% create_get_xattrs_tests_env/4.
+%% create_get_xattrs_tests_env/3.
 %% @end
 %%--------------------------------------------------------------------
-create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXattrKey, Config) ->
-    User4Auth = ?USER(api_test_env:get_user_id(user4, Config)),
+create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXattrKey) ->
+    User4Auth = ?USER(oct_background:get_user_id(user4)),
 
     fun(#api_test_ctx{client = Client, data = Data}) ->
         try
@@ -710,13 +710,13 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXa
 
 
 get_file_xattrs_on_provider_not_supporting_space_test(Config) ->
-    P2Id = api_test_env:get_provider_id(p2, Config),
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    P2Id = oct_background:get_provider_id(paris),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
 
-    SessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
+    SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space1(Config),
+    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     ?assertMatch(ok, lfm_proxy:set_xattr(P1Node, SessIdP1, {guid, FileGuid}, ?XATTR_1)),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
@@ -726,7 +726,7 @@ get_file_xattrs_on_provider_not_supporting_space_test(Config) ->
         FileType, FilePath, FileGuid, undefined,
         build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
         build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
-        [P2Node], ?CLIENT_SPEC_FOR_SPACE_1, _DataSpec = undefined, _QsParams = [],
+        [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, _DataSpec = undefined, _QsParams = [],
         _RandomlySelectScenario = false,
         Config
     ).
@@ -995,9 +995,10 @@ build_get_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
-        {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
-    ]}).
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "api_tests",
+        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+    }).
 
 
 end_per_suite(_Config) ->

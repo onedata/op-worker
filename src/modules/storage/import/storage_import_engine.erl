@@ -93,6 +93,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
+    IsManualImport = maps:get(manual, Info, false),
     case file_ctx:is_root_dir_const(ParentCtx) of
         true ->
             check_file_meta_and_maybe_sync(StorageFileCtx, SpaceCtx, Info, true);
@@ -119,7 +120,25 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                             % deleted from the system and if links (and file) were deleted
                             % before we checked the links.
                             % maybe_import_file/2 will perform the check.
-                            maybe_import_file(StorageFileCtx, Info);
+                            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+                            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+                            case IsManualImport of
+                                true ->
+                                    maybe_import_file(StorageFileCtx, Info);
+                                false ->
+                                    case storage_sync_info:get(StorageFileId, SpaceId) of
+                                        {error, not_found} ->
+                                            maybe_import_file(StorageFileCtx, Info);
+                                        {ok, SSIDoc} ->
+                                            case storage_sync_info:get_guid(SSIDoc) of
+                                                undefined ->
+                                                    maybe_import_file(StorageFileCtx, Info);
+                                                Guid ->
+                                                    FileCtx = file_ctx:new_by_guid(Guid),
+                                                    check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info)
+                                            end
+                                    end
+                            end;
                         % It's impossible that deletion link is not found and HasSuffix == true,
                         % which is proved below:
                         %
@@ -354,7 +373,7 @@ check_file_location_and_maybe_sync(Job, FileCtx, Info) ->
 %% This function analyses file_location associated with passed FileCtx
 %% to determine whether the file can by synchronised, and if so whether
 %% it should be imported or updated.
-%% CheckType flag determines whether dir_location associated with
+%% StorageFileIsDir flag determines whether dir_location associated with
 %% given FileCtx has already been checked.
 %% If StorageFileIsDir == true dir_location has been checked and has not been found.
 %% else dir_location has not been checked yet.
@@ -637,8 +656,9 @@ create_location(FileUuid, StorageFileCtx, OwnerId) ->
     }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     case file_meta:type(Mode) of
         ?REGULAR_FILE_TYPE ->
+            Guid = file_id:pack_guid(FileUuid, SpaceId),
             StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx2),
-            storage_sync_info:update_mtime(StorageFileId, SpaceId, MTime, StatTimestamp),
+            storage_sync_info:update_mtime(StorageFileId, SpaceId, Guid, MTime, StatTimestamp),
             create_file_location(FileUuid, OwnerId, StorageFileCtx2);
         _ ->
             create_dir_location(FileUuid, StorageFileCtx2)
@@ -655,7 +675,8 @@ create_dir_location(FileUuid, StorageFileCtx) ->
         false ->
             {undefined, StorageFileCtx2}
     end,
-    ok = dir_location:mark_dir_synced_from_storage(FileUuid, SyncedGid),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx4),
+    ok = dir_location:mark_dir_synced_from_storage(FileUuid, StorageFileId, SyncedGid),
     {ok, StorageFileCtx4}.
 
 
@@ -1057,7 +1078,8 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
                     false
             end
     end,
-    storage_sync_info:update_mtime(StorageFileId, SpaceId, StMtime, NewLastStat),
+    Guid = file_ctx:get_guid_const(FileCtx4),
+    storage_sync_info:update_mtime(StorageFileId, SpaceId, Guid, StMtime, NewLastStat),
     {Result2, FileCtx4, StorageFileCtx2, ?FILE_LOCATION_ATTR_NAME}.
 
 -spec maybe_update_mode(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->

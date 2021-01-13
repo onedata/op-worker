@@ -355,7 +355,8 @@ emit_suffixes([], _) ->
 emit_suffixes(Files, {parent_guid, ParentGuid}) ->
     lists:foreach(fun({Uuid, ExtendedName}) ->
         try
-            Guid = fslogic_uuid:uuid_to_guid(Uuid),
+            {_, SpaceId} = file_id:unpack_guid(ParentGuid),
+            Guid = file_id:pack_guid(Uuid, SpaceId),
             FileCtx = file_ctx:new_by_guid(Guid),
 
             event:emit_to_filtered_subscribers(#file_renamed_event{top_entry = #file_renamed_entry{

@@ -23,12 +23,12 @@
 -export([
     build_rest_url/2,
 
-    create_shared_file_in_space1/1,
-    create_and_sync_shared_file_in_space2/2,
-    create_and_sync_shared_file_in_space2/3,
-    create_and_sync_shared_file_in_space2/4,
-    create_file_in_space2_with_additional_metadata/4,
-    create_file_in_space2_with_additional_metadata/5,
+    create_shared_file_in_space_krk/0,
+    create_and_sync_shared_file_in_space_krk_par/1,
+    create_and_sync_shared_file_in_space_krk_par/2,
+    create_and_sync_shared_file_in_space_krk_par/3,
+    create_file_in_space_krk_par_with_additional_metadata/3,
+    create_file_in_space_krk_par_with_additional_metadata/4,
 
     randomly_choose_file_type_for_test/0,
     randomly_choose_file_type_for_test/1,
@@ -78,55 +78,53 @@
 
 -spec build_rest_url(node(), [binary()]) -> binary().
 build_rest_url(Node, PathTokens) ->
-    list_to_binary(rpc:call(Node, oneprovider, get_rest_endpoint, [
+    rpc:call(Node, oneprovider, get_rest_endpoint, [
         string:trim(filename:join([<<"/">> | PathTokens]), leading, [$/])
-    ])).
+    ]).
 
 
--spec create_shared_file_in_space1(api_test_runner:config()) ->
+-spec create_shared_file_in_space_krk() ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
-create_shared_file_in_space1(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+create_shared_file_in_space_krk() ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
 
-    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
-    SpaceOwnerSessId = api_test_env:get_user_session_id(user1, p1, Config),
+    UserSessId = oct_background:get_user_session_id(user3, krakow),
+    SpaceOwnerSessId = oct_background:get_user_session_id(user1, krakow),
 
     FileType = randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
+    FilePath = filename:join(["/", ?SPACE_KRK, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessId, FilePath),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, {guid, FileGuid}, <<"share">>),
 
     {FileType, FilePath, FileGuid, ShareId}.
 
 
--spec create_and_sync_shared_file_in_space2(file_meta:mode(), api_test_runner:config()) ->
+-spec create_and_sync_shared_file_in_space_krk_par(file_meta:mode()) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
-create_and_sync_shared_file_in_space2(Mode, Config) ->
+create_and_sync_shared_file_in_space_krk_par(Mode) ->
     FileType = randomly_choose_file_type_for_test(),
-    create_and_sync_shared_file_in_space2(FileType, Mode, Config).
+    create_and_sync_shared_file_in_space_krk_par(FileType, Mode).
 
 
--spec create_and_sync_shared_file_in_space2(file_type(), file_meta:mode(), api_test_runner:config()) ->
+-spec create_and_sync_shared_file_in_space_krk_par(file_type(), file_meta:mode()) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
-create_and_sync_shared_file_in_space2(FileType, Mode, Config) ->
-    create_and_sync_shared_file_in_space2(FileType, ?RANDOM_FILE_NAME(), Mode, Config).
+create_and_sync_shared_file_in_space_krk_par(FileType, Mode) ->
+    create_and_sync_shared_file_in_space_krk_par(FileType, ?RANDOM_FILE_NAME(), Mode).
 
 
--spec create_and_sync_shared_file_in_space2(
+-spec create_and_sync_shared_file_in_space_krk_par(
     file_type(),
     file_meta:name(),
-    file_meta:mode(),
-    api_test_runner:config()
+    file_meta:mode()
 ) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
-create_and_sync_shared_file_in_space2(FileType, FileName, Mode, Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+create_and_sync_shared_file_in_space_krk_par(FileType, FileName, Mode) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    SpaceOwnerSessIdP1 = kv_utils:get([users, user2, sessions, krakow], node_cache:get(oct_mapping)),
+    UserSessIdP1 = kv_utils:get([users, user3, sessions, krakow], node_cache:get(oct_mapping)),
 
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-
-    FilePath = filename:join(["/", ?SPACE_2, FileName]),
+    FilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
@@ -135,33 +133,31 @@ create_and_sync_shared_file_in_space2(FileType, FileName, Mode, Config) ->
     {FileType, FilePath, FileGuid, ShareId}.
 
 
--spec create_file_in_space2_with_additional_metadata(
+-spec create_file_in_space_krk_par_with_additional_metadata(
     file_meta:path(),
     boolean(),
-    file_meta:name(),
-    api_test_runner:config()
+    file_meta:name()
 ) ->
     {file_type(), file_meta:path(), file_id:file_guid(), #file_details{}}.
-create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileName, Config) ->
+create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, FileName) ->
     FileType = randomly_choose_file_type_for_test(false),
-    create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName, Config).
+    create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName).
 
 
--spec create_file_in_space2_with_additional_metadata(
+-spec create_file_in_space_krk_par_with_additional_metadata(
     file_meta:path(),
     boolean(),
     file_type(),
-    file_meta:name(),
-    api_test_runner:config()
+    file_meta:name()
 ) ->
     {file_type(), file_meta:path(), file_id:file_guid(), #file_details{}}.
-create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName, Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Nodes = [P1Node, P2Node],
 
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
 
     FilePath = filename:join([ParentPath, FileName]),
 

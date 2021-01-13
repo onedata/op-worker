@@ -33,9 +33,10 @@
     incompatible_providers_should_not_connect/1,
     provider_should_reconnect_after_loss_of_connection/1,
     after_connection_timeout_session_is_terminated/1,
+    provider_logic_correctly_resolves_nodes_to_connect/1,
+    configuration_endpoint_is_served/1,
     deprecated_configuration_endpoint_is_served/1,
-    configuration_endpoints_give_same_results/1,
-    provider_logic_should_correctly_resolve_nodes_to_connect/1
+    broken_compatibility_file_causes_unknown_entries_in_configuration/1
 ]).
 
 all() ->
@@ -43,9 +44,10 @@ all() ->
         incompatible_providers_should_not_connect,
         provider_should_reconnect_after_loss_of_connection,
         after_connection_timeout_session_is_terminated,
+        provider_logic_correctly_resolves_nodes_to_connect,
+        configuration_endpoint_is_served,
         deprecated_configuration_endpoint_is_served,
-        configuration_endpoints_give_same_results,
-        provider_logic_should_correctly_resolve_nodes_to_connect
+        broken_compatibility_file_causes_unknown_entries_in_configuration
     ]).
 
 -define(ATTEMPTS, 90).
@@ -76,7 +78,7 @@ incompatible_providers_should_not_connect(Config) ->
     ?assertMatch(false, connection_exists(P1, P2)),
     ?assertMatch(false, connection_exists(P2, P1)),
 
-    test_utils:mock_unload(Nodes, oneprovider),
+    test_utils:mock_unload(Nodes, op_worker),
     ?assertMatch(true, connection_exists(P1, P2), ?ATTEMPTS),
     ?assertMatch(true, connection_exists(P2, P1), ?ATTEMPTS),
 
@@ -154,36 +156,7 @@ after_connection_timeout_session_is_terminated(Config) ->
     test_utils:mock_unload(Nodes, [session_connections]).
 
 
-deprecated_configuration_endpoint_is_served(Config) ->
-    Nodes = ?config(op_worker_nodes, Config),
-
-    lists:foreach(fun(Node) ->
-        ExpectedConfiguration = expected_configuration(Node),
-        URL = str_utils:format("https://~s/configuration/",
-            [maps:get(<<"domain">>, ExpectedConfiguration)]),
-        {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-            http_client:get(URL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
-        ?assertMatch(ExpectedConfiguration, json_utils:decode(Body))
-    end, Nodes).
-
-
-configuration_endpoints_give_same_results(Config) ->
-    Nodes = ?config(op_worker_nodes, Config),
-
-    lists:foreach(fun(Node) ->
-        {ok, Domain} = rpc:call(Node, provider_logic, get_domain, []),
-        OldURL = str_utils:format("https://~s/configuration", [Domain]),
-        NewURL = str_utils:format("https://~s/api/v3/oneprovider/configuration", [Domain]),
-
-        {_, _, _, OldBody} = ?assertMatch({ok, 200, _, _},
-            http_client:get(OldURL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
-        {_, _, _, NewBody} = ?assertMatch({ok, 200, _, _},
-            http_client:get(NewURL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
-        ?assertEqual(json_utils:decode(OldBody), json_utils:decode(NewBody))
-    end, Nodes).
-
-
-provider_logic_should_correctly_resolve_nodes_to_connect(Config) ->
+provider_logic_correctly_resolves_nodes_to_connect(Config) ->
     % There are 2 providers and 3 nodes:
     %   * P1 -> 1 node
     %   * P2 -> 2 nodes
@@ -197,8 +170,8 @@ provider_logic_should_correctly_resolve_nodes_to_connect(Config) ->
     P2 = initializer:domain_to_provider_id(?GET_DOMAIN(hd(Nodes2))),
     IPs1 = [node_ip(N) || N <- Nodes1],
     IPs2 = [node_ip(N) || N <- Nodes2],
-    IPsBin1 = [ip_to_binary(IP) || IP <- IPs1],
-    IPsBin2 = [ip_to_binary(IP) || IP <- IPs2],
+    IPsBin1 = [element(2, {ok, _} = ip_utils:to_binary(IP)) || IP <- IPs1],
+    IPsBin2 = [element(2, {ok, _} = ip_utils:to_binary(IP)) || IP <- IPs2],
 
     % I) provider is registered using an IP address
     test_utils:mock_expect(Nodes, provider_logic, get_domain, fun(_, ProviderId) ->
@@ -207,8 +180,8 @@ provider_logic_should_correctly_resolve_nodes_to_connect(Config) ->
             P2 -> {ok, <<"172.17.0.74">>}
         end
     end),
-    ?assertMatch({ok, [<<"172.17.0.10">>]}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
-    ?assertMatch({ok, [<<"172.17.0.74">>]}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])),
+    ?assertEqual({ok, [<<"172.17.0.10">>]}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
+    ?assertEqual({ok, [<<"172.17.0.74">>]}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])),
 
     % II) provider is registered using a domain that resolves to IPs that host
     % the same service
@@ -225,8 +198,8 @@ provider_logic_should_correctly_resolve_nodes_to_connect(Config) ->
         end
     end),
 
-    ?assertMatch({ok, IPsBin1}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
-    ?assertMatch({ok, IPsBin2}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])),
+    ?assertEqual({ok, IPsBin1}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
+    ?assertEqual({ok, IPsBin2}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])),
 
     % III) provider is registered using a domain, but the IPs that it resolves to
     % do not point to the same service (e.g. when reverse proxy is used).
@@ -238,8 +211,62 @@ provider_logic_should_correctly_resolve_nodes_to_connect(Config) ->
     end),
 
     % in such case, provider should fall back to using domain for connections
-    ?assertMatch({ok, [Domain1Bin]}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
-    ?assertMatch({ok, [Domain2Bin]}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])).
+    ?assertEqual({ok, [Domain1Bin]}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
+    ?assertEqual({ok, [Domain2Bin]}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])).
+
+
+configuration_endpoint_is_served(Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Node) ->
+        {ok, NodeIpBin} = ip_utils:to_binary(node_ip(Node)),
+        ExpectedConfiguration = expected_configuration(Node),
+        URL = str_utils:format("https://~s/api/v3/oneprovider/configuration", [NodeIpBin]),
+        {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
+            http_client:get(URL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
+        ?assertMatch(ExpectedConfiguration, json_utils:decode(Body))
+    end, Nodes).
+
+
+deprecated_configuration_endpoint_is_served(Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Node) ->
+        {ok, NodeIpBin} = ip_utils:to_binary(node_ip(Node)),
+        DeprecatedURL = str_utils:format("https://~s/configuration", [NodeIpBin]),
+        ModernURL = str_utils:format("https://~s/api/v3/oneprovider/configuration", [NodeIpBin]),
+
+        {_, _, _, OldBody} = ?assertMatch({ok, 200, _, _},
+            http_client:get(DeprecatedURL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
+        {_, _, _, NewBody} = ?assertMatch({ok, 200, _, _},
+            http_client:get(ModernURL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
+        ?assertEqual(json_utils:decode(OldBody), json_utils:decode(NewBody))
+    end, Nodes).
+
+
+broken_compatibility_file_causes_unknown_entries_in_configuration(Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    CurrentRegistryPath = rpc:call(hd(Nodes), ctool, get_env, [current_compatibility_registry_file]),
+
+    rpc:multicall(Nodes, file, delete, [CurrentRegistryPath]),
+    rpc:multicall(Nodes, compatibility, clear_registry_cache, []),
+    broken_compatibility_file_causes_unknown_entries_in_configuration_base(Nodes),
+
+    rpc:multicall(Nodes, file, write_file, [CurrentRegistryPath, <<"bad content">>]),
+    rpc:multicall(Nodes, compatibility, clear_registry_cache, []),
+    broken_compatibility_file_causes_unknown_entries_in_configuration_base(Nodes).
+
+broken_compatibility_file_causes_unknown_entries_in_configuration_base(Nodes) ->
+    lists:foreach(fun(Node) ->
+        {ok, NodeIpBin} = ip_utils:to_binary(node_ip(Node)),
+        URL = str_utils:format("https://~s/api/v3/oneprovider/configuration", [NodeIpBin]),
+        {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
+            http_client:get(URL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
+        ?assertMatch(#{
+            <<"compatibilityRegistryRevision">> := <<"unknown">>,
+            <<"compatibleOnezoneVersions">> := <<"unknown">>,
+            <<"compatibleOneproviderVersions">> := <<"unknown">>,
+            <<"compatibleOneclientVersions">> := <<"unknown">>
+        }, json_utils:decode(Body))
+    end, Nodes).
 
 
 %%%===================================================================
@@ -250,13 +277,15 @@ provider_logic_should_correctly_resolve_nodes_to_connect(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         Nodes = ?config(op_worker_nodes, NewConfig),
-        test_utils:mock_new(Nodes, oneprovider),
+        test_utils:mock_new(Nodes, op_worker),
         % Set op version to old one, that for sure is not compatible with current one
-        test_utils:mock_expect(Nodes, oneprovider, get_version, fun() -> <<"16.04-rc5">> end),
+        test_utils:mock_expect(Nodes, op_worker, get_release_version, fun() -> <<"16.04-rc5">> end),
         % Make sure provider identity token is not regenerated between requests
         rpc:multicall(Nodes, application, set_env, [?APP_NAME, provider_token_ttl_sec, 999999999]),
-        % do not attempt fetching new compatibility registry during the tests
+        % prevent replacing the current compatibility registry during the tests
         test_utils:set_env(Nodes, ctool, compatibility_registry_mirrors, []),
+        test_utils:set_env(Nodes, ctool, default_compatibility_registry_file, "not-a-valid-file-path.xxx"),
+        rpc:multicall(Nodes, compatibility, clear_registry_cache, []),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
@@ -265,7 +294,7 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     ok.
 
-init_per_testcase(provider_logic_should_correctly_resolve_nodes_to_connect, Config) ->
+init_per_testcase(provider_logic_correctly_resolves_nodes_to_connect, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Nodes, inet, [unstick, passthrough]),
     ssl:start(),
@@ -282,8 +311,9 @@ init_per_testcase(provider_logic_should_correctly_resolve_nodes_to_connect, Conf
     Config;
 
 init_per_testcase(Case, Config) when
-    Case == deprecated_configuration_endpoint_is_served;
-    Case == configuration_endpoints_give_same_results ->
+    Case == configuration_endpoint_is_served;
+    Case == broken_compatibility_file_causes_unknown_entries_in_configuration;
+    Case == deprecated_configuration_endpoint_is_served ->
     ssl:start(),
     hackney:start(),
     init_per_testcase(default, Config);
@@ -292,14 +322,15 @@ init_per_testcase(_Case, Config) ->
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config).
 
 
-end_per_testcase(provider_logic_should_correctly_resolve_nodes_to_connect, Config) ->
+end_per_testcase(provider_logic_correctly_resolves_nodes_to_connect, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes, [inet]),
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
-    Case == deprecated_configuration_endpoint_is_served;
-    Case == configuration_endpoints_give_same_results ->
+    Case == configuration_endpoint_is_served;
+    Case == broken_compatibility_file_causes_unknown_entries_in_configuration;
+    Case == deprecated_configuration_endpoint_is_served ->
     hackney:stop(),
     ssl:stop(),
     end_per_testcase(default, Config);
@@ -364,32 +395,33 @@ get_outgoing_connection_manager(Provider, SessId) ->
 
 -spec expected_configuration(node()) -> #{binary() := binary() | [binary()]}.
 expected_configuration(Node) ->
-    Version = rpc:call(Node, oneprovider, get_version, []),
-    {ok, CompOzVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONEZONE]),
-    {ok, CompOpVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONEPROVIDER]),
-    {ok, CompOcVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONECLIENT]),
+    Version = rpc:call(Node, op_worker, get_release_version, []),
     {ok, TransferConfig} = test_utils:get_env(Node, rtransfer_link, transfer),
     RtransferPort = proplists:get_value(server_port, TransferConfig),
     {ok, Name} = rpc:call(Node, provider_logic, get_name, []),
     {ok, Domain} = rpc:call(Node, provider_logic, get_domain, []),
+
+    CurrentRegistryPath = rpc:call(Node, ctool, get_env, [current_compatibility_registry_file]),
+    {ok, FileBody} = rpc:call(Node, file, read_file, [CurrentRegistryPath]),
+    #{<<"revision">> := Revision} = json_utils:decode(FileBody),
+    {ok, OzVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONEZONE]),
+    {ok, OpVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONEPROVIDER]),
+    {ok, OcVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONECLIENT]),
 
     #{
         <<"providerId">> => rpc:call(Node, oneprovider, get_id_or_undefined, []),
         <<"name">> => Name,
         <<"domain">> => Domain,
         <<"onezoneDomain">> => rpc:call(Node, oneprovider, get_oz_domain, []),
-        <<"version">> => rpc:call(Node, oneprovider, get_version, []),
-        <<"build">> => rpc:call(Node, oneprovider, get_build, []),
+        <<"version">> => rpc:call(Node, op_worker, get_release_version, []),
+        <<"build">> => rpc:call(Node, op_worker, get_build_version, []),
         <<"rtransferPort">> => RtransferPort,
-        <<"compatibleOnezoneVersions">> => CompOzVersions,
-        <<"compatibleOneproviderVersions">> => CompOpVersions,
-        <<"compatibleOneclientVersions">> => CompOcVersions
+        <<"compatibilityRegistryRevision">> => Revision,
+        <<"compatibleOnezoneVersions">> => OzVersions,
+        <<"compatibleOneproviderVersions">> => OpVersions,
+        <<"compatibleOneclientVersions">> => OcVersions
     }.
 
-
--spec ip_to_binary(inet:ip4_address()) -> binary().
-ip_to_binary(IP) ->
-    list_to_binary(inet:ntoa(IP)).
 
 
 -spec node_ip(node()) -> inet:ip4_address().

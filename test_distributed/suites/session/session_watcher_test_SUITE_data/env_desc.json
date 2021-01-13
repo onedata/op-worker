@@ -11,7 +11,12 @@
     },
     "os_configs": {
         "cfg1": {
-            "storages": [],
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st1"
+                }
+            ],
             "users": [],
             "groups": {}
         }
@@ -50,6 +55,29 @@
                             ],
                             "graph_sync_reconnect_base_interval": 999999999
                         }
+                    }
+                }
+            }
+        }
+    },
+    "test_global_setup": {
+        "users": {
+            "user1": {
+                "default_space": "space1"
+            }
+        },
+        "groups": {
+        },
+        "spaces": {
+            "space1": {
+                "displayed_name": "space1",
+                "users": ["user1"],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
                     }
                 }
             }
