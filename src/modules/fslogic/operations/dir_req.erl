@@ -172,11 +172,11 @@ get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
-    CTime = clock:timestamp_seconds(),
+    CTime = global_clock:timestamp_seconds(),
     Owner = user_ctx:get_user_id(UserCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
-    {ok, DirUuid} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
+    {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
 
     try
@@ -324,6 +324,8 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, IncludeRepl
 ) ->
     fslogic_worker:fuse_response().
 get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWhiteList) ->
+    file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
+
     {Children, _NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, undefined, StartId, ChildrenWhiteList
     ),

@@ -156,7 +156,7 @@ handle_provider_handshake(#provider_handshake_request{
 assert_client_compatibility(#client_handshake_request{
     version = OcVersion
 }, IpAddress) ->
-    OpVersion = oneprovider:get_version(),
+    OpVersion = op_worker:get_release_version(),
 
     case compatibility:check_products_compatibility(
         ?ONEPROVIDER, OpVersion, ?ONECLIENT, OcVersion

@@ -205,7 +205,7 @@ mark_enqueued(T = #transfer{eviction_status = ?SCHEDULED_STATUS}) ->
         eviction_status = ?ENQUEUED_STATUS,
         start_time = case transfer:is_migration(T) of
             true -> T#transfer.start_time;
-            false -> clock:timestamp_seconds()
+            false -> global_clock:monotonic_timestamp_seconds(T#transfer.start_time)
         end
     }};
 mark_enqueued(#transfer{eviction_status = Status}) ->
@@ -225,7 +225,7 @@ mark_aborting(#transfer{eviction_status = Status}) ->
 mark_completed(T = #transfer{eviction_status = ?ACTIVE_STATUS}) ->
     {ok, T#transfer{
         eviction_status = ?COMPLETED_STATUS,
-        finish_time = clock:timestamp_seconds()
+        finish_time = global_clock:monotonic_timestamp_seconds(T#transfer.start_time)
     }};
 mark_completed(#transfer{eviction_status = Status}) ->
     {error, Status}.
@@ -248,7 +248,7 @@ mark_failed_forced(Transfer) ->
         false ->
             {ok, Transfer#transfer{
                 eviction_status = ?FAILED_STATUS,
-                finish_time = clock:timestamp_seconds()
+                finish_time = global_clock:monotonic_timestamp_seconds(Transfer#transfer.start_time)
             }}
     end.
 
@@ -264,7 +264,7 @@ mark_cancelled(Transfer) ->
         Status when Status == ?ENQUEUED_STATUS orelse Status == ?ABORTING_STATUS ->
             {ok, Transfer#transfer{
                 eviction_status = ?CANCELLED_STATUS,
-                finish_time = clock:timestamp_seconds()
+                finish_time = global_clock:monotonic_timestamp_seconds(Transfer#transfer.start_time)
             }};
         Status ->
             {error, Status}

@@ -402,12 +402,12 @@ get_provider_id() ->
 
 -spec get_access_token() -> {ok, tokens:serialized()} | {error, term()}.
 get_access_token() ->
-    provider_auth:get_access_token().
+    provider_auth:acquire_access_token().
 
 
 -spec get_identity_token() -> {ok, tokens:serialized()} | {error, term()}.
 get_identity_token() ->
-    provider_auth:get_identity_token().
+    provider_auth:acquire_identity_token().
 
 
 -spec is_connected_to_oz() -> boolean().
@@ -427,7 +427,7 @@ on_deregister() ->
 
 -spec get_op_worker_version() -> binary().
 get_op_worker_version() ->
-    oneprovider:get_version().
+    op_worker:get_release_version().
 
 
 -spec provider_logic_update(Data :: #{binary() => term()}) ->
@@ -567,7 +567,7 @@ autocleaning_get_run_report(RunId) ->
 
 -spec autocleaning_status(od_space:id()) -> map().
 autocleaning_status(SpaceId) ->
-    autocleaning_api:status(SpaceId).
+    autocleaning_api:get_status(SpaceId).
 
 
 -spec autocleaning_force_run(od_space:id()) ->

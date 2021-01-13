@@ -1365,28 +1365,38 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, C
     SortedRequiredPrivs = lists:sort(RequiredPrivs),
     ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
-    try
-        lists:foreach(fun
-            (PrivsToAdd) when PrivsToAdd =:= SortedRequiredPrivs ->
-                % success will be checked later
-                ok;
-            (PrivsToAdd) ->
-                initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ PrivsToAdd),
-                {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, []),
-                ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
-        end, combinations(RequiredPrivs)),
+    case rpc:call(Worker, provider_logic, supports_space, [SpaceId]) of
+        true ->
+            try
+                lists:foreach(fun
+                    (PrivsToAdd) when PrivsToAdd =:= SortedRequiredPrivs ->
+                        % success will be checked later
+                        ok;
+                    (PrivsToAdd) ->
+                        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ PrivsToAdd),
+                        {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, []),
+                        ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
+                end, combinations(RequiredPrivs)),
 
-        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ RequiredPrivs),
-        case rest_test_utils:request(Worker, URL, Method, Headers, []) of
-            {ok, 201, _, Body} ->
-                DecodedBody = json_utils:decode(Body),
-                #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
-                {ok, Tid};
-            {ok, 400, _, Body} ->
-                {error, Body}
-        end
-    after
-        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, UserSpacePrivs)
+                initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ RequiredPrivs),
+                case rest_test_utils:request(Worker, URL, Method, Headers, []) of
+                    {ok, 201, _, Body} ->
+                        DecodedBody = json_utils:decode(Body),
+                        #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
+                        {ok, Tid};
+                    {ok, 400, _, Body} ->
+                        {error, Body}
+                end
+            after
+                initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, UserSpacePrivs)
+            end;
+        false ->
+            {ok, Code, _, RespBody} = rest_test_utils:request(Worker, URL, Method, Headers, []),
+            ?assertMatch(400, Code),
+            ?assertMatch(
+                ?ERROR_SPACE_NOT_SUPPORTED_BY(_),
+                errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody)))
+            )
     end.
 
 %% Modifies storage timeout twice in order to

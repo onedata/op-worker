@@ -15,6 +15,7 @@
 -include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -711,11 +712,11 @@ gen_test_env(Config) ->
     }.
 
 f(Space, FileName) ->
-    P = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space, FileName]),
+    P = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, Space, FileName]),
     {path, P}.
 
 f(Space, Dirs, FileName) ->
-    P = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space] ++ Dirs ++ [FileName]),
+    P = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, Space] ++ Dirs ++ [FileName]),
     {path, P}.
 
 current_size(Worker, SpaceId) ->

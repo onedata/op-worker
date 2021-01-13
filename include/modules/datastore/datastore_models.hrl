@@ -224,12 +224,12 @@
 -record(provider_auth, {
     provider_id :: od_provider:id(),
     root_token :: tokens:serialized(),
-    cached_access_token = {0, <<"">>} :: {ValidUntil :: clock:seconds(), tokens:serialized()},
-    cached_identity_token = {0, <<"">>} :: {ValidUntil :: clock:seconds(), tokens:serialized()}
+    cached_access_token = {0, <<"">>} :: {ValidUntil :: time:seconds(), tokens:serialized()},
+    cached_identity_token = {0, <<"">>} :: {ValidUntil :: time:seconds(), tokens:serialized()}
 }).
 
 -record(file_download_code, {
-    expires :: clock:seconds(),
+    expires :: time:seconds(),
     session_id :: session:id(),
     file_guid :: fslogic_worker:file_guid()
 }).
@@ -241,7 +241,7 @@
 %% User session
 -record(session, {
     status :: undefined | session:status(),
-    accessed :: undefined | clock:seconds(),
+    accessed :: undefined | time:seconds(),
     type :: undefined | session:type(),
     identity :: aai:subject(),
     credentials :: undefined | auth_manager:credentials(),
@@ -287,9 +287,10 @@
 }).
 
 -record(storage_sync_info, {
+    guid :: undefined | fslogic_worker:file_guid(),
     children_hashes = #{} :: storage_sync_info:hashes(),
-    mtime :: undefined | clock:seconds(),
-    last_stat :: undefined | clock:seconds(),
+    mtime :: undefined | time:seconds(),
+    last_stat :: undefined | time:seconds(),
     % below counters are used to check whether all batches of given directory
     % were processed, as they are processed in parallel
     batches_to_process = 0 :: non_neg_integer(),
@@ -492,8 +493,8 @@
 %% Each record stores information about one specific run.
 -record(autocleaning_run, {
     space_id :: undefined | od_space:id(),
-    started_at = 0 :: clock:seconds(),
-    stopped_at :: undefined | clock:seconds(),
+    started_at = 0 :: time:seconds(),
+    stopped_at :: undefined | time:seconds(),
     status :: undefined | autocleaning_run:status(),
 
     released_bytes = 0 :: non_neg_integer(),
@@ -533,7 +534,7 @@
     },
     last_rename :: undefined | replica_changes:last_rename(),
     storage_file_created = false :: boolean(),
-    last_replication_timestamp :: undefined | clock:seconds(),
+    last_replication_timestamp :: undefined | time:seconds(),
     % synced_gid field is set by storage import, only on POSIX-compatible storages.
     % It is used to override display gid, only in
     % the syncing provider, with the gid that file
@@ -550,6 +551,7 @@
 %% Model for storing dir's location data
 -record(dir_location, {
     storage_file_created = false :: boolean(),
+    storage_file_id :: undefined | helpers:file_id(),
     % synced_gid field is set by storage import, only on POSIX-compatible storages.
     % It is used to override display gid, only in
     % the syncing provider, with the gid that file
@@ -582,10 +584,10 @@
 %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
 -record(storage_sync_monitoring, {
     scans = 0 :: non_neg_integer(), % overall number of finished scans,
-    import_start_time :: undefined | clock:seconds(),
-    import_finish_time :: undefined | clock:seconds(),
-    last_update_start_time :: undefined | clock:seconds(),
-    last_update_finish_time :: undefined | clock:seconds(),
+    import_start_time :: undefined | time:seconds(),
+    import_finish_time :: undefined | time:seconds(),
+    last_update_start_time :: undefined | time:seconds(),
+    last_update_finish_time :: undefined | time:seconds(),
 
     % counters used for scan management, they're reset on the beginning of each scan
     to_process = 0 :: non_neg_integer(),
@@ -630,41 +632,33 @@
     status :: storage_import_monitoring:status(),
 
     % start/stop timestamps of last scan in millis
-    scan_start_time :: undefined | clock:millis(),
-    scan_stop_time :: undefined | clock:millis(),
+    scan_start_time :: undefined | time:millis(),
+    scan_stop_time :: undefined | time:millis(),
 
-    % counters used for scan management, they're reset on the beginning of each scan
-    to_process = 0 :: non_neg_integer(),
+    % Counters of files (regular and directories) processed during current (or last finished) scan.
+    % Each processed file is counted just once.
     created = 0 :: non_neg_integer(),
     modified = 0 :: non_neg_integer(),
     deleted = 0 :: non_neg_integer(),
     failed = 0 :: non_neg_integer(),
-    % counter for tasks which don't match to any one of the above categories
-    % i.e.
-    %   * remote files that were processed by sync algorithm but not deleted
-    %   * directories are processed many times (for each batch) but we increase
-    %     `updated` counter only for 1 batch, for other batches we increase
-    %     `other_processed_tasks` to keep track of algorithm and check whether
-    %     it performs as intended
-    other_processed = 0 :: non_neg_integer(),
+    unmodified = 0 :: non_neg_integer(),
 
-    % summary of all scans
-    created_sum = 0 :: non_neg_integer(),
-    modified_sum = 0 :: non_neg_integer(),
-    deleted_sum = 0 :: non_neg_integer(),
-
+    % histograms for files (both directories and regular files) creations
     created_min_hist :: time_slot_histogram:histogram(),
     created_hour_hist :: time_slot_histogram:histogram(),
     created_day_hist :: time_slot_histogram:histogram(),
 
+    % histograms for files (both directories and regular files) modification
     modified_min_hist :: time_slot_histogram:histogram(),
     modified_hour_hist :: time_slot_histogram:histogram(),
     modified_day_hist :: time_slot_histogram:histogram(),
 
+    % histograms for files (both directories and regular files) deletions
     deleted_min_hist :: time_slot_histogram:histogram(),
     deleted_hour_hist :: time_slot_histogram:histogram(),
     deleted_day_hist :: time_slot_histogram:histogram(),
 
+    % histograms for length of jobs' queue
     queue_length_min_hist :: time_slot_histogram:histogram(),
     queue_length_hour_hist :: time_slot_histogram:histogram(),
     queue_length_day_hist :: time_slot_histogram:histogram()
@@ -738,7 +732,7 @@
     monitoring_id = #monitoring_id{} :: #monitoring_id{},
     rrd_guid :: undefined | binary(),
     state_buffer = #{} :: map(),
-    last_update_time :: undefined | clock:seconds()
+    last_update_time :: undefined | time:seconds()
 }).
 
 %% Model that stores file handles
@@ -785,7 +779,7 @@
     space_id :: undefined  | od_space:id(),
     size = 0 :: non_neg_integer(),
     open_count = 0 :: non_neg_integer(),
-    last_open = 0 :: clock:hours(),
+    last_open = 0 :: time:hours(),
     hr_hist = [] :: list(),
     dy_hist = [] :: list(),
     mth_hist = [] :: list(),
@@ -824,15 +818,15 @@
     files_replicated = 0 :: non_neg_integer(),
     bytes_replicated = 0 :: non_neg_integer(),
     files_evicted = 0 :: non_neg_integer(),
-    schedule_time = 0 :: clock:seconds(),
-    start_time = 0 :: clock:seconds(),
-    finish_time = 0 :: clock:seconds(),
+    schedule_time = 0 :: time:seconds(),
+    start_time = 0 :: time:seconds(),
+    finish_time = 0 :: time:seconds(),
 
     % Histograms with different time spans (last minute, hour, day and month)
     % of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
     % Length of each histogram type is defined in transfer.hrl
-    last_update = #{} :: #{od_provider:id() => clock:seconds()},
+    last_update = #{} :: #{od_provider:id() => time:seconds()},
     min_hist = #{} :: #{od_provider:id() => histogram:histogram()},
     hr_hist = #{} :: #{od_provider:id() => histogram:histogram()},
     dy_hist = #{} :: #{od_provider:id() => histogram:histogram()},
@@ -865,19 +859,19 @@
     % of transferred bytes per provider, last_update per provider is
     % required to keep track in histograms.
     % Length of each histogram type is defined in transfer.hrl
-    last_update = #{} :: #{od_provider:id() => clock:seconds()},
+    last_update = #{} :: #{od_provider:id() => time:seconds()},
     min_hist = #{} :: #{od_provider:id() => histogram:histogram()},
     hr_hist = #{} :: #{od_provider:id() => histogram:histogram()},
     dy_hist = #{} :: #{od_provider:id() => histogram:histogram()},
     mth_hist = #{} :: #{od_provider:id() => histogram:histogram()}
 }).
 
-%% Model that holds statistics about all transfers for given space.
+%% Model that holds statistics about all transfers for given space (memory only and node-wide).
 -record(space_transfer_stats_cache, {
     % Time at which the cache record will expire.
-    expires = 0 :: clock:millis(),
-    % Time of last update for stats.
-    timestamp = 0 :: clock:seconds(),
+    expiration_timer = countdown_timer:start_millis(0) :: countdown_timer:instance(),
+    % Timestamp of last update for stats.
+    last_update = 0 :: time:seconds(),
     % Mapping of providers to their data input and sources
     stats_in = #{} :: #{od_provider:id() => histogram:histogram()},
     % Mapping of providers to their data output and destinations

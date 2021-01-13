@@ -51,32 +51,32 @@ basic_operations_test_core(Config, LastLevel) ->
     RootUuid = <<>>,
     SpaceId = <<"Space 1">>,
     Space1Uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    {{ok, Space1Uuid}, CreateLevel1} = ?assertMatch(
+    {{ok, #document{key = Space1Uuid}}, CreateLevel1} = ?assertMatch(
         {{ok, _}, _},
         ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{key = Space1Uuid,
             value = #file_meta{name = SpaceId, is_scope = true}, scope = SpaceId}])
     ),
-    {{ok, Dir1Uuid}, CreateLevel2} = ?assertMatch(
+    {{ok, #document{key = Dir1Uuid}}, CreateLevel2} = ?assertMatch(
         {{ok, _}, _},
         ?call_with_time(Worker1, create, [{uuid, Space1Uuid}, #document{value = #file_meta{name = <<"dir1">>}}])
     ),
-    {ok, Dir1File1Uuid} = ?assertMatch(
+    {ok, #document{key = Dir1File1Uuid}} = ?assertMatch(
         {ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, Dir1Uuid}, #document{value = #file_meta{name = <<"file1">>}}])
     ),
-    {ok, Dir2Uuid} = ?assertMatch(
+    {ok, #document{key = Dir2Uuid}} = ?assertMatch(
         {ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, Space1Uuid}, #document{value = #file_meta{name = <<"dir2">>}}])
     ),
-    {ok, Dir2File1Uuid} = ?assertMatch(
+    {ok, #document{key = Dir2File1Uuid}} = ?assertMatch(
         {ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, Dir2Uuid}, #document{value = #file_meta{name = <<"file1">>}}])
     ),
-    {ok, Dir2File2Uuid} = ?assertMatch(
+    {ok, #document{key = Dir2File2Uuid}} = ?assertMatch(
         {ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, Dir2Uuid}, #document{value = #file_meta{name = <<"file2">>}}])
     ),
-    {ok, Dir2File3Uuid} = ?assertMatch(
+    {ok, #document{key = Dir2File3Uuid}} = ?assertMatch(
         {ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, Dir2Uuid}, #document{value = #file_meta{name = <<"file3">>}}])
     ),
@@ -114,9 +114,9 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(<<"/Space 1/dir2/file2">>, U31),
     ?assertMatch(<<"/Space 1/dir2/file3">>, U32),
 
-    {A41, ResolveLevel2} = ?call_with_time(Worker1, fslogic_path, resolve, [<<"/Space 1/">>]),
-    {A42, ResolveLevel3} = ?call_with_time(Worker1, fslogic_path, resolve, [<<"/Space 1/dir2">>]),
-    {A43, ResolveLevel20} = ?call_with_time(Worker1, fslogic_path, resolve, [Level20Path]),
+    {A41, ResolveLevel2} = ?call_with_time(Worker1, canonical_path, resolve, [<<"/Space 1/">>]),
+    {A42, ResolveLevel3} = ?call_with_time(Worker1, canonical_path, resolve, [<<"/Space 1/dir2">>]),
+    {A43, ResolveLevel20} = ?call_with_time(Worker1, canonical_path, resolve, [Level20Path]),
     ?assertMatch({ok, #document{key = Space1Uuid}}, A41),
     ?assertMatch({ok, #document{key = Dir2Uuid}}, A42),
     ?assertMatch({ok, #document{key = Level20Key}}, A43),
@@ -273,13 +273,12 @@ space_info_mock(Workers, SpaceName) ->
     end).
 
 exec_and_check_time(Mod, M, A) ->
-    BeforeProcessing = os:timestamp(),
+    Stopwatch = stopwatch:start(),
     Ans = erlang:apply(Mod, M, A),
-    AfterProcessing = os:timestamp(),
-    {Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}.
+    {Ans, stopwatch:read_micros(Stopwatch)}.
 
 create_deep_tree(Worker, ParentPath, ParentUuid, 1) ->
-    {{ok, FileUuid}, Time} = ?assertMatch(
+    {{ok, #document{key = FileUuid}}, Time} = ?assertMatch(
         {{ok, _}, _},
         ?call_with_time(Worker, create, [{uuid, ParentUuid}, #document{value = #file_meta{name = <<"1">>}}])
     ),
@@ -287,7 +286,7 @@ create_deep_tree(Worker, ParentPath, ParentUuid, 1) ->
 create_deep_tree(Worker, ParentPath, ParentUuid, Num) ->
     BinaryNum = integer_to_binary(Num),
 
-    {ok, FileUuid} = ?assertMatch(
+    {ok, #document{key = FileUuid}} = ?assertMatch(
         {ok, _},
         rpc:call(Worker, file_meta, create, [{uuid, ParentUuid}, #document{value = #file_meta{name = BinaryNum}}])
     ),

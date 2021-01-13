@@ -17,6 +17,7 @@
 -module(provider_logic).
 -author("Lukasz Opiola").
 
+-include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
@@ -46,16 +47,14 @@
 -export([get_nodes/1, get_nodes/2]).
 -export([get_rtransfer_port/1]).
 -export([set_txt_record/3, remove_txt_record/1]).
--export([get_zone_time/0]).
 -export([zone_get_offline_access_idps/0]).
--export([fetch_peer_version/1]).
--export([assert_zone_compatibility/0]).
+-export([fetch_service_configuration/1, fetch_peer_version/1]).
 -export([provider_connection_ssl_opts/1]).
 -export([assert_provider_compatibility/1]).
 -export([verify_provider_identity/1]).
 
 
--define(PROVIDER_NODES_CACHE_TTL, 
+-define(PROVIDER_NODES_CACHE_TTL,
     application:get_env(?APP_NAME, provider_nodes_cache_ttl_seconds, 600)). % 10 minutes
 
 -compile([{no_auto_import, [get/0]}]).
@@ -657,15 +656,6 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
     })).
 
 
--spec get_zone_time() -> clock:millis() | no_return().
-get_zone_time() ->
-    {ok, Millis} = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_provider, id = undefined, aspect = current_time}
-    }),
-    Millis.
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns the list of IdPs in Onezone that support offline access.
@@ -707,10 +697,10 @@ zone_get_offline_access_idps() ->
 -spec verify_provider_identity(od_provider:id()) -> ok | {error, term()}.
 verify_provider_identity(TheirProviderId) ->
     try
-        {ok, Domain} = get_domain(TheirProviderId),
-        {ok, OurIdentityToken} = provider_auth:get_identity_token_for_consumer(
+        {ok, OurIdentityToken} = ?throw_on_error(provider_auth:acquire_identity_token_for_consumer(
             ?SUB(?ONEPROVIDER, TheirProviderId)
-        ),
+        )),
+        {ok, Domain} = get_domain(TheirProviderId),
         Headers = tokens:access_token_header(OurIdentityToken),
         URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
@@ -719,24 +709,42 @@ verify_provider_identity(TheirProviderId) ->
                 verify_provider_identity(TheirProviderId, TheirIdentityToken);
             {ok, Code, _, _} ->
                 {error, {bad_http_code, Code}};
-            {error, _} = Error ->
-                Error
+            {error, _} = Error1 ->
+                Error1
         end
-    catch Type:Reason ->
-        ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
-            provider_logic:to_printable(TheirProviderId),
-            Type, Reason
-        ]),
-        {error, Reason}
+    catch
+        throw:{error, _} = Error2 ->
+            Error2;
+        Type:Reason ->
+            ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
+                provider_logic:to_printable(TheirProviderId),
+                Type, Reason
+            ]),
+            {error, Reason}
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Performs request fetching peer version from Onezone
-%% or another Oneprovider.
-%% @end
-%%--------------------------------------------------------------------
+-spec fetch_service_configuration(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
+    {ok, json_utils:json_term()} |
+    {error, {bad_response, Code :: integer(), Body :: binary()}} |
+    {error, term()}.
+fetch_service_configuration(onezone) ->
+    URL = oneprovider:get_oz_url(?ZONE_CONFIGURATION_PATH),
+    DeprecatedURL = oneprovider:get_oz_url(?DEPRECATED_ZONE_CONFIGURATION_PATH),
+    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
+    fetch_configuration(URL, DeprecatedURL, SslOpts);
+
+fetch_service_configuration({oneprovider, Domain, Hostname}) ->
+    URL = str_utils:format_bin("https://~s~s", [
+        Hostname, ?PROVIDER_CONFIGURATION_PATH
+    ]),
+    DeprecatedURL = str_utils:format_bin("https://~s~s", [
+        Hostname, ?DEPRECATED_PROVIDER_CONFIGURATION_PATH
+    ]),
+    SslOpts = provider_connection_ssl_opts(Domain),
+    fetch_configuration(URL, DeprecatedURL, SslOpts).
+
+
 -spec fetch_peer_version(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
     {ok, PeerVersion :: binary()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} | {error, term()}.
@@ -747,51 +755,6 @@ fetch_peer_version(Service) ->
             {ok, PeerVersion};
         {error, Error} ->
             {error, Error}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check compatibility of Onezone and exit if it is not compatible.
-%% @end
-%%--------------------------------------------------------------------
--spec assert_zone_compatibility() -> ok | no_return().
-assert_zone_compatibility() ->
-    case fetch_peer_version(onezone) of
-        {ok, OzVersion} ->
-            OpVersion = oneprovider:get_version(),
-            case compatibility:check_products_compatibility(
-                ?ONEPROVIDER, OpVersion, ?ONEZONE, OzVersion
-            ) of
-                true ->
-                    ok;
-                {false, CompOzVersions} ->
-                    ?critical("This Oneprovider is not compatible with its Onezone service.~n"
-                    "Oneprovider version: ~s, supports zones: ~s~n"
-                    "Onezone version: ~s~n"
-                    "The service will not be operational until the problem is resolved "
-                    "(may require Oneprovider / Onezone upgrade or compatibility registry refresh).", [
-                        OpVersion,
-                        str_utils:join_binary(CompOzVersions, <<", ">>),
-                        OzVersion
-                    ]),
-                    throw({error, incompatible_oneprovider_version});
-                {error, Error} ->
-                    ?critical("Cannot check Oneprovider's compatibility due to ~w. "
-                    "The service will not be operational until the problem is resolved.", [
-                        {error, Error}
-                    ]),
-                    throw({error, Error})
-            end;
-        {error, {bad_response, Code, ResponseBody}} ->
-            ?critical("Failure while checking Onezone version. "
-            "The service will not be operational until the problem is resolved.~n"
-            "HTTP response: ~B ~s", [
-                Code, ResponseBody
-            ]),
-            throw({error, cannot_check_onezone_version});
-        {error, Error} ->
-            throw({error, Error})
     end.
 
 
@@ -816,7 +779,7 @@ provider_connection_ssl_opts(Domain) ->
 assert_provider_compatibility(Domain) ->
     case fetch_peer_version({oneprovider, Domain, Domain}) of
         {ok, RemoteOpVersion} ->
-            OpVersion = oneprovider:get_version(),
+            OpVersion = op_worker:get_release_version(),
 
             case compatibility:check_products_compatibility(
                 ?ONEPROVIDER, RemoteOpVersion, ?ONEPROVIDER, OpVersion
@@ -842,38 +805,6 @@ assert_provider_compatibility(Domain) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempts to fetch the configuration page of given service.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch_service_configuration(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
-    {ok, json_utils:json_term()} |
-    {error, {bad_response, Code :: integer(), Body :: binary()}} |
-    {error, term()}.
-fetch_service_configuration(onezone) ->
-    OzHostname = oneprovider:get_oz_domain(),
-    URL = str_utils:format_bin("https://~s~s", [
-        OzHostname, ?ZONE_CONFIGURATION_PATH
-    ]),
-    DeprecatedURL = str_utils:format_bin("https://~s~s", [
-        OzHostname, ?DEPRECATED_ZONE_CONFIGURATION_PATH
-    ]),
-    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
-    fetch_configuration(URL, DeprecatedURL, SslOpts);
-
-fetch_service_configuration({oneprovider, Domain, Hostname}) ->
-    URL = str_utils:format_bin("https://~s~s", [
-        Hostname, ?PROVIDER_CONFIGURATION_PATH
-    ]),
-    DeprecatedURL = str_utils:format_bin("https://~s~s", [
-        Hostname, ?DEPRECATED_PROVIDER_CONFIGURATION_PATH
-    ]),
-    SslOpts = provider_connection_ssl_opts(Domain),
-    fetch_configuration(URL, DeprecatedURL, SslOpts).
-
 
 %%--------------------------------------------------------------------
 %% @private

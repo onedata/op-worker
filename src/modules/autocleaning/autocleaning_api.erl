@@ -25,7 +25,7 @@
 
 %% API
 -export([force_run/1, check/1, configure/2, disable/1, get_configuration/1,
-    status/1, list_reports/1, list_reports/4, restart_autocleaning_run/1,
+    get_status/1, list_reports/1, list_reports/4, restart_autocleaning_run/1,
     delete_config/1, get_run_report/1, get_run_report/2, cancel_run/1, cancel_run/2]).
 
 %%%===================================================================
@@ -156,18 +156,21 @@ disable(SpaceId) ->
 %% understandable by onepanel.
 %% @end
 %%-------------------------------------------------------------------
--spec status(od_space:id()) -> map().
-status(SpaceId) ->
+-spec get_status(od_space:id()) -> map().
+get_status(SpaceId) ->
     CurrentSize = space_quota:current_size(SpaceId),
-    InProgress = case autocleaning:get_current_run(SpaceId) of
-        undefined ->
-            false;
-        _ ->
-            true
+    Status = case list_reports(SpaceId, undefined, 0, 1) of
+        {ok, []} ->
+            null;
+        {ok, [ARId]} ->
+            case autocleaning_run:get(ARId) of
+                {ok, ARDoc} -> autocleaning_run:get_status(ARDoc);
+                _ -> null
+            end
     end,
     #{
-        in_progress => InProgress,
-        space_occupancy => CurrentSize
+        lastRunStatus => Status,
+        spaceOccupancy => CurrentSize
     }.
 
 %%-------------------------------------------------------------------
@@ -252,12 +255,12 @@ get_run_report(ARId, #autocleaning_run{
 }) ->
     StoppedAt2 = case StoppedAt of
         undefined -> null;
-        StoppedAt -> time_format:seconds_to_iso8601(StoppedAt)
+        StoppedAt -> time:seconds_to_iso8601(StoppedAt)
     end,
     {ok, #{
         id => ARId,
         index => autocleaning_run_links:link_key(ARId, StartedAt),
-        started_at => time_format:seconds_to_iso8601(StartedAt),
+        started_at => time:seconds_to_iso8601(StartedAt),
         stopped_at => StoppedAt2,
         status => atom_to_binary(Status, utf8),
         released_bytes => ReleasedBytes,

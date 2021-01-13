@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -92,6 +92,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -137,13 +138,9 @@
 ).
 
 %% API
--export([
-    start_link/5, start_link/7,
-    close/1,
-
-    send_msg/2,
-    send_keepalive/1
-]).
+-export([start_link/5, start_link/7, close/1]).
+-export([send_msg/2, send_keepalive/1]).
+-export([rebuild_rib/1]).
 
 %% Private API
 -export([connect_with_provider/8]).
@@ -157,6 +154,8 @@
     handle_call/3, handle_cast/2, handle_info/2,
     terminate/2, code_change/3
 ]).
+
+-define(REBUILD_RIB_MSG, rebuild_rib).
 
 
 %%%===================================================================
@@ -211,31 +210,7 @@ close(Pid) ->
 %%-------------------------------------------------------------------
 -spec send_msg(pid(), communicator:message()) -> ok | error().
 send_msg(Pid, Msg) ->
-    try
-        gen_server2:call(Pid, {send_msg, Msg}, ?DEFAULT_REQUEST_TIMEOUT)
-    catch
-        exit:{noproc, _} ->
-            ?debug("Connection process ~p does not exist", [Pid]),
-            {error, no_connection};
-        exit:{{nodedown, Node}, _} ->
-            ?debug("Node ~p with connection process ~p is down", [Node, Pid]),
-            {error, no_connection};
-        exit:{normal, _} ->
-            ?debug("Exit of connection process ~p for message ~s", [
-                Pid, clproto_utils:msg_to_string(Msg)
-            ]),
-            {error, no_connection};
-        exit:{timeout, _} ->
-            ?debug("Timeout of connection process ~p for message ~s", [
-                Pid, clproto_utils:msg_to_string(Msg)
-            ]),
-            ?ERROR_TIMEOUT;
-        Type:Reason ->
-            ?error("Connection ~p cannot send msg ~s due to ~p:~p", [
-                Pid, clproto_utils:msg_to_string(Msg), Type, Reason
-            ]),
-            {error, Reason}
-    end.
+    call_connection_process(Pid, {send_msg, Msg}).
 
 
 %%-------------------------------------------------------------------
@@ -246,6 +221,17 @@ send_msg(Pid, Msg) ->
 -spec send_keepalive(pid()) -> ok.
 send_keepalive(Pid) ->
     gen_server2:cast(Pid, send_keepalive).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Informs connection process that it should rebuild it's rib as it
+%% may be obsolete (e.g. after node death).
+%% @end
+%%-------------------------------------------------------------------
+-spec rebuild_rib(pid()) -> ok | error().
+rebuild_rib(Pid) ->
+    call_connection_process(Pid, ?REBUILD_RIB_MSG).
 
 
 %%%===================================================================
@@ -292,6 +278,8 @@ handle_call({send_msg, Msg}, _From, #state{status = ready} = State) ->
 handle_call({send_msg, _Msg}, _From, #state{status = Status, socket = Socket} = State) ->
     ?warning("Attempt to send msg via not ready connection ~p", [Socket]),
     {reply, {error, Status}, State, ?PROTO_CONNECTION_TIMEOUT};
+handle_call(?REBUILD_RIB_MSG, _From, #state{session_id = SessionId} = State) ->
+    {reply, ok, State#state{rib = router:build_rib(SessionId)}, ?PROTO_CONNECTION_TIMEOUT};
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, {error, wrong_request}, State, ?PROTO_CONNECTION_TIMEOUT}.
@@ -338,7 +326,7 @@ handle_info({upgrade_protocol, Hostname}, State) ->
         {ok, NewState} ->
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, _Reason} ->
-            {stop, connection_attempt_failed, State}
+            {stop, termination_reason(connection_attempt_failed, State), State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Socket, ok = Ok} = State) ->
@@ -350,12 +338,16 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_protocol_upgrade_response'
             % so terminate gracefully as to not spam more error logs
-            {stop, connection_attempt_failed, State}
-    catch Type:Reason ->
-        ?error_stacktrace("Unexpected error during protocol upgrade: ~p:~p", [
-            Type, Reason
-        ]),
-        {stop, connection_attempt_failed, State}
+            {stop, termination_reason(connection_attempt_failed, State), State}
+    catch
+        throw:{error, _} = Error ->
+            ?error("Protocol upgrade failed due to ~p", [Error]),
+            {stop, termination_reason(connection_attempt_failed, State), State};
+        Type:Reason ->
+            ?error_stacktrace("Unexpected error during protocol upgrade: ~p:~p", [
+                Type, Reason
+            ]),
+            {stop, termination_reason(connection_attempt_failed, State), State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
@@ -368,12 +360,12 @@ handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = S
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_handshake' so
             % terminate gracefully as to not spam more error logs
-            {stop, connection_attempt_failed, State}
+            {stop, termination_reason(connection_attempt_failed, State), State}
     catch Type:Reason ->
         ?error_stacktrace("Unexpected error while performing handshake: ~p:~p", [
             Type, Reason
         ]),
-        {stop, connection_attempt_failed, State}
+        {stop, termination_reason(connection_attempt_failed, State), State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State) ->
@@ -637,9 +629,9 @@ handle_protocol_upgrade_response(State, Data) ->
                 peer_id = ProviderId
             } = State,
             {ok, MsgId} = clproto_message_id:generate(self()),
-            {ok, Token} = provider_auth:get_identity_token_for_consumer(
+            {ok, Token} = ?throw_on_error(provider_auth:acquire_identity_token_for_consumer(
                 ?SUB(?ONEPROVIDER, ProviderId)
-            ),
+            )),
             ClientMsg = #client_message{
                 message_id = MsgId,
                 message_body = #provider_handshake_request{
@@ -901,3 +893,54 @@ activate_socket(#state{socket_mode = active_always}, false) ->
     ok;
 activate_socket(#state{transport = Transport, socket = Socket}, _) ->
     ok = Transport:setopts(Socket, [{active, once}]).
+
+
+%% @private
+-spec call_connection_process(ConnPid :: pid(), term()) ->
+    ok | error().
+call_connection_process(ConnPid, Msg) ->
+    try
+        gen_server2:call(ConnPid, Msg, ?DEFAULT_REQUEST_TIMEOUT)
+    catch
+        exit:{noproc, _} ->
+            ?debug("Connection process ~p does not exist", [ConnPid]),
+            {error, no_connection};
+        exit:{{nodedown, Node}, _} ->
+            ?debug("Node ~p with connection process ~p is down", [Node, ConnPid]),
+            {error, no_connection};
+        exit:{normal, _} ->
+            ?debug("Exit of connection process ~p for message ~s", [
+                ConnPid, maybe_stringify_msg(Msg)
+            ]),
+            {error, no_connection};
+        exit:{timeout, _} ->
+            ?debug("Timeout of connection process ~p for message ~s", [
+                ConnPid, maybe_stringify_msg(Msg)
+            ]),
+            ?ERROR_TIMEOUT;
+        Type:Reason ->
+            ?error("Connection ~p cannot send msg ~s due to ~p:~p", [
+                ConnPid, maybe_stringify_msg(Msg), Type, Reason
+            ]),
+            {error, Reason}
+    end.
+
+
+%% @private
+-spec maybe_stringify_msg(term()) -> term() | string().
+maybe_stringify_msg({send_msg, Msg}) ->
+    clproto_utils:msg_to_string(Msg);
+maybe_stringify_msg(Msg) ->
+    Msg.
+
+
+%% @private
+-spec termination_reason(OriginalTerminationReason :: atom(), state()) ->
+    TerminationReason :: atom().
+termination_reason(_Reason, #state{type = incoming, status = Status}) when Status /= ready ->
+    % Concrete errors were already logged and in case of incoming connections
+    % no backoff is performed by server (as it is responsibility of a remote peer)
+    % so terminate with reason 'normal' to not spam with termination logs
+    normal;
+termination_reason(Reason, _State) ->
+    Reason.

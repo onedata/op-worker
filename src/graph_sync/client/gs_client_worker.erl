@@ -263,7 +263,13 @@ init([]) ->
             gs_hooks:handle_deregistered_from_oz(),
             {stop, normal};
         {error, _} = Error ->
-            ?error("Failed to establish Onezone connection: ~w", [Error]),
+            ?debug("Failed to establish Onezone connection: ~w", [Error]),
+            utils:throttle(?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
+                ?warning(
+                    "Onezone connection cannot be established, is the service online (~ts)? "
+                    "Last error was: ~w. Retrying as long as it takes...", [oneprovider:get_oz_domain(), Error]
+                )
+            end),
             {stop, normal}
     end.
 
@@ -398,13 +404,11 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, gs_client:client_ref(), gs_protocol:handshake_resp()} | errors:error().
 start_gs_connection() ->
     try
-        provider_logic:assert_zone_compatibility(),
-
         Port = ?GS_CHANNEL_PORT,
         Address = str_utils:format("wss://~s:~b~s", [oneprovider:get_oz_domain(), Port, ?GS_CHANNEL_PATH]),
         CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
-        {ok, AccessToken} = provider_auth:get_access_token(),
+        {ok, AccessToken} = provider_auth:acquire_access_token(),
         OpWorkerAccessToken = tokens:add_oneprovider_service_indication(?OP_WORKER, AccessToken),
 
         gs_client:start_link(

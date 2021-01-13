@@ -4,6 +4,42 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 20.02.5
+
+-   **VFS-7129** Improved connection pool management for HTTP storages,
+    including minimized reconnections and DNS caching.
+-   **VFS-7113** Fixed original timestamp preservation during \`cp
+    \--preserve=times\` or \`rsync \--times\` commands.
+-   **VFS-7058** Handling detached shares after files or directories
+    removal in GUI.
+-   **VFS-7047** Fixed possible race when using buffered helper to write
+    to storage which fails after the file size has been updated.
+-   **VFS-6999** Improve error reporting in entrypoints of
+    oneprovider/onezone dockers, always dump application logs to stdout
+    in case of failures during batch deployment.
+-   **VFS-6745** Added new view with token templates in tokens creator
+    GUI.
+
+### 20.02.4
+
+-   **VFS-7003** Added new counters presenting progress of current/last
+    finished scan of the storage import mechanism - number of all
+    processed files (\`Processed files\`) and the total number of files
+    residing on the storage during the scan (\`Total storage files\`).
+-   **VFS-6958** Added new endpoint that checks correctness of a QoS
+    expression and returns the list of storages that match the
+    expression.
+-   **VFS-6940** Fix truncating of sparse files.
+-   **VFS-6891** Added new REST api for file deletion, uploading and
+    downloading in both normal mode and share mode, accessible under
+    \`/data/{fileId}\` path.
+-   **VFS-6841** Introduce unified time management in all Onedata
+    components - all clusters now regularly synchronize their clocks
+    with the Onezone service, the process is managed by Onepanel's
+    master node.
+-   **VFS-6687** Blocked file path resolutions for unsupported spaces.
+
+
 ### 20.02.3
 
 -   **VFS-6967** Fixed not visible JSON and RDF metadata editors in GUI
@@ -384,6 +420,11 @@ CHANGELOG
 
 -   Hotfix - rename opened deleted files, enotdir when needed and fix
     async\_request\_manager
+
+### 19.02.5
+
+-   **VFS-6857** Add support for resuming partial file downloads via
+    CDMI.
 
 ### 19.02.4
 

@@ -261,12 +261,8 @@ resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
     middleware_utils:decode_object_id(cowboy_req:binding(Key, Req), Key);
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
     Path = filename:join([<<"/">> | cowboy_req:path_info(Req)]),
-    case guid_utils:ensure_guid(SessionId, {path, Path}) of
-        {guid, Guid} ->
-            Guid;
-        _Error ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>))
-    end;
+    {ok, Guid} = middleware_utils:resolve_file_path(SessionId, Path),
+    Guid;
 resolve_bindings(SessionId, {Atom, PossibleBinding}, Req) when is_atom(Atom) ->
     {Atom, resolve_bindings(SessionId, PossibleBinding, Req)};
 resolve_bindings(_SessionId, Other, _Req) ->

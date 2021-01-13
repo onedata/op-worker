@@ -135,7 +135,7 @@ provider_connection_test(Config) ->
 
 client_connection_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    OpVersion = rpc:call(Worker1, oneprovider, get_version, []),
+    OpVersion = rpc:call(Worker1, op_worker, get_release_version, []),
     {ok, [CompatibleVersion | _]} = rpc:call(
         Worker1, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
@@ -180,7 +180,7 @@ python_client_test_base(Config) ->
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
-    OpVersion = rpc:call(Worker1, oneprovider, get_version, []),
+    OpVersion = rpc:call(Worker1, op_worker, get_release_version, []),
     {ok, [Version | _]} = rpc:call(
         Worker1, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
@@ -215,7 +215,7 @@ python_client_test_base(Config) ->
     {ok, Port} = test_utils:get_env(Worker1, ?APP_NAME, https_server_port),
 
     % when
-    T1 = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     Args = [
         "--host", Host,
         "--port", integer_to_list(Port),
@@ -229,9 +229,9 @@ python_client_test_base(Config) ->
     lists:foreach(fun(_) ->
         ?assertReceivedMatch(router_message_called, timer:seconds(15))
     end, lists:seq(1, PacketNum)),
-    T2 = clock:timestamp_millis(),
+    Time = stopwatch:read_millis(Stopwatch),
     catch port_close(PythonClient),
-    #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
+    #parameter{name = full_time, value = Time, unit = "ms"}.
 
 
 multi_connection_test(Config) ->
@@ -307,7 +307,7 @@ sequential_ping_pong_test_base(Config) ->
     % when
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1),
 
-    T1 = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     lists:foreach(fun({MsgId, Ping}) ->
         % send ping
         ok = ssl:send(Sock, Ping),
@@ -318,12 +318,12 @@ sequential_ping_pong_test_base(Config) ->
             message_body = {pong, #'Pong'{}}
         }, fuse_test_utils:receive_server_message())
     end, Pings),
-    T2 = clock:timestamp_millis(),
+    Time = stopwatch:read_millis(Stopwatch),
 
     % then
     ok = ssl:close(Sock),
 
-    #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
+    #parameter{name = full_time, value = Time, unit = "ms"}.
 
 
 multi_ping_pong_test(Config) ->
@@ -360,7 +360,7 @@ multi_ping_pong_test_base(Config) ->
 
     Self = self(),
 
-    T1 = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     [
         spawn_link(fun() ->
             % when
@@ -387,8 +387,8 @@ multi_ping_pong_test_base(Config) ->
     lists:foreach(fun(_) ->
         ?assertReceivedMatch(success, infinity)
     end, ConnNumbersList),
-    T2 = clock:timestamp_millis(),
-    #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
+    Time = stopwatch:read_millis(Stopwatch),
+    #parameter{name = full_time, value = Time, unit = "ms"}.
 
 
 bandwidth_test(Config) ->
@@ -424,17 +424,18 @@ bandwidth_test_base(Config) ->
 
     % when
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}]),
-    T1 = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
+    T1 = stopwatch:read_millis(Stopwatch),
     lists:foreach(fun(_) ->
         ok = ssl:send(Sock, PacketRaw)
     end, lists:seq(1, PacketNum)),
-    T2 = clock:timestamp_millis(),
+    T2 = stopwatch:read_millis(Stopwatch),
 
     % then
     lists:foreach(fun(_) ->
         ?assertReceivedMatch(router_message_called, ?TIMEOUT)
     end, lists:seq(1, PacketNum)),
-    T3 = clock:timestamp_millis(),
+    T3 = stopwatch:read_millis(Stopwatch),
     ssl:close(Sock),
 
     [
@@ -485,15 +486,16 @@ bandwidth_test2_base(Config) ->
 
     % when
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}]),
-    T1 = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
+    T1 = stopwatch:read_millis(Stopwatch),
     lists:foreach(fun(E) -> ok = ssl:send(Sock, E) end, RawEvents),
-    T2 = clock:timestamp_millis(),
+    T2 = stopwatch:read_millis(Stopwatch),
 
     % then
     lists:foreach(fun(N) ->
         ?assertReceivedMatch(N, ?TIMEOUT)
     end, MsgNumbers),
-    T3 = clock:timestamp_millis(),
+    T3 = stopwatch:read_millis(Stopwatch),
     ok = ssl:close(Sock),
     [
         #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
@@ -654,10 +656,6 @@ init_per_testcase(Case, Config) when
             ?ERROR_BAD_TOKEN
     end),
 
-    test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
-        ok
-    end),
-
     init_per_testcase(default, Config);
 
 init_per_testcase(Case, Config) when
@@ -686,7 +684,7 @@ end_per_testcase(Case, Config) when
     Case =:= rtransfer_nodes_ips_test
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [provider_logic, token_logic]),
+    test_utils:mock_validate_and_unload(Workers, [token_logic]),
     end_per_testcase(default, Config);
 
 end_per_testcase(python_client_test, Config) ->

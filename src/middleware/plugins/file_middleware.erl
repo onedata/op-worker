@@ -24,6 +24,8 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/logging.hrl").
+
 
 -export([
     operation_supported/3,
@@ -278,7 +280,7 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     StorageId = maps:get(<<"storageId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId),
     middleware_utils:assert_space_supported_with_storage(SpaceId, StorageId),
-    storage_import:assert_manual_import_mode(SpaceId).
+    storage_import:assert_imported_storage(StorageId).
 
 
 %%--------------------------------------------------------------------
@@ -345,17 +347,20 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     DestinationPath = maps:get(<<"destinationPath">>, Data),
     StorageId = maps:get(<<"storageId">>, Data),
     StorageFileId = maps:get(<<"storageFileId">>, Data),
-    {ok, FileGuid} = try
-        file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data)
+    try
+        case file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data) of
+            {ok, FileGuid} ->
+                {ok, FileId} = file_id:guid_to_objectid(FileGuid),
+                {ok, value, FileId};
+            Error2 ->
+                throw(Error2)
+        end
     catch
         throw:{error, _} = Error ->
             throw(Error);
         throw:PosixErrno ->
             throw(?ERROR_POSIX(PosixErrno))
-    end,
-    {ok, FileId} = file_id:guid_to_objectid(FileGuid),
-    {ok, value, FileId}.
-
+    end.
 
 %%%===================================================================
 %%% GET SECTION
@@ -550,7 +555,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}},
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
     {ok, Path} = ?check(lfm:get_file_path(SessionId, FileGuid)),
 
-    case lfm:stat(SessionId, {guid, FileGuid}) of
+    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
             {ok, Children} = ?check(lfm:get_children(SessionId, {guid, Guid}, Offset, Limit)),
             {ok, lists:map(fun({ChildGuid, ChildPath}) ->
@@ -559,9 +564,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}},
             end, Children)};
         {ok, #file_attr{guid = Guid}} ->
             {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-            {ok, [#{<<"id">> => ObjectId, <<"path">> => Path}]};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
+            {ok, [#{<<"id">> => ObjectId, <<"path">> => Path}]}
     end;
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
@@ -570,12 +573,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
-    case lfm:get_children(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
-        {ok, Children, _, _} ->
-            {ok, value, Children};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    {ok, Children, _, _} = ?check(lfm:get_children(
+        SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId)
+    ),
+    {ok, value, Children};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -583,12 +584,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
-    case lfm:get_children_details(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of
-        {ok, ChildrenDetails, _} ->
-            {ok, value, ChildrenDetails};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    {ok, ChildrenDetails, _} = ?check(lfm:get_children_details(
+        SessionId, {guid, FileGuid}, Offset, Limit, StartId
+    )),
+    {ok, value, ChildrenDetails};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, scope = Sc}}, _) ->
     RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
@@ -668,12 +667,8 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) -
     ?check(lfm:get_file_distribution(Auth#auth.session_id, {guid, FileGuid}));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
-    case lfm:stat(Auth#auth.session_id, {guid, FileGuid}) of
-        {ok, #file_attr{shares = Shares}} ->
-            {ok, Shares};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, {guid, FileGuid})),
+    {ok, FileAttrs#file_attr.shares};
 
 get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
     {ok, #{
@@ -693,18 +688,13 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
     end;
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, _) ->
-    SessionId = Auth#auth.session_id,
-    case lfm:get_effective_file_qos(SessionId, {guid, FileGuid}) of
-        {ok, {QosEntriesWithStatus, _AssignedEntries}} ->
-            {ok, #{
-                <<"requirements">> => QosEntriesWithStatus,
-                <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))
-            }};
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND;
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    {ok, {QosEntriesWithStatus, _AssignedEntries}} = ?check(lfm:get_effective_file_qos(
+        Auth#auth.session_id, {guid, FileGuid}
+    )),
+    {ok, #{
+        <<"requirements">> => QosEntriesWithStatus,
+        <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))
+    }};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -864,13 +854,11 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 delete(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{id = FileGuid, aspect = instance}}) ->
     FileKey = {guid, FileGuid},
 
-    case lfm:stat(SessionId, {guid, FileGuid}) of
+    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             ?check(lfm:rm_recursive(SessionId, FileKey));
         {ok, _} ->
-            ?check(lfm:unlink(SessionId, FileKey, false));
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
+            ?check(lfm:unlink(SessionId, FileKey, false))
     end;
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
@@ -914,15 +902,13 @@ create_file(_, _, _, _, Counter, Attempts) when Counter >= Attempts ->
 create_file(SessId, ParentGuid, OriginalName, Type, Counter, Attempts) ->
     Name = maybe_add_file_suffix(OriginalName, Counter),
     case create_file(SessId, ParentGuid, Name, Type) of
-        {ok, Guid} ->
-            {ok, Guid};
         {error, ?EEXIST} ->
             create_file(
                 SessId, ParentGuid, OriginalName, Type,
                 Counter + 1, Attempts
             );
-        {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
+        Result ->
+            ?check(Result)
     end.
 
 

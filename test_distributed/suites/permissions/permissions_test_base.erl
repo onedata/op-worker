@@ -13,7 +13,7 @@
 -module(permissions_test_base).
 -author("Bartosz Walkowicz").
 
--include("../storage_files_test_SUITE.hrl").
+-include("storage_files_test_SUITE.hrl").
 -include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -570,20 +570,20 @@ data_access_caveats_cache_test(Config) ->
     end, [UserRootDir, SpaceRootDirGuid, RootDirGuid, DirGuid]),
 
     ?assertEqual(
-        {ok, subpath},
+        {ok, equal_or_descendant},
         ?rpcCache(W, check_permission, [{data_constraint, Token, FileGuid}])
     ),
 
-    % calling on dir any function reserved only for subpath should cache
-    % {subpath, ?EACCES} meaning that no such operation can be performed
-    % but since ancestor checks were not performed it is not known whether
+    % calling on dir any function reserved only for equal_or_descendant should
+    % cache {equal_or_descendant, ?EACCES} meaning that no such operation can be
+    % performed but since ancestor checks were not performed it is not known whether
     % ancestor operations can be performed
     ?assertMatch(
         {error, ?EACCES},
         lfm_proxy:get_acl(W, SessId, {guid, DirGuid})
     ),
     ?assertEqual(
-        {ok, {subpath, ?EACCES}},
+        {ok, {equal_or_descendant, ?EACCES}},
         ?rpcCache(W, check_permission, [{data_constraint, Token, DirGuid}])
     ),
 
@@ -1251,6 +1251,12 @@ set_perms_test(Config) ->
     permissions_test_utils:set_modes(W, #{DirGuid => 8#000, FileGuid => 8#000}),
     ?assertMatch(ok, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, FileGuid}, 8#555)),
     AssertProperStorageAttrsFun(8#555),
+
+    % but even space owner cannot perform write operation on space dir
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(<<"space1">>),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#000)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#555)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(W, SpaceOwnerSessId, {guid, SpaceGuid}, 8#777)),
 
     % users outside of space shouldn't even see the file
     permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
@@ -2256,7 +2262,6 @@ init_per_suite(Config) ->
             [{spaces_owners, [<<"owner">>]} | NewConfig2]
         ),
         initializer:mock_auth_manager(NewConfig3),
-        load_module_from_test_distributed_dir(Config, storage_test_utils),
         NewConfig3
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
@@ -2284,34 +2289,6 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%%% TODO VFS-6385 Reorganize and fix includes and loading modules from other dirs in tests
--spec load_module_from_test_distributed_dir(proplists:proplist(), module()) ->
-    ok.
-load_module_from_test_distributed_dir(Config, ModuleName) ->
-    DataDir = ?config(data_dir, Config),
-    ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
-        Token /= "test_distributed"
-    end, filename:split(DataDir))),
-    TestsRootDir = filename:join([ProjectRoot, "test_distributed"]),
-
-    code:add_pathz(TestsRootDir),
-
-    CompileOpts = [
-        verbose,report_errors,report_warnings,
-        {i, TestsRootDir},
-        {i, filename:join([TestsRootDir, "..", "include"])},
-        {i, filename:join([TestsRootDir, "..", "_build", "default", "lib"])}
-    ],
-    case compile:file(filename:join(TestsRootDir, ModuleName), CompileOpts) of
-        {ok, ModuleName} ->
-            code:purge(ModuleName),
-            code:load_file(ModuleName),
-            ok;
-        _ ->
-            ct:fail("Couldn't load module: ~p", [ModuleName])
-    end.
 
 
 %% @private

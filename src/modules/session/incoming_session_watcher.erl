@@ -129,7 +129,7 @@ init([SessId, SessType]) ->
             AccessTokenBin = auth_manager:get_access_token(TokenCredentials),
             {ok, AccessToken} = tokens:deserialize(AccessTokenBin),
 
-            NextCheckupDelay = case infer_ttl(tokens:get_caveats(AccessToken)) of
+            NextCheckupDelay = case caveats:infer_ttl(tokens:get_caveats(AccessToken)) of
                 undefined ->
                     ?SESSION_VALIDITY_CHECK_INTERVAL;
                 TokenTTL ->
@@ -346,23 +346,35 @@ get_session_grace_period(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mark_inactive_if_grace_period_has_passed(session:id(), session:grace_period()) ->
-    true | {false, RemainingTime :: clock:seconds()}.
+    true | {false, RemainingTime :: time:seconds()}.
 mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
     Diff = fun
-        (#session{status = active, accessed = Accessed} = Sess) ->
-            InactivityPeriod = clock:timestamp_seconds() - Accessed,
-            case InactivityPeriod >= GracePeriod of
+        (#session{status = active, accessed = LastAccessTimestamp} = Sess) ->
+            Now = global_clock:timestamp_seconds(),
+            case Now >= LastAccessTimestamp of
                 true ->
-                    {ok, Sess#session{status = inactive}};
+                    InactivityPeriod = Now - LastAccessTimestamp,
+                    case InactivityPeriod >= GracePeriod of
+                        true ->
+                            {ok, Sess#session{status = inactive}};
+                        false ->
+                            {error, {grace_period_not_exceeded, GracePeriod - InactivityPeriod}}
+                    end;
                 false ->
-                    {error, {grace_period_not_exceeded, GracePeriod - InactivityPeriod}}
+                    % backward time warp has happened and it is impossible to tell if grace period
+                    % has passed or not. To not let session unnecessarily exist until global time
+                    % catches to previous value, set `accessed` field to Now and check once again
+                    % later.
+                    {ok, Sess#session{accessed = Now}}
             end;
         (#session{} = Sess) ->
             {ok, Sess#session{status = inactive}}
     end,
     case session:update(SessionId, Diff) of
-        {ok, _} ->
+        {ok, #document{value = #session{status = inactive}}} ->
             true;
+        {ok, _} ->
+            {false, GracePeriod};
         {error, {grace_period_not_exceeded, RemainingTime}} ->
             {false, RemainingTime};
         {error, _} ->
@@ -381,7 +393,7 @@ check_auth_validity(TokenCredentials, Identity) ->
             {true, schedule_session_validity_checkup(?SESSION_VALIDITY_CHECK_INTERVAL)};
         {ok, #auth{subject = Identity}, TokenValidUntil} ->
             NextCheckupDelay = min(
-                max(0, TokenValidUntil - clock:timestamp_seconds()),
+                max(0, TokenValidUntil - global_clock:timestamp_seconds()),
                 ?SESSION_VALIDITY_CHECK_INTERVAL
             ),
             {true, schedule_session_validity_checkup(NextCheckupDelay)};
@@ -406,14 +418,14 @@ mark_inactive(SessionId) ->
 
 
 %% @private
--spec schedule_session_activity_checkup(Delay :: clock:seconds()) ->
+-spec schedule_session_activity_checkup(Delay :: time:seconds()) ->
     TimeRef :: reference().
 schedule_session_activity_checkup(Delay) ->
     erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_ACTIVITY).
 
 
 %% @private
--spec schedule_session_validity_checkup(Delay :: clock:seconds()) ->
+-spec schedule_session_validity_checkup(Delay :: time:seconds()) ->
     TimeRef :: reference().
 schedule_session_validity_checkup(Delay) ->
     erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_VALIDITY).
@@ -428,20 +440,7 @@ cancel_validity_checkup_timer(ValidityCheckupTimer) ->
 
 
 %% @private
--spec schedule_session_removal(Delay :: clock:seconds()) ->
+-spec schedule_session_removal(Delay :: time:seconds()) ->
     TimeRef :: reference().
 schedule_session_removal(Delay) ->
     erlang:send_after(timer:seconds(Delay), self(), ?REMOVE_SESSION).
-
-%% @private
--spec infer_ttl([caveats:caveat()]) -> undefined | clock:seconds().
-infer_ttl(Caveats) ->
-    ValidUntil = lists:foldl(fun
-        (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
-        (#cv_time{valid_until = ValidUntil}, Acc) -> min(ValidUntil, Acc)
-    end, undefined, caveats:filter([cv_time], Caveats)),
-
-    case ValidUntil of
-        undefined -> undefined;
-        _ -> ValidUntil - clock:timestamp_seconds()
-    end.

@@ -12,7 +12,7 @@
 -module(permissions_test_utils).
 -author("Bartosz Walkowicz").
 
--include("../storage_files_test_SUITE.hrl").
+-include("storage_files_test_SUITE.hrl").
 -include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/handshake_messages.hrl").

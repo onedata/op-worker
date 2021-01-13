@@ -18,10 +18,6 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 
-%% Common names
--define(DIRECTORY_SEPARATOR, "/").
--define(DIRECTORY_SEPARATOR_BINARY, list_to_binary(?DIRECTORY_SEPARATOR)).
-
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
 

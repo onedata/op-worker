@@ -28,6 +28,7 @@
 
 -export([
     auth_cache_expiration_test/1,
+    auth_cache_expiration_with_time_warps_test/1,
     auth_cache_size_test/1,
     auth_cache_named_token_events_test/1,
     auth_cache_temporary_token_events_test/1,
@@ -38,6 +39,7 @@
 
 all() -> ?ALL([
     auth_cache_expiration_test,
+    auth_cache_expiration_with_time_warps_test,
     auth_cache_size_test,
     auth_cache_named_token_events_test,
     auth_cache_temporary_token_events_test,
@@ -51,7 +53,7 @@ all() -> ?ALL([
 -define(USER_ID_2, <<"test_id_2">>).
 -define(USER_FULL_NAME, <<"test_name">>).
 
--define(NOW(), clock:timestamp_seconds()).
+-define(NOW(), global_clock:timestamp_seconds()).
 
 -define(ATTEMPTS, 60).
 
@@ -128,6 +130,73 @@ auth_cache_expiration_test(Config) ->
     ?assertMatch(?ERROR_UNAUTHORIZED, verify_credentials(Worker1, TokenCredentials2)),
     ?assertEqual(8, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
     ?assertMatch(AccessToken2, rpc:call(Worker1, meck, capture, [last, Mod, Fun, '_', 1])),
+
+    clear_auth_caches(Config).
+
+
+auth_cache_expiration_with_time_warps_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    Mod = token_logic,
+    Fun = verify_access_token,
+
+    clear_auth_caches(Config),
+
+    AccessToken1 = initializer:create_access_token(?USER_ID_1, [], temporary),
+    TokenCredentials1 = create_token_credentials(AccessToken1, rest),
+
+    Token2TTL = ?NOW() + 1500,
+    AccessToken2 = initializer:create_access_token(?USER_ID_1, [#cv_time{
+        valid_until = Token2TTL
+    }], named),
+    TokenCredentials2 = create_token_credentials(AccessToken2, graphsync),
+
+    set_auth_cache_default_ttl(Worker1, 5),
+
+    ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker1, TokenCredentials1)),
+    ?assertMatch({ok, ?USER(?USER_ID_1), Token2TTL}, verify_credentials(Worker1, TokenCredentials2)),
+    ?assertEqual(2, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+
+    simulate_gs_temporary_tokens_revocation(Worker1, ?USER_ID_1),
+
+    % After temporary token revocation cache entries for such tokens should be changed to
+    % ?ERROR_TOKEN_INVALID and kept for cache entry ttl independent of global time
+    ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker1, TokenCredentials1)),
+    ?assertMatch({ok, ?USER(?USER_ID_1), Token2TTL}, verify_credentials(Worker1, TokenCredentials2)),
+    ?assertEqual(2, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+
+    timer:sleep(timer:seconds(3)),
+    time_test_utils:simulate_seconds_passing(2000),
+
+    % Forward time warp should invalidate entries for tokens with expired ttl
+    % and leave unchanged cached errors
+    ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker1, TokenCredentials1)),
+    ?assertEqual(2, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+    ?assertMatch(?ERROR_UNAUTHORIZED, verify_credentials(Worker1, TokenCredentials2)),
+    ?assertEqual(3, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+
+    % After passage of local time greater than cache default ttl concrete error entries
+    % are invalidated and tokens can be verified once again
+    timer:sleep(timer:seconds(3)),
+
+    ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker1, TokenCredentials1)),
+    ?assertEqual(4, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+    ?assertMatch(?ERROR_UNAUTHORIZED, verify_credentials(Worker1, TokenCredentials2)),
+    ?assertEqual(4, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+
+    % Backward time warp should make tokens with ttl usable once again but only after cached
+    % error entries for those tokens expires
+    time_test_utils:simulate_seconds_passing(-1000),
+
+    ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker1, TokenCredentials1)),
+    ?assertMatch(?ERROR_UNAUTHORIZED, verify_credentials(Worker1, TokenCredentials2)),
+    ?assertEqual(4, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+
+    timer:sleep(timer:seconds(3)),
+
+    ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker1, TokenCredentials1)),
+    ?assertEqual(4, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+    ?assertMatch({ok, ?USER(?USER_ID_1), Token2TTL}, verify_credentials(Worker1, TokenCredentials2)),
+    ?assertEqual(5, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
 
     clear_auth_caches(Config).
 
@@ -446,6 +515,12 @@ token_expiration(Config) ->
 %%%===================================================================
 
 
+init_per_testcase(Case, Config) when
+    Case == auth_cache_expiration_with_time_warps_test
+->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     ssl:start(),
     mock_provider_logic(Config),
@@ -456,6 +531,12 @@ init_per_testcase(_Case, Config) ->
     rpc:multicall(?config(op_worker_nodes, Config), gs_client_worker, enable_cache, []),
     Config.
 
+
+end_per_testcase(Case, Config) when
+    Case == auth_cache_expiration_with_time_warps_test
+->
+    time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
     unmock_provider_logic(Config),
@@ -545,7 +626,7 @@ mock_token_logic(Config) ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = ?SUB(user, UserId)} = Token} ->
                     Caveats = tokens:get_caveats(Token),
-                    case infer_ttl(Caveats) of
+                    case caveats:infer_ttl(Caveats) of
                         undefined ->
                             {ok, ?SUB(user, UserId), undefined};
                         TokenTTL when TokenTTL > 0 ->
@@ -576,18 +657,6 @@ verify_credentials(Worker, TokenCredentials) ->
 
 clear_auth_cache(Worker) ->
     rpc:call(Worker, ets, delete_all_objects, [auth_cache]).
-
-
--spec infer_ttl([caveats:caveat()]) -> undefined | clock:seconds().
-infer_ttl(Caveats) ->
-    ValidUntil = lists:foldl(fun
-        (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
-        (#cv_time{valid_until = ValidUntil}, Acc) -> min(ValidUntil, Acc)
-    end, undefined, caveats:filter([cv_time], Caveats)),
-    case ValidUntil of
-        undefined -> undefined;
-        _ -> ValidUntil - ?NOW()
-    end.
 
 
 get_auth_cache_size(Worker) ->
@@ -690,14 +759,14 @@ set_auth_cache_size_limit(Node, SizeLimit) ->
     ])).
 
 
--spec set_auth_cache_purge_delay(node(), Delay :: clock:millis()) -> ok.
+-spec set_auth_cache_purge_delay(node(), Delay :: time:millis()) -> ok.
 set_auth_cache_purge_delay(Node, Delay) ->
     ?assertMatch(ok, rpc:call(Node, application, set_env, [
         ?APP_NAME, auth_cache_purge_delay, Delay
     ])).
 
 
--spec set_auth_cache_default_ttl(node(), TTL :: clock:seconds()) -> ok.
+-spec set_auth_cache_default_ttl(node(), TTL :: time:seconds()) -> ok.
 set_auth_cache_default_ttl(Node, TTL) ->
     ?assertMatch(ok, rpc:call(Node, application, set_env, [
         ?APP_NAME, auth_cache_item_default_ttl, TTL

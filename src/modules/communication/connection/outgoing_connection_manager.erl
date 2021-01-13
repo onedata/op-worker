@@ -49,10 +49,12 @@
 ]).
 
 % Definitions of renewal intervals for provider connections.
--define(INITIAL_RENEWAL_INTERVAL, timer:seconds(2)).
--define(RENEWAL_INTERVAL_INCREASE_RATE, 2).
-% timer:minutes(15) - defined like that to use in patter matching
--define(MAX_RENEWAL_INTERVAL, 900000).
+-define(INITIAL_RENEWAL_INTERVAL, 2000).  % 2 seconds
+-define(RENEWAL_INTERVAL_BACKOFF_RATE, 1.2).
+-define(MAX_RENEWAL_INTERVAL, 180000).  % 3 minutes
+
+% how often logs appear when waiting for peer provider connection
+-define(CONNECTION_AWAIT_LOG_INTERVAL_SEC, 21600).  % 6 hours
 
 -define(RENEW_CONNECTIONS_REQ, renew_connections).
 -define(SUCCESSFUL_HANDSHAKE, handshake_succeeded).
@@ -267,13 +269,22 @@ terminate_session(SessionId, State) ->
 %%--------------------------------------------------------------------
 -spec renew_connections(state()) -> {ok, state()} | {error, peer_offline}.
 renew_connections(#state{
+    peer_id = PeerId,
+    session_id = SessionId,
     renewal_timer = undefined,
     renewal_interval = Interval
 } = State) ->
     NewState = try
         renew_connections_insecure(State)
     catch Type:Reason ->
-        log_error(State, Type, Reason),
+        ?debug("Failed to establish connection with provider ~ts due to ~p:~p.~n"
+               "Next retry not sooner than ~B s.", [
+            provider_logic:to_printable(PeerId), Type, Reason,
+            Interval div 1000
+        ]),
+        utils:throttle({?MODULE, SessionId}, ?CONNECTION_AWAIT_LOG_INTERVAL_SEC, fun() ->
+            log_error(State, Type, Reason)
+        end),
         schedule_next_renewal(State)
     end,
 
@@ -338,9 +349,9 @@ schedule_next_renewal(#state{
     TimerRef = erlang:send_after(Interval, self(), ?RENEW_CONNECTIONS_REQ),
     NextRenewalInterval = case Interval of
         ?MAX_RENEWAL_INTERVAL ->
-            Interval * ?RENEWAL_INTERVAL_INCREASE_RATE;
+            round(Interval * ?RENEWAL_INTERVAL_BACKOFF_RATE);
         _ ->
-            min(Interval * ?RENEWAL_INTERVAL_INCREASE_RATE,
+            min(round(Interval * ?RENEWAL_INTERVAL_BACKOFF_RATE),
                 ?MAX_RENEWAL_INTERVAL)
     end,
     State#state{
@@ -355,41 +366,37 @@ schedule_next_renewal(State) ->
 -spec log_error(state(), Type :: throw | error | exit, Reason :: term()) ->
     ok.
 log_error(State, throw, {cannot_verify_peer_op_identity, Reason}) ->
-    ?warning("Discarding connections renewal to provider ~ts because "
-             "its identity cannot be verified due to ~w.~n"
-             "Next retry not sooner than ~B s.", [
-        provider_logic:to_printable(State#state.peer_id),
-        Reason,
-        State#state.renewal_interval div 1000
-    ]);
+    log_error(State, str_utils:format("peer identity cannot be verified due to ~w", [
+        Reason
+    ]));
 log_error(State, throw, {cannot_check_peer_op_version, HTTPErrorCode}) ->
-    ?warning("Discarding connections renewal to provider ~ts because "
-             "its version cannot be determined (HTTP ~B).~n"
-             "Next retry not sooner than ~B s.", [
-        provider_logic:to_printable(State#state.peer_id),
-        HTTPErrorCode,
-        State#state.renewal_interval div 1000
-    ]);
+    log_error(State, str_utils:format("peer version cannot be determined (HTTP ~B)", [
+        HTTPErrorCode
+    ]));
 log_error(State, throw, {incompatible_peer_op_version, PeerOpVersion, PeerCompOpVersions}) ->
-    Version = oneprovider:get_version(),
+    Version = op_worker:get_release_version(),
     {ok, CompatibleOpVersions} = compatibility:get_compatible_versions(
         ?ONEPROVIDER, Version, ?ONEPROVIDER
     ),
-    ?warning("Discarding connections renewal to provider ~ts "
-             "because of incompatible version.~n"
-             "Local version: ~s, supports providers: ~s~n"
-             "Remote version: ~s, supports providers: ~s~n"
-             "Next retry not sooner than ~B s.", [
-        provider_logic:to_printable(State#state.peer_id),
-        Version, str_utils:join_binary(CompatibleOpVersions, <<", ">>),
-        PeerOpVersion, str_utils:join_binary(PeerCompOpVersions, <<", ">>),
-        State#state.renewal_interval div 1000
-    ]);
+    log_error(State, str_utils:format(
+        "peer is of incompatible version.~n"
+        "Local version: ~s, supports providers: ~s~n"
+        "Remote version: ~s, supports providers: ~s", [
+            Version, str_utils:join_binary(CompatibleOpVersions, <<", ">>),
+            PeerOpVersion, str_utils:join_binary(PeerCompOpVersions, <<", ">>)
+        ]
+    ));
 log_error(State, Type, Reason) ->
-    ?warning("Failed to renew connections to provider ~ts~n"
-             "Error was: ~w:~p.~n"
-             "Next retry not sooner than ~B s.", [
-        provider_logic:to_printable(State#state.peer_id),
-        Type, Reason,
-        State#state.renewal_interval div 1000
-    ]).
+    log_error(State, str_utils:format("~w:~p", [Type, Reason])).
+
+
+%% @private
+-spec log_error(state(), ReasonString :: string()) -> ok.
+log_error(#state{peer_id = PeerId}, ReasonString) ->
+    ?warning(
+        "Failed to renew connections to provider ~ts, retrying in the background...~n"
+        "Last error was: ~ts.", [
+            provider_logic:to_printable(PeerId),
+            ReasonString
+        ]
+    ).

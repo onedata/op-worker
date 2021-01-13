@@ -12,6 +12,7 @@
 -module(token_logic).
 -author("Bartosz Walkowicz").
 
+-include("middleware/middleware.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -37,7 +38,7 @@
 %% Creates a new temporary identity token for this provider with given TTL.
 %% @end
 %%--------------------------------------------------------------------
--spec create_identity_token(ValidUntil :: clock:seconds()) ->
+-spec create_identity_token(ValidUntil :: time:seconds()) ->
     {ok, tokens:serialized()} | errors:error().
 create_identity_token(ValidUntil) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
@@ -120,7 +121,7 @@ get_temporary_tokens_generation(UserId) ->
     Interface :: undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
-    {ok, aai:subject(), TTL :: undefined | clock:seconds()} | errors:error().
+    {ok, aai:subject(), TTL :: undefined | time:seconds()} | errors:error().
 verify_access_token(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
@@ -220,5 +221,5 @@ build_verification_payload(AccessToken, ConsumerToken, PeerIp, Interface, DataAc
 %% @private
 -spec op_worker_identity_token() -> tokens:serialized().
 op_worker_identity_token() ->
-    {ok, IdentityToken} = provider_auth:get_identity_token(),
+    {ok, IdentityToken} = ?throw_on_error(provider_auth:acquire_identity_token()),
     tokens:add_oneprovider_service_indication(?OP_WORKER, IdentityToken).

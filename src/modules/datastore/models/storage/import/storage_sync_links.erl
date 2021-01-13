@@ -75,7 +75,7 @@
 %%-------------------------------------------------------------------
 -spec add_link_recursive(helpers:file_id(), storage:id(), link_name(), boolean()) -> ok.
 add_link_recursive(StorageFileId, StorageId, ChildStorageFileId, MarkLeaves) ->
-    ChildrenTokens = fslogic_path:split(ChildStorageFileId) -- fslogic_path:split(StorageFileId),
+    ChildrenTokens = filepath_utils:split(ChildStorageFileId) -- filepath_utils:split(StorageFileId),
     RootId = ?ROOT_ID(StorageFileId, StorageId),
     add_link_recursive(RootId, StorageFileId, StorageId, ChildrenTokens, MarkLeaves).
 

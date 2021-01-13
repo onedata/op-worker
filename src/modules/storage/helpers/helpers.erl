@@ -418,11 +418,10 @@ apply_helper_nif(#file_handle{handle = Handle, timeout = Timeout}, Function, Arg
     ok | {ok, term()} | {error, Reason :: term()}.
 apply_helper_nif(Handle, Timeout, Function, Args) ->
     ?update_counter(?EXOMETER_NAME(Function)),
-    Now = os:timestamp(), % @TODO VFS-6841 switch to the clock module
+    Stopwatch = stopwatch:start(),
     {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
     Ans = receive_loop(ResponseRef, Timeout),
-    Time = timer:now_diff(os:timestamp(), Now),
-    ?update_counter(?EXOMETER_TIME_NAME(Function), Time),
+    ?update_counter(?EXOMETER_TIME_NAME(Function), stopwatch:read_micros(Stopwatch)),
     Ans.
 
 %%--------------------------------------------------------------------

@@ -53,7 +53,7 @@
 
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
--export([reset/1, new_by_partial_context/1, add_file_location/2, set_file_id/2,
+-export([reset/1, new_by_partial_context/1, set_file_location/2, set_file_id/2,
     set_is_dir/2]).
 
 %% Functions that do not modify context
@@ -84,7 +84,7 @@
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
@@ -146,7 +146,7 @@ new_by_partial_context(FileCtx = #file_ctx{}) ->
     {FileCtx, get_space_id_const(FileCtx)};
 new_by_partial_context(FilePartialCtx) ->
     {CanonicalPath, FilePartialCtx2} = file_partial_ctx:get_canonical_path(FilePartialCtx),
-    {ok, FileDoc} = fslogic_path:resolve(CanonicalPath),
+    {ok, FileDoc} = canonical_path:resolve(CanonicalPath),
     SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx2),
     {new_by_doc(FileDoc, SpaceId, undefined), SpaceId}.
 
@@ -159,15 +159,10 @@ new_by_partial_context(FilePartialCtx) ->
 reset(FileCtx) ->
     new_by_guid(get_guid_const(FileCtx)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds file location to context record
-%% @end
-%%--------------------------------------------------------------------
--spec add_file_location(ctx(), file_location:id()) -> ctx().
-add_file_location(FileCtx = #file_ctx{file_location_ids = undefined}, _LocationId) ->
+-spec set_file_location(ctx(), file_location:id()) -> ctx().
+set_file_location(FileCtx = #file_ctx{file_location_ids = undefined}, _LocationId) ->
     FileCtx;
-add_file_location(FileCtx = #file_ctx{file_location_ids = Locations}, LocationId) ->
+set_file_location(FileCtx = #file_ctx{file_location_ids = Locations}, LocationId) ->
     FileCtx#file_ctx{
         file_location_ids = [LocationId | Locations]
     }.
@@ -274,7 +269,7 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
                 FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
-    {fslogic_path:split(Path), FileCtx}.
+    {filepath_utils:split(Path), FileCtx}.
 
 
 -spec get_uuid_based_path(ctx()) -> {file_meta:uuid_based_path(), ctx()}.
@@ -298,7 +293,7 @@ get_logical_path(FileCtx, UserCtx) ->
             {<<"/">>, FileCtx2};
         {Path, FileCtx2} ->
             {SpaceName, FileCtx3} = get_space_name(FileCtx2, UserCtx),
-            {ok, [<<"/">>, _SpaceId | Rest]} = fslogic_path:split_skipping_dots(Path),
+            {ok, [<<"/">>, _SpaceId | Rest]} = filepath_utils:split_and_skip_dots(Path),
             LogicalPath = filename:join([<<"/">>, SpaceName | Rest]),
             {LogicalPath, FileCtx3}
     end.
@@ -488,24 +483,41 @@ get_storage_file_id(FileCtx) ->
 get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
     case is_root_dir_const(FileCtx0) of
         true ->
-            StorageFileId = ?DIRECTORY_SEPARATOR_BINARY,
+            StorageFileId = <<?DIRECTORY_SEPARATOR>>,
             {StorageFileId, FileCtx0#file_ctx{storage_file_id = StorageFileId}};
         false ->
-            case get_local_file_location_doc(FileCtx0, false) of
-                {#document{value = #file_location{file_id = ID, storage_file_created = SFC}}, FileCtx}
-                    when ID =/= undefined andalso (SFC or Generate) ->
-                    {ID, FileCtx};
-                {_, FileCtx} ->
-                    % Check if id should be generated
-                    {Continue, FileCtx2} = case Generate of
-                        true -> {true, FileCtx};
-                        _ -> is_dir(FileCtx)
+            {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+            case IsDir of
+                true ->
+                    StorageFileIdOrUndefined = case get_dir_location_doc_const(FileCtx1) of
+                        undefined ->
+                            undefined;
+                        DirLocation ->
+                            dir_location:get_storage_file_id(DirLocation)
                     end,
-                    case Continue of
-                        true ->
-                            get_new_storage_file_id(FileCtx2);
-                        _ ->
-                            {undefined, FileCtx2}
+                    case StorageFileIdOrUndefined of
+                        undefined ->
+                            get_new_storage_file_id(FileCtx1);
+                        StorageFileId ->
+                            {StorageFileId, FileCtx1#file_ctx{storage_file_id = StorageFileId}}
+                    end;
+                false ->
+                    case get_local_file_location_doc(FileCtx1, false) of
+                        {#document{
+                            value = #file_location{file_id = StorageFileId, storage_file_created = SFC}
+                        }, FileCtx2}
+                            when StorageFileId =/= undefined
+                            andalso (SFC or Generate)
+                        ->
+                            {StorageFileId, FileCtx2#file_ctx{storage_file_id = StorageFileId}};
+                        {_, FileCtx2} ->
+                            % Check if id should be generated
+                            case Generate of
+                                true ->
+                                    get_new_storage_file_id(FileCtx2);
+                                _ ->
+                                    {undefined, FileCtx2}
+                            end
                     end
             end
     end;
@@ -516,14 +528,18 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
 get_new_storage_file_id(FileCtx) ->
     {Storage, FileCtx2} = get_storage(FileCtx),
     Helper = storage:get_helper(Storage),
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
     case helper:get_storage_path_type(Helper) of
         ?FLAT_STORAGE_PATH ->
-            {FileId, FileCtx3} = storage_file_id:flat(FileCtx2),
+            FileUuid = file_ctx:get_uuid_const(FileCtx2),
+            StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
             % TODO - do not get_canonical_path (fix acceptance tests before)
-            {_, FileCtx4} = get_canonical_path(FileCtx3),
-            {FileId, FileCtx4#file_ctx{storage_file_id = FileId}};
+            {_, FileCtx3} = get_canonical_path(FileCtx2),
+            {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}};
         ?CANONICAL_STORAGE_PATH ->
-            {StorageFileId, FileCtx3} = storage_file_id:canonical(FileCtx2),
+            {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+            StorageId = storage:get_id(Storage),
+            StorageFileId = storage_file_id:canonical(CanonicalPath, SpaceId, StorageId),
             {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}}
     end.
 
@@ -651,7 +667,7 @@ get_child(FileCtx, Name, UserCtx) ->
         _ ->
             SpaceId = get_space_id_const(FileCtx),
             {FileDoc, FileCtx2} = get_file_doc(FileCtx),
-            case fslogic_path:resolve(FileDoc, <<"/", Name/binary>>) of
+            case canonical_path:resolve(FileDoc, <<"/", Name/binary>>) of
                 {ok, ChildDoc} ->
                     ShareId = get_share_id_const(FileCtx2),
                     Child = new_by_doc(ChildDoc, SpaceId, ShareId),
@@ -660,18 +676,6 @@ get_child(FileCtx, Name, UserCtx) ->
                     throw(?ENOENT)
             end
     end.
-
-%%%-------------------------------------------------------------------
-%%% @doc
-%%% Returns CanonicalPath for child of ParentCtx with given FileName.
-%%% @end
-%%%-------------------------------------------------------------------
--spec get_child_canonical_path(ctx(), file_meta:name()) ->
-    {file_meta:name(), NewParenCtx :: ctx()}.
-get_child_canonical_path(ParentCtx, FileName) ->
-    {ParentPath, ParentCtx2} = get_canonical_path(ParentCtx),
-    CanonicalPath = filename:join(ParentPath, FileName),
-    {CanonicalPath, ParentCtx2}.
 
 
 %%--------------------------------------------------------------------
@@ -1319,13 +1323,21 @@ resolve_and_cache_path(FileCtx, Type) ->
     end,
     case FileType of
         ?DIRECTORY_TYPE ->
-            {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
-            {Path, FileCtx2};
+            case effective_value:get_or_calculate(CacheName, Doc, Callback) of
+                {ok, Path, _} ->
+                    {Path, FileCtx2};
+                {error, {file_meta_missing, _}} ->
+                    throw(?ERROR_NOT_FOUND)
+            end;
         _ ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
             {ok, ParentDoc} = file_meta:get_including_deleted(ParentUuid),
-            {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
-            {Path ++ [FilenameOrUuid], FileCtx2}
+            case effective_value:get_or_calculate(CacheName, ParentDoc, Callback) of
+                {ok, Path, _} ->
+                    {Path ++ [FilenameOrUuid], FileCtx2};
+                {error, {file_meta_missing, _}} ->
+                    throw(?ERROR_NOT_FOUND)
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -1344,7 +1356,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true) ->
             {Location, FileCtx2}
     end;
 get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocationExists) ->
-    case location_and_link_utils:get_new_file_location_doc(FileCtx, false, false) of
+    case location_and_link_utils:create_new_file_location_doc(FileCtx, false, false) of
         {{ok, _}, FileCtx2} ->
             {LocationDocs, FileCtx3} = get_file_location_docs(FileCtx2, true, false),
             lists:foreach(fun(ChangedLocation) ->

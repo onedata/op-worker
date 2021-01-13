@@ -75,5 +75,18 @@ routes() -> [
             aspect = file_qos_summary, 
             scope = private
         }
+    }},
+    %% Evaluate qos expression
+    {<<"/spaces/:sid/evaluate_qos_expression">>, rest_handler, #rest_req{
+        method = 'POST',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_space, 
+            id = ?BINDING(sid), 
+            aspect = evaluate_qos_expression, 
+            scope = private
+        }
     }}
 ].

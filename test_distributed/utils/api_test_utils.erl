@@ -13,37 +13,31 @@
 -author("Bartosz Walkowicz").
 
 -include("api_test_runner.hrl").
--include("file_api_test_utils.hrl").
+-include("api_file_test_utils.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("test_utils/initializer.hrl").
 
 
--export([load_module_from_test_distributed_dir/2]).
-
 -export([
     build_rest_url/2,
 
-    get_file_attrs/2,
-
-    create_shared_file_in_space1/1,
-    create_and_sync_shared_file_in_space2/2,
-    create_and_sync_shared_file_in_space2/3,
-    create_and_sync_shared_file_in_space2/4,
-    create_file_in_space2_with_additional_metadata/4,
-    create_file_in_space2_with_additional_metadata/5,
+    create_shared_file_in_space_krk/0,
+    create_and_sync_shared_file_in_space_krk_par/1,
+    create_and_sync_shared_file_in_space_krk_par/2,
+    create_and_sync_shared_file_in_space_krk_par/3,
+    create_file_in_space_krk_par_with_additional_metadata/3,
+    create_file_in_space_krk_par_with_additional_metadata/4,
 
     randomly_choose_file_type_for_test/0,
     randomly_choose_file_type_for_test/1,
     create_file/4, create_file/5,
-    wait_for_file_sync/3,
 
     fill_file_with_dummy_data/4,
     fill_file_with_dummy_data/5,
     write_file/5,
     read_file/4,
-    assert_distribution/3,
 
     share_file_and_sync_file_attrs/4,
 
@@ -82,134 +76,88 @@
 %%%===================================================================
 
 
-%%% TODO VFS-6385 Reorganize and fix includes and loading modules from other dirs in tests
--spec load_module_from_test_distributed_dir(proplists:proplist(), module()) ->
-    ok.
-load_module_from_test_distributed_dir(Config, ModuleName) ->
-    DataDir = ?config(data_dir, Config),
-    ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
-        Token /= "test_distributed"
-    end, filename:split(DataDir))),
-    TestsRootDir = filename:join([ProjectRoot, "test_distributed"]),
-
-    code:add_pathz(TestsRootDir),
-
-    CompileOpts = [
-        verbose,report_errors,report_warnings,
-        {i, TestsRootDir},
-        {i, filename:join([TestsRootDir, "..", "include"])},
-        {i, filename:join([TestsRootDir, "..", "_build", "default", "lib"])}
-    ],
-    case compile:file(filename:join(TestsRootDir, ModuleName), CompileOpts) of
-        {ok, ModuleName} ->
-            code:purge(ModuleName),
-            code:load_file(ModuleName),
-            ok;
-        _ ->
-            ct:fail("Couldn't load module: ~p", [ModuleName])
-    end.
-
-
 -spec build_rest_url(node(), [binary()]) -> binary().
 build_rest_url(Node, PathTokens) ->
-    list_to_binary(rpc:call(Node, oneprovider, get_rest_endpoint, [
+    rpc:call(Node, oneprovider, get_rest_endpoint, [
         string:trim(filename:join([<<"/">> | PathTokens]), leading, [$/])
-    ])).
+    ]).
 
 
--spec get_file_attrs(node(), file_id:file_guid()) ->
-    {ok, lfm_attrs:file_attributes()} | {error, times_not_synchronized}.
-get_file_attrs(Node, FileGuid) ->
-    case ?assertMatch({ok, _}, lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, FileGuid}), ?ATTEMPTS) of
-        % File attrs are constructed from several records so it is possible that
-        % even if 'file_meta' (the main doc) was synchronized 'times' doc wasn't
-        {ok, #file_attr{mtime = 0}} ->
-            {error, times_not_synchronized};
-        Result ->
-            Result
-    end.
-
-
--spec create_shared_file_in_space1(api_test_runner:config()) ->
+-spec create_shared_file_in_space_krk() ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
-create_shared_file_in_space1(Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
+create_shared_file_in_space_krk() ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
 
-    UserSessId = api_test_env:get_user_session_id(user3, p1, Config),
-    SpaceOwnerSessId = api_test_env:get_user_session_id(user1, p1, Config),
+    UserSessId = oct_background:get_user_session_id(user3, krakow),
+    SpaceOwnerSessId = oct_background:get_user_session_id(user1, krakow),
 
     FileType = randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
+    FilePath = filename:join(["/", ?SPACE_KRK, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessId, FilePath),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, {guid, FileGuid}, <<"share">>),
 
     {FileType, FilePath, FileGuid, ShareId}.
 
 
--spec create_and_sync_shared_file_in_space2(file_meta:mode(), api_test_runner:config()) ->
+-spec create_and_sync_shared_file_in_space_krk_par(file_meta:mode()) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
-create_and_sync_shared_file_in_space2(Mode, Config) ->
+create_and_sync_shared_file_in_space_krk_par(Mode) ->
     FileType = randomly_choose_file_type_for_test(),
-    create_and_sync_shared_file_in_space2(FileType, Mode, Config).
+    create_and_sync_shared_file_in_space_krk_par(FileType, Mode).
 
 
--spec create_and_sync_shared_file_in_space2(file_type(), file_meta:mode(), api_test_runner:config()) ->
+-spec create_and_sync_shared_file_in_space_krk_par(file_type(), file_meta:mode()) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
-create_and_sync_shared_file_in_space2(FileType, Mode, Config) ->
-    create_and_sync_shared_file_in_space2(FileType, ?RANDOM_FILE_NAME(), Mode, Config).
+create_and_sync_shared_file_in_space_krk_par(FileType, Mode) ->
+    create_and_sync_shared_file_in_space_krk_par(FileType, ?RANDOM_FILE_NAME(), Mode).
 
 
--spec create_and_sync_shared_file_in_space2(
+-spec create_and_sync_shared_file_in_space_krk_par(
     file_type(),
     file_meta:name(),
-    file_meta:mode(),
-    api_test_runner:config()
+    file_meta:mode()
 ) ->
     {file_type(), file_meta:path(), file_id:file_guid(), od_share:id()}.
-create_and_sync_shared_file_in_space2(FileType, FileName, Mode, Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+create_and_sync_shared_file_in_space_krk_par(FileType, FileName, Mode) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    SpaceOwnerSessIdP1 = kv_utils:get([users, user2, sessions, krakow], node_cache:get(oct_mapping)),
+    UserSessIdP1 = kv_utils:get([users, user3, sessions, krakow], node_cache:get(oct_mapping)),
 
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    UserSessIdP2 = api_test_env:get_user_session_id(user3, p2, Config),
-
-    FilePath = filename:join(["/", ?SPACE_2, FileName]),
+    FilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
 
-    wait_for_file_sync(P2Node, UserSessIdP2, FileGuid),
+    file_test_utils:await_sync(P2Node, FileGuid),
 
     {FileType, FilePath, FileGuid, ShareId}.
 
 
--spec create_file_in_space2_with_additional_metadata(
+-spec create_file_in_space_krk_par_with_additional_metadata(
     file_meta:path(),
     boolean(),
-    file_meta:name(),
-    api_test_runner:config()
+    file_meta:name()
 ) ->
     {file_type(), file_meta:path(), file_id:file_guid(), #file_details{}}.
-create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileName, Config) ->
+create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, FileName) ->
     FileType = randomly_choose_file_type_for_test(false),
-    create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName, Config).
+    create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName).
 
 
--spec create_file_in_space2_with_additional_metadata(
+-spec create_file_in_space_krk_par_with_additional_metadata(
     file_meta:path(),
     boolean(),
     file_type(),
-    file_meta:name(),
-    api_test_runner:config()
+    file_meta:name()
 ) ->
     {file_type(), file_meta:path(), file_id:file_guid(), #file_details{}}.
-create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName, Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Nodes = [P1Node, P2Node],
 
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
 
     FilePath = filename:join([ParentPath, FileName]),
 
@@ -231,7 +179,7 @@ create_file_in_space2_with_additional_metadata(ParentPath, HasParentQos, FileTyp
     end,
     {ok, FileAttrs} = ?assertMatch(
         {ok, #file_attr{size = Size, shares = FileShares}},
-        get_file_attrs(P2Node, FileGuid),
+        file_test_utils:get_attrs(P2Node, FileGuid),
         ?ATTEMPTS
     ),
 
@@ -280,12 +228,6 @@ create_file(<<"dir">>, Node, SessId, Path, Mode) ->
     lfm_proxy:mkdir(Node, SessId, Path, Mode).
 
 
--spec wait_for_file_sync(node(), session:id(), file_id:file_guid()) -> ok.
-wait_for_file_sync(Node, SessId, FileGuid) ->
-    ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, {guid, FileGuid}), ?ATTEMPTS),
-    ok.
-
-
 -spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
     WrittenContent :: binary().
 fill_file_with_dummy_data(Node, SessId, FileGuid, Size) ->
@@ -318,54 +260,6 @@ read_file(Node, SessId, FileGuid, Size) ->
     Content.
 
 
--spec assert_distribution(
-    [node()],
-    file_id:file_guid() | [file_id:file_guid()],
-    [{node(), non_neg_integer()}]
-) ->
-    true | no_return().
-assert_distribution(NodesToVerify, Files, ExpSizePerProvider) when is_list(Files) ->
-    ExpDistribution = lists:sort(lists:map(fun
-        ({Node, Blocks}) when is_list(Blocks) ->
-            #{
-                <<"blocks">> => lists:foldr(fun
-                    (#file_block{offset = _Offset, size = 0}, Acc) ->
-                        Acc;
-                    (#file_block{offset = Offset, size = Size}, Acc) ->
-                        [[Offset, Size] | Acc]
-                end, [], Blocks),
-                <<"providerId">> => op_test_rpc:get_provider_id(Node),
-                <<"totalBlocksSize">> => lists:sum(lists:map(fun(#file_block{size = Size}) ->
-                    Size
-                end, Blocks))
-            };
-        ({Node, ExpSize}) when is_integer(ExpSize) ->
-            #{
-                <<"blocks">> => case ExpSize of
-                    0 -> [];
-                    _ -> [[0, ExpSize]]
-                end,
-                <<"providerId">> => op_test_rpc:get_provider_id(Node),
-                <<"totalBlocksSize">> => ExpSize
-            }
-    end, ExpSizePerProvider)),
-
-    FetchDistributionFun = fun(Node, Guid) ->
-        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, ?ROOT_SESS_ID, {guid, Guid}),
-        lists:sort(Distribution)
-    end,
-
-    lists:foreach(fun(FileGuid) ->
-        lists:foreach(fun(Node) ->
-            ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), ?ATTEMPTS)
-        end, NodesToVerify)
-    end, Files),
-
-    true;
-assert_distribution(NodesToVerify, File, ExpSizePerProvider) ->
-    assert_distribution(NodesToVerify, [File], ExpSizePerProvider).
-
-
 -spec share_file_and_sync_file_attrs(node(), session:id(), [node()], file_id:file_guid()) ->
     od_share:id().
 share_file_and_sync_file_attrs(CreationNode, SessionId, SyncNodes, FileGuid) ->
@@ -377,7 +271,7 @@ share_file_and_sync_file_attrs(CreationNode, SessionId, SyncNodes, FileGuid) ->
     lists:foreach(fun(Node) ->
         ?assertMatch(
             {ok, #file_attr{shares = [ShareId | _]}},
-            get_file_attrs(Node, FileGuid),
+            file_test_utils:get_attrs(Node, FileGuid),
             ?ATTEMPTS
         )
     end, SyncNodes),
@@ -527,7 +421,7 @@ guids_to_object_ids(Guids) ->
 file_details_to_gs_json(undefined, #file_details{
     file_attr = #file_attr{
         guid = FileGuid,
-        parent_uuid = ParentGuid,
+        parent_guid = ParentGuid,
         name = FileName,
         type = Type,
         mode = Mode,
@@ -575,7 +469,7 @@ file_details_to_gs_json(undefined, #file_details{
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{
         guid = FileGuid,
-        parent_uuid = ParentGuid,
+        parent_guid = ParentGuid,
         name = FileName,
         type = Type,
         mode = Mode,
@@ -811,7 +705,7 @@ get_invalid_file_id_errors() ->
 
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
-        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>)}},
+        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
         {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>)}},
 
         % Errors thrown by middleware and internal logic

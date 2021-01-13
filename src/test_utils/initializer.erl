@@ -556,7 +556,7 @@ mock_auth_manager(Config, CheckIfUserIsSupported, NoHistory) ->
                                     Csm
                             end,
                             AuthCtx = #auth_ctx{
-                                current_timestamp = clock:timestamp_seconds(),
+                                current_timestamp = global_clock:timestamp_seconds(),
                                 ip = auth_manager:get_peer_ip(TokenCredentials),
                                 interface = auth_manager:get_interface(TokenCredentials),
                                 service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
@@ -621,14 +621,14 @@ mock_provider_ids(Config) ->
 -spec mock_provider_id([node()], od_provider:id(), binary(), binary()) -> ok.
 mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
     ok = test_utils:mock_new(Workers, provider_auth),
-    ok = test_utils:mock_expect(Workers, provider_auth, get_identity_token_for_consumer,
+    ok = test_utils:mock_expect(Workers, provider_auth, acquire_identity_token_for_consumer,
         fun(_Consumer) ->
             {ok, ?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)}
         end
     ),
 
     % Mock cached auth and identity tokens with large TTL
-    ExpirationTime = clock:timestamp_seconds() + 999999999,
+    ExpirationTime = global_clock:timestamp_seconds() + 999999999,
     {RpcAns, []} = rpc:multicall(Workers, datastore_model, save, [#{model => provider_auth}, #document{
         key = <<"provider_auth">>,
         value = #provider_auth{
@@ -1499,11 +1499,6 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
             lists:member(StorageId, StorageIds)
         end),
 
-    test_utils:mock_expect(AllWorkers, provider_logic, assert_zone_compatibility,
-        fun() ->
-            ok
-        end),
-
     VerifyProviderIdentityFun = fun
         (?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)) ->
             {ok, ?SUB(?ONEPROVIDER, ProviderId)};
@@ -1625,11 +1620,15 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
             {ok, maps:get(<<"provider_id">>, maps:get(StorageId, StorageMap, #{}))}
         end),
 
-    ok = test_utils:mock_expect(Workers, storage_logic, get_name,
+    ok = test_utils:mock_expect(Workers, storage_logic, get_name_of_local_storage,
         % storage name is equal to its id
         fun(#document{key = Id}) -> {ok, Id};
             (Id) -> {ok, Id}
         end),
+    
+    ok = test_utils:mock_expect(Workers, storage_logic, get_name_of_remote_storage,
+        % storage name is equal to its id
+        fun(StorageId, _) -> {ok, StorageId} end),
 
     ok = test_utils:mock_expect(Workers, storage_logic, get_spaces,
         fun(StorageId) -> {ok, maps:get(StorageId, StoragesToSpaces, [])} end),

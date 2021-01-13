@@ -42,7 +42,6 @@
 
 %% API
 -export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0]).
--export([actual_timestamp/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -50,14 +49,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @equiv universaltime().
-%%--------------------------------------------------------------------
--spec actual_timestamp() -> timestamp().
-actual_timestamp() ->
-    erlang:universaltime().
-
 
 -spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update_cache(Id, Diff, Default) ->

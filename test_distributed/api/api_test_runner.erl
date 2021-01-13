@@ -139,7 +139,7 @@ get_scenario_specific_error_for_invalid_clients(rest_with_file_path, InvalidClie
 ->
     % Error thrown by rest_handler (before middleware auth checks could be performed)
     % as invalid clients who doesn't belong to space can't resolve file path to guid
-    ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
+    ?ERROR_POSIX(?ENOENT);
 get_scenario_specific_error_for_invalid_clients(_ScenarioType, unauthorized) ->
     ?ERROR_UNAUTHORIZED;
 get_scenario_specific_error_for_invalid_clients(_ScenarioType, forbidden_not_in_space) ->
@@ -429,7 +429,8 @@ run_exp_error_testcase(
             RequestResult = make_request(Config, TargetNode, Client, Args),
             try
                 validate_error_result(ScenarioType, ExpError, RequestResult),
-                VerifyFun(expected_failure, TestCaseCtx)
+                VerifyFun(expected_failure, TestCaseCtx),
+                true
             catch T:R ->
                 log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R),
                 false
@@ -460,7 +461,8 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, SupportedClient
                             ScenarioType, ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED), Result
                         ),
                         VerifyFun(expected_failure, TestCaseCtx)
-                end
+                end,
+                true
             catch T:R ->
                 log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R),
                 false
@@ -801,7 +803,7 @@ make_rest_request(_Config, Node, Client, #rest_args{
     URL = get_rest_endpoint(Node, Path),
     HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
     CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
-    Opts = [{ssl_options, [{cacerts, CaCerts}]}],
+    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 10000}],
 
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
         {ok, RespCode, RespHeaders, RespBody} ->

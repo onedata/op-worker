@@ -21,6 +21,7 @@
 -module(storage).
 -author("Michal Stanisz").
 
+-include("middleware/middleware.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -38,8 +39,8 @@
     get_id/1, get_block_size/1, get_helper/1, get_helper_name/1,
     get_luma_feed/1, get_luma_config/1
 ]).
--export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
-    fetch_qos_parameters_of_remote_storage/2]).
+-export([fetch_name/1, fetch_name_of_remote_storage/2, fetch_provider_id_of_remote_storage/2, 
+    fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2]).
 -export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
@@ -91,11 +92,6 @@
     imported/0, readonly/0, config/0]).
 
 -compile({no_auto_import, [get/1]}).
-
--define(throw_on_error(Res), case Res of
-    {error, _} = Error -> throw(Error);
-    _ -> Res
-end).
 
 
 %%%===================================================================
@@ -263,8 +259,20 @@ get_luma_config(StorageData) ->
 
 -spec fetch_name(id()) -> name().
 fetch_name(StorageId) when is_binary(StorageId) ->
-    {ok, Name} = ?throw_on_error(storage_logic:get_name(StorageId)),
+    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_local_storage(StorageId)),
     Name.
+
+
+-spec fetch_name_of_remote_storage(id(), od_space:id()) -> name().
+fetch_name_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
+    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_remote_storage(StorageId, SpaceId)),
+    Name.
+
+
+-spec fetch_provider_id_of_remote_storage(id(), od_space:id()) -> od_provider:id().
+fetch_provider_id_of_remote_storage(StorageId, SpaceId) ->
+    {ok, ProviderId} = ?throw_on_error(storage_logic:get_provider(StorageId, SpaceId)),
+    ProviderId.
 
 
 -spec fetch_qos_parameters_of_local_storage(id()) -> qos_parameters().
@@ -356,22 +364,10 @@ update_luma_config(StorageId, Diff) ->
 update_readonly_and_imported(StorageId, Readonly, Imported) ->
     storage_logic:update_readonly_and_imported(StorageId, Readonly, Imported).
 
+
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
-    set_qos_parameters(StorageId, oneprovider:get_id(), QosParameters).
-
-
--spec set_qos_parameters(id(), oneprovider:id(), qos_parameters()) -> ok | errors:error().
-set_qos_parameters(_StorageId, ProviderId, #{<<"providerId">> := OtherProvider}) when ProviderId =/= OtherProvider ->
-    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"qosParameters.providerId">>, [ProviderId]);
-set_qos_parameters(StorageId, _ProviderId, #{<<"storageId">> := OtherStorage}) when StorageId =/= OtherStorage ->
-    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"qosParameters.storageId">>, [StorageId]);
-set_qos_parameters(StorageId, ProviderId, QosParameters) ->
-    ExtendedQosParameters = QosParameters#{
-        <<"storageId">> => StorageId,
-        <<"providerId">> => ProviderId
-    },
-    case storage_logic:set_qos_parameters(StorageId, ExtendedQosParameters) of
+    case storage_logic:set_qos_parameters(StorageId, QosParameters) of
         ok ->
             {ok, Spaces} = storage_logic:get_spaces(StorageId),
             lists:foreach(fun(SpaceId) ->
@@ -484,16 +480,10 @@ supports_any_space(StorageId) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
     rtransfer_config:add_storage(StorageId).
-
-
-%% @private
--spec on_storage_created(id(), qos_parameters()) -> ok.
-on_storage_created(StorageId, QosParameters) ->
-    ok = set_qos_parameters(StorageId, QosParameters),
-    on_storage_created(StorageId).
 
 
 %% @private
@@ -527,7 +517,7 @@ on_helper_changed(StorageId) ->
 is_name_occupied(Name) ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
     lists:member(Name, lists:map(fun(StorageId) ->
-        {ok, OccupiedName} = storage_logic:get_name(StorageId),
+        {ok, OccupiedName} = storage_logic:get_name_of_local_storage(StorageId),
         OccupiedName
     end, StorageIds)).
 
@@ -548,11 +538,11 @@ lock_on_storage_by_name(Identifier, Fun) ->
 -spec create_insecure(name(), helpers:helper(), luma_config(),
     imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly) of
+    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
         {ok, Id} ->
             case storage_config:create(Id, Helper, LumaConfig) of
                 {ok, Id} ->
-                    on_storage_created(Id, QosParameters),
+                    on_storage_created(Id),
                     {ok, Id};
                 StorageConfigError ->
                     case storage_logic:delete_in_zone(Id) of
@@ -602,14 +592,12 @@ sanitize_readonly_option(IdOrName, #{
     readonly := Readonly,
     importedStorage := Imported
 }) ->
-
     case {ensure_boolean(Readonly), ensure_boolean(SkipStorageDetection), ensure_boolean(Imported)} of
         {false, _, _} -> ok;
         {true, false, _} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(skipStorageDetection, [true]));
         {true, true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
         {true, true, true} -> ok
     end.
-
 
 
 -spec ensure_boolean(binary() | boolean()) -> boolean().
@@ -665,7 +653,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage = #storage{name 
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, unknown, false, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(Name, unknown, false, #{}, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).

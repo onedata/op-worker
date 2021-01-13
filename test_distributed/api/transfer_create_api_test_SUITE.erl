@@ -18,7 +18,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("test_utils/initializer.hrl").
 -include("transfer_api_test_utils.hrl").
--include("../transfers_test_mechanism.hrl").
+-include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
@@ -112,13 +112,12 @@ create_file_migration(Config) ->
 create_file_transfer(Config, Type) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?SESS_ID(?USER_IN_SPACE_2, P1, Config),
-    SessIdP2 = ?SESS_ID(?USER_IN_SPACE_2, P2, Config),
 
     % Shared file will be used to assert that shared file transfer will be forbidden
     % (it will be added to '#data_spec.bad_values')
     FileGuid = transfer_api_test_utils:create_file(P1, SessIdP1, filename:join(["/", ?SPACE_2])),
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
-    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+    file_test_utils:await_sync(P2, FileGuid),
 
     RequiredPrivs = create_file_transfer_required_privs(Type),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
@@ -651,9 +650,9 @@ build_create_transfer_validate_rest_call_result_fun(MemRef) ->
         ),
         TransferId = maps:get(<<"transferId">>, Body),
 
-        ExpLocation = list_to_binary(rpc:call(Node, oneprovider, get_rest_endpoint, [
+        ExpLocation = rpc:call(Node, oneprovider, get_rest_endpoint, [
             string:trim(filename:join([<<"/">>, <<"transfers">>, TransferId]), leading, [$/])
-        ])),
+        ]),
         ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers)),
 
         build_create_transfer_validate_call_result(MemRef, TransferId, TestCtx)
@@ -715,8 +714,6 @@ build_create_transfer_validate_call_result(MemRef, TransferId, #api_test_ctx{
 
 
 init_per_suite(Config) ->
-    api_test_utils:load_module_from_test_distributed_dir(Config, transfers_test_utils),
-
     Posthook = fun(NewConfig) ->
         NewConfig1 = [{space_storage_mock, false} | NewConfig],
         NewConfig2 = initializer:setup_storage(NewConfig1),
@@ -797,9 +794,8 @@ stop_http_server() ->
 
 do(#mod{method = "POST", request_uri = ?ENDED_TRANSFERS_PATH, entity_body = Body}) ->
     #{<<"transferId">> := TransferId} = json_utils:decode(Body),
-    CallTime = clock:timestamp_millis() div 1000,
+    CallTime = global_clock:timestamp_seconds(),
     ?TEST_PROCESS ! ?CALLBACK_CALL_TIME(TransferId, CallTime),
-
     done.
 
 

@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Tests of time_slot_histogram module
+%%% Tests of time_slot_histogram module.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(time_slot_histogram_test).
@@ -17,78 +17,74 @@
 
 new_histogram_should_have_last_update_set_to_zero_test() ->
     Histogram = time_slot_histogram:new(10, 10),
-
     ?assertEqual(0, time_slot_histogram:get_last_update(Histogram)).
 
 new_histogram_should_have_histograms_set_to_zero_test() ->
     Histogram = time_slot_histogram:new(10, 3),
-
     ?assertEqual([0, 0, 0], time_slot_histogram:get_histogram_values(Histogram)).
 
 update_should_set_last_timestamp_test() ->
     Histogram = time_slot_histogram:new(10, 10),
-    UpdatedHistogram = time_slot_histogram:increment(Histogram, 123),
+    NewHistogram = increment_histogram(Histogram, 123, rand:uniform(999)),
+    ?assertEqual(123, time_slot_histogram:get_last_update(NewHistogram)).
 
-    ?assertEqual(123, time_slot_histogram:get_last_update(UpdatedHistogram)).
+change_within_the_same_window_should_change_the_same_counter_test() ->
+    H1 = time_slot_histogram:new(5, 3),
+    H2 = assert_histogram_values([2, 0, 0], increment_histogram(H1, 1, 2)),
+    H3 = assert_histogram_values([1, 0, 0], decrement_histogram(H2, 1, 1)),
+    _ = assert_histogram_values([4, 0, 0], increment_histogram(H3, 1, 3)).
 
-increment_within_the_same_window_should_increment_the_same_counter_test() ->
-    Histogram = time_slot_histogram:new(5, 3),
-    IncrementHistogram1 = time_slot_histogram:increment(Histogram, 1),
-    IncrementHistogram2 = time_slot_histogram:increment(IncrementHistogram1, 1),
-    IncrementHistogram3 = time_slot_histogram:increment(IncrementHistogram2, 4),
+change_within_consecutive_windows_should_change_consecutive_counters_test() ->
+    H1 = time_slot_histogram:new(5, 3),
+    H2 = assert_histogram_values([1, 0, 0], increment_histogram(H1, 1, 1)),
+    H3 = assert_histogram_values([-2, 1, 0], decrement_histogram(H2, 5, 2)),
+    _ = assert_histogram_values([3, -2, 1], increment_histogram(H3, 12, 3)).
 
-    ?assertMatch([1, 0, 0], time_slot_histogram:get_histogram_values(IncrementHistogram1)),
-    ?assertMatch([2, 0, 0], time_slot_histogram:get_histogram_values(IncrementHistogram2)),
-    ?assertMatch([3, 0, 0], time_slot_histogram:get_histogram_values(IncrementHistogram3)).
+change_with_backward_time_warp_should_change_the_same_counter_test() ->
+    H1 = time_slot_histogram:new(5, 3),
+    H2 = assert_histogram_values([7, 0, 0], increment_histogram(H1, 4432, 7)),
+    H3 = assert_histogram_values([2, 0, 0], decrement_histogram(H2, 2504, 5)),
+    _ = assert_histogram_values([6, 0, 0], increment_histogram(H3, 1, 4)).
 
-increment_within_consecutive_windows_should_increment_consecutive_counters_test() ->
-    Histogram = time_slot_histogram:new(5, 3),
-    IncrementHistogram1 = time_slot_histogram:increment(Histogram, 1),
-    IncrementHistogram2 = time_slot_histogram:increment(IncrementHistogram1, 5),
-    IncrementHistogram3 = time_slot_histogram:increment(IncrementHistogram2, 12),
+change_within_distant_windows_should_change_distant_counters_test() ->
+    H1 = time_slot_histogram:new(5, 6),
+    H2 = assert_histogram_values([-7, 0, 0, 0, 0, 0], decrement_histogram(H1, 2, 7)),
+    H3 = assert_histogram_values([18, 0, 0, -7, 0, 0], increment_histogram(H2, 16, 18)),
+    _ = assert_histogram_values([-1, 0, 18, 0, 0, -7], decrement_histogram(H3, 26, 1)).
 
-    ?assertMatch([1, 0, 0], time_slot_histogram:get_histogram_values(IncrementHistogram1)),
-    ?assertMatch([1, 1, 0], time_slot_histogram:get_histogram_values(IncrementHistogram2)),
-    ?assertMatch([1, 1, 1], time_slot_histogram:get_histogram_values(IncrementHistogram3)).
+change_after_long_time_should_strip_old_values_test() ->
+    H1 = time_slot_histogram:new(5, 6),
+    H2 = assert_histogram_values([7, 0, 0, 0, 0, 0], increment_histogram(H1, 2, 7)),
+    H3 = assert_histogram_values([-18, 7, 0, 0, 0, 0], decrement_histogram(H2, 6, 18)),
+    _ = assert_histogram_values([-1, 0, 0, 0, 0, -18], decrement_histogram(H3, 31, 1)).
 
-increment_within_distant_windows_should_increment_distant_counters_test() ->
-    Histogram = time_slot_histogram:new(5, 6),
-    IncrementHistogram1 = time_slot_histogram:increment(Histogram, 2),
-    IncrementHistogram2 = time_slot_histogram:increment(IncrementHistogram1, 16),
-    IncrementHistogram3 = time_slot_histogram:increment(IncrementHistogram2, 26),
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
-    ?assertMatch([1, 0, 0, 0, 0, 0], time_slot_histogram:get_histogram_values(IncrementHistogram1)),
-    ?assertMatch([1, 0, 0, 1, 0, 0], time_slot_histogram:get_histogram_values(IncrementHistogram2)),
-    ?assertMatch([1, 0, 1, 0, 0, 1], time_slot_histogram:get_histogram_values(IncrementHistogram3)).
+%% The time_slot_histogram API requires that all timestamps are monotonic
+%% (this is guarded by the opaque monotonic_timestamp() type and dialyzer).
+%% Above tests use the same API by calling below wrappers.
 
-increment_after_long_time_should_strip_old_values_test() ->
-    Histogram = time_slot_histogram:new(5, 6),
-    IncrementHistogram1 = time_slot_histogram:increment(Histogram, 2),
-    IncrementHistogram2 = time_slot_histogram:increment(IncrementHistogram1, 6),
-    IncrementHistogram3 = time_slot_histogram:increment(IncrementHistogram2, 31),
+%% @private
+-spec increment_histogram(time_slot_histogram:histogram(), non_neg_integer(), non_neg_integer()) ->
+    time_slot_histogram:histogram().
+increment_histogram(Histogram, CurrentTime, Value) ->
+    MonotonicTime = time_slot_histogram:ensure_monotonic_timestamp(Histogram, CurrentTime),
+    time_slot_histogram:increment(Histogram, MonotonicTime, Value).
 
-    ?assertMatch([1, 0, 0, 0, 0, 0], time_slot_histogram:get_histogram_values(IncrementHistogram1)),
-    ?assertMatch([1, 1, 0, 0, 0, 0], time_slot_histogram:get_histogram_values(IncrementHistogram2)),
-    ?assertMatch([1, 0, 0, 0, 0, 1], time_slot_histogram:get_histogram_values(IncrementHistogram3)).
 
-increment_by_more_than_one_test_() ->
-    {setup, 
-        fun setup/0, 
-        fun teardown/1, 
-        fun() ->
-        Histogram = time_slot_histogram:new(0, 60, histogram:new(60)),
-        Timestamp = clock:timestamp_seconds(),
+%% @private
+-spec decrement_histogram(time_slot_histogram:histogram(), non_neg_integer(), non_neg_integer()) ->
+    time_slot_histogram:histogram().
+decrement_histogram(Histogram, CurrentTime, Value) ->
+    MonotonicTime = time_slot_histogram:ensure_monotonic_timestamp(Histogram, CurrentTime),
+    time_slot_histogram:decrement(Histogram, MonotonicTime, Value).
 
-        ?assertMatch(
-            [5 | _],
-            time_slot_histogram:get_histogram_values(
-                time_slot_histogram:increment(Histogram, Timestamp, 5)
-            )
-        )
-    end}.
 
-setup() ->
-    node_cache:init().
-
-teardown(_) ->
-    node_cache:destroy().
+%% @private
+-spec assert_histogram_values(histogram:histogram(), time_slot_histogram:histogram()) ->
+    time_slot_histogram:histogram().
+assert_histogram_values(ExpectedValues, TimeSlotHistogram) ->
+    ?assertEqual(ExpectedValues, time_slot_histogram:get_histogram_values(TimeSlotHistogram)),
+    TimeSlotHistogram.

@@ -6,7 +6,13 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Basic utils for transfer histograms.
+%%% This module handles creating, updating and processing transfer histograms.
+%%%
+%%% NOTE: As clocks may warp backward, timestamps taken consecutively may not be
+%%% monotonic, which could break the prepend-only histograms used by this
+%%% module. For that reason, all timestamps are checked against the last update
+%%% value and, if needed, rounded up artificially to ensure monotonicity. This
+%%% may cause spikes in specific histogram windows, but ensures their integrity.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(transfer_histograms).
@@ -17,18 +23,23 @@
 
 % possible types are: <<"minute">>, <<"hour">>, <<"day">> and <<"month">>.
 -type period() :: binary().
+-type timestamp() :: time:seconds().
+% see the module description for details on monotonic timestamps
+-opaque monotonic_timestamp() :: {monotonic, timestamp()}.
+% length of one time window
+-type window() :: time:seconds().
 -type histograms() :: #{od_provider:id() => histogram:histogram()}.
--type timestamp() :: clock:seconds().
--type timestamps() :: #{od_provider:id() => non_neg_integer()}.
--type stats_record() ::
-    transfer:transfer() |
-    space_transfer_stats:space_transfer_stats().
+-type last_updates() :: #{od_provider:id() => timestamp()}.
+-type stats_record() :: transfer:transfer() | space_transfer_stats:space_transfer_stats().
 
--export_type([histograms/0]).
+-export_type([histograms/0, timestamp/0, window/0, monotonic_timestamp/0]).
 
 %% API
 -export([
-    new/2, get/2, update/6,
+    new/2, get/2,
+    get_current_monotonic_time/1, get_current_monotonic_time/2,
+    monotonic_timestamp_value/1,
+    update/6, calc_shift_size/3,
     prepare/4,
     pad_with_zeroes/4,
     trim_min_histograms/2, trim_histograms/4, trim_timestamp/1,
@@ -52,8 +63,7 @@
 %% bytes per provider.
 %% @end
 %%-------------------------------------------------------------------
--spec new(BytesPerProvider :: #{od_provider:id() => non_neg_integer()},
-    Period :: period()) -> histograms().
+-spec new(BytesPerProvider :: #{od_provider:id() => non_neg_integer()}, period()) -> histograms().
 new(BytesPerProvider, Period) ->
     HistogramLength = period_to_hist_length(Period),
     maps:map(fun(_ProviderId, Bytes) ->
@@ -61,6 +71,7 @@ new(BytesPerProvider, Period) ->
     end, BytesPerProvider).
 
 
+%% @formatter:off
 -spec get(stats_record(), Period :: binary()) -> histograms().
 get(#transfer{min_hist = Hist}, ?MINUTE_PERIOD)             -> Hist;
 get(#transfer{hr_hist = Hist}, ?HOUR_PERIOD)                -> Hist;
@@ -70,21 +81,44 @@ get(#space_transfer_stats{min_hist = Hist}, ?MINUTE_PERIOD) -> Hist;
 get(#space_transfer_stats{hr_hist = Hist}, ?HOUR_PERIOD)    -> Hist;
 get(#space_transfer_stats{dy_hist = Hist}, ?DAY_PERIOD)     -> Hist;
 get(#space_transfer_stats{mth_hist = Hist}, ?MONTH_PERIOD)  -> Hist.
+%% @formatter:on
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns current timestamp, but not smaller that the provided last update
+%% (either directly as timestamp, or inferred from a map of last_updates() and
+%% start time). Must be called before performing any modification on transfer histograms.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_current_monotonic_time(LastUpdate :: timestamp()) -> monotonic_timestamp().
+get_current_monotonic_time(LastUpdate) when is_integer(LastUpdate) ->
+    {monotonic, global_clock:monotonic_timestamp_seconds(LastUpdate)}.
+
+-spec get_current_monotonic_time(last_updates(), StartTime :: timestamp()) -> monotonic_timestamp().
+get_current_monotonic_time(LastUpdates, StartTime) when is_map(LastUpdates) ->
+    LastUpdate = maps:fold(fun(_ProviderId, LastUpdate, Acc) ->
+        max(LastUpdate, Acc)
+    end, StartTime, LastUpdates),
+    get_current_monotonic_time(LastUpdate).
+
+
+-spec monotonic_timestamp_value(monotonic_timestamp()) -> timestamp().
+monotonic_timestamp_value({monotonic, Timestamp}) ->
+    Timestamp.
 
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Updates transfer_histograms for specified providers.
-%% Specified CurrentTime is assumed to be greater than or equal to LastUpdate.
 %% @end
 %%-------------------------------------------------------------------
--spec update(BytesPerProvider :: #{od_provider:id() => non_neg_integer()},
-    histograms(), Period :: period(), LastUpdates :: timestamps(),
-    StartTime :: timestamp(), CurrentTime :: timestamp()
+-spec update(BytesPerProvider :: #{od_provider:id() => non_neg_integer()}, histograms(),
+    period(), last_updates(), StartTime :: timestamp(), CurrentMonotonicTime :: monotonic_timestamp()
 ) ->
     histograms().
 update(BytesPerProvider, Histograms, Period,
-    LastUpdates, StartTime, CurrentTime
+    LastUpdates, StartTime, CurrentMonotonicTime
 ) ->
     Window = period_to_time_window(Period),
     HistogramLength = period_to_hist_length(Period),
@@ -92,13 +126,17 @@ update(BytesPerProvider, Histograms, Period,
         Histogram = case maps:find(ProviderId, OldHistograms) of
             {ok, OldHistogram} ->
                 LastUpdate = maps:get(ProviderId, LastUpdates, StartTime),
-                ShiftSize = (CurrentTime div Window) - (LastUpdate div Window),
-                histogram:shift(OldHistogram, ShiftSize);
+                histogram:shift(OldHistogram, calc_shift_size(Window, LastUpdate, CurrentMonotonicTime));
             error ->
                 histogram:new(HistogramLength)
         end,
         OldHistograms#{ProviderId => histogram:increment(Histogram, Bytes)}
     end, Histograms, BytesPerProvider).
+
+
+-spec calc_shift_size(window(), LastUpdate :: timestamp(), monotonic_timestamp()) -> non_neg_integer().
+calc_shift_size(Window, LastUpdate, {monotonic, CurrentTime}) ->
+    max(0, (CurrentTime div Window) - (LastUpdate div Window)).
 
 
 %%--------------------------------------------------------------------
@@ -110,35 +148,35 @@ update(BytesPerProvider, Histograms, Period,
 %% (otherwise it is not possible to trim histograms of other types).
 %% @end
 %%--------------------------------------------------------------------
--spec prepare(stats_record(), period(), timestamp(), LastUpdates :: timestamps()) ->
-    {histograms(), timestamp(), TimeWindow :: non_neg_integer()}.
-prepare(Stats, ?MINUTE_PERIOD, CurrentTime, LastUpdates) ->
+-spec prepare(stats_record(), period(), monotonic_timestamp(), last_updates()) ->
+    {histograms(), timestamp(), window()}.
+prepare(Stats, ?MINUTE_PERIOD, {monotonic, CurrentTime}, LastUpdates) ->
     Histograms = get(Stats, ?MINUTE_PERIOD),
     TimeWindow = ?FIVE_SEC_TIME_WINDOW,
     PaddedHistograms = pad_with_zeroes(
-        Histograms, TimeWindow, LastUpdates, CurrentTime
+        Histograms, TimeWindow, LastUpdates, {monotonic, CurrentTime}
     ),
-    {NewHistograms, NewTimestamp} = trim_min_histograms(
+    {NewHistograms, TrimmedTimestamp} = trim_min_histograms(
         PaddedHistograms, CurrentTime
     ),
-    {NewHistograms, NewTimestamp, TimeWindow};
+    {NewHistograms, TrimmedTimestamp, TimeWindow};
 
-prepare(Stats, Period, CurrentTime, LastUpdates) ->
+prepare(Stats, Period, {monotonic, CurrentTime}, LastUpdates) ->
     MinHistograms = get(Stats, ?MINUTE_PERIOD),
     RequestedHistograms = get(Stats, Period),
     TimeWindow = period_to_time_window(Period),
 
     PaddedMinHistograms = pad_with_zeroes(
-        MinHistograms, ?FIVE_SEC_TIME_WINDOW, LastUpdates, CurrentTime
+        MinHistograms, ?FIVE_SEC_TIME_WINDOW, LastUpdates, {monotonic, CurrentTime}
     ),
     PaddedRequestedHistograms = pad_with_zeroes(
-        RequestedHistograms, TimeWindow, LastUpdates, CurrentTime
+        RequestedHistograms, TimeWindow, LastUpdates, {monotonic, CurrentTime}
     ),
-    {_, NewRequestedHistograms, NewTimestamp} = trim_histograms(
+    {_, NewRequestedHistograms, TrimmedTimestamp} = trim_histograms(
         PaddedMinHistograms, PaddedRequestedHistograms, TimeWindow, CurrentTime
     ),
 
-    {NewRequestedHistograms, NewTimestamp, TimeWindow}.
+    {NewRequestedHistograms, TrimmedTimestamp, TimeWindow}.
 
 
 %%-------------------------------------------------------------------
@@ -148,13 +186,12 @@ prepare(Stats, Period, CurrentTime, LastUpdates) ->
 %% intact.
 %% @end
 %%-------------------------------------------------------------------
--spec pad_with_zeroes(histograms(), Window :: non_neg_integer(),
-    LastUpdates :: timestamps(), CurrentTime :: timestamp()) -> histograms().
-pad_with_zeroes(Histograms, Window, LastUpdates, CurrentTime) ->
+-spec pad_with_zeroes(histograms(), window(), last_updates(),
+    CurrentMonotonicTime :: monotonic_timestamp()) -> histograms().
+pad_with_zeroes(Histograms, Window, LastUpdates, CurrentMonotonicTime) ->
     maps:map(fun(Provider, Histogram) ->
         LastUpdate = maps:get(Provider, LastUpdates),
-        ShiftSize = max(0, (CurrentTime div Window) - (LastUpdate div Window)),
-        histogram:shift(Histogram, ShiftSize)
+        histogram:shift(Histogram, calc_shift_size(Window, LastUpdate, CurrentMonotonicTime))
     end, Histograms).
 
 
@@ -166,7 +203,7 @@ pad_with_zeroes(Histograms, Window, LastUpdates, CurrentTime) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec trim_min_histograms(histograms(), LastUpdate :: timestamp()) ->
-    {histograms(), NewTimestamp :: timestamp()}.
+    {histograms(), TrimmedTimestamp :: timestamp()}.
 trim_min_histograms(Histograms, LastUpdate) ->
     SlotsToRemove = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH,
     TrimmedHistograms = maps:map(fun(_Provider, Histogram) ->
@@ -186,11 +223,11 @@ trim_min_histograms(Histograms, LastUpdate) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec trim_histograms(MinHistograms, RequestedHistograms,
-    TimeWindow :: non_neg_integer(), LastUpdate :: timestamp()
+    window(), LastUpdate :: timestamp()
 ) -> {MinHistograms, RequestedHistograms, Timestamp :: timestamp()}
     when MinHistograms :: histograms(), RequestedHistograms :: histograms().
 trim_histograms(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
-    NewTimestamp = trim_timestamp(LastUpdate),
+    TrimmedTimestamp = trim_timestamp(LastUpdate),
     TrimFun = fun(OldMinHist, [FstSlot, SndSlot | Rest] = _OldRequestedHist) ->
         % Remove recent slots from minute histogram and calculate bytes
         % to remove from other histogram (using removed slots)
@@ -203,7 +240,7 @@ trim_histograms(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
         NewRequestedHist = case RemovedBytes >= FstSlot of
             true ->
                 PreviousTimeSlot = LastUpdate div TimeWindow,
-                CurrentTimeSlot = NewTimestamp div TimeWindow,
+                CurrentTimeSlot = TrimmedTimestamp div TimeWindow,
                 case PreviousTimeSlot == CurrentTimeSlot of
                     true ->
                         % If we are still in the same time slot
@@ -228,7 +265,7 @@ trim_histograms(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
             }
         end, {#{}, #{}}, MinHistograms
     ),
-    {TrimmedMinHistograms, TrimmedRequestedHistograms, NewTimestamp}.
+    {TrimmedMinHistograms, TrimmedRequestedHistograms, TrimmedTimestamp}.
 
 
 %%-------------------------------------------------------------------
@@ -238,7 +275,7 @@ trim_histograms(MinHistograms, RequestedHistograms, TimeWindow, LastUpdate) ->
 %% avoid fluctuations on charts due to synchronization between providers).
 %% @end
 %%-------------------------------------------------------------------
--spec trim_timestamp(Timestamp :: timestamp()) -> timestamp().
+-spec trim_timestamp(timestamp()) -> timestamp().
 trim_timestamp(Timestamp) ->
     FullSlotsToSub = ?MIN_HIST_LENGTH - ?MIN_SPEED_HIST_LENGTH - 1,
     FullSlotsToSubTime = FullSlotsToSub * ?FIVE_SEC_TIME_WINDOW,
@@ -254,7 +291,7 @@ trim_timestamp(Timestamp) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec to_speed_charts(histograms(), StartTime :: timestamp(),
-    EndTime :: timestamp(), TimeWindow :: non_neg_integer()) -> histograms().
+    EndTime :: timestamp(), window()) -> histograms().
 to_speed_charts(_, StartTime, EndTime, _) when StartTime > EndTime ->
     #{};
 to_speed_charts(Histograms, StartTime, EndTime, TimeWindow) ->
@@ -273,18 +310,18 @@ to_speed_charts(Histograms, StartTime, EndTime, TimeWindow) ->
     end, Histograms).
 
 
--spec period_to_time_window(period()) -> non_neg_integer().
+-spec period_to_time_window(period()) -> window().
 period_to_time_window(?MINUTE_PERIOD) -> ?FIVE_SEC_TIME_WINDOW;
-period_to_time_window(?HOUR_PERIOD)   -> ?MIN_TIME_WINDOW;
-period_to_time_window(?DAY_PERIOD)    -> ?HOUR_TIME_WINDOW;
-period_to_time_window(?MONTH_PERIOD)  -> ?DAY_TIME_WINDOW.
+period_to_time_window(?HOUR_PERIOD) -> ?MIN_TIME_WINDOW;
+period_to_time_window(?DAY_PERIOD) -> ?HOUR_TIME_WINDOW;
+period_to_time_window(?MONTH_PERIOD) -> ?DAY_TIME_WINDOW.
 
 
 -spec period_to_hist_length(period()) -> non_neg_integer().
 period_to_hist_length(?MINUTE_PERIOD) -> ?MIN_HIST_LENGTH;
-period_to_hist_length(?HOUR_PERIOD)   -> ?HOUR_HIST_LENGTH;
-period_to_hist_length(?DAY_PERIOD)    -> ?DAY_HIST_LENGTH;
-period_to_hist_length(?MONTH_PERIOD)  -> ?MONTH_HIST_LENGTH.
+period_to_hist_length(?HOUR_PERIOD) -> ?HOUR_HIST_LENGTH;
+period_to_hist_length(?DAY_PERIOD) -> ?DAY_HIST_LENGTH;
+period_to_hist_length(?MONTH_PERIOD) -> ?MONTH_HIST_LENGTH.
 
 
 %%%===================================================================
@@ -293,6 +330,7 @@ period_to_hist_length(?MONTH_PERIOD)  -> ?MONTH_HIST_LENGTH.
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Calculates average speed chart based on bytes histogram.
 %% The produced array contains integers indicating speed (B/s) and 'null' atoms
@@ -315,7 +353,7 @@ period_to_hist_length(?MONTH_PERIOD)  -> ?MONTH_HIST_LENGTH.
 %% @end
 %%--------------------------------------------------------------------
 -spec histogram_to_speed_chart(histogram:histogram(), Start :: timestamp(),
-    End :: timestamp(), Window :: non_neg_integer()) -> [non_neg_integer() | null].
+    End :: timestamp(), window()) -> [non_neg_integer() | null].
 histogram_to_speed_chart([First | Rest], Start, End, Window) when (End div Window) == (Start div Window) ->
     % First value must be handled in a special way, because the newest time slot
     % might have not passed yet.
@@ -347,7 +385,7 @@ histogram_to_speed_chart([First | Rest = [Previous | _]], Start, End, Window) ->
 
 -spec histogram_to_speed_chart(CurrentValue :: non_neg_integer(),
     histogram:histogram(), Start :: timestamp(), End :: timestamp(),
-    Window :: non_neg_integer(), ChartStart :: timestamp()) ->
+    window(), ChartStart :: timestamp()) ->
     [non_neg_integer() | null].
 histogram_to_speed_chart(Current, [Previous | Rest], Start, End, Window, ChartStart) ->
     Duration = End - ChartStart + 1,
@@ -375,14 +413,16 @@ histogram_to_speed_chart(Current, [Previous | Rest], Start, End, Window, ChartSt
     end.
 
 
--spec speed_chart_span(TimeWindow :: non_neg_integer()) -> non_neg_integer().
+%% @private
+-spec speed_chart_span(window()) -> window().
 speed_chart_span(?FIVE_SEC_TIME_WINDOW) -> 60;
 speed_chart_span(?MIN_TIME_WINDOW) -> 3600;
 speed_chart_span(?HOUR_TIME_WINDOW) -> 86400; % 24 hours
 speed_chart_span(?DAY_TIME_WINDOW) -> 2592000. % 30 days
 
 
--spec window_to_speed_chart_len(non_neg_integer()) -> non_neg_integer().
+%% @private
+-spec window_to_speed_chart_len(window()) -> non_neg_integer().
 window_to_speed_chart_len(?FIVE_SEC_TIME_WINDOW) -> ?MIN_SPEED_HIST_LENGTH;
 window_to_speed_chart_len(?MIN_TIME_WINDOW) -> ?HOUR_SPEED_HIST_LENGTH;
 window_to_speed_chart_len(?HOUR_TIME_WINDOW) -> ?DAY_SPEED_HIST_LENGTH;

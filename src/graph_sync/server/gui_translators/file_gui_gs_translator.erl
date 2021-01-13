@@ -172,7 +172,7 @@ translate_file_details(#file_details{
         guid = FileGuid,
         name = FileName,
         mode = Mode,
-        parent_uuid = ParentGuid,
+        parent_guid = ParentGuid,
         mtime = MTime,
         type = TypeAttr,
         size = SizeAttr,

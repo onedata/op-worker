@@ -14,9 +14,10 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 
 %% API
--export([is_root_dir_uuid/1, is_user_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1]).
+-export([is_root_dir_uuid/1, is_user_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1, is_special_uuid/1]).
 -export([user_root_dir_uuid/1, user_root_dir_guid/1, root_dir_guid/0]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, spaceid_to_space_dir_guid/1]).
@@ -54,6 +55,12 @@ is_user_root_dir_uuid(FileUuid) ->
         _ ->
             false
     end.
+
+
+-spec is_special_uuid(file_meta:uuid()) -> boolean().
+is_special_uuid(FileUuid) ->
+    is_root_dir_uuid(FileUuid) orelse is_space_dir_uuid(FileUuid).
+
 
 %%--------------------------------------------------------------------
 %% @doc Returns Guid of root directory.
@@ -180,7 +187,7 @@ gen_path(Entry, SessionId, Tokens) ->
         {ok, #document{key = ?GLOBAL_ROOT_DIR_UUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Uuid),
             {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
+            {ok, filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
         {ok, #document{key = ParentUuid}} ->
             gen_path({uuid, ParentUuid}, SessionId, [Name | Tokens])
     end.

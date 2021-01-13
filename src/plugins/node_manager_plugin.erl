@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
--include_lib("cluster_worker/include/elements/node_manager/node_manager.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
@@ -46,7 +45,7 @@
     {1, ?LINE_19_02},
     {2, ?LINE_20_02(<<"0-beta3">>)},
     {3, ?LINE_20_02(<<"1">>)},
-    {4, oneprovider:get_version()}
+    {4, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 1).
 

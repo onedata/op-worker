@@ -169,17 +169,16 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     FileGuid = maps:get(<<"fileId">>, Req#op_req.data),
     SpaceId = file_id:guid_to_space_id(FileGuid),
 
-    case lfm:add_qos_entry(SessionId, {guid, FileGuid}, Expression, ReplicasNum) of
-        {ok, QosEntryId} ->
-            {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
-            Status = case qos_entry:is_possible(QosEntry) of
-                true -> ?PENDING;
-                false -> ?IMPOSSIBLE
-            end,
-            {ok, resource, {GRI#gri{id = QosEntryId}, entry_to_details(QosEntry, Status, SpaceId)}};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end.
+    {ok, QosEntryId} = ?check(lfm:add_qos_entry(
+        SessionId, {guid, FileGuid}, Expression, ReplicasNum
+    )),
+    {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
+
+    Status = case qos_entry:is_possible(QosEntry) of
+        true -> ?PENDING;
+        false -> ?IMPOSSIBLE
+    end,
+    {ok, resource, {GRI#gri{id = QosEntryId}, entry_to_details(QosEntry, Status, SpaceId)}}.
 
 
 %%--------------------------------------------------------------------

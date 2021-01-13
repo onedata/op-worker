@@ -263,7 +263,7 @@ connect_via_token(Node, SocketOpts, Nonce) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
 connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
     % given
-    OpVersion = rpc:call(Node, oneprovider, get_version, []),
+    OpVersion = rpc:call(Node, op_worker, get_release_version, []),
     {ok, [Version | _]} = rpc:call(
         Node, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
@@ -339,7 +339,7 @@ receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).
 
 receive_server_message(IgnoredMsgList, Timeout) ->
-    Now = clock:timestamp_millis(),
+    Stopwatch = stopwatch:start(),
     receive
         {_, _, Data} ->
             % ignore listed messages
@@ -347,7 +347,7 @@ receive_server_message(IgnoredMsgList, Timeout) ->
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
                 true ->
-                    NewTimeout = max(0, Timeout - (clock:timestamp_millis() - Now)),
+                    NewTimeout = max(0, Timeout - stopwatch:read_millis(Stopwatch)),
                     receive_server_message(IgnoredMsgList, NewTimeout);
                 false ->
                     Msg

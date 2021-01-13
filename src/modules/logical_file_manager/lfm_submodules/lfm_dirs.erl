@@ -39,7 +39,7 @@ mkdir(SessId, Path) ->
     Mode :: file_meta:posix_permissions() | undefined) ->
     {ok, DirGuid :: fslogic_worker:file_guid()} | lfm:error_reply().
 mkdir(SessId, Path, Mode) ->
-    {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
+    {Name, ParentPath} = filepath_utils:basename_and_parent_dir(Path),
     remote_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = ParentPath},
         fun(#guid{guid = ParentGuid}) ->
             mkdir(SessId, ParentGuid, Name, Mode)

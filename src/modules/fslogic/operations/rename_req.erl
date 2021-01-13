@@ -144,8 +144,8 @@ rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourcePath, SourceFileCtx3} = file_ctx:get_canonical_path(SourceFileCtx2),
     {TargetPath, TargetParentFileCtx3} = file_ctx:get_canonical_path(TargetParentFileCtx2),
 
-    SourceTokens = fslogic_path:split(SourcePath),
-    TargetTokens = fslogic_path:split(TargetPath),
+    SourceTokens = filepath_utils:split(SourcePath),
+    TargetTokens = filepath_utils:split(TargetPath),
     TargetTokensBeg = lists:sublist(TargetTokens, length(SourceTokens)),
     MoveIntoItself = (TargetTokensBeg =:= SourceTokens),
 
@@ -634,7 +634,7 @@ remotely_get_child_type(SessId, ParentGuid, ChildName) ->
 on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFileCtx, TargetName) ->
     {PrevName, SourceFileCtx2} = file_ctx:get_aliased_name(SourceFileCtx, UserCtx),
     ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
-    CurrentTime = clock:timestamp_seconds(),
+    CurrentTime = global_clock:timestamp_seconds(),
     ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
     ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime),
     ok = fslogic_times:update_ctime(SourceFileCtx2, CurrentTime),

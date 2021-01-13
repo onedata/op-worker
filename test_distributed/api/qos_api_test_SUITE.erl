@@ -30,7 +30,8 @@
     get_qos_test/1,
     delete_qos_test/1,
     get_qos_summary_test/1,
-    get_available_qos_parameters_test/1
+    get_available_qos_parameters_test/1,
+    evaluate_qos_expression_test/1
 ]).
 
 
@@ -39,7 +40,8 @@ all() -> [
     get_qos_test,
     delete_qos_test,
     get_qos_summary_test,
-    get_available_qos_parameters_test
+    get_available_qos_parameters_test,
+    evaluate_qos_expression_test
 ].
 
 create_qos_test(Config) ->
@@ -101,7 +103,6 @@ create_qos_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(MemRef, create)
                 }
             ],
-            randomly_select_scenarios = true,
             data_spec = 
                 api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     FileToShareGuid, ?SPACE_2, ShareId, CreateDataSpec
@@ -251,6 +252,44 @@ get_available_qos_parameters_test(Config) ->
     ok.
 
 
+evaluate_qos_expression_test(Config) ->
+    WorkerNodes = ?config(op_worker_nodes, Config),
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, space_id, ?SPACE_2),
+    
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = WorkerNodes,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Match storages by QoS expression using gs endpoint">>,
+                    type = gs,
+                    prepare_args_fun = prepare_args_fun_gs(MemRef, evaluate_qos_expression),
+                    validate_result_fun = validate_result_fun_gs(MemRef, evaluate_qos_expression)
+                },
+                #scenario_template{
+                    name = <<"Match storages by QoS expression using rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = prepare_args_fun_rest(MemRef, evaluate_qos_expression),
+                    validate_result_fun = validate_result_fun_rest(MemRef, evaluate_qos_expression)
+                }
+            ],
+            data_spec = #data_spec{
+                required = [<<"expression">>],
+                correct_values = #{
+                    <<"expression">> => [<<"some_number = 8">>]
+                },
+                bad_values = [
+                    {<<"expression">>, <<"invalid_qos_expression">>, 
+                        ?ERROR_INVALID_QOS_EXPRESSION(<<"syntax error before: ">>)}
+                ]
+            }
+        }
+    ])),
+    ok.
+
+
 %%%===================================================================
 %%% Setup functions
 %%%===================================================================
@@ -301,6 +340,17 @@ prepare_args_fun_rest(MemRef, qos_summary) ->
         } 
     end;
 
+prepare_args_fun_rest(MemRef, evaluate_qos_expression) ->
+    fun(#api_test_ctx{data = Data}) ->
+        SpaceId = api_test_memory:get(MemRef, space_id),
+        #rest_args{
+            method = post,
+            path = <<"spaces/", SpaceId/binary, "/evaluate_qos_expression">>,
+            body = json_utils:encode(Data),
+            headers = #{<<"content-type">> => <<"application/json">>}
+        }
+    end;
+
 prepare_args_fun_rest(MemRef, Method) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos),
@@ -338,6 +388,14 @@ prepare_args_fun_gs(_MemRef, available_qos_parameters) ->
         #gs_args{
             operation = get,
             gri = #gri{type = op_space, id = ?SPACE_2, aspect = available_qos_parameters, scope = private}
+        }
+    end;
+prepare_args_fun_gs(_MemRef,  evaluate_qos_expression) ->
+    fun(#api_test_ctx{data = Data}) ->
+        #gs_args{
+            operation = create,
+            gri = #gri{type = op_space, id = ?SPACE_2, aspect = evaluate_qos_expression, scope = private},
+            data = Data
         }
     end;
 
@@ -394,6 +452,14 @@ validate_result_fun_rest(MemRef, qos_summary) ->
             <<"status">> := <<"impossible">>
         }, RespBody),
         ok
+    end;
+
+validate_result_fun_rest(MemRef, evaluate_qos_expression) ->
+    fun(#api_test_ctx{node = Node, data = Data}, {ok, RespCode, _, Result}) ->
+        ?assertEqual(?HTTP_200_OK, RespCode),
+        SpaceId = api_test_memory:get(MemRef, space_id),
+        Expression = qos_expression:parse(maps:get(<<"expression">>, Data)),
+        check_evaluate_expression_result_storages(Node, SpaceId, Expression, maps:get(<<"matchingStorages">>, Result))
     end.
 
 
@@ -458,6 +524,14 @@ validate_result_fun_gs(MemRef, available_qos_parameters) ->
             }
         }, AvailableQosParameters),
         ok
+    end;
+
+validate_result_fun_gs(MemRef, evaluate_qos_expression) ->
+    fun(#api_test_ctx{data = Data, node = Node}, {ok, Result}) ->
+        SpaceId = api_test_memory:get(MemRef, space_id),
+        Expression = qos_expression:parse(maps:get(<<"expression">>, Data)),
+        check_evaluate_expression_result_storages(Node, SpaceId, Expression, maps:get(<<"matchingStorages">>, Result)),
+        ?assertEqual(maps:get(<<"expressionRpn">>, Result), qos_expression:to_rpn(Expression))
     end.
 
 
@@ -517,6 +591,16 @@ maybe_inject_object_id(Data, Guid) ->
         objectId -> Data#{<<"fileId">> => ObjectId};
         _ -> Data
     end.
+
+
+check_evaluate_expression_result_storages(Node, SpaceId, Expression, Result) ->
+    ExpectedStorages = rpc:call(Node, qos_expression, get_matching_storages_in_space, [SpaceId, Expression]),
+    lists:foreach(fun(StorageDetails) ->
+        #{<<"id">> := Id, <<"name">> := Name, <<"providerId">> := ProviderId} = StorageDetails,
+        ?assert(lists:member(Id, ExpectedStorages)),
+        ?assertEqual(ProviderId, rpc:call(Node, storage, fetch_provider_id_of_remote_storage, [Id, SpaceId])),
+        ?assertEqual(Name, rpc:call(Node, storage, fetch_name_of_remote_storage, [Id, SpaceId]))
+    end, Result).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

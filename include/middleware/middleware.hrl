@@ -19,6 +19,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
+
 % Record expressing middleware request
 -record(op_req, {
     auth = ?GUEST :: aai:auth(),
@@ -29,5 +30,12 @@
     % applicable for create/get requests - returns the revision of resource
     return_revision = false :: boolean()
 }).
+
+
+-define(throw_on_error(Res), case Res of
+    {error, _} = Error -> throw(Error);
+    _ -> Res
+end).
+
 
 -endif.

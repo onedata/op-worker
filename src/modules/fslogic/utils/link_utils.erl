@@ -33,7 +33,7 @@
     {ok, file_meta:uuid()} | {error, term()}.
 try_to_resolve_child_link(FileName, ParentCtx) ->
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    fslogic_path:to_uuid(ParentUuid, FileName).
+    canonical_path:to_uuid(ParentUuid, FileName).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -44,7 +44,7 @@ try_to_resolve_child_link(FileName, ParentCtx) ->
     {ok, file_meta:uuid()} | {error, term()}.
 try_to_resolve_child_deletion_link(FileName, ParentCtx) ->
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    fslogic_path:to_uuid(ParentUuid, ?FILE_DELETION_LINK_NAME(FileName)).
+    canonical_path:to_uuid(ParentUuid, ?FILE_DELETION_LINK_NAME(FileName)).
 
 %%-------------------------------------------------------------------
 %% @doc

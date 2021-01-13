@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -45,17 +46,13 @@ move(?USER(_UserId, SessionId) = Auth, Data) ->
     assert_space_membership_and_local_support(Auth, FileGuid),
     assert_space_membership_and_local_support(Auth, TargetParentGuid),
 
-    case lfm:mv(SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName) of
-        {ok, NewGuid} ->
-            {ok, #{<<"id">> => gri:serialize(#gri{
-                type = op_file,
-                id = NewGuid,
-                aspect = instance,
-                scope = private
-            })}};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end.
+    {ok, NewGuid} = ?check(lfm:mv(
+        SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName
+    )),
+    {ok, #{<<"id">> => gri:serialize(#gri{
+        type = op_file, id = NewGuid,
+        aspect = instance, scope = private
+    })}}.
 
 
 -spec copy(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().
@@ -74,17 +71,13 @@ copy(?USER(_UserId, SessionId) = Auth, Data) ->
     assert_space_membership_and_local_support(Auth, FileGuid),
     assert_space_membership_and_local_support(Auth, TargetParentGuid),
 
-    case lfm:cp(SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName) of
-        {ok, NewGuid} ->
-            {ok, #{<<"id">> => gri:serialize(#gri{
-                type = op_file,
-                id = NewGuid,
-                aspect = instance,
-                scope = private
-            })}};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end.
+    {ok, NewGuid} = ?check(lfm:cp(
+        SessionId, {guid, FileGuid}, {guid, TargetParentGuid}, TargetName
+    )),
+    {ok, #{<<"id">> => gri:serialize(#gri{
+        type = op_file, id = NewGuid,
+        aspect = instance, scope = private
+    })}}.
 
 
 -spec register_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
@@ -95,14 +88,16 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
 
-    case lfm:stat(SessionId, {guid, FileGuid}) of
+    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+            ?ERROR_BAD_DATA(<<"guid">>, <<"not a regular file">>);
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0, owner_id = UserId}} ->
             ok = file_upload_manager:register_upload(UserId, FileGuid),
             {ok, #{}};
-        {ok, _} ->
-            ?ERROR_BAD_DATA(<<"guid">>);
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0}} ->
+            ?ERROR_BAD_DATA(<<"guid">>, <<"file is not owned by user">>);
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
+            ?ERROR_BAD_DATA(<<"guid">>, <<"file is not empty">>)
     end.
 
 
