@@ -8,6 +8,18 @@
 %%% @doc
 %%% This module is responsible for monitoring and restarting DBSync streams
 %%% and routing messages to them.
+%%%
+%%% The main flow of changes is as follows. After document is saved to couchbase,
+%%% it is quarried by couchbase_changes_worker started by dbsync_out_stream and then
+%%% broadcast to other providers by dbsync_out_stream. When document broadcast by
+%%% other provider appears, it is handled by dbsync_in_stream. Sequences from incoming
+%%% documents are marked as pending by dbsync_in_stream that means that these documents
+%%% has been saved with sequence number of remote provider inside document and do not
+%%% have sequence number assigned by local couchbase_driver yet. Afterwards, the sequences
+%%% assigned by local couchbase_driver are analysed by dbsync_out_stream to describe correlation
+%%% between local and remote sequences. Remote sequence that appears in dbsync_out_stream
+%%% is removed from pending sequences list. For more information about sequences
+%%% correlations see dbsync_seqs_correlation.erl.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dbsync_worker).
@@ -16,6 +28,7 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -23,16 +36,7 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([supervisor_flags/0, get_on_demand_changes_stream_id/2,
-    start_streams/0, start_streams/1]).
-
-%% Internal services API
--export([start_in_stream/1, stop_in_stream/1, start_out_stream/1, stop_out_stream/1]).
-
--define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
-
--define(IN_STREAM_ID(ID), {dbsync_in_stream, ID}).
--define(OUT_STREAM_ID(ID), {dbsync_out_stream, ID}).
+-export([supervisor_flags/0, start_streams/0, start_streams/1, get_main_out_stream_opts/1]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -64,6 +68,10 @@ handle({dbsync_message, _SessId, Msg = #tree_broadcast2{}}) ->
     handle_tree_broadcast(Msg);
 handle({dbsync_message, SessId, Msg = #changes_request2{}}) ->
     handle_changes_request(dbsync_utils:get_provider(SessId), Msg);
+% TODO VFS-7031 - Handler for tests - SessId will be used when
+% #custom_changes_requests are used in dbsync main messages flow
+handle({dbsync_message, _SessId, Msg = #custom_changes_request{}}) ->
+    handle_custom_changes_request(<<>>, Msg);
 handle({dbsync_message, SessId, Msg = #changes_batch{}}) ->
     handle_changes_batch(dbsync_utils:get_provider(SessId), undefined, Msg);
 handle(Request) ->
@@ -89,40 +97,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec supervisor_flags() -> supervisor:sup_flags().
 supervisor_flags() ->
-    #{strategy => one_for_one, intensity => 1000, period => 3600}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a child spec for a DBSync in stream worker.
-%% @end
-%%--------------------------------------------------------------------
--spec dbsync_in_stream_spec(od_space:id()) -> supervisor:child_spec().
-dbsync_in_stream_spec(SpaceId) ->
-    #{
-        id => ?IN_STREAM_ID(SpaceId),
-        start => {dbsync_in_stream, start_link, [SpaceId]},
-        restart => transient,
-        shutdown => timer:seconds(10),
-        type => worker,
-        modules => [dbsync_in_stream]
-    }.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a child spec for a DBSync out stream worker.
-%% @end
-%%--------------------------------------------------------------------
--spec dbsync_out_stream_spec(binary(), od_space:id(),
-    [dbsync_out_stream:option()]) -> supervisor:child_spec().
-dbsync_out_stream_spec(ReqId, SpaceId, Opts) ->
-    #{
-        id => ?OUT_STREAM_ID(ReqId),
-        start => {dbsync_out_stream, start_link, [ReqId, SpaceId, Opts]},
-        restart => transient,
-        shutdown => timer:seconds(10),
-        type => worker,
-        modules => [dbsync_out_stream]
-    }.
+    dbsync_worker_sup:supervisor_flags().
 
 -spec start_streams() -> ok.
 start_streams() ->
@@ -137,73 +112,28 @@ start_streams(Spaces) ->
             ]);
         _ ->
             lists:foreach(fun(SpaceId) ->
-                ok = internal_services_manager:start_service(?MODULE, <<"dbsync_in_stream", SpaceId/binary>>,
+                ok = internal_services_manager:start_service(dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>,
                     start_in_stream, stop_in_stream, [SpaceId], SpaceId),
-                ok = internal_services_manager:start_service(?MODULE, <<"dbsync_out_stream", SpaceId/binary>>,
+                ok = internal_services_manager:start_service(dbsync_worker_sup, <<"dbsync_out_stream", SpaceId/binary>>,
                     start_out_stream, stop_out_stream, [SpaceId], SpaceId)
             end, Spaces)
     end.
 
--spec get_on_demand_changes_stream_id(od_space:id(), od_provider:id()) -> binary().
-get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
-    <<SpaceId/binary, "_", ProviderId/binary>>.
-
-%%%===================================================================
-%%% Internal services API
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts incoming DBSync stream for a given space.
-%% @end
-%%--------------------------------------------------------------------
--spec start_in_stream(od_space:id()) -> ok.
-start_in_stream(SpaceId) ->
-    Spec = dbsync_in_stream_spec(SpaceId),
-    {ok, _} = supervisor:start_child(?DBSYNC_WORKER_SUP, Spec),
-    ok.
-
--spec stop_in_stream(od_space:id()) -> ok | no_return().
-stop_in_stream(SpaceId) ->
-    ok = supervisor:terminate_child(?DBSYNC_WORKER_SUP, ?IN_STREAM_ID(SpaceId)),
-    ok = supervisor:delete_child(?DBSYNC_WORKER_SUP, ?IN_STREAM_ID(SpaceId)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts outgoing DBSync stream for a given space.
-%% @end
-%%--------------------------------------------------------------------
--spec start_out_stream(od_space:id()) -> ok.
-start_out_stream(SpaceId) ->
-    Filter = fun
-        (#document{mutators = [Mutator | _]}) ->
-            Mutator =:= oneprovider:get_id();
-        (#document{}) ->
-            false
-    end,
+-spec get_main_out_stream_opts(od_space:id()) -> [dbsync_out_stream:option()].
+get_main_out_stream_opts(SpaceId) ->
     Handler = fun
         (Since, Until, Timestamp, Docs) when Since =:= Until ->
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs);
         (Since, Until, Timestamp, Docs) ->
             ProviderId = oneprovider:get_id(),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs),
-            dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp)
+            dbsync_state:set_sync_progress(SpaceId, ProviderId, Until, Timestamp)
     end,
-    Spec = dbsync_out_stream_spec(SpaceId, SpaceId, [
+    [
         {main_stream, true},
-        {filter, Filter},
-        {handler, Handler},
-        {handling_interval, application:get_env(
-            ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(5)
-        )}
-    ]),
-    {ok, _} = supervisor:start_child(?DBSYNC_WORKER_SUP, Spec),
-    ok.
-
--spec stop_out_stream(od_space:id()) -> ok | no_return().
-stop_out_stream(SpaceId) ->
-    ok = supervisor:terminate_child(?DBSYNC_WORKER_SUP, ?OUT_STREAM_ID(SpaceId)),
-    ok = supervisor:delete_child(?DBSYNC_WORKER_SUP, ?OUT_STREAM_ID(SpaceId)).
+        {local_changes_only, true},
+        {batch_handler, Handler}
+    ].
 
 %%%===================================================================
 %%% Internal functions
@@ -224,7 +154,7 @@ handle_changes_batch(ProviderId, MsgId, #changes_batch{
     timestamp = Timestamp,
     compressed_docs = CompressedDocs
 }) ->
-    Name = {dbsync_in_stream, SpaceId},
+    Name = ?IN_STREAM_ID(SpaceId),
     Docs = dbsync_utils:uncompress(CompressedDocs),
     gen_server:cast(
         {global, Name}, {changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}
@@ -252,38 +182,17 @@ handle_changes_request(ProviderId, #changes_request2{
                 ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
     end,
-    Name = get_on_demand_changes_stream_id(SpaceId, ProviderId),
-    StreamID = ?OUT_STREAM_ID(Name),
-    critical_section:run([?MODULE, StreamID], fun() ->
-        case global:whereis_name(StreamID) of
-            undefined ->
-                Node = datastore_key:any_responsible_node(SpaceId),
-                % TODO VFS-VFS-6651 - child deletion will not be needed after
-                % refactoring of supervision tree to use one_for_one supervisor
-                rpc:call(Node, supervisor, terminate_child, [?DBSYNC_WORKER_SUP, StreamID]),
-                rpc:call(Node, supervisor, delete_child, [?DBSYNC_WORKER_SUP, StreamID]),
 
-                Spec = dbsync_out_stream_spec(Name, SpaceId, [
-                    {since, Since},
-                    {until, Until},
-                    {except_mutator, ProviderId}, % TODO VFS-6652 - restults in different seq numbers/timestamps
-                                                  % seen by different providers
-                    {handler, Handler},
-                    {handling_interval, application:get_env(
-                        ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
-                    )}
-                ]),
-                try
-                    {ok, _} = rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]),
-                    ok
-                catch
-                    Error:Reason ->
-                        ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
-                end;
-            _ ->
-                ok
-        end
-    end).
+    Opts = [
+        {since, Since},
+        {until, Until},
+        {local_changes_only, true},
+        {batch_handler, Handler},
+        {handling_interval, application:get_env(
+            ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1))}
+    ],
+
+    dbsync_worker_sup:start_on_demand_stream(SpaceId, ProviderId, Opts).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -299,3 +208,49 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 }) ->
     handle_changes_batch(SrcProviderId, MsgId, Msg),
     dbsync_communicator:forward(BroadcastMsg).
+
+%% @private
+%% @doc
+-spec handle_custom_changes_request(od_provider:id(), #custom_changes_request{}) -> ok.
+% TODO VFS-7031 - Use in dbsync main messages flow
+handle_custom_changes_request(CallerProviderId, #custom_changes_request{
+    space_id = SpaceId,
+    reference_provider_id = ReferenceProviderId,
+    since = RequestedSince,
+    until = RequestedUntil,
+    trim_skipped = TrimSkipped
+}) ->
+    LocalSince = dbsync_seqs_correlations_history:map_remote_seq_to_local_start_seq(
+        SpaceId, ReferenceProviderId, RequestedSince, TrimSkipped),
+    % Information about remote sequences for last batch has to be prepared getting local until sequence
+    % see `dbsync_seqs_correlation_history:map_remote_seq_to_local_stop_params` function doc for more information
+    {LocalUntil, EncodedRemoteSequences} =
+        dbsync_seqs_correlations_history:map_remote_seq_to_local_stop_params(SpaceId, ReferenceProviderId, RequestedUntil),
+    case LocalSince < LocalUntil of
+        true ->
+            Handler = fun
+                (BatchSince, end_of_stream, Timestamp, Docs) ->
+                    dbsync_communicator:send_changes_with_extended_info(
+                        CallerProviderId, SpaceId, BatchSince, LocalUntil, Timestamp, Docs, EncodedRemoteSequences
+                    );
+                (BatchSince, BatchUntil, Timestamp, Docs) ->
+                    ExtendedInfo = dbsync_processed_seqs_history:get(SpaceId, BatchUntil),
+                    dbsync_communicator:send_changes_with_extended_info(
+                        CallerProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs, ExtendedInfo
+                    )
+            end,
+
+            Opts = [
+                {since, LocalSince},
+                {until, LocalUntil},
+                {except_mutator, CallerProviderId},
+                {batch_handler, Handler},
+                {handling_interval, application:get_env(
+                    ?APP_NAME, dbsync_custom_request_changes_handling_interval, timer:seconds(1))}
+            ],
+
+            dbsync_worker_sup:start_on_demand_stream(SpaceId, CallerProviderId, Opts);
+        false ->
+            % TODO VFS-7031 - send empty batch
+            ok
+    end.

@@ -16,6 +16,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -31,10 +32,7 @@
     seq :: couchbase_changes:seq(),
     changes_stash :: ets:tid(),
     changes_request_ref :: undefined | reference(),
-    apply_batch :: undefined | couchbase_changes:until(),
-    first_batch_processed = false :: boolean(),
-    lower_changes_count = 0 :: non_neg_integer(),
-    first_lower_seq = 1 :: non_neg_integer()
+    apply_batch :: undefined | couchbase_changes:until()
 }).
 
 -type state() :: #state{}.
@@ -216,10 +214,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec handle_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
     dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
-handle_changes_batch(Since, Until, Timestamp, Docs,
-    State0 = #state{seq = Seq, apply_batch = Apply, first_batch_processed = FBP,
-        lower_changes_count = LCC, first_lower_seq = FLS, space_id = SpaceID}) ->
-    State = State0#state{first_batch_processed = true, lower_changes_count = 0},
+handle_changes_batch(Since, Until, Timestamp, Docs, State = #state{seq = Seq, apply_batch = Apply}) ->
     case {Since, Apply} of
         {Seq, undefined} ->
             apply_changes_batch(Since, Until, Timestamp, Docs, State);
@@ -229,31 +224,6 @@ handle_changes_batch(Since, Until, Timestamp, Docs,
         {Higher, _} when Higher >= Apply ->
             State2 = stash_changes_batch(Since, Until, Timestamp, Docs, State),
             schedule_changes_request(State2);
-        {Lower, _} when Lower < Seq ->
-            case FBP of
-                true ->
-                    MaxLowerChanges = application:get_env(?APP_NAME,
-                        lower_changes_before_reset, 10),
-                    case {LCC < MaxLowerChanges, LCC, MaxLowerChanges} of
-                        {true, 0, _} ->
-                            State#state{lower_changes_count = 1,
-                                first_lower_seq = Lower};
-                        {true, _, _} ->
-                            State#state{lower_changes_count = LCC + 1};
-                        {_, _, 0} ->
-                            ?info("Reset changes seq for space ~p,"
-                            " old ~p, new ~p", [SpaceID, Seq, Lower]),
-                            State#state{seq = Lower};
-                        _ ->
-                            ?info("Reset changes seq for space ~p,"
-                            " old ~p, new ~p", [SpaceID, Seq, FLS]),
-                            State#state{seq = FLS}
-                    end;
-                _ ->
-                    ?info("Reset changes seq with first batch for space ~p,"
-                    " old ~p, new ~p", [SpaceID, Seq, Lower]),
-                    State#state{seq = Lower}
-            end;
         _ ->
             State
     end.
@@ -296,10 +266,10 @@ stash_changes_batch(Since, Until, Timestamp, Docs, State = #state{
 %%--------------------------------------------------------------------
 -spec apply_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
     dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
-apply_changes_batch(Since, Until, Timestamp, Docs, State) ->
+apply_changes_batch(Since, Until, Timestamp, Docs, #state{provider_id = ProviderID} = State) ->
     State2 = cancel_changes_request(State),
     {Docs2, Timestamp2, Until2, State3} = prepare_batch(Docs, Timestamp, Until, State2),
-    dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2),
+    dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2, ProviderID),
 
     case application:get_env(?APP_NAME, dbsync_in_stream_worker_gc, on) of
         on ->
@@ -317,15 +287,16 @@ apply_changes_batch(Since, Until, Timestamp, Docs, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec change_applied(couchbase_changes:since(), couchbase_changes:until(), dbsync_changes:timestamp(),
-    ok | timeout | {error, datastore_doc:seq(), term()}, state()) -> state().
-change_applied(_Since, Until, Timestamp, Ans, State) ->
+    dbsync_changes:dbsync_application_result(), state()) -> state().
+change_applied(_Since, Until, Timestamp, Ans, #state{provider_id = ProviderId, space_id = SpaceId} = State) ->
     State2 = State#state{apply_batch = undefined},
+    dbsync_pending_seqs:process_dbsync_in_stream_seqs(SpaceId, ProviderId, Ans),
     case Ans of
-        ok ->
+        #dbsync_application_result{min_erroneous_seq = undefined} ->
             gen_server2:cast(self(), check_batch_stash),
             update_seq(Until, Timestamp, State2);
-        {error, Seq, _} ->
-            State3 = update_seq(Seq - 1, undefined, State2),
+        #dbsync_application_result{min_erroneous_seq = Seq} ->
+            State3 = update_seq(Seq, undefined, State2),
             schedule_changes_request(State3);
         timeout ->
             schedule_changes_request(State2)
@@ -376,7 +347,7 @@ prepare_batch(Docs, Timestamp, Until, State = #state{
 update_seq(Seq, _Timestamp, State = #state{seq = Seq}) ->
     State;
 update_seq(Seq, Timestamp, State = #state{space_id = SpaceId, provider_id = ProviderId}) ->
-    dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Seq, Timestamp),
+    dbsync_state:set_sync_progress(SpaceId, ProviderId, Seq, Timestamp),
     State#state{seq = Seq}.
 
 %%--------------------------------------------------------------------

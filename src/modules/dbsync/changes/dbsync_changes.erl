@@ -13,20 +13,28 @@
 -author("Krzysztof Trzepla").
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([apply_batch/3, apply/1]).
+-export([apply_batch/4, apply/2]).
 
 -type ctx() :: datastore_cache:ctx().
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
+-type remote_mutation_info() :: datastore_doc:remote_mutation_info().
 -type model() :: datastore_model:model().
 -type timestamp() :: datastore_doc:timestamp() | undefined.
+-type dbsync_successful_application_result() :: #dbsync_application_result{}.
+% Extend dbsync_successful_application_result() type in case of timeout
+% (dbsync_successful_application_result record cannot be created).
+-type dbsync_application_result() :: dbsync_successful_application_result() | timeout.
 
--export_type([timestamp/0]).
+-export_type([remote_mutation_info/0, timestamp/0, dbsync_application_result/0]).
 
 %% Time to wait for worker process
 -define(WORKER_TIMEOUT, 90000).
@@ -41,8 +49,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec apply_batch([datastore:doc()], {couchbase_changes:since(),
-    couchbase_changes:until()}, timestamp()) -> ok.
-apply_batch(Docs, BatchRange, Timestamp) ->
+    couchbase_changes:until()}, timestamp(), oneprovider:id()) -> ok.
+apply_batch(Docs, BatchRange, Timestamp, ProviderId) ->
     Master = self(),
     spawn_link(fun() ->
         DocsGroups = group_changes(Docs),
@@ -66,7 +74,7 @@ apply_batch(Docs, BatchRange, Timestamp) ->
         end,
 
         Ref = make_ref(),
-        Pids = parallel_apply(DocsList3, Ref),
+        Pids = parallel_apply(DocsList3, Ref, ProviderId),
         Ans = gather_answers(Pids, Ref),
         Master ! {batch_applied, BatchRange, Timestamp, Ans}
     end),
@@ -74,50 +82,59 @@ apply_batch(Docs, BatchRange, Timestamp) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Applies remote changes.
+%% Applies remote changes. In case of success returns remote_mutation_info()
+%% or undefined if document is ignored.
 %% @end
 %%--------------------------------------------------------------------
--spec apply(datastore:doc()) -> ok | {error, datastore_doc:seq(), term()}.
-apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
+-spec apply(datastore:doc(), oneprovider:id()) ->
+    {ok | ?REMOTE_DOC_ALREADY_EXISTS, remote_mutation_info() | undefined} | {error, datastore_doc:remote_seq()}.
+apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}, ProviderId) ->
     try
-        DocToHandle = case Value of
+        HandlingAns = case Value of
             #links_forest{model = Model, key = Key} ->
-                links_save(Model, Key, Doc);
+                links_save(Model, Key, Doc, ProviderId);
             #links_node{model = Model, key = Key} ->
-                links_save(Model, Key, Doc);
+                links_save(Model, Key, Doc, ProviderId);
             #links_mask{} ->
-                links_delete(Doc);
+                links_delete(Doc, ProviderId);
             _ ->
                 Model = element(1, Value),
-                Ctx = get_ctx(Model),
-                Ctx2 = Ctx#{sync_change => true, hooks_disabled => true},
-                case datastore_model:save(Ctx2, Doc) of
-                    {ok, Doc2} ->
+                Ctx = (get_ctx(Model))#{hooks_disabled => true},
+                case datastore_model:save_remote(Ctx, Doc, ProviderId) of
+                    {ok, Doc2, _} = OkAns ->
                         case Value of
                             #file_location{} ->
                                 fslogic_location_cache:cache_location(Doc2);
                             _ ->
                                 ok
                         end,
-                        Doc2;
-                    {error, ignored} ->
-                        undefined
+                        OkAns;
+                    Other ->
+                        Other
                 end
         end,
 
-        try
-            dbsync_events:change_replicated(SpaceId, DocToHandle)
-        catch
-            _:Reason_ ->
-                ?error_stacktrace("Change ~p post-processing failed due "
-                "to: ~p", [Doc, Reason_])
-        end,
-        ok
+        case HandlingAns of
+            {ok, DocToHandle, RemoteUpdateDesc} ->
+                try
+                    dbsync_events:change_replicated(SpaceId, DocToHandle)
+                catch
+                    _:Reason_ ->
+                        ?error_stacktrace("Change ~p post-processing failed due "
+                        "to: ~p", [Doc, Reason_])
+                end,
+
+                {ok, RemoteUpdateDesc};
+            {error, ignored} ->
+                {ok, undefined};
+            {error, {?REMOTE_DOC_ALREADY_EXISTS, _} = ErrorDesc} ->
+                ErrorDesc
+        end
     catch
         _:Reason ->
             ?error_stacktrace("Unable to apply change ~p due to: ~p",
                 [Doc, Reason]),
-            {error, Seq, Reason}
+            {error, Seq}
     end.
 
 %%%===================================================================
@@ -131,21 +148,16 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
 %% `undefined` if remote doc was ignored.
 %% @end
 %%--------------------------------------------------------------------
--spec links_save(model(), key(), doc()) -> undefined | doc().
-links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
+-spec links_save(model(), key(), doc(), oneprovider:id()) ->
+    {ok, doc(), remote_mutation_info()} | {error, ignored}.
+links_save(Model, RoutingKey, Doc = #document{key = Key}, ProviderId) ->
     Ctx = get_ctx(Model),
     Ctx2 = Ctx#{
-        sync_change => true,
         local_links_tree_id => oneprovider:get_id(),
         routing_key => RoutingKey
     },
     Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
-    case datastore_router:route(save, [Ctx3, Key, Doc]) of
-        {ok, Doc2} ->
-            Doc2;
-        {error, ignored} ->
-            undefined
-    end.
+    datastore_router:route(save_remote, [Ctx3, Key, Doc, ProviderId]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -154,46 +166,52 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
 %% applying changes.
 %% @end
 %%--------------------------------------------------------------------
--spec links_delete(doc()) -> undefined | doc().
+-spec links_delete(doc(), oneprovider:id()) -> {ok, doc(), remote_mutation_info()} | {error, ignored}.
 links_delete(Doc = #document{key = Key, value = LinksMask = #links_mask{
     key = RoutingKey, model = Model, tree_id = TreeId
-}, deleted = false}) ->
+}, deleted = false}, ProviderId) ->
     LocalTreeId = oneprovider:get_id(),
     case TreeId of
         LocalTreeId ->
-            Ctx = get_ctx(Model),
-            Ctx2 = Ctx#{
-                sync_change => true,
-                local_links_tree_id => LocalTreeId
-            },
-            Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
-            DeletedLinks = get_links_mask(Ctx3, Key, RoutingKey),
-            Deleted = apply_links_mask(Ctx3, LinksMask, DeletedLinks),
-            Ctx2_2 = datastore_multiplier:extend_name(RoutingKey, Ctx),
-            save_links_mask(Ctx2_2, Doc#document{deleted = Deleted});
+            Ctx = (get_ctx(Model))#{local_links_tree_id => LocalTreeId},
+            Ctx2 = datastore_multiplier:extend_name(RoutingKey, Ctx),
+            DeletedLinks = get_links_mask(Ctx2, Key, RoutingKey),
+            IsMaskFull = apply_links_mask(Ctx2, LinksMask, DeletedLinks),
+            Ans = save_links_mask(Ctx2, Doc, ProviderId),
+
+            % Mask document is full - delete it
+            case IsMaskFull of
+                true ->
+                    DocToDelete = case Ans of
+                        {ok, SavedDoc, _RemoteUpdateDesc} -> SavedDoc;
+                        {error, ignored} -> Doc
+                    end,
+                    {ok, _} = datastore_router:route(save,
+                        [Ctx2#{routing_key => RoutingKey}, Key, DocToDelete#document{deleted = IsMaskFull}]);
+                false ->
+                    ok
+            end,
+
+            Ans;
         _ ->
-            undefined
+            {error, ignored}
     end;
 links_delete(Doc = #document{
     mutators = [TreeId, RemoteTreeId],
     value = #links_mask{key = RoutingKey, model = Model, tree_id = RemoteTreeId},
     deleted = true
-}) ->
+}, ProviderId) ->
     LocalTreeId = oneprovider:get_id(),
     case TreeId of
         LocalTreeId ->
-            Ctx = get_ctx(Model),
-            Ctx2 = Ctx#{
-                sync_change => true,
-                local_links_tree_id => LocalTreeId
-            },
-            Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
-            save_links_mask(Ctx3, Doc);
+            Ctx = (get_ctx(Model))#{local_links_tree_id => LocalTreeId},
+            Ctx2 = datastore_multiplier:extend_name(RoutingKey, Ctx),
+            save_links_mask(Ctx2, Doc, ProviderId);
         _ ->
-            undefined
+            {error, ignored}
     end;
-links_delete(#document{}) ->
-    undefined.
+links_delete(#document{}, _ProviderId) ->
+    {error, ignored}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -245,15 +263,10 @@ apply_links_mask(Ctx, #links_mask{key = Key, tree_id = TreeId, links = Links},
 %% `undefined` if remote doc was ignored.
 %% @end
 %%--------------------------------------------------------------------
--spec save_links_mask(ctx(), doc()) -> undefined | doc().
+-spec save_links_mask(ctx(), doc(), oneprovider:id()) -> {ok, doc(), remote_mutation_info()} | {error, ignored}.
 save_links_mask(Ctx, Doc = #document{key = Key,
-    value = #links_mask{key = RoutingKey}}) ->
-    case datastore_router:route(save, [Ctx#{routing_key => RoutingKey}, Key, Doc]) of
-        {ok, Doc2} ->
-            Doc2;
-        {error, ignored} ->
-            undefined
-    end.
+    value = #links_mask{key = RoutingKey}}, ProviderId) ->
+    datastore_router:route(save_remote, [Ctx#{routing_key => RoutingKey}, Key, Doc, ProviderId]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -284,23 +297,38 @@ group_changes(Docs) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts one worker for each documents' group.
+%% Starts one worker for each documents' list.
 %% @end
 %%--------------------------------------------------------------------
--spec parallel_apply([[datastore:doc()]], reference()) -> [pid()].
-parallel_apply(DocsList, Ref) ->
+-spec parallel_apply([[datastore:doc()]], reference(), oneprovider:id()) -> [pid()].
+parallel_apply(DocsList, Ref, ProviderId) ->
     Master = self(),
     lists:map(fun(DocList) ->
         spawn(fun() ->
-            SlaveAns = lists:foldl(fun
-                (Doc, ok) ->
-                    dbsync_changes:apply(Doc);
-                (_, Acc) ->
-                    Acc
-            end, ok, lists:reverse(DocList)),
+            SlaveAns = apply_docs_list(lists:reverse(DocList), ProviderId, #dbsync_application_result{}),
             Master ! {changes_worker_ans, Ref, self(), SlaveAns}
         end)
     end, DocsList).
+
+%% @private
+-spec apply_docs_list([[datastore:doc()]], oneprovider:id(), dbsync_successful_application_result()) ->
+    dbsync_successful_application_result().
+apply_docs_list([], _ProviderId, Acc) ->
+    Acc;
+apply_docs_list([Doc | DocList], ProviderId,
+    #dbsync_application_result{successful = Applied, erroneous = AppliedWithError} = Acc) ->
+    case dbsync_changes:apply(Doc, ProviderId) of
+        {ok, undefined} ->
+            apply_docs_list(DocList, ProviderId, Acc);
+        {ok, #remote_mutation_info{} = UpdateDesc} ->
+            Acc2 = Acc#dbsync_application_result{successful = [UpdateDesc | Applied]},
+            apply_docs_list(DocList, ProviderId, Acc2);
+        {?REMOTE_DOC_ALREADY_EXISTS, #remote_mutation_info{} = UpdateDesc} ->
+            Acc2 = Acc#dbsync_application_result{erroneous = [UpdateDesc | AppliedWithError]},
+            apply_docs_list(DocList, ProviderId, Acc2);
+        {error, Seq} ->
+            Acc#dbsync_application_result{min_erroneous_seq = Seq}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -308,10 +336,9 @@ parallel_apply(DocsList, Ref) ->
 %% Gather answers from workers.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_answers([pid()], reference()) ->
-    ok | timeout | {error, datastore_doc:seq(), term()}.
+-spec gather_answers([pid()], reference()) -> dbsync_application_result().
 gather_answers(SlavesList, Ref) ->
-    gather_answers(SlavesList, Ref, ok, false).
+    gather_answers(SlavesList, Ref, #dbsync_application_result{}, false).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -319,21 +346,15 @@ gather_answers(SlavesList, Ref) ->
 %% Gather appropriate number of workers' answers.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_answers([pid()], reference(),
-    ok | {error, datastore_doc:seq(), term()}, boolean()) ->
-    ok | timeout | {error, datastore_doc:seq(), term()}.
+-spec gather_answers([pid()], reference(), dbsync_successful_application_result(), boolean()) ->
+    dbsync_application_result().
 gather_answers([], _Ref, Ans, _FinalCheck) ->
     Ans;
 gather_answers(Pids, Ref, TmpAns, FinalCheck) ->
     receive
         {changes_worker_ans, Ref, Pid, Ans} ->
-            Merged = case {Ans, TmpAns} of
-                {ok, _} -> TmpAns;
-                {{error, Seq, _}, {error, Seq2, _}} when Seq < Seq2 -> Ans;
-                {{error, _, _}, {error, _, _}} -> TmpAns;
-                _ -> Ans
-            end,
-            gather_answers(Pids -- [Pid], Ref, Merged, FinalCheck)
+            MergedAns = merge_result_records(Ans, TmpAns),
+            gather_answers(Pids -- [Pid], Ref, MergedAns, FinalCheck)
     after
         ?WORKER_TIMEOUT ->
             IsAnyAlive = lists:foldl(fun
@@ -351,6 +372,29 @@ gather_answers(Pids, Ref, TmpAns, FinalCheck) ->
                     timeout
             end
     end.
+
+-spec merge_result_records(dbsync_successful_application_result(), dbsync_successful_application_result()) ->
+    dbsync_successful_application_result().
+merge_result_records(#dbsync_application_result{
+    successful = Applied1,
+    erroneous = AppliedWithError1,
+    min_erroneous_seq = SmallestSeqWithError1
+}, #dbsync_application_result{
+    successful = Applied2,
+    erroneous = AppliedWithError2,
+    min_erroneous_seq = SmallestSeqWithError2
+}) ->
+    SmallestSeqWithError = case {SmallestSeqWithError1, SmallestSeqWithError2} of
+        {undefined, _} -> SmallestSeqWithError2;
+        {_, undefined} -> SmallestSeqWithError1;
+        _ -> min(SmallestSeqWithError1, SmallestSeqWithError2)
+    end,
+
+    #dbsync_application_result{
+        successful = Applied1 ++ Applied2,
+        erroneous = AppliedWithError1 ++ AppliedWithError2,
+        min_erroneous_seq = SmallestSeqWithError
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc

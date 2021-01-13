@@ -1262,11 +1262,11 @@ mock_dbsync_changes(Config) ->
 
     ok = test_utils:mock_expect(Worker1, dbsync_changes, apply,
         fun
-            (Doc = #document{value = #file_meta{}}) ->
-                TestPid ! {file_meta, Doc},
-                ok;
-            (Doc) ->
-                meck:passthrough([Doc])
+            (Doc = #document{value = #file_meta{}}, ProviderId) ->
+                TestPid ! {file_meta, Doc, ProviderId},
+                {ok, undefined};
+            (Doc, ProviderId) ->
+                meck:passthrough([Doc, ProviderId])
         end).
 
 
@@ -1295,8 +1295,8 @@ unmock_file_meta_posthooks(Config) ->
 save_file_meta_docs(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     receive
-        {file_meta, Doc} ->
-            ?assertMatch(ok, rpc:call(Worker1, dbsync_changes, apply, [Doc])),
+        {file_meta, Doc, ProviderId} ->
+            ?assertMatch({ok, _}, rpc:call(Worker1, dbsync_changes, apply, [Doc, ProviderId])),
             save_file_meta_docs(Config)
     after 0 ->
         ok

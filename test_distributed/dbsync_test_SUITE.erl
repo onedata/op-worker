@@ -11,6 +11,7 @@
 -module(dbsync_test_SUITE).
 -author("Krzysztof Trzepla").
 
+-include("modules/dbsync/dbsync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include("global_definitions.hrl").
@@ -141,7 +142,7 @@ local_changes_should_be_broadcast(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(SpaceId) ->
         Pid = rpc:call(Worker, global, whereis_name, [
-            {dbsync_out_stream, SpaceId}
+            ?OUT_STREAM_ID(SpaceId)
         ]),
         Docs = lists:map(fun(N) ->
             timer:sleep(100),
@@ -156,7 +157,7 @@ remote_changes_should_not_be_broadcast(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(SpaceId) ->
         Pid = rpc:call(Worker, global, whereis_name, [
-            {dbsync_out_stream, SpaceId}
+            ?OUT_STREAM_ID(SpaceId)
         ]),
         lists:foreach(fun(ProviderId) ->
             Doc = ?DOC(ProviderId, 1),
@@ -350,7 +351,7 @@ changes_request_should_be_handled(Config) ->
         ProviderIds = lists:usort(get_providers(SpaceId)),
         ProviderIds2 = lists:delete(<<"p1">>, ProviderIds),
         lists:foreach(fun(ProviderId) ->
-            StreamId = dbsync_worker:get_on_demand_changes_stream_id(SpaceId, ProviderId),
+            StreamId = dbsync_worker_sup:get_on_demand_changes_stream_id(SpaceId, ProviderId),
             Request = #changes_request2{
                 space_id = SpaceId,
                 since = 1,
@@ -358,10 +359,10 @@ changes_request_should_be_handled(Config) ->
             },
             ?call(Worker, ProviderId, Request),
             Children = rpc:call(Worker, supervisor, which_children, [
-                dbsync_worker_sup
+                ?DBSYNC_WORKER_SUP
             ]),
             {_, Pid, _, _} = lists:keyfind(
-                {dbsync_out_stream, StreamId}, 1, Children
+                ?OUT_STREAM_ID(StreamId), 1, Children
             ),
             ?assertEqual(true, is_pid(Pid)),
             Doc = ?DOC(<<"p1">>, 1),
@@ -422,9 +423,9 @@ init_per_testcase(_Case, Config) ->
         (ProviderId, Msg) -> Self ! {send, ProviderId, Msg}, ok
     end),
     test_utils:mock_expect(Worker, dbsync_changes, apply, fun
-        (Doc) ->
+        (Doc, _) ->
             Self ! {apply, Doc},
-            ok
+            {ok, undefined}
     end),
 
     lists:foreach(fun({Name, Value}) ->
@@ -444,9 +445,9 @@ end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(SpaceId) ->
         ok = rpc:call(Worker, internal_services_manager, stop_service,
-            [dbsync_worker, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
+            [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
         ok = rpc:call(Worker, internal_services_manager, stop_service,
-            [dbsync_worker, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
+            [dbsync_worker_sup, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
         ok = rpc:call(Worker, dbsync_state, delete, [SpaceId])
     end, ?config(spaces, Config)),
     initializer:unmock_provider_ids(Workers),

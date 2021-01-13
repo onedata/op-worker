@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([get_or_default/1, save/1, get/1, exists/1, delete/1, update/2, create/1,
+-export([get_or_default/1, save/1, save/2, get/1, exists/1, delete/1, update/2, create/1,
     create_or_update/2, save/5]).
 
 %% datastore_model callbacks
@@ -80,14 +80,13 @@ save(FileUuid, SpaceId, ATime, MTime, CTime) ->
         scope = SpaceId}
     )).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves permission cache.
-%% @end
-%%--------------------------------------------------------------------
 -spec save(doc()) -> {ok, key()} | {error, term()}.
 save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc)).
+    save(Doc, true).
+
+-spec save(doc(), boolean()) -> {ok, key()} | {error, term()}.
+save(Doc, GeneratedKey) ->
+    ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc

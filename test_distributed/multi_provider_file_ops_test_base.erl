@@ -14,6 +14,7 @@
 
 -include("middleware/middleware.hrl").
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -29,7 +30,6 @@
 -export([
     create_on_different_providers_test_base/1,
     basic_opts_test_base/4,
-    basic_opts_test_base/5,
     rtransfer_test_base/11,
     rtransfer_blocking_test_base/6,
     rtransfer_blocking_test_cleanup/1,
@@ -53,7 +53,8 @@
     transfer_files_to_source_provider/1,
     proxy_session_token_update_test_base/3
 ]).
--export([init_env/1, teardown_env/1, mock_sync_and_rtransfer_errors/1, unmock_sync_and_rtransfer_errors/1]).
+-export([init_env/1, teardown_env/1,
+    mock_sync_and_rtransfer_errors/1, mock_sync_and_rtransfer_errors/2, unmock_sync_and_rtransfer_errors/1]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, create_location/4]).
@@ -65,6 +66,7 @@
 -export([async_synchronize/3]).
 -export([get_seq_and_timestamp_or_error/2]).
 -export([await_replication_end/3, await_replication_end/4]).
+-export([are_all_seqs_equal/3]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -632,13 +634,10 @@ rtransfer_blocking_test_cleanup(Config) ->
 
     test_utils:mock_validate_and_unload(Workers2, [replica_synchronizer, rtransfer_config]).
 
-basic_opts_test_base(Config, User, NodesDescroption, Attempts) ->
-    basic_opts_test_base(Config, User, NodesDescroption, Attempts, true).
-
 % TODO - add reading with chunks to test prefetching
-basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, CheckSequences) ->
-    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, CheckSequences);
-basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, CheckSequences) ->
+basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
+    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
+basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
 
 %%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
@@ -693,51 +692,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
         ?assertEqual(ok, lfm_proxy:close_all(W))
     end),
 
-    ProvIds = lists:foldl(fun(W, Acc) ->
-        sets:add_element(rpc:call(W, oneprovider, get_id, []), Acc)
-    end, sets:new(), Workers),
-
-    AreAllSeqsEqual = fun() ->
-        % Get list of states of all dbsync streams (for tested space) from all workers (all providers), e.g.:
-        % WorkersDbsyncStates = [StateOnWorker1, StateOnWorker2 ... StateOnWorkerN],
-        % StateOnWorker = [ProgressOfSynWithProv1, ProgressOfSynWithProv2 ... ProgressOfSynWithProvM]
-        WorkersDbsyncStates = lists:foldl(fun(W, Acc) ->
-            WorkerState = lists:foldl(fun(ProvID, Acc2) ->
-                case get_seq_and_timestamp_or_error(W, SpaceId, ProvID) of
-                    {error, not_found} ->
-                        % provider `ProvID` does not support space so there is no synchronization progress data
-                        % on this worker
-                        Acc2;
-                    {_, Timestamp} = Ans ->
-                        case Timestamp >= Timestamp0 of
-                            true -> ok;
-                            false -> throw(too_small_timestamp)
-                        end,
-                        [Ans | Acc2]
-                end
-            end, [], sets:to_list(ProvIds)),
-
-            case WorkerState of
-                [] -> Acc; % this worker belongs to provider that does not support this space
-                _ -> [WorkerState | Acc]
-            end
-        end, [], Workers),
-
-        % States of all workers (that belong to providers that support tested space) should be equal
-        % create set from list to remove duplicates
-        WorkersDbsyncStatesSet = sets:from_list(WorkersDbsyncStates),
-        case sets:size(WorkersDbsyncStatesSet) of
-            1 -> true; % States of all workers are equal
-            _ -> {false, WorkersDbsyncStates}
-        end
-    end,
-    % TODO VFS-6652 Always check sequences
-    case CheckSequences of
-        true -> ?assertEqual(true, catch AreAllSeqsEqual(), 60);
-        false -> ok
-    end,
-
-    ok.
+    ?assertEqual(true, catch are_all_seqs_equal(Workers, SpaceId, Timestamp0), 60).
 
 create_after_del_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
     create_after_del_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
@@ -1811,11 +1766,14 @@ teardown_env(Config) ->
     ssl:stop().
 
 mock_sync_and_rtransfer_errors(Config) ->
+    mock_sync_and_rtransfer_errors(Config, true).
+
+mock_sync_and_rtransfer_errors(Config, DelaySend) ->
     % TODO - consider creation of separate tests mocking sync and rtransfer errors
     % limit test with rtransfer errors to single file check
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
-    RequestDelay = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
+    {ok, RequestDelay} = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
     test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(1)),
 
     test_utils:mock_new(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config], [passthrough]),
@@ -1823,15 +1781,23 @@ mock_sync_and_rtransfer_errors(Config) ->
     test_utils:mock_expect(Workers, dbsync_in_stream_worker, handle_info, fun
         ({batch_applied, {Since, Until}, Timestamp, Ans} = Info, State) ->
             case Ans of
-                ok ->
+                #dbsync_application_result{min_erroneous_seq = undefined} ->
                     Counter = case get(test_counter) of
                         undefined -> 1;
                         Val -> Val
                     end,
-                    case Counter < 4 of
-                        true ->
+                    case Counter of
+                        1 ->
                             put(test_counter, Counter + 1),
                             meck:passthrough([{batch_applied, {Since, max(Until - 10, Since)}, Timestamp, Ans}, State]);
+                        2 ->
+                            put(test_counter, Counter + 1),
+                            % TODO VFS-7035 - check why tests with `min_erroneous_seq = Since + 1` fail?
+                            meck:passthrough([{batch_applied, {Since, Until}, Timestamp,
+                                #dbsync_application_result{min_erroneous_seq = Since}}, State]);
+                        3 ->
+                            put(test_counter, Counter + 1),
+                            meck:passthrough([{batch_applied, {Since, max(Until - 10, Since)}, Timestamp, timeout}, State]);
                         _ ->
                             put(test_counter, 1),
                             meck:passthrough([Info, State])
@@ -1843,11 +1809,16 @@ mock_sync_and_rtransfer_errors(Config) ->
             meck:passthrough([Info, State])
     end),
 
-    test_utils:mock_expect(Workers, dbsync_communicator, send_changes,
-        fun(ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs) ->
-            timer:sleep(2000),
-            meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs])
-        end),
+    case DelaySend of
+        true ->
+            test_utils:mock_expect(Workers, dbsync_communicator, send_changes,
+                fun(ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs) ->
+                    timer:sleep(2000),
+                    meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs])
+                end);
+        false ->
+            ok
+    end,
 
     test_utils:mock_expect(Workers, rtransfer_config, get_connection_secret,
         fun(ProviderId, HostAndPort) ->
@@ -2412,7 +2383,7 @@ get_seq_and_timestamp_or_error(Worker, SpaceId, ProviderId) ->
 
 get_seq_and_timestamp_or_error(SpaceId, ProviderId) ->
     case datastore_model:get(#{model => dbsync_state}, SpaceId) of
-        {ok, #document{value = #dbsync_state{seq = Seq}}} ->
+        {ok, #document{value = #dbsync_state{sync_progress = Seq}}} ->
             maps:get(ProviderId, Seq, {error, not_found});
         Error ->
             Error
@@ -2442,6 +2413,43 @@ await_replication_end(Node, TransferId, Attempts, GetFun) ->
             await_replication_end(Node, TransferId, Attempts - 1, GetFun)
     end.
 
+are_all_seqs_equal(Workers, SpaceId, Timestamp0) ->
+    ProvIds = lists:foldl(fun(W, Acc) ->
+        sets:add_element(rpc:call(W, oneprovider, get_id, []), Acc)
+    end, sets:new(), Workers),
+
+    % Get list of states of all dbsync streams (for tested space) from all workers (all providers), e.g.:
+    % WorkersDbsyncStates = [StateOnWorker1, StateOnWorker2 ... StateOnWorkerN],
+    % StateOnWorker = [ProgressOfSynWithProv1, ProgressOfSynWithProv2 ... ProgressOfSynWithProvM]
+    WorkersDbsyncStates = lists:foldl(fun(W, Acc) ->
+        WorkerState = lists:foldl(fun(ProvID, Acc2) ->
+            case get_seq_and_timestamp_or_error(W, SpaceId, ProvID) of
+                {error, not_found} ->
+                    % provider `ProvID` does not support space so there is no synchronization progress data
+                    % on this worker
+                    Acc2;
+                {_, Timestamp} = Ans ->
+                    case Timestamp >= Timestamp0 of
+                        true -> ok;
+                        false -> throw(too_small_timestamp)
+                    end,
+                    [Ans | Acc2]
+            end
+        end, [], sets:to_list(ProvIds)),
+
+        case WorkerState of
+            [] -> Acc; % this worker belongs to provider that does not support this space
+            _ -> [WorkerState | Acc]
+        end
+    end, [], Workers),
+
+    % States of all workers (that belong to providers that support tested space) should be equal
+    % create set from list to remove duplicates
+    WorkersDbsyncStatesSet = sets:from_list(WorkersDbsyncStates),
+    case sets:size(WorkersDbsyncStatesSet) of
+        1 -> true; % States of all workers are equal
+        _ -> {false, WorkersDbsyncStates}
+    end.
 
 %% @private
 -spec get_session_client_tokens(node(), session:id()) ->

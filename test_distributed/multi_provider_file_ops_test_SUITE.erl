@@ -162,7 +162,7 @@ remote_driver_internal_call_test(Config0) ->
         meck:passthrough([Ctx, Key])
     end),
     test_utils:mock_expect(Workers2, datastore_remote_driver, wait, fun
-        ({{error, {badmatch, {error, internal_call}}}, _SessId} = Future) ->
+        ({future, {error, {badmatch, {error, internal_call}}}, _, _} = Future) ->
             Master ! internal_call,
             meck:passthrough([Future]);
         (Future) ->
