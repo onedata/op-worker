@@ -450,7 +450,8 @@ delete_file(FileCtx) ->
 finish_callback(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     depth = Depth,
-    max_depth = MaxDepth
+    max_depth = MaxDepth,
+    info = #{file_ctx := FileCtx}
 }) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     MTime = try
@@ -462,8 +463,9 @@ finish_callback(#storage_traverse_master{
     end,
     ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+        Guid = file_ctx:get_guid_const(FileCtx),
         case Depth =:= MaxDepth of
-            true -> storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, undefined);
-            false -> storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, MTime)
+            true -> storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, undefined);
+            false -> storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, MTime)
         end
     end).

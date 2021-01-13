@@ -32,7 +32,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([create_in_zone/3, create_in_zone/4, delete_in_zone/1]).
+-export([create_in_zone/4, create_in_zone/5, delete_in_zone/1]).
 -export([get/1, get_shared_data/2]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).
@@ -58,9 +58,10 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(Name, ImportedStorage, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), storage:imported(), storage:readonly()) -> {ok, storage:id()} | errors:error().
-create_in_zone(Name, ImportedStorage, Readonly) ->
-    create_in_zone(Name, ImportedStorage, Readonly, undefined).
+-spec create_in_zone(od_storage:name(), storage:imported(), storage:readonly(), storage:qos_parameters()) -> 
+    {ok, storage:id()} | errors:error().
+create_in_zone(Name, ImportedStorage, Readonly, QosParameters) ->
+    create_in_zone(Name, ImportedStorage, Readonly, QosParameters, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -68,9 +69,9 @@ create_in_zone(Name, ImportedStorage, Readonly) ->
 %% Creates document containing storage public information in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), storage:imported() | unknown, storage:readonly(), storage:id() | undefined) ->
-    {ok, storage:id()} | errors:error().
-create_in_zone(Name, ImportedStorage, Readonly, StorageId) ->
+-spec create_in_zone(od_storage:name(), storage:imported() | unknown, storage:readonly(), 
+    storage:qos_parameters(), storage:id() | undefined) -> {ok, storage:id()} | errors:error().
+create_in_zone(Name, ImportedStorage, Readonly, QosParameters, StorageId) ->
     PartialData = case ImportedStorage of
         unknown-> #{};
         _ -> #{<<"imported">> => ImportedStorage}
@@ -80,7 +81,8 @@ create_in_zone(Name, ImportedStorage, Readonly, StorageId) ->
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
         data = PartialData#{
             <<"name">> => Name,
-            <<"readonly">> => Readonly
+            <<"readonly">> => Readonly,
+            <<"qosParameters">> => QosParameters
         }
     }),
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->

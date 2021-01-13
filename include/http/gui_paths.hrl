@@ -17,6 +17,7 @@
 -define(PROVIDER_CONFIGURATION_PATH, "/api/v3/oneprovider/configuration").
 -define(DEPRECATED_ZONE_CONFIGURATION_PATH, "/configuration").
 -define(ZONE_CONFIGURATION_PATH, "/api/v3/onezone/configuration").
+-define(ZONE_COMPATIBILITY_REGISTRY_PATH, "/compatibility.json").
 
 % Endpoint for nagios healthcheck
 -define(NAGIOS_PATH, "/nagios").

@@ -290,6 +290,7 @@
 }).
 
 -record(storage_sync_info, {
+    guid :: undefined | fslogic_worker:file_guid(),
     children_hashes = #{} :: storage_sync_info:hashes(),
     mtime :: undefined | time:seconds(),
     last_stat :: undefined | time:seconds(),
@@ -553,6 +554,7 @@
 %% Model for storing dir's location data
 -record(dir_location, {
     storage_file_created = false :: boolean(),
+    storage_file_id :: undefined | helpers:file_id(),
     % synced_gid field is set by storage import, only on POSIX-compatible storages.
     % It is used to override display gid, only in
     % the syncing provider, with the gid that file

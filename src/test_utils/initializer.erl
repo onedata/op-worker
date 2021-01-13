@@ -1508,11 +1508,6 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
             lists:member(StorageId, StorageIds)
         end),
 
-    test_utils:mock_expect(AllWorkers, provider_logic, assert_zone_compatibility,
-        fun() ->
-            ok
-        end),
-
     VerifyProviderIdentityFun = fun
         (?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)) ->
             {ok, ?SUB(?ONEPROVIDER, ProviderId)};

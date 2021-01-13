@@ -32,8 +32,7 @@
     create_directory_import_many_test/1,
     create_empty_file_import_test/1,
     create_file_import_test/1,
-    create_delete_import_test_read_both/1,
-    create_delete_import_test_read_remote_only/1,
+    create_delete_import_test/1,
     create_file_import_check_user_id_test/1,
     create_file_import_check_user_id_error_test/1,
     create_file_in_dir_import_test/1,
@@ -47,6 +46,8 @@
     create_file_import_race_test/1,
     close_file_import_race_test/1,
     delete_file_reimport_race_test/1,
+    remote_delete_file_reimport_race_test/1,
+    remote_delete_file_reimport_race2_test/1,
     delete_opened_file_reimport_race_test/1,
 
     % tests of update
@@ -115,8 +116,7 @@
     create_directory_import_many_test,
     create_empty_file_import_test,
     create_file_import_test,
-    create_delete_import_test_read_both,
-    create_delete_import_test_read_remote_only,
+    create_delete_import_test,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
     create_file_in_dir_import_test,
@@ -130,6 +130,8 @@
     create_file_import_race_test,
     close_file_import_race_test,
     delete_file_reimport_race_test,
+    remote_delete_file_reimport_race_test,
+    remote_delete_file_reimport_race2_test,
     delete_opened_file_reimport_race_test,
 
     % tests of update
@@ -221,11 +223,8 @@ create_empty_file_import_test(Config) ->
 create_file_import_test(Config) ->
     storage_import_test_base:create_file_import_test(Config).
 
-create_delete_import_test_read_both(Config) ->
-    storage_import_test_base:create_delete_import_test_read_both(Config).
-
-create_delete_import_test_read_remote_only(Config) ->
-    storage_import_test_base:create_delete_import_test_read_remote_only(Config).
+create_delete_import_test(Config) ->
+    storage_import_test_base:create_delete_import_test(Config).
 
 create_file_import_check_user_id_test(Config) ->
     storage_import_test_base:create_file_import_check_user_id_test(Config).
@@ -269,6 +268,12 @@ close_file_import_race_test(Config) ->
 delete_file_reimport_race_test(Config) ->
     storage_import_test_base:delete_file_reimport_race_test(Config, ?POSIX_HELPER_NAME).
 
+remote_delete_file_reimport_race_test(Config) ->
+    storage_import_test_base:remote_delete_file_reimport_race_test(Config, ?POSIX_HELPER_NAME).
+
+remote_delete_file_reimport_race2_test(Config) ->
+    storage_import_test_base:remote_delete_file_reimport_race2_test(Config, ?POSIX_HELPER_NAME).
+
 delete_opened_file_reimport_race_test(Config) ->
     storage_import_test_base:delete_opened_file_reimport_race_test(Config, ?POSIX_HELPER_NAME).
 
@@ -303,7 +308,7 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
     storage_import_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config).
 
 create_delete_import2_test(Config) ->
-    storage_import_test_base:create_delete_import2_test(Config, true).
+    storage_import_test_base:create_delete_import2_test(Config).
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->
     storage_import_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config).

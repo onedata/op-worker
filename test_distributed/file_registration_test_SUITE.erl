@@ -19,6 +19,7 @@
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% export for ct
@@ -34,8 +35,8 @@
     registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled/1,
     registration_should_fail_if_file_is_missing/1,
     registration_should_succeed_if_size_is_passed/1,
-    stalled_file_link_test/1,
-    stalled_parent_link_test/1,
+    interrupted_registration_test/1,
+    interrupted_registration_nested_file_test/1,
     register_many_files_test/1,
     register_many_nested_files_test/1
 ]).
@@ -48,8 +49,8 @@
     registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled,
     registration_should_fail_if_file_is_missing,
     registration_should_succeed_if_size_is_passed,
-    stalled_file_link_test,
-    stalled_parent_link_test,
+    interrupted_registration_test,
+    interrupted_registration_nested_file_test,
     register_many_files_test,
     register_many_nested_files_test
 ]).
@@ -433,9 +434,9 @@ registration_should_succeed_if_size_is_passed(Config) ->
     % check whether file is visible on 2nd provider
     ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, #{}, #{}, <<>>, ?ATTEMPTS).
 
-stalled_file_link_test(Config) ->
-    % these test checks whether subsequent registration can handle case when
-    % there is a stalled file_meta link (without doc) of the file e. g. when user aborted the registration
+interrupted_registration_test(Config) ->
+    % these test checks whether subsequent registration can succeed when previous one was interrupted by used
+    % e. g. by pressing CTRL + C
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -496,9 +497,9 @@ stalled_file_link_test(Config) ->
     % check whether file is visible on 2nd provider
     ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
 
-stalled_parent_link_test(Config) ->
-    % these test checks whether subsequent registration can handle case when
-    % there is a stalled file_meta link (without doc) of a parent dir e. g. when user aborted the registration
+interrupted_registration_nested_file_test(Config) ->
+    % these test checks whether subsequent registration can succeed when previous one was interrupted by used
+    % e. g. by pressing CTRL + C
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -605,7 +606,7 @@ register_many_files_test(Config) ->
 
     verification_loop(LogicalFilePaths, fun(LogicalFilePath) ->
         % check whether file has been properly registered
-        ?assertFile(W1, SessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+        ?assertFile(W1, SessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, 60),
 
         % check whether file is visible on 2nd provider
         ?assertFile(W2, SessId2, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
@@ -702,7 +703,7 @@ end_per_testcase(_Case, Config) ->
 
 register_file(Worker, Config, Body) ->
     Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
-    rest_test_utils:request(Worker, <<"data/register">>, post, Headers, json_utils:encode(Body)).
+    rest_test_utils:request(Worker, <<"data/register">>, post, Headers, json_utils:encode(Body), [{recv_timeout, 30000}]).
 
 
 verify_file(Worker, SessionId, FilePath, ReadData, Xattrs, JSON, RDF, Attempts) ->
@@ -724,14 +725,15 @@ mock_file_meta_save(Worker, FileName) ->
         case FM#file_meta.name =:= FileName of
             true ->
                 TestMasterPid ! saving_file_meta_frozen,
-                timer:sleep(timer:seconds(30));
+                timer:sleep(timer:seconds(5)),
+                meck:passthrough([Doc]);
             false ->
                 meck:passthrough([Doc])
         end
     end).
 
 unmock_file_meta_save(Worker) ->
-    test_utils:mock_unload(Worker, file_meta).
+    ok = test_utils:mock_unload(Worker, file_meta).
 
 wait_until_saving_file_meta_is_frozen() ->
     receive saving_file_meta_frozen -> ok end.

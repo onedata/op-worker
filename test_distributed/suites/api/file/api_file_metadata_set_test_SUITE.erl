@@ -62,9 +62,7 @@ all() -> [
 
 set_file_rdf_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        8#707, Config
-    ),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
         FileGuid, ShareId, #data_spec{
@@ -109,17 +107,17 @@ set_file_rdf_metadata_test(Config) ->
         FileType, FilePath, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
-        VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_2, DataSpec, _QsParams = [],
+        VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, _QsParams = [],
         _RandomlySelectScenario = true,
         Config
     ).
 
 
 set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
-    P2Id = api_test_env:get_provider_id(p2, Config),
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space1(Config),
+    P2Id = oct_background:get_provider_id(paris),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
@@ -138,7 +136,7 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
         FileType, FilePath, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
-        VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_1, DataSpec, _QsParams = [],
+        VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, DataSpec, _QsParams = [],
         _RandomlySelectScenario = false,
         Config
     ).
@@ -161,9 +159,7 @@ remove_rdf(Node, FileGuid) ->
 
 set_file_json_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        8#707, Config
-    ),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
     ExampleJson = #{<<"attr1">> => [0, 1, <<"val">>]},
 
@@ -306,7 +302,7 @@ set_file_json_metadata_test(Config) ->
         FileType, FilePath, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
-        VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_2, DataSpec, QsParams,
+        VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, QsParams,
         _RandomlySelectScenario = true,
         Config
     ).
@@ -314,9 +310,7 @@ set_file_json_metadata_test(Config) ->
 
 set_file_primitive_json_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        8#707, Config
-    ),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
         FileGuid, ShareId, #data_spec{
@@ -359,17 +353,17 @@ set_file_primitive_json_metadata_test(Config) ->
         FileType, FilePath, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
-        VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_2, DataSpec, _QsParams = [],
+        VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, _QsParams = [],
         _RandomlySelectScenario = true,
         Config
     ).
 
 
 set_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
-    P2Id = api_test_env:get_provider_id(p2, Config),
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space1(Config),
+    P2Id = oct_background:get_provider_id(paris),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
@@ -388,7 +382,7 @@ set_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
         FileType, FilePath, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
-        VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_1, DataSpec, _QsParams = [],
+        VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, DataSpec, _QsParams = [],
         _RandomlySelectScenario = false,
         Config
     ).
@@ -411,11 +405,9 @@ remove_json(Node, FileGuid) ->
 
 set_file_xattrs_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    User2Id = api_test_env:get_user_id(user2, Config),
-    User3Id = api_test_env:get_user_id(user3, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        8#707, Config
-    ),
+    User2Id = oct_background:get_user_id(user2),
+    User3Id = oct_background:get_user_id(user3),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
         FileGuid, ShareId, #data_spec{
@@ -459,8 +451,8 @@ set_file_xattrs_test(Config) ->
         (expected_success, #api_test_ctx{
             node = TestNode,
             client = Client,
-            data = #{<<"metadata">> := Xattrs
-        }}) ->
+            data = #{<<"metadata">> := Xattrs}
+        }) ->
             case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
                 {?USER(UserId), true} when UserId /= User2Id andalso UserId /= User3Id ->
                     % Only owner (?USER_IN_BOTH_SPACES) can set acl in posix mode
@@ -477,17 +469,17 @@ set_file_xattrs_test(Config) ->
         FileType, FilePath, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
-        VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_2, DataSpec, _QsParams = [],
+        VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, _QsParams = [],
         _RandomlySelectScenario = true,
         Config
     ).
 
 
 set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
-    P2Id = api_test_env:get_provider_id(p2, Config),
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space1(Config),
+    P2Id = oct_background:get_provider_id(paris),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
@@ -506,7 +498,7 @@ set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
         FileType, FilePath, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
-        VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_1, DataSpec, _QsParams = [],
+        VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, DataSpec, _QsParams = [],
         _RandomlySelectScenario = false,
         Config
     ).
@@ -773,9 +765,10 @@ build_set_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
-        {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
-    ]}).
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "api_tests",
+        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+    }).
 
 
 end_per_suite(_Config) ->

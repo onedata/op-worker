@@ -20,7 +20,7 @@
 %%%===================================================================
 
 %% API
--export([space_dir_id/2, flat/1, canonical/1]).
+-export([space_dir_id/2, flat/2, canonical/3]).
 
 %%%===================================================================
 %%% API functions
@@ -53,23 +53,17 @@ space_dir_id(SpaceId, StorageId) ->
 %% e.g. "/SpaceId/A/B/C/ABCyasd7321r5ssasdd7asdsafdfvsd"
 %% @end
 %%--------------------------------------------------------------------
--spec flat(file_ctx:ctx()) -> {helpers:file_id(), file_ctx:ctx()}.
-flat(FileCtx) ->
-    case file_ctx:is_root_dir_const(FileCtx) of
+-spec flat(file_meta:uuid(), od_space:id()) -> helpers:file_id().
+flat(FileUuid, SpaceId) ->
+    case fslogic_uuid:is_root_dir_uuid(FileUuid) of
         true ->
-            {<<?DIRECTORY_SEPARATOR>>, FileCtx};
+            <<?DIRECTORY_SEPARATOR>>;
         false ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {IsSpaceMountedInRoot, FileCtx2} = file_ctx:is_imported_storage(FileCtx),
-            PathTokens = case IsSpaceMountedInRoot of
-                true -> [<<?DIRECTORY_SEPARATOR>>, SpaceId];
-                false -> [<<?DIRECTORY_SEPARATOR>>]
-            end,
-            FileId = case file_ctx:is_space_dir_const(FileCtx2) of
+            PathTokens = [<<?DIRECTORY_SEPARATOR>>, SpaceId],
+            case fslogic_uuid:is_space_dir_uuid(FileUuid) of
                 true ->
                     filepath_utils:join(PathTokens);
                 false ->
-                    FileUuid = file_ctx:get_uuid_const(FileCtx2),
                     case size(FileUuid) > 3 of
                         true ->
                             filepath_utils:join(PathTokens ++ [
@@ -80,8 +74,7 @@ flat(FileCtx) ->
                         false ->
                             filepath_utils:join(PathTokens ++ [<<"other">>, FileUuid])
                     end
-            end,
-            {FileId, FileCtx2}
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -95,16 +88,13 @@ flat(FileCtx) ->
 %% FILE'S ID ON CANONICAL STORAGE.
 %% @end
 %%--------------------------------------------------------------------
--spec canonical(file_ctx:ctx()) -> {helpers:file_id(), file_ctx:ctx()}.
-canonical(FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {IsSpaceMountedInRoot, FileCtx2} = file_ctx:is_imported_storage(FileCtx),
-    {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
-    case IsSpaceMountedInRoot of
+-spec canonical(file_meta:path(), od_space:id(), storage:id()) -> helpers:file_id().
+canonical(FslogicCanonicalPath, SpaceId, StorageId) ->
+    case storage:is_imported(StorageId) of
         true ->
-            {filter_space_id(CanonicalPath, SpaceId), FileCtx3};
+            filter_space_id(FslogicCanonicalPath, SpaceId);
         false ->
-            {CanonicalPath, FileCtx3}
+            ensure_starts_with_space_id(FslogicCanonicalPath, SpaceId)
     end.
 
 %%%===================================================================
@@ -118,4 +108,14 @@ filter_space_id(FilePath, SpaceId) ->
             filepath_utils:join([Sep | Path]);
         _ ->
             FilePath
+    end.
+
+
+-spec ensure_starts_with_space_id(file_meta:path(), od_space:id()) -> file_meta:path().
+ensure_starts_with_space_id(FilePath, SpaceId) ->
+    case filepath_utils:split(FilePath) of
+        [_Sep, SpaceId | _Path] ->
+            FilePath;
+        [Sep | Path] ->
+            filepath_utils:join([Sep, SpaceId | Path])
     end.

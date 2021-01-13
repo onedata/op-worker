@@ -17,6 +17,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 
 -record(client_spec, {
@@ -130,23 +131,22 @@
     data_spec = undefined :: undefined | onenv_api_test_runner:data_spec()
 }).
 
--record(onenv_test_config, {
-    % name of yaml file in test_distributed/onenv_scenarios
-    onenv_scenario = "api_tests" :: binary(),
-    envs :: [{Service :: atom(), Application :: atom(), Env :: [term()]}],
-    posthook = fun(Config) -> Config end :: fun((api_test_runner:config()) -> api_test_runner:config())
-}).
-
 -define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
 
 -define(SPACE_1, <<"space1">>).
 -define(SPACE_2, <<"space2">>).
+-define(SPACE_KRK, <<"space_krk">>).
+-define(SPACE_KRK_PAR, <<"space_krk_par">>).
 
 -define(USER_IN_SPACE_1, <<"user1">>).
 -define(USER_IN_SPACE_1_AUTH, ?USER(?USER_IN_SPACE_1)).
+-define(USER_IN_SPACE_KRK, <<"user1">>).
+-define(USER_IN_SPACE_KRK_AUTH, ?USER(?USER_IN_SPACE_KRK)).
 
 -define(USER_IN_SPACE_2, <<"user3">>).
 -define(USER_IN_SPACE_2_AUTH, ?USER(?USER_IN_SPACE_2)).
+-define(USER_IN_SPACE_KRK_PAR, <<"user3">>).
+-define(USER_IN_SPACE_KRK_PAR_AUTH, ?USER(?USER_IN_SPACE_KRK_PAR)).
 
 -define(USER_IN_BOTH_SPACES, <<"user2">>).
 -define(USER_IN_BOTH_SPACES_AUTH, ?USER(?USER_IN_BOTH_SPACES)).
@@ -154,15 +154,21 @@
 -define(SUPPORTED_CLIENTS_PER_NODE(__CONFIG), (fun() ->
     [Provider2, Provider1] = ?config(op_worker_nodes, __CONFIG),
     #{
-        Provider1 => [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        Provider2 => [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
+        Provider1 => [?USER_IN_SPACE_KRK_AUTH, ?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        Provider2 => [?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
     }
 end)()).
 
--define(CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(__CONFIG), #client_spec{
-    correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+-define(CLIENT_SPEC_FOR_SPACE_KRK_SCENARIOS(__CONFIG), #client_spec{
+    correct = [?USER_IN_SPACE_KRK_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [?NOBODY],
-    forbidden_not_in_space = [?USER_IN_SPACE_2_AUTH],
+    forbidden_not_in_space = [?USER_IN_SPACE_KRK_PAR_AUTH],
+    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
+}).
+-define(CLIENT_SPEC_FOR_SPACE_KRK_PAR_SCENARIOS(__CONFIG), #client_spec{
+    correct = [?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+    unauthorized = [?NOBODY],
+    forbidden_not_in_space = [?USER_IN_SPACE_KRK_AUTH],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
 }).
 -define(CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(__CONFIG), #client_spec{
@@ -175,7 +181,7 @@ end)()).
 % being made using credentials by user not supported on specific provider
 % ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED) should be returned
 -define(CLIENT_SPEC_FOR_SHARE_SCENARIOS(__CONFIG), #client_spec{
-    correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+    correct = [?NOBODY, ?USER_IN_SPACE_KRK_AUTH, ?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [],
     forbidden_not_in_space = [],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)

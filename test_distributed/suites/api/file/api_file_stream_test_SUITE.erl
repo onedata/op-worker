@@ -55,8 +55,8 @@ all() -> [
 gui_download_file_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
 
-    {_FileType, _DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        <<"dir">>, 8#704, Config
+    {_FileType, _DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(
+        <<"dir">>, 8#704
     ),
     DirShareGuid = file_id:guid_to_share_guid(DirGuid, DirShareId),
 
@@ -65,9 +65,9 @@ gui_download_file_test(Config) ->
 
     MemRef = api_test_memory:init(),
 
-    SetupFun = build_download_file_setup_fun(MemRef, Content, Config),
-    ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef, Content, Config),
-    VerifyFun = build_download_file_with_gui_endpoint_verify_fun(MemRef, Content, Config),
+    SetupFun = build_download_file_setup_fun(MemRef, Content),
+    ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef, Content),
+    VerifyFun = build_download_file_with_gui_endpoint_verify_fun(MemRef, Content),
 
     ?assert(onenv_api_test_runner:run_tests(Config, [
         #scenario_spec{
@@ -141,16 +141,15 @@ build_get_download_url_prepare_gs_args_fun(MemRef, TestMode, Scope) ->
 %% @private
 -spec build_get_download_url_validate_gs_call_fun(
     api_test_memory:mem_ref(),
-    FileContent :: binary(),
-    onenv_api_test_runner:ct_config()
+    FileContent :: binary()
 ) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, Config) ->
+build_get_download_url_validate_gs_call_fun(MemRef, ExpContent) ->
     FileSize = size(ExpContent),
     FirstBlockFetchedSize = min(FileSize, ?DEFAULT_READ_BLOCK_SIZE),
 
-    [FileCreationNode] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+    [FileCreationNode] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
 
     fun(#api_test_ctx{node = DownloadNode}, Result) ->
         FileGuid = api_test_memory:get(MemRef, file_guid),
@@ -253,13 +252,12 @@ download_file_with_gui_endpoint(Node, FileDownloadUrl) ->
 %% @private
 -spec build_download_file_with_gui_endpoint_verify_fun(
     api_test_memory:mem_ref(),
-    FileContent :: binary(),
-    onenv_api_test_runner:ct_config()
+    FileContent :: binary()
 ) ->
     onenv_api_test_runner:verify_fun().
-build_download_file_with_gui_endpoint_verify_fun(MemRef, Content, Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+build_download_file_with_gui_endpoint_verify_fun(MemRef, Content) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
     FileSize = size(Content),
@@ -287,8 +285,8 @@ build_download_file_with_gui_endpoint_verify_fun(MemRef, Content, Config) ->
 rest_download_file_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
 
-    {_FileType, _DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space2(
-        <<"dir">>, 8#704, Config
+    {_FileType, _DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(
+        <<"dir">>, 8#704
     ),
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
@@ -300,9 +298,9 @@ rest_download_file_test(Config) ->
 
     MemRef = api_test_memory:init(),
 
-    SetupFun = build_download_file_setup_fun(MemRef, Content, Config),
+    SetupFun = build_download_file_setup_fun(MemRef, Content),
     ValidateCallResultFun = build_rest_download_file_validate_call_fun(MemRef, Content, Config),
-    VerifyFun = build_download_file_verify_fun(MemRef, FileSize, Config),
+    VerifyFun = build_download_file_verify_fun(MemRef, FileSize),
 
     AllRangesToTest = [
         {<<"bytes=10-20">>, ?HTTP_206_PARTIAL_CONTENT, [{10, 11}]},
@@ -316,7 +314,7 @@ rest_download_file_test(Config) ->
             ?HTTP_206_PARTIAL_CONTENT, [{FileSize - 100, 100}]
         },
         {<<"bytes=100-300,500-500,-300">>, ?HTTP_206_PARTIAL_CONTENT, [
-            {100, 201}, {500, 1}, {FileSize-300, 300}
+            {100, 201}, {500, 1}, {FileSize - 300, 300}
         ]},
 
         {<<"unicorns">>, ?HTTP_416_RANGE_NOT_SATISFIABLE},
@@ -344,7 +342,7 @@ rest_download_file_test(Config) ->
             name = <<"Download file using rest endpoint">>,
             type = rest,
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
 
             setup_fun = SetupFun,
             prepare_args_fun = build_rest_download_file_prepare_args_fun(MemRef, normal_mode),
@@ -420,7 +418,7 @@ build_rest_download_file_validate_call_fun(_MemRef, ExpContent, _Config) ->
 
             {_, ?HTTP_206_PARTIAL_CONTENT, [{RangeStart, RangeLen}]} ->
                 ExpContentRange = str_utils:format_bin("bytes ~B-~B/~B", [
-                    RangeStart, RangeStart+RangeLen-1, FileSize
+                    RangeStart, RangeStart + RangeLen - 1, FileSize
                 ]),
                 ExpPartialContent = binary:part(ExpContent, RangeStart, RangeLen),
 
@@ -437,7 +435,7 @@ build_rest_download_file_validate_call_fun(_MemRef, ExpContent, _Config) ->
 
                 Parts = lists:map(fun({RangeStart, RangeLen}) ->
                     PartContentRange = str_utils:format_bin("bytes ~B-~B/~B", [
-                        RangeStart, RangeStart+RangeLen-1, FileSize
+                        RangeStart, RangeStart + RangeLen - 1, FileSize
                     ]),
                     PartContent = binary:part(ExpContent, RangeStart, RangeLen),
 
@@ -465,13 +463,12 @@ build_rest_download_file_validate_call_fun(_MemRef, ExpContent, _Config) ->
 %% @private
 -spec build_download_file_verify_fun(
     api_test_memory:mem_ref(),
-    file_meta:size(),
-    onenv_api_test_runner:ct_config()
+    file_meta:size()
 ) ->
     onenv_api_test_runner:verify_fun().
-build_download_file_verify_fun(MemRef, FileSize, Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+build_download_file_verify_fun(MemRef, FileSize) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
     fun
@@ -543,22 +540,21 @@ get_fetched_block_size({RangeStart, RangeLen}, FileSize) ->
 %% @private
 -spec build_download_file_setup_fun(
     api_test_memory:mem_ref(),
-    FileContent :: binary(),
-    onenv_api_test_runner:ct_config()
+    FileContent :: binary()
 ) ->
     onenv_api_test_runner:setup_fun().
-build_download_file_setup_fun(MemRef, Content, Config) ->
-    [P1Node] = api_test_env:get_provider_nodes(p1, Config),
-    [P2Node] = api_test_env:get_provider_nodes(p2, Config),
+build_download_file_setup_fun(MemRef, Content) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
-    UserSessIdP1 = api_test_env:get_user_session_id(user3, p1, Config),
-    SpaceOwnerSessIdP1 = api_test_env:get_user_session_id(user2, p1, Config),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
 
     FileSize = size(Content),
 
     fun() ->
-        FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+        FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
         {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
         {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
         api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
@@ -596,20 +592,23 @@ get_file_guid(MemRef, TestMode) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    api_test_env:init_per_suite(Config, #onenv_test_config{envs = [
-        {op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {default_download_read_block_size, ?DEFAULT_READ_BLOCK_SIZE},
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "api_tests",
+        envs = [
+            {op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {default_download_read_block_size, ?DEFAULT_READ_BLOCK_SIZE},
 
-            % Ensure replica_synchronizer will not fetch more data than requested
-            {minimal_sync_request, ?DEFAULT_READ_BLOCK_SIZE},
-            {synchronizer_prefetch, false},
+                % Ensure replica_synchronizer will not fetch more data than requested
+                {minimal_sync_request, ?DEFAULT_READ_BLOCK_SIZE},
+                {synchronizer_prefetch, false},
 
-            {public_block_percent_threshold, 1},
+                {public_block_percent_threshold, 1},
 
-            {download_code_expiration_interval_seconds, ?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS}
-        ]}
-    ]}).
+                {download_code_expiration_interval_seconds, ?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS}
+            ]}
+        ]
+    }).
 
 
 end_per_suite(_Config) ->

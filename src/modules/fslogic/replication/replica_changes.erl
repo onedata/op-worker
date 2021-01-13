@@ -161,20 +161,27 @@ rename_or_delete(FileCtx,
                     {skipped, NewFileCtx2};
                 {false, NewFileCtx2} ->
                     {TargetStorageId, NewFileCtx3} = file_ctx:get_storage_id(NewFileCtx2),
-                    % TODO VFS-6155 properly handle remote rename, target parent doc may not be synchronized yet, how do we know its mode?
-                    case sd_utils:rename(user_ctx:new(?ROOT_SESS_ID), TargetSpaceId,
-                        TargetStorageId, FileUuid, SourceFileId, undefined, RemoteTargetFileId)
-                    of
-                        ok -> ok;
-                        {error, ?ENOENT} -> ok
-                    end,
-                    RenamedDoc = Doc#document{value = Loc#file_location{
-                        file_id = RemoteTargetFileId,
-                        space_id = TargetSpaceId,
-                        storage_id = TargetStorageId,
-                        last_rename = LastRename
-                    }},
-                    {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx3}
+                    Helper = storage:get_helper(TargetStorageId),
+                    case helper:get_storage_path_type(Helper) of
+                        ?CANONICAL_STORAGE_PATH ->
+                            TargetStorageFileId = storage_file_id:canonical(RemoteTargetFileId, TargetSpaceId, TargetStorageId),
+                            % TODO VFS-6155 properly handle remote rename, target parent doc may not be synchronized yet, how do we know its mode?
+                            case sd_utils:rename(user_ctx:new(?ROOT_SESS_ID), TargetSpaceId,
+                                TargetStorageId, FileUuid, SourceFileId, undefined, TargetStorageFileId)
+                            of
+                                ok -> ok;
+                                {error, ?ENOENT} -> ok
+                            end,
+                            RenamedDoc = Doc#document{value = Loc#file_location{
+                                file_id = TargetStorageFileId,
+                                space_id = TargetSpaceId,
+                                storage_id = TargetStorageId,
+                                last_rename = LastRename
+                            }},
+                            {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx3};
+                        ?FLAT_STORAGE_PATH ->
+                            {skipped, NewFileCtx2}
+                    end
             end;
         false ->
             %% TODO: VFS-2299 delete file locally without triggering deletion

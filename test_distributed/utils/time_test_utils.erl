@@ -18,8 +18,8 @@
 -export([
     freeze_time/1, unfreeze_time/1,
     get_frozen_time_seconds/0,
-    simulate_seconds_passing/1
-
+    simulate_seconds_passing/1,
+    set_current_time_seconds/1
 ]).
 
 
@@ -51,3 +51,8 @@ get_frozen_time_seconds() ->
 -spec simulate_seconds_passing(time:seconds()) -> time:seconds().
 simulate_seconds_passing(Seconds) ->
     clock_freezer_mock:simulate_seconds_passing(Seconds).
+
+
+-spec set_current_time_seconds(time:seconds()) -> ok.
+set_current_time_seconds(Seconds) ->
+    clock_freezer_mock:set_current_time_millis(Seconds * 1000).

@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 %% API
 -export([all/0]).
@@ -76,12 +77,12 @@ node_kill_test(Config) ->
     restart_test_base(Config, RestartFun, kill).
 
 restart_test_base(Config, RestartFun, RestartType) ->
-    [P1, P2] = test_config:get_providers(Config),
-    [WorkerP1] = test_config:get_provider_nodes(Config, P1),
-    [WorkerP2] = test_config:get_provider_nodes(Config, P2),
-    [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
+    [P1, P2] = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
+    [WorkerP1] = oct_background:get_provider_nodes(krakow),
+    [WorkerP2] = oct_background:get_provider_nodes(paris),
+    [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
     SpaceGuid = rpc:call(WorkerP1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
-    [User1] = test_config:get_provider_users(Config, P1),
+    User1 = oct_background:to_entity_id(user1),
     SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
     SessIdP1 = SessId(P1),
     SessIdP2 = SessId(P2),
@@ -93,7 +94,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
     UserCtxP2 = rpc:call(WorkerP2, user_ctx, new, [SessIdP2]),
 
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
-    onenv_test_utils:disable_panel_healthcheck(Config),
+    oct_environment:disable_panel_healthcheck(Config),
 
     % Create test files
     Files1 = file_ops_test_utils:create_files(WorkerP1, SessIdP1, SpaceGuid, FilesCount),
@@ -123,7 +124,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
                 rpc:call(WorkerP2, sync_req, request_block_synchronization,
                     [UserCtxP2, FileCtx, #file_block{offset = Offset, size = 1}, false, undefined, Priority]))
-        end, lists:seq(0,9)),
+        end, lists:seq(0, 9)),
         lfm_proxy:schedule_file_replication(WorkerP2, SessIdP2, {guid, File}, P2)
     end, Files2),
 
@@ -184,15 +185,14 @@ restart_test_base(Config, RestartFun, RestartType) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        onenv_test_utils:prepare_base_test_config(NewConfig)
-    end,
-    test_config:set_many(Config, [
-        {add_envs, [op_worker, op_worker, [{session_validity_check_interval_seconds, 1800}]]},
-        {add_envs, [op_worker, op_worker, [{fuse_session_grace_period_seconds, 1800}]]},
-        {set_onenv_scenario, ["2op"]}, % name of yaml file in test_distributed/onenv_scenarios
-        {set_posthook, Posthook}
-    ]).
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "2op",
+        envs = [
+            {op_worker, op_worker, [{session_validity_check_interval_seconds, 1800}]},
+            {op_worker, op_worker, [{fuse_session_grace_period_seconds, 1800}]}
+        ]
+    }).
+
 
 init_per_testcase(_Case, Config) ->
     Workers = test_config:get_all_op_worker_nodes(Config),

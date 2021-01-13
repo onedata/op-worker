@@ -427,7 +427,7 @@ on_deregister() ->
 
 -spec get_op_worker_version() -> binary().
 get_op_worker_version() ->
-    oneprovider:get_version().
+    op_worker:get_release_version().
 
 
 -spec provider_logic_update(Data :: #{binary() => term()}) ->
