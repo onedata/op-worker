@@ -130,7 +130,7 @@ is_registered() ->
 %% Returns CA certs trusted by this provider in DER format.
 %% @end
 %%--------------------------------------------------------------------
--spec trusted_ca_certs() -> [DerCert :: binary()].
+-spec trusted_ca_certs() -> [public_key:der_encoded()].
 trusted_ca_certs() ->
     cert_utils:load_ders_in_dir(oz_plugin:get_cacerts_dir()).
 
