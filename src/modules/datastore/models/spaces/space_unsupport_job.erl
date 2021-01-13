@@ -43,7 +43,7 @@
 %%% API
 %%%===================================================================
 
--spec save(record()) -> {ok, id()} | {error, term()}.
+-spec save(record()) -> ok | {error, term()}.
 save(Job) ->
     #space_unsupport_job{
         space_id = SpaceId, 
@@ -67,7 +67,7 @@ save(undefined, Job, TaskId) ->
     % SpaceId, StorageId and Stage e.g. in slave_job
     save(gen_id(SpaceId, StorageId, Stage), Job, TaskId);
 save(Key, Job, TaskId) ->
-    ?extract_key(datastore_model:save(?CTX, #document{
+    ?extract_ok(datastore_model:save(?CTX, #document{
         key = Key, 
         value = Job#space_unsupport_job{
             task_id = TaskId

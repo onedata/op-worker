@@ -415,7 +415,7 @@ support_space(StorageId, SerializedToken, SupportSize) ->
         {ok, SpaceId} ->
             % remove possible remnants of previous support 
             % (when space was unsupported in Onezone without provider knowledge)
-            ok = space_unsupport:cleanup_local_documents(SpaceId, StorageId),
+            ok = space_unsupport:clean_local_documents(SpaceId, StorageId),
             case storage_logic:init_space_support(StorageId, SerializedToken, SupportSize) of
                 {ok, SpaceId} ->
                     on_init_support(SpaceId, StorageId),
@@ -469,7 +469,7 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
-    space_unsupport:run(SpaceId, StorageId).
+    space_unsupport:schedule(SpaceId, StorageId).
 
 
 -spec supports_any_space(id()) -> boolean() | errors:error().
@@ -497,7 +497,6 @@ upgrade_supports_to_21_02() ->
     lists:foreach(fun(SpaceId) ->
         {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
         {ok, Name} = space_logic:get_name(SpaceId),
-        ok = supported_spaces:add(SpaceId, StorageId),
         ok = storage_logic:upgrade_support_to_21_02(StorageId, SpaceId),
         ?info("  * space '~ts' (~ts) OK", [Name, SpaceId])
     end, Spaces),

@@ -381,12 +381,12 @@ revise_supported_spaces_test(Config) ->
     ok = rpc:call(Node, supported_spaces, add, [<<"b">>, <<"st3">>]),
     
     ?assertEqual(ok, rpc:call(Node, provider_logic, revise_supported_spaces, [])),
-    test_utils:mock_assert_num_calls(Node, space_unsupport, run, 3, 0),
+    test_utils:mock_assert_num_calls(Node, space_unsupport, schedule, 3, 0),
     % simulate space forced unsupport/deletion by adding another support to locally persisted
     rpc:call(Node, supported_spaces, add, [<<"c">>, <<"st2">>]),
     ?assertEqual(ok, rpc:call(Node, provider_logic, revise_supported_spaces, [])),
-    test_utils:mock_assert_num_calls(Node, space_unsupport, run, 3, 1),
-    test_utils:mock_assert_num_calls(Node, space_unsupport, run, [<<"c">>, <<"st2">>, true], 1).
+    test_utils:mock_assert_num_calls(Node, space_unsupport, schedule, 3, 1),
+    test_utils:mock_assert_num_calls(Node, space_unsupport, schedule, [<<"c">>, <<"st2">>, forced], 1).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -405,7 +405,7 @@ init_per_testcase(revise_supported_spaces_test, Config) ->
     test_utils:mock_new(Nodes, space_unsupport, [passthrough]),
     test_utils:mock_new(Nodes, provider_logic, [passthrough]),
     test_utils:mock_new(Nodes, space_logic, [passthrough]),
-    test_utils:mock_expect(Nodes, space_unsupport, run, fun(_, _, _) -> ok end),
+    test_utils:mock_expect(Nodes, space_unsupport, schedule, fun(_, _, _) -> ok end),
     test_utils:mock_expect(Nodes, provider_logic, get_spaces, fun() -> {ok, [<<"a">>, <<"b">>]} end),
     test_utils:mock_expect(Nodes, space_logic, get_local_storage_ids, 
         fun

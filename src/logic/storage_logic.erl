@@ -51,7 +51,7 @@
 
 -compile({no_auto_import, [get/1]}).
 
--type unsupport_aspect() ::  init_unsupport | complete_unsupport_resize 
+-type unsupport_step() ::  init_unsupport | complete_unsupport_resize 
     | complete_unsupport_purge | finalize_unsupport.
 
 %%%===================================================================
@@ -162,27 +162,27 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec init_unsupport(storage:id(), od_space:id()) -> ok | errors:error().
 init_unsupport(StorageId, SpaceId) ->
-    update_unsupport_stage(StorageId, SpaceId, init_unsupport).
+    apply_unsupport_step(StorageId, SpaceId, init_unsupport).
 
 -spec complete_unsupport_resize(storage:id(), od_space:id()) -> ok | errors:error().
 complete_unsupport_resize(StorageId, SpaceId) ->
-    update_unsupport_stage(StorageId, SpaceId, complete_unsupport_resize).
+    apply_unsupport_step(StorageId, SpaceId, complete_unsupport_resize).
 
 -spec complete_unsupport_purge(storage:id(), od_space:id()) -> ok | errors:error().
 complete_unsupport_purge(StorageId, SpaceId) ->
-    update_unsupport_stage(StorageId, SpaceId, complete_unsupport_purge).
+    apply_unsupport_step(StorageId, SpaceId, complete_unsupport_purge).
 
 -spec finalize_unsupport(storage:id(), od_space:id()) -> ok | errors:error().
 finalize_unsupport(StorageId, SpaceId) ->
-    update_unsupport_stage(StorageId, SpaceId, finalize_unsupport).
+    apply_unsupport_step(StorageId, SpaceId, finalize_unsupport).
 
 
--spec update_unsupport_stage(storage:id(), od_space:id(), unsupport_aspect()) -> 
+-spec apply_unsupport_step(storage:id(), od_space:id(), unsupport_step()) -> 
     ok | errors:error().
-update_unsupport_stage(StorageId, SpaceId, Aspect) ->
+apply_unsupport_step(StorageId, SpaceId, UnsupportStep) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_storage, id = StorageId, aspect = {Aspect, SpaceId}}
+        gri = #gri{type = od_storage, id = StorageId, aspect = {UnsupportStep, SpaceId}}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_space, SpaceId),
@@ -354,5 +354,6 @@ upgrade_support_to_21_02(StorageId, SpaceId) ->
         gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_support_to_21_02, SpaceId}}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
+        ok = supported_spaces:add(SpaceId, StorageId),
         gs_client_worker:invalidate_cache(od_space, SpaceId)
     end).

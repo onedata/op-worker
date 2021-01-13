@@ -67,7 +67,7 @@ list() ->
 run_after(update, _, {ok, Doc = #document{value = #od_provider{}}}) ->
     % run asynchronously as this requires the provider record, which will be cached
     % only after run_after finishes (running synchronously could cause an infinite loop)
-    spawn(provider_logic, revise_supported_space, []),
+    spawn(provider_logic, revise_supported_spaces, []),
     {ok, Doc};
     
 run_after(_Function, _Args, Result) ->

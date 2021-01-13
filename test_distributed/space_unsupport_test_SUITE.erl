@@ -300,7 +300,7 @@ overall_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     
     create_files_and_dirs(Worker, SessId),
-    ok = rpc:call(Worker, space_unsupport, run, [?SPACE_ID, StorageId]),
+    ok = rpc:call(Worker, space_unsupport, schedule, [?SPACE_ID, StorageId]),
     
     % mocked in init_per_testcase
     receive task_finished -> ok end,

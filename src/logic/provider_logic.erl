@@ -22,7 +22,6 @@
 -include("modules/rtransfer/rtransfer.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("modules/datastore/datastore_runner.hrl").
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -838,18 +837,18 @@ assert_provider_compatibility(Domain) ->
 -spec revise_supported_spaces() -> ok.
 revise_supported_spaces() ->
     {ok, SupportedSpaces} = provider_logic:get_spaces(),
-    ActualSupports = lists:flatten(lists:map(fun(SpaceId) ->
+    ActualSupports = lists:flatmap(fun(SpaceId) ->
         {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
         lists:map(fun(StorageId) -> {SpaceId, StorageId} end, StorageIds)
-    end, SupportedSpaces)),
-    PersistedSupports = supported_spaces:get_supports(),
-    PersistedSupportsList = lists:flatten(maps:fold(fun(SpaceId, StorageIds, Acc) ->
-        lists:map(fun(StorageId) -> {SpaceId, StorageId} end, StorageIds) ++ Acc
-    end, [], PersistedSupports)),
+    end, SupportedSpaces),
+    PreviouslyKnownSupports = supported_spaces:get_supports(),
+    PreviouslyKnownSupportsList = lists:flatmap(fun({SpaceId, StorageIds}) ->
+        lists:map(fun(StorageId) -> {SpaceId, StorageId} end, StorageIds)
+    end, maps:to_list(PreviouslyKnownSupports)),
         
     lists:foreach(fun({SpaceId, StorageId}) ->
-        ok = ?ok_if_exists(space_unsupport:run(SpaceId, StorageId, true))
-    end, lists_utils:subtract(PersistedSupportsList, ActualSupports)).
+        ok = space_unsupport:schedule(SpaceId, StorageId, forced)
+    end, lists_utils:subtract(PreviouslyKnownSupportsList, ActualSupports)).
 
 %%%===================================================================
 %%% Internal functions

@@ -24,14 +24,12 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
--type id() :: od_space:id().
 -type record() :: #supported_spaces{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
--export_type([id/0, record/0, doc/0, diff/0]).
-
 -define(CTX, #{model => ?MODULE}).
+-define(ID, oneprovider:get_id()).
 
 -compile({no_auto_import, [get/0]}).
 
@@ -44,18 +42,20 @@ add(SpaceId, StorageId) ->
     UpdateFun = fun(#supported_spaces{supports = Supports} = Value) ->
         SpaceStorages = maps:get(SpaceId, Supports, []),
         {ok, Value#supported_spaces{supports = Supports#{
-            SpaceId => lists:umerge([StorageId], SpaceStorages)
+            SpaceId => lists_utils:union([StorageId], SpaceStorages)
         }}}
     end,
-    update(UpdateFun, #supported_spaces{supports = #{SpaceId => [StorageId]}}).
+    update(UpdateFun, UpdateFun(#supported_spaces{})).
+
 
 -spec get_supports() -> #{od_space:id() => [storage:id()]}.
 get_supports() ->
     case get() of
-        {ok, #document{value = #supported_spaces{supports = SpaceIds}}} ->
-            SpaceIds;
-        _ -> #{}
+        {ok, #document{value = #supported_spaces{supports = Supports}}} ->
+            Supports;
+        {error, not_found}-> #{}
     end.
+
 
 -spec remove(od_space:id(), storage:id()) -> ok | {error, term()}.
 remove(SpaceId, StorageId) ->
@@ -68,7 +68,7 @@ remove(SpaceId, StorageId) ->
         end,
         {ok, Value#supported_spaces{supports = NewSupports}}
     end,
-    update(UpdateFun, #supported_spaces{supports = #{}}).
+    update(UpdateFun, UpdateFun(#supported_spaces{})).
     
 
 %%%===================================================================
@@ -77,12 +77,12 @@ remove(SpaceId, StorageId) ->
 
 -spec get() -> {ok, doc()} | {error, term()}.
 get() ->
-    datastore_model:get(?CTX, oneprovider:get_id()).
+    datastore_model:get(?CTX, ?ID).
 
--spec update(datastore_model:diff(), #supported_spaces{}) -> ok | {error, term()}.
+
+-spec update(diff(), #supported_spaces{}) -> ok | {error, term()}.
 update(UpdateFun, Default) ->
-    Id = oneprovider:get_id(),
-    ?extract_ok(datastore_model:update(?CTX, Id, UpdateFun, #document{key = Id, value = Default})).
+    ?extract_ok(datastore_model:update(?CTX, ?ID, UpdateFun, #document{key = ?ID, value = Default})).
 
 %%%===================================================================
 %%% datastore_model callbacks

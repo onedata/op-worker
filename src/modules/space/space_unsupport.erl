@@ -30,10 +30,10 @@
 -behaviour(traverse_behaviour).
 
 %% API
--export([init_pools/0, run/2, run/3]).
+-export([init_pools/0, schedule/2, schedule/3]).
 -export([report_cleanup_traverse_finished/2]).
 -export([get_all_stages/0]).
--export([cleanup_local_documents/2]).
+-export([clean_local_documents/2]).
 
 %% traverse behaviour callbacks
 -export([get_job/1, update_job_progress/5]).
@@ -45,6 +45,7 @@
 -type job() :: space_unsupport_job:record().
 % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
 -type subtask_id() :: qos_entry:id() | unsupport_cleanup_traverse:id().
+-type strategy() :: forced | graceful.
 
 -export_type([stage/0, subtask_id/0]).
 
@@ -64,19 +65,19 @@ init_pools() ->
     traverse:init_pool(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit),
     unsupport_cleanup_traverse:init_pool().
 
--spec run(od_space:id(), storage:id()) -> ok.
-run(SpaceId, StorageId) ->
-    run(SpaceId, StorageId, false).
+-spec schedule(od_space:id(), storage:id()) -> ok.
+schedule(SpaceId, StorageId) ->
+    schedule(SpaceId, StorageId, graceful).
 
--spec run(od_space:id(), storage:id(), boolean()) -> ok.
-run(SpaceId, StorageId, ForcedUnsupport) ->
+-spec schedule(od_space:id(), storage:id(), strategy()) -> ok.
+schedule(SpaceId, StorageId, Strategy) ->
     %% @TODO VFS-7167 handle last unsupport
     % ensure that file_meta doc for space is created, so it is not needed to always 
     % check if it exists when doing operations on files
     file_meta:make_space_exist(SpaceId),
     ?ok_if_exists(traverse:run(?POOL_NAME, datastore_key:new_from_digest([SpaceId, StorageId]),
         #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, stage = init, 
-            forced_unsupport = ForcedUnsupport})).
+            forced_unsupport = Strategy == forced})).
 
 
 -spec report_cleanup_traverse_finished(od_space:id(), storage:id()) -> ok.
@@ -99,8 +100,8 @@ get_all_stages() ->
     ].
 
 
--spec cleanup_local_documents(od_space:id(), storage:id()) -> ok.
-cleanup_local_documents(SpaceId, StorageId) ->
+-spec clean_local_documents(od_space:id(), storage:id()) -> ok.
+clean_local_documents(SpaceId, StorageId) ->
     file_popularity_api:disable(SpaceId),
     file_popularity_api:delete_config(SpaceId),
     autocleaning_api:disable(SpaceId),
@@ -130,7 +131,7 @@ update_job_progress(Id, _Job, _PoolName, _TaskId, Status) when
     ok = space_unsupport_job:delete(Id),
     {ok, Id};
 update_job_progress(Id, Job, _PoolName, TaskId, _Status) ->
-    space_unsupport_job:save(Id, Job, TaskId).
+    ok = space_unsupport_job:save(Id, Job, TaskId).
 
 -spec do_master_job(job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
@@ -168,8 +169,8 @@ get_next_jobs_base(delete_local_documents) -> [].
 %% @private
 -spec execute_stage(space_unsupport_job:record()) -> ok.
 execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId, storage_id = StorageId}) ->
-    supported_spaces:remove(SpaceId, StorageId),
     ok = storage_logic:init_unsupport(StorageId, SpaceId),
+    ok = supported_spaces:remove(SpaceId, StorageId),
     main_harvesting_stream:space_unsupported(SpaceId),
     storage_import:stop_auto_scan(SpaceId),
     auto_storage_import_worker:notify_space_unsupported(SpaceId),
@@ -188,7 +189,7 @@ execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = 
     Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
     {ok, QosEntryId} = lfm:add_qos_entry(?ROOT_SESS_ID, {guid, SpaceGuid}, Expression, 1, internal),
     NewJob = Job#space_unsupport_job{subtask_id = QosEntryId},
-    {ok, _} = space_unsupport_job:save(NewJob),
+    ok = space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
 execute_stage(#space_unsupport_job{stage = replicate} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, subtask_id = QosEntryId} = Job,
@@ -201,7 +202,7 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse, subtask_id = undefi
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     {ok, TaskId} = unsupport_cleanup_traverse:start(SpaceId, StorageId),
     NewJob = Job#space_unsupport_job{subtask_id = TaskId, slave_job_pid = self()},
-    {ok, _} = space_unsupport_job:save(NewJob),
+    ok = space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
 execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
     % This clause can be run after provider restart so update slave_job_pid if needed
@@ -238,7 +239,7 @@ execute_stage(#space_unsupport_job{stage = delete_synced_documents} = Job) ->
 execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     %% @TODO VFS-6241 Properly clean up users root dirs
-    cleanup_local_documents(SpaceId, StorageId),
+    clean_local_documents(SpaceId, StorageId),
     qos_entry:apply_to_all_impossible_in_space(SpaceId, fun(QosEntryId) -> 
         qos_entry:remove_from_impossible_list(SpaceId, QosEntryId)
     end),
@@ -275,8 +276,7 @@ maybe_update_slave_job_pid(#space_unsupport_job{slave_job_pid = Pid} = Job) ->
     case self() of
         Pid -> ok;
         _ -> 
-            space_unsupport_job:save(Job#space_unsupport_job{slave_job_pid = self()}),
-            ok
+            ok = space_unsupport_job:save(Job#space_unsupport_job{slave_job_pid = self()})
     end.
 
 %% @private

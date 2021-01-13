@@ -411,8 +411,8 @@
     % Id of process waiting to be notified of task finish.
     % NOTE: should be updated after provider restart
     slave_job_pid  = undefined :: pid() | undefined,
-    % If set to true some unsupport stages (like data replication) will be omitted, as it means 
-    % that provider is no longer supporting this space and is merely performing cleanup
+    %% Indicates that the provider has been forcefully removed from the space supporters.
+    %% In such case, only necessary cleanup is performed and stages such as data replication are omitted.
     forced_unsupport = false :: boolean()
 }).
 
