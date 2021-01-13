@@ -1196,6 +1196,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 
     test_utils:mock_expect(Workers, space_logic, get, GetSpaceFun),
 
+    test_utils:mock_expect(Workers, space_logic, get_name, fun(SpaceId) ->
+        {ok, #document{value = #od_space{name = Name}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
+        {ok, Name}
+    end),
+
     test_utils:mock_expect(Workers, space_logic, get_name, fun(Client, SpaceId) ->
         {ok, #document{value = #od_space{name = Name}}} = GetSpaceFun(Client, SpaceId),
         {ok, Name}
@@ -1258,6 +1263,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 
     test_utils:mock_expect(Workers, space_logic, get_harvesters, fun(SpaceId) ->
         {ok, proplists:get_value(SpaceId, SpacesHarvesters, [])}
+    end),
+    
+    test_utils:mock_expect(Workers, space_logic, report_provider_sync_progress, fun(_SpaceId, _) ->
+        ok
     end),
     
     test_utils:mock_expect(Workers, space_logic, has_eff_user, fun(SessionId, SpaceId, UserId) ->

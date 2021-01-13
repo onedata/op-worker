@@ -5,6 +5,7 @@
 .idea
 .rebar
 rebar3.crashdump
+erl_crash.dump
 
 *.iml
 *.sublime*

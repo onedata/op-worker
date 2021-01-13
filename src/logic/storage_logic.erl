@@ -47,7 +47,7 @@
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
 -export([set_imported/2, update_readonly_and_imported/3]).
--export([upgrade_legacy_support/2]).
+-export([upgrade_support_to_21_02/2]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -134,7 +134,7 @@ support_space(StorageId, SpaceSupportToken, SupportSize) ->
     Data = #{<<"token">> => SpaceSupportToken, <<"size">> => SupportSize},
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_storage, id = StorageId, aspect = support},
+        gri = #gri{type = od_storage, id = StorageId, aspect = init_support},
         data = Data
     }),
 
@@ -162,10 +162,24 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(storage:id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = delete,
-        gri = #gri{type = od_storage, id = StorageId, aspect = {space, SpaceId}}
-    }),
+    % @todo VFS-6311 implement proper support stage management, for now the
+    % Oneprovider just pretends to go trough the steps
+    UnsupportStages = [
+        init_unsupport,
+        complete_unsupport_resize,
+        complete_unsupport_purge,
+        finalize_unsupport
+    ],
+    Result = lists_utils:foldl_while(fun(Step, _) ->
+        StepResult = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+            operation = create,
+            gri = #gri{type = od_storage, id = StorageId, aspect = {Step, SpaceId}}
+        }),
+        case StepResult of
+            ok -> {cont, ok};
+            {error, _} = Error -> {halt, Error}
+        end
+    end, ok, UnsupportStages),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_space, SpaceId),
         gs_client_worker:invalidate_cache(od_storage, StorageId),
@@ -183,7 +197,7 @@ get_name_of_local_storage(StorageId) ->
     end.
 
 
--spec get_name_of_remote_storage(storage:id(), od_space:id()) -> 
+-spec get_name_of_remote_storage(storage:id(), od_space:id()) ->
     {ok, storage:name()} | errors:error().
 get_name_of_remote_storage(StorageId, SpaceId) ->
     case get_shared_data(StorageId, SpaceId) of
@@ -324,19 +338,16 @@ update_readonly_and_imported(StorageId, Readonly, Imported) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Upgrades legacy space support in Onezone to model with new storages.
-%% This adds relation between given storage and given space and removes
-%% this space from virtual storage (with id equal to that of provider) in Onezone.
-%% Can be only used by providers already supporting given space.
-%%
-%% Dedicated for upgrading Oneprovider from 19.02.* to 19.09.*.
+%% Upgrades the space support in Onezone to the new model (21.02).
+%% Can be used only by providers already supporting given space.
+%% Dedicated for upgrading Oneprovider from 20.02.* to 21.02.*.
 %% @end
 %%--------------------------------------------------------------------
--spec upgrade_legacy_support(storage:id(), od_space:id()) -> ok | errors:error().
-upgrade_legacy_support(StorageId, SpaceId) ->
+-spec upgrade_support_to_21_02(storage:id(), od_space:id()) -> ok | errors:error().
+upgrade_support_to_21_02(StorageId, SpaceId) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_legacy_support, SpaceId}}
+        gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_support_to_21_02, SpaceId}}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_space, SpaceId)

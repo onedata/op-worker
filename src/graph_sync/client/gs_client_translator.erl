@@ -34,9 +34,8 @@
 %%--------------------------------------------------------------------
 -spec translate(gri:gri(), Result :: gs_protocol:data()) ->
     datastore:doc().
-translate(#gri{type = od_provider, aspect = current_time}, #{<<"timeMillis">> := TimeMillis}) ->
-    TimeMillis;
-
+translate(#gri{type = space_stats, aspect = {latest_emitted_seq, _}}, #{<<"seq">> := Seq}) ->
+    Seq;
 
 translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Result) ->
     #document{
@@ -90,7 +89,9 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
         key = Id,
         value = #od_space{
             name = maps:get(<<"name">>, Result),
-            providers = maps:get(<<"providers">>, Result)
+            providers = maps:get(<<"providers">>, Result),
+            support_parameters_registry = support_parameters:registry_from_json(maps:get(<<"supportParametersRegistry">>, Result)),
+            support_stage_registry = support_stage:registry_from_json(maps:get(<<"supportStageRegistry">>, Result))
         }
     };
 
@@ -134,7 +135,10 @@ translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private
 
             providers = maps:get(<<"providers">>, Result),
             shares = maps:get(<<"shares">>, Result),
-            harvesters = maps:get(<<"harvesters">>, Result)
+            harvesters = maps:get(<<"harvesters">>, Result),
+
+            support_parameters_registry = support_parameters:registry_from_json(maps:get(<<"supportParametersRegistry">>, Result)),
+            support_stage_registry = support_stage:registry_from_json(maps:get(<<"supportStageRegistry">>, Result))
         }
     };
 

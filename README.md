@@ -9,7 +9,7 @@ The main objective of *op-worker*, and *oneprovider* as a whole, is to unify acc
 
 # Using
 
-*oz-worker* is an internal component of Oneprovider service and it should only be started as part of its deployment.
+*op-worker* is an internal component of Oneprovider service and it should only be started as part of its deployment.
 
 ## Dependencies
 
@@ -31,10 +31,10 @@ make submodules
 *op-worker* can be started using [bamboo](https://github.com/onedata/bamboo) scripts that are included in the repository. *oneprovider* cluster needs to be connected to *onezone* in order to operate, so we should clone it and build. Run the following commands from root of *op-worker* repository:
 
 ```
-git clone git@github.com:onedata/oz-worker.git
-cd oz-worker && ./make.py
+git clone git@github.com:onedata/op-worker.git
+cd op-worker && ./make.py
 cd ..
-./bamboos/docker/env_up.py --bin-worker . --bin-oz oz-worker --bin-cm cluster_manager bamboos/example_env/single_gr_and_provider.json
+./bamboos/docker/env_up.py --bin-worker . --bin-oz op-worker --bin-cm cluster_manager bamboos/example_env/single_gr_and_provider.json
 ```
 
 As *op-worker* won't work without *cluster_manager*, both those applications will be started and connected into a small cluster. The section "provider_domains" in the JSON file defines all instances of oneprovider clusters that should be started and allows for basic configuration. The *onezone* will be started also and its configuration is defined in "zone_domains" section.
