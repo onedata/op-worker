@@ -49,13 +49,12 @@
 ]).
 
 % Definitions of renewal intervals for provider connections.
--define(INITIAL_RENEWAL_INTERVAL, timer:seconds(2)).
--define(RENEWAL_INTERVAL_INCREASE_RATE, 2).
-% timer:minutes(15) - defined like that to use in patter matching
--define(MAX_RENEWAL_INTERVAL, 900000).
+-define(INITIAL_RENEWAL_INTERVAL, 2000).  % 2 seconds
+-define(RENEWAL_INTERVAL_BACKOFF_RATE, 1.2).
+-define(MAX_RENEWAL_INTERVAL, 180000).  % 3 minutes
 
 % how often logs appear when waiting for peer provider connection
--define(CONNECTION_AWAIT_LOG_INTERVAL, 21600). % 6 hours
+-define(CONNECTION_AWAIT_LOG_INTERVAL_SEC, 21600).  % 6 hours
 
 -define(RENEW_CONNECTIONS_REQ, renew_connections).
 -define(SUCCESSFUL_HANDSHAKE, handshake_succeeded).
@@ -283,7 +282,7 @@ renew_connections(#state{
             provider_logic:to_printable(PeerId), Type, Reason,
             Interval div 1000
         ]),
-        utils:throttle({?MODULE, SessionId}, ?CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
+        utils:throttle({?MODULE, SessionId}, ?CONNECTION_AWAIT_LOG_INTERVAL_SEC, fun() ->
             log_error(State, Type, Reason)
         end),
         schedule_next_renewal(State)
@@ -350,9 +349,9 @@ schedule_next_renewal(#state{
     TimerRef = erlang:send_after(Interval, self(), ?RENEW_CONNECTIONS_REQ),
     NextRenewalInterval = case Interval of
         ?MAX_RENEWAL_INTERVAL ->
-            Interval * ?RENEWAL_INTERVAL_INCREASE_RATE;
+            round(Interval * ?RENEWAL_INTERVAL_BACKOFF_RATE);
         _ ->
-            min(Interval * ?RENEWAL_INTERVAL_INCREASE_RATE,
+            min(round(Interval * ?RENEWAL_INTERVAL_BACKOFF_RATE),
                 ?MAX_RENEWAL_INTERVAL)
     end,
     State#state{
@@ -375,7 +374,7 @@ log_error(State, throw, {cannot_check_peer_op_version, HTTPErrorCode}) ->
         HTTPErrorCode
     ]));
 log_error(State, throw, {incompatible_peer_op_version, PeerOpVersion, PeerCompOpVersions}) ->
-    Version = oneprovider:get_version(),
+    Version = op_worker:get_release_version(),
     {ok, CompatibleOpVersions} = compatibility:get_compatible_versions(
         ?ONEPROVIDER, Version, ?ONEPROVIDER
     ),
@@ -395,7 +394,7 @@ log_error(State, Type, Reason) ->
 -spec log_error(state(), ReasonString :: string()) -> ok.
 log_error(#state{peer_id = PeerId}, ReasonString) ->
     ?warning(
-        "Failed to renew connections to provider ~ts, retrying in the background..."
+        "Failed to renew connections to provider ~ts, retrying in the background...~n"
         "Last error was: ~ts.", [
             provider_logic:to_printable(PeerId),
             ReasonString

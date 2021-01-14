@@ -364,22 +364,10 @@ update_luma_config(StorageId, Diff) ->
 update_readonly_and_imported(StorageId, Readonly, Imported) ->
     storage_logic:update_readonly_and_imported(StorageId, Readonly, Imported).
 
+
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
-    set_qos_parameters(StorageId, oneprovider:get_id(), QosParameters).
-
-
--spec set_qos_parameters(id(), oneprovider:id(), qos_parameters()) -> ok | errors:error().
-set_qos_parameters(_StorageId, ProviderId, #{<<"providerId">> := OtherProvider}) when ProviderId =/= OtherProvider ->
-    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"qosParameters.providerId">>, [ProviderId]);
-set_qos_parameters(StorageId, _ProviderId, #{<<"storageId">> := OtherStorage}) when StorageId =/= OtherStorage ->
-    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"qosParameters.storageId">>, [StorageId]);
-set_qos_parameters(StorageId, ProviderId, QosParameters) ->
-    ExtendedQosParameters = QosParameters#{
-        <<"storageId">> => StorageId,
-        <<"providerId">> => ProviderId
-    },
-    case storage_logic:set_qos_parameters(StorageId, ExtendedQosParameters) of
+    case storage_logic:set_qos_parameters(StorageId, QosParameters) of
         ok ->
             {ok, Spaces} = storage_logic:get_spaces(StorageId),
             lists:foreach(fun(SpaceId) ->
@@ -492,16 +480,10 @@ supports_any_space(StorageId) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
     rtransfer_config:add_storage(StorageId).
-
-
-%% @private
--spec on_storage_created(id(), qos_parameters()) -> ok.
-on_storage_created(StorageId, QosParameters) ->
-    ok = set_qos_parameters(StorageId, QosParameters),
-    on_storage_created(StorageId).
 
 
 %% @private
@@ -556,11 +538,11 @@ lock_on_storage_by_name(Identifier, Fun) ->
 -spec create_insecure(name(), helpers:helper(), luma_config(),
     imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly) of
+    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
         {ok, Id} ->
             case storage_config:create(Id, Helper, LumaConfig) of
                 {ok, Id} ->
-                    on_storage_created(Id, QosParameters),
+                    on_storage_created(Id),
                     {ok, Id};
                 StorageConfigError ->
                     case storage_logic:delete_in_zone(Id) of
@@ -671,7 +653,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage = #storage{name 
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, unknown, false, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(Name, unknown, false, #{}, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).

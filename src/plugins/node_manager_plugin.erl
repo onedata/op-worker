@@ -45,7 +45,7 @@
     {1, ?LINE_19_02},
     {2, ?LINE_20_02(<<"0-beta3">>)},
     {3, ?LINE_20_02(<<"1">>)},
-    {4, oneprovider:get_version()}
+    {4, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 1).
 

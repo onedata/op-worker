@@ -21,6 +21,7 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([update_version_info/3, upload_op_worker_gui/1]).
 
@@ -58,25 +59,27 @@ update_version_info(Release, Build, GuiHash) ->
 %% Uploads OP worker GUI static package to Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_op_worker_gui(file:filename_all()) -> ok | {error, gui_upload_failed}.
+-spec upload_op_worker_gui(file:filename_all()) -> ok | {error, term()}.
 upload_op_worker_gui(PackagePath) ->
-    ClusterId = oneprovider:get_id(),
     GuiPrefix = onedata:gui_prefix(?OP_WORKER_GUI),
-    Result = oz_endpoint:request(
-        provider,
-        str_utils:format("/~s/~s/gui-upload", [GuiPrefix, ClusterId]),
-        post,
-        {multipart, [{file, str_utils:to_binary(PackagePath)}]},
-        [{endpoint, gui}]
-    ),
-    case Result of
+    ClusterId = oneprovider:get_id(),
+    Url = oneprovider:get_oz_url(str_utils:format_bin("/~s/~s/gui-upload", [GuiPrefix, ClusterId])),
+    {ok, ProviderAccessToken} = provider_auth:acquire_access_token(),
+    Headers = #{?HDR_X_AUTH_TOKEN => ProviderAccessToken},
+    Body = {multipart, [{file, str_utils:to_binary(PackagePath)}]},
+    Opts = [
+        {connect_timeout, timer:seconds(30)},
+        {recv_timeout, timer:minutes(2)},
+        {ssl_options, [{cacerts, oneprovider:trusted_ca_certs()}]}
+    ],
+    case http_client:post(Url, Headers, Body, Opts) of
         {ok, 200, _, _} ->
             ok;
-        Other ->
+        FailureResult ->
             try
-                {ok, 400, _, Body} = Other,
-                errors:from_json(json_utils:decode(Body))
+                {ok, 400, _, RespBody} = FailureResult,
+                errors:from_json(json_utils:decode(RespBody))
             catch _:_ ->
-                {error, {unexpected_gui_upload_result, Other}}
+                {error, {unexpected_gui_upload_result, FailureResult}}
             end
     end.
