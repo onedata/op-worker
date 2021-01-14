@@ -23,8 +23,7 @@
     mixed_get_test/1,
     subscribe_test/1,
     convenience_functions_test/1,
-    confined_access_token_test/1,
-    revise_supported_spaces_test/1
+    confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
@@ -33,8 +32,7 @@ all() -> ?ALL([
     mixed_get_test,
     subscribe_test,
     convenience_functions_test,
-    confined_access_token_test,
-    revise_supported_spaces_test
+    confined_access_token_test
 ]).
 
 %%%===================================================================
@@ -371,23 +369,6 @@ confined_access_token_test(Config) ->
     ?assertEqual(TokenSecretGraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenSecretGriMatcher)),
     ?assertEqual(GraphCalls, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)).
 
-
-revise_supported_spaces_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-    % onezone supports (provider_logic and space_logic) are mocked in init_per_testcase
-    ok = rpc:call(Node, supported_spaces, add, [<<"a">>, <<"st1">>]),
-    ok = rpc:call(Node, supported_spaces, add, [<<"a">>, <<"st2">>]),
-    ok = rpc:call(Node, supported_spaces, add, [<<"b">>, <<"st2">>]),
-    ok = rpc:call(Node, supported_spaces, add, [<<"b">>, <<"st3">>]),
-    
-    ?assertEqual(ok, rpc:call(Node, provider_logic, revise_supported_spaces, [])),
-    test_utils:mock_assert_num_calls(Node, space_unsupport, schedule, 3, 0),
-    % simulate space forced unsupport/deletion by adding another support to locally persisted
-    rpc:call(Node, supported_spaces, add, [<<"c">>, <<"st2">>]),
-    ?assertEqual(ok, rpc:call(Node, provider_logic, revise_supported_spaces, [])),
-    test_utils:mock_assert_num_calls(Node, space_unsupport, schedule, 3, 1),
-    test_utils:mock_assert_num_calls(Node, space_unsupport, schedule, [<<"c">>, <<"st2">>, forced], 1).
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -399,29 +380,9 @@ init_per_suite(Config) ->
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
-
-init_per_testcase(revise_supported_spaces_test, Config) ->
-    Nodes = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Nodes, space_unsupport, [passthrough]),
-    test_utils:mock_new(Nodes, provider_logic, [passthrough]),
-    test_utils:mock_new(Nodes, space_logic, [passthrough]),
-    test_utils:mock_expect(Nodes, space_unsupport, schedule, fun(_, _, _) -> ok end),
-    test_utils:mock_expect(Nodes, provider_logic, get_spaces, fun() -> {ok, [<<"a">>, <<"b">>]} end),
-    test_utils:mock_expect(Nodes, space_logic, get_local_storage_ids, 
-        fun
-            (<<"a">>) -> {ok, [<<"st1">>, <<"st2">>]};
-            (<<"b">>) -> {ok, [<<"st2">>, <<"st3">>]} 
-        end),
-    Config;
-    
 init_per_testcase(_, Config) ->
     logic_tests_common:init_per_testcase(Config).
 
-end_per_testcase(revise_supported_spaces_test, Config) ->
-    Nodes = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Nodes, provider_logic),
-    test_utils:mock_unload(Nodes, space_logic),
-    test_utils:mock_unload(Nodes, space_unsupport);
 end_per_testcase(_, _Config) ->
     ok.
 

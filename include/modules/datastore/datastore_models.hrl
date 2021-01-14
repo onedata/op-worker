@@ -402,19 +402,19 @@
 }).
 
 -record(space_unsupport_job, {
-    stage = init :: space_unsupport:stage(),
+    stage = init :: space_unsupport_engine:stage(),
     task_id :: traverse:id(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
     % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id).
     % It is persisted so when slave job is restarted no additional task is created.
-    subtask_id = undefined :: space_unsupport:subtask_id() | undefined,
+    subtask_id = undefined :: space_unsupport_engine:subtask_id() | undefined,
     % Id of process waiting to be notified of task finish.
     % NOTE: should be updated after provider restart
     slave_job_pid  = undefined :: pid() | undefined,
-    %% Indicates that the provider has been forcefully removed from the space supporters.
+    %% Forced strategy indicates that the provider has been forcefully removed from the space supporters.
     %% In such case, only necessary cleanup is performed and stages such as data replication are omitted.
-    forced_unsupport = false :: boolean()
+    strategy = graceful :: space_unsupport_engine:strategy()
 }).
 
 %% Model that holds information necessary to tell whether whole subtree

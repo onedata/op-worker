@@ -14,10 +14,14 @@
 %%%     * cleaning up local storage and local metadata 
 %%%     * waiting for all remote providers to be up to date with this provider dbsync changes (@TODO VFS-7164 NYI)
 %%%     * cleaning up database from documents synced in space scope 
-%%%     * cleaning up database from local documents related to space support
+%%%     * cleaning up database from local documents related to space support 
+%%% 
+%%% Forced strategy indicates that the provider has been forcefully removed 
+%%% from the space supporters. In such case, only necessary cleanup is performed 
+%%% and stages such as data replication are omitted.
 %%% @end
 %%%--------------------------------------------------------------------
--module(space_unsupport).
+-module(space_unsupport_engine).
 -author("Michal Stanisz").
 
 -include("global_definitions.hrl").
@@ -30,10 +34,11 @@
 -behaviour(traverse_behaviour).
 
 %% API
--export([init_pools/0, schedule/2, schedule/3]).
+-export([init_pools/0]).
+-export([schedule_start/2, schedule_start/3]).
 -export([report_cleanup_traverse_finished/2]).
--export([get_all_stages/0]).
 -export([clean_local_documents/2]).
+-export([get_all_stages/0]).
 
 %% traverse behaviour callbacks
 -export([get_job/1, update_job_progress/5]).
@@ -47,7 +52,7 @@
 -type subtask_id() :: qos_entry:id() | unsupport_cleanup_traverse:id().
 -type strategy() :: forced | graceful.
 
--export_type([stage/0, subtask_id/0]).
+-export_type([stage/0, subtask_id/0, strategy/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(DOCUMENT_EXPIRY_TIME, 60). % in seconds
@@ -65,19 +70,20 @@ init_pools() ->
     traverse:init_pool(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit),
     unsupport_cleanup_traverse:init_pool().
 
--spec schedule(od_space:id(), storage:id()) -> ok.
-schedule(SpaceId, StorageId) ->
-    schedule(SpaceId, StorageId, graceful).
 
--spec schedule(od_space:id(), storage:id(), strategy()) -> ok.
-schedule(SpaceId, StorageId, Strategy) ->
+-spec schedule_start(od_space:id(), storage:id()) -> ok.
+schedule_start(SpaceId, StorageId) ->
+    schedule_start(SpaceId, StorageId, graceful).
+
+-spec schedule_start(od_space:id(), storage:id(), strategy()) -> ok.
+schedule_start(SpaceId, StorageId, Strategy) ->
     %% @TODO VFS-7167 handle last unsupport
     % ensure that file_meta doc for space is created, so it is not needed to always 
     % check if it exists when doing operations on files
     file_meta:make_space_exist(SpaceId),
     ?ok_if_exists(traverse:run(?POOL_NAME, datastore_key:new_from_digest([SpaceId, StorageId]),
         #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, stage = init, 
-            forced_unsupport = Strategy == forced})).
+            strategy = Strategy})).
 
 
 -spec report_cleanup_traverse_finished(od_space:id(), storage:id()) -> ok.
@@ -86,18 +92,6 @@ report_cleanup_traverse_finished(SpaceId, StorageId) ->
         space_unsupport_job:get(SpaceId, StorageId, cleanup_traverse),
     Pid ! cleanup_traverse_finished,
     ok.
-
-
--spec get_all_stages() -> [stage()].
-get_all_stages() -> 
-    [
-        init, 
-        replicate, 
-        cleanup_traverse, 
-        wait_for_dbsync, 
-        delete_synced_documents, 
-        delete_local_documents
-    ].
 
 
 -spec clean_local_documents(od_space:id(), storage:id()) -> ok.
@@ -109,6 +103,18 @@ clean_local_documents(SpaceId, StorageId) ->
     storage_import:clean_up(SpaceId),
     space_quota:delete(SpaceId),
     luma:clear_db(StorageId, SpaceId).
+
+
+-spec get_all_stages() -> [stage()].
+get_all_stages() ->
+    [
+        init,
+        replicate,
+        cleanup_traverse,
+        wait_for_dbsync,
+        delete_synced_documents,
+        delete_local_documents
+    ].
 
 %%%===================================================================
 %%% Traverse behaviour callbacks
@@ -169,7 +175,7 @@ get_next_jobs_base(delete_local_documents) -> [].
 %% @private
 -spec execute_stage(space_unsupport_job:record()) -> ok.
 execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId, storage_id = StorageId}) ->
-    ok = storage_logic:init_unsupport(StorageId, SpaceId),
+    ok = space_support:init_unsupport(StorageId, SpaceId),
     ok = supported_spaces:remove(SpaceId, StorageId),
     main_harvesting_stream:space_unsupported(SpaceId),
     storage_import:stop_auto_scan(SpaceId),
@@ -180,7 +186,7 @@ execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId, storage_id 
     %% @TODO VFS-6208 Cancel sync and auto-cleaning traverse and clean up ended tasks when unsupporting
     ok;
 
-execute_stage(#space_unsupport_job{stage = replicate, forced_unsupport = true}) ->
+execute_stage(#space_unsupport_job{stage = replicate, strategy = forced}) ->
     % can not replicate data as space is no longer supported
     ok;
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = Job) ->
@@ -195,7 +201,7 @@ execute_stage(#space_unsupport_job{stage = replicate} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, subtask_id = QosEntryId} = Job,
     %% @TODO Use subscription after resolving VFS-5647
     wait(fun() -> lfm:check_qos_status(?ROOT_SESS_ID, QosEntryId) == {ok, ?FULFILLED} end),
-    ok = storage_logic:complete_unsupport_resize(StorageId, SpaceId),
+    ok = space_support:complete_unsupport_resize(StorageId, SpaceId),
     lfm:remove_qos_entry(?ROOT_SESS_ID, QosEntryId);
 
 execute_stage(#space_unsupport_job{stage = cleanup_traverse, subtask_id = undefined} = Job) ->
@@ -217,9 +223,9 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
                 ok
             end
     end,
-    ok = storage_logic:complete_unsupport_purge(StorageId, SpaceId);
+    ok = space_support:complete_unsupport_purge(StorageId, SpaceId);
 
-execute_stage(#space_unsupport_job{stage =  wait_for_dbsync, forced_unsupport = true}) ->
+execute_stage(#space_unsupport_job{stage =  wait_for_dbsync, strategy = forced}) ->
     % no need to wait for dbsync as this space is no longer supported by this provider
     ok;
 execute_stage(#space_unsupport_job{stage = wait_for_dbsync} = _Job) ->
@@ -247,7 +253,7 @@ execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
         qos_entry:remove_from_failed_files_list(SpaceId, FileUuid)
     end),
     unsupport_cleanup_traverse:delete_ended(SpaceId, StorageId),
-    ok = storage_logic:finalize_unsupport(StorageId, SpaceId).
+    ok = space_support:finalize_unsupport(StorageId, SpaceId).
 
 
 %%%===================================================================
@@ -265,7 +271,7 @@ wait(Fun) ->
                 wait(Fun)
         end
     catch Error:Reason ->
-        ?warning("Error in space_unsupport:wait/1 ~p:~p", [Error, Reason]),
+        ?warning("Error in space_unsupport_engine:wait/1 ~p:~p", [Error, Reason]),
         timer:sleep(timer:seconds(10)),
         wait(Fun)
     end.

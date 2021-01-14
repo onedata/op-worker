@@ -19,13 +19,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add/2, get_supports/0, remove/2]).
+-export([add/2, remove/2]).
+-export([revise/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
 -type record() :: #supported_spaces{}.
--type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
 -define(CTX, #{model => ?MODULE}).
@@ -49,15 +49,6 @@ add(SpaceId, StorageId) ->
     update(UpdateFun, Default).
 
 
--spec get_supports() -> #{od_space:id() => [storage:id()]}.
-get_supports() ->
-    case get() of
-        {ok, #document{value = #supported_spaces{supports = Supports}}} ->
-            Supports;
-        {error, not_found}-> #{}
-    end.
-
-
 -spec remove(od_space:id(), storage:id()) -> ok | {error, term()}.
 remove(SpaceId, StorageId) ->
     UpdateFun = fun(#supported_spaces{supports = Supports} = Value) ->
@@ -71,16 +62,44 @@ remove(SpaceId, StorageId) ->
     end,
     {ok, Default} = UpdateFun(#supported_spaces{}),
     update(UpdateFun, Default).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Compare locally persisted supports with supports received from Onezone. 
+%% Each additional local entry means that space has been deleted or 
+%% support was revoked when provider was offline. In such case schedule 
+%% forced unsupport to perform necessary cleanup.
+%% @end
+%%--------------------------------------------------------------------
+-spec revise() -> ok.
+revise() ->
+    {ok, SupportedSpaces} = provider_logic:get_spaces(),
+    ActualSupports = lists:flatmap(fun(SpaceId) ->
+        {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
+        lists:map(fun(StorageId) -> {SpaceId, StorageId} end, StorageIds)
+    end, SupportedSpaces),
+    PreviouslyKnownSupports = get_supports(),
+    PreviouslyKnownSupportsList = lists:flatmap(fun({SpaceId, StorageIds}) ->
+        lists:map(fun(StorageId) -> {SpaceId, StorageId} end, StorageIds)
+    end, maps:to_list(PreviouslyKnownSupports)),
+    
+    lists:foreach(fun({SpaceId, StorageId}) ->
+        ok = space_unsupport_engine:schedule_start(SpaceId, StorageId, forced)
+    end, lists_utils:subtract(PreviouslyKnownSupportsList, ActualSupports)).
     
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec get() -> {ok, doc()} | {error, term()}.
-get() ->
-    datastore_model:get(?CTX, ?ID).
-
+-spec get_supports() -> #{od_space:id() => [storage:id()]}.
+get_supports() ->
+    case datastore_model:get(?CTX, ?ID) of
+        {ok, #document{value = #supported_spaces{supports = Supports}}} ->
+            Supports;
+        {error, not_found}-> #{}
+    end.
 
 -spec update(diff(), #supported_spaces{}) -> ok | {error, term()}.
 update(UpdateFun, Default) ->

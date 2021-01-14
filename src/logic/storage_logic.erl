@@ -34,9 +34,6 @@
 
 -export([create_in_zone/4, create_in_zone/5, delete_in_zone/1]).
 -export([get/1, get_shared_data/2]).
--export([init_space_support/3]).
--export([update_space_support_size/3]).
--export([init_unsupport/2, complete_unsupport_resize/2, complete_unsupport_purge/2, finalize_unsupport/2]).
 -export([get_name_of_local_storage/1, get_name_of_remote_storage/2]).
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([get_provider/2]).
@@ -50,9 +47,6 @@
 -export([upgrade_support_to_21_02/2]).
 
 -compile({no_auto_import, [get/1]}).
-
--type unsupport_step() ::  init_unsupport | complete_unsupport_resize 
-    | complete_unsupport_purge | finalize_unsupport.
 
 %%%===================================================================
 %%% API
@@ -129,68 +123,6 @@ get_shared_data(StorageId, SpaceId) ->
         subscribe = true,
         auth_hint = ?THROUGH_SPACE(SpaceId)
     }).
-
-
--spec init_space_support(storage:id(), tokens:serialized(), od_space:support_size()) ->
-    {ok, od_space:id()} | errors:error().
-init_space_support(StorageId, SpaceSupportToken, SupportSize) ->
-    Data = #{<<"token">> => SpaceSupportToken, <<"size">> => SupportSize},
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_storage, id = StorageId, aspect = init_support},
-        data = Data
-    }),
-
-    ?ON_SUCCESS(?CREATE_RETURN_ID(Result), fun({ok, SpaceId}) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id()),
-        gs_client_worker:invalidate_cache(od_space, SpaceId),
-        gs_client_worker:invalidate_cache(od_storage, StorageId)
-    end).
-
-
--spec update_space_support_size(storage:id(), od_space:id(), NewSupportSize :: integer()) ->
-    ok | errors:error().
-update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
-    Data = #{<<"size">> => NewSupportSize},
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = update, data = Data,
-        gri = #gri{type = od_storage, id = StorageId, aspect = {space, SpaceId}}
-    }),
-    ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId),
-        gs_client_worker:invalidate_cache(od_storage, StorageId),
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
-    end).
-
--spec init_unsupport(storage:id(), od_space:id()) -> ok | errors:error().
-init_unsupport(StorageId, SpaceId) ->
-    apply_unsupport_step(StorageId, SpaceId, init_unsupport).
-
--spec complete_unsupport_resize(storage:id(), od_space:id()) -> ok | errors:error().
-complete_unsupport_resize(StorageId, SpaceId) ->
-    apply_unsupport_step(StorageId, SpaceId, complete_unsupport_resize).
-
--spec complete_unsupport_purge(storage:id(), od_space:id()) -> ok | errors:error().
-complete_unsupport_purge(StorageId, SpaceId) ->
-    apply_unsupport_step(StorageId, SpaceId, complete_unsupport_purge).
-
--spec finalize_unsupport(storage:id(), od_space:id()) -> ok | errors:error().
-finalize_unsupport(StorageId, SpaceId) ->
-    apply_unsupport_step(StorageId, SpaceId, finalize_unsupport).
-
-
--spec apply_unsupport_step(storage:id(), od_space:id(), unsupport_step()) -> 
-    ok | errors:error().
-apply_unsupport_step(StorageId, SpaceId, UnsupportStep) ->
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_storage, id = StorageId, aspect = {UnsupportStep, SpaceId}}
-    }),
-    ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId),
-        gs_client_worker:invalidate_cache(od_storage, StorageId),
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
-    end).
 
 
 -spec get_name_of_local_storage(storage:id() | od_storage:doc()) -> {ok, storage:name()} | errors:error().

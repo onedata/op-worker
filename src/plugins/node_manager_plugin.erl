@@ -201,7 +201,7 @@ custom_workers() -> filter_disabled_workers([
 %%--------------------------------------------------------------------
 on_db_and_workers_ready() ->
     fslogic_delete:cleanup_opened_files(),
-    space_unsupport:init_pools(),
+    space_unsupport_engine:init_pools(),
     gs_channel_service:on_db_and_workers_ready().
 
 %%--------------------------------------------------------------------

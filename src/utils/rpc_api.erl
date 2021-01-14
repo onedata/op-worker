@@ -150,7 +150,7 @@ storage_safe_remove(StorageId) ->
 
 -spec storage_supports_any_space(storage:id()) -> boolean().
 storage_supports_any_space(StorageId) ->
-    storage:supports_any_space(StorageId).
+    space_support:supports_any_space(StorageId).
 
 
 -spec storage_list_ids() -> {ok, [storage:id()]} | {error, term()}.
@@ -439,14 +439,14 @@ provider_logic_update(Data) ->
 -spec support_space(storage:id(), tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, Token, SupportSize) ->
-    storage:support_space(StorageId, Token, SupportSize).
+    space_support:add(StorageId, Token, SupportSize).
 
 
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.
 revoke_space_support(SpaceId) ->
     {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
     StorageId = hd(StorageIds),
-    storage:revoke_space_support(StorageId, SpaceId).
+    space_support:revoke(StorageId, SpaceId).
 
 -spec get_spaces() -> {ok, [od_space:id()]} | errors:error().
 get_spaces() ->
@@ -533,7 +533,7 @@ space_quota_current_size(SpaceId) ->
 update_space_support_size(SpaceId, NewSupportSize) ->
     {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
     StorageId = hd(StorageIds),
-    storage:update_space_support_size(StorageId, SpaceId, NewSupportSize).
+    space_support:update_support_size(StorageId, SpaceId, NewSupportSize).
 
 
 -spec update_subdomain_delegation_ips() -> ok | error.

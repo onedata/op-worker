@@ -52,7 +52,6 @@
 -export([provider_connection_ssl_opts/1]).
 -export([assert_provider_compatibility/1]).
 -export([verify_provider_identity/1]).
--export([revise_supported_spaces/0]).
 
 
 -define(PROVIDER_NODES_CACHE_TTL,
@@ -801,23 +800,6 @@ assert_provider_compatibility(Domain) ->
         {error, Error} ->
             error(Error)
     end.
-
-
--spec revise_supported_spaces() -> ok.
-revise_supported_spaces() ->
-    {ok, SupportedSpaces} = provider_logic:get_spaces(),
-    ActualSupports = lists:flatmap(fun(SpaceId) ->
-        {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
-        lists:map(fun(StorageId) -> {SpaceId, StorageId} end, StorageIds)
-    end, SupportedSpaces),
-    PreviouslyKnownSupports = supported_spaces:get_supports(),
-    PreviouslyKnownSupportsList = lists:flatmap(fun({SpaceId, StorageIds}) ->
-        lists:map(fun(StorageId) -> {SpaceId, StorageId} end, StorageIds)
-    end, maps:to_list(PreviouslyKnownSupports)),
-        
-    lists:foreach(fun({SpaceId, StorageId}) ->
-        ok = space_unsupport:schedule(SpaceId, StorageId, forced)
-    end, lists_utils:subtract(PreviouslyKnownSupportsList, ActualSupports)).
 
 %%%===================================================================
 %%% Internal functions

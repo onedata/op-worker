@@ -22,9 +22,6 @@
 -author("Michal Stanisz").
 
 -include("middleware/middleware.hrl").
--include("modules/datastore/datastore_models.hrl").
--include("modules/storage/helpers/helpers.hrl").
--include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -41,7 +38,8 @@
 ]).
 -export([fetch_name/1, fetch_name_of_remote_storage/2, fetch_provider_id_of_remote_storage/2,
     fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, 
+    is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 -export([verify_configuration/3]).
@@ -51,10 +49,6 @@
 -export([set_qos_parameters/2, update_readonly_and_imported/3]).
 -export([update_helper_args/2, update_helper_admin_ctx/2,
     update_helper/2]).
-
-%%% Support related functions
--export([support_space/3, update_space_support_size/3, revoke_space_support/2]).
--export([supports_any_space/1]).
 
 % exported for initializer and env_up escripts
 -export([on_storage_created/1]).
@@ -166,7 +160,7 @@ exists(StorageId) ->
 -spec delete(id()) -> ok | ?ERROR_STORAGE_IN_USE | {error, term()}.
 delete(StorageId) ->
     lock_on_storage_by_id(StorageId, fun() ->
-        case supports_any_space(StorageId) of
+        case space_support:supports_any_space(StorageId) of
             true ->
                 ?ERROR_STORAGE_IN_USE;
             false ->
@@ -391,83 +385,6 @@ update_helper(StorageId, UpdateFun) ->
         {error, _} = Error -> Error
     end.
 
-
-%%%===================================================================
-%%% Support related functions
-%%%===================================================================
-
--spec support_space(id(), tokens:serialized(), od_space:support_size()) ->
-    {ok, od_space:id()} | errors:error().
-support_space(StorageId, SerializedToken, SupportSize) ->
-    case validate_support_request(SerializedToken) of
-        {ok, SpaceId} ->
-            % remove possible remnants of previous support 
-            % (when space was unsupported in Onezone without provider knowledge)
-            ok = space_unsupport:clean_local_documents(SpaceId, StorageId),
-            case storage_logic:init_space_support(StorageId, SerializedToken, SupportSize) of
-                {ok, SpaceId} ->
-                    on_init_support(SpaceId, StorageId),
-                    %% @TODO VFS-7170 Run only after space became active
-                    on_finalize_support(SpaceId),
-                    {ok, SpaceId};
-                {error, _} = Error ->
-                    Error
-            end;
-        Error ->
-            Error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks if given token is valid support token and whether provider
-%% does not already support this space.
-%% @TODO VFS-5497 This check will not be needed when multisupport is implemented
-%% @end
-%%--------------------------------------------------------------------
--spec validate_support_request(tokens:serialized()) -> {ok, od_space:id()} | errors:error().
-validate_support_request(SerializedToken) ->
-    case tokens:deserialize(SerializedToken) of
-        {ok, #token{type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId)}} ->
-            case provider_logic:supports_space(SpaceId) of
-                true ->
-                    ?ERROR_RELATION_ALREADY_EXISTS(
-                        od_space, SpaceId, od_provider, oneprovider:get_id()
-                    );
-                false -> {ok, SpaceId}
-            end;
-        {ok, #token{type = ReceivedType}} ->
-            ?ERROR_BAD_VALUE_TOKEN(<<"token">>,
-                ?ERROR_NOT_AN_INVITE_TOKEN(?SUPPORT_SPACE, ReceivedType));
-        {error, _} = Error ->
-            ?ERROR_BAD_VALUE_TOKEN(<<"token">>, Error)
-    end.
-
-
--spec update_space_support_size(id(), od_space:id(), NewSupportSize :: integer()) ->
-    ok | errors:error().
-update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
-    CurrentOccupiedSize = space_quota:current_size(SpaceId),
-    case NewSupportSize < CurrentOccupiedSize of
-        true -> ?ERROR_BAD_VALUE_TOO_LOW(<<"size">>, CurrentOccupiedSize);
-        false -> storage_logic:update_space_support_size(StorageId, SpaceId, NewSupportSize)
-    end.
-
-
--spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
-revoke_space_support(StorageId, SpaceId) ->
-    space_unsupport:schedule(SpaceId, StorageId).
-
-
--spec supports_any_space(id()) -> boolean() | errors:error().
-supports_any_space(StorageId) ->
-    case storage_logic:get_spaces(StorageId) of
-        {ok, []} -> false;
-        {ok, _Spaces} -> true;
-        {error, _} = Error -> Error
-    end.
-
 %%%===================================================================
 %%% Upgrade from 20.02.* to 21.02.*
 %%%===================================================================
@@ -498,18 +415,6 @@ upgrade_supports_to_21_02() ->
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
     rtransfer_config:add_storage(StorageId).
-
-
-%% @private
--spec on_init_support(od_space:id(), id()) -> ok.
-on_init_support(SpaceId, StorageId) ->
-    supported_spaces:add(SpaceId, StorageId).
-
-
-%% @private
--spec on_finalize_support(od_space:id()) -> ok.
-on_finalize_support(SpaceId) ->
-    space_logic:on_space_supported(SpaceId).
 
 
 %% @private

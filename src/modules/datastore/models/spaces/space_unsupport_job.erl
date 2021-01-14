@@ -75,7 +75,7 @@ save(Key, Job, TaskId) ->
     })).
 
 
--spec get(od_space:id(), storage:id(), space_unsupport:stage()) -> 
+-spec get(od_space:id(), storage:id(), space_unsupport_engine:stage()) -> 
     {ok, record()} | {error, term()}.
 get(SpaceId, StorageId, Stage) ->
     get(gen_id(SpaceId, StorageId, Stage)).
@@ -90,7 +90,7 @@ get(Key) ->
 delete(Key) ->
     datastore_model:delete(?CTX, Key).
 
--spec delete(od_space:id(), storage:id(), space_unsupport:stage()) -> ok | {error, term()}.
+-spec delete(od_space:id(), storage:id(), space_unsupport_engine:stage()) -> ok | {error, term()}.
 delete(SpaceId, StorageId, Stage) ->
     delete(gen_id(SpaceId, StorageId, Stage)).
 
@@ -123,12 +123,12 @@ get_record_struct(1) ->
     ]}.
 
 
--spec encode_subtask_id(space_unsupport:subtask_id() | undefined) -> binary().
+-spec encode_subtask_id(space_unsupport_engine:subtask_id() | undefined) -> binary().
 encode_subtask_id(undefined) -> <<"undefined">>;
 encode_subtask_id(Binary) when is_binary(Binary) -> Binary.
 
 
--spec decode_subtask_id(binary()) -> space_unsupport:subtask_id() | undefined.
+-spec decode_subtask_id(binary()) -> space_unsupport_engine:subtask_id() | undefined.
 decode_subtask_id(<<"undefined">>) -> undefined;
 decode_subtask_id(Binary) when is_binary(Binary) -> Binary.
 
@@ -147,6 +147,6 @@ decode_slave_job_pid(Pid) -> list_to_pid(binary_to_list(Pid)).
 %%%===================================================================
 
 %% @private
--spec gen_id(od_space:id(), storage:id(), space_unsupport:stage()) -> id().
+-spec gen_id(od_space:id(), storage:id(), space_unsupport_engine:stage()) -> id().
 gen_id(SpaceId, StorageId, Stage) ->
     datastore_key:adjacent_from_digest([StorageId, Stage], SpaceId).
