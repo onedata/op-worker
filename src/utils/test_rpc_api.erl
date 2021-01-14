@@ -17,19 +17,27 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([
-    get_storage_ids/0,
+    create_fuse_session/3,
+
+    storage_list_ids/0,
     get_local_storage_id/1,
     get_local_storage_ids/1,
-    describe_storage/1,
+    storage_describe/1,
     is_storage_imported/1,
 
-    get_space_ids/0,
-    get_space_document/1,
+    get_spaces/0,
+    get_space_details/1,
     get_autocleaning_status/1,
-    get_space_support_size/1,
+    get_support_size/1,
     get_space_providers/1,
     support_space/3,
-    revoke_space_support/1
+    revoke_space_support/1,
+
+    get_provider_id/0,
+    get_provider_domain/0,
+
+    get_cert_chain_pems/0,
+    gs_protocol_supported_versions/0
 ]).
 
 
@@ -38,23 +46,29 @@
 %%%===================================================================
 
 
--spec get_storage_ids() -> {ok, [storage:id()]} | {error, term()}.
-get_storage_ids() ->
+-spec create_fuse_session(binary(), aai:subject(),
+    auth_manager:token_credentials()) -> {ok, session:id()} | no_return().
+create_fuse_session(Nonce, Identity, TokenCredentials) ->
+    session_manager:reuse_or_create_fuse_session(Nonce, Identity, TokenCredentials).
+
+
+-spec storage_list_ids() -> {ok, [storage:id()]} | {error, term()}.
+storage_list_ids() ->
     rpc_api:storage_list_ids().
 
 
 -spec get_local_storage_id(od_space:id()) -> {ok, storage:id()}.
-get_local_storage_id(SpaceID) ->
-    rpc_api:space_logic_get_storage_id(SpaceID).
+get_local_storage_id(SpaceId) ->
+    space_logic:get_local_storage_id(SpaceId).
 
 
 -spec get_local_storage_ids(od_space:id()) -> {ok, [storage:id()]}.
-get_local_storage_ids(SpaceID) ->
-    rpc_api:space_logic_get_storage_ids(SpaceID).
+get_local_storage_ids(SpaceId) ->
+    rpc_api:space_logic_get_storage_ids(SpaceId).
 
 
--spec describe_storage(storage:id()) -> {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
-describe_storage(StorageId) ->
+-spec storage_describe(storage:id()) -> {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
+storage_describe(StorageId) ->
     rpc_api:storage_describe(StorageId).
 
 
@@ -63,13 +77,13 @@ is_storage_imported(StorageId) ->
     rpc_api:storage_is_imported_storage(StorageId).
 
 
--spec get_space_ids() -> {ok, [od_space:id()]} | errors:error().
-get_space_ids() ->
+-spec get_spaces() -> {ok, [od_space:id()]} | errors:error().
+get_spaces() ->
     rpc_api:get_spaces().
 
 
--spec get_space_document(od_space:id()) -> {ok, #{atom() := term()}} | errors:error().
-get_space_document(SpaceId) ->
+-spec get_space_details(od_space:id()) -> {ok, #{atom() := term()}} | errors:error().
+get_space_details(SpaceId) ->
     rpc_api:get_space_details(SpaceId).
 
 
@@ -78,14 +92,14 @@ get_autocleaning_status(SpaceId) ->
     rpc_api:autocleaning_status(SpaceId).
 
 
--spec get_space_support_size(od_space:id()) -> {ok, integer()} | errors:error().
-get_space_support_size(SpaceId) ->
-    rpc_api:get_space_support_size(SpaceId).
+-spec get_support_size(od_space:id()) -> {ok, integer()} | errors:error().
+get_support_size(SpaceId) ->
+    provider_logic:get_support_size(SpaceId).
 
 
 -spec get_space_providers(od_space:id()) -> {ok, [od_provider:id()]}.
 get_space_providers(SpaceId) ->
-    rpc_api:space_logic_get_provider_ids(SpaceId).
+    space_logic:get_provider_ids(SpaceId).
 
 
 -spec support_space(storage:id(), tokens:serialized(), SupportSize :: integer()) -> {ok, od_space:id()} | errors:error().
@@ -96,3 +110,22 @@ support_space(StorageId, Token, SupportSize) ->
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.
 revoke_space_support(SpaceId) ->
     rpc_api:revoke_space_support(SpaceId).
+
+
+-spec get_provider_id() -> binary() | no_return().
+get_provider_id() ->
+    oneprovider:get_id().
+
+
+-spec get_provider_domain() -> binary() | no_return().
+get_provider_domain() ->
+    oneprovider:get_domain().
+
+-spec get_cert_chain_pems() -> [public_key:der_encoded()] | no_return().
+get_cert_chain_pems() ->
+    https_listener:get_cert_chain_pems().
+
+
+-spec gs_protocol_supported_versions() -> [gs_protocol:protocol_version()].
+gs_protocol_supported_versions() ->
+    gs_protocol:supported_versions().

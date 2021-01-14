@@ -62,9 +62,7 @@
     prepare_user_ctx_params/2,
     get_helper_args/1,
     get_helper_admin_ctx/1,
-    space_logic_get_storage_id/1,
     space_logic_get_storage_ids/1,
-    space_logic_get_provider_ids/1,
     file_popularity_api_configure/2,
     file_popularity_api_get_configuration/1,
     autocleaning_configure/2,
@@ -92,7 +90,6 @@
     set_delegated_subdomain/1,
     set_domain/1,
     space_quota_current_size/1,
-    get_space_support_size/1,
     update_space_support_size/2,
     update_subdomain_delegation_ips/0,
     force_oz_connection_start/0,
@@ -381,19 +378,9 @@ get_helper_admin_ctx(Helper) ->
     helper:get_admin_ctx(Helper).
 
 
--spec space_logic_get_storage_id(od_space:id()) -> {ok, storage:id()}.
-space_logic_get_storage_id(SpaceId) ->
-    space_logic:get_local_storage_id(SpaceId).
-
-
 -spec space_logic_get_storage_ids(od_space:id()) -> {ok, [storage:id()]}.
 space_logic_get_storage_ids(SpaceId) ->
     space_logic:get_local_storage_ids(SpaceId).
-
-
--spec space_logic_get_provider_ids(od_space:id()) -> {ok, [od_provider:id()]}.
-space_logic_get_provider_ids(SpaceId) ->
-    space_logic:get_provider_ids(SpaceId).
 
 
 -spec file_popularity_api_configure(file_popularity_config:id(), map()) ->
@@ -539,11 +526,6 @@ set_domain(Domain) ->
 -spec space_quota_current_size(space_quota:id()) -> non_neg_integer().
 space_quota_current_size(SpaceId) ->
     space_quota:current_size(SpaceId).
-
-
--spec get_space_support_size(od_space:id()) -> {ok, integer()} | errors:error().
-get_space_support_size(SpaceId) ->
-    provider_logic:get_support_size(SpaceId).
 
 
 -spec update_space_support_size(od_space:id(), NewSupportSize :: integer()) ->
