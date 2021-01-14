@@ -402,7 +402,7 @@
 }).
 
 -record(space_unsupport_job, {
-    stage = init :: space_unsupport_engine:stage(),
+    step = 'resize#init' :: space_unsupport_engine:step(),
     task_id :: traverse:id(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),

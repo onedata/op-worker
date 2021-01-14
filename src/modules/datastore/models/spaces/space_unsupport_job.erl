@@ -48,7 +48,7 @@ save(Job) ->
     #space_unsupport_job{
         space_id = SpaceId,
         storage_id = StorageId,
-        stage = Stage,
+        step = Stage,
         task_id = TaskId
     } = Job,
     save(gen_id(SpaceId, StorageId, Stage), Job, TaskId).
@@ -61,7 +61,7 @@ save(undefined, Job, TaskId) ->
     #space_unsupport_job{
         space_id = SpaceId,
         storage_id = StorageId,
-        stage = Stage
+        step = Stage
     } = Job,
     % use fixed id so document can be accessed knowing only 
     % SpaceId, StorageId and Stage e.g. in slave_job
@@ -75,10 +75,10 @@ save(Key, Job, TaskId) ->
     })).
 
 
--spec get(od_space:id(), storage:id(), space_unsupport_engine:stage()) -> 
+-spec get(od_space:id(), storage:id(), space_unsupport_engine:step()) -> 
     {ok, record()} | {error, term()}.
-get(SpaceId, StorageId, Stage) ->
-    get(gen_id(SpaceId, StorageId, Stage)).
+get(SpaceId, StorageId, Step) ->
+    get(gen_id(SpaceId, StorageId, Step)).
 
 -spec get(id()) -> {ok, record()} | {error, term()}.
 get(Key) ->
@@ -90,7 +90,7 @@ get(Key) ->
 delete(Key) ->
     datastore_model:delete(?CTX, Key).
 
--spec delete(od_space:id(), storage:id(), space_unsupport_engine:stage()) -> ok | {error, term()}.
+-spec delete(od_space:id(), storage:id(), space_unsupport_engine:step()) -> ok | {error, term()}.
 delete(SpaceId, StorageId, Stage) ->
     delete(gen_id(SpaceId, StorageId, Stage)).
 
@@ -113,13 +113,13 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {stage, atom},
+        {step, atom},
         {task_id, string},
         {space_id, string},
         {storage_id, string},
         {substask_id, {custom, string, {?MODULE, encode_subtask_id, decode_subtask_id}}},
         {slave_job_pid, {custom, string, {?MODULE, encode_slave_job_pid, decode_slave_job_pid}}},
-        {forced_unsupport, boolean}
+        {strategy, atom}
     ]}.
 
 
@@ -147,6 +147,6 @@ decode_slave_job_pid(Pid) -> list_to_pid(binary_to_list(Pid)).
 %%%===================================================================
 
 %% @private
--spec gen_id(od_space:id(), storage:id(), space_unsupport_engine:stage()) -> id().
+-spec gen_id(od_space:id(), storage:id(), space_unsupport_engine:step()) -> id().
 gen_id(SpaceId, StorageId, Stage) ->
     datastore_key:adjacent_from_digest([StorageId, Stage], SpaceId).

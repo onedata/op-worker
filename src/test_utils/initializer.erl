@@ -1665,11 +1665,12 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
             ok = meck:expect(storage_logic, get, GetStorageFun(NewStorageMap))
         end),
     
-    ok = test_utils:mock_expect(Workers, storage_logic, init_space_support, fun(_,_,_) -> ok end),
-    ok = test_utils:mock_expect(Workers, storage_logic, init_unsupport, fun(_,_) -> ok end),
-    ok = test_utils:mock_expect(Workers, storage_logic, complete_unsupport_resize, fun(_,_) -> ok end),
-    ok = test_utils:mock_expect(Workers, storage_logic, complete_unsupport_purge, fun(_,_) -> ok end),
-    ok = test_utils:mock_expect(Workers, storage_logic, finalize_unsupport, fun(_,_) -> ok end).
+    ok = test_utils:mock_new(Workers, space_support),
+    ok = test_utils:mock_expect(Workers, space_support, init_space_support, fun(_,_,_) -> ok end),
+    ok = test_utils:mock_expect(Workers, space_support, init_unsupport, fun(_,_) -> ok end),
+    ok = test_utils:mock_expect(Workers, space_support, complete_unsupport_resize, fun(_,_) -> ok end),
+    ok = test_utils:mock_expect(Workers, space_support, complete_unsupport_purge, fun(_,_) -> ok end),
+    ok = test_utils:mock_expect(Workers, space_support, finalize_unsupport, fun(_,_) -> ok end).
 
 
 -spec storage_mock_teardown(Workers :: node() | [node()]) -> ok.

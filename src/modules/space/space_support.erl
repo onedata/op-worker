@@ -34,6 +34,9 @@
 -export([supports_any_space/1]).
 -export([init_unsupport/2, complete_unsupport_resize/2, complete_unsupport_purge/2, finalize_unsupport/2]).
 
+% for initializer
+-export([init_space_support/3]).
+
 -type unsupport_step() ::  init_unsupport | complete_unsupport_resize
     | complete_unsupport_purge | finalize_unsupport.
 
