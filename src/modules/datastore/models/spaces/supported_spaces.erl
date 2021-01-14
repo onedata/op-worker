@@ -45,7 +45,8 @@ add(SpaceId, StorageId) ->
             SpaceId => lists_utils:union([StorageId], SpaceStorages)
         }}}
     end,
-    update(UpdateFun, UpdateFun(#supported_spaces{})).
+    {ok, Default} = UpdateFun(#supported_spaces{}),
+    update(UpdateFun, Default).
 
 
 -spec get_supports() -> #{od_space:id() => [storage:id()]}.
@@ -68,7 +69,8 @@ remove(SpaceId, StorageId) ->
         end,
         {ok, Value#supported_spaces{supports = NewSupports}}
     end,
-    update(UpdateFun, UpdateFun(#supported_spaces{})).
+    {ok, Default} = UpdateFun(#supported_spaces{}),
+    update(UpdateFun, Default).
     
 
 %%%===================================================================

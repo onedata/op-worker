@@ -43,32 +43,32 @@
 %%% API
 %%%===================================================================
 
--spec save(record()) -> ok | {error, term()}.
+-spec save(record()) -> {ok, id()} | {error, term()}.
 save(Job) ->
     #space_unsupport_job{
-        space_id = SpaceId, 
-        storage_id = StorageId, 
-        stage = Stage, 
+        space_id = SpaceId,
+        storage_id = StorageId,
+        stage = Stage,
         task_id = TaskId
     } = Job,
     save(gen_id(SpaceId, StorageId, Stage), Job, TaskId).
 
--spec save(id() | undefined | main_job, record(), traverse:id()) -> 
+-spec save(id() | undefined | main_job, record(), traverse:id()) ->
     {ok, id()} | {error, term()}.
 save(main_job, Job, TaskId) ->
     save(undefined, Job, TaskId);
 save(undefined, Job, TaskId) ->
     #space_unsupport_job{
-        space_id = SpaceId, 
-        storage_id = StorageId, 
+        space_id = SpaceId,
+        storage_id = StorageId,
         stage = Stage
     } = Job,
     % use fixed id so document can be accessed knowing only 
     % SpaceId, StorageId and Stage e.g. in slave_job
     save(gen_id(SpaceId, StorageId, Stage), Job, TaskId);
 save(Key, Job, TaskId) ->
-    ?extract_ok(datastore_model:save(?CTX, #document{
-        key = Key, 
+    ?extract_key(datastore_model:save(?CTX, #document{
+        key = Key,
         value = Job#space_unsupport_job{
             task_id = TaskId
         }

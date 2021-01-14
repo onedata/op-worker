@@ -131,7 +131,7 @@ update_job_progress(Id, _Job, _PoolName, _TaskId, Status) when
     ok = space_unsupport_job:delete(Id),
     {ok, Id};
 update_job_progress(Id, Job, _PoolName, TaskId, _Status) ->
-    ok = space_unsupport_job:save(Id, Job, TaskId).
+    {ok, _} = space_unsupport_job:save(Id, Job, TaskId).
 
 -spec do_master_job(job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
@@ -189,7 +189,7 @@ execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = 
     Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
     {ok, QosEntryId} = lfm:add_qos_entry(?ROOT_SESS_ID, {guid, SpaceGuid}, Expression, 1, internal),
     NewJob = Job#space_unsupport_job{subtask_id = QosEntryId},
-    ok = space_unsupport_job:save(NewJob),
+    {ok, _} = space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
 execute_stage(#space_unsupport_job{stage = replicate} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, subtask_id = QosEntryId} = Job,
@@ -202,7 +202,7 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse, subtask_id = undefi
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     {ok, TaskId} = unsupport_cleanup_traverse:start(SpaceId, StorageId),
     NewJob = Job#space_unsupport_job{subtask_id = TaskId, slave_job_pid = self()},
-    ok = space_unsupport_job:save(NewJob),
+    {ok, _} = space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
 execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
     % This clause can be run after provider restart so update slave_job_pid if needed
@@ -276,7 +276,8 @@ maybe_update_slave_job_pid(#space_unsupport_job{slave_job_pid = Pid} = Job) ->
     case self() of
         Pid -> ok;
         _ -> 
-            ok = space_unsupport_job:save(Job#space_unsupport_job{slave_job_pid = self()})
+            {ok, _} = space_unsupport_job:save(Job#space_unsupport_job{slave_job_pid = self()}),
+            ok
     end.
 
 %% @private
