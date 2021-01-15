@@ -2110,6 +2110,9 @@ warp_time_during_replication(Config, Type) ->
                     [Tid] = transfers_test_mechanism:get_transfer_ids(NewConfig),
                     transfers_test_mechanism:await_replication_starts(WorkerP2, Tid),
                     ok = time_test_utils:set_current_time_seconds(PastTime),
+
+                    % Make sure the time warp happened when the replication was ongoing.
+                    % If this assert fails, the test needs to be adjusted.
                     #transfer{bytes_replicated = BytesReplicated} = transfers_test_utils:get_transfer(WorkerP2, Tid),
                     ?assert(BytesReplicated < TotalTransferredBytes),
 
