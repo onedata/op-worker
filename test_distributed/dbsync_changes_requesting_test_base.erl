@@ -21,7 +21,7 @@
 
 %% API
 -export([generic_test_skeleton/2]).
--export([handle_each_correlation_in_out_stream_separattely/1, add_delay_to_in_stream_handler/1,
+-export([handle_each_correlation_in_out_stream_separately/1, add_delay_to_in_stream_handler/1,
     use_single_doc_broadcast_batch/1, use_default_broadcast_batch_size/1]).
 
 % Record sent by mocks to gather information about synchronization progress
@@ -31,22 +31,33 @@
     documents
 }).
 
+% Type of test_action (different request can be created depending on action type)
+-type action_type() ::
+    request_range |                               % Requesting changes using range [Since, Until]
+    request_using_map |                           % Requesting changes starting from map generated at the begging
+                                                  % of the test (before test data creation)
+    estart_using_seq_returned_from_prev_request | % Requesting changes using range [Since, Until] where Since
+                                                  % is Until from previous request
+    restart_using_map_returned_from_prev_request. % Requesting changes using map returned by from previous request
+% Type describing custom parameter for test action (it depends on action type)
+-type action_param() :: datastore_doc:seq() | dbsync_processed_seqs_history:encoded_correlations() | oneprovider:id().
+
 % Record describing action to be executed during the test
 -record(test_action, {
-    worker_handling_request,
-    action_type,  % see macros below
-    action_param, % custom parameter for action
+    worker_handling_request :: node(),
+    action_type :: action_type(),
+    action_param :: action_param(),
     % parameters to be included in changes request message
-    trim_skipped,
-    until,
-    provider_id
+    include_mutators :: dbsync_worker:mutators_to_include(),
+    until :: datastore_doc:seq(),
+    provider_id :: oneprovider:id()
 }).
 
 % Requesting changes using range [Since, Until]
 -define(RANGE_REQUEST(Since, Until, ProviderId, WorkerHandlingRequest), #test_action{
     action_type = request_range,
     action_param = Since,
-    trim_skipped = false,
+    include_mutators = all_providers,
     until = Until,
     provider_id = ProviderId,
     worker_handling_request = WorkerHandlingRequest
@@ -56,7 +67,7 @@
 -define(REQUEST_USING_MAP(EncodedInitSequencesMap, Until, ProviderId, WorkerHandlingRequest), #test_action{
     action_type = request_using_map,
     action_param = EncodedInitSequencesMap,
-    trim_skipped = false,
+    include_mutators = all_providers,
     until = Until,
     provider_id = ProviderId,
     worker_handling_request = WorkerHandlingRequest
@@ -66,7 +77,7 @@
 -define(RESTART_FROM_PREV_REQUEST_USING_SEQ(PrevProvider, Until, ProviderId, WorkerHandlingRequest), #test_action{
     action_type = restart_using_seq_returned_from_prev_request,
     action_param = PrevProvider,
-    trim_skipped = false,
+    include_mutators = all_providers,
     until = Until,
     provider_id = ProviderId,
     worker_handling_request = WorkerHandlingRequest
@@ -76,7 +87,7 @@
 -define(RESTART_FROM_PREV_REQUEST_MAP_REQUEST(PrevProvider, Until, ProviderId, WorkerHandlingRequest), #test_action{
     action_type = restart_using_map_returned_from_prev_request,
     action_param = PrevProvider,
-    trim_skipped = false,
+    include_mutators = all_providers,
     until = Until,
     provider_id = ProviderId,
     worker_handling_request = WorkerHandlingRequest
@@ -86,7 +97,7 @@
 -define(SINGLE_PROVIDER_CHANGES_REQUEST(Since, Until, ProviderId, WorkerHandlingRequest), #test_action{
     action_type = request_range,
     action_param = Since,
-    trim_skipped = true,
+    include_mutators = reference_provider,
     until = Until,
     provider_id = ProviderId,
     worker_handling_request = WorkerHandlingRequest
@@ -301,7 +312,7 @@ process_and_send_changes_request(SpaceId, #test_action{
 process_and_send_changes_request(SpaceId, #test_action{
     action_type = ActionType,
     action_param = SinceOrSequenceMap,
-    trim_skipped = TrimSkipped,
+    include_mutators = IncludeMutators,
     until = Until,
     provider_id = ProviderId,
     worker_handling_request = WorkerHandlingRequest
@@ -312,7 +323,7 @@ process_and_send_changes_request(SpaceId, #test_action{
             since = SinceOrSequenceMap,
             until = Until,
             reference_provider_id = ProviderId,
-            trim_skipped = TrimSkipped
+            include_mutators = IncludeMutators
         }}
     ])),
     
@@ -364,7 +375,7 @@ verify_synchronization_logs(SynchronizationLogsGeneratedByRequest, InitialSynchr
 
 create_dirs(Config, SpaceName, TestSize) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    Timestamp0 = rpc:call(Worker1, clock, timestamp_seconds, []),
+    Timestamp0 = rpc:call(Worker1, global_clock, timestamp_seconds, []),
 
     DirsCount = case TestSize of
         small -> [10, 5, 1, 20, 2, 1];
@@ -379,7 +390,7 @@ create_dirs(Config, SpaceName, TestSize) ->
     timer:sleep(5000),
     create_single_dirs_batch(Config, SpaceName, Workers, DirsCount),
 
-    multi_provider_file_ops_test_base:are_all_seqs_equal(Workers, SpaceName, Timestamp0).
+    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_and_timestamps_equal(Workers, SpaceName, Timestamp0), 60).
 
 create_single_dirs_batch(Config, SpaceName, Workers, DirSizes) ->
     SessId = ?config(session, Config),
@@ -431,9 +442,9 @@ verify_sequences_correlation(WorkerToProviderId, SpaceId) ->
 
             % Check if all sequences has been processed
             NotProcessedSequences = lists:filtermap(fun({RemoteProvider,
-                #sequences_correlation{remote_continuously_processed_max = RemoteContinuouslyProcessedMax} = Correlation}) ->
+                #sequences_correlation{remote_consecutively_processed_max = RemoteConsecutivelyProcessedMax} = Correlation}) ->
                 {ProviderSeqNumber, _} = maps:get(RemoteProvider, Seqs),
-                case ProviderSeqNumber =:= RemoteContinuouslyProcessedMax of
+                case ProviderSeqNumber =:= RemoteConsecutivelyProcessedMax of
                     true -> false;
                     false -> {true, {RemoteProvider, ProviderSeqNumber, Correlation}}
                 end
@@ -606,7 +617,7 @@ get_doc_seq(#document{seq = Seq}) ->
 %%% to simulate different problems and different working conditions during generic test
 %%%===================================================================
 
-handle_each_correlation_in_out_stream_separattely(Config) ->
+handle_each_correlation_in_out_stream_separately(Config) ->
     Workers =  ?config(op_worker_nodes, Config),
 
     % NOTE: use erlang:apply with meck_util:original_name functions instead of meck:passthrough because

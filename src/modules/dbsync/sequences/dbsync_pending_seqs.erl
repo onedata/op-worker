@@ -103,9 +103,7 @@ process_dbsync_in_stream_seqs(SpaceId, ProviderId,
     end, Applied),
     check_and_delete_pending_seqs(SpaceId, ProviderId, RacedSeqs ++ OverriddenSeqs),
 
-    handle_dbsync_in_stream_errors(SpaceId, ProviderId, AppliedWithError);
-process_dbsync_in_stream_seqs(_SpaceId, _ProviderId, timeout) ->
-    ok.
+    handle_dbsync_in_stream_errors(SpaceId, ProviderId, AppliedWithError).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -127,7 +125,7 @@ process_dbsync_out_stream_seqs(SpaceId, ProviderId, ProcessedRemoteSequences, Lo
         end
     end, ProcessedRemoteSequences),
 
-    % TODO VFS-7036 - delete raced sequnences when they are not needed anymore
+    % TODO VFS-7036 - delete raced sequences when they are not needed anymore
     save_raced_seqs(SpaceId, ProviderId, RacedSeqs),
     check_and_delete_pending_seqs(SpaceId, ProviderId, ProcessedRemoteSequences).
 

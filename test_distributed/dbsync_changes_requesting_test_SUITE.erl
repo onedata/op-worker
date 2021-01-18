@@ -44,7 +44,7 @@ basic_changes_requests_test(Config) ->
     dbsync_changes_requesting_test_base:generic_test_skeleton(Config, large).
 
 handling_changes_separately_test(Config) ->
-    dbsync_changes_requesting_test_base:handle_each_correlation_in_out_stream_separattely(Config),
+    dbsync_changes_requesting_test_base:handle_each_correlation_in_out_stream_separately(Config),
     dbsync_changes_requesting_test_base:generic_test_skeleton(Config, medium).
 
 test_with_simulated_apply_delays(Config) ->

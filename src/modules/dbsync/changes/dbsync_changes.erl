@@ -29,10 +29,7 @@
 -type remote_mutation_info() :: datastore_doc:remote_mutation_info().
 -type model() :: datastore_model:model().
 -type timestamp() :: datastore_doc:timestamp() | undefined.
--type dbsync_successful_application_result() :: #dbsync_application_result{}.
-% Extend dbsync_successful_application_result() type in case of timeout
-% (dbsync_successful_application_result record cannot be created).
--type dbsync_application_result() :: dbsync_successful_application_result() | timeout.
+-type dbsync_application_result() :: #dbsync_application_result{}.
 
 -export_type([remote_mutation_info/0, timestamp/0, dbsync_application_result/0]).
 
@@ -56,8 +53,7 @@ apply_batch(Docs, BatchRange, Timestamp, ProviderId) ->
         DocsGroups = group_changes(Docs),
         DocsList = maps:values(DocsGroups),
 
-        MinSize = application:get_env(?APP_NAME,
-            dbsync_changes_apply_min_group_size, 10),
+        MinSize = op_worker:get_env(dbsync_changes_apply_min_group_size, 10),
 
         {LastGroup, DocsList2} = lists:foldl(fun(Group, {CurrentGroup, Acc}) ->
             Group2 = Group ++ CurrentGroup,
@@ -76,7 +72,7 @@ apply_batch(Docs, BatchRange, Timestamp, ProviderId) ->
         Ref = make_ref(),
         Pids = parallel_apply(DocsList3, Ref, ProviderId),
         Ans = gather_answers(Pids, Ref),
-        Master ! {batch_applied, BatchRange, Timestamp, Ans}
+        Master ! {batch_application_result, BatchRange, Timestamp, Ans}
     end),
     ok.
 
@@ -302,30 +298,31 @@ group_changes(Docs) ->
 %%--------------------------------------------------------------------
 -spec parallel_apply([[datastore:doc()]], reference(), oneprovider:id()) -> [pid()].
 parallel_apply(DocsList, Ref, ProviderId) ->
+    % TODO VFS-7206 - use utils:foreach instead of parallel_apply and gather_answers
     Master = self(),
     lists:map(fun(DocList) ->
         spawn(fun() ->
-            SlaveAns = apply_docs_list(lists:reverse(DocList), ProviderId, #dbsync_application_result{}),
+            SlaveAns = apply_docs(lists:reverse(DocList), ProviderId, #dbsync_application_result{}),
             Master ! {changes_worker_ans, Ref, self(), SlaveAns}
         end)
     end, DocsList).
 
 %% @private
--spec apply_docs_list([[datastore:doc()]], oneprovider:id(), dbsync_successful_application_result()) ->
-    dbsync_successful_application_result().
-apply_docs_list([], _ProviderId, Acc) ->
+-spec apply_docs([[datastore:doc()]], oneprovider:id(), dbsync_application_result()) ->
+    dbsync_application_result().
+apply_docs([], _ProviderId, Acc) ->
     Acc;
-apply_docs_list([Doc | DocList], ProviderId,
+apply_docs([Doc | DocList], ProviderId,
     #dbsync_application_result{successful = Applied, erroneous = AppliedWithError} = Acc) ->
     case dbsync_changes:apply(Doc, ProviderId) of
         {ok, undefined} ->
-            apply_docs_list(DocList, ProviderId, Acc);
+            apply_docs(DocList, ProviderId, Acc);
         {ok, #remote_mutation_info{} = UpdateDesc} ->
             Acc2 = Acc#dbsync_application_result{successful = [UpdateDesc | Applied]},
-            apply_docs_list(DocList, ProviderId, Acc2);
+            apply_docs(DocList, ProviderId, Acc2);
         {?REMOTE_DOC_ALREADY_EXISTS, #remote_mutation_info{} = UpdateDesc} ->
             Acc2 = Acc#dbsync_application_result{erroneous = [UpdateDesc | AppliedWithError]},
-            apply_docs_list(DocList, ProviderId, Acc2);
+            apply_docs(DocList, ProviderId, Acc2);
         {error, Seq} ->
             Acc#dbsync_application_result{min_erroneous_seq = Seq}
     end.
@@ -346,8 +343,8 @@ gather_answers(SlavesList, Ref) ->
 %% Gather appropriate number of workers' answers.
 %% @end
 %%--------------------------------------------------------------------
--spec gather_answers([pid()], reference(), dbsync_successful_application_result(), boolean()) ->
-    dbsync_application_result().
+-spec gather_answers([pid()], reference(), dbsync_application_result(), boolean()) ->
+    dbsync_application_result() | timeout.
 gather_answers([], _Ref, Ans, _FinalCheck) ->
     Ans;
 gather_answers(Pids, Ref, TmpAns, FinalCheck) ->
@@ -373,8 +370,8 @@ gather_answers(Pids, Ref, TmpAns, FinalCheck) ->
             end
     end.
 
--spec merge_result_records(dbsync_successful_application_result(), dbsync_successful_application_result()) ->
-    dbsync_successful_application_result().
+-spec merge_result_records(dbsync_application_result(), dbsync_application_result()) ->
+    dbsync_application_result().
 merge_result_records(#dbsync_application_result{
     successful = Applied1,
     erroneous = AppliedWithError1,

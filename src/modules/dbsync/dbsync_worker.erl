@@ -10,7 +10,7 @@
 %%% and routing messages to them.
 %%%
 %%% The main flow of changes is as follows. After document is saved to couchbase,
-%%% it is quarried by couchbase_changes_worker started by dbsync_out_stream and then
+%%% it is queried by couchbase_changes_worker started by dbsync_out_stream and then
 %%% broadcast to other providers by dbsync_out_stream. When document broadcast by
 %%% other provider appears, it is handled by dbsync_in_stream. Sequences from incoming
 %%% documents are marked as pending by dbsync_in_stream that means that these documents
@@ -37,6 +37,10 @@
 
 %% API
 -export([supervisor_flags/0, start_streams/0, start_streams/1, get_main_out_stream_opts/1]).
+
+% Type describing mutators whose changes should be included in stream
+-type mutators_to_include() :: reference_provider | all_providers.
+-export_type([mutators_to_include/0]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -188,8 +192,7 @@ handle_changes_request(ProviderId, #changes_request2{
         {until, Until},
         {local_changes_only, true},
         {batch_handler, Handler},
-        {handling_interval, application:get_env(
-            ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1))}
+        {handling_interval, op_worker:get_env(dbsync_changes_resend_interval, timer:seconds(1))}
     ],
 
     dbsync_worker_sup:start_on_demand_stream(SpaceId, ProviderId, Opts).
@@ -218,16 +221,21 @@ handle_custom_changes_request(CallerProviderId, #custom_changes_request{
     reference_provider_id = ReferenceProviderId,
     since = RequestedSince,
     until = RequestedUntil,
-    trim_skipped = TrimSkipped
+    include_mutators = IncludeMutators
 }) ->
+    SingleProviderChangesRequested = case IncludeMutators of
+        reference_provider -> true;
+        all_providers -> false
+    end,
     LocalSince = dbsync_seqs_correlations_history:map_remote_seq_to_local_start_seq(
-        SpaceId, ReferenceProviderId, RequestedSince, TrimSkipped),
+        SpaceId, ReferenceProviderId, RequestedSince, SingleProviderChangesRequested),
     % Information about remote sequences for last batch has to be prepared getting local until sequence
     % see `dbsync_seqs_correlation_history:map_remote_seq_to_local_stop_params` function doc for more information
     {LocalUntil, EncodedRemoteSequences} =
         dbsync_seqs_correlations_history:map_remote_seq_to_local_stop_params(SpaceId, ReferenceProviderId, RequestedUntil),
     case LocalSince < LocalUntil of
         true ->
+            % TODO VFS-7204 - filter documents not mutated by ReferenceProviderId (with remote seq outside range)
             Handler = fun
                 (BatchSince, end_of_stream, Timestamp, Docs) ->
                     dbsync_communicator:send_changes_with_extended_info(
@@ -245,8 +253,8 @@ handle_custom_changes_request(CallerProviderId, #custom_changes_request{
                 {until, LocalUntil},
                 {except_mutator, CallerProviderId},
                 {batch_handler, Handler},
-                {handling_interval, application:get_env(
-                    ?APP_NAME, dbsync_custom_request_changes_handling_interval, timer:seconds(1))}
+                {handling_interval, op_worker:get_env(
+                    dbsync_custom_request_changes_handling_interval, timer:seconds(1))}
             ],
 
             dbsync_worker_sup:start_on_demand_stream(SpaceId, CallerProviderId, Opts);

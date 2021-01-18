@@ -58,15 +58,15 @@ stop_out_stream(SpaceId) ->
 -spec start_on_demand_stream(od_space:id(), od_provider:id(), [dbsync_out_stream:option()]) -> ok.
 start_on_demand_stream(SpaceId, ProviderId, Opts) ->
     Name = get_on_demand_changes_stream_id(SpaceId, ProviderId),
-    StreamID = ?OUT_STREAM_ID(Name),
-    critical_section:run([?MODULE, StreamID], fun() ->
-        case global:whereis_name(StreamID) of
+    StreamId = ?OUT_STREAM_ID(Name),
+    critical_section:run([?MODULE, StreamId], fun() ->
+        case global:whereis_name(StreamId) of
             undefined ->
                 Node = datastore_key:any_responsible_node(SpaceId),
                 % TODO VFS-VFS-6651 - child deletion will not be needed after
                 % refactoring of supervision tree to use one_for_one supervisor
-                rpc:call(Node, supervisor, terminate_child, [?DBSYNC_WORKER_SUP, StreamID]),
-                rpc:call(Node, supervisor, delete_child, [?DBSYNC_WORKER_SUP, StreamID]),
+                rpc:call(Node, supervisor, terminate_child, [?DBSYNC_WORKER_SUP, StreamId]),
+                rpc:call(Node, supervisor, delete_child, [?DBSYNC_WORKER_SUP, StreamId]),
 
                 Spec = dbsync_out_stream_spec(Name, SpaceId, Opts),
                 try

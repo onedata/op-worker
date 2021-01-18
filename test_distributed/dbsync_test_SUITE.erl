@@ -427,7 +427,7 @@ init_per_testcase(_Case, Config) ->
     lists:foreach(fun({Name, Value}) ->
         test_utils:set_env(Worker, op_worker, Name, Value)
     end, [
-        {dbsync_changes_request_delay, timer:seconds(1)},
+        {dbsync_changes_batch_await_period, timer:seconds(1)},
         {dbsync_changes_broadcast_interval, timer:seconds(1)}
     ]),
     rpc:call(Worker, dbsync_worker, start_streams, []),

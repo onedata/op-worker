@@ -158,8 +158,7 @@ handle_info(request_changes, State = #state{
             gen_server2:cast(self(), check_batch_stash),
             {noreply, State#state{changes_request_ref = undefined}};
         {Until, _} ->
-            MaxSize = application:get_env(?APP_NAME,
-                dbsync_changes_max_request_size, 1000000),
+            MaxSize = op_worker:get_env(dbsync_changes_max_request_size, 1000000),
             Until2 = min(Until, Seq + MaxSize),
             dbsync_communicator:request_changes(
                 ProviderId, SpaceId, Seq, Until2
@@ -168,8 +167,8 @@ handle_info(request_changes, State = #state{
                 changes_request_ref = undefined
             })}
     end;
-handle_info({batch_applied, {Since, Until}, Timestamp, Ans}, #state{} = State) ->
-    State2 = change_applied(Since, Until, Timestamp, Ans, State),
+handle_info({batch_application_result, {Since, Until}, Timestamp, Ans}, #state{} = State) ->
+    State2 = process_batch_application_result(Since, Until, Timestamp, Ans, State),
     {noreply, State2};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
@@ -241,7 +240,7 @@ stash_changes_batch(Since, Until, Timestamp, Docs, State = #state{
     changes_stash = Stash,
     seq = Seq
 }) ->
-    Max = application:get_env(?APP_NAME, dbsync_changes_stash_max_size, 100000),
+    Max = op_worker:get_env(dbsync_changes_stash_max_size, 100000),
     case Until > Seq + Max of
         true ->
             case ets:first(Stash) of
@@ -271,7 +270,7 @@ apply_changes_batch(Since, Until, Timestamp, Docs, #state{provider_id = Provider
     {Docs2, Timestamp2, Until2, State3} = prepare_batch(Docs, Timestamp, Until, State2),
     dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2, ProviderID),
 
-    case application:get_env(?APP_NAME, dbsync_in_stream_worker_gc, on) of
+    case op_worker:get_env(dbsync_in_stream_worker_gc, on) of
         on ->
             erlang:garbage_collect();
         _ ->
@@ -286,16 +285,18 @@ apply_changes_batch(Since, Until, Timestamp, Docs, #state{provider_id = Provider
 %% Updates sequence when changes applying ends.
 %% @end
 %%--------------------------------------------------------------------
--spec change_applied(couchbase_changes:since(), couchbase_changes:until(), dbsync_changes:timestamp(),
-    dbsync_changes:dbsync_application_result(), state()) -> state().
-change_applied(_Since, Until, Timestamp, Ans, #state{provider_id = ProviderId, space_id = SpaceId} = State) ->
+-spec process_batch_application_result(couchbase_changes:since(), couchbase_changes:until(),
+    dbsync_changes:timestamp(), dbsync_changes:dbsync_application_result() | timeout, state()) -> state().
+process_batch_application_result(_Since, Until, Timestamp, Ans,
+    #state{provider_id = ProviderId, space_id = SpaceId} = State) ->
     State2 = State#state{apply_batch = undefined},
-    dbsync_pending_seqs:process_dbsync_in_stream_seqs(SpaceId, ProviderId, Ans),
     case Ans of
         #dbsync_application_result{min_erroneous_seq = undefined} ->
+            dbsync_pending_seqs:process_dbsync_in_stream_seqs(SpaceId, ProviderId, Ans),
             gen_server2:cast(self(), check_batch_stash),
             update_seq(Until, Timestamp, State2);
         #dbsync_application_result{min_erroneous_seq = Seq} ->
+            dbsync_pending_seqs:process_dbsync_in_stream_seqs(SpaceId, ProviderId, Ans),
             State3 = update_seq(Seq, undefined, State2),
             schedule_changes_request(State3);
         timeout ->
@@ -318,8 +319,7 @@ prepare_batch(Docs, Timestamp, Until, State = #state{
         '$end_of_table' ->
             {Docs, Timestamp, Until, State};
         {Until, NextUntil} = Key ->
-            MaxSize = application:get_env(?APP_NAME,
-                dbsync_changes_apply_max_size, 500),
+            MaxSize = op_worker:get_env(dbsync_changes_apply_max_size, 500),
             case length(Docs) > MaxSize of
                 true ->
                     {Docs, Timestamp, Until, State};
@@ -360,9 +360,7 @@ update_seq(Seq, Timestamp, State = #state{space_id = SpaceId, provider_id = Prov
 schedule_changes_request(State = #state{
     changes_request_ref = undefined
 }) ->
-    Delay = application:get_env(
-        ?APP_NAME, dbsync_changes_request_delay, timer:seconds(15)
-    ),
+    Delay = op_worker:get_env(dbsync_changes_batch_await_period, timer:seconds(15)),
     State#state{changes_request_ref = erlang:send_after(
         Delay, self(), request_changes
     )};

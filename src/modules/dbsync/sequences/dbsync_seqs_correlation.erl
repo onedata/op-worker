@@ -24,8 +24,10 @@
 %%%       update seq field in documents),
 %%%     - maximal remote sequence number connected with document
 %%%       already processed by local provider's dbsync_out_stream,
-%%%     - maximal continuously processed remote sequence number (remote sequence
-%%%       numbers can be saved to local database in different order).
+%%%     - maximal consecutively processed remote sequence number (note that remote
+%%%       sequence numbers can be saved to local database in different order and not
+%%%       all sequence numbers appear in stream so difference between two
+%%%       consecutive sequence numbers can be greater than 1).
 %%% 2 remote sequence numbers have to be used as remote sequence
 %%% numbers processing consists of two stages.
 %%%     - During the first stage dbsync_in_stream saves remote documents to database
@@ -53,13 +55,13 @@
 -export([set_sequences_correlation/3]).
 
 -type correlation() :: #sequences_correlation{}.
--type correlations() :: #{oneprovider:id() => correlation()}.
--type continuously_processed_sequences() :: #{oneprovider:id() => datastore_doc:seq()}.
+-type providers_correlations() :: #{oneprovider:id() => correlation()}.
+-type consecutively_processed_sequences() :: #{oneprovider:id() => datastore_doc:seq()}.
 
--export_type([correlations/0, continuously_processed_sequences/0]).
+-export_type([providers_correlations/0, consecutively_processed_sequences/0]).
 
 % Interval defining how often correlations are added to history
--define(HISTORY_PERSISTING_INTERVAL,  application:get_env(?APP_NAME, seq_persisting_interval, 10000)).
+-define(HISTORY_PERSISTING_INTERVAL,  op_worker:get_env(seq_persisting_interval, 10000)).
 
 %%%===================================================================
 %%% API
@@ -80,14 +82,14 @@ set_sequences_correlation(SpaceId, LocalSeq, RemoteMutations) ->
     
     process_pending_links(SpaceId, RemoteMutations, InitialSyncProgress),
     ProviderIds = maps:keys(InitialSyncProgress) -- [LocalProviderID],
-    ContinuouslyProcessedSequences = get_continuously_processed_sequences(SpaceId, ProviderIds, InitialSyncProgress),
+    ConsecutivelyProcessedSequences = get_consecutively_processed_sequences(SpaceId, ProviderIds, InitialSyncProgress),
     
     Diff = fun(CurrentCorrelation) ->
         lists:foldl(fun(ProviderId, Acc) ->
             CorrelationToUpdate = maps:get(ProviderId, CurrentCorrelation, #sequences_correlation{}),
             RemoteMutationsCache = maps:get(ProviderId, RemoteMutations, undefined),
-            ContinuouslyProcessedSequence = maps:get(ProviderId, ContinuouslyProcessedSequences),
-            UpdatedCorrelation = update_correlation_record(RemoteMutationsCache, ContinuouslyProcessedSequence, CorrelationToUpdate),
+            ConsecutivelyProcessedSequence = maps:get(ProviderId, ConsecutivelyProcessedSequences),
+            UpdatedCorrelation = update_correlation_record(RemoteMutationsCache, ConsecutivelyProcessedSequence, CorrelationToUpdate),
             Acc#{ProviderId => UpdatedCorrelation}
         end, #{}, ProviderIds)
     end,
@@ -107,9 +109,9 @@ process_pending_links(SpaceId, RemoteMutations, SyncProgress) ->
         dbsync_pending_seqs:process_dbsync_out_stream_seqs(SpaceId, RemoteProviderId, RemoteSeqs, CurrentRemoteSeq)
     end, maps:to_list(RemoteMutations)).
 
--spec get_continuously_processed_sequences(od_space:id(), [oneprovider:id()], dbsync_state:sync_progress()) ->
-    continuously_processed_sequences().
-get_continuously_processed_sequences(SpaceId, ProviderIds, SyncProgress) ->
+-spec get_consecutively_processed_sequences(od_space:id(), [oneprovider:id()], dbsync_state:sync_progress()) ->
+    consecutively_processed_sequences().
+get_consecutively_processed_sequences(SpaceId, ProviderIds, SyncProgress) ->
     maps:from_list(lists:map(fun(ProviderId) ->
         % TODO VFS-7035 - test races with link operations by dbsync_in_stream
         case dbsync_pending_seqs:get_first_pending_seq(SpaceId, ProviderId) of
@@ -124,20 +126,20 @@ get_continuously_processed_sequences(SpaceId, ProviderIds, SyncProgress) ->
 
 -spec update_correlation_record(dbsync_out_stream_batch_cache:provider_mutations() | undefined,
     datastore_doc:remote_seq(), correlation()) -> correlation().
-update_correlation_record(undefined = _ProviderMutations, RemoteContinuouslyProcessedSequence, CorrelationRecord) ->
+update_correlation_record(undefined = _ProviderMutations, RemoteConsecutivelyProcessedSequence, CorrelationRecord) ->
     % Out stream cache is undefined - update only information created using pending sequences links
-    CorrelationRecord#sequences_correlation{remote_continuously_processed_max = RemoteContinuouslyProcessedSequence};
-update_correlation_record(ProviderMutations, RemoteContinuouslyProcessedSequence,
+    CorrelationRecord#sequences_correlation{remote_consecutively_processed_max = RemoteConsecutivelyProcessedSequence};
+update_correlation_record(ProviderMutations, RemoteConsecutivelyProcessedSequence,
     #sequences_correlation{remote_with_doc_processed_max = MaxRemoteSequence}) ->
     NewRemoteSeqs = dbsync_out_stream_batch_cache:get_sequences(ProviderMutations),
     MaxNewRemoteSequence = lists:max(lists:map(fun(Info) -> Info#remote_sequence_info.seq end, NewRemoteSeqs)),
     #sequences_correlation{
-        local_on_last_remote = dbsync_out_stream_batch_cache:get_last_local_seq(ProviderMutations),
-        remote_continuously_processed_max = RemoteContinuouslyProcessedSequence,
+        local_of_last_remote = dbsync_out_stream_batch_cache:get_last_local_seq(ProviderMutations),
+        remote_consecutively_processed_max = RemoteConsecutivelyProcessedSequence,
         remote_with_doc_processed_max = max(MaxNewRemoteSequence, MaxRemoteSequence)}.
 
 -spec update_state_doc_and_history(od_space:id(), datastore_doc:seq(),
-    fun((correlations()) -> correlations())) -> ok.
+    fun((providers_correlations()) -> providers_correlations())) -> ok.
 update_state_doc_and_history(SpaceId, LocalSeq, Diff) ->
     UpdatedDiff = fun(#dbsync_state{seqs_correlations = CurrentCorrelation} = StateDoc) ->
         UpdatedCorrelation = Diff(CurrentCorrelation),
@@ -153,8 +155,8 @@ update_state_doc_and_history(SpaceId, LocalSeq, Diff) ->
     
     case dbsync_state:custom_update(SpaceId, UpdatedDiff) of
         {ok, #document{value = #dbsync_state{correlation_persisting_seq = PersistingSeq,
-            seqs_correlations = UpdatedSeqsCorrelation}}} ->
-            add_to_history(SpaceId, UpdatedSeqsCorrelation, LocalSeq, PersistingSeq);
+            seqs_correlations = UpdatedCorrelations}}} ->
+            add_to_history(SpaceId, UpdatedCorrelations, LocalSeq, PersistingSeq);
         {error, nothing_changed} ->
             ok;
         {error, not_found} ->
@@ -174,11 +176,11 @@ update_persisting_seq(State = #dbsync_state{correlation_persisting_seq = LastPer
 %% Adds new entry to history if current local sequence is marked as sequence to be flushed.
 %% @end
 %%--------------------------------------------------------------------
--spec add_to_history(od_space:id(), dbsync_seqs_correlation:correlations(), datastore_doc:seq(),
+-spec add_to_history(od_space:id(), dbsync_seqs_correlation:providers_correlations(), datastore_doc:seq(),
     datastore_doc:seq()) -> ok.
-add_to_history(SpaceId, SeqsCorrelation, CurrentLocalSeq, CurrentLocalSeq) ->
-    dbsync_seqs_correlations_history:add(SpaceId, SeqsCorrelation, CurrentLocalSeq),
+add_to_history(SpaceId, ProvidersCorrelations, CurrentLocalSeq, CurrentLocalSeq) ->
+    dbsync_seqs_correlations_history:add(SpaceId, ProvidersCorrelations, CurrentLocalSeq),
     % Save sequences to process for current local sequence
-    dbsync_processed_seqs_history:add(SpaceId, SeqsCorrelation, CurrentLocalSeq);
-add_to_history(_SpaceId, _SeqsCorrelation, _CurrentLocalSeq, _FlushSeq) ->
+    dbsync_processed_seqs_history:add(SpaceId, ProvidersCorrelations, CurrentLocalSeq);
+add_to_history(_SpaceId, _ProvidersCorrelations, _CurrentLocalSeq, _FlushSeq) ->
     ok.

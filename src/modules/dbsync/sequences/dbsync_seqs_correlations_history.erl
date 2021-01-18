@@ -6,17 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module responsible fo storing (using links) history of past correlations
+%%% Module responsible fo storing history of past correlations
 %%% between sequences of different providers. This history is used
 %%% to calculate start/stop sequences for dbsync streams when batch of
 %%% changes of other (remote) provider is requested. Such history is saved
 %%% for each provider separately using links. Links ids are remote sequence
-%%% numbers saved in ascending and descending order as trees are searched
-%%% using different orders to find beginning and ending of requested range
-%%% (there is no guarantee that link for given remote sequence is saved so
-%%% appropriate margin has to be used if the link does not exist - for
-%%% beginning of the range we take its predecessor and for end of the range
-%%% we use its successor). Each link's value encodes two sequence numbers,
+%%% numbers saved in ascending and descending order. Thus, trees can be searched
+%%% using different orders to find beginning and ending of requested range.
+%%% There is no guarantee that link for given remote sequence has been saved so
+%%% appropriate margin has to be used if the link does not exist. If link does not
+%%% exist, we take its predecessor for beginning of the range and successor for
+%%% the end of the range. Each link's value encodes two sequence numbers,
 %%% that describe correlation at the time of link creation:
 %%%    - first is local sequence number of last processed document mutated
 %%%      previously by remote provider,
@@ -29,6 +29,9 @@
 %%% documents mutated by particular remote provider in this range.
 %%% Such range reduction is done when TrimSkipped parameter is  'true'
 %%% during mapping (see map_remote_seq_to_local_start_seq function).
+%%%
+%%% TODO VFS-7031 - Rename TrimSkipped parameter after change from inclusive
+%%% to exclusive sequences range
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dbsync_seqs_correlations_history).
@@ -62,7 +65,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec map_remote_seq_to_local_start_seq(od_space:id(), od_provider:id(),
-    datastore_doc:remote_seq() | dbsync_processed_seqs_history:encoded_seqs(), boolean()) ->
+    datastore_doc:remote_seq() | dbsync_processed_seqs_history:encoded_correlations(), boolean()) ->
     datastore_doc:seq().
 map_remote_seq_to_local_start_seq(_SpaceId, _ProviderId, <<>>, _TrimSkipped) ->
     1; % Empty binary - start from the first sequence
@@ -97,7 +100,7 @@ map_remote_seq_to_local_start_seq(SpaceId, ProviderId, RemoteSeqNum, TrimSkipped
 %% @end
 %%--------------------------------------------------------------------
 -spec map_remote_seq_to_local_stop_params(od_space:id(), od_provider:id(), datastore_doc:remote_seq()) ->
-    {datastore_doc:seq(), dbsync_processed_seqs_history:encoded_seqs()}.
+    {datastore_doc:seq(), dbsync_processed_seqs_history:encoded_correlations()}.
 map_remote_seq_to_local_stop_params(SpaceId, ProviderId, RemoteSeqNum) ->
     % TODO VFS-7034 - should batch size be limited by dbsync_changes_max_request_size env variable?
     LocalProviderId = oneprovider:get_id(),
@@ -135,17 +138,17 @@ map_remote_seq_to_local_stop_params(SpaceId, ProviderId, RemoteSeqNum) ->
 %%% History saving API
 %%%===================================================================
 
--spec add(od_space:id(), dbsync_seqs_correlation:correlations(), datastore_doc:seq()) -> ok.
-add(SpaceId, SeqsCorrelation, CurrentLocalSeq) ->
+-spec add(od_space:id(), dbsync_seqs_correlation:providers_correlations(), datastore_doc:seq()) -> ok.
+add(SpaceId, ProvidersCorrelations, CurrentLocalSeq) ->
     lists:foreach(fun({RemoteProviderID,
         #sequences_correlation{
-            local_on_last_remote = LocalOnLastRemote,
+            local_of_last_remote = LocalOfLastRemote,
             remote_with_doc_processed_max = RemoteWithDocProcessedMax,
-            remote_continuously_processed_max = RemoteContinuouslyProcessedMax
+            remote_consecutively_processed_max = RemoteConsecutivelyProcessedMax
         }}) ->
-        save_correlation(SpaceId, RemoteProviderID, LocalOnLastRemote, CurrentLocalSeq,
-            RemoteContinuouslyProcessedMax, RemoteWithDocProcessedMax)
-    end, maps:to_list(SeqsCorrelation)).
+        save_correlation(SpaceId, RemoteProviderID, LocalOfLastRemote, CurrentLocalSeq,
+            RemoteConsecutivelyProcessedMax, RemoteWithDocProcessedMax)
+    end, maps:to_list(ProvidersCorrelations)).
 
 %%%===================================================================
 %%% History saving for single provider
@@ -153,13 +156,13 @@ add(SpaceId, SeqsCorrelation, CurrentLocalSeq) ->
 
 -spec save_correlation(od_space:id(), oneprovider:id(), datastore_doc:seq(),
     datastore_doc:seq(), datastore_doc:remote_seq(), datastore_doc:remote_seq()) -> ok.
-save_correlation(SpaceId, ProviderId, LocalOnLastRemote, CurrentLocalSeq,
-    RemoteContinuouslyProcessedMax, RemoteWithDocProcessedMax) ->
+save_correlation(SpaceId, ProviderId, LocalOfLastRemote, CurrentLocalSeq,
+    RemoteConsecutivelyProcessedMax, RemoteWithDocProcessedMax) ->
     % Add correlation used to find start sequence from which changes should be send after a request
     % for remote changes (used by map_remote_seq_to_local_start_seq fun).
     save_or_update_correlation(SpaceId, ProviderId, RemoteWithDocProcessedMax,
-        LocalOnLastRemote, CurrentLocalSeq),
-    case RemoteWithDocProcessedMax < RemoteContinuouslyProcessedMax of
+        LocalOfLastRemote, CurrentLocalSeq),
+    case RemoteWithDocProcessedMax < RemoteConsecutivelyProcessedMax of
         true ->
             % All remote sequences are saved up to value higher than maximal remote sequence that appeared
             % in dbsync_out_stream with document. Such situation is possible only when remote sequence counter
@@ -167,28 +170,28 @@ save_correlation(SpaceId, ProviderId, LocalOnLastRemote, CurrentLocalSeq,
             % are ignored). In such a case additional correlation is saved allowing more precise determining of
             % local starting sequence in future.
             save_or_update_correlation(
-                SpaceId, ProviderId, RemoteContinuouslyProcessedMax, LocalOnLastRemote, CurrentLocalSeq);
+                SpaceId, ProviderId, RemoteConsecutivelyProcessedMax, LocalOfLastRemote, CurrentLocalSeq);
         false ->
             ok
     end,
 
     % Add correlation used to find stop sequence up to which changes should be send after a request
     % for remote changes (used by map_remote_seq_to_local_stop_params fun).
-    dbsync_seqs_tree:add_new(?CTX, ?KEY(SpaceId), ProviderId, RemoteContinuouslyProcessedMax,
-        encode_local_sequences_range(LocalOnLastRemote, CurrentLocalSeq)).
+    dbsync_seqs_tree:add_new(?CTX, ?KEY(SpaceId), ProviderId, RemoteConsecutivelyProcessedMax,
+        encode_local_sequences_range(LocalOfLastRemote, CurrentLocalSeq)).
 
 -spec save_or_update_correlation(od_space:id(), oneprovider:id(), datastore_doc:remote_seq(),
     datastore_doc:seq(), datastore_doc:seq()) -> ok.
-save_or_update_correlation(SpaceId, ProviderId, RemoteSeq, LocalOnLastRemote, CurrentLocalSeq) ->
+save_or_update_correlation(SpaceId, ProviderId, RemoteSeq, LocalOfLastRemote, CurrentLocalSeq) ->
     % Only current local sequence can be modified in existing link. Such update means that no changes higher 
     % than remote sequence from remote provider have been processed since last update of link.
     % Local sequence of last remote mutation should not be changed. (TODO VFS-7035 - test it)
     UpdateFun = fun
         (undefined) ->
-            encode_local_sequences_range(LocalOnLastRemote, CurrentLocalSeq);
+            encode_local_sequences_range(LocalOfLastRemote, CurrentLocalSeq);
         (PrevValue) ->
-            PrevLocalOnLastRemote = get_local_sequence_from_encoded_range(PrevValue, false),
-            encode_local_sequences_range(PrevLocalOnLastRemote, CurrentLocalSeq)
+            PrevLocalOfLastRemote = get_local_sequence_from_encoded_range(PrevValue, false),
+            encode_local_sequences_range(PrevLocalOfLastRemote, CurrentLocalSeq)
     end,
     dbsync_seqs_tree:overwrite(descending, ?CTX, ?KEY(SpaceId), ProviderId, RemoteSeq, UpdateFun).
 
@@ -197,8 +200,8 @@ save_or_update_correlation(SpaceId, ProviderId, RemoteSeq, LocalOnLastRemote, Cu
 %%%===================================================================
 
 -spec encode_local_sequences_range(datastore_doc:seq(), datastore_doc:seq()) -> encoded_local_sequences_range().
-encode_local_sequences_range(LocalOnLastRemote, NotMutatedUntil) ->
-    <<?ENCODED_SEQUENCE_RANGE_BEGINNING, (integer_to_binary(LocalOnLastRemote))/binary,
+encode_local_sequences_range(LocalOfLastRemote, NotMutatedUntil) ->
+    <<?ENCODED_SEQUENCE_RANGE_BEGINNING, (integer_to_binary(LocalOfLastRemote))/binary,
         ?ENCODED_SEQUENCE_RANGE_ENDING, (integer_to_binary(NotMutatedUntil))/binary>>.
 
 -spec get_local_sequence_from_encoded_range(encoded_local_sequences_range(), boolean()) -> datastore_doc:seq().

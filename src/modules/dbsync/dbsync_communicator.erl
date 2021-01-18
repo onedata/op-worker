@@ -165,7 +165,7 @@ send_changes(ProviderId, SpaceId, Since, Until, Timestamp, Docs) ->
 % #custom_changes_requests are used in dbsync main messages flow
 -spec send_changes_with_extended_info(od_provider:id(), od_space:id(), couchbase_changes:since(),
     couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()],
-    dbsync_processed_seqs_history:encoded_seqs()) -> ok.
+    dbsync_processed_seqs_history:encoded_correlations()) -> ok.
 send_changes_with_extended_info(_ProviderId, _SpaceId, _Since, _Until, _Timestamp, _Docs, _OtherProvidersSeqs) ->
     ok.
 
@@ -217,7 +217,7 @@ get_next_broadcast_hops(SpaceId, Opts) ->
     ProviderIds = dbsync_utils:get_providers(SpaceId),
     ProviderIds2 = select_receiving_providers(ProviderIds, Opts),
 
-    MinSupport = application:get_env(?APP_NAME, multipath_broadcast_min_support, 8),
+    MinSupport = op_worker:get_env(multipath_broadcast_min_support, 8),
     Multipath = length(ProviderIds2) >= MinSupport,
 
     Pivot = case Multipath of

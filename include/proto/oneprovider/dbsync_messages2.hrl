@@ -48,8 +48,9 @@
     reference_provider_id :: od_provider:id(), % id of provider which sequence numbers are used to determine
                                                % first and last document to be synchronized
                                                % (each provider has own sequence numbers)
-    trim_skipped = false :: boolean() % allows reduction of sequences range when only changes of single
-                                      % provider are needed (see dbsync_seqs_correlations_history.erl)
+    include_mutators = all_providers :: dbsync_worker:mutators_to_include() % allows reduction of documents amount
+                                                                            % to be sent when only changes of
+                                                                            % single provider are needed
 }).
 
 -endif.

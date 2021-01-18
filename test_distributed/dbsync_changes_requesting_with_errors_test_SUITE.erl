@@ -44,11 +44,11 @@ test_with_simulation_of_apply_errors(Config) ->
     dbsync_changes_requesting_test_base:generic_test_skeleton(Config, medium).
 
 handling_changes_separately_test_with_simulation_of_apply_errors(Config) ->
-    dbsync_changes_requesting_test_base:handle_each_correlation_in_out_stream_separattely(Config),
+    dbsync_changes_requesting_test_base:handle_each_correlation_in_out_stream_separately(Config),
     dbsync_changes_requesting_test_base:generic_test_skeleton(Config, medium).
 
 handling_changes_separately_test_with_simulation_of_apply_errors_and_delays(Config) ->
-    dbsync_changes_requesting_test_base:handle_each_correlation_in_out_stream_separattely(Config),
+    dbsync_changes_requesting_test_base:handle_each_correlation_in_out_stream_separately(Config),
     dbsync_changes_requesting_test_base:add_delay_to_in_stream_handler(Config),
     dbsync_changes_requesting_test_base:generic_test_skeleton(Config, small).
 

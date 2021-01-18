@@ -12,6 +12,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dbsync_out_stream_batch_cache).
+% TODO VFS-7205 - create eunit tests for this module
 -author("Michal Wrzeszcz").
 
 -include("modules/dbsync/dbsync.hrl").

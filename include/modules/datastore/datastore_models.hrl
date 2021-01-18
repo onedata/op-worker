@@ -672,7 +672,7 @@
 -record(dbsync_state, {
     sync_progress = #{} :: dbsync_state:sync_progress(),
     % Fields describing correlation between providers' sequences - see dbsync_seqs_correlation.erl
-    seqs_correlations = #{} :: dbsync_seqs_correlation:correlations(),
+    seqs_correlations = #{} :: dbsync_seqs_correlation:providers_correlations(),
     correlation_persisting_seq = 0 :: datastore_doc:seq()
 }).
 

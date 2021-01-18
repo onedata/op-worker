@@ -27,7 +27,7 @@
 
 -record(future, {
     communicator_ans :: communicator_ans(),
-    model :: atom(),
+    model :: datastore_model:model(),
     session_id :: session:id() | undefined
 }).
 

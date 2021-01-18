@@ -61,7 +61,7 @@
 -type state() :: #state{}.
 
 -define(DEFAULT_HANDLING_INTERVAL,
-    application:get_env(?APP_NAME, dbsync_out_stream_handling_interval, timer:seconds(5))).
+    op_worker:get_env(dbsync_out_stream_handling_interval, timer:seconds(5))).
 
 %%%===================================================================
 %%% API
@@ -247,7 +247,7 @@ aggregate_change(Doc = #document{seq = Seq}, State = #state{batch_cache = Cache}
         until = Seq + 1,
         batch_cache = UpdatedCache
     },
-    Len = application:get_env(?APP_NAME, dbsync_changes_broadcast_batch_size, 100),
+    Len = op_worker:get_env(dbsync_changes_broadcast_batch_size, 100),
     case dbsync_out_stream_batch_cache:get_changes_num(UpdatedCache) >= Len of
         true -> handle_changes_batch(State2);
         false -> State2
@@ -268,7 +268,7 @@ handle_changes_batch(State = #state{
     last_timestamp = Timestamp
 }) ->
     Docs = dbsync_out_stream_batch_cache:get_changes(Cache),
-    MinSize = application:get_env(?APP_NAME, dbsync_handler_spawn_size, 10),
+    MinSize = op_worker:get_env(dbsync_handler_spawn_size, 10),
     case dbsync_out_stream_batch_cache:get_changes_num(Cache) >= MinSize of
         true ->
             % TODO VFS-7034 - possible race between two consecutive batches?
@@ -288,7 +288,7 @@ handle_changes_batch(State = #state{
             process_remote_mutations(State)
     end,
 
-    case application:get_env(?APP_NAME, dbsync_out_stream_gc, on) of
+    case op_worker:get_env(dbsync_out_stream_gc, on) of
         on ->
             erlang:garbage_collect();
         _ ->

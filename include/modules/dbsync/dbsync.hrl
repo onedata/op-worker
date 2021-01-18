@@ -49,27 +49,28 @@
 % Separate record is stored to describe correlation with each provider's sequences.
 % The correlation is created by dbsync_seqs_correlation module processing remote sequence numbers.
 % As the processing consists of two stages, 2 remote sequence numbers have to be stored - see
-% dbsync_seqs_correlation module. `remote_continuously_processed_max` represents  maximal continuously
-% processed remote sequence number. As order of sequences of other providers may be changed when
+% dbsync_seqs_correlation module. `remote_consecutively_processed_max` represents  maximal consecutively
+% processed remote sequence number (note that not all sequence numbers appear in stream so difference between two
+% consecutive sequence numbers can be greater than 1). As order of sequences of other providers may be changed when
 % flushing documents from memory to db, it is guaranteed that all remote sequences
-% up to `remote_continuously_processed_max` field value have appeared in dbsync_out_stream or have been ignored.
-% However, there can be also some sequences grater than this value that have already appeared. It is guaranteed
-% that no sequence grater than `remote_with_doc_processed_max` field value has appeared in dbsync_out_stream.
+% up to `remote_consecutively_processed_max` field value have appeared in dbsync_out_stream or have been ignored.
+% However, there can be also some sequences greater than this value that have already appeared. It is guaranteed
+% that no sequence greater than `remote_with_doc_processed_max` field value has appeared in dbsync_out_stream.
 % In case of this field `with_doc` means that this sequence number appeared in dbsync_out_stream with document
 % as some sequence numbers can be connected to ignored documents (see dbsync_seqs_correlations_history:save_correlation
 % function).
 %
-% E.g. if `remote_continuously_processed_max = 10` and `remote_with_doc_processed_max = 20` than document with remote
-% sequence value `20` has already appeared in dbsync_out_stream but there is at least one sequence grater
+% E.g. if `remote_consecutively_processed_max = 10` and `remote_with_doc_processed_max = 20` than document with remote
+% sequence value `20` has already appeared in dbsync_out_stream but there is at least one sequence greater
 % than `10` and smaller than `20` that has been saved to local database but has not appeared in dbsync_out_stream.
-% If `local_on_last_remote` is 100 than it is guaranteed that document with local sequence 100 has been
+% If `local_of_last_remote` is 100 then it is guaranteed that document with local sequence 100 has been
 % modified by the remote provider and all documents already processed by dbsync_out_stream with local sequences
-% grater than 100 have not been modified by remote provider.
+% greater than 100 have not been modified by remote provider.
 -record(sequences_correlation, {
     % TODO VFS-7030 - test if changes can be requested before any correlation appears.
     % Should default be 0 or 1?
-    local_on_last_remote = 0 :: datastore_doc:seq(),
-    remote_continuously_processed_max = 0 :: datastore_doc:remote_seq(),
+    local_of_last_remote = 0 :: datastore_doc:seq(),
+    remote_consecutively_processed_max = 0 :: datastore_doc:remote_seq(),
     remote_with_doc_processed_max = 0 :: datastore_doc:remote_seq()
 }).
 

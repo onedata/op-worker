@@ -23,8 +23,8 @@
 % For tests
 -export([provider_seq_to_binary/2]).
 
--type encoded_seqs() :: binary().
--export_type([encoded_seqs/0]).
+-type encoded_correlations() :: binary().
+-export_type([encoded_correlations/0]).
 
 % All links connected with single space are saved using following key
 -define(KEY(SpaceId), <<SpaceId/binary, "###_processed_sequences">>).
@@ -40,12 +40,12 @@
 %%% Add/get API
 %%%===================================================================
 
--spec add(od_space:id(), dbsync_seqs_correlation:correlations(), datastore_doc:seq()) -> ok.
-add(SpaceId, SeqsCorrelations, CurrentLocalSeq) ->
+-spec add(od_space:id(), dbsync_seqs_correlation:providers_correlations(), datastore_doc:seq()) -> ok.
+add(SpaceId, ProvidersCorrelations, CurrentLocalSeq) ->
     dbsync_seqs_tree:overwrite(descending, ?CTX, ?KEY(SpaceId), ?TREE_ID,
-        CurrentLocalSeq, encode(SeqsCorrelations)).
+        CurrentLocalSeq, encode(ProvidersCorrelations)).
 
--spec get(od_space:id(), datastore_doc:seq()) -> encoded_seqs().
+-spec get(od_space:id(), datastore_doc:seq()) -> encoded_correlations().
 get(SpaceId, SeqNum) ->
     dbsync_seqs_tree:get_next(descending, ?CTX, ?KEY(SpaceId), ?TREE_ID, SeqNum, <<>>).
 
@@ -53,16 +53,16 @@ get(SpaceId, SeqNum) ->
 %%% Encoding/decoding link values
 %%%===================================================================
 
--spec encode(dbsync_seqs_correlation:correlations()) -> encoded_seqs().
-encode(SeqsCorrelations) ->
+-spec encode(dbsync_seqs_correlation:providers_correlations()) -> encoded_correlations().
+encode(ProvidersCorrelations) ->
     maps:fold(fun
-        (ProviderId, #sequences_correlation{remote_continuously_processed_max = RemoteContinuouslyProcessedMax}, Acc) ->
-            <<Acc/binary, (provider_seq_to_binary(ProviderId, RemoteContinuouslyProcessedMax))/binary>>
-    end, <<>>, SeqsCorrelations).
+        (ProviderId, #sequences_correlation{remote_consecutively_processed_max = RemoteConsecutivelyProcessedMax}, Acc) ->
+            <<Acc/binary, (provider_seq_to_binary(ProviderId, RemoteConsecutivelyProcessedMax))/binary>>
+    end, <<>>, ProvidersCorrelations).
 
--spec decode(encoded_seqs()) -> dbsync_seqs_correlation:continuously_processed_sequences().
-decode(EncodedSeqsCorrelations) ->
-    ProvidersSeqs = binary:split(EncodedSeqsCorrelations, <<?PROVIDER_MARKER>>, [global, trim_all]),
+-spec decode(encoded_correlations()) -> dbsync_seqs_correlation:consecutively_processed_sequences().
+decode(EncodedCorrelations) ->
+    ProvidersSeqs = binary:split(EncodedCorrelations, <<?PROVIDER_MARKER>>, [global, trim_all]),
     maps:from_list(lists:map(fun(ProviderSeqBinary) ->
         [ProviderId, SeqBinary] = binary:split(ProviderSeqBinary, <<?SEQ_MARKER>>),
         {ProviderId, binary_to_integer(SeqBinary)}
