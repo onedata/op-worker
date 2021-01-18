@@ -329,9 +329,10 @@ check_for_compatibility_registry_updates(OzConfiguration) ->
             end,
             case RemoteRevision > LocalRevision of
                 true ->
-                    compatibility:check_for_updates([
-                        oneprovider:get_oz_url(?ZONE_COMPATIBILITY_REGISTRY_PATH)
-                    ]);
+                    compatibility:check_for_updates(
+                        [oneprovider:get_oz_url(?ZONE_COMPATIBILITY_REGISTRY_PATH)],
+                        oneprovider:trusted_ca_certs()
+                    );
                 false ->
                     ?debug(
                         "Local compatibility registry (v. ~s) is not older than Onezone's (v. ~s)",
