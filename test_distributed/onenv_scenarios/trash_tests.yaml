@@ -10,22 +10,21 @@ sourcesRoot: ".."
 # NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources 
 # (by default cluster_manager provided as op_worker dependency will be used).
 sources:
-#  TODO odkomentowac !!!
-#  onezone:
-#    node-1:
-#      - oz-panel
-#      - oz-worker
-#      - cluster-manager
+  onezone:
+    node-1:
+      - oz-panel
+      - oz-worker
+      - cluster-manager
   oneprovider-1:
     node-1:
-#      - op-panel
+      - op-panel
       - op-worker
-#      - cluster-manager
+      - cluster-manager
   oneprovider-2:
     node-1:
-#      - op-panel
+      - op-panel
       - op-worker
-#      - cluster-manager
+      - cluster-manager
 
 
 # Onezone image to use. Note that if 'sources' option is enabled, it must
