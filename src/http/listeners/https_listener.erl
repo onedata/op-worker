@@ -34,7 +34,7 @@
 ] end).
 
 %% listener_behaviour callbacks
--export([port/0, start/0, stop/0, healthcheck/0]).
+-export([port/0, start/0, stop/0, restart_and_reload_web_certs/0, healthcheck/0]).
 -export([get_cert_chain_pems/0]).
 
 %%%===================================================================
@@ -104,6 +104,22 @@ start() ->
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
     gui:stop().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link listener_behaviour} callback restart_and_reload_web_certs/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec restart_and_reload_web_certs() -> ok | {error, term()}.
+restart_and_reload_web_certs() ->
+    case stop() of
+        ok ->
+            ssl:clear_pem_cache(),
+            start();
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
