@@ -128,7 +128,7 @@ await_distribution(Nodes, Files, ExpSizeOrBlocksPerProvider) ->
                     0 -> [];
                     _ -> [[0, ExpSize]]
                 end,
-                <<"providerId">> => op_test_rpc:get_provider_id(Node),
+                <<"providerId">> => opw_test_rpc:get_provider_id(Node),
                 <<"totalBlocksSize">> => ExpSize
             };
         ({Node, Blocks}) when is_list(Blocks) ->
@@ -139,7 +139,7 @@ await_distribution(Nodes, Files, ExpSizeOrBlocksPerProvider) ->
                     (#file_block{offset = Offset, size = Size}, Acc) ->
                         [[Offset, Size] | Acc]
                 end, [], Blocks),
-                <<"providerId">> => op_test_rpc:get_provider_id(Node),
+                <<"providerId">> => opw_test_rpc:get_provider_id(Node),
                 <<"totalBlocksSize">> => lists:sum(lists:map(fun(#file_block{size = Size}) ->
                     Size
                 end, Blocks))

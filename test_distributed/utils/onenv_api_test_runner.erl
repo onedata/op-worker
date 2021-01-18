@@ -926,7 +926,7 @@ build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet) ->
 is_client_supported_by_node(?NOBODY, _Node) ->
     true;
 is_client_supported_by_node(?USER(UserId), Node) ->
-    ProvId = op_test_rpc:get_provider_id(Node),
+    ProvId = opw_test_rpc:get_provider_id(Node),
     lists:member(UserId, oct_background:get_provider_eff_users(ProvId)).
 
 
@@ -977,8 +977,8 @@ connect_via_gs(Node, Client) ->
             {TokenAuth, ?SUB(user, UserId)}
     end,
     GsEndpoint = gs_endpoint(Node),
-    GsSupportedVersions = op_test_rpc:gs_protocol_supported_versions(Node),
-    Opts = [{cacerts, op_test_rpc:get_cert_chain_pems(Node)}],
+    GsSupportedVersions = opw_test_rpc:gs_protocol_supported_versions(Node),
+    Opts = [{cacerts, opw_test_rpc:get_cert_chain_pems(Node)}],
 
     case gs_client:start_link(GsEndpoint, Auth, GsSupportedVersions, fun(_) -> ok end, Opts) of
         {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} ->
@@ -992,7 +992,7 @@ connect_via_gs(Node, Client) ->
 -spec gs_endpoint(node()) -> URL :: binary().
 gs_endpoint(Node) ->
     Port = get_https_server_port_str(Node),
-    Domain = op_test_rpc:get_provider_domain(Node),
+    Domain = opw_test_rpc:get_provider_domain(Node),
 
     str_utils:join_as_binaries(
         ["wss://", Domain, Port, "/graph_sync/gui"],
@@ -1011,7 +1011,7 @@ make_rest_request(Config, Node, Client, #rest_args{
 }) ->
     URL = get_rest_endpoint(Node, Path),
     HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
-    CaCerts = op_test_rpc:get_cert_chain_pems(Node),
+    CaCerts = opw_test_rpc:get_cert_chain_pems(Node),
     Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 15000}],
 
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
@@ -1040,7 +1040,7 @@ get_rest_auth_headers(?USER(UserId)) ->
     URL :: binary().
 get_rest_endpoint(Node, ResourcePath) ->
     Port = get_https_server_port_str(Node),
-    Domain = op_test_rpc:get_provider_domain(Node),
+    Domain = opw_test_rpc:get_provider_domain(Node),
 
     str_utils:join_as_binaries(
         ["https://", Domain, Port, "/api/v3/oneprovider/", ResourcePath],

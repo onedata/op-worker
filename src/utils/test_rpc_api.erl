@@ -18,6 +18,7 @@
 
 -export([
     create_fuse_session/3,
+    build_token_credentials/5,
 
     storage_list_ids/0,
     get_local_storage_id/1,
@@ -35,6 +36,8 @@
 
     get_provider_id/0,
     get_provider_domain/0,
+    get_provider_name/0,
+    get_provider_eff_users/0,
 
     get_cert_chain_pems/0,
     gs_protocol_supported_versions/0
@@ -50,6 +53,17 @@
     auth_manager:token_credentials()) -> {ok, session:id()} | no_return().
 create_fuse_session(Nonce, Identity, TokenCredentials) ->
     session_manager:reuse_or_create_fuse_session(Nonce, Identity, TokenCredentials).
+
+
+-spec build_token_credentials(
+    binary(), binary(),
+    PeerIp :: undefined | ip_utils:ip(),
+    Interface :: undefined | cv_interface:interface(),
+    data_access_caveats:policy()
+) ->
+    map().
+build_token_credentials(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+    auth_manager:build_token_credentials(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy).
 
 
 -spec storage_list_ids() -> {ok, [storage:id()]} | {error, term()}.
@@ -120,6 +134,17 @@ get_provider_id() ->
 -spec get_provider_domain() -> binary() | no_return().
 get_provider_domain() ->
     oneprovider:get_domain().
+
+
+-spec get_provider_name() -> {ok, od_provider:name()} | errors:error().
+get_provider_name() ->
+    provider_logic:get_name().
+
+
+-spec get_provider_eff_users() -> binary() | no_return().
+get_provider_eff_users() ->
+    provider_logic:get_eff_users().
+
 
 -spec get_cert_chain_pems() -> [public_key:der_encoded()] | no_return().
 get_cert_chain_pems() ->
