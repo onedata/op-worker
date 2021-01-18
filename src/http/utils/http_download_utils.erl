@@ -284,7 +284,13 @@ stream_bytes_range({From, To}, #download_ctx{
     encoding_fun = EncodingFun
 } = DownloadCtx, Req, SendRetryDelay) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
-    {ok, _NewFileHandle, Data} = ?check(lfm:read(FileHandle, From, ToRead)),
+    {ok, _NewFileHandle, Data} = case lfm:read(FileHandle, From, ToRead) of
+        {error, ?ENOSPC} ->
+            % Translate POSIX error to something better understandable by user.
+            throw(?ERROR_QUOTA_EXCEEDED);
+        Res -> 
+            ?check(Res)
+    end,
 
     case byte_size(Data) of
         0 ->
