@@ -360,9 +360,9 @@ teardown_session(Worker, Config) ->
             {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
             lists:foreach(fun(SpaceId) ->
                 rpc:call(Worker, internal_services_manager, stop_service,
-                    [dbsync_worker, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
+                    [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
                 rpc:call(Worker, internal_services_manager, stop_service,
-                    [dbsync_worker, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
+                    [dbsync_worker_sup, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
                 rpc:call(Worker, file_meta, delete, [fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)])
             end, SpaceIds),
             Acc;
@@ -1196,6 +1196,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 
     test_utils:mock_expect(Workers, space_logic, get, GetSpaceFun),
 
+    test_utils:mock_expect(Workers, space_logic, get_name, fun(SpaceId) ->
+        {ok, #document{value = #od_space{name = Name}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
+        {ok, Name}
+    end),
+
     test_utils:mock_expect(Workers, space_logic, get_name, fun(Client, SpaceId) ->
         {ok, #document{value = #od_space{name = Name}}} = GetSpaceFun(Client, SpaceId),
         {ok, Name}
@@ -1258,6 +1263,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 
     test_utils:mock_expect(Workers, space_logic, get_harvesters, fun(SpaceId) ->
         {ok, proplists:get_value(SpaceId, SpacesHarvesters, [])}
+    end),
+    
+    test_utils:mock_expect(Workers, space_logic, report_provider_sync_progress, fun(_SpaceId, _) ->
+        ok
     end),
     
     test_utils:mock_expect(Workers, space_logic, has_eff_user, fun(SessionId, SpaceId, UserId) ->

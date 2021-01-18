@@ -101,6 +101,12 @@ mock_gs_client(Config) ->
         true
     end),
 
+    % dbsync reports its state regularly - mock the function so as not to generate
+    % requests to gs_client which would interfere with request counting in tests
+    ok = test_utils:mock_expect(Nodes, space_logic, report_provider_sync_progress, fun(_, _) ->
+        ok
+    end),
+
     % adding dummy storages to rtransfer would fail
     ok = test_utils:mock_expect(Nodes, rtransfer_config, add_storages, fun() -> ok end),
 
@@ -518,6 +524,13 @@ mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, Aut
         false ->
             ?ERROR_FORBIDDEN
     end;
+
+mock_graph_get(GRI = #gri{type = space_stats, aspect = {latest_emitted_seq, _}}, _, _) ->
+    {ok, #gs_resp_graph{data_format = resource, data = #{
+        <<"revision">> => 1,
+        <<"gri">> => gri:serialize(GRI),
+        <<"seq">> => ?SPACE_MOCKED_LATEST_EMITTED_SEQ
+    }}};
 
 mock_graph_get(GRI = #gri{type = od_share, id = ShareId, aspect = instance}, AuthOverride, _) ->
     Authorized = case {AuthOverride, GRI#gri.scope} of

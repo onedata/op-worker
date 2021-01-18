@@ -22,6 +22,9 @@
 -export([send/2, forward/1, broadcast/4]).
 -export([request_changes/4, send_changes/6, broadcast_changes/5]).
 
+% Test API
+-export([send_changes_with_extended_info/7]).
+
 -type changes_batch() :: #changes_batch{}.
 -type changes_request() :: #changes_request2{}.
 -type tree_broadcast() :: #tree_broadcast2{}.
@@ -158,6 +161,14 @@ send_changes(ProviderId, SpaceId, Since, Until, Timestamp, Docs) ->
         compressed_docs = dbsync_utils:compress(Docs)
     }).
 
+% TODO VFS-7031 - Function for tests - will be implemented when
+% #custom_changes_requests are used in dbsync main messages flow
+-spec send_changes_with_extended_info(od_provider:id(), od_space:id(), couchbase_changes:since(),
+    couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()],
+    dbsync_processed_seqs_history:encoded_correlations()) -> ok.
+send_changes_with_extended_info(_ProviderId, _SpaceId, _Since, _Until, _Timestamp, _Docs, _OtherProvidersSeqs) ->
+    ok.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Broadcast changes from a space in given range to all providers supporting
@@ -206,7 +217,7 @@ get_next_broadcast_hops(SpaceId, Opts) ->
     ProviderIds = dbsync_utils:get_providers(SpaceId),
     ProviderIds2 = select_receiving_providers(ProviderIds, Opts),
 
-    MinSupport = application:get_env(?APP_NAME, multipath_broadcast_min_support, 8),
+    MinSupport = op_worker:get_env(multipath_broadcast_min_support, 8),
     Multipath = length(ProviderIds2) >= MinSupport,
 
     Pivot = case Multipath of

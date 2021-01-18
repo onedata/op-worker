@@ -118,6 +118,9 @@
 
     harvesters = [] :: [od_harvester:id()],
 
+    support_parameters_registry = #{} :: support_parameters:registry(),
+    support_stage_registry = #{} :: support_stage:registry(),
+
     cache_state = #{} :: cache_state()
 }).
 
@@ -667,7 +670,10 @@
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
-    seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}}
+    sync_progress = #{} :: dbsync_state:sync_progress(),
+    % Fields describing correlation between providers' sequences - see dbsync_seqs_correlation.erl
+    seqs_correlations = #{} :: dbsync_seqs_correlation:providers_correlations(),
+    correlation_persisting_seq = 0 :: datastore_doc:seq()
 }).
 
 %% Model that holds state entries for DBSync worker

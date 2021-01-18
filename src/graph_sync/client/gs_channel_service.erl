@@ -174,6 +174,7 @@ healthcheck(LastInterval) ->
             ?debug("Skipping Onezone connection as the provider is not registered"),
             {ok, calculate_backoff(LastInterval)};
         {true, true} ->
+            gs_hooks:handle_successful_healthcheck(),
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
         {true, false} ->
             case try_to_start_connection() of

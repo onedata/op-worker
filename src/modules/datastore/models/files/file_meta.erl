@@ -760,7 +760,7 @@ setup_onedata_user(UserId, EffSpaces) ->
                         key = FileUuid,
                         value = #times{mtime = CTime, atime = CTime, ctime = CTime},
                         scope = ?ROOT_DIR_SCOPE
-                    }),
+                    }, false),
                     ok;
                 {error, already_exists} ->
                     ok
@@ -842,7 +842,7 @@ make_space_exist(SpaceId) ->
                 value = #times{mtime = CTime, atime = CTime, ctime = CTime},
                 scope = SpaceId
             },
-            case times:save(TimesDoc) of
+            case times:save(TimesDoc, false) of
                 {ok, _} -> ok;
                 {error, already_exists} -> ok
             end,

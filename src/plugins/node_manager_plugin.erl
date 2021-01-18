@@ -37,17 +37,20 @@
 -type record_version() :: datastore_model:record_version().
 
 % List of all known cluster generations.
-% When cluster is not in newest generation it will be upgraded during initialization.
-% This can be used to e.g. move models between services.
-% Oldest upgradable generation is the lowest one that can be directly upgraded to newest.
-% Human readable version is included to for logging purposes.
+% If the cluster is not in the newest generation, it will be upgraded during initialization.
+% This can be used to e.g. interactively upgrade the database or move models between services.
+% Oldest upgradable generation is the lowest one that can be directly upgraded to
+% the newest (current one) - if the cluster is in lower version, it will have to
+% be first upgraded to an intermediate version.
+% Human readable version is included for easier maintenance and logging purposes.
 -define(CLUSTER_GENERATIONS, [
     {1, ?LINE_19_02},
     {2, ?LINE_20_02(<<"0-beta3">>)},
     {3, ?LINE_20_02(<<"1">>)},
-    {4, op_worker:get_release_version()}
+    {4, ?LINE_20_02(<<"2">>)},
+    {5, op_worker:get_release_version()}
 ]).
--define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 1).
+-define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
 
 %%%===================================================================
@@ -148,16 +151,13 @@ before_cluster_upgrade() ->
 %%--------------------------------------------------------------------
 -spec upgrade_cluster(node_manager:cluster_generation()) ->
     {ok, node_manager:cluster_generation()}.
-upgrade_cluster(1) ->
-    await_zone_connection_and_run(fun storage:migrate_to_zone/0),
-    {ok, 2};
-upgrade_cluster(2) ->
-    await_zone_connection_and_run(fun storage:migrate_imported_storages_to_zone/0),
-    {ok, 3};
 upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
-    {ok, 4}.
+    {ok, 4};
+upgrade_cluster(4) ->
+    await_zone_connection_and_run(fun storage:upgrade_supports_to_21_02/0),
+    {ok, 5}.
 
 %%--------------------------------------------------------------------
 %% @doc

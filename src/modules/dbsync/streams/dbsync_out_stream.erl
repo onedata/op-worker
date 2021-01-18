@@ -20,6 +20,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -29,30 +30,38 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--type filter() :: fun((datastore:doc()) -> boolean()).
--type handler() :: fun((couchbase_changes:since(),
-                        couchbase_changes:until() | end_of_stream,
-                        dbsync_changes:timestamp(),
-                        [datastore:doc()]) -> any()).
+-type batch_handler() :: fun((couchbase_changes:since(),
+                              couchbase_changes:until() | end_of_stream,
+                              dbsync_changes:timestamp(),
+                              [datastore:doc()]) -> any()).
 -type option() :: {main_stream, boolean()} |
-                  {filter, filter()} |
-                  {handler, handler()} |
+                  {local_changes_only, boolean()} |
+                  {batch_handler, batch_handler()} |
                   {handling_interval, non_neg_integer()} |
                   couchbase_changes:option().
+-type remote_sequence_info() :: #remote_sequence_info{}.
 
--export_type([option/0]).
-
+-export_type([option/0, remote_sequence_info/0]).
 -record(state, {
+    space_id :: od_space:id(),
+    main_stream :: boolean(),
     since :: couchbase_changes:since(),
     until :: couchbase_changes:until(),
-    changes :: [datastore:doc()],
-    filter :: filter(),
-    handler :: handler(),
+    local_changes_only :: boolean(),
+    except_mutator = <<>> :: oneprovider:id(),
+    % TODO VFS-7031 eliminate undefined/null/0 from protocol
+    % (init last_timestamp from db, do not clean on flush)
+    last_timestamp :: dbsync_changes:timestamp(),
+    batch_handler :: batch_handler(),
     handling_ref :: undefined | reference(),
-    handling_interval :: non_neg_integer()
+    handling_interval :: non_neg_integer(),
+    batch_cache :: dbsync_out_stream_batch_cache:cache()
 }).
 
 -type state() :: #state{}.
+
+-define(DEFAULT_HANDLING_INTERVAL,
+    op_worker:get_env(dbsync_out_stream_handling_interval, timer:seconds(5))).
 
 %%%===================================================================
 %%% API
@@ -87,26 +96,29 @@ init([SpaceId, Opts]) ->
     Bucket = dbsync_utils:get_bucket(),
     Since = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
     Callback = fun(Change) -> gen_server:cast(Stream, {change, Change}) end,
+    MainStream = proplists:get_value(main_stream, Opts, false),
 
-    {ok, _} = case proplists:get_value(main_stream, Opts, false) of
+    {ok, _} = case MainStream of
         true ->
             couchbase_changes_worker:start_link(Bucket, SpaceId, Callback,
                 proplists:get_value(since, Opts, Since));
         false ->
             couchbase_changes_stream:start_link(Bucket, SpaceId, Callback, [
                 {since, proplists:get_value(since, Opts, Since)},
-                {until, proplists:get_value(until, Opts, infinity)},
-                {except_mutator, proplists:get_value(except_mutator, Opts, <<>>)}
+                {until, proplists:get_value(until, Opts, infinity)}
             ], [])
     end,
 
     {ok, schedule_docs_handling(#state{
+        space_id = SpaceId,
+        main_stream = MainStream,
         since = proplists:get_value(since, Opts, Since),
         until = proplists:get_value(since, Opts, Since),
-        changes = [],
-        filter = proplists:get_value(filter, Opts, fun(_) -> true end),
-        handler = proplists:get_value(handler, Opts, fun(_, _, _) -> ok end),
-        handling_interval = proplists:get_value(handling_interval, Opts, 5000)
+        local_changes_only = proplists:get_value(local_changes_only, Opts, false),
+        except_mutator = proplists:get_value(except_mutator, Opts, <<>>),
+        batch_handler = proplists:get_value(batch_handler, Opts, fun(_, _, _) -> ok end),
+        handling_interval = proplists:get_value(handling_interval, Opts, ?DEFAULT_HANDLING_INTERVAL),
+        batch_cache = dbsync_out_stream_batch_cache:empty()
     })}.
 
 %%--------------------------------------------------------------------
@@ -138,31 +150,41 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_cast({change, {ok, Docs}}, State = #state{
-    filter = Filter
+    local_changes_only = LocalChangesOnly,
+    except_mutator = ExceptMutator
 }) when is_list(Docs)->
     FinalState = lists:foldl(fun(Doc, TmpState) ->
-        handle_doc_change(Doc, Filter, TmpState)
+        handle_doc_change(Doc, LocalChangesOnly, ExceptMutator, TmpState)
     end, State, Docs),
     {noreply, FinalState};
 handle_cast({change, {ok, #document{} = Doc}}, State = #state{
-    filter = Filter
+    local_changes_only = LocalChangesOnly,
+    except_mutator = ExceptMutator
 }) ->
-    {noreply, handle_doc_change(Doc, Filter, State)};
+    {noreply, handle_doc_change(Doc, LocalChangesOnly, ExceptMutator, State)};
 handle_cast({change, {ok, end_of_stream}}, State = #state{
     since = Since,
     until = Until,
-    changes = Docs,
-    handler = Handler
+    batch_cache = Cache,
+    batch_handler = Handler,
+    last_timestamp = Timestamp
 }) ->
-    Handler(Since, end_of_stream, get_batch_timestamp(Docs), lists:reverse(Docs)),
-    {stop, normal, State#state{since = Until, changes = []}};
+    Handler(Since, end_of_stream, Timestamp, dbsync_out_stream_batch_cache:get_changes(Cache)),
+    % TODO VFS-7033 - verify behaviour if node fails here
+    % (after handler execution but before correlation processing)
+    process_remote_mutations(State),
+    {stop, normal, State#state{since = Until,
+        batch_cache = dbsync_out_stream_batch_cache:empty(), last_timestamp = undefined}};
 handle_cast({change, {error, Seq, Reason}}, State = #state{
     since = Since,
-    changes = Docs,
-    handler = Handler
+    batch_cache = Cache,
+    batch_handler = Handler,
+    last_timestamp = Timestamp
 }) ->
-    Handler(Since, Seq, get_batch_timestamp(Docs), lists:reverse(Docs)),
-    {stop, Reason, State#state{since = Seq, changes = []}};
+    Handler(Since, Seq, Timestamp, dbsync_out_stream_batch_cache:get_changes(Cache)),
+    process_remote_mutations(State),
+    {stop, Reason, State#state{since = Seq,
+        batch_cache = dbsync_out_stream_batch_cache:empty(), last_timestamp = undefined}};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -177,8 +199,8 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(handle_changes, State = #state{}) ->
-    {noreply, handle_changes(State)};
+handle_info(handle_changes_batch, State = #state{}) ->
+    {noreply, handle_changes_batch(State)};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -219,55 +241,62 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec aggregate_change(datastore:doc(), state()) -> state().
-aggregate_change(Doc = #document{seq = Seq}, State = #state{changes = Docs}) ->
+aggregate_change(Doc = #document{seq = Seq}, State = #state{batch_cache = Cache}) ->
+    UpdatedCache = dbsync_out_stream_batch_cache:cache_change(Doc, Cache),
     State2 = State#state{
         until = Seq + 1,
-        changes = [Doc | Docs]
+        batch_cache = UpdatedCache
     },
-    Len = application:get_env(?APP_NAME, dbsync_changes_broadcast_batch_size, 100),
-    case erlang:length(Docs) + 1 >= Len of
-        true -> handle_changes(State2);
+    Len = op_worker:get_env(dbsync_changes_broadcast_batch_size, 100),
+    case dbsync_out_stream_batch_cache:get_changes_num(UpdatedCache) >= Len of
+        true -> handle_changes_batch(State2);
         false -> State2
     end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handles changes by executing provided handler.
+%% Handles changes batch by executing provided handler.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_changes(state()) -> state().
-handle_changes(State = #state{
+-spec handle_changes_batch(state()) -> state().
+handle_changes_batch(State = #state{
     since = Since,
     until = Until,
-    changes = Docs,
-    handler = Handler
+    batch_cache = Cache,
+    batch_handler = Handler,
+    last_timestamp = Timestamp
 }) ->
-    MinSize = application:get_env(?APP_NAME, dbsync_handler_spawn_size, 10),
-    case length(Docs) >= MinSize of
+    Docs = dbsync_out_stream_batch_cache:get_changes(Cache),
+    MinSize = op_worker:get_env(dbsync_handler_spawn_size, 10),
+    case dbsync_out_stream_batch_cache:get_changes_num(Cache) >= MinSize of
         true ->
+            % TODO VFS-7034 - possible race between two consecutive batches?
             spawn(fun() ->
-                Handler(Since, Until, get_batch_timestamp(Docs), lists:reverse(Docs))
+                Handler(Since, Until, Timestamp, Docs),
+                process_remote_mutations(State)
             end);
         _ ->
             try
-                Handler(Since, Until, get_batch_timestamp(Docs), lists:reverse(Docs))
+                Handler(Since, Until, Timestamp, Docs)
             catch
                 _:_ ->
                     % Handle should catch own errors
                     % try/catch only to protect stream
                     ok
-            end
+            end,
+            process_remote_mutations(State)
     end,
 
-    case application:get_env(?APP_NAME, dbsync_out_stream_gc, on) of
+    case op_worker:get_env(dbsync_out_stream_gc, on) of
         on ->
             erlang:garbage_collect();
         _ ->
             ok
     end,
 
-    schedule_docs_handling(State#state{since = Until, changes = []}).
+    schedule_docs_handling(State#state{since = Until,
+        batch_cache = dbsync_out_stream_batch_cache:empty(), last_timestamp = undefined}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -281,7 +310,7 @@ schedule_docs_handling(#state{
     handling_interval = Interval
 } = State) ->
     State#state{
-        handling_ref = erlang:send_after(Interval, self(), handle_changes)
+        handling_ref = erlang:send_after(Interval, self(), handle_changes_batch)
     };
 schedule_docs_handling(State = #state{handling_ref = Ref}) ->
     erlang:cancel_timer(Ref),
@@ -293,24 +322,53 @@ schedule_docs_handling(State = #state{handling_ref = Ref}) ->
 %% Handles change that include document.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_doc_change(datastore:doc(), filter(), state()) -> state().
-handle_doc_change(#document{seq = Seq} = Doc, Filter,
+-spec handle_doc_change(datastore:doc(), boolean(), oneprovider:id(), state()) -> state().
+handle_doc_change(#document{seq = Seq} = Doc, LocalChangesOnly, ExceptMutator,
     State = #state{until = Until}) when Seq >= Until ->
-    case Filter(Doc) of
-        true -> aggregate_change(Doc, State);
-        false -> State#state{until = Seq + 1}
+    StateWithTimestampAndMutations = update_timestamp(Doc, cache_remote_mutations(Doc, State)),
+    case is_synced_change(Doc, LocalChangesOnly, ExceptMutator) of
+        true -> aggregate_change(Doc#document{remote_sequences = #{}}, StateWithTimestampAndMutations);
+        false -> StateWithTimestampAndMutations#state{until = Seq + 1}
     end;
-handle_doc_change(#document{seq = Seq} = Doc, _Filter,
+handle_doc_change(#document{seq = Seq} = Doc, _LocalChangesOnly, _ExceptMutator,
     State = #state{until = Until}) ->
     ?error("Received change with old sequence ~p. Expected sequences"
     " greater than or equal to ~p~n~p", [Seq, Until, Doc]),
     State.
 
 %% @private
--spec get_batch_timestamp([datastore:doc()]) -> dbsync_changes:timestamp().
-get_batch_timestamp([]) ->
-    undefined;
-get_batch_timestamp([#document{timestamp = null} | _]) ->
-    undefined;
-get_batch_timestamp([#document{timestamp = Timestamp} | _]) ->
-    Timestamp.
+-spec update_timestamp(datastore:doc(), state()) -> state().
+update_timestamp(#document{timestamp = null}, State) ->
+    State;
+update_timestamp(#document{timestamp = Timestamp}, State) ->
+    State#state{last_timestamp = Timestamp}.
+
+%% @private
+-spec is_synced_change(datastore:doc(), boolean(), oneprovider:id()) -> boolean().
+is_synced_change(#document{mutators = [Mutator | _]}, true, _ExceptMutator) ->
+    Mutator =:= oneprovider:get_id();
+is_synced_change(#document{mutators = [Mutator | _]}, false, ExceptMutator) ->
+    Mutator =/= ExceptMutator;
+is_synced_change(#document{} = Doc, _LocalChangesOnly, _ExceptMutator) ->
+    ?error("Document without mutator in ~p: ~p", [?MODULE, Doc]),
+    false.
+
+%% @private
+-spec cache_remote_mutations(datastore:doc(), state()) -> state().
+cache_remote_mutations(_Doc, #state{main_stream = false} = State) ->
+    State;
+cache_remote_mutations(Doc, #state{batch_cache = Cache} = State) ->
+    State#state{batch_cache = dbsync_out_stream_batch_cache:cache_remote_mutations(Doc, Cache)}.
+
+%% @private
+-spec process_remote_mutations(state()) -> ok.
+process_remote_mutations(#state{main_stream = false}) ->
+    ok;
+process_remote_mutations(#state{
+    space_id = SpaceId,
+    until = Until,
+    batch_cache = Cache
+}) ->
+    % `Until` is number of next sequence that will appear in stream so subtract 1
+    dbsync_seqs_correlation:set_sequences_correlation(SpaceId, Until - 1,
+        dbsync_out_stream_batch_cache:get_remote_mutations(Cache)).

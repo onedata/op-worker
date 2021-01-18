@@ -21,9 +21,14 @@
 
 %% API
 -export([handle_connected_to_oz/0]).
+-export([handle_successful_healthcheck/0]).
 -export([handle_disconnected_from_oz/0]).
 -export([handle_deregistered_from_oz/0]).
 -export([handle_entity_deleted/1]).
+
+-define(PROVIDER_SYNC_PROGRESS_REPORT_INTERVAL,
+    application:get_env(?APP_NAME, provider_sync_progress_report_interval_sec, 15)
+).
 
 %%%===================================================================
 %%% API
@@ -54,6 +59,24 @@ handle_connected_to_oz() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Called each time the Onezone connection is verified as healthy (every ?GS_RECONNECT_BASE_INTERVAL).
+%% Errors are logged, but ignored.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_successful_healthcheck() -> ok | error.
+handle_successful_healthcheck() ->
+    try
+        on_successful_healthcheck()
+    catch
+        Class:Reason ->
+            ?error_stacktrace("Failed to execute on-successful-healthcheck procedures - ~w:~p", [
+                Class, Reason
+            ])
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Called when the Onezone connection is terminated to allow cleaning up.
 %% Errors are logged, but ignored.
 %% @end
@@ -63,7 +86,7 @@ handle_disconnected_from_oz() ->
     try
         on_disconnect_from_oz()
     catch Class:Reason ->
-        ?error_stacktrace("Failed to run on-disconnect-from-oz procedures - ~w:~p", [
+        ?error_stacktrace("Failed to execute on-disconnect-from-oz procedures - ~w:~p", [
             Class, Reason
         ])
     end.
@@ -82,7 +105,7 @@ handle_deregistered_from_oz() ->
         on_deregister_from_oz(),
         ?notice("Oneprovider cleanup complete")
     catch Class:Reason ->
-        ?error_stacktrace("Failed to run on-deregister-from-oz procedures - ~w:~p", [
+        ?error_stacktrace("Failed to execute on-deregister-from-oz procedures - ~w:~p", [
             Class, Reason
         ])
     end.
@@ -100,11 +123,10 @@ handle_entity_deleted(GRI) ->
         on_entity_deleted(GRI),
         ok
     catch Class:Reason ->
-        ?error_stacktrace("Failed to run on-entity-deleted procedures for ~ts - ~w:~p", [
+        ?error_stacktrace("Failed to execute on-entity-deleted procedures for ~ts - ~w:~p", [
             gri:serialize(GRI), Class, Reason
         ])
     end.
-
 
 %%%===================================================================
 %%% Callback implementations
@@ -124,6 +146,12 @@ on_connect_to_oz() ->
     ok = auto_storage_import_worker:notify_connection_to_oz(),
     ok = dbsync_worker:start_streams(),
     ok = qos_worker:init_retry_failed_files().
+
+
+%% @private
+-spec on_successful_healthcheck() -> ok | no_return().
+on_successful_healthcheck() ->
+    utils:throttle(?PROVIDER_SYNC_PROGRESS_REPORT_INTERVAL, fun report_provider_sync_progress/0).
 
 
 %% @private
@@ -158,3 +186,28 @@ on_entity_deleted(#gri{type = temporary_token_secret, id = UserId, aspect = user
     ok = auth_cache:report_temporary_tokens_deletion(UserId);
 on_entity_deleted(_) ->
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec report_provider_sync_progress() -> ok.
+report_provider_sync_progress() ->
+    try
+        {ok, Spaces} = provider_logic:get_spaces(),
+        lists:foreach(fun report_provider_sync_progress/1, Spaces)
+    catch Class:Reason ->
+        ?error_stacktrace("Failed to report provider sync progress to Onezone due to ~w:~p", [Class, Reason])
+    end.
+
+
+%% @private
+-spec report_provider_sync_progress(od_space:id()) -> ok.
+report_provider_sync_progress(SpaceId) ->
+    {ok, Providers} = space_logic:get_provider_ids(SpaceId),
+    Report = provider_sync_progress:build_collective_report(Providers, fun(ProviderId) ->
+        dbsync_state:get_sync_progress(SpaceId, ProviderId)
+    end),
+    space_logic:report_provider_sync_progress(SpaceId, Report).
+

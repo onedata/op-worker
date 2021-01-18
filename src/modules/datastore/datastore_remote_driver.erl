@@ -25,13 +25,19 @@
 %% remote_driver callbacks
 -export([get_async/2, wait/1]).
 
+-record(future, {
+    communicator_ans :: communicator_ans(),
+    model :: datastore_model:model(),
+    session_id :: session:id() | undefined
+}).
+
 -type ctx() :: #{model := datastore_model:model(),
                  routing_key := key(),
                  source_ids := [oneprovider:id()]}.
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
 -type communicator_ans() :: {ok, clproto_message_id:id()} | {error, term()}.
--type future() :: {communicator_ans(), session:id()}.
+-type future() :: future().
 
 
 %%%===================================================================
@@ -102,12 +108,19 @@ get_async(#{
                     _:Reason ->
                         {error, Reason}
                 end,
-                {SendAns, SessId}
+                #future{
+                    communicator_ans = SendAns,
+                    model = Model,
+                    session_id = SessId
+                }
         end
     catch
         _:Reason2 ->
             ?error_stacktrace("Datastore remote get failed due to: ~p", [Reason2]),
-            {error, Reason2}
+            #future{
+                communicator_ans = {error, Reason2},
+                model = Model
+            }
     end.
 
 %%--------------------------------------------------------------------
@@ -116,7 +129,7 @@ get_async(#{
 %% @end
 %%--------------------------------------------------------------------
 -spec wait(future()) -> {ok, doc()} | {error, term()}.
-wait({{ok, MsgId}, _} = Future) ->
+wait(#future{communicator_ans = {ok, MsgId}} = Future) ->
     Timeout = application:get_env(op_worker, datastore_remote_driver_timeout,
         timer:minutes(1)),
     receive
@@ -150,12 +163,12 @@ wait({{ok, MsgId}, _} = Future) ->
         % TODO VFS-4025 - multiprovider communication
         Timeout -> {error, timeout}
     end;
-wait({{error, {badmatch, {error, internal_call}}}, SessId}) ->
-    ?debug("Remote driver internal call"),
+wait(#future{communicator_ans = {error, {badmatch, {error, internal_call}}}, model = Model, session_id = SessId}) ->
+    ?warning("Remote driver internal call for model ~p and session ~p", [Model, SessId]),
     spawn(fun() ->
         session_connections:ensure_connected(SessId)
     end),
     {error, interrupted_call};
-wait({{error, Reason}, _}) ->
-    ?debug("Remote driver error ~p", [Reason]),
+wait(#future{communicator_ans = {error, Reason}, model = Model, session_id = SessId}) ->
+    ?error("Remote driver error ~p for model ~p and session ~p", [Reason, Model, SessId]),
     {error, interrupted_call}.

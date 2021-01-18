@@ -24,10 +24,11 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/space_support/support_stage.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -export([get/2, get_protected_data/2]).
--export([get_name/2]).
+-export([get_name/1, get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
 -export([is_owner/2]).
@@ -41,6 +42,9 @@
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
+-export([report_provider_sync_progress/2]).
+-export([get_support_stage_registry/1]).
+-export([get_latest_emitted_seq/2]).
 -export([on_space_supported/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
@@ -81,8 +85,12 @@ get_protected_data(SessionId, SpaceId) ->
     }).
 
 
--spec get_name(gs_client_worker:client(), od_space:id()) ->
-    {ok, od_space:name()} | errors:error().
+
+-spec get_name(od_space:id()) -> {ok, od_space:name()} | errors:error().
+get_name(SpaceId) ->
+    get_name(?ROOT_SESS_ID, SpaceId).
+
+-spec get_name(gs_client_worker:client(), od_space:id()) -> {ok, od_space:name()} | errors:error().
 get_name(SessionId, SpaceId) ->
     case get_protected_data(SessionId, SpaceId) of
         {ok, #document{value = #od_space{name = Name}}} ->
@@ -395,6 +403,36 @@ get_harvesters(SpaceId) ->
             ?error("space_logic:get_harvesters(~p) failed due to ~p", [SpaceId, Error]),
             Error
     end.
+
+
+-spec report_provider_sync_progress(od_space:id(), provider_sync_progress:collective_report()) -> ok | errors:error().
+report_provider_sync_progress(SpaceId, CollectiveReport) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = space_stats, id = SpaceId, aspect = {provider_sync_progress, oneprovider:get_id()}},
+        data = #{
+            <<"providerSyncProgressReport">> => provider_sync_progress:collective_report_to_json(CollectiveReport)
+        }
+    }).
+
+
+-spec get_support_stage_registry(od_space:id()) -> {ok, support_stage:registry()} | errors:error().
+get_support_stage_registry(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{support_stage_registry = SupportStageRegistry}}} ->
+            {ok, SupportStageRegistry};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_latest_emitted_seq(od_space:id(), od_provider:id()) ->
+    {ok, provider_sync_progress:seen_seq()} | errors:error().
+get_latest_emitted_seq(SpaceId, ProviderId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = space_stats, id = SpaceId, aspect = {latest_emitted_seq, ProviderId}}
+    }).
 
 
 -spec on_space_supported(od_space:id()) -> ok.
