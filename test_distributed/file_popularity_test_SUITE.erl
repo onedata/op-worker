@@ -333,6 +333,9 @@ time_warp_test(Config) ->
     {ok, FileId2} = file_id:guid_to_objectid(G2),
     {ok, FileId3} = file_id:guid_to_objectid(G3),
 
+    % Files should be sorted by increasing timestamp of last open
+    % Due to time warps, file that was created as last one has the smallest timestamp so the files
+    % should be sorted in reverse order than they were created
     ?assertMatch([{FileId3, _}, {FileId2, _}, {FileId1, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 %%%===================================================================
