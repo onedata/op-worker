@@ -6,18 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% Util functions for operation on files using lfm_proxy.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_test_utils).
 -author("Jakub Kudzia").
 
-
 -include("lfm_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
--export([clean_space/3, clean_space/4, ensure_space_and_trash_are_empty/3, is_space_dir_empty/4]).
+-export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
 -export([create_files_tree/4]).
 
 % TODO merge this module with file_ops_test_utils
@@ -29,11 +28,10 @@
 create_files_tree(Worker, SessId, Structure, RootGuid) ->
     create_files_tree(Worker, SessId, Structure, RootGuid, <<"dir">>, <<"file">>, [], []).
 
-clean_space(Worker, SpaceId, Attempts) when is_atom(Worker) ->
-    clean_space([Worker], SpaceId, Attempts);
-clean_space(Workers, SpaceId, Attempts) when is_list(Workers) ->
-    CleaningWorker = lists_utils:random_element(Workers),
-    clean_space(CleaningWorker, Workers, SpaceId, Attempts).
+clean_space(Workers, SpaceId, Attempts) ->
+    Workers2 = utils:ensure_list(Workers),
+    CleaningWorker = lists_utils:random_element(Workers2),
+    clean_space(CleaningWorker, Workers2, SpaceId, Attempts).
 
 clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
@@ -42,36 +40,32 @@ clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, undefined, BatchSize, false),
     % TODO VFS-7064 remove below line after introducing link to trash directory
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId), undefined, BatchSize, false),
-    ensure_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
+    assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
 
-is_space_dir_empty(Worker, SessId, SpaceId, Attempts) ->
+assert_space_dir_empty(Workers, SpaceId, Attempts) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    ?assertMatch({ok, []},
-        % TODO VFS-7064 after introducing link to trash directory this function must be adapted
-        lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, 0, 10), Attempts).
-
-
-ensure_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
-    Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     lists:foreach(fun(W) ->
-        case supports_space(W, SpaceId) of
+        ?assertMatch({ok, []},
+            % TODO VFS-7064 after introducing link to trash directory this function must be adapted
+            lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10), Attempts)
+    end, utils:ensure_list(Workers)).
+
+
+assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    lists:foreach(fun(W) ->
+        case op_test_rpc:supports_space(W, SpaceId) of
             true ->
                 ?assertMatch({ok, []},
-                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, Guid}, 0, 100), Attempts),
+                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 100), Attempts),
                 % trash directory should be empty
                 ?assertMatch({ok, []},
                     lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)}, 0, 100), Attempts),
-                ?assertEqual(0, space_occupation(W, SpaceId), Attempts);
+                ?assertEqual(0, op_test_rpc:space_capacity_usage(W, SpaceId), Attempts);
             false ->
                 ok
         end
-    end, Workers).
-
-space_occupation(Worker, SpaceId) ->
-    rpc:call(Worker, space_quota, current_size, [SpaceId]).
-
-supports_space(Worker, SpaceId) ->
-    rpc:call(Worker, provider_logic, supports_space, [SpaceId]).
+    end, utils:ensure_list(Workers)).
 
 %%%===================================================================
 %%% Internal functions
@@ -83,10 +77,10 @@ rm_recursive(Worker, SessId, DirGuid, Token, BatchSize) ->
 rm_recursive(Worker, SessId, DirGuid, Token, BatchSize, DeleteDir) ->
     case lfm_proxy:get_children(Worker, SessId, {guid, DirGuid}, 0, BatchSize, Token) of
         {ok, GuidsAndNames, Token2, IsLast} ->
-            case rm_children(Worker, SessId, GuidsAndNames, BatchSize) of
+            case rm_files(Worker, SessId, GuidsAndNames, BatchSize) of
                 ok ->
                     case IsLast of
-                        true when DeleteDir -> lfm_proxy:rmdir(Worker, SessId, {guid, DirGuid});
+                        true when DeleteDir -> lfm_proxy:unlink(Worker, SessId, {guid, DirGuid});
                         true -> ok;
                         false -> rm_recursive(Worker, SessId, DirGuid, Token2, BatchSize, DeleteDir)
                     end;
@@ -98,15 +92,17 @@ rm_recursive(Worker, SessId, DirGuid, Token, BatchSize, DeleteDir) ->
     end.
 
 
-rm_children(Worker, SessId, GuidsAndPaths, BatchSize) ->
+rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
     Results = lists:map(fun({G, Name}) ->
         case Name =:= ?TRASH_DIR_NAME of
             true ->
                 rm_recursive(Worker, SessId, G, undefined, BatchSize, false);
             false ->
-                case is_dir(Worker, SessId, G) of
-                    true -> rm_recursive(Worker, SessId, G, undefined, BatchSize);
-                    false -> lfm_proxy:unlink(Worker, SessId, {guid, G});
+                case lfm_proxy:is_dir(Worker, SessId, {guid, G}) of
+                    true ->
+                        rm_recursive(Worker, SessId, G, undefined, BatchSize);
+                    false ->
+                        lfm_proxy:unlink(Worker, SessId, {guid, G});
                     {error, not_found} -> ok;
                     Error -> Error
                 end
@@ -153,11 +149,3 @@ create_children(ChildPrefix, ChildCount, CreateFun) ->
         ChildName = str_utils:format_bin("~s_~p", [ChildPrefix, N]),
         CreateFun(ChildName)
     end, lists:seq(1, ChildCount)).
-
-
-is_dir(Worker, SessId, Guid) ->
-    case lfm_proxy:stat(Worker, SessId, {guid, Guid}) of
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
-        {ok, _} -> false;
-        Error -> Error
-    end.

@@ -37,7 +37,7 @@ schedule_file_transfer(
     ReplicatingProviderId, EvictingProviderId,
     Callback
 ) ->
-    assert_trash_dir_will_not_be_replicated(ReplicatingProviderId, FileCtx0),
+    assert_not_a_trash_dir_replication(ReplicatingProviderId, FileCtx0),
     data_constraints:assert_not_readonly_mode(UserCtx),
 
     FileCtx1 = fslogic_authz:ensure_authorized(
@@ -112,8 +112,8 @@ schedule_transfer_insecure(
     ?PROVIDER_OK_RESP(#scheduled_transfer{transfer_id = TransferId}).
 
 
--spec assert_trash_dir_will_not_be_replicated(undefined | od_provider:id(), file_ctx:ctx()) -> ok.
-assert_trash_dir_will_not_be_replicated(undefined, _) ->
+-spec assert_not_a_trash_dir_replication(undefined | od_provider:id(), file_ctx:ctx()) -> ok.
+assert_not_a_trash_dir_replication(undefined, _) ->
     ok;
-assert_trash_dir_will_not_be_replicated(_ReplicatingProviderId, FileCtx0) ->
+assert_not_a_trash_dir_replication(_ReplicatingProviderId, FileCtx0) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0).

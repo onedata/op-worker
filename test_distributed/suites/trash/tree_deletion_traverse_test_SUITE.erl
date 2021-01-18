@@ -12,16 +12,13 @@
 -module(tree_deletion_traverse_test_SUITE).
 -author("Jakub Kudzia").
 
-% TODO jk dodać suite na bamboo
-
--include("lfm_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/traverse/storage_traverse.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -46,13 +43,12 @@ all() -> ?ALL([
     delete_tree_test
 ]).
 
--define(SPACE_ID, <<"space1">>).
+-define(SPACE_PLACEHOLDER, space1).
+-define(SPACE_ID, oct_background:get_space_id(?SPACE_PLACEHOLDER)).
 -define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID)).
 -define(SPACE_UUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
 -define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID)).
 -define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
--define(USER1, <<"user1">>).
--define(SESS_ID(Worker, Config), ?SESS_ID(?USER1, Worker, Config)).
 -define(ATTEMPTS, 30).
 -define(RAND_DIR_NAME, <<"dir_", (integer_to_binary(rand:uniform(1000)))/binary>>).
 
@@ -61,41 +57,64 @@ all() -> ?ALL([
 %%% Test functions
 %%%===================================================================
 
-delete_empty_dir_test(Config) ->
-    delete_files_structure_test_base(Config, []).
+delete_empty_dir_test(_Config) ->
+    delete_files_structure_test_base([]).
 
-delete_regular_files_test(Config) ->
-   delete_files_structure_test_base(Config, [{0, 10000}]).
+delete_regular_files_test(_Config) ->
+   delete_files_structure_test_base([{0, 1000}]).
 
-delete_empty_dirs_test(Config) ->
-    delete_files_structure_test_base(Config, [{10000, 0}]).
+delete_empty_dirs_test(_Config) ->
+    delete_files_structure_test_base([{1000, 0}]).
 
-delete_empty_dirs2_test(Config) ->
-    delete_files_structure_test_base(Config, [{10, 0}, {10, 0}, {10, 0}, {10, 0}]).
+delete_empty_dirs2_test(_Config) ->
+    delete_files_structure_test_base([{10, 0}, {10, 0}, {10, 0}]).
 
-delete_tree_test(Config) ->
-    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}, {10, 10}]).
+delete_tree_test(_Config) ->
+    delete_files_structure_test_base([{10, 10}, {10, 10}, {10, 10}]).
 
 
 %%%===================================================================
 %%% Test bases
 %%%===================================================================
 
-delete_files_structure_test_base(Config, FilesStructure) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    mock_traverse_finished(W1, self()),
-    DirName = ?RAND_DIR_NAME,
-    {ok, RootGuid} = lfm_proxy:mkdir(W1, ?SESS_ID(W1, Config), ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
-    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(W1, ?SESS_ID(W1, Config), FilesStructure, RootGuid),
-    RootDirCtx = file_ctx:new_by_guid(RootGuid),
-    UserCtx = rpc:call(W1, user_ctx, new, [?SESS_ID(W1, Config)]),
+delete_files_structure_test_base(FilesStructure) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
 
-    {ok, TaskId} = rpc:call(W1, tree_deletion_traverse, start, [RootDirCtx, UserCtx, false, ?SPACE_UUID]),
+    mock_traverse_finished(P1Node, self()),
+    DirName = ?RAND_DIR_NAME,
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    {ok, RootGuid} = try
+        lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS)
+    catch
+        E0:R0 ->
+            ct:pal("ASSERT FAILED: ~p", [{E0, R0}]),
+            ct:pal(
+                "SessId = ~p.~n"
+                "DirName = ~p.~n"
+                "SpaceGuid = ~p.", [UserSessIdP1, DirName, ?SPACE_GUID]),
+            ct:timetrap({hours, 10}),
+            ct:sleep({hours, 10})
+    end,
+    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, FilesStructure, RootGuid),
+    RootDirCtx = file_ctx:new_by_guid(RootGuid),
+    UserCtx = rpc:call(P1Node, user_ctx, new, [UserSessIdP1]),
+
+    {ok, TaskId} = rpc:call(P1Node, tree_deletion_traverse, start, [RootDirCtx, UserCtx, false, ?SPACE_UUID]),
     await_traverse_finished(TaskId),
 
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, ?SESS_ID(W1, Config), {guid, ?SPACE_GUID}, 0, 10000)),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?SPACE_GUID}, 0, 10000)),
     lists:foreach(fun(Guid) ->
-        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W1, ?SESS_ID(W1, Config), {guid, Guid}))
+        try
+            ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(P1Node, UserSessIdP1, {guid, Guid}))
+        catch
+            E:R ->
+                ct:pal("ASSERT FAILED: ~p", [{E, R}]),
+                ct:pal(
+                    "SessId = ~p.~n"
+                    "Guid = ~p.", [UserSessIdP1, Guid]),
+                ct:timetrap({hours, 10}),
+                ct:sleep({hours, 10})
+        end
     end, [RootGuid | DirGuids] ++ FileGuids).
 
 %===================================================================
@@ -103,35 +122,27 @@ delete_files_structure_test_base(Config, FilesStructure) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        initializer:mock_provider_ids(NewConfig),
-        NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
-        sort_workers(NewConfig2)
-    end,
-    [
-        {?ENV_UP_POSTHOOK, Posthook},
-        {?LOAD_MODULES, [initializer, ?MODULE]}
-        | Config
-    ].
+    ssl:start(),
+    hackney:start(),
+    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "trash_tests"}).
 
-end_per_suite(Config) ->
-    multi_provider_file_ops_test_base:teardown_env(Config).
+end_per_suite(_Config) ->
+    hackney:stop(),
+    ssl:stop().
 
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 end_per_testcase(_Case, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    lfm_test_utils:clean_space(W1, ?SPACE_ID, ?ATTEMPTS),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    AllNodes = [P1Node, P2Node],
+    lfm_test_utils:clean_space(P1Node, AllNodes, ?SPACE_ID, ?ATTEMPTS),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-sort_workers(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
 
 mock_traverse_finished(Worker, TestProcess) ->
     ok = test_utils:mock_new(Worker, tree_deletion_traverse),

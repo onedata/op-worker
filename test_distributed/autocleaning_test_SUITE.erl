@@ -776,7 +776,7 @@ init_per_testcase(default, Config) ->
     ensure_controller_stopped(W, ?SPACE_ID),
     clean_autocleaning_run_model(W, ?SPACE_ID),
     Config2 = lfm_proxy:init(Config),
-    lfm_test_utils:ensure_space_and_trash_are_empty(Workers, ?SPACE_ID, ?ATTEMPTS),
+    lfm_test_utils:assert_space_and_trash_are_empty(Workers, ?SPACE_ID, ?ATTEMPTS),
     Config2;
 
 init_per_testcase(_Case, Config) ->

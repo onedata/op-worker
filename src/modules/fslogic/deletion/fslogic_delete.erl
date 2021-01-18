@@ -31,10 +31,10 @@
 -export([delete_parent_link/2, get_open_file_handling_method/1]).
 
 
-% below type determines how deletion of opened files is handled
-% ?RENAME means that an opened file is moved to a special directory with name ?DELETED_OPENED_FILES_DIR
-% ?DELETION_MARKER means that a deletion_marker is added for the file (see deletion_marker.erl)
--type opened_file_deletion_method() :: ?RENAME | ?DELETION_MARKER.
+% Below type determines strategies for handling deletion of opened files.
+% ?RENAME_DELETED means that an opened file is moved to a special directory with name ?DELETED_OPENED_FILES_DIR
+% ?SET_DELETION_MARKER means that a deletion_marker is added for the file (see deletion_marker.erl)
+-type opened_file_deletion_method() :: ?RENAME_DELETED | ?SET_DELETION_MARKER.
 
 %% Macros defining scopes of deleting docs associated with file.
 % ?LOCAL_DOCS scope is used in case of remote deletion
@@ -187,16 +187,16 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
 %%--------------------------------------------------------------------
 -spec custom_handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), opened_file_deletion_method()) ->
     file_ctx:ctx().
-custom_handle_opened_file(FileCtx, UserCtx, DocsDeletionScope, ?RENAME) ->
+custom_handle_opened_file(FileCtx, UserCtx, DocsDeletionScope, ?RENAME_DELETED) ->
     FileCtx3 = case maybe_rename_storage_file(FileCtx) of
         {ok, FileCtx2} -> FileCtx2;
         {error, _} -> FileCtx
     end,
     % TODO VFS-6114 maybe we should call maybe_try_to_delete_parent/3 here?
     maybe_delete_parent_link(FileCtx3, UserCtx, DocsDeletionScope == ?LOCAL_DOCS);
-custom_handle_opened_file(FileCtx, UserCtx, ?LOCAL_DOCS, ?DELETION_MARKER) ->
+custom_handle_opened_file(FileCtx, UserCtx, ?LOCAL_DOCS, ?SET_DELETION_MARKER) ->
     maybe_add_deletion_marker(FileCtx, UserCtx);
-custom_handle_opened_file(FileCtx, UserCtx, _DocsDeletionScope, ?DELETION_MARKER) ->
+custom_handle_opened_file(FileCtx, UserCtx, _DocsDeletionScope, ?SET_DELETION_MARKER) ->
     FileCtx2 = maybe_add_deletion_marker(FileCtx, UserCtx),
     delete_parent_link(FileCtx2, UserCtx).
 
@@ -223,7 +223,6 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeletionSpec) ->
                 Error
         end
         % TODO VFS-7138 failure to delete file from storage should result in whole procedure failure
-
     end).
 
 
@@ -260,55 +259,50 @@ delete_storage_file(FileCtx, UserCtx) ->
                 % child that is still opened or in case of race on remote deletion
                 Error;
             {error, _} = OtherError ->
-                {Format, Args} = storage_file_deletion_error_log_format_and_args(FileCtx, OtherError),
-                ?error(Format, Args),
+                log_storage_file_deletion_error(FileCtx, OtherError, false),
                 OtherError
         end
     catch
         Class:Reason ->
-            {Format2, Args2} = storage_file_deletion_error_log_format_and_args(FileCtx, {Class, Reason}),
-            ?error_stacktrace(Format2, Args2),
+            log_storage_file_deletion_error(FileCtx, {Class, Reason}, true),
             {error, Reason}
     end.
 
 
 -spec delete_file_metadata(file_ctx:ctx(), user_ctx:ctx(), spec(), boolean()) -> ok.
-delete_file_metadata(FileCtx, UserCtx, DeletionSpec, StorageFileDeleted) ->
-    case DeletionSpec of
-        ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS) ->
-            FileCtx2 = update_parent_timestamps(UserCtx, FileCtx),
-            % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
-            FileCtx3 = delete_location(FileCtx2),
-            FileCtx4 = delete_file_meta(FileCtx3),
-            remove_associated_documents(FileCtx4, StorageFileDeleted),
-            FileCtx8 = remove_deletion_marker(FileCtx4, UserCtx),
-            maybe_try_to_delete_parent(FileCtx8, UserCtx, ?ALL_DOCS);
-        ?SPEC(?TWO_STEP_DEL_INIT, _DocsDeletionScope) ->
-            % TODO VFS-6114 maybe delete file_meta and associated documents here?
-            update_parent_timestamps(UserCtx, FileCtx),
-            ok;
-        ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope) ->
-            {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-            FileCtx3 = delete_location(FileCtx2),
-            file_meta:delete_without_link(FileDoc), % do not match, document may not exist
-            case DocsDeletionScope of
-                ?ALL_DOCS ->
-                    remove_associated_documents(FileCtx3, StorageFileDeleted),
-                    % remove deletion marker even if open_file_handling method is rename
-                    % as deletion marker may have been created when error occurred on deleting file on storage
-                    FileCtx4 = remove_deletion_marker(FileCtx3, UserCtx),
-                    maybe_try_to_delete_parent(FileCtx4, UserCtx, DocsDeletionScope);
-                ?LOCAL_DOCS->
-                    remove_local_associated_documents(FileCtx3, StorageFileDeleted),
-                    % remove deletion marker even if open_file_handling method is rename
-                    % as deletion marker may have been created when error occurred on deleting file on storage
-                    FileCtx4 = remove_deletion_marker(FileCtx3, UserCtx),
-                    maybe_try_to_delete_parent(FileCtx4, UserCtx, DocsDeletionScope)
-            end;
-        ?SPEC(?SINGLE_STEP_DEL, ?LOCAL_DOCS) ->
-            FileCtx2 = delete_location(FileCtx),
-            remove_local_associated_documents(FileCtx2, StorageFileDeleted),
-            maybe_try_to_delete_parent(FileCtx2, UserCtx, ?LOCAL_DOCS)
+delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS), StorageFileDeleted) ->
+    FileCtx2 = update_parent_timestamps(UserCtx, FileCtx),
+    % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
+    FileCtx3 = delete_location(FileCtx2),
+    FileCtx4 = delete_file_meta(FileCtx3),
+    remove_associated_documents(FileCtx4, StorageFileDeleted),
+    FileCtx8 = remove_deletion_marker(FileCtx4, UserCtx),
+    maybe_try_to_delete_parent(FileCtx8, UserCtx, ?ALL_DOCS);
+delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?LOCAL_DOCS), StorageFileDeleted) ->
+    FileCtx2 = delete_location(FileCtx),
+    remove_local_associated_documents(FileCtx2, StorageFileDeleted),
+    maybe_try_to_delete_parent(FileCtx2, UserCtx, ?LOCAL_DOCS);
+delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_INIT, _DocsDeletionScope), _StorageFileDeleted) ->
+    % TODO VFS-6114 maybe delete file_meta and associated documents here?
+    update_parent_timestamps(UserCtx, FileCtx),
+    ok;
+delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope), StorageFileDeleted) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    FileCtx3 = delete_location(FileCtx2),
+    file_meta:delete_without_link(FileDoc), % do not match, document may not exist
+    case DocsDeletionScope of
+        ?ALL_DOCS ->
+            remove_associated_documents(FileCtx3, StorageFileDeleted),
+            % remove deletion marker even if open_file_handling method is rename
+            % as deletion marker may have been created when error occurred on deleting file on storage
+            FileCtx4 = remove_deletion_marker(FileCtx3, UserCtx),
+            maybe_try_to_delete_parent(FileCtx4, UserCtx, DocsDeletionScope);
+        ?LOCAL_DOCS->
+            remove_local_associated_documents(FileCtx3, StorageFileDeleted),
+            % remove deletion marker even if open_file_handling method is rename
+            % as deletion marker may have been created when error occurred on deleting file on storage
+            FileCtx4 = remove_deletion_marker(FileCtx3, UserCtx),
+            maybe_try_to_delete_parent(FileCtx4, UserCtx, DocsDeletionScope)
     end.
 
 
@@ -439,8 +433,8 @@ get_open_file_handling_method(FileCtx) ->
     {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
     Helper = storage:get_helper(Storage),
     case helper:is_rename_supported(Helper) of
-        true -> {?RENAME, FileCtx2};
-        _ -> {?DELETION_MARKER, FileCtx2}
+        true -> {?RENAME_DELETED, FileCtx2};
+        _ -> {?SET_DELETION_MARKER, FileCtx2}
     end.
 
 
@@ -580,15 +574,19 @@ delete_location(FileCtx) ->
             end;
         false ->
             fslogic_location_cache:force_flush(FileUuid),
-            fslogic_location_cache:clear_local_blocks(FileCtx),
             ok = fslogic_location_cache:delete_local_location(FileUuid)
     end,
     FileCtx2.
 
 
--spec storage_file_deletion_error_log_format_and_args(file_ctx:ctx(), term()) -> {string(), [term()]}.
-storage_file_deletion_error_log_format_and_args(FileCtx, Error) ->
+-spec log_storage_file_deletion_error(file_ctx:ctx(), term(), boolean()) -> ok.
+log_storage_file_deletion_error(FileCtx, Error, IncludeStacktrace) ->
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
     FileGuid = file_ctx:get_guid_const(FileCtx3),
-    {"Deleting file ~s on storage ~s with guid ~s failed due to ~p.", [StorageFileId, StorageId, FileGuid, Error]}.
+    Format = "Deleting file ~s on storage ~s with guid ~s failed due to ~p.",
+    Args = [StorageFileId, StorageId, FileGuid, Error],
+    case IncludeStacktrace of
+        true -> ?error_stacktrace(Format, Args);
+        false -> ?error(Format, Args)
+    end.

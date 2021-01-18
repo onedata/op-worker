@@ -802,7 +802,7 @@ init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, fslogic_delete, [passthrough]),
     test_utils:mock_expect(Workers, fslogic_delete, get_open_file_handling_method,
-        fun(Ctx) -> {?DELETION_MARKER, Ctx} end
+        fun(Ctx) -> {?SET_DELETION_MARKER, Ctx} end
     ),
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).

@@ -198,7 +198,6 @@ set_xattr_internal(UserCtx, FileCtx0, ?XATTR(XattrName, XattrValue), Create, Rep
 -spec remove_xattr_internal(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:name()) ->
     fslogic_worker:fuse_response().
 remove_xattr_internal(UserCtx, FileCtx, ?ACL_KEY) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx),
     provider_to_fuse_response(acl_req:remove_acl(UserCtx, FileCtx));
 
 remove_xattr_internal(_UserCtx, _FileCtx, <<?CDMI_PREFIX_STR, _/binary>>) ->

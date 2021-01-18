@@ -927,7 +927,7 @@
     % TODO VFS-7101 use offline access token
     session_id :: session:id(),
     % Information needed to restart directory listing
-    use_token = true :: boolean(),
+    use_listing_token = true :: boolean(),
     last_name :: file_meta:name(),
     last_tree :: od_provider:id(),
     % Traverse task specific info

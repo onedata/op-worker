@@ -491,8 +491,8 @@ handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime =
     attr_req:update_times(UserCtx, FileCtx, ATime, MTime, CTime);
 handle_file_request(UserCtx, #delete_file{silent = Silent}, FileCtx) ->
     delete_req:delete(UserCtx, FileCtx, Silent);
-handle_file_request(UserCtx, #delete_using_trash{silent = Silent}, FileCtx) ->
-    delete_req:delete_using_trash(UserCtx, FileCtx, Silent);
+handle_file_request(UserCtx, #move_to_trash{emit_events = EmitEvents}, FileCtx) ->
+    delete_req:delete_using_trash(UserCtx, FileCtx, EmitEvents);
 handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCtx) ->
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #get_file_children{

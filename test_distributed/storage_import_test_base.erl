@@ -2141,7 +2141,7 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config, StorageType) -
 
     % replicate file to W1
     {ok, H3} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, G2}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W1, H3, 0, 100)),
+    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W1, H3, 0, 100), ?ATTEMPTS),
     ok = lfm_proxy:close(W1, H3),
 
     % there should be 2 files on storage
@@ -5519,7 +5519,7 @@ sync_should_not_invalidate_file_after_replication(Config) ->
 
     % replicate file to W1
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
 
@@ -6067,7 +6067,7 @@ unmock_import_file_error(Worker) ->
 mock_link_handling_method(Workers) ->
     ok = test_utils:mock_new(Workers, fslogic_delete),
     ok = test_utils:mock_expect(Workers, fslogic_delete, get_open_file_handling_method, fun(Ctx) ->
-        {?DELETION_MARKER, Ctx}
+        {?SET_DELETION_MARKER, Ctx}
     end).
 
 block_syncing_process(TestProcess) ->

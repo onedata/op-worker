@@ -1283,10 +1283,7 @@ init_per_suite(Config) ->
         NewConfig2 = initializer:setup_storage(NewConfig1),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
         end, ?config(op_worker_nodes, NewConfig2)),
 

@@ -17,7 +17,7 @@
 
 -define(BATCH_PROCESSING_PREHOOK_NOOP, fun(_, _, _, _) -> ok end).
 -define(DEFAULT_BATCH_SIZE, 1000).
--define(DEFAULT_EXECS_SLAVE_ON_DIR, false).
+-define(DEFAULT_EXEC_SLAVE_ON_DIR, false).
 -define(DEFAULT_CHILDREN_MASTER_JOBS_MODE, sync).
 -define(DEFAULT_TRACK_SUBTREE_STATUS, false).
 
@@ -46,6 +46,7 @@
     traverse_info :: tree_traverse:traverse_info()
 }).
 
+% Record that defines slave job
 -record(tree_traverse_slave, {
     file_ctx :: file_ctx:ctx(),
     traverse_info :: tree_traverse:traverse_info(),

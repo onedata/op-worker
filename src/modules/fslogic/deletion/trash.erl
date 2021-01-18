@@ -20,9 +20,6 @@
 %%%
 %%% Currently, deletion using trash is performed on directories via GUI
 %%% and REST/CDMI interfaces.
-%%% After moving the subtree rooted in given directory to the trash
-%%% a tree_deletion_traverse is scheduled on given subtree to
-%%% asynchronously delete whole subtree.
 %%%
 %%% Directories moved to trash become direct children of the trash directory.
 %%% Therefore, their names are suffixed with their uuid to avoid conflicts.
@@ -37,12 +34,9 @@
 
 
 %% API
--export([create/1, move_to_trash/1, delete_from_trash/4]).
+-export([create/1, move_to_trash/2, delete_from_trash/4]).
 
-% TODO jk Co z harvestowaniem kosza?
-% TODO jk Co z ustawianiem metadanych pod CMDI? (cdmi_metadata_req) Czy blokujemy?
-% TODO jk Czy pozwalamy zrobić share'a z kosza?
-% TODO jk Czy zakazujemy ustawiać QoS na koszu?
+% TODO jk Czy zakazujemy ustawiać QoS na koszu? - ogarnac
 
 -define(NAME_UUID_SEPARATOR, "@@").
 -define(NAME_IN_TRASH(FileName, FileUuid), <<FileName/binary, ?NAME_UUID_SEPARATOR, FileUuid/binary>>).
@@ -66,15 +60,14 @@ create(SpaceId) ->
     ok.
 
 
--spec move_to_trash(file_ctx:ctx()) -> file_ctx:ctx().
-move_to_trash(FileCtx) ->
-    file_ctx:assert_not_protected_const(FileCtx),
+-spec move_to_trash(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
+move_to_trash(FileCtx, UserCtx) ->
+    file_ctx:assert_not_special_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     Uuid = file_ctx:get_uuid_const(FileCtx),
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
-    FileCtx3 = maybe_add_deletion_marker(ParentUuid, FileCtx2),
+    FileCtx3 = add_deletion_marker_if_applicable(ParentUuid, FileCtx2),
     {Name, FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
     {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
     % files moved to trash are direct children of trash directory
@@ -87,20 +80,26 @@ move_to_trash(FileCtx) ->
     FileCtx5.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% This function starts a tree_deletion_traverse on given subtree to
+%% asynchronously remove the subtree from the trash.
+%% @end
+%%--------------------------------------------------------------------
 -spec delete_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) ->
     {ok, tree_deletion_traverse:id()}.
-delete_from_trash(FileCtx, UserCtx, Silent, RootOriginalParentUuid) ->
-    file_ctx:assert_not_protected_const(FileCtx),
+delete_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
+    file_ctx:assert_not_special_const(FileCtx),
     % TODO VFS-7101 use offline access token in tree_traverse
-    tree_deletion_traverse:start(FileCtx, UserCtx, Silent, RootOriginalParentUuid).
+    tree_deletion_traverse:start(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec maybe_add_deletion_marker(file_meta:uuid(), file_ctx:ctx()) -> file_ctx:ctx().
-maybe_add_deletion_marker(ParentUuid, FileCtx) ->
+-spec add_deletion_marker_if_applicable(file_meta:uuid(), file_ctx:ctx()) -> file_ctx:ctx().
+add_deletion_marker_if_applicable(ParentUuid, FileCtx) ->
     case file_ctx:is_imported_storage(FileCtx) of
         {true, FileCtx2} -> deletion_marker:add(ParentUuid, FileCtx2);
         {false, FileCtx2} -> FileCtx2

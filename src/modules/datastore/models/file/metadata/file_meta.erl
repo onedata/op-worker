@@ -30,14 +30,12 @@
 
 -export([save/1, create/2, save/2, get/1, exists/1, update/2]).
 -export([delete/1, delete_without_link/1]).
--export([]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,
-    list_children/2, list_children/3, list_children/4,
-    list_children/5, list_children/6,
+    list_children/4, list_children/6,
     list_children_whitelisted/4
 ]).
 -export([get_name/1, set_name/2]).
@@ -48,7 +46,6 @@
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
 % For tests
--export([]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -75,7 +72,7 @@
 
 -type offset() :: file_meta_links:offset().
 -type non_neg_offset() :: file_meta_links:non_neg_offset().
--type limit() :: file_meta_links:limit().
+-type limit() :: file_meta_links:size().
 -type list_extended_info() :: file_meta_links:list_extended_info().
 
 -export_type([
@@ -319,7 +316,7 @@ delete_without_link(FileUuid) ->
 
 -spec delete_doc_if_not_special(uuid()) -> ok.
 delete_doc_if_not_special(FileUuid) ->
-    case fslogic_uuid:is_protected_uuid(FileUuid) of
+    case fslogic_uuid:is_special_uuid(FileUuid) of
         true -> ok;
         false -> delete_without_link(FileUuid)
     end.
@@ -405,28 +402,6 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv list_children_internal(Entry, #{size => Size, token => #link_token{}}).
-%% @end
-%%--------------------------------------------------------------------
--spec list_children(entry(), limit()) ->
-    {ok, [link()], list_extended_info()} | {error, term()}.
-list_children(Entry, Limit) ->
-    list_children(Entry, undefined, Limit, #link_token{}, undefined, undefined).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv list_children(Entry, Offset, Size, undefined)
-%% @end
-%%--------------------------------------------------------------------
--spec list_children(entry(), offset(), limit()) ->
-    {ok, [link()], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Limit) ->
-    list_children(Entry, Offset, Limit, undefined, undefined, undefined).
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% @equiv list_children(Entry, Offset, Size, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
@@ -434,24 +409,7 @@ list_children(Entry, Offset, Limit) ->
     datastore_links_iter:token() | undefined) ->
     {ok, [link()], list_extended_info()} | {error, term()}.
 list_children(Entry, Offset, Limit, Token) ->
-    list_children(Entry, Offset, Limit, Token, undefined).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv list_children(Entry, Offset, Size, Token, PrevLinkKey, undefined).
-%% @end
-%%--------------------------------------------------------------------
--spec list_children(
-    Entry :: entry(),
-    Offset :: offset(),
-    Limit :: limit(),
-    Token :: undefined | datastore_links_iter:token(),
-    PrevLinkKey :: undefined | name()
-) ->
-    {ok, [link()], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Limit, Token, PrevLinkKey) ->
-    list_children(Entry, Offset, Limit, Token, PrevLinkKey, undefined).
+    list_children(Entry, Offset, Limit, Token, undefined, undefined).
 
 
 %%--------------------------------------------------------------------

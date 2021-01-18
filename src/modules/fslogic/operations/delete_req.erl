@@ -36,7 +36,7 @@
 delete(UserCtx, FileCtx, Silent) ->
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
-            file_ctx:assert_not_protected_const(FileCtx2),
+            file_ctx:assert_not_special_const(FileCtx2),
             delete_dir(UserCtx, FileCtx2, Silent);
         {false, FileCtx2} ->
             delete_file(UserCtx, FileCtx2, Silent)
@@ -45,8 +45,8 @@ delete(UserCtx, FileCtx, Silent) ->
 
 -spec delete_using_trash(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
     fslogic_worker:fuse_response().
-delete_using_trash(UserCtx, FileCtx0, Silent) ->
-    file_ctx:assert_not_protected_const(FileCtx0),
+delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
+    file_ctx:assert_not_special_const(FileCtx0),
     FileCtx1 = file_ctx:assert_is_dir(FileCtx0),
 
     {FileParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
@@ -58,7 +58,7 @@ delete_using_trash(UserCtx, FileCtx0, Silent) ->
         UserCtx, FileParentCtx,
         [traverse_ancestors, ?delete_subcontainer]
     ),
-    delete_using_trash_insecure(UserCtx, FileCtx3, Silent).
+    delete_using_trash_insecure(UserCtx, FileCtx3, EmitEvents).
 
 
 %%%===================================================================
@@ -123,10 +123,10 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
 
 -spec delete_using_trash_insecure(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
     fslogic_worker:fuse_response().
-delete_using_trash_insecure(UserCtx, FileCtx, Silent) ->
+delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
-    FileCtx3 = trash:move_to_trash(FileCtx2),
-    {ok, _} = trash:delete_from_trash(FileCtx3, UserCtx, Silent, file_id:guid_to_uuid(ParentGuid)),
+    FileCtx3 = trash:move_to_trash(FileCtx2, UserCtx),
+    {ok, _} = trash:delete_from_trash(FileCtx3, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid)),
     ?FUSE_OK_RESP.
 
 

@@ -269,7 +269,7 @@ query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     ?assertMatch([{FileId1, _}, {FileId2, _}, {FileId3, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
-    [W | _] = Nodes = ?config(op_worker_nodes, Config),
+    [W | _] = ?config(op_worker_nodes, Config),
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName1 = <<"file1">>,
     FileName2 = <<"file2">>,
@@ -466,9 +466,6 @@ configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCount
 
 disable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, disable, [SpaceId]).
-
-current_timestamp_hours(Worker) ->
-    rpc:call(Worker, clock, timestamp_seconds, []) div 3600.
 
 open_and_close_file(Worker, SessId, Guid, Times) ->
     lists:foreach(fun(_) ->

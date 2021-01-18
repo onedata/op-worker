@@ -53,11 +53,11 @@
 % Listing options (see datastore_links_iter.erl in cluster_worker for more information about link listing options)
 -type offset() :: integer().
 -type non_neg_offset() :: non_neg_integer().
--type limit() :: non_neg_integer().
+-type size() :: non_neg_integer().
 -type token() :: datastore_links_iter:token().
 -type list_opts() :: #{
     % required keys
-    size := limit(),
+    size := size(),
     % optional keys
     token => token() | undefined,
     offset => offset(),
@@ -73,7 +73,7 @@
 }.
 %% @formatter:on
 
--export_type([link/0, offset/0, non_neg_offset/0, limit/0, token/0, list_opts/0, list_extended_info/0]).
+-export_type([link/0, offset/0, non_neg_offset/0, size/0, token/0, list_opts/0, list_extended_info/0]).
 
 -define(CTX, (file_meta:get_ctx())).
 -define(CTX(Scope), ?CTX#{scope => Scope}).
@@ -100,7 +100,7 @@ add(ParentUuid, Scope, FileName, FileUuid) ->
 
 
 -spec check_and_add(forest(), scope(), tree_ids(), link_name(), link_target()) -> ok | {error, term()}.
-check_and_add(ParentUuid, Scope, TreesToCheck, FileName, FileUuid) ->
+check_and_add(ParentUuid, Scope, TreesToCheck, FilLieName, FileUuid) ->
     ?extract_ok(datastore_model:check_and_add_links(?CTX(Scope), ParentUuid, ?LOCAL_TREE_ID, TreesToCheck,
         ?LINK(FileName, FileUuid))).
 
@@ -136,11 +136,11 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
     ok = datastore_model:mark_links_deleted(?CTX(Scope), ParentUuid, TreeId, {FileName, Revision}).
 
 
--spec list(forest(), offset() | undefined, limit(), token() | undefined, link_name() | undefined,
+-spec list(forest(), offset() | undefined, size(), token() | undefined, link_name() | undefined,
     tree_id() | undefined) -> {ok, [link()], list_extended_info()} | {error, term()}.
-list(ParentUuid, Offset, Limit, Token, PrevLinkKey, PrevTreeId) ->
+list(ParentUuid, Offset, Size, Token, PrevLinkKey, PrevTreeId) ->
 
-    ListOpts = prepare_opts(Offset, Limit, Token, PrevLinkKey, PrevTreeId),
+    ListOpts = prepare_opts(Offset, Size, Token, PrevLinkKey, PrevTreeId),
     Result = fold(ParentUuid, fun(Link = #link{name = Name}, Acc) ->
         case not (file_meta:is_hidden(Name) orelse file_meta:is_deletion_link(Name)) of
             true -> {ok, [Link | Acc]};
@@ -158,8 +158,8 @@ list(ParentUuid, Offset, Limit, Token, PrevLinkKey, PrevTreeId) ->
     end.
 
 
--spec list_whitelisted(forest(), non_neg_offset(), limit(), [link_name()]) -> {ok, [link()]}.
-list_whitelisted(ParentUuid, NonNegOffset, Limit, ChildrenWhiteListed) ->
+-spec list_whitelisted(forest(), non_neg_offset(), size(), [link_name()]) -> {ok, [link()]}.
+list_whitelisted(ParentUuid, NonNegOffset, Size, ChildrenWhiteListed) ->
     ValidLinks = lists:flatmap(fun
         ({ok, L}) ->
             L;
@@ -171,7 +171,7 @@ list_whitelisted(ParentUuid, NonNegOffset, Limit, ChildrenWhiteListed) ->
 
     case NonNegOffset < length(ValidLinks) of
         true ->
-            RequestedLinks = lists:sublist(ValidLinks, NonNegOffset + 1, Limit),
+            RequestedLinks = lists:sublist(ValidLinks, NonNegOffset + 1, Size),
             {ok, tag_ambiguous(RequestedLinks)};
         false ->
             {ok, []}
@@ -236,15 +236,15 @@ get_all(ParentUuid, Name) ->
 %%% Internal functions
 %%%===================================================================
 
--spec prepare_opts(offset() | undefined, limit() | undefined, token() | undefined,
+-spec prepare_opts(offset() | undefined, size() | undefined, token() | undefined,
     link_name() | undefined, tree_id() | undefined) -> list_opts().
-prepare_opts(Offset, Limit, Token, PrevLinkKey, PrevTreeId)
-    when ((is_integer(Limit) andalso Limit >= 0) orelse (Limit =:= undefined))
+prepare_opts(Offset, Size, Token, PrevLinkKey, PrevTreeId)
+    when ((is_integer(Size) andalso Size >= 0) orelse (Size =:= undefined))
     % at lease one of below options must be defined so that we know where to start listing
     andalso (Offset /= undefined orelse Token /= undefined orelse PrevLinkKey /= undefined)
 ->
     validate_starting_opts(Offset, PrevLinkKey, Token),
-    Opts1 = #{size => utils:ensure_defined(Limit, ?DEFAULT_LS_CHUNK_SIZE)},
+    Opts1 = #{size => utils:ensure_defined(Size, ?DEFAULT_LS_CHUNK_SIZE)},
     Opts2 = maps_utils:put_if_defined(Opts1, offset, Offset),
     Opts3 = maps_utils:put_if_defined(Opts2, token, Token),
     Opts4 = maps_utils:put_if_defined(Opts3, prev_link_name, PrevLinkKey),
@@ -257,7 +257,8 @@ validate_starting_opts(_, _, #link_token{}) ->
 validate_starting_opts(Offset, undefined, undefined) when Offset >= 0 ->
     ok;
 validate_starting_opts(Offset, undefined, undefined) when Offset < 0 ->
-    throw(?ERROR_BAD_VALUE_TOO_LOW(offset, 0));
+    throw(?EINVAL);
+    %% TODO VFS-7208 throw(?ERROR_BAD_VALUE_TOO_LOW(offset, 0));
 validate_starting_opts(undefined, LastName, undefined) when is_binary(LastName) ->
     ok;
 validate_starting_opts(Offset, LastName, undefined) when is_binary(LastName) andalso is_integer(Offset) ->

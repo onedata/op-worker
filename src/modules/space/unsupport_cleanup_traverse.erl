@@ -6,16 +6,13 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% TODO UPDATE
-%%% This module is responsible for traversing files tree in order to 
+%%% This module is responsible for traversing files tree in order to
 %%% perform necessary clean up after space was unsupported, i.e foreach file: 
 %%%     * deletes it on storage (if storage is not imported),
 %%%     * deletes file_qos document
 %%%     * deletes local file_location or dir_location document
 %%% 
-%%% Clean up for directory is started after all its children have been traversed. 
-%%% This is determined using using cleanup_traverse_status document, 
-%%% which is created for each directory.
+%%% Clean up for directory is started after all its children have been traversed.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(unsupport_cleanup_traverse).

@@ -19,7 +19,7 @@
 -export([root_dir_guid/0, user_root_dir_uuid/1, user_root_dir_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, spaceid_to_space_dir_guid/1, space_dir_uuid_to_spaceid/1]).
 -export([spaceid_to_trash_dir_uuid/1, spaceid_to_trash_dir_guid/1]).
--export([is_protected_uuid/1, is_protected_guid/1]).
+-export([is_special_uuid/1, is_special_guid/1]).
 -export([is_root_dir_guid/1, is_root_dir_uuid/1, is_user_root_dir_uuid/1]).
 -export([is_space_dir_uuid/1, is_space_dir_guid/1]).
 -export([is_trash_dir_uuid/1, is_trash_dir_guid/1]).
@@ -86,16 +86,16 @@ spaceid_to_trash_dir_guid(SpaceId) ->
     file_id:pack_guid(spaceid_to_trash_dir_uuid(SpaceId), SpaceId).
 
 
--spec is_protected_uuid(file_meta:uuid()) -> boolean().
-is_protected_uuid(FileUuid) ->
+-spec is_special_uuid(file_meta:uuid()) -> boolean().
+is_special_uuid(FileUuid) ->
     is_root_dir_uuid(FileUuid)
         orelse is_space_dir_uuid(FileUuid)
         orelse is_trash_dir_uuid(FileUuid).
 
 
--spec is_protected_guid(file_id:file_guid()) -> boolean().
-is_protected_guid(FileGuid) ->
-    is_protected_uuid(file_id:guid_to_uuid(FileGuid)).
+-spec is_special_guid(file_id:file_guid()) -> boolean().
+is_special_guid(FileGuid) ->
+    is_special_uuid(file_id:guid_to_uuid(FileGuid)).
 
 
 -spec is_root_dir_guid(file_id:file_guid()) -> boolean().

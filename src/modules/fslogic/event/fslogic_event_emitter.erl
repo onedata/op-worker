@@ -304,7 +304,7 @@ emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclu
     {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     ProviderId = file_meta:get_provider_id(Doc),
     {ok, FileUuid} = file_meta:get_uuid(Doc),
-    % do not get ParentUuid and Name from Doc
+    % do not get ParentUuid and Name from Doc as the doc contains already updated information
     FinalName = case file_meta:check_name_and_get_conflicting_files(file_id:guid_to_uuid(OldParentGuid), 
         OldName, FileUuid, ProviderId
     ) of

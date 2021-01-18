@@ -7,17 +7,15 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% TODO UPDATE
-%%% This model holds information necessary to tell whether whole subtree
-%%% of a directory was traversed so this directory can be cleaned up.
-%%% One `tree_traverse_status` document is created per directory.
+%%% This is a helper model for tree_traverse mechanism.
+%%% It holds information necessary to determine whether whole
+%%% subtree of a directory was traversed.
+%%% One `tree_traverse_progress` document is created per directory in
+%%% given traverse task.
 %%%
 %%% Traverse lists children in batches and model holds information about
-%%% number of remaining (i.e not yet traversed) already listed children
-%%% and whether all batches of have been listed.
-%%% Based on this information it can be determined whether subtree of a
-%%% directory was traversed (no children left and all batches have been
-%%% evaluated).
+%%% number of remaining (i.e not yet traversed) already listed children,
+%%% number of processed children and whether all batches have been listed.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(tree_traverse_progress).
@@ -64,7 +62,7 @@
 create(TaskId, FileUuid) ->
     ?extract_ok(datastore_model:create(?CTX, #document{
         key = gen_id(TaskId, FileUuid),
-        value = #tree_traverse_progress{} % todo maybe set +1 here?
+        value = #tree_traverse_progress{}
     })).
 
 
@@ -76,10 +74,7 @@ report_children_to_process(TaskId, FileUUid, ChildrenCount, AllBatchesListed) ->
     } = TTP) ->
         {ok, TTP#tree_traverse_progress{
             to_process = ToProcess + ChildrenCount,
-            all_batches_listed = case AllBatchesListed of
-                true -> true;
-                false -> CurrentAllBatchesListed
-            end
+            all_batches_listed = AllBatchesListed or CurrentAllBatchesListed
         }}
     end).
 

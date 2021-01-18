@@ -18,8 +18,8 @@
 -define(LOCAL_REMOVE, local_remove).
 -define(REMOTE_REMOVE, remote_remove).
 
-% Macros defining methods of handling opened files
--define(RENAME, rename).
--define(DELETION_MARKER, deletion_marker).
+% Macros defining strategies for handling deletions of opened files
+-define(RENAME_DELETED, rename_deleted).
+-define(SET_DELETION_MARKER, set_deletion_marker).
 
 -endif.

@@ -37,9 +37,13 @@ request(Node, URL, Method, Headers, Body) ->
 request(Node, URL, Method, Headers, Body, Opts) ->
     CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
     Opts2 = [{ssl_options, [{cacerts, CaCerts}]} | Opts],
+    Headers2 = case is_map(Headers) of
+        true -> Headers;
+        false -> maps:from_list(Headers)
+    end,
     Result = http_client:request(
         Method, <<(rest_endpoint(Node))/binary, URL/binary>>,
-        maps:from_list(Headers), Body, Opts2
+        Headers2, Body, Opts2
     ),
     case Result of
         {ok, RespCode, RespHeaders, RespBody} ->
@@ -118,7 +122,7 @@ rest_endpoint(Node) ->
             PStr;
         P -> P
     end,
-    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
+    Domain = op_test_rpc:get_provider_domain(Node),
     <<"https://", (str_utils:to_binary(Domain))/binary, Port/binary, "/api/v3/oneprovider/">>.
 
 print_request(URL, Method, Headers, Body, Opts) ->

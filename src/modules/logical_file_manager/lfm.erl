@@ -50,7 +50,7 @@
     get_child_attr/3, get_children_count/2, get_parent/2
 ]).
 %% Functions operating on directories or files
--export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
+-export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3, is_dir/2]).
 -export([
     schedule_file_transfer/5, schedule_view_transfer/7,
     schedule_file_replication/4, schedule_replica_eviction/4,
@@ -86,8 +86,6 @@
 -export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2,
     get_effective_file_qos/2, check_qos_status/2, check_qos_status/3]).
 
-%% Function exported only for use in tests
--export([rmdir/2]).
 
 %%%===================================================================
 %%% API
@@ -124,7 +122,7 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 -spec rm_recursive(session:id(), fslogic_worker:file_guid_or_path()) ->
     ok | error_reply().
 rm_recursive(SessId, FileKey) ->
-    ?run(fun() -> lfm_files:rm(SessId, FileKey) end).
+    ?run(fun() -> lfm_files:rm_recursive(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -326,6 +324,13 @@ get_file_guid(SessId, FilePath) ->
     ok | error_reply().
 unlink(SessId, FileEntry, Silent) ->
     ?run(fun() -> lfm_files:unlink(SessId, FileEntry, Silent) end).
+
+
+-spec is_dir(session:id(), fslogic_worker:file_guid_or_path()) ->
+    ok | error_reply().
+is_dir(SessId, FileEntry) ->
+    ?run(fun() -> lfm_files:is_dir(SessId, FileEntry) end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -967,15 +972,3 @@ check_qos_status(SessId, QosEntryId) ->
     {ok, qos_status:summary()} | error_reply().
 check_qos_status(SessId, QosEntryId, FileKey) ->
     ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId, FileKey) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes an empty directory.
-%% NOTE!!!
-%% This function should only be used in cleanup of tests!!!
-%% @end
-%%--------------------------------------------------------------------
--spec rmdir(session:id(), fslogic_worker:file_guid_or_path()) ->
-    ok | error_reply().
-rmdir(SessId, FileKey) ->
-    ?run(fun() -> lfm_files:rm(SessId, FileKey, true) end).

@@ -71,7 +71,7 @@ save_master_job(Key, Job = #tree_traverse{
         task_id = TaskID,
         doc_id = Uuid,
         session_id = user_ctx:get_session_id(UserCtx),
-        use_token = Token =/= undefined,
+        use_listing_token = Token =/= undefined,
         last_name = LastName,
         last_tree = LastTree,
         execute_slave_on_dir = OnDir,
@@ -87,7 +87,11 @@ save_master_job(Key, Job = #tree_traverse{
     ok | {error, term()}.
 delete_master_job(<<?MAIN_JOB_PREFIX, _/binary>> = Key, Job, Scope, CallbackModule) ->
     Ctx = get_extended_ctx(Job, CallbackModule),
-    datastore_model:delete(Ctx#{scope => Scope}, Key);
+    Ctx2 = case maps:get(sync_enabled, Ctx, false) of
+        true -> Ctx#{scope => Scope};
+        false -> Ctx
+    end,
+    datastore_model:delete(Ctx2, Key);
 delete_master_job(Key, Job, _, CallbackModule) ->
     Ctx = get_extended_ctx(Job, CallbackModule),
     datastore_model:delete(Ctx, Key).
@@ -98,7 +102,7 @@ get_master_job(#document{value = #tree_traverse_job{
     pool = Pool, task_id = TaskID,
     doc_id = DocID,
     session_id = SessionId,
-    use_token = UseToken,
+    use_listing_token = UseListingToken,
     last_name = LastName,
     last_tree = LastTree,
     execute_slave_on_dir = OnDir,
@@ -112,7 +116,7 @@ get_master_job(#document{value = #tree_traverse_job{
     Job = #tree_traverse{
         file_ctx = FileCtx,
         user_ctx = user_ctx:new(SessionId),
-        token = case UseToken of
+        token = case UseListingToken of
             true -> #link_token{};
             false -> undefined
         end,
@@ -179,8 +183,8 @@ get_record_struct(2) ->
         {doc_id, string},
         % session_id has been added in this version
         {session_id, string},
-        % use_token field has been added in this version
-        {use_token, boolean},
+        % use_listing_token field has been added in this version
+        {use_listing_token, boolean},
         {last_name, string},
         {last_tree, string},
         {execute_slave_on_dir, boolean},
@@ -210,7 +214,7 @@ upgrade_record(1, {?MODULE, Pool, CallbackModule, TaskId, DocId, LastName, LastT
         DocId,
         % session_id has been added in this version
         ?ROOT_SESS_ID,
-        % use_token field has been added in this version
+        % use_listing_token field has been added in this version
         true,
         LastName,
         LastTree,
@@ -238,12 +242,22 @@ upgrade_record(1, {?MODULE, Pool, CallbackModule, TaskId, DocId, LastName, LastT
 save(main_job, Scope, Value, Ctx) ->
     RandomPart = datastore_key:new(),
     GenKey = <<?MAIN_JOB_PREFIX, RandomPart/binary>>,
-    ?extract_key(datastore_model:save(Ctx#{generated_key => true},
-        #document{key = GenKey, scope = Scope, value = Value}));
+    Doc = #document{key = GenKey, value = Value},
+    Doc2 = set_scope_if_sync_enabled(Doc, Scope, Ctx),
+    ?extract_key(datastore_model:save(Ctx#{generated_key => true}, Doc2));
 save(<<?MAIN_JOB_PREFIX, _/binary>> = Key, Scope, Value, Ctx) ->
-    ?extract_key(datastore_model:save(Ctx, #document{key = Key, scope = Scope, value = Value}));
+    Doc = #document{key = Key, value = Value},
+    Doc2 = set_scope_if_sync_enabled(Doc, Scope, Ctx),
+    ?extract_key(datastore_model:save(Ctx, Doc2));
 save(Key, _, Value, Ctx) ->
     ?extract_key(datastore_model:save(Ctx, #document{key = Key, value = Value})).
+
+
+-spec set_scope_if_sync_enabled(doc(), datastore_doc:scope(), datastore:ctx()) -> doc().
+set_scope_if_sync_enabled(Doc, Scope, #{sync_enabled := true}) ->
+    Doc#document{scope = Scope};
+set_scope_if_sync_enabled(Doc, _Scope, _Ctx) ->
+    Doc.
 
 
 -spec get_extended_ctx(tree_traverse:master_job(), traverse:callback_module()) -> datastore:ctx().

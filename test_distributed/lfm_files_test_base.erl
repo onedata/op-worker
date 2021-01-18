@@ -1317,7 +1317,7 @@ lfm_rmdir_fails_with_eperm_on_space_directory(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    ?assertMatch({error, ?EPERM}, lfm_proxy:rmdir(W, SessId1, {path, <<"/space_name1">>})).
+    ?assertMatch({error, ?EPERM}, lfm_proxy:unlink(W, SessId1, {path, <<"/space_name1">>})).
 
 
 rm_recursive(Config) ->

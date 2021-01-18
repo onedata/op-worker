@@ -60,7 +60,7 @@
     execute_slave_on_dir => execute_slave_on_dir(),
     % flag determining whether token should be used for iterating over file_meta links
     % token shouldn't be used when links may be deleted from tree
-    use_token => boolean(),
+    use_listing_token => boolean(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode => children_master_jobs_mode(),
     % With this option enabled, tree_traverse_status will be
@@ -137,11 +137,11 @@ run(Pool, FileCtx, UserCtx, Opts) ->
         false -> user_ctx:new(?ROOT_SESS_ID)
     end,
     BatchSize = maps:get(batch_size, Opts, ?DEFAULT_BATCH_SIZE),
-    ExecuteSlaveOnDir = maps:get(execute_slave_on_dir, Opts, ?DEFAULT_EXECS_SLAVE_ON_DIR),
+    ExecuteSlaveOnDir = maps:get(execute_slave_on_dir, Opts, ?DEFAULT_EXEC_SLAVE_ON_DIR),
     ChildrenMasterJobsMode = maps:get(children_master_jobs, Opts, ?DEFAULT_CHILDREN_MASTER_JOBS_MODE),
     TrackSubtreeStatus = maps:get(track_subtree_status, Opts, ?DEFAULT_TRACK_SUBTREE_STATUS),
     TraverseInfo = maps:get(traverse_info, Opts, undefined),
-    Token = case maps:get(use_token, Opts, true) of
+    Token = case maps:get(use_listing_token, Opts, true) of
         true -> #link_token{};
         false -> undefined
     end,
