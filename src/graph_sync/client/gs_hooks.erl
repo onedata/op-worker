@@ -207,7 +207,7 @@ report_provider_sync_progress() ->
 report_provider_sync_progress(SpaceId) ->
     {ok, Providers} = space_logic:get_provider_ids(SpaceId),
     Report = provider_sync_progress:build_collective_report(Providers, fun(ProviderId) ->
-        dbsync_state:get_seq_and_timestamp(SpaceId, ProviderId)
+        dbsync_state:get_sync_progress(SpaceId, ProviderId)
     end),
     space_logic:report_provider_sync_progress(SpaceId, Report).
 

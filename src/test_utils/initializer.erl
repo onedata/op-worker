@@ -360,9 +360,9 @@ teardown_session(Worker, Config) ->
             {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
             lists:foreach(fun(SpaceId) ->
                 rpc:call(Worker, internal_services_manager, stop_service,
-                    [dbsync_worker, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
+                    [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
                 rpc:call(Worker, internal_services_manager, stop_service,
-                    [dbsync_worker, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
+                    [dbsync_worker_sup, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
                 rpc:call(Worker, file_meta, delete, [fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)])
             end, SpaceIds),
             Acc;

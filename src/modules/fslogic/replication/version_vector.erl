@@ -86,7 +86,7 @@ version_diff(#document{value = #file_location{version_vector = LocalVV}},
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns true if replica_id associated with first document is grater that
+%% Returns true if replica_id associated with first document is greater that
 %% second.
 %% @end
 %%--------------------------------------------------------------------
