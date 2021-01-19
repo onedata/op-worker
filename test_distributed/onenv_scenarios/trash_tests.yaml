@@ -78,3 +78,15 @@ spaces:
       - provider: "oneprovider-2"
         storage_name: "IdealNullStorage"
         size: '1000000000'
+  - name: space2
+    user: *user1
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "ImportedNullStorage2"
+        size: '1000000000'
+        import:
+          mode: auto
+          continuousScan: false
+      - provider: "oneprovider-2"
+        storage_name: "IdealNullStorage"
+        size: '1000000000'

@@ -48,7 +48,8 @@
     schedule_replication_transfer_on_space_does_not_replicate_trash/1,
     schedule_migration_transfer_on_space_does_not_replicate_trash/1,
     move_to_trash_test/1,
-    move_to_trash_and_delete_test/1
+    move_to_trash_and_delete_test/1,
+    files_from_trash_are_not_reimported/1
 ]).
 
 
@@ -74,12 +75,17 @@ all() -> ?ALL([
     schedule_replication_transfer_on_space_does_not_replicate_trash,
     schedule_migration_transfer_on_space_does_not_replicate_trash,
     move_to_trash_test,
-    move_to_trash_and_delete_test
+    move_to_trash_and_delete_test,
+    files_from_trash_are_not_reimported
 ]).
 
--define(SPACE_PLACEHOLDER, space1).
--define(SPACE_ID, oct_background:get_space_id(?SPACE_PLACEHOLDER)).
--define(SPACE_NAME, oct_background:get_space_name(?SPACE_PLACEHOLDER)).
+-define(SPACE1_PLACEHOLDER, space1).
+-define(SPACE_ID, oct_background:get_space_id(?SPACE1_PLACEHOLDER)).
+-define(SPACE_NAME, oct_background:get_space_name(?SPACE1_PLACEHOLDER)).
+-define(SPACE2_PLACEHOLDER, space2).
+-define(SPACE_ID2, oct_background:get_space_id(?SPACE2_PLACEHOLDER)).
+-define(SPACE_NAME2, oct_background:get_space_name(?SPACE2_PLACEHOLDER)).
+
 -define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID)).
 -define(SPACE_UUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
 -define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID)).
@@ -266,19 +272,22 @@ schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
 
 schedule_migration_transfer_on_space_does_not_replicate_trash(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
     DirName = ?RAND_DIR_NAME,
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
 
     % create file and directory
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
-    lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
+    lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{0, 10}], DirGuid),
 
     % move subtree to trash
-    ok = lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, DirGuid}),
+    DirCtx = file_ctx:new_by_guid(DirGuid),
+    move_to_trash(P1Node, DirCtx, UserSessIdP1),
 
     % wait till moving directory to trash is synchronized
     ?assertMatch({ok, [{DirGuid, _}]},
-        lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
 
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
@@ -302,7 +311,7 @@ move_to_trash_test(_Config) ->
     DirCtx = file_ctx:new_by_guid(DirGuid),
     lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
 
-    move_to_trash(P1Node, DirCtx),
+    move_to_trash(P1Node, DirCtx, UserSessIdP1),
 
     lfm_test_utils:assert_space_dir_empty(P1Node, ?SPACE_ID, ?ATTEMPTS),
     lfm_test_utils:assert_space_dir_empty(P2Node, ?SPACE_ID, ?ATTEMPTS),
@@ -336,7 +345,7 @@ move_to_trash_and_delete_test(_Config) ->
     {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
     DirCtx = file_ctx:new_by_guid(DirGuid),
 
-    move_to_trash(P1Node, DirCtx),
+    move_to_trash(P1Node, DirCtx, UserSessIdP1),
     delete_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
 
     lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID, ?ATTEMPTS),
@@ -367,6 +376,30 @@ move_to_trash_and_delete_test(_Config) ->
     })).
 
 
+files_from_trash_are_not_reimported(_Config) ->
+    % this test is performed in ?SPACE2 which is supported by ImportedNullStorage2
+    % on which legacy dataset is simulated with
+    % structure 1-0:10-10 (1 root directory with 10 subdirectories and 10 files)
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+
+    % ensure that 1st scan has been finished
+    ?assertEqual(true, rpc:call(P1Node, storage_import_monitoring, is_initial_scan_finished, [?SPACE_ID2]), ?ATTEMPTS),
+
+    {ok, [{DirGuid, _}]} = lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?SPACE_GUID(?SPACE_ID2)}, 0, 1000),
+    DirCtx = file_ctx:new_by_guid(DirGuid),
+
+    % move imported directory to trash
+    move_to_trash(P1Node, DirCtx, UserSessIdP1),
+
+    % start scan and wait till it's finished
+    ok = rpc:call(P1Node, storage_import, start_auto_scan, [?SPACE_ID2]),
+    ?assertEqual(true, rpc:call(P1Node, storage_import_monitoring, is_scan_finished, [?SPACE_ID2, 2]), ?ATTEMPTS),
+
+    % files which are currently in trash shouldn't have been reimported
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?SPACE_GUID(?SPACE_ID2)}, 0, 1000)).
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -394,8 +427,9 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-move_to_trash(Worker, FileCtx) ->
-    rpc:call(Worker, trash, move_to_trash, [FileCtx]).
+move_to_trash(Worker, FileCtx, SessId) ->
+    UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
+    rpc:call(Worker, trash, move_to_trash, [FileCtx, UserCtx]).
 
 delete_from_trash(Worker, FileCtx, SessId, RootOriginalParentUuid) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
