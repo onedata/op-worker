@@ -41,7 +41,7 @@ handshake_attributes(_Client) ->
 
     #{
         <<"providerName">> => ProviderName,
-        <<"serviceVersion">> => oneprovider:get_version(),
+        <<"serviceVersion">> => op_worker:get_release_version(),
         <<"onezoneUrl">> => oneprovider:get_oz_url(),
         <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit()
     }.

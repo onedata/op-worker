@@ -67,7 +67,11 @@
     fail_to_migrate_replicas_from_view/2
 ]).
 
--export([move_transfer_ids_to_old_key/1]).
+-export([
+    move_transfer_ids_to_old_key/1,
+    get_transfer_ids/1,
+    await_replication_starts/2
+]).
 
 % functions exported to be called by rpc
 -export([create_files_structure/11, create_file/7,
@@ -1100,6 +1104,9 @@ map_config_key(Key0, NewKey, Config) ->
             (Other) -> Other
         end
     end, 1, Config).
+
+get_transfer_ids(Config) ->
+    [Tid || {_, Tid, _, _} <- ?config(?TRANSFERS_KEY, Config, [])].
 
 update_config(Key, UpdateFun, Config, DefaultValue) ->
     case proplists:get_value(Key, Config, no_value) of

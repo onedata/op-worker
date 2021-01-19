@@ -17,6 +17,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 
 -record(client_spec, {
@@ -128,13 +129,6 @@
     randomly_select_scenarios = false,
 
     data_spec = undefined :: undefined | onenv_api_test_runner:data_spec()
-}).
-
--record(onenv_test_config, {
-    % name of yaml file in test_distributed/onenv_scenarios
-    onenv_scenario = "api_tests" :: binary(),
-    envs :: [{Service :: atom(), Application :: atom(), Env :: [term()]}],
-    posthook = fun(Config) -> Config end :: fun((api_test_runner:config()) -> api_test_runner:config())
 }).
 
 -define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).

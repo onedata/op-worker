@@ -20,6 +20,7 @@
 -define(PROVIDER1, <<"ProviderId1">>).
 -define(PROVIDER2, <<"ProviderId2">>).
 
+
 new_transfer_histograms_test() ->
     Bytes = 50,
     Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
@@ -29,7 +30,8 @@ new_transfer_histograms_test() ->
     ),
     ?assertEqual(ExpTransferHist, TransferHist).
 
-update_with_nonexistent_test_() ->
+
+update_with_nonexistent_test() ->
     {setup, fun node_cache:init/0, fun(_) -> node_cache:destroy() end, fun() ->
         Bytes = 50,
         Histogram = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
@@ -43,6 +45,7 @@ update_with_nonexistent_test_() ->
         ),
         assertEqualMaps(ExpTransferHist, TransferHist2)
     end}.
+
 
 update_with_existent_the_same_slot_test() ->
     {setup, fun node_cache:init/0, fun(_) -> node_cache:destroy() end, fun() ->
@@ -75,6 +78,42 @@ update_with_existent_the_same_slot_test() ->
         assertEqualMaps(ExpTransferHist3, TransferHist3)
     end}.
 
+
+update_with_time_warps_test() ->
+    {setup, fun node_cache:init/0, fun(_) -> node_cache:destroy() end, fun() ->
+        Bytes = 50,
+        Window = ?FIVE_SEC_TIME_WINDOW,
+        Histogram0 = histogram:increment(histogram:new(?MIN_HIST_LENGTH), Bytes),
+        TransferHist0 = #{?PROVIDER1 => Histogram0},
+
+        StartMonotonicTime = transfer_histograms:get_current_monotonic_time(0),
+        StartTime = transfer_histograms:monotonic_timestamp_value(StartMonotonicTime),
+        LastUpdates0 = #{?PROVIDER1 => StartTime},
+
+        % Forward time warp should shift slots and update new hd slot
+        TimeDiff1 = 100,
+        CurrentMonotonicTime1 = transfer_histograms:get_current_monotonic_time(StartTime + TimeDiff1),
+        CurrentTime1 = transfer_histograms:monotonic_timestamp_value(CurrentMonotonicTime1),
+        TransferHist1 = transfer_histograms:update(#{?PROVIDER1 => Bytes},
+            TransferHist0, ?MINUTE_PERIOD, LastUpdates0, StartTime, CurrentMonotonicTime1
+        ),
+        LastUpdates1 = #{?PROVIDER1 => CurrentTime1},
+        ShiftSize1 = TimeDiff1 div Window,
+        Histogram1 = histogram:increment(histogram:shift(Histogram0, ShiftSize1), Bytes),
+        ExpTransferHist1 = #{?PROVIDER1 => Histogram1},
+        assertEqualMaps(ExpTransferHist1, TransferHist1),
+
+        % Backward time warp should freeze histogram so that only hd slot is updated
+        CurrentMonotonicTime2 = transfer_histograms:get_current_monotonic_time(CurrentTime1 - 80),
+        TransferHist2 = transfer_histograms:update(#{?PROVIDER1 => Bytes},
+            TransferHist1, ?MINUTE_PERIOD, LastUpdates1, StartTime, CurrentMonotonicTime2
+        ),
+        Histogram2 = histogram:increment(Histogram1, Bytes),
+        ExpTransferHist2 = #{?PROVIDER1 => Histogram2},
+        assertEqualMaps(ExpTransferHist2, TransferHist2)
+    end}.
+
+
 pad_with_zeroes_test() ->
     {setup, fun node_cache:init/0, fun(_) -> node_cache:destroy() end, fun() ->
         Bytes = 50,
@@ -102,6 +141,7 @@ pad_with_zeroes_test() ->
         assertEqualMaps(ExpPaddedHistograms, PaddedHistograms)
     end}.
 
+
 trim_timestamp_test() ->
     % trim_timestamp remove always 6 recent slots from minute histogram
     % (from 26 to 30 seconds depending on slots boundaries).
@@ -114,6 +154,7 @@ trim_timestamp_test() ->
     TrimmedTimestamp2 = transfer_histograms:trim_timestamp(Timestamp2),
     ExpTrimmedTimestamp2 = 64 - 30,
     ?assertEqual(ExpTrimmedTimestamp2, TrimmedTimestamp2).
+
 
 trim_min_histograms_test() ->
     Bytes = 50,
@@ -130,6 +171,7 @@ trim_min_histograms_test() ->
     ),
     ExpTransferHist = #{?PROVIDER1 => ExpHistogram},
     assertEqualMaps(ExpTransferHist, TrimmedTransferHist).
+
 
 trim_test() ->
     Bytes = 50,
@@ -169,6 +211,7 @@ trim_test() ->
     assertEqualMaps(ExpMinHistogram, TrimmedMinHist2),
     assertEqualMaps(ExpHourHistograms2, TrimmedHourHist2).
 
+
 histogram_with_zero_duration_time_test() ->
     % Histogram starting in 0 and ending in 0 is considered to have one second
     % duration, because we treat each second as a slot that lasts to the
@@ -184,6 +227,7 @@ histogram_with_zero_duration_time_test() ->
     ?assertEqual(?MIN_SPEED_HIST_LENGTH + 1, length(SpeedChart)),
     ?assertMatch([0, 0, null | _], SpeedChart).
 
+
 histogram_with_zeroes_and_single_slot_test() ->
     % If the transfer lasted for a single slot, it should have two values
     % (starting and current point).
@@ -194,6 +238,7 @@ histogram_with_zeroes_and_single_slot_test() ->
     SpeedChart = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
     ?assertEqual(?MIN_SPEED_HIST_LENGTH + 1, length(SpeedChart)),
     ?assertMatch([0, 0, null | _], SpeedChart).
+
 
 histogram_with_zeroes_and_two_slots_test() ->
     % If the transfer lasted for two slots, it should have three values
@@ -206,6 +251,7 @@ histogram_with_zeroes_and_two_slots_test() ->
     ?assertEqual(?MIN_SPEED_HIST_LENGTH + 1, length(SpeedChart)),
     ?assertMatch([0, 0, 0, null | _], SpeedChart).
 
+
 histogram_with_single_slot_test() ->
     % If the transfer lasted for a single slot, the two values (starting and
     % current point) should be the same. 10 bytes were sent here during 10
@@ -217,6 +263,7 @@ histogram_with_single_slot_test() ->
     SpeedChart = transfer_histograms:histogram_to_speed_chart(Histogram, Start, End, Window),
     ?assertEqual(?HOUR_SPEED_HIST_LENGTH + 1, length(SpeedChart)),
     ?assertMatch([1, 1, null | _], SpeedChart).
+
 
 histogram_with_two_slots_test() ->
     % If the transfer lasted for two slots, it should have three values
@@ -238,6 +285,7 @@ histogram_with_two_slots_test() ->
     % They can be the same as the newest window is much longer and the average
     % will not be too much influenced by the measurement from 1 sec window.
     ?assert(Previous >= Current).
+
 
 histogram_with_three_slots_test() ->
     Day = 60 * 60 * 24,
@@ -268,6 +316,7 @@ histogram_with_three_slots_test() ->
     ?assert(Previous >= OneButLast),
     ?assert(Current >= OneButLast).
 
+
 histogram_with_all_slots_test() ->
     % If the transfer lasted for more slots than fit in a histogram (in this case
     % 15 slots, while the histogram has 13), it should have as many values as
@@ -283,6 +332,7 @@ histogram_with_all_slots_test() ->
     % ((50 + 100) / 2) / 5 = 15
     %                 50  100 160 80  200 400  0  150 300 200 100
     ?assertMatch([_, _, 15, 26, 24, 28, 60, 40, 15, 45, 50, 30 | _], SpeedChart).
+
 
 increasing_trend_at_the_start_of_histogram_test() ->
     % The start of the histogram should depict current trends in transfer speed
@@ -321,6 +371,7 @@ increasing_trend_at_the_start_of_histogram_test() ->
     ?assert(First4 >= First5),
     ?assert(Second4 >= Second5).
 
+
 decreasing_trend_at_the_start_of_histogram_test() ->
     % The start of the histogram should depict current trends in transfer speed
     % (if it's increasing or decreasing). The longer the newest window, the
@@ -357,6 +408,7 @@ decreasing_trend_at_the_start_of_histogram_test() ->
     ?assert(First5 < Second5),
     ?assert(First4 >= First5),
     ?assert(Second4 >= Second5).
+
 
 increasing_trend_at_the_end_of_histogram_test() ->
     % The end of the histogram should smoothly change towards the next measurement
@@ -401,6 +453,7 @@ increasing_trend_at_the_end_of_histogram_test() ->
     ?assert(Last5 > OneButLast5),
     ?assert(Last4 >= Last5),
     ?assert(OneButLast4 >= OneButLast5).
+
 
 decreasing_trend_at_the_end_of_histogram_test() ->
     % The end of the histogram should smoothly change towards the next measurement

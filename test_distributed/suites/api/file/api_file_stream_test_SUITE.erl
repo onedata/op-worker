@@ -592,20 +592,23 @@ get_file_guid(MemRef, TestMode) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    oct_background:init_per_suite(Config, #onenv_test_config{envs = [
-        {op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {default_download_read_block_size, ?DEFAULT_READ_BLOCK_SIZE},
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "api_tests",
+        envs = [
+            {op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {default_download_read_block_size, ?DEFAULT_READ_BLOCK_SIZE},
 
-            % Ensure replica_synchronizer will not fetch more data than requested
-            {minimal_sync_request, ?DEFAULT_READ_BLOCK_SIZE},
-            {synchronizer_prefetch, false},
+                % Ensure replica_synchronizer will not fetch more data than requested
+                {minimal_sync_request, ?DEFAULT_READ_BLOCK_SIZE},
+                {synchronizer_prefetch, false},
 
-            {public_block_percent_threshold, 1},
+                {public_block_percent_threshold, 1},
 
-            {download_code_expiration_interval_seconds, ?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS}
-        ]}
-    ]}).
+                {download_code_expiration_interval_seconds, ?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS}
+            ]}
+        ]
+    }).
 
 
 end_per_suite(_Config) ->

@@ -451,8 +451,8 @@ set_file_xattrs_test(Config) ->
         (expected_success, #api_test_ctx{
             node = TestNode,
             client = Client,
-            data = #{<<"metadata">> := Xattrs
-        }}) ->
+            data = #{<<"metadata">> := Xattrs}
+        }) ->
             case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
                 {?USER(UserId), true} when UserId /= User2Id andalso UserId /= User3Id ->
                     % Only owner (?USER_IN_BOTH_SPACES) can set acl in posix mode
@@ -765,9 +765,10 @@ build_set_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    oct_background:init_per_suite(Config, #onenv_test_config{envs = [
-        {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
-    ]}).
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "api_tests",
+        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+    }).
 
 
 end_per_suite(_Config) ->

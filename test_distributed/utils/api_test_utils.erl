@@ -78,9 +78,9 @@
 
 -spec build_rest_url(node(), [binary()]) -> binary().
 build_rest_url(Node, PathTokens) ->
-    list_to_binary(rpc:call(Node, oneprovider, get_rest_endpoint, [
+    rpc:call(Node, oneprovider, get_rest_endpoint, [
         string:trim(filename:join([<<"/">> | PathTokens]), leading, [$/])
-    ])).
+    ]).
 
 
 -spec create_shared_file_in_space_krk() ->
