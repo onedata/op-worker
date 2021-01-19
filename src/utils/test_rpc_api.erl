@@ -56,12 +56,13 @@ create_fuse_session(Nonce, Identity, TokenCredentials) ->
 
 
 -spec build_token_credentials(
-    binary(), binary(),
-    PeerIp :: undefined | ip_utils:ip(),
-    Interface :: undefined | cv_interface:interface(),
+    binary(),
+    undefined | binary(),
+    undefined | ip_utils:ip(),
+    undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
-    map().
+    auth_manager:token_credentials().
 build_token_credentials(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     auth_manager:build_token_credentials(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy).
 
@@ -141,7 +142,7 @@ get_provider_name() ->
     provider_logic:get_name().
 
 
--spec get_provider_eff_users() -> binary() | no_return().
+-spec get_provider_eff_users() -> {ok, [od_user:id()]} | errors:error().
 get_provider_eff_users() ->
     provider_logic:get_eff_users().
 
