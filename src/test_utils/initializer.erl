@@ -920,7 +920,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
     {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_grace_period_seconds, FuseSessionTTL]),
 
     lists:foreach(fun(Worker) ->
-        test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_out_stream_handling_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
     end, AllWorkers),
