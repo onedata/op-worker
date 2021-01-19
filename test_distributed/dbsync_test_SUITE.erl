@@ -428,7 +428,7 @@ init_per_testcase(_Case, Config) ->
         test_utils:set_env(Worker, op_worker, Name, Value)
     end, [
         {dbsync_changes_batch_await_period, timer:seconds(1)},
-        {dbsync_changes_broadcast_interval, timer:seconds(1)}
+        {dbsync_out_stream_handling_interval, timer:seconds(1)}
     ]),
     rpc:call(Worker, dbsync_worker, start_streams, []),
 

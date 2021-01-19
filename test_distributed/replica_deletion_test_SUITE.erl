@@ -256,7 +256,7 @@ init_per_suite(Config) ->
         NewConfig1 = [{space_storage_mock, false} | NewConfig],
         NewConfig2 = initializer:setup_storage(NewConfig1),
         lists:foreach(fun(Worker) ->
-            test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?APP_NAME, dbsync_out_stream_handling_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
@@ -283,7 +283,7 @@ init_per_testcase(throttling_test, Config) ->
     init_per_testcase(default, [{old_replica_deletion_max_parallel_requests, OldValue} | Config]);
 init_per_testcase(_Case, Config) ->
     Config2 = sort_workers(Config),
-    ct:timetrap(timer:minutes(20)),
+    ct:timetrap(timer:minutes(30)),
     lfm_proxy:init(Config2).
 
 end_per_testcase(throttling_test, Config) ->
