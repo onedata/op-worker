@@ -100,7 +100,7 @@ add(ParentUuid, Scope, FileName, FileUuid) ->
 
 
 -spec check_and_add(forest(), scope(), tree_ids(), link_name(), link_target()) -> ok | {error, term()}.
-check_and_add(ParentUuid, Scope, TreesToCheck, FilLieName, FileUuid) ->
+check_and_add(ParentUuid, Scope, TreesToCheck, FileName, FileUuid) ->
     ?extract_ok(datastore_model:check_and_add_links(?CTX(Scope), ParentUuid, ?LOCAL_TREE_ID, TreesToCheck,
         ?LINK(FileName, FileUuid))).
 
