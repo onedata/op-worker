@@ -65,7 +65,8 @@
     schedule_replication_of_100_regular_files_by_view_with_batch_100/1,
     schedule_replication_of_100_regular_files_by_view_with_batch_10/1,
     file_removed_during_replication/1,
-    rtransfer_works_between_providers_with_different_ports/1
+    rtransfer_works_between_providers_with_different_ports/1,
+    warp_time_during_replication/1
 ]).
 
 all() -> [
@@ -112,7 +113,8 @@ all() -> [
     schedule_replication_of_100_regular_files_by_view_with_batch_100,
     schedule_replication_of_100_regular_files_by_view_with_batch_10,
     file_removed_during_replication,
-    rtransfer_works_between_providers_with_different_ports
+    rtransfer_works_between_providers_with_different_ports,
+    warp_time_during_replication
 ].
 
 %%%===================================================================
@@ -253,6 +255,9 @@ file_removed_during_replication(Config) ->
 
 rtransfer_works_between_providers_with_different_ports(Config) ->
     replication_transfers_test_base:rtransfer_works_between_providers_with_different_ports(Config, rest).
+
+warp_time_during_replication(Config) ->
+    replication_transfers_test_base:warp_time_during_replication(Config, rest).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -58,7 +58,9 @@
     scheduling_replication_by_not_existing_key_in_view_should_succeed/2,
     schedule_replication_of_100_regular_files_by_view/2,
     file_removed_during_replication/3,
-    rtransfer_works_between_providers_with_different_ports/2]).
+    rtransfer_works_between_providers_with_different_ports/2,
+    warp_time_during_replication/2
+]).
 
 -define(SPACE_ID, <<"space1">>).
 
@@ -2063,6 +2065,97 @@ rtransfer_works_between_providers_with_different_ports(Config, Type) ->
     transfers_test_mechanism:run_test(Config2, TransferTestSpec2).
 
 
+warp_time_during_replication(Config, Type) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+    SpaceId = ?SPACE_ID,
+
+    FilesNum = 100,
+    TotalTransferredBytes = FilesNum * ?DEFAULT_SIZE,
+
+    CurrTime = time_test_utils:get_frozen_time_seconds(),
+    PastTime = CurrTime - 1000,
+    FutureTime = CurrTime + 2764800,  % move 32 days to the future
+
+    % Forward time warp should cause shift of space transfer stats
+    % so that no artefacts from previous tests remains.
+    ok = time_test_utils:set_current_time_seconds(FutureTime),
+
+    ExpMinHist = #{ProviderId1 => histogram:increment(histogram:new(?MIN_HIST_LENGTH), TotalTransferredBytes)},
+    ExpHrHist = #{ProviderId1 => histogram:increment(histogram:new(?HOUR_HIST_LENGTH), TotalTransferredBytes)},
+    ExpDayHist = #{ProviderId1 => histogram:increment(histogram:new(?DAY_HIST_LENGTH), TotalTransferredBytes)},
+    ExpMthHist = #{ProviderId1 => histogram:increment(histogram:new(?MONTH_HIST_LENGTH), TotalTransferredBytes)},
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{10, 0}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                space_id = SpaceId,
+                function = fun(Config, Scenario) ->
+                    NewConfig = transfers_test_mechanism:replicate_root_directory(Config, Scenario),
+
+                    % Wait until some bytes are replicated before warping time backwards
+                    [Tid] = transfers_test_mechanism:get_transfer_ids(NewConfig),
+                    transfers_test_mechanism:await_replication_starts(WorkerP2, Tid),
+                    ok = time_test_utils:set_current_time_seconds(PastTime),
+
+                    % Make sure the time warp happened when the replication was ongoing.
+                    % If this assert fails, the test needs to be adjusted.
+                    #transfer{bytes_replicated = BytesReplicated} = transfers_test_utils:get_transfer(WorkerP2, Tid),
+                    ?assert(BytesReplicated < TotalTransferredBytes),
+
+                    NewConfig
+                end
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    schedule_time => FutureTime,
+                    start_time => FutureTime,
+                    finish_time => FutureTime,
+                    replication_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => 111,
+                    files_processed => 111,
+                    files_replicated => FilesNum,
+                    bytes_replicated => TotalTransferredBytes,
+                    min_hist => ExpMinHist,
+                    hr_hist => ExpHrHist,
+                    dy_hist => ExpDayHist,
+                    mth_hist => ExpMthHist
+                },
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP1, WorkerP2]
+            }
+        }
+    ),
+
+    ?assertMatch(
+        {ok, #document{value = #space_transfer_stats{
+            last_update = #{ProviderId1 := FutureTime},
+            min_hist = ExpMinHist,
+            hr_hist = ExpHrHist,
+            dy_hist = ExpDayHist,
+            mth_hist = ExpMthHist
+        }}},
+        rpc:call(WorkerP2, space_transfer_stats, get, [?JOB_TRANSFERS_TYPE, SpaceId])
+    ).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -2090,32 +2183,32 @@ init_per_suite(Config) ->
         | Config
     ].
 
-init_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
+init_per_testcase(not_synced_file_should_not_be_replicated = Case, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(WorkerP2, replication_worker),
     ok = test_utils:mock_expect(WorkerP2, replication_worker, transfer_regular_file, fun(_, _) ->
         {error, not_found}
     end),
-    init_per_testcase(all, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(schedule_replication_of_100_regular_files_by_view_with_batch_100, Config) ->
+init_per_testcase(schedule_replication_of_100_regular_files_by_view_with_batch_100 = Case, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_view_batch),
     test_utils:set_env(Nodes, op_worker, replication_by_view_batch, 100),
-    init_per_testcase(all, [{replication_by_view_batch, OldValue} | Config]);
+    init_per_testcase(?DEFAULT_CASE(Case), [{replication_by_view_batch, OldValue} | Config]);
 
-init_per_testcase(schedule_replication_of_100_regular_files_by_view_with_batch_10, Config) ->
+init_per_testcase(schedule_replication_of_100_regular_files_by_view_with_batch_10 = Case, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_view_batch),
     test_utils:set_env(Nodes, op_worker, replication_by_view_batch, 10),
-    init_per_testcase(all, [{replication_by_view_batch, OldValue} | Config]);
+    init_per_testcase(?DEFAULT_CASE(Case), [{replication_by_view_batch, OldValue} | Config]);
 
 init_per_testcase(file_removed_during_replication, Config) ->
     ct:timetrap(timer:minutes(60)),
     lfm_proxy:init(Config),
     [{space_id, <<"space4">>} | Config];
 
-init_per_testcase(rtransfer_works_between_providers_with_different_ports, Config) ->
+init_per_testcase(rtransfer_works_between_providers_with_different_ports = Case, Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     {ok, C} = rpc:call(Worker1, application, get_env, [rtransfer_link, transfer]),
     C1 = lists:keyreplace(server_port, 1, C, {server_port, 30000}),
@@ -2125,34 +2218,40 @@ init_per_testcase(rtransfer_works_between_providers_with_different_ports, Config
     rpc:call(Worker2, node_cache, clear, [{rtransfer_port, ProviderId1}]),
     rpc:call(Worker1, rtransfer_config, restart_link, []),
     
-    init_per_testcase(all, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case, Config)
     when Case =:= cancel_replication_on_target_nodes_by_scheduling_user
     orelse Case =:= cancel_replication_on_target_nodes_by_other_user
     orelse Case =:= transfer_continues_on_modified_storage
-    ->
+->
     Workers = ?config(op_worker_nodes, Config),
     transfers_test_utils:mock_prolonged_replication(Workers, 1, 10),
-    init_per_testcase(all, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+init_per_testcase(warp_time_during_replication = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = time_test_utils:freeze_time(Config),
+    transfers_test_utils:mock_prolonged_replication(Workers, 1, 10),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(60)),
     lfm_proxy:init(Config),
     [{space_id, ?SPACE_ID} | Config].
 
-end_per_testcase(not_synced_file_should_not_be_replicated, Config) ->
+end_per_testcase(not_synced_file_should_not_be_replicated = Case, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(WorkerP2, replication_worker),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= replication_should_succeed_when_there_is_enough_space_for_file;
     Case =:= replication_should_fail_when_space_is_full
-    ->
+->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
     transfers_test_utils:unmock_space_occupancy(WorkerP2, ?SPACE_ID),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= schedule_replication_of_100_regular_files_by_view_with_batch_100;
@@ -2161,16 +2260,22 @@ end_per_testcase(Case, Config) when
     Nodes = ?config(op_worker_nodes, Config),
     OldValue = ?config(replication_by_view_batch, Config),
     test_utils:set_env(Nodes, op_worker, replication_by_view_batch, OldValue),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config)
     when Case =:= cancel_replication_on_target_nodes_by_scheduling_user
     orelse Case =:= cancel_replication_on_target_nodes_by_other_user
     orelse Case =:= transfer_continues_on_modified_storage
-    ->
+->
     Workers = ?config(op_worker_nodes, Config),
     transfers_test_utils:unmock_prolonged_replication(Workers),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(warp_time_during_replication = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    transfers_test_utils:unmock_prolonged_replication(Workers),
+    ok = time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
