@@ -193,7 +193,7 @@ verify_provider_identity_token(IdentityToken) ->
     Interface :: undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
-    {ok, aai:subject(), TTL :: undefined | time:seconds()} | errors:error().
+    {ok, tokens:serialized()} | errors:error().
 acquire_offline_user_access_token(UserId, AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,

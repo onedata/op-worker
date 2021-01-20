@@ -177,7 +177,6 @@ get_caveats(TokenCredentials) ->
     end.
 
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% @see provider_offline_access
