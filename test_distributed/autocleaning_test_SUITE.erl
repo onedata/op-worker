@@ -787,7 +787,7 @@ time_warp_test(Config) ->
     ?assertEqual(FilesNum * FileSize, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     StartTimeSeconds = 1000000000, % 10 ^ 9
 
-    ok = clock_freezer_mock:set_current_time_millis(StartTimeSeconds * 1000),
+    ok = time_test_utils:set_current_time_seconds(StartTimeSeconds),
     % "On the fly" replication of the ExtraFile will cause occupancy
     % to exceed the Threshold.
 
@@ -795,9 +795,9 @@ time_warp_test(Config) ->
     read_file(W1, SessId, EG, ExtraFileSize),
     {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
 
-    % pretend that there has been a 1 hour backward time warp
-    BackwardTimeWarpSeconds = 1000, % 10 ^ 3
-    clock_freezer_mock:simulate_seconds_passing(-BackwardTimeWarpSeconds),
+    % pretend that there has been a 10 hour backward time warp
+    BackwardTimeWarpSeconds = 36000,
+    time_test_utils:simulate_seconds_passing(-BackwardTimeWarpSeconds),
 
     ?assertRunFinished(W1, ARId),
     StartTimeIso8601 = time:seconds_to_iso8601(StartTimeSeconds),
@@ -856,7 +856,7 @@ init_per_testcase(default, Config) ->
 init_per_testcase(time_warp_test, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     disable_periodical_spaces_autocleaning_check(W),
-    clock_freezer_mock:setup_on_nodes(?config(op_worker_nodes, Config), [autocleaning_run]),
+    time_test_utils:freeze_time(Config),
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
@@ -870,7 +870,7 @@ end_per_testcase(cancel_autocleaning_run, Config) ->
     end_per_testcase(default, Config);
 
 end_per_testcase(time_warp_test, Config) ->
-    clock_freezer_mock:teardown_on_nodes(?config(op_worker_nodes, Config)),
+    time_test_utils:unfreeze_time(Config),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
