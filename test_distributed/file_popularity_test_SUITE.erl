@@ -40,7 +40,8 @@
     avg_open_count_per_day_parameter_should_be_bounded_by_custom_value/1,
     changing_max_avg_open_count_per_day_limit_should_reindex_the_file/1,
     changing_last_open_weight_should_reindex_the_file/1,
-    changing_avg_open_count_weight_should_reindex_the_file/1
+    changing_avg_open_count_weight_should_reindex_the_file/1,
+    time_warp_test/1
 ]).
 
 %% view_traverse callbacks
@@ -66,7 +67,8 @@ all() -> [
     changing_last_open_weight_should_reindex_the_file,
     changing_avg_open_count_weight_should_reindex_the_file,
     query_should_return_files_sorted_by_increasing_avg_open_count_per_day,
-    query_should_return_files_sorted_by_increasing_last_open_timestamp
+    query_should_return_files_sorted_by_increasing_last_open_timestamp,
+    time_warp_test
 ].
 
 -define(SPACE_ID, <<"space1">>).
@@ -282,23 +284,58 @@ query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
     {ok, H1} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read), % 3 hours before query
     ok = lfm_proxy:close(W, H1),
-    clock_freezer_mock:simulate_seconds_passing(3600),
+    time_test_utils:simulate_seconds_passing(3600),
 
     {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
     {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read), % 2 hours before query
     ok = lfm_proxy:close(W, H2),
-    clock_freezer_mock:simulate_seconds_passing(3600),
+    time_test_utils:simulate_seconds_passing(3600),
 
     {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3, 8#664),
     {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read), % 1 hour before query
     ok = lfm_proxy:close(W, H3),
-    clock_freezer_mock:simulate_seconds_passing(3600),
+    time_test_utils:simulate_seconds_passing(3600),
 
     {ok, FileId1} = file_id:guid_to_objectid(G1),
     {ok, FileId2} = file_id:guid_to_objectid(G2),
     {ok, FileId3} = file_id:guid_to_objectid(G3),
 
     ?assertMatch([{FileId1, _}, {FileId2, _}, {FileId3, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
+
+time_warp_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    ok = enable_file_popularity(W, ?SPACE_ID),
+    FileName1 = <<"file1">>,
+    FileName2 = <<"file2">>,
+    FileName3 = <<"file3">>,
+    FilePath1 = ?FILE_PATH(FileName1),
+    FilePath2 = ?FILE_PATH(FileName2),
+    FilePath3 = ?FILE_PATH(FileName3),
+
+    % simulate each next file being opened one hour BEFORE the previous one (due to a time warp)
+    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
+    {ok, H1} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read), % 1 hour before query
+    ok = lfm_proxy:close(W, H1),
+    time_test_utils:simulate_seconds_passing(-3600),
+
+    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
+    {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read), % 2 hours before query
+    ok = lfm_proxy:close(W, H2),
+    time_test_utils:simulate_seconds_passing(-3600),
+
+    {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3, 8#664),
+    {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read), % 3 hour before query
+    ok = lfm_proxy:close(W, H3),
+    time_test_utils:simulate_seconds_passing(-3600),
+
+    {ok, FileId1} = file_id:guid_to_objectid(G1),
+    {ok, FileId2} = file_id:guid_to_objectid(G2),
+    {ok, FileId3} = file_id:guid_to_objectid(G3),
+
+    % Files should be sorted by increasing timestamp of last open
+    % Due to time warps, file that was created as last one has the smallest timestamp so the files
+    % should be sorted in reverse order than they were created
+    ?assertMatch([{FileId3, _}, {FileId2, _}, {FileId1, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 %%%===================================================================
 %%% Test base functions
@@ -309,7 +346,7 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenW, AvgOpenW),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
-    FrozenTimestamp = clock_freezer_mock:current_time_hours(),
+    FrozenTimestamp = time_test_utils:get_frozen_time_hours(),
     AvgOpen = 1 / 30,
     Popularity = popularity(FrozenTimestamp, LastOpenW, AvgOpen, AvgOpenW),
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
@@ -335,9 +372,10 @@ init_per_testcase(Case, Config) when
     Case == query_should_return_files_sorted_by_increasing_last_open_timestamp;
     Case == file_should_have_correct_popularity_value;
     Case == file_should_have_correct_popularity_value2;
-    Case == file_should_have_correct_popularity_value3
+    Case == file_should_have_correct_popularity_value3;
+    Case == time_warp_test
 ->
-    clock_freezer_mock:setup_on_nodes(?config(op_worker_nodes, Config), [file_popularity]),
+    time_test_utils:freeze_time(Config),
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
@@ -351,9 +389,10 @@ end_per_testcase(Case, Config) when
     Case == query_should_return_files_sorted_by_increasing_last_open_timestamp;
     Case == file_should_have_correct_popularity_value;
     Case == file_should_have_correct_popularity_value2;
-    Case == file_should_have_correct_popularity_value3
+    Case == file_should_have_correct_popularity_value3;
+    Case == time_warp_test
 ->
-    clock_freezer_mock:teardown_on_nodes(?config(op_worker_nodes, Config)),
+    time_test_utils:unfreeze_time(Config),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
