@@ -114,6 +114,8 @@ schedule_transfer_insecure(
 
 -spec assert_not_a_trash_dir_replication(undefined | od_provider:id(), file_ctx:ctx()) -> ok.
 assert_not_a_trash_dir_replication(undefined, _) ->
+    % if ReplicatingProvider is undefined the transfer is a eviction
+    % eviction is allowed on trash directory
     ok;
 assert_not_a_trash_dir_replication(_ReplicatingProviderId, FileCtx0) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0).

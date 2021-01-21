@@ -214,8 +214,13 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
             end;
         <<"reconcile">> ->
             {ok, EffectiveFileQos} = file_qos:get_effective(FileDoc),
-            {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
-            file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
+            case file_qos:is_in_trash(EffectiveFileQos) of
+                true ->
+                    [];
+                false ->
+                    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
+                    file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
+            end
     end,
     ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries),
 

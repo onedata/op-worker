@@ -76,7 +76,7 @@
 %formatter:off
 % This callback is executed after generating children jobs but before executing them (before returning
 % traverse:master_job_map()).
--type batch_processing_prehook() ::
+-type new_jobs_preprocessor() ::
     fun((
         slave_jobs(),
         master_jobs(),
@@ -241,7 +241,7 @@ get_sync_info() ->
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) -> 
     {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
-    do_master_job(Job, MasterJobArgs, ?BATCH_PROCESSING_PREHOOK_NOOP).
+    do_master_job(Job, MasterJobArgs, ?NEW_JOBS_DEFAULT_PREPROCESSOR).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -249,15 +249,14 @@ do_master_job(Job, MasterJobArgs) ->
 %% returns jobs for listed children and next batch if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec do_master_job(master_job(), traverse:master_job_extended_args(), batch_processing_prehook()) ->
+-spec do_master_job(master_job(), traverse:master_job_extended_args(), new_jobs_preprocessor()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job = #tree_traverse{
     file_ctx = FileCtx,
-    children_master_jobs_mode = ChildrenMasterJobsMode,
-    batch_size = BatchSize
+    children_master_jobs_mode = ChildrenMasterJobsMode
 },
     #{task_id := TaskId},
-    BatchProcessingPrehook
+    NewJobsPreprocessor
 ) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     Job2 = Job#tree_traverse{file_ctx = FileCtx2},
@@ -265,16 +264,15 @@ do_master_job(Job = #tree_traverse{
         ?REGULAR_FILE_TYPE ->
             {ok, #{slave_jobs => [get_child_slave_job(Job2, FileCtx2)]}};
         ?DIRECTORY_TYPE ->
-            {ChildrenCtxs, ListExtendedInfo, FileCtx3} = list_children(Job2),
+            {ChildrenCtxs, ListExtendedInfo, FileCtx3, IsLast} = list_children(Job2),
             LastName2 = maps:get(last_name, ListExtendedInfo),
             LastTree2 = maps:get(last_tree, ListExtendedInfo),
             Token2 = maps:get(token, ListExtendedInfo, undefined),
             {SlaveJobs, MasterJobs} = generate_children_jobs(Job2, TaskId, ChildrenCtxs),
             ChildrenCount = length(SlaveJobs) + length(MasterJobs),
-            IsLastBatch = (Token2 =/= undefined andalso Token2#link_token.is_last) orelse (length(ChildrenCtxs) < BatchSize),
-            SubtreeProcessingStatus = maybe_report_children_jobs_to_process(Job2, TaskId, ChildrenCount, IsLastBatch),
-            BatchProcessingPrehook(SlaveJobs, MasterJobs, ListExtendedInfo, SubtreeProcessingStatus),
-            FinalMasterJobs = case IsLastBatch of
+            SubtreeProcessingStatus = maybe_report_children_jobs_to_process(Job2, TaskId, ChildrenCount, IsLast),
+            NewJobsPreprocessor(SlaveJobs, MasterJobs, ListExtendedInfo, SubtreeProcessingStatus),
+            FinalMasterJobs = case IsLast of
                 true ->
                     MasterJobs;
                 false -> [Job2#tree_traverse{
@@ -354,7 +352,12 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 %%%===================================================================
 
 -spec list_children(master_job()) ->
-    {Children :: [file_ctx:ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: file_ctx:ctx()}.
+    {
+        Children :: [file_ctx:ctx()],
+        ListExtendedInfo :: file_meta:list_extended_info(),
+        NewFileCtx :: file_ctx:ctx(),
+        IsLast :: boolean()
+    }.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
     user_ctx = UserCtx,

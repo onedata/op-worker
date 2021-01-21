@@ -90,7 +90,7 @@ get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
 get_children(UserCtx, FileCtx0, Offset, Limit, EncodedToken, StartId, StartTree) ->
     ParentGuid = file_ctx:get_guid_const(FileCtx0),
     Token = decode_token(EncodedToken),
-    {ChildrenCtxs, ExtendedInfo, FileCtx1} =
+    {ChildrenCtxs, ExtendedInfo, FileCtx1, IsLast} =
         get_children_ctxs(UserCtx, FileCtx0, Offset, Limit, Token, StartId, StartTree),
     ChildrenNum = length(ChildrenCtxs),
 
@@ -121,13 +121,13 @@ get_children(UserCtx, FileCtx0, Offset, Limit, EncodedToken, StartId, StartTree)
         end
     end, lists:zip(lists:seq(1, ChildrenNum), ChildrenCtxs)),
 
-    NewToken = maps:get(token, ExtendedInfo, #link_token{}),
+    NewTokenOrUndefined = maps:get(token, ExtendedInfo, undefined),
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
             child_links = ChildrenLinks,
-            index_token = encode_token(NewToken),
-            is_last = NewToken#link_token.is_last
+            index_token = encode_token(NewTokenOrUndefined),
+            is_last = IsLast
         }
     }.
 
@@ -150,7 +150,8 @@ get_children(UserCtx, FileCtx0, Offset, Limit, EncodedToken, StartId, StartTree)
     {
         ChildrenCtxs :: [file_ctx:ctx()],
         ExtendedListInfo :: file_meta:list_extended_info(),
-        NewFileCtx :: file_ctx:ctx()
+        NewFileCtx :: file_ctx:ctx(),
+        IsLast :: boolean()
     }.
 get_children_ctxs(UserCtx, FileCtx0, Offset, Limit, Token, StartId, StartTree) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
@@ -295,7 +296,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     fslogic_worker:fuse_response().
 get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, EncodedToken, IncludeReplicationStatus, ChildrenWhiteList) ->
     Token = decode_token(EncodedToken),
-    {Children, ExtendedInfo, FileCtx1} = list_children(
+    {Children, ExtendedInfo, FileCtx1, IsLast} = list_children(
         UserCtx, FileCtx0, Offset, Limit, Token, undefined, undefined, ChildrenWhiteList
     ),
     ChildrenAttrs = map_children(
@@ -307,12 +308,12 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, EncodedToken, Incl
 
     fslogic_times:update_atime(FileCtx1),
 
-    NewToken = maps:get(token, ExtendedInfo, #link_token{}),
+    NewTokenOrUndefined = maps:get(token, ExtendedInfo, undefined),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
-            index_token = encode_token(NewToken),
-            is_last = NewToken#link_token.is_last
+            index_token = encode_token(NewTokenOrUndefined),
+            is_last = IsLast
         }
     }.
 
@@ -336,8 +337,8 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, EncodedToken, Incl
     fslogic_worker:fuse_response().
 get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWhiteList) ->
     file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
-    {Children, ExtendedInfo, FileCtx1} = list_children(
-        UserCtx, FileCtx0, Offset, Limit, #link_token{}, StartId, undefined, ChildrenWhiteList
+    {Children, _ExtendedInfo, FileCtx1, IsLast} = list_children(
+        UserCtx, FileCtx0, Offset, Limit, undefined, StartId, undefined, ChildrenWhiteList
     ),
     ChildrenDetails = map_children(
         UserCtx,
@@ -345,12 +346,11 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
         Children,
         false
     ),
-    NewToken = maps:get(token, ExtendedInfo, #link_token{}),
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_details{
             child_details = ChildrenDetails,
-            is_last = NewToken#link_token.is_last
+            is_last = IsLast
         }
     }.
 
@@ -367,14 +367,19 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
     {
         Children :: [file_ctx:ctx()],
         ExtendedInfo :: file_meta:list_extended_info(),
-        NewFileCtx :: file_ctx:ctx()
+        NewFileCtx :: file_ctx:ctx(),
+        IsLast :: boolean()
     }.
 list_children(UserCtx, FileCtx, Offset, Limit, Token, StartId, StartTree, undefined) ->
     case file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, StartTree) of
         {Children, FileCtx2}  ->
-            {Children, #{token => #link_token{is_last = length(Children) < Limit}}, FileCtx2};
+            {Children, #{}, FileCtx2, length(Children) < Limit};
         {Children, ExtendedInfo, FileCtx2} ->
-            {Children, ExtendedInfo, FileCtx2}
+            IsLast = case maps:get(token, ExtendedInfo, undefined) of
+                undefined -> length(Children) < Limit;
+                NewToken -> NewToken#link_token.is_last
+            end,
+            {Children, ExtendedInfo, FileCtx2, IsLast}
     end;
 list_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, _StartTree, ChildrenWhiteList0) ->
     ChildrenWhiteList1 = case StartId of
@@ -386,7 +391,7 @@ list_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, _StartTree, Children
     {Children, FileCtx1} = file_ctx:get_file_children_whitelisted(
         FileCtx0, UserCtx, Offset, Limit, ChildrenWhiteList1
     ),
-    {Children, #{token => #link_token{is_last = length(Children) < Limit}}, FileCtx1}.
+    {Children, #{}, FileCtx1, length(Children) < Limit}.
 
 
 %%--------------------------------------------------------------------
@@ -449,18 +454,14 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus) ->
 
 
 
--spec decode_token(undefined | binary()) -> file_meta_links:token().
+-spec decode_token(binary()) -> file_meta_links:token() | undefined.
 decode_token(<<>>) ->
-    #link_token{};
-decode_token(undefined) ->
-    #link_token{};
+    undefined;
 decode_token(Token) ->
     binary_to_term(Token).
 
 
--spec encode_token(file_meta_links:token()) -> binary().
-encode_token(#link_token{restart_token = undefined}) ->
-    <<>>;
+-spec encode_token(file_meta_links:token() | undefined) -> binary().
 encode_token(undefined) ->
     <<>>;
 encode_token(Token) ->

@@ -19,7 +19,7 @@
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
 -export([create_files_tree/4]).
 
-% TODO merge this module with file_ops_test_utils
+% TODO VFS-7215 - merge this module with file_ops_test_utils
 
 %%%===================================================================
 %%% API functions

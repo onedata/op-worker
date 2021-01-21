@@ -92,9 +92,8 @@ delete_master_job(<<?MAIN_JOB_PREFIX, _/binary>> = Key, Job, Scope, CallbackModu
         false -> Ctx
     end,
     datastore_model:delete(Ctx2, Key);
-delete_master_job(Key, Job, _, CallbackModule) ->
-    Ctx = get_extended_ctx(Job, CallbackModule),
-    datastore_model:delete(Ctx, Key).
+delete_master_job(Key, _Job, _, _CallbackModule) ->
+    datastore_model:delete(?CTX, Key).
 
 -spec get_master_job(key() | doc()) ->
     {ok, tree_traverse:master_job(), traverse:pool(), traverse:id()}  | {error, term()}.
@@ -239,18 +238,18 @@ upgrade_record(1, {?MODULE, Pool, CallbackModule, TaskId, DocId, LastName, LastT
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:key() | main_job, datastore_doc:scope(), record(), datastore:ctx()) -> {ok, key()} | {error, term()}.
-save(main_job, Scope, Value, Ctx) ->
+save(main_job, Scope, Value, ExtendedCtx) ->
     RandomPart = datastore_key:new(),
     GenKey = <<?MAIN_JOB_PREFIX, RandomPart/binary>>,
     Doc = #document{key = GenKey, value = Value},
-    Doc2 = set_scope_if_sync_enabled(Doc, Scope, Ctx),
-    ?extract_key(datastore_model:save(Ctx#{generated_key => true}, Doc2));
-save(<<?MAIN_JOB_PREFIX, _/binary>> = Key, Scope, Value, Ctx) ->
+    Doc2 = set_scope_if_sync_enabled(Doc, Scope, ExtendedCtx),
+    ?extract_key(datastore_model:save(ExtendedCtx#{generated_key => true}, Doc2));
+save(<<?MAIN_JOB_PREFIX, _/binary>> = Key, Scope, Value, ExtendedCtx) ->
     Doc = #document{key = Key, value = Value},
-    Doc2 = set_scope_if_sync_enabled(Doc, Scope, Ctx),
-    ?extract_key(datastore_model:save(Ctx, Doc2));
-save(Key, _, Value, Ctx) ->
-    ?extract_key(datastore_model:save(Ctx, #document{key = Key, value = Value})).
+    Doc2 = set_scope_if_sync_enabled(Doc, Scope, ExtendedCtx),
+    ?extract_key(datastore_model:save(ExtendedCtx, Doc2));
+save(Key, _, Value, _ExtendedCtx) ->
+    ?extract_key(datastore_model:save(?CTX, #document{key = Key, value = Value})).
 
 
 -spec set_scope_if_sync_enabled(doc(), datastore_doc:scope(), datastore:ctx()) -> doc().

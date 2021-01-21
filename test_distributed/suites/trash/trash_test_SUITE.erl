@@ -13,6 +13,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("distribution_assert.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -41,15 +42,20 @@
     set_metadata_on_trash_dir_is_forbidden/1,
     set_cdmi_metadata_on_trash_dir_is_forbidden/1,
     create_share_from_trash_dir_is_forbidden/1,
+    add_qos_entry_for_trash_dir_is_forbidden/1,
     remove_metadata_on_trash_dir_is_forbidden/1,
     schedule_replication_transfer_on_trash_dir_is_forbidden/1,
     schedule_eviction_transfer_on_trash_dir_is_allowed/1,
     schedule_migration_transfer_on_trash_dir_is_forbidden/1,
     schedule_replication_transfer_on_space_does_not_replicate_trash/1,
+    schedule_eviction_transfer_on_space_evicts_trash/1,
     schedule_migration_transfer_on_space_does_not_replicate_trash/1,
     move_to_trash_test/1,
     move_to_trash_and_delete_test/1,
-    files_from_trash_are_not_reimported/1
+    files_from_trash_are_not_reimported/1,
+    qos_set_on_file_does_not_affect_file_in_trash/1,
+    qos_set_on_parent_directory_does_not_affect_files_in_trash/1,
+    qos_set_on_space_directory_does_not_affect_files_in_trash/1
 ]).
 
 
@@ -68,15 +74,20 @@ all() -> ?ALL([
     set_metadata_on_trash_dir_is_forbidden,
     set_cdmi_metadata_on_trash_dir_is_forbidden,
     create_share_from_trash_dir_is_forbidden,
+    add_qos_entry_for_trash_dir_is_forbidden,
     remove_metadata_on_trash_dir_is_forbidden,
     schedule_replication_transfer_on_trash_dir_is_forbidden,
     schedule_eviction_transfer_on_trash_dir_is_allowed,
     schedule_migration_transfer_on_trash_dir_is_forbidden,
     schedule_replication_transfer_on_space_does_not_replicate_trash,
+    schedule_eviction_transfer_on_space_evicts_trash,
     schedule_migration_transfer_on_space_does_not_replicate_trash,
     move_to_trash_test,
     move_to_trash_and_delete_test,
-    files_from_trash_are_not_reimported
+    files_from_trash_are_not_reimported,
+    qos_set_on_file_does_not_affect_file_in_trash,
+    qos_set_on_parent_directory_does_not_affect_files_in_trash,
+    qos_set_on_space_directory_does_not_affect_files_in_trash
 ]).
 
 -define(SPACE1_PLACEHOLDER, space1).
@@ -214,6 +225,12 @@ create_share_from_trash_dir_is_forbidden(_Config) ->
     ?assertMatch({error, ?EPERM},
         lfm_proxy:create_share(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"MY SHARE">>)).
 
+add_qos_entry_for_trash_dir_is_forbidden(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    ?assertMatch({error, ?EPERM},
+        lfm_proxy:add_qos_entry(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"key=value">>, 1)).
+
 remove_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
@@ -268,6 +285,52 @@ schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
         replication_status = completed,
         files_replicated = 0
     }}}, rpc:call(P1Node, transfer, get, [TransferId]), ?ATTEMPTS).
+
+
+schedule_eviction_transfer_on_space_evicts_trash(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    DirName = ?RAND_DIR_NAME,
+    FileName = ?RAND_FILE_NAME,
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
+
+    % create file and directory
+    TestData = <<"test data">>,
+    Size = byte_size(TestData),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, {FileGuid, H}} =
+        ?assertMatch({ok, _}, lfm_proxy:create_and_open(P1Node, UserSessIdP1, DirGuid, FileName, ?DEFAULT_FILE_PERMS), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:write(P1Node, H,  0, TestData), ?ATTEMPTS),
+    lfm_proxy:close(P1Node, H),
+
+    % read file on P2 to replicate it
+    {ok, H2} =
+        ?assertMatch({ok, _}, lfm_proxy:open(P2Node, UserSessIdP2, {guid, FileGuid}, read), ?ATTEMPTS),
+    ?assertEqual(Size, try
+        {ok, Bytes} = lfm_proxy:read(P2Node, H2,  0, Size),
+        byte_size(Bytes)
+    catch
+        _:_ ->
+            error
+    end, ?ATTEMPTS),
+    lfm_proxy:close(P2Node, H2),
+
+    P1Id = oct_background:get_provider_id(krakow),
+    P2Id = oct_background:get_provider_id(paris),
+
+    ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size, Size]), FileGuid, ?ATTEMPTS),
+
+    % evict whole space
+    {ok, TransferId} = ?assertMatch({ok, _},
+        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, {guid, ?SPACE_GUID}, P1Id, undefined)),
+
+    ?assertMatch({ok, #document{value = #transfer{
+        eviction_status = completed,
+        files_evicted = 1
+    }}}, rpc:call(P1Node, transfer, get, [TransferId]), ?ATTEMPTS),
+
+    ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [0, Size]), FileGuid, ?ATTEMPTS).
 
 
 schedule_migration_transfer_on_space_does_not_replicate_trash(_Config) ->
@@ -399,6 +462,73 @@ files_from_trash_are_not_reimported(_Config) ->
     % files which are currently in trash shouldn't have been reimported
     ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?SPACE_GUID(?SPACE_ID2)}, 0, 1000)).
 
+qos_set_on_file_does_not_affect_file_in_trash(Config) ->
+    qos_does_not_affect_files_in_trash_test_base(Config, file).
+
+qos_set_on_parent_directory_does_not_affect_files_in_trash(Config) ->
+    qos_does_not_affect_files_in_trash_test_base(Config, parent_dir).
+
+qos_set_on_space_directory_does_not_affect_files_in_trash(Config) ->
+    qos_does_not_affect_files_in_trash_test_base(Config, space_dir).
+
+%===================================================================
+% Test base functions
+%===================================================================
+
+qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
+    % this test creates the following structure in the space directory:
+    % /space_dir/parent_dir/file
+    % It adds QoS entry for file determined by SetQosOn parameter
+    % and checks whether file which is in trash is not replicated by QoS.
+    % Parameter SetQosOn can have the following values:
+    %  - space_dir
+    %  - parent_dir
+    %  - file
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    StorageId = op_test_rpc:get_supporting_storage_id(P1Node, ?SPACE_ID),
+    ok = rpc:call(P1Node, storage_logic, set_qos_parameters, [StorageId, #{<<"key">> => <<"value">>}]),
+
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
+
+    P1Id = oct_background:get_provider_id(krakow),
+    P2Id = oct_background:get_provider_id(paris),
+
+    DirName = ?RAND_DIR_NAME,
+    FileName = ?RAND_FILE_NAME,
+    {ok, DirGuid} = lfm_proxy:mkdir(P2Node, UserSessIdP2, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    DirCtx = file_ctx:new_by_guid(DirGuid),
+    {ok, {FileGuid, H1}} = lfm_proxy:create_and_open(P2Node, UserSessIdP2, DirGuid, FileName, ?DEFAULT_FILE_PERMS),
+    TestData1 = <<"first part ">>,
+    TestData2 = <<"seconds part">>,
+    Size1 = byte_size(TestData1),
+    Size2 = Size1 + byte_size(TestData2),
+    {ok, _} = lfm_proxy:write(P2Node, H1, 0, TestData1),
+    lfm_proxy:fsync(P2Node, H1),
+
+    GuidWithQos = case SetQosOn of
+        space_dir -> ?SPACE_GUID;
+        parent_dir -> DirGuid;
+        file -> FileGuid
+    end,
+
+    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, UserSessIdP1, {guid, GuidWithQos}, <<"key=value">>, 1),
+
+    % check whether QoS synchronized the file
+    ?assertMatch({ok, {#{QosEntryId := fulfilled}, _}},
+        lfm_proxy:get_effective_file_qos(P1Node, UserSessIdP1, {guid, GuidWithQos}), ?ATTEMPTS),
+
+    ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size1, Size1]), FileGuid, ?ATTEMPTS),
+
+    % move the file to trash
+    move_to_trash(P1Node, DirCtx, UserSessIdP1),
+
+    % write new blocks to file which is in trash
+    {ok, _} = lfm_proxy:write(P2Node, H1, Size1, TestData2),
+
+    % file shouldn't have been synchronized because it's in trash
+    ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size1, Size2]), FileGuid, ?ATTEMPTS).
 
 %===================================================================
 % SetUp and TearDown functions

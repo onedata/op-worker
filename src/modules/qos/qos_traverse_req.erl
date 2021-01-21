@@ -151,8 +151,8 @@ split_local_and_remote(TraverseReqs) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
+%% @doc
 %% Returns file's file_meta document.
 %% Returns error if there is no such file doc (it is not synced yet).
 %% @end

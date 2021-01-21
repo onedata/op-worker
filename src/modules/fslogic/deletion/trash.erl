@@ -8,7 +8,7 @@
 %%% @doc
 %%% API module for trash management.
 %%% Trash is a special directory where files are moved as a result
-%%% of fslogic #delete_using_trash operation.
+%%% of fslogic #move_to_trash operation.
 %%% Trash directory is created for each space, it has
 %%% a predefined uuid (see fslogic_uuid) and a predefined name.
 %%% Trash directory is child of a space directory.
@@ -36,7 +36,6 @@
 %% API
 -export([create/1, move_to_trash/2, delete_from_trash/4]).
 
-% TODO jk Czy zakazujemy ustawiać QoS na koszu? - ogarnac
 
 -define(NAME_UUID_SEPARATOR, "@@").
 -define(NAME_IN_TRASH(FileName, FileUuid), <<FileName/binary, ?NAME_UUID_SEPARATOR, FileUuid/binary>>).
@@ -74,8 +73,7 @@ move_to_trash(FileCtx, UserCtx) ->
     % they names are suffixed with Uuid to avoid conflicts
     TrashUuid = fslogic_uuid:spaceid_to_trash_dir_uuid(SpaceId),
     % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
-    % TODO jk clean up na innych providerach?
-    file_qos:clean_up(FileCtx),
+    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     file_meta:rename(FileDoc, ParentUuid, TrashUuid, ?NAME_IN_TRASH(Name, Uuid)),
     FileCtx5.
 

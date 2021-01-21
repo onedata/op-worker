@@ -15,7 +15,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 
--define(BATCH_PROCESSING_PREHOOK_NOOP, fun(_, _, _, _) -> ok end).
+-define(NEW_JOBS_DEFAULT_PREPROCESSOR, fun(_, _, _, _) -> ok end).
 -define(DEFAULT_BATCH_SIZE, 1000).
 -define(DEFAULT_EXEC_SLAVE_ON_DIR, false).
 -define(DEFAULT_CHILDREN_MASTER_JOBS_MODE, sync).

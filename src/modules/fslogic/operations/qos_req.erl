@@ -38,6 +38,7 @@
 -spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:expression(),
     qos_entry:replicas_num(), qos_entry:type()) -> fslogic_worker:provider_response().
 add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
+    file_ctx:assert_not_trash_dir_const(FileCtx),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx,
         [traverse_ancestors, ?write_metadata]
@@ -146,18 +147,26 @@ get_effective_file_qos_insecure(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case file_qos:get_effective(FileUuid) of
         {ok, EffQos} ->
-            QosEntriesList = file_qos:get_qos_entries(EffQos),
-            EntriesWithStatus = lists:foldl(fun(QosEntryId, Acc) ->
-                Status = qos_status:check(FileCtx, QosEntryId),
-                Acc#{QosEntryId => Status}
-            end, #{}, QosEntriesList),
-            #provider_response{
-                status = #status{code = ?OK},
-                provider_response = #eff_qos_response{
-                    entries_with_status = EntriesWithStatus,
-                    assigned_entries = file_qos:get_assigned_entries(EffQos)
-                }
-            };
+            case file_qos:is_in_trash(EffQos) of
+                true ->
+                    #provider_response{
+                        status = #status{code = ?OK},
+                        provider_response = #eff_qos_response{}
+                    };
+                false ->
+                    QosEntriesList = file_qos:get_qos_entries(EffQos),
+                    EntriesWithStatus = lists:foldl(fun(QosEntryId, Acc) ->
+                        Status = qos_status:check(FileCtx, QosEntryId),
+                        Acc#{QosEntryId => Status}
+                    end, #{}, QosEntriesList),
+                    #provider_response{
+                        status = #status{code = ?OK},
+                        provider_response = #eff_qos_response{
+                            entries_with_status = EntriesWithStatus,
+                            assigned_entries = file_qos:get_assigned_entries(EffQos)
+                        }
+                    }
+            end;
         undefined ->
             #provider_response{
                 status = #status{code = ?OK},
