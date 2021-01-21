@@ -304,7 +304,7 @@ init_per_testcase(resupport_cleanup_test, Config) ->
         StorageId = ?config({storage_id, ?GET_DOMAIN(Node)}, Config1),
         test_utils:mock_expect(Node, space_logic, get_local_storage_id, fun(_) -> {ok, StorageId} end)
     end, Nodes),
-    test_utils:mock_expect(Nodes, space_support, init_space_support, fun(_, _, _) ->  {ok, <<"space1">>} end),
+    test_utils:mock_expect(Nodes, storage_logic, init_space_support, fun(_, _, _) ->  {ok, <<"space1">>} end),
     test_utils:mock_expect(Nodes, storage_logic, is_imported, fun(_) ->  {ok, true} end),
     Config1;
 init_per_testcase(revise_supported_spaces_test, Config) ->

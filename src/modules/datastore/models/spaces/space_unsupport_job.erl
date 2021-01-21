@@ -7,8 +7,8 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This model holds information about current space unsupport job, i.e. what space is being 
-%%% unsuported, from which storage and what stage is currently running.
-%%% Some stages start internal task (like starting cleanup traverse or adding QoS entry). 
+%%% unsuported, from which storage and what step is currently running.
+%%% Some steps start internal task (like starting cleanup traverse or adding QoS entry). 
 %%% This tasks should not be started again after provider was restarted. For this purpose 
 %%% id of such internal task is persisted in this model as substask_id.
 %%% @end
@@ -48,10 +48,10 @@ save(Job) ->
     #space_unsupport_job{
         space_id = SpaceId,
         storage_id = StorageId,
-        step = Stage,
+        step = Step,
         task_id = TaskId
     } = Job,
-    save(gen_id(SpaceId, StorageId, Stage), Job, TaskId).
+    save(gen_id(SpaceId, StorageId, Step), Job, TaskId).
 
 -spec save(id() | undefined | main_job, record(), traverse:id()) ->
     {ok, id()} | {error, term()}.
@@ -61,11 +61,11 @@ save(undefined, Job, TaskId) ->
     #space_unsupport_job{
         space_id = SpaceId,
         storage_id = StorageId,
-        step = Stage
+        step = Step
     } = Job,
     % use fixed id so document can be accessed knowing only 
-    % SpaceId, StorageId and Stage e.g. in slave_job
-    save(gen_id(SpaceId, StorageId, Stage), Job, TaskId);
+    % SpaceId, StorageId and Step e.g. in slave_job
+    save(gen_id(SpaceId, StorageId, Step), Job, TaskId);
 save(Key, Job, TaskId) ->
     ?extract_key(datastore_model:save(?CTX, #document{
         key = Key,
@@ -91,8 +91,8 @@ delete(Key) ->
     datastore_model:delete(?CTX, Key).
 
 -spec delete(od_space:id(), storage:id(), space_unsupport_engine:step()) -> ok | {error, term()}.
-delete(SpaceId, StorageId, Stage) ->
-    delete(gen_id(SpaceId, StorageId, Stage)).
+delete(SpaceId, StorageId, Step) ->
+    delete(gen_id(SpaceId, StorageId, Step)).
 
 
 %%%===================================================================
@@ -148,5 +148,5 @@ decode_slave_job_pid(Pid) -> list_to_pid(binary_to_list(Pid)).
 
 %% @private
 -spec gen_id(od_space:id(), storage:id(), space_unsupport_engine:step()) -> id().
-gen_id(SpaceId, StorageId, Stage) ->
-    datastore_key:adjacent_from_digest([StorageId, Stage], SpaceId).
+gen_id(SpaceId, StorageId, Step) ->
+    datastore_key:adjacent_from_digest([StorageId, Step], SpaceId).

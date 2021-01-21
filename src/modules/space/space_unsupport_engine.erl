@@ -51,8 +51,8 @@
 -export([task_finished/2]).
 
 -type step() :: 'resize#init' | 'resize#replicate' | 'purge#cleanup_traverse' 
-    | 'retire#wait_for_dbsync' |'retire#delete_synced_documents' | 'retire#delete_local_documents'
-.
+    | 'retire#wait_for_dbsync' |'retire#delete_synced_documents' | 'retire#delete_local_documents'.
+
 -type job() :: space_unsupport_job:record().
 % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
 -type subtask_id() :: qos_entry:id() | unsupport_cleanup_traverse:id().
@@ -181,7 +181,7 @@ get_next_jobs_base('retire#delete_local_documents') -> [].
 %% @private
 -spec execute_step(space_unsupport_job:record()) -> ok.
 execute_step(#space_unsupport_job{step ='resize#init', space_id = SpaceId, storage_id = StorageId}) ->
-    ok = space_support:init_unsupport(StorageId, SpaceId),
+    ok = storage:init_unsupport(StorageId, SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId),
     storage_import:stop_auto_scan(SpaceId),
     auto_storage_import_worker:notify_space_unsupported(SpaceId),
@@ -206,7 +206,7 @@ execute_step(#space_unsupport_job{step = 'resize#replicate'} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, subtask_id = QosEntryId} = Job,
     %% @TODO Use subscription after resolving VFS-5647
     wait(fun() -> lfm:check_qos_status(?ROOT_SESS_ID, QosEntryId) == {ok, ?FULFILLED} end),
-    ok = space_support:complete_unsupport_resize(StorageId, SpaceId),
+    ok = storage:complete_unsupport_resize(StorageId, SpaceId),
     lfm:remove_qos_entry(?ROOT_SESS_ID, QosEntryId);
 
 execute_step(#space_unsupport_job{step = 'purge#cleanup_traverse', subtask_id = undefined} = Job) ->
@@ -228,7 +228,7 @@ execute_step(#space_unsupport_job{step = 'purge#cleanup_traverse'} = Job) ->
                 ok
             end
     end,
-    ok = space_support:complete_unsupport_purge(StorageId, SpaceId);
+    ok = storage:complete_unsupport_purge(StorageId, SpaceId);
 
 execute_step(#space_unsupport_job{step =  'retire#wait_for_dbsync', strategy = forced}) ->
     % no need to wait for dbsync as this space is no longer supported by this provider
@@ -259,7 +259,7 @@ execute_step(#space_unsupport_job{step = 'retire#delete_local_documents'} = Job)
     end),
     unsupport_cleanup_traverse:delete_ended(SpaceId, StorageId),
     ok = supported_spaces:remove(SpaceId, StorageId), %% @TODO VFS-7201 Handle force unsupport of space already being unsupported 
-    ok = space_support:finalize_unsupport(StorageId, SpaceId).
+    ok = storage:finalize_unsupport(StorageId, SpaceId).
 
 
 %%%===================================================================

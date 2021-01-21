@@ -50,6 +50,11 @@
 -export([update_helper_args/2, update_helper_admin_ctx/2,
     update_helper/2]).
 
+%%% Support related functions
+-export([init_space_support/3, update_space_support_size/3]).
+-export([init_unsupport/2, complete_unsupport_resize/2, complete_unsupport_purge/2, 
+    finalize_unsupport/2]).
+
 % exported for initializer and env_up escripts
 -export([on_storage_created/1]).
 
@@ -384,6 +389,41 @@ update_helper(StorageId, UpdateFun) ->
         {error, no_changes} -> ok;
         {error, _} = Error -> Error
     end.
+
+%%%===================================================================
+%%% Support related functions
+%%%===================================================================
+
+-spec init_space_support(storage:id(), tokens:serialized(), od_space:support_size()) ->
+    {ok, od_space:id()} | errors:error().
+init_space_support(StorageId, SpaceSupportToken, SupportSize) ->
+    storage_logic:init_space_support(StorageId, SpaceSupportToken, SupportSize).
+
+
+-spec update_space_support_size(storage:id(), od_space:id(), NewSupportSize :: integer()) ->
+    ok | errors:error().
+update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
+    storage_logic:update_space_support_size(StorageId, SpaceId, NewSupportSize).
+
+
+-spec init_unsupport(storage:id(), od_space:id()) -> ok | errors:error().
+init_unsupport(StorageId, SpaceId) ->
+    storage_logic:apply_unsupport_step(StorageId, SpaceId, init_unsupport).
+
+
+-spec complete_unsupport_resize(storage:id(), od_space:id()) -> ok | errors:error().
+complete_unsupport_resize(StorageId, SpaceId) ->
+    storage_logic:apply_unsupport_step(StorageId, SpaceId, complete_unsupport_resize).
+
+
+-spec complete_unsupport_purge(storage:id(), od_space:id()) -> ok | errors:error().
+complete_unsupport_purge(StorageId, SpaceId) ->
+    storage_logic:apply_unsupport_step(StorageId, SpaceId, complete_unsupport_purge).
+
+
+-spec finalize_unsupport(storage:id(), od_space:id()) -> ok | errors:error().
+finalize_unsupport(StorageId, SpaceId) ->
+    storage_logic:apply_unsupport_step(StorageId, SpaceId, finalize_unsupport).
 
 %%%===================================================================
 %%% Upgrade from 20.02.* to 21.02.*
