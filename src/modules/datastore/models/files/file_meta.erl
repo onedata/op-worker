@@ -171,7 +171,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         LocalTreeId = oneprovider:get_id(),
         Ctx = ?CTX#{scope => ParentScopeId},
         Link = {FileName, FileUuid},
-        case file_meta:save(FileDoc3) of
+        case create_internal(FileDoc3) of
             {ok, FileDocFinal = #document{key = FileUuid}} ->
                 case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
                     {ok, #link{}} ->
@@ -221,6 +221,22 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         end
     end).
 
+%% @private
+-spec create_internal(doc()) -> {ok, doc()} | {error, term()}.
+create_internal(#document{key = FileUuid, value = #file_meta{is_scope = IsScope}} = Doc) ->
+    Ctx = case IsScope of
+        true -> ?CTX#{memory_copies => all};
+        false -> ?CTX#{generated_key => true}
+    end,
+
+    case datastore_model:create(Ctx, Doc) of
+        ?ERROR_ALREADY_EXISTS ->
+            % This should happen only for space (or other special files with
+            % deterministic uuids). Others should have unique ones.
+            file_meta:get(FileUuid);
+        Result ->
+            Result
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
