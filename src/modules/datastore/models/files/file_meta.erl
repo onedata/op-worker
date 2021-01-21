@@ -130,8 +130,13 @@ save(Doc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save(doc(), boolean()) -> {ok, doc()} | {error, term()}.
-save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
-    datastore_model:save(?CTX#{memory_copies => all}, Doc);
+save(#document{key = FileUuid, value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
+    % Spaces are handled specially so as to not overwrite file_meta if it already
+    % exists ('make_space_exist' may be called several times for each space)
+    case datastore_model:create(?CTX#{memory_copies => all}, Doc) of
+        ?ERROR_ALREADY_EXISTS -> file_meta:get(FileUuid);
+        Result -> Result
+    end;
 save(Doc, GeneratedKey) ->
     datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc).
 
@@ -171,7 +176,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         LocalTreeId = oneprovider:get_id(),
         Ctx = ?CTX#{scope => ParentScopeId},
         Link = {FileName, FileUuid},
-        case create_internal(FileDoc3) of
+        case file_meta:save(FileDoc3) of
             {ok, FileDocFinal = #document{key = FileUuid}} ->
                 case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
                     {ok, #link{}} ->
@@ -220,23 +225,6 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
                 Error
         end
     end).
-
-%% @private
--spec create_internal(doc()) -> {ok, doc()} | {error, term()}.
-create_internal(#document{key = FileUuid, value = #file_meta{is_scope = IsScope}} = Doc) ->
-    Ctx = case IsScope of
-        true -> ?CTX#{memory_copies => all};
-        false -> ?CTX#{generated_key => true}
-    end,
-
-    case datastore_model:create(Ctx, Doc) of
-        ?ERROR_ALREADY_EXISTS ->
-            % This should happen only for space (or other special files with
-            % deterministic uuids). Others should have unique ones.
-            file_meta:get(FileUuid);
-        Result ->
-            Result
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
