@@ -37,9 +37,9 @@ clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     BatchSize = 1000,
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, AllWorkers),
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, undefined, BatchSize, false),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, <<>>, BatchSize, false),
     % TODO VFS-7064 remove below line after introducing link to trash directory
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId), undefined, BatchSize, false),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId), <<>>, BatchSize, false),
     assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
 
 assert_space_dir_empty(Workers, SpaceId, Attempts) ->
@@ -96,11 +96,11 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
     Results = lists:map(fun({G, Name}) ->
         case Name =:= ?TRASH_DIR_NAME of
             true ->
-                rm_recursive(Worker, SessId, G, undefined, BatchSize, false);
+                rm_recursive(Worker, SessId, G, <<>>, BatchSize, false);
             false ->
                 case lfm_proxy:is_dir(Worker, SessId, {guid, G}) of
                     true ->
-                        rm_recursive(Worker, SessId, G, undefined, BatchSize);
+                        rm_recursive(Worker, SessId, G, <<>>, BatchSize);
                     false ->
                         lfm_proxy:unlink(Worker, SessId, {guid, G});
                     {error, not_found} -> ok;

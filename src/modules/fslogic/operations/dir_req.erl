@@ -359,7 +359,7 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
 -spec list_children(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: file_meta:offset(),
     Limit :: file_meta:limit(),
-    Token :: file_meta_links:token(),
+    Token :: undefined | file_meta_links:token(),
     StartId :: undefined | file_meta:name(),
     StartTree :: undefined | oneprovider:id(),
     ChildrenWhiteList :: undefined | [file_meta:name()]
@@ -455,8 +455,10 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus) ->
 
 
 -spec decode_token(binary()) -> file_meta_links:token() | undefined.
-decode_token(<<>>) ->
+decode_token(undefined) ->
     undefined;
+decode_token(<<>>) ->
+    #link_token{};
 decode_token(Token) ->
     binary_to_term(Token).
 

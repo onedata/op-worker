@@ -178,7 +178,7 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_i
 
         case Token#link_token.is_last of
             true ->
-                ok = qos_status:report_traverse_finished_for_dir(SpaceId, TaskId, Uuid);
+                ok = qos_status:report_traverse_finished_for_dir(FileCtx, TaskId);
             false ->
                 ok
         end
@@ -226,10 +226,10 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
 
     case TaskType of
         <<"traverse">> ->
-            ok = qos_status:report_traverse_finished_for_file(
-                TaskId, file_ctx:new_by_doc(FileDoc, SpaceId)
-            );
-        <<"reconcile">> -> ok
+            {ParentFileCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+            ok = qos_status:report_traverse_finished_for_file(TaskId, FileCtx2, ParentFileCtx);
+        <<"reconcile">> ->
+            ok
     end.
 
 
@@ -254,8 +254,8 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
     SyncResult = replica_synchronizer:synchronize(
         UserCtx, FileCtx2, FileBlock, false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY
     ),
-    lists:foreach(fun(QosEntry) -> 
-        qos_entry:remove_transfer_from_list(QosEntry, TransferId) 
+    lists:foreach(fun(QosEntry) ->
+        qos_entry:remove_transfer_from_list(QosEntry, TransferId)
     end, QosEntries),
     
     case SyncResult of

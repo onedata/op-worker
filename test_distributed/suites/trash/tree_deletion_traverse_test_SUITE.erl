@@ -61,16 +61,20 @@ delete_empty_dir_test(_Config) ->
     delete_files_structure_test_base([]).
 
 delete_regular_files_test(_Config) ->
-   delete_files_structure_test_base([{0, 1000}]).
+    % TODO VFS-7101 increase number of file to 1000 after introducing offline access token
+    delete_files_structure_test_base([{0, 100}]).
 
 delete_empty_dirs_test(_Config) ->
-    delete_files_structure_test_base([{1000, 0}]).
+    % TODO VFS-7101 increase number of file to 1000 after introducing offline access token
+    delete_files_structure_test_base([{100, 0}]).
 
 delete_empty_dirs2_test(_Config) ->
-    delete_files_structure_test_base([{10, 0}, {10, 0}, {10, 0}]).
+    % TODO VFS-7101 add one more level in the tree after introducing offline access token
+    delete_files_structure_test_base([{10, 0}, {10, 0}]).
 
 delete_tree_test(_Config) ->
-    delete_files_structure_test_base([{10, 10}, {10, 10}, {10, 10}]).
+    % TODO VFS-7101 add one more level in the tree after introducing offline access token
+    delete_files_structure_test_base([{10, 10}, {10, 10}]).
 
 
 %%%===================================================================
@@ -83,18 +87,7 @@ delete_files_structure_test_base(FilesStructure) ->
     mock_traverse_finished(P1Node, self()),
     DirName = ?RAND_DIR_NAME,
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    {ok, RootGuid} = try
-        lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS)
-    catch
-        E0:R0 ->
-            ct:pal("ASSERT FAILED: ~p", [{E0, R0}]),
-            ct:pal(
-                "SessId = ~p.~n"
-                "DirName = ~p.~n"
-                "SpaceGuid = ~p.", [UserSessIdP1, DirName, ?SPACE_GUID]),
-            ct:timetrap({hours, 10}),
-            ct:sleep({hours, 10})
-    end,
+    {ok, RootGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
     {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, FilesStructure, RootGuid),
     RootDirCtx = file_ctx:new_by_guid(RootGuid),
     UserCtx = rpc:call(P1Node, user_ctx, new, [UserSessIdP1]),
@@ -104,17 +97,7 @@ delete_files_structure_test_base(FilesStructure) ->
 
     ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?SPACE_GUID}, 0, 10000)),
     lists:foreach(fun(Guid) ->
-        try
-            ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(P1Node, UserSessIdP1, {guid, Guid}))
-        catch
-            E:R ->
-                ct:pal("ASSERT FAILED: ~p", [{E, R}]),
-                ct:pal(
-                    "SessId = ~p.~n"
-                    "Guid = ~p.", [UserSessIdP1, Guid]),
-                ct:timetrap({hours, 10}),
-                ct:sleep({hours, 10})
-        end
+        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(P1Node, UserSessIdP1, {guid, Guid}))
     end, [RootGuid | DirGuids] ++ FileGuids).
 
 %===================================================================

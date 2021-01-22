@@ -140,8 +140,18 @@ do_slave_job(#tree_traverse_slave{
 
 %% @private
 -spec file_processed(file_ctx:ctx(), id(), info()) -> ok.
-file_processed(FileCtx, TaskId, TraverseInfo = #{user_ctx := UserCtx}) ->
-    {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
+file_processed(FileCtx, TaskId, TraverseInfo = #{user_ctx := UserCtx, root_original_parent_uuid := RootOriginalParentUuid}) ->
+    {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
+    case file_qos:get_effective(RootOriginalParentUuid) of
+        {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx1),
+            OriginalRootParentCtx = file_ctx:new_by_guid(file_id:pack_guid(RootOriginalParentUuid, SpaceId)),
+            lists:foreach(fun(EffectiveQosEntryId) ->
+                qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId, OriginalRootParentCtx)
+            end, EffectiveQosEntries);
+        _ ->
+            ok
+    end,
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
     delete_dir_if_subtree_processed(ParentStatus, ParentFileCtx, TaskId, TraverseInfo).

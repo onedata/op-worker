@@ -60,7 +60,7 @@
     qos_status_after_failed_transfer_deleted_entry/3
 ]).
 
--define(ATTEMPTS, 60).
+-define(ATTEMPTS, 120).
 
 %%%===================================================================
 %%% Group of tests that adds single QoS expression for file or directory

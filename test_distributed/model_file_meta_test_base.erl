@@ -146,12 +146,12 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch({ok, [{_, Space1Uuid}], #{}}, list_children(Worker1, <<"/">>, 0, 10)),
     ?assertMatch({ok, [], #{}}, list_children(Worker1, <<"/Space 1/dir2/file3">>, 0, 10)),
 
-    {{A15, U15, #{}}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 20]),
-    {{A15_2, U15_2, #{}}, ListUuids100_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 100]),
-    {{A15_3, U15_3, #{}}, ListUuids1000_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 1000]),
-    {{A15_4, U15_4, #{}}, ListUuids1_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 1]),
-    {{A16, U16, #{}}, ListUuids50_60_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 50, 10]),
-    {{AL20_4, UL20_4, #{}}, ListUuidsLevel20} = ?call_with_time(Worker1, list_children, [{path, Level20Path}, 0, 1]),
+    {{A15, U15, #{}}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 20, undefined]),
+    {{A15_2, U15_2, #{}}, ListUuids100_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 100, undefined]),
+    {{A15_3, U15_3, #{}}, ListUuids1000_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 1000, undefined]),
+    {{A15_4, U15_4, #{}}, ListUuids1_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 1, undefined]),
+    {{A16, U16, #{}}, ListUuids50_60_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 50, 10, undefined]),
+    {{AL20_4, UL20_4, #{}}, ListUuidsLevel20} = ?call_with_time(Worker1, list_children, [{path, Level20Path}, 0, 1, undefined]),
 
     ?assertMatch({ok, _}, {A15, U15}),
     ?assertMatch({ok, _}, {A15_2, U15_2}),

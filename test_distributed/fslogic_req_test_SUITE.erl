@@ -576,7 +576,7 @@ default_permissions_test(Config) ->
                 fun(SessId) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                        ?file_req(Worker, SessId, Guid, #get_file_children{}))
+                        ?file_req(Worker, SessId, Guid, #get_file_children{offset = 0}))
                 end, SessIds);
         ({chmod, Path, Mode, SessIds, Code}) ->
             lists:foreach(
@@ -630,8 +630,6 @@ simple_rename_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
-    {_SessId3, _UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
-    {_SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     #fuse_response{fuse_response = #guid{guid = RootGuid1}} =
         ?assertMatch(

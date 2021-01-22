@@ -320,12 +320,14 @@ resolve_conflict(_Ctx,
 
 -spec invalidate_qos_bounded_cache_if_moved_to_trash(file_meta:doc(), file_meta:doc()) -> ok.
 invalidate_qos_bounded_cache_if_moved_to_trash(
-    #document{value = #file_meta{parent_uuid = NewParentUuid}, scope = SpaceId},
-    #document{value = #file_meta{parent_uuid = PrevParentUuid}
+    #document{key = Uuid, value = #file_meta{parent_uuid = NewParentUuid}, scope = SpaceId}, #document{value = #file_meta{parent_uuid = PrevParentUuid}
 }) ->
     case PrevParentUuid =/= NewParentUuid andalso fslogic_uuid:is_trash_dir_uuid(NewParentUuid) of
         true ->
             % the file has been moved to trash
+            FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
+            PrevParentCtx = file_ctx:new_by_guid(file_id:pack_guid(PrevParentUuid, SpaceId)),
+            file_qos:clean_up(FileCtx, PrevParentCtx),
             qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
         false ->
             ok

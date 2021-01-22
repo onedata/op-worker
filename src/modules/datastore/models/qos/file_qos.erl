@@ -45,7 +45,7 @@
     get_effective/1, 
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
-    has_any_qos_entry/2, clean_up/1, delete_associated_entries/1
+    has_any_qos_entry/2, clean_up/1, clean_up/2, delete_associated_entries/1
 ]).
 
 %% higher-level functions operating on effective_file_qos record.
@@ -113,7 +113,7 @@ get_effective(FileUuid) when is_binary(FileUuid) ->
         ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}}
     end;
 get_effective(#document{scope = SpaceId} = FileDoc) ->
-    Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}}, ParentEffQos, CalculationInfo]) ->
+    Callback = fun([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
         case fslogic_uuid:is_trash_dir_uuid(Uuid) of
             true ->
                 % qos cannot be set on trash directory
@@ -283,13 +283,18 @@ has_any_qos_entry(UuidOrDoc, effective) ->
 %%--------------------------------------------------------------------
 -spec clean_up(file_ctx:ctx()) -> ok.
 clean_up(FileCtx) ->
+  clean_up(FileCtx, undefined).
+
+
+-spec clean_up(file_ctx:ctx(), file_ctx:ctx() | undefined) -> ok.
+clean_up(FileCtx, OriginalParentCtx) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case get_effective(FileDoc) of
         undefined -> ok;
         % clean up all potential documents related to status calculation
         {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
             lists:foreach(fun(EffectiveQosEntryId) ->
-                qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId)
+                qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId, OriginalParentCtx)
             end, EffectiveQosEntries);
         {error, _} = Error ->
             ?warning("Error during QoS clean up procedure:~p", [Error]),

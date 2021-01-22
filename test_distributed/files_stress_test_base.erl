@@ -121,7 +121,7 @@ single_dir_creation_test_base(Config, Clear) ->
                         true ->
                             put(last_ls, NewSum),
                             LsTime = measure_execution_time(fun() ->
-                                ls(Worker, SessId, Dir, undefined, false)
+                                ls(Worker, SessId, Dir, <<>>, false)
                             end),
 
                             ct:print("Save num ~p, sum ~p, ls time ~p",

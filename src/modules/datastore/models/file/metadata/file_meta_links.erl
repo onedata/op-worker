@@ -239,13 +239,16 @@ get_all(ParentUuid, Name) ->
 -spec prepare_opts(offset() | undefined, size() | undefined, token() | undefined,
     link_name() | undefined, tree_id() | undefined) -> list_opts().
 prepare_opts(Offset, Size, Token, PrevLinkKey, PrevTreeId)
-    when ((is_integer(Size) andalso Size >= 0) orelse (Size =:= undefined))
-    % at lease one of below options must be defined so that we know where to start listing
-    andalso (Offset /= undefined orelse Token /= undefined orelse PrevLinkKey /= undefined)
+    when (is_integer(Size) andalso Size >= 0) orelse (Size =:= undefined)
 ->
-    validate_starting_opts(Offset, PrevLinkKey, Token),
+    % TODO VFS-7252 get rid of below protections when GUI does not longer send inappropriate params
+    Offset2 = case PrevLinkKey =:= undefined of
+        true -> max(Offset, 0);
+        false -> Offset
+    end,
+    validate_starting_opts(Offset2, PrevLinkKey, Token),
     Opts1 = #{size => utils:ensure_defined(Size, ?DEFAULT_LS_CHUNK_SIZE)},
-    Opts2 = maps_utils:put_if_defined(Opts1, offset, Offset),
+    Opts2 = maps_utils:put_if_defined(Opts1, offset, Offset2),
     Opts3 = maps_utils:put_if_defined(Opts2, token, Token),
     Opts4 = maps_utils:put_if_defined(Opts3, prev_link_name, PrevLinkKey),
     maps_utils:put_if_defined(Opts4, prev_tree_id, PrevTreeId).
@@ -254,6 +257,9 @@ prepare_opts(Offset, Size, Token, PrevLinkKey, PrevTreeId)
 -spec validate_starting_opts(offset() | undefined, link_name() | undefined, token() | undefined) -> ok.
 validate_starting_opts(_, _, #link_token{}) ->
     ok;
+validate_starting_opts(undefined, undefined, undefined) ->
+    % at lease one of the options must be defined so that we know where to start listing
+    throw(?EINVAL);
 validate_starting_opts(Offset, undefined, undefined) when Offset >= 0 ->
     ok;
 validate_starting_opts(Offset, undefined, undefined) when Offset < 0 ->

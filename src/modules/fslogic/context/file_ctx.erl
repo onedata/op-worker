@@ -73,7 +73,7 @@
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
-    get_file_doc_including_deleted/1, get_parent/2, get_and_check_parent/2,
+    get_file_doc_including_deleted/1, get_parent/2, get_and_check_parent/2, get_original_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
     get_display_credentials/1, get_times/1,
@@ -463,6 +463,29 @@ get_parent_guid(#file_ctx{guid = FileGuid} = FileCtx, UserCtx) ->
         ParentGuid ->
             {ParentGuid, FileCtx2}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% This function returns original parent of a file.
+%% It means that it checks whether file is not a child of trash.
+%% If it is, it returns ctx() of directory which was parent of the file
+%% before it was moved to trash.
+%% TODO VFS-7133 original parent uuid should be stored in file_meta doc
+%% @end
+%%--------------------------------------------------------------------
+-spec get_original_parent(ctx(), ctx() | undefined) -> {ctx(), ctx()}.
+get_original_parent(FileCtx, undefined) ->
+    file_ctx:get_parent(FileCtx, undefined);
+get_original_parent(FileCtx, OriginalParentCtx) ->
+    {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+    case file_ctx:is_trash_dir_const(ParentCtx) of
+        true ->
+            {OriginalParentCtx, FileCtx2};
+        false ->
+            {ParentCtx, FileCtx2}
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

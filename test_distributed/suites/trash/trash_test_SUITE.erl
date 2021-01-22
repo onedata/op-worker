@@ -52,10 +52,10 @@
     schedule_migration_transfer_on_space_does_not_replicate_trash/1,
     move_to_trash_test/1,
     move_to_trash_and_delete_test/1,
-    files_from_trash_are_not_reimported/1,
     qos_set_on_file_does_not_affect_file_in_trash/1,
     qos_set_on_parent_directory_does_not_affect_files_in_trash/1,
-    qos_set_on_space_directory_does_not_affect_files_in_trash/1
+    qos_set_on_space_directory_does_not_affect_files_in_trash/1,
+    files_from_trash_are_not_reimported/1
 ]).
 
 
@@ -84,10 +84,10 @@ all() -> ?ALL([
     schedule_migration_transfer_on_space_does_not_replicate_trash,
     move_to_trash_test,
     move_to_trash_and_delete_test,
-    files_from_trash_are_not_reimported,
     qos_set_on_file_does_not_affect_file_in_trash,
     qos_set_on_parent_directory_does_not_affect_files_in_trash,
-    qos_set_on_space_directory_does_not_affect_files_in_trash
+    qos_set_on_space_directory_does_not_affect_files_in_trash,
+    files_from_trash_are_not_reimported
 ]).
 
 -define(SPACE1_PLACEHOLDER, space1).
@@ -372,7 +372,8 @@ move_to_trash_test(_Config) ->
     DirName = ?RAND_DIR_NAME,
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
     DirCtx = file_ctx:new_by_guid(DirGuid),
-    lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
+    % TODO VFS-7101 add one more level in the tree after introducing offline access token
+    lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}], DirGuid),
 
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
 
@@ -405,7 +406,8 @@ move_to_trash_and_delete_test(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
-    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
+    % TODO VFS-7101 add one more level in the tree after introducing offline access token
+    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}], DirGuid),
     DirCtx = file_ctx:new_by_guid(DirGuid),
 
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
@@ -438,6 +440,14 @@ move_to_trash_and_delete_test(_Config) ->
         <<"autoDetectAttributes">> => false
     })).
 
+qos_set_on_file_does_not_affect_file_in_trash(Config) ->
+    qos_does_not_affect_files_in_trash_test_base(Config, file).
+
+qos_set_on_parent_directory_does_not_affect_files_in_trash(Config) ->
+    qos_does_not_affect_files_in_trash_test_base(Config, parent_dir).
+
+qos_set_on_space_directory_does_not_affect_files_in_trash(Config) ->
+    qos_does_not_affect_files_in_trash_test_base(Config, space_dir).
 
 files_from_trash_are_not_reimported(_Config) ->
     % this test is performed in ?SPACE2 which is supported by ImportedNullStorage2
@@ -461,15 +471,6 @@ files_from_trash_are_not_reimported(_Config) ->
 
     % files which are currently in trash shouldn't have been reimported
     ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?SPACE_GUID(?SPACE_ID2)}, 0, 1000)).
-
-qos_set_on_file_does_not_affect_file_in_trash(Config) ->
-    qos_does_not_affect_files_in_trash_test_base(Config, file).
-
-qos_set_on_parent_directory_does_not_affect_files_in_trash(Config) ->
-    qos_does_not_affect_files_in_trash_test_base(Config, parent_dir).
-
-qos_set_on_space_directory_does_not_affect_files_in_trash(Config) ->
-    qos_does_not_affect_files_in_trash_test_base(Config, space_dir).
 
 %===================================================================
 % Test base functions
@@ -526,6 +527,7 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
 
     % write new blocks to file which is in trash
     {ok, _} = lfm_proxy:write(P2Node, H1, Size1, TestData2),
+    lfm_proxy:close(P2Node, H1),
 
     % file shouldn't have been synchronized because it's in trash
     ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size1, Size2]), FileGuid, ?ATTEMPTS).
