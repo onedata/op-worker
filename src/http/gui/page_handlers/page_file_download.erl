@@ -88,7 +88,13 @@ handle(<<"GET">>, Req) ->
 maybe_sync_first_file_block(SessionId, FileGuid) ->
     {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, read)),
     ReadBlockSize = http_download_utils:get_read_block_size(FileHandle),
-    ?check(lfm:read(FileHandle, 0, ReadBlockSize)),
+    case lfm:read(FileHandle, 0, ReadBlockSize) of
+        {error, ?ENOSPC} -> 
+            % Translate POSIX error to something better understandable by user.
+            throw(?ERROR_QUOTA_EXCEEDED);
+        Res ->
+            ?check(Res)
+    end,
     lfm:monitored_release(FileHandle),
     ok.
 
