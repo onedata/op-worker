@@ -7,21 +7,14 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible for
-%%% management of connections for outgoing provider session. It starts
-%%% such connections, monitors them and restarts if they fail due to
-%%% reasons other than timeout.
-%%% Connection is always randomly selected for sending msg it is unlikely
-%%% that for active session any of the connections will be idle for more
-%%% than 24h (connection timeout). That is why when any connection dies out
-%%% due to timeout entire session is terminated (session is inactive).
-%%% Failed connection attempts are repeated after a backoff period that grows
-%%% with every failure. Mentioned period is reset every time that any
-%%% connection reports successful handshake.
-%%% If backoff reaches ?MAX_RENEWAL_INTERVAL and manager still fails to
-%%% connect to at least one peer host, then it is assumed that the peer is
-%%% down/offline and the session is terminated.
-%%% Next time any process tries to send a msg to the peer, it will first call
-%%% `session_connections:ensure_connected` to create the session again.
+%%% management of connections for outgoing provider session, which includes:
+%%% - (re)starting connections to peer hosts. In case of a connection attempt
+%%%   failure next retry will be performed after a backoff period that grows
+%%%   with every such failure. If backoff reaches ?MAX_RENEWAL_INTERVAL and
+%%%   manager still fails to connect to at least one peer host, then it is
+%%%   assumed that the peer is down/offline and the session is terminated.
+%%%   Otherwise, backoff period is reset on every successful handshake.
+%%% - session termination in case of any connection timeout (stale session).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(outgoing_connection_manager).
@@ -29,7 +22,7 @@
 
 -behaviour(gen_server).
 
--include("modules/datastore/datastore_models.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
@@ -170,11 +163,7 @@ handle_info(_, #state{is_stopping = true} = State) ->
     {noreply, State};
 
 handle_info(?RENEW_CONNECTIONS_REQ, State0) ->
-    NewState = case renew_connections(State0#state{renewal_timer = undefined}) of
-        {ok, State1} -> State1;
-        {error, peer_offline} -> terminate_session(State0)
-    end,
-    {noreply, NewState};
+    {noreply, renew_connections(State0#state{renewal_timer = undefined})};
 
 handle_info({'EXIT', _ConnPid, timeout}, State) ->
     {noreply, terminate_session(State)};
@@ -189,9 +178,9 @@ handle_info({'EXIT', ConnPid, _Reason}, #state{
                 connecting = LeftoverConnecting
             });
         error ->
-            handle_connection_death(State#state{
+            {noreply, renew_connections(State#state{
                 connected = maps:remove(ConnPid, Connected)
-            })
+            })}
     end;
 
 handle_info(Info, State) ->
@@ -202,19 +191,9 @@ handle_info(Info, State) ->
 %% @private
 -spec handle_failed_connection_attempt(state()) -> {noreply, state()}.
 handle_failed_connection_attempt(State) ->
-    NewState = case failed_connection_attempts_exceeded(State) of
+    NewState = case failed_connection_attempts_limit_exceeded(State) of
         true -> terminate_session(State);
         false -> schedule_next_renewal(State)
-    end,
-    {noreply, NewState}.
-
-
-%% @private
--spec handle_connection_death(state()) -> {noreply, state()}.
-handle_connection_death(State0) ->
-    NewState = case renew_connections(State0) of
-        {ok, State1} -> State1;
-        {error, peer_offline} -> terminate_session(State0)
     end,
     {noreply, NewState}.
 
@@ -263,7 +242,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% meaning that peer is probably down/offline, returns error.
 %% @end
 %%--------------------------------------------------------------------
--spec renew_connections(state()) -> {ok, state()} | {error, peer_offline}.
+-spec renew_connections(state()) -> state().
 renew_connections(#state{
     peer_id = PeerId,
     session_id = SessionId,
@@ -284,12 +263,12 @@ renew_connections(#state{
         schedule_next_renewal(State)
     end,
 
-    case failed_connection_attempts_exceeded(NewState) of
-        true -> {error, peer_offline};
-        false -> {ok, NewState}
+    case failed_connection_attempts_limit_exceeded(NewState) of
+        true -> terminate_session(NewState);
+        false -> NewState
     end;
 renew_connections(State) ->
-    {ok, State}.
+    State.
 
 
 %%--------------------------------------------------------------------
@@ -352,15 +331,15 @@ schedule_next_renewal(State) ->
 
 
 %% @private
--spec failed_connection_attempts_exceeded(state()) -> boolean().
-failed_connection_attempts_exceeded(#state{
+-spec failed_connection_attempts_limit_exceeded(state()) -> boolean().
+failed_connection_attempts_limit_exceeded(#state{
     connecting = Connecting,
     connected = Connected,
     renewal_timer = undefined,
     renewal_interval = Interval
 }) when map_size(Connecting) == 0, map_size(Connected) == 0, Interval > ?MAX_RENEWAL_INTERVAL ->
     true;
-failed_connection_attempts_exceeded(_) ->
+failed_connection_attempts_limit_exceeded(_) ->
     false.
 
 
