@@ -31,7 +31,24 @@
     since :: couchbase_changes:since(),
     until :: couchbase_changes:until(),
     timestamp :: dbsync_changes:timestamp(),
-    compressed_docs :: binary()
+    compressed_docs :: binary(),
+    reference_provider_id = <<>> :: oneprovider:id(),
+    custom_request_extension = <<>> :: dbsync_worker:custom_request_extension()
+}).
+
+% Record used to represent changes batch internally.
+% It is similar to #changes_batch{} but stores uncompressed documents.
+% It does not contain space id as each stream is connected with singe space.
+% For same reason it contains sender_id instead of reference_provider_id
+% (each stream processes changes of single provider that can be provider
+% by multiple senders).
+-record(internal_changes_batch, {
+    since :: couchbase_changes:since(),
+    until :: couchbase_changes:until(),
+    timestamp :: dbsync_changes:timestamp(),
+    docs :: dbsync_worker:batch_docs(),
+    sender_id :: oneprovider:id(),
+    custom_request_extension = <<>> :: dbsync_worker:custom_request_extension() | undefined
 }).
 
 -record(changes_request2, {
@@ -40,7 +57,6 @@
     until :: couchbase_changes:until()
 }).
 
-% TODO VFS-7031 - use in standard dbsync flow
 -record(custom_changes_request, {
     space_id :: od_space:id(),
     since :: couchbase_changes:since(),

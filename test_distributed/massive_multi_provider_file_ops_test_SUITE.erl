@@ -567,7 +567,8 @@ multiple_traverse_test_base(Config, StartTaskWorkers, DirName) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
-    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+    [{?LOAD_MODULES, [initializer, dbsync_test_utils, multi_provider_file_ops_test_base]},
+        {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).

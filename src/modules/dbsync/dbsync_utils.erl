@@ -99,12 +99,17 @@ get_providers(SpaceId) ->
 %% Check whether a space is supported by all given providers.
 %% @end
 %%--------------------------------------------------------------------
--spec is_supported(od_space:id(), [od_provider:id()]) -> boolean().
+-spec is_supported(od_space:id(), [od_provider:id()]) -> true | {false, [od_provider:id()]}.
 is_supported(SpaceId, ProviderIds) ->
     ValidProviderIds = gb_sets:from_list(dbsync_utils:get_providers(SpaceId)),
-    lists:all(fun(ProviderId) ->
-        gb_sets:is_element(ProviderId, ValidProviderIds)
-    end, ProviderIds).
+    NotSupported = lists:filter(fun(ProviderId) ->
+        not gb_sets:is_element(ProviderId, ValidProviderIds)
+    end, ProviderIds),
+
+    case NotSupported of
+        [] -> true;
+        _ -> {false, NotSupported}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -120,7 +125,7 @@ gen_request_id() ->
 %% Returns a compressed datastore documents binary.
 %% @end
 %%--------------------------------------------------------------------
--spec compress([datastore:doc()]) -> binary().
+-spec compress(dbsync_worker:batch_docs()) -> binary().
 compress(Docs) ->
     Docs2 = [datastore_json:encode(Doc) || Doc <- Docs],
     zlib:compress(jiffy:encode(Docs2)).
@@ -130,7 +135,7 @@ compress(Docs) ->
 %% Returns a list of uncompressed datastore documents.
 %% @end
 %%--------------------------------------------------------------------
--spec uncompress(binary()) -> [datastore:doc()].
+-spec uncompress(binary()) -> dbsync_worker:batch_docs().
 uncompress(CompressedDocs) ->
     Docs = jiffy:decode(zlib:uncompress(CompressedDocs)),
     [datastore_json:decode(Doc) || Doc <- Docs].

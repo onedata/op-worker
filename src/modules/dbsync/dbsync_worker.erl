@@ -38,9 +38,17 @@
 %% API
 -export([supervisor_flags/0, start_streams/0, start_streams/1, get_main_out_stream_opts/1]).
 
+-type batch_docs() :: [datastore:doc()].
 % Type describing mutators whose changes should be included in stream
 -type mutators_to_include() :: reference_provider | all_providers.
--export_type([mutators_to_include/0]).
+% Extension of changes batch used to handle custom changes requests.
+% TODO VFS-7247: The field usage will be extend in ticket VFS-7247. Define type more in more
+%   detail and prepare functions processing this type (currently this extension is empty or
+%   contains dbsync_processed_seqs_history:encoded_correlations()).
+-type custom_request_extension() :: binary().
+% Record used to represent changes batch internally in dbsync modules.
+-type internal_changes_batch() ::#internal_changes_batch{}.
+-export_type([batch_docs/0, mutators_to_include/0, custom_request_extension/0, internal_changes_batch/0]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -72,10 +80,8 @@ handle({dbsync_message, _SessId, Msg = #tree_broadcast2{}}) ->
     handle_tree_broadcast(Msg);
 handle({dbsync_message, SessId, Msg = #changes_request2{}}) ->
     handle_changes_request(dbsync_utils:get_provider(SessId), Msg);
-% TODO VFS-7031 - Handler for tests - SessId will be used when
-% #custom_changes_requests are used in dbsync main messages flow
-handle({dbsync_message, _SessId, Msg = #custom_changes_request{}}) ->
-    handle_custom_changes_request(<<>>, Msg);
+handle({dbsync_message, SessId, Msg = #custom_changes_request{}}) ->
+    handle_custom_changes_request(dbsync_utils:get_provider(SessId), Msg);
 handle({dbsync_message, SessId, Msg = #changes_batch{}}) ->
     handle_changes_batch(dbsync_utils:get_provider(SessId), undefined, Msg);
 handle(Request) ->
@@ -151,17 +157,27 @@ get_main_out_stream_opts(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec handle_changes_batch(od_provider:id(), undefined |
 dbsync_communicator:msg_id(), dbsync_communicator:changes_batch()) -> ok.
-handle_changes_batch(ProviderId, MsgId, #changes_batch{
+handle_changes_batch(Sender, MsgId, #changes_batch{
     space_id = SpaceId,
     since = Since,
     until = Until,
     timestamp = Timestamp,
-    compressed_docs = CompressedDocs
+    compressed_docs = CompressedDocs,
+    reference_provider_id = ReferenceProviderId,
+    custom_request_extension = CustomRequestExtension
 }) ->
     Name = ?IN_STREAM_ID(SpaceId),
     Docs = dbsync_utils:uncompress(CompressedDocs),
+    InternalBatch = #internal_changes_batch{
+        since = Since,
+        until = Until,
+        timestamp = Timestamp,
+        docs = Docs,
+        sender_id = Sender,
+        custom_request_extension = CustomRequestExtension
+    },
     gen_server:cast(
-        {global, Name}, {changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}
+        {global, Name}, {changes_batch, MsgId, ReferenceProviderId, InternalBatch}
     ).
 
 %%--------------------------------------------------------------------
@@ -214,8 +230,7 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 
 %% @private
 %% @doc
--spec handle_custom_changes_request(od_provider:id(), #custom_changes_request{}) -> ok.
-% TODO VFS-7031 - Use in dbsync main messages flow
+-spec handle_custom_changes_request(od_provider:id(), dbsync_communicator:custom_changes_request()) -> ok.
 handle_custom_changes_request(CallerProviderId, #custom_changes_request{
     space_id = SpaceId,
     reference_provider_id = ReferenceProviderId,
@@ -231,21 +246,19 @@ handle_custom_changes_request(CallerProviderId, #custom_changes_request{
         SpaceId, ReferenceProviderId, RequestedSince, SingleProviderChangesRequested),
     % Information about remote sequences for last batch has to be prepared getting local until sequence
     % see `dbsync_seqs_correlation_history:map_remote_seq_to_local_stop_params` function doc for more information
-    {LocalUntil, EncodedRemoteSequences} =
+    {LocalUntil, FinalEncodedCorrelations} =
         dbsync_seqs_correlations_history:map_remote_seq_to_local_stop_params(SpaceId, ReferenceProviderId, RequestedUntil),
     case LocalSince < LocalUntil of
         true ->
             % TODO VFS-7204 - filter documents not mutated by ReferenceProviderId (with remote seq outside range)
             Handler = fun
                 (BatchSince, end_of_stream, Timestamp, Docs) ->
-                    dbsync_communicator:send_changes_with_extended_info(
-                        CallerProviderId, SpaceId, BatchSince, LocalUntil, Timestamp, Docs, EncodedRemoteSequences
-                    );
+                    dbsync_communicator:send_changes_and_correlations(CallerProviderId, ReferenceProviderId,
+                        SpaceId, BatchSince, LocalUntil, Timestamp, Docs, FinalEncodedCorrelations);
                 (BatchSince, BatchUntil, Timestamp, Docs) ->
-                    ExtendedInfo = dbsync_processed_seqs_history:get(SpaceId, BatchUntil),
-                    dbsync_communicator:send_changes_with_extended_info(
-                        CallerProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs, ExtendedInfo
-                    )
+                    EncodedCorrelations = dbsync_processed_seqs_history:get(SpaceId, BatchUntil),
+                    dbsync_communicator:send_changes_and_correlations(CallerProviderId, ReferenceProviderId,
+                        SpaceId, BatchSince, BatchUntil, Timestamp, Docs, EncodedCorrelations)
             end,
 
             Opts = [
@@ -259,6 +272,6 @@ handle_custom_changes_request(CallerProviderId, #custom_changes_request{
 
             dbsync_worker_sup:start_on_demand_stream(SpaceId, CallerProviderId, Opts);
         false ->
-            % TODO VFS-7031 - send empty batch
+            % TODO VFS-7247 - maybe send empty batch
             ok
     end.

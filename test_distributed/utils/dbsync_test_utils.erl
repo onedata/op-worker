@@ -15,13 +15,16 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([are_all_seqs_and_timestamps_equal/3]).
+-export([are_all_seqs_equal/2, are_all_seqs_and_timestamps_equal/3]).
 %% Exported for RPC (internal usage)
 -export([get_seq_and_timestamp_or_error/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+are_all_seqs_equal(Workers, SpaceId) ->
+    are_all_seqs_and_timestamps_equal(Workers, SpaceId, undefined).
 
 are_all_seqs_and_timestamps_equal(Workers, SpaceId, Timestamp0) ->
     ProvIds = lists:foldl(fun(W, Acc) ->
@@ -38,12 +41,14 @@ are_all_seqs_and_timestamps_equal(Workers, SpaceId, Timestamp0) ->
                     % provider `ProvID` does not support space so there is no synchronization progress data
                     % on this worker
                     Acc2;
-                {_, Timestamp} = Ans ->
+                {_, Timestamp} = Ans when Timestamp0 =/= undefined ->
                     case Timestamp >= Timestamp0 of
                         true -> ok;
                         false -> throw(too_small_timestamp)
                     end,
-                    [Ans | Acc2]
+                    [Ans | Acc2];
+                {Seq, _} ->
+                    [Seq | Acc2]
             end
         end, [], sets:to_list(ProvIds)),
 
@@ -70,8 +75,8 @@ get_seq_and_timestamp_or_error(Worker, SpaceId, ProviderId) ->
 
 get_seq_and_timestamp_or_error(SpaceId, ProviderId) ->
     case datastore_model:get(#{model => dbsync_state}, SpaceId) of
-        {ok, #document{value = #dbsync_state{sync_progress = Seq}}} ->
-            maps:get(ProviderId, Seq, {error, not_found});
+        {ok, #document{value = #dbsync_state{sync_progress = SyncProgress}}} ->
+            maps:get(ProviderId, SyncProgress, {error, not_found});
         Error ->
             Error
     end.

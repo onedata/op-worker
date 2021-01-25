@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([apply_batch/4, apply/2]).
+-export([apply_batch/5, apply/2]).
 
 -type ctx() :: datastore_cache:ctx().
 -type key() :: datastore:key().
@@ -45,9 +45,10 @@
 %% Applies remote changes.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_batch([datastore:doc()], {couchbase_changes:since(),
-    couchbase_changes:until()}, timestamp(), oneprovider:id()) -> ok.
-apply_batch(Docs, BatchRange, Timestamp, ProviderId) ->
+-spec apply_batch(dbsync_worker:batch_docs(), {couchbase_changes:since(), couchbase_changes:until()}, timestamp(),
+    oneprovider:id(), dbsync_worker:custom_request_extension() | undefined) -> ok.
+apply_batch(Docs, BatchRange, Timestamp, ProviderId, CustomRequestExtension) ->
+    % TODO VFS-7247 - test race between application of custom and main flow changes
     Master = self(),
     spawn_link(fun() ->
         DocsGroups = group_changes(Docs),
@@ -72,7 +73,7 @@ apply_batch(Docs, BatchRange, Timestamp, ProviderId) ->
         Ref = make_ref(),
         Pids = parallel_apply(DocsList3, Ref, ProviderId),
         Ans = gather_answers(Pids, Ref),
-        Master ! {batch_application_result, BatchRange, Timestamp, Ans}
+        Master ! {batch_application_result, BatchRange, Timestamp, CustomRequestExtension, Ans}
     end),
     ok.
 
@@ -282,7 +283,7 @@ get_change_key(#document{key = Uuid}) ->
 %% Group changes - documents connected with single file are grouped together.
 %% @end
 %%--------------------------------------------------------------------
--spec group_changes([datastore:doc()]) -> map().
+-spec group_changes(dbsync_worker:batch_docs()) -> map().
 group_changes(Docs) ->
     lists:foldl(fun(Doc, Acc) ->
         ChangeKey = get_change_key(Doc),
@@ -296,7 +297,7 @@ group_changes(Docs) ->
 %% Starts one worker for each documents' list.
 %% @end
 %%--------------------------------------------------------------------
--spec parallel_apply([[datastore:doc()]], reference(), oneprovider:id()) -> [pid()].
+-spec parallel_apply([dbsync_worker:batch_docs()], reference(), oneprovider:id()) -> [pid()].
 parallel_apply(DocsList, Ref, ProviderId) ->
     % TODO VFS-7206 - use utils:foreach instead of parallel_apply and gather_answers
     Master = self(),
@@ -308,7 +309,7 @@ parallel_apply(DocsList, Ref, ProviderId) ->
     end, DocsList).
 
 %% @private
--spec apply_docs([[datastore:doc()]], oneprovider:id(), dbsync_application_result()) ->
+-spec apply_docs([dbsync_worker:batch_docs()], oneprovider:id(), dbsync_application_result()) ->
     dbsync_application_result().
 apply_docs([], _ProviderId, Acc) ->
     Acc;
