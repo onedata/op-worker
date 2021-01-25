@@ -7,8 +7,8 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This model holds information about current space unsupport job, i.e. what space is being 
-%%% unsuported, from which storage and what stage is currently running.
-%%% Some stages start internal task (like starting cleanup traverse or adding QoS entry). 
+%%% unsuported, from which storage and what step is currently running.
+%%% Some steps start internal task (like starting cleanup traverse or adding QoS entry). 
 %%% This tasks should not be started again after provider was restarted. For this purpose 
 %%% id of such internal task is persisted in this model as substask_id.
 %%% @end
@@ -46,39 +46,39 @@
 -spec save(record()) -> {ok, id()} | {error, term()}.
 save(Job) ->
     #space_unsupport_job{
-        space_id = SpaceId, 
-        storage_id = StorageId, 
-        stage = Stage, 
+        space_id = SpaceId,
+        storage_id = StorageId,
+        step = Step,
         task_id = TaskId
     } = Job,
-    save(gen_id(SpaceId, StorageId, Stage), Job, TaskId).
+    save(gen_id(SpaceId, StorageId, Step), Job, TaskId).
 
--spec save(id() | undefined | main_job, record(), traverse:id()) -> 
+-spec save(id() | undefined | main_job, record(), traverse:id()) ->
     {ok, id()} | {error, term()}.
 save(main_job, Job, TaskId) ->
     save(undefined, Job, TaskId);
 save(undefined, Job, TaskId) ->
     #space_unsupport_job{
-        space_id = SpaceId, 
-        storage_id = StorageId, 
-        stage = Stage
+        space_id = SpaceId,
+        storage_id = StorageId,
+        step = Step
     } = Job,
     % use fixed id so document can be accessed knowing only 
-    % SpaceId, StorageId and Stage e.g. in slave_job
-    save(gen_id(SpaceId, StorageId, Stage), Job, TaskId);
+    % SpaceId, StorageId and Step e.g. in slave_job
+    save(gen_id(SpaceId, StorageId, Step), Job, TaskId);
 save(Key, Job, TaskId) ->
     ?extract_key(datastore_model:save(?CTX, #document{
-        key = Key, 
+        key = Key,
         value = Job#space_unsupport_job{
             task_id = TaskId
         }
     })).
 
 
--spec get(od_space:id(), storage:id(), space_unsupport:stage()) -> 
+-spec get(od_space:id(), storage:id(), space_unsupport_engine:step()) -> 
     {ok, record()} | {error, term()}.
-get(SpaceId, StorageId, Stage) ->
-    get(gen_id(SpaceId, StorageId, Stage)).
+get(SpaceId, StorageId, Step) ->
+    get(gen_id(SpaceId, StorageId, Step)).
 
 -spec get(id()) -> {ok, record()} | {error, term()}.
 get(Key) ->
@@ -90,9 +90,9 @@ get(Key) ->
 delete(Key) ->
     datastore_model:delete(?CTX, Key).
 
--spec delete(od_space:id(), storage:id(), space_unsupport:stage()) -> ok | {error, term()}.
-delete(SpaceId, StorageId, Stage) ->
-    delete(gen_id(SpaceId, StorageId, Stage)).
+-spec delete(od_space:id(), storage:id(), space_unsupport_engine:step()) -> ok | {error, term()}.
+delete(SpaceId, StorageId, Step) ->
+    delete(gen_id(SpaceId, StorageId, Step)).
 
 
 %%%===================================================================
@@ -113,21 +113,22 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {stage, atom},
+        {step, atom},
         {task_id, string},
         {space_id, string},
         {storage_id, string},
         {substask_id, {custom, string, {?MODULE, encode_subtask_id, decode_subtask_id}}},
-        {slave_job_pid, {custom, string, {?MODULE, encode_slave_job_pid, decode_slave_job_pid}}}
+        {slave_job_pid, {custom, string, {?MODULE, encode_slave_job_pid, decode_slave_job_pid}}},
+        {strategy, atom}
     ]}.
 
 
--spec encode_subtask_id(space_unsupport:subtask_id() | undefined) -> binary().
+-spec encode_subtask_id(space_unsupport_engine:subtask_id() | undefined) -> binary().
 encode_subtask_id(undefined) -> <<"undefined">>;
 encode_subtask_id(Binary) when is_binary(Binary) -> Binary.
 
 
--spec decode_subtask_id(binary()) -> space_unsupport:subtask_id() | undefined.
+-spec decode_subtask_id(binary()) -> space_unsupport_engine:subtask_id() | undefined.
 decode_subtask_id(<<"undefined">>) -> undefined;
 decode_subtask_id(Binary) when is_binary(Binary) -> Binary.
 
@@ -146,6 +147,6 @@ decode_slave_job_pid(Pid) -> list_to_pid(binary_to_list(Pid)).
 %%%===================================================================
 
 %% @private
--spec gen_id(od_space:id(), storage:id(), space_unsupport:stage()) -> id().
-gen_id(SpaceId, StorageId, Stage) ->
-    datastore_key:adjacent_from_digest([StorageId, Stage], SpaceId).
+-spec gen_id(od_space:id(), storage:id(), space_unsupport_engine:step()) -> id().
+gen_id(SpaceId, StorageId, Step) ->
+    datastore_key:adjacent_from_digest([StorageId, Step], SpaceId).

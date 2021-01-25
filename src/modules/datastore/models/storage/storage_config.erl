@@ -30,7 +30,7 @@
 -export([create/2, create/3, get/1, exists/1, delete/1]).
 -export([get_id/1, get_helper/1,
     get_luma_feed/1, get_luma_config/1,
-    should_skip_storage_detection/1, is_imported_storage/1]).
+    should_skip_storage_detection/1]).
 
 -export([update_helper/2, update_luma_config/2, set_luma_config/2]).
 
@@ -137,17 +137,6 @@ get_luma_config(StorageId) ->
 should_skip_storage_detection(Storage) ->
     Helper = get_helper(Storage),
     helper:should_skip_storage_detection(Helper).
-
-%% @TODO VFS-5856 deprecated, included for upgrade procedure
--spec is_imported_storage(doc() | record() | storage:id()) -> boolean().
-is_imported_storage(#document{value = #storage_config{} = Value}) ->
-    is_imported_storage(Value);
-is_imported_storage(#storage_config{imported_storage = ImportedStorage}) ->
-    ImportedStorage;
-is_imported_storage(StorageId) ->
-    {ok, #document{value = Value}} = get(StorageId),
-    is_imported_storage(Value).
-
 
 -spec update_helper(storage:id(), fun((helpers:helper()) -> helpers:helper())) ->
     ok | {error, term()}.

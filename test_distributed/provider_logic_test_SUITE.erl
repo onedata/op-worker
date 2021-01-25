@@ -369,7 +369,6 @@ confined_access_token_test(Config) ->
     ?assertEqual(TokenSecretGraphCalls + 1, logic_tests_common:count_reqs(Config, graph, TokenSecretGriMatcher)),
     ?assertEqual(GraphCalls, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)).
 
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================

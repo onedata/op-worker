@@ -45,7 +45,6 @@
 -export([report_provider_sync_progress/2]).
 -export([get_support_stage_registry/1]).
 -export([get_latest_emitted_seq/2]).
--export([on_space_supported/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
     ?APP_NAME, graph_sync_harvest_metadata_request_timeout, 120000
@@ -433,10 +432,4 @@ get_latest_emitted_seq(SpaceId, ProviderId) ->
         operation = get,
         gri = #gri{type = space_stats, id = SpaceId, aspect = {latest_emitted_seq, ProviderId}}
     }).
-
-
--spec on_space_supported(od_space:id()) -> ok.
-on_space_supported(SpaceId) ->
-    ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
-
 
