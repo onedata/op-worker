@@ -326,7 +326,7 @@ handle_info({upgrade_protocol, Hostname}, State) ->
         {ok, NewState} ->
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
         {error, _Reason} ->
-            {stop, termination_reason(connection_attempt_failed, State), State}
+            {stop, normal, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Socket, ok = Ok} = State) ->
@@ -338,16 +338,16 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_protocol_upgrade_response'
             % so terminate gracefully as to not spam more error logs
-            {stop, termination_reason(connection_attempt_failed, State), State}
+            {stop, normal, State}
     catch
         throw:{error, _} = Error ->
             ?error("Protocol upgrade failed due to ~p", [Error]),
-            {stop, termination_reason(connection_attempt_failed, State), State};
+            {stop, normal, State};
         Type:Reason ->
             ?error_stacktrace("Unexpected error during protocol upgrade: ~p:~p", [
                 Type, Reason
             ]),
-            {stop, termination_reason(connection_attempt_failed, State), State}
+            {stop, normal, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
@@ -360,12 +360,12 @@ handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = S
         {error, _Reason} ->
             % Concrete errors were already logged in 'handle_handshake' so
             % terminate gracefully as to not spam more error logs
-            {stop, termination_reason(connection_attempt_failed, State), State}
+            {stop, normal, State}
     catch Type:Reason ->
         ?error_stacktrace("Unexpected error while performing handshake: ~p:~p", [
             Type, Reason
         ]),
-        {stop, termination_reason(connection_attempt_failed, State), State}
+        {stop, normal, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State) ->
@@ -407,13 +407,8 @@ handle_info(Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
 terminate(Reason, #state{session_id = SessionId, socket = Socket} = State) ->
-    case Reason of
-        connection_attempt_failed ->
-            % Do not log terminate here as concrete errors were logged already
-            ok;
-        _ ->
-            ?log_terminate(Reason, State)
-    end,
+    ?log_terminate(Reason, State),
+
     case SessionId of
         undefined -> ok;
         _ -> session_connections:deregister(SessionId, self())
@@ -932,15 +927,3 @@ maybe_stringify_msg({send_msg, Msg}) ->
     clproto_utils:msg_to_string(Msg);
 maybe_stringify_msg(Msg) ->
     Msg.
-
-
-%% @private
--spec termination_reason(OriginalTerminationReason :: atom(), state()) ->
-    TerminationReason :: atom().
-termination_reason(_Reason, #state{type = incoming, status = Status}) when Status /= ready ->
-    % Concrete errors were already logged and in case of incoming connections
-    % no backoff is performed by server (as it is responsibility of a remote peer)
-    % so terminate with reason 'normal' to not spam with termination logs
-    normal;
-termination_reason(Reason, _State) ->
-    Reason.
