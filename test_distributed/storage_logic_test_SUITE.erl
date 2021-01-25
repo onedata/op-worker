@@ -22,7 +22,8 @@
     get_shared_data_test/1,
     mixed_get_test/1,
     subscribe_test/1,
-    resupport_cleanup_test/1
+    resupport_cleanup_test/1,
+    revise_supported_spaces_test/1
 ]).
 
 all() -> ?ALL([
@@ -30,7 +31,8 @@ all() -> ?ALL([
     get_shared_data_test,
     mixed_get_test,
     subscribe_test,
-    resupport_cleanup_test
+    resupport_cleanup_test,
+    revise_supported_spaces_test
 ]).
 
 
@@ -253,7 +255,7 @@ resupport_cleanup_test(Config) ->
     }, <<"secret">>, [])),
     
     % force cleanup by adding new support when remnants of previous one still exist
-    {ok, _} = rpc:call(Node, storage, support_space, [StorageId, Token, 10]),
+    {ok, _} = rpc:call(Node, space_support, add, [StorageId, Token, 10]),
     
     ?assertEqual({error, not_found}, rpc:call(Node, storage_import_config, get, [SpaceId])),
     ?assertEqual({error, not_found}, rpc:call(Node, storage_import_monitoring, get, [SpaceId])),
@@ -261,6 +263,23 @@ resupport_cleanup_test(Config) ->
     ?assertEqual({error, not_found}, rpc:call(Node, autocleaning, get, [SpaceId])),
     ?assertEqual(false, rpc:call(Node, file_popularity_api, is_enabled, [SpaceId])),
     ?assertEqual({error, not_found}, rpc:call(Node, file_popularity_config, get, [SpaceId])).
+
+
+revise_supported_spaces_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+    % onezone supports (provider_logic and space_logic) are mocked in init_per_testcase
+    ok = rpc:call(Node, supported_spaces, add, [<<"a">>, <<"st1">>]),
+    ok = rpc:call(Node, supported_spaces, add, [<<"a">>, <<"st2">>]),
+    ok = rpc:call(Node, supported_spaces, add, [<<"b">>, <<"st2">>]),
+    ok = rpc:call(Node, supported_spaces, add, [<<"b">>, <<"st3">>]),
+    
+    ?assertEqual(ok, rpc:call(Node, supported_spaces, revise, [])),
+    test_utils:mock_assert_num_calls(Node, space_unsupport_engine, schedule_start, 3, 0),
+    % simulate space forced unsupport/deletion by adding another support to locally persisted
+    rpc:call(Node, supported_spaces, add, [<<"c">>, <<"st2">>]),
+    ?assertEqual(ok, rpc:call(Node, supported_spaces, revise, [])),
+    test_utils:mock_assert_num_calls(Node, space_unsupport_engine, schedule_start, 3, 1),
+    test_utils:mock_assert_num_calls(Node, space_unsupport_engine, schedule_start, [<<"c">>, <<"st2">>, forced], 1).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -285,15 +304,33 @@ init_per_testcase(resupport_cleanup_test, Config) ->
         StorageId = ?config({storage_id, ?GET_DOMAIN(Node)}, Config1),
         test_utils:mock_expect(Node, space_logic, get_local_storage_id, fun(_) -> {ok, StorageId} end)
     end, Nodes),
-    test_utils:mock_expect(Nodes, storage_logic, support_space, fun(_, _, _) ->  {ok, <<"space1">>} end),
+    test_utils:mock_expect(Nodes, storage_logic, init_space_support, fun(_, _, _) ->  {ok, <<"space1">>} end),
     test_utils:mock_expect(Nodes, storage_logic, is_imported, fun(_) ->  {ok, true} end),
     Config1;
+init_per_testcase(revise_supported_spaces_test, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Nodes, space_unsupport_engine, [passthrough]),
+    test_utils:mock_new(Nodes, provider_logic, [passthrough]),
+    test_utils:mock_new(Nodes, space_logic, [passthrough]),
+    test_utils:mock_expect(Nodes, space_unsupport_engine, schedule_start, fun(_, _, _) -> ok end),
+    test_utils:mock_expect(Nodes, provider_logic, get_spaces, fun() -> {ok, [<<"a">>, <<"b">>]} end),
+    test_utils:mock_expect(Nodes, space_logic, get_local_storage_ids,
+        fun
+            (<<"a">>) -> {ok, [<<"st1">>, <<"st2">>]};
+            (<<"b">>) -> {ok, [<<"st2">>, <<"st3">>]}
+        end),
+    Config;
 init_per_testcase(_, Config) ->
     logic_tests_common:init_per_testcase(Config).
 
 end_per_testcase(resupport_cleanup_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes);
+end_per_testcase(revise_supported_spaces_test, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Nodes, provider_logic),
+    test_utils:mock_unload(Nodes, space_logic),
+    test_utils:mock_unload(Nodes, space_unsupport);
 end_per_testcase(_, _Config) ->
     ok.
 

@@ -36,7 +36,7 @@
 }).
 
 %% API
--export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0]).
+-export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -63,6 +63,15 @@ invalidate_cache(Key) ->
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
+run_after(update, _, {ok, Doc = #document{value = #od_provider{}}}) ->
+    % run asynchronously as this requires the provider record, which will be cached
+    % only after run_after finishes (running synchronously could cause an infinite loop)
+    spawn(supported_spaces, revise, []),
+    {ok, Doc};
+    
+run_after(_Function, _Args, Result) ->
+    Result.
 
 %%%===================================================================
 %%% datastore_model callbacks
