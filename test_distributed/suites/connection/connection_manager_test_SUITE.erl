@@ -20,6 +20,7 @@
 -module(connection_manager_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("api_file_test_utils.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -32,18 +33,18 @@
 -export([
     consecutive_failures_to_verify_peer_should_terminate_session_test/1,
     consecutive_failures_to_perform_handshake_should_terminate_session_test/1,
-    if_at_least_one_handshake_succeeds_session_should_not_be_terminated_test/1,
+    reconnects_should_be_performed_with_backoff_test/1,
     crushed_connection_should_be_restarted_test/1
 ]).
 
 all() -> [
     consecutive_failures_to_verify_peer_should_terminate_session_test,
     consecutive_failures_to_perform_handshake_should_terminate_session_test,
-    if_at_least_one_handshake_succeeds_session_should_not_be_terminated_test,
+    reconnects_should_be_performed_with_backoff_test,
     crushed_connection_should_be_restarted_test
 ].
 
--define(ATTEMPTS, 40).
+-define(ATTEMPTS, 30).
 
 
 %%%===================================================================
@@ -51,84 +52,76 @@ all() -> [
 %%%===================================================================
 
 
-consecutive_failures_to_verify_peer_should_terminate_session_test(Config) ->
-    [Worker1P2, Worker1P1, _Worker2P1] = ?config(op_worker_nodes, Config),
-    P1Id = op_test_rpc:get_provider_id(Worker1P1),
+consecutive_failures_to_verify_peer_should_terminate_session_test(_Config) ->
+    ParisId = oct_background:get_provider_id(paris),
+    [KrakowNode] = oct_background:get_provider_nodes(krakow),
 
-    set_conn_manager_backoff_parameters(Worker1P2),
+    SessId = get_outgoing_provider_session_id(ParisId),
 
-    SessId = get_outgoing_provider_session(P1Id),
+    ?assertEqual(false, session_exists(KrakowNode, SessId)),
 
-    start_outgoing_provider_session(Worker1P2, SessId),
-    ?assertEqual(true, outgoing_provider_session_exists(Worker1P2, SessId)),
+    start_outgoing_provider_session(KrakowNode, SessId),
+    ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
     % After reaching max backoff period session should be terminated
-    ?assertEqual(false, outgoing_provider_session_exists(Worker1P2, SessId), ?ATTEMPTS),
+    ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
 
     ok.
 
 
-consecutive_failures_to_perform_handshake_should_terminate_session_test(Config) ->
-    [Worker1P2, Worker1P1, _Worker2P1] = ?config(op_worker_nodes, Config),
-    P1Id = op_test_rpc:get_provider_id(Worker1P1),
+consecutive_failures_to_perform_handshake_should_terminate_session_test(_Config) ->
+    ParisId = oct_background:get_provider_id(paris),
+    [KrakowNode] = oct_background:get_provider_nodes(krakow),
 
-    set_conn_manager_backoff_parameters(Worker1P2),
+    SessId = session_utils:get_provider_session_id(outgoing, ParisId),
 
-    SessId = session_utils:get_provider_session_id(outgoing, P1Id),
+    ?assertEqual(false, session_exists(KrakowNode, SessId)),
 
-    start_outgoing_provider_session(Worker1P2, SessId),
-    ?assertEqual(true, outgoing_provider_session_exists(Worker1P2, SessId)),
+    start_outgoing_provider_session(KrakowNode, SessId),
+    ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
     % After reaching max backoff period session should be terminated
-    ?assertEqual(false, outgoing_provider_session_exists(Worker1P2, SessId), ?ATTEMPTS),
+    ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
 
     ok.
 
 
-if_at_least_one_handshake_succeeds_session_should_not_be_terminated_test(Config) ->
-    [Worker1P2, Worker1P1, _Worker2P1] = ?config(op_worker_nodes, Config),
-    P1Id = op_test_rpc:get_provider_id(Worker1P1),
+reconnects_should_be_performed_with_backoff_test(_Config) ->
+    ParisId = oct_background:get_provider_id(paris),
+    [KrakowNode] = oct_background:get_provider_nodes(krakow),
 
-    set_conn_manager_backoff_parameters(Worker1P2),
+    SessId = session_utils:get_provider_session_id(outgoing, ParisId),
 
-    SessId = session_utils:get_provider_session_id(outgoing, P1Id),
+    ?assertEqual(false, session_exists(KrakowNode, SessId)),
 
-    start_outgoing_provider_session(Worker1P2, SessId),
-    ?assertEqual(true, outgoing_provider_session_exists(Worker1P2, SessId)),
+    start_outgoing_provider_session(KrakowNode, SessId),
+    ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
-    % Even after reaching max backoff period session should not be terminated
-    % as there exists connection to one of the peer nodes
     timer:sleep(timer:seconds(?ATTEMPTS)),
-    ?assertEqual(true, outgoing_provider_session_exists(Worker1P2, SessId)),
-    ?assertMatch([_], get_outgoing_provider_session_connections(Worker1P2, SessId)),
+
+    ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
     ok.
 
 
-crushed_connection_should_be_restarted_test(Config) ->
-    [Worker1P2, Worker1P1, _Worker2P1] = ?config(op_worker_nodes, Config),
-    P1Id = op_test_rpc:get_provider_id(Worker1P1),
+crushed_connection_should_be_restarted_test(_Config) ->
+    ParisId = oct_background:get_provider_id(paris),
+    [KrakowNode] = oct_background:get_provider_nodes(krakow),
 
-    set_conn_manager_backoff_parameters(Worker1P2),
+    SessId = session_utils:get_provider_session_id(outgoing, ParisId),
 
-    SessId = session_utils:get_provider_session_id(outgoing, P1Id),
+    ?assertEqual(false, session_exists(KrakowNode, SessId)),
 
-    start_outgoing_provider_session(Worker1P2, SessId),
-    ?assertEqual(true, outgoing_provider_session_exists(Worker1P2, SessId)),
-    [Conn1, Conn2] = ?assertMatch(
-        [_, _], get_outgoing_provider_session_connections(Worker1P2, SessId), ?ATTEMPTS
-    ),
-    Cons1 = lists:sort([Conn1, Conn2]),
+    start_outgoing_provider_session(KrakowNode, SessId),
+    ?assertEqual(true, session_exists(KrakowNode, SessId)),
+    [Conn1] = ?assertMatch([_], get_session_connections(KrakowNode, SessId), ?ATTEMPTS),
 
-    connection:close(Conn2),
+    connection:close(Conn1),
     timer:sleep(timer:seconds(5)),
 
-    Cons2 = lists:sort(?assertMatch(
-        [_, _], get_outgoing_provider_session_connections(Worker1P2, SessId), ?ATTEMPTS
-    )),
+    [Conn2] = ?assertMatch([_], get_session_connections(KrakowNode, SessId), ?ATTEMPTS),
 
-    ?assert(lists:member(Conn1, Cons2)),
-    ?assertNotEqual(Cons1, Cons2),
+    ?assertNotEqual(Conn1, Conn2),
 
     ok.
 
@@ -139,55 +132,60 @@ crushed_connection_should_be_restarted_test(Config) ->
 
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
-        NewConfig3 = initializer:create_test_users_and_spaces(
-            ?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2
-        ),
-        initializer:mock_auth_manager(NewConfig3),
-        NewConfig3
-    end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
+    ssl:start(),
+    hackney:start(),
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "connection_tests",
+        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+    }).
 
 
-end_per_suite(Config) ->
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:teardown_storage(Config).
+end_per_suite(_Config) ->
+    hackney:stop(),
+    ssl:stop().
 
 
 init_per_testcase(consecutive_failures_to_verify_peer_should_terminate_session_test = Case, Config) ->
-    [Worker1P2 | _] = ?config(op_worker_nodes, Config),
-    mock_provider_identity_verification(Worker1P2),
+    [Node] = oct_background:get_provider_nodes(krakow),
+    mock_provider_identity_verification(Node),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(consecutive_failures_to_perform_handshake_should_terminate_session_test = Case, Config) ->
-    [_Worker1P2, Worker1P1, Worker2P1] = ?config(op_worker_nodes, Config),
-    mock_provider_handshake([Worker1P1, Worker2P1]),
+    Nodes = oct_background:get_provider_nodes(paris),
+    mock_provider_handshake(Nodes, infinity),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(if_at_least_one_handshake_succeeds_session_should_not_be_terminated_test = Case, Config) ->
-    [_Worker1P2, Worker1P1, _Worker2P1] = ?config(op_worker_nodes, Config),
-    mock_provider_handshake([Worker1P1]),
+init_per_testcase(reconnects_should_be_performed_with_backoff_test = Case, Config) ->
+    Nodes = oct_background:get_provider_nodes(paris),
+    mock_provider_handshake(Nodes, 2),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
+    [KrakowNode] = oct_background:get_provider_nodes(krakow),
+    ParisId = oct_background:get_provider_id(paris),
+    SessId = session_utils:get_provider_session_id(outgoing, ParisId),
+
+    terminate_session(KrakowNode, SessId),
+    ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
+
+    set_conn_manager_backoff_parameters(KrakowNode),
+
     Config.
 
 
 end_per_testcase(consecutive_failures_to_verify_peer_should_terminate_session_test = Case, Config) ->
-    [Worker1P2 | _] = ?config(op_worker_nodes, Config),
-    unmock_provider_identity_verification(Worker1P2),
+    [Node] = oct_background:get_provider_nodes(krakow),
+    unmock_provider_identity_verification(Node),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(consecutive_failures_to_perform_handshake_should_terminate_session_test = Case, Config) ->
-    [_Worker1P2, Worker1P1, Worker2P1] = ?config(op_worker_nodes, Config),
-    unmock_provider_handshake([Worker1P1, Worker2P1]),
+    Nodes = oct_background:get_provider_nodes(paris),
+    unmock_provider_handshake(Nodes),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(if_at_least_one_handshake_succeeds_session_should_not_be_terminated_test = Case, Config) ->
-    [_Worker1P2, Worker1P1, _Worker2P1] = ?config(op_worker_nodes, Config),
-    unmock_provider_handshake([Worker1P1]),
+end_per_testcase(reconnects_should_be_performed_with_backoff_test = Case, Config) ->
+    Nodes = oct_background:get_provider_nodes(paris),
+    unmock_provider_handshake(Nodes),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, _Config) ->
@@ -212,8 +210,8 @@ set_conn_manager_backoff_parameters(Node) ->
 
 
 %% @private
--spec get_outgoing_provider_session(od_provider:id()) -> session:id().
-get_outgoing_provider_session(PeerId) ->
+-spec get_outgoing_provider_session_id(od_provider:id()) -> session:id().
+get_outgoing_provider_session_id(PeerId) ->
     session_utils:get_provider_session_id(outgoing, PeerId).
 
 
@@ -228,14 +226,20 @@ start_outgoing_provider_session(Node, SessionId) ->
 
 
 %% @private
--spec outgoing_provider_session_exists(node(), session:id()) -> boolean().
-outgoing_provider_session_exists(Node, SessionId) ->
+-spec terminate_session(node(), session:id()) -> ok.
+terminate_session(Node, SessionId) ->
+    ?assertEqual(ok, rpc:call(Node, session_manager, terminate_session, [SessionId])).
+
+
+%% @private
+-spec session_exists(node(), session:id()) -> boolean().
+session_exists(Node, SessionId) ->
     rpc:call(Node, session, exists, [SessionId]).
 
 
 %% @private
--spec get_outgoing_provider_session_connections(node(), session:id()) -> [pid()].
-get_outgoing_provider_session_connections(Node, SessionId) ->
+-spec get_session_connections(node(), session:id()) -> [pid()].
+get_session_connections(Node, SessionId) ->
     {ok, #document{value = #session{
         connections = Cons
     }}} = ?assertMatch({ok, _}, rpc:call(Node, session, get, [SessionId])),
@@ -255,15 +259,27 @@ mock_provider_identity_verification(Node) ->
 %% @private
 -spec unmock_provider_identity_verification(node()) -> ok.
 unmock_provider_identity_verification(Node) ->
-    ok = test_utils:mock_unload(Node, auth_manager).
+    ok = test_utils:mock_unload(Node, provider_logic).
 
 
 %% @private
--spec mock_provider_handshake([node()]) -> ok.
-mock_provider_handshake(Nodes) ->
+-spec mock_provider_handshake([node()], infinity | non_neg_integer()) -> ok.
+mock_provider_handshake(Nodes, MaxFailedAttempts) ->
+    {_, []} = rpc:multicall(Nodes, application, set_env, [
+        ?APP_NAME, test_handshake_failed_attempts, MaxFailedAttempts
+    ]),
+
     test_utils:mock_new(Nodes, connection_auth, [passthrough]),
-    test_utils:mock_expect(Nodes, connection_auth, handle_handshake, fun(_, _) ->
-        throw(invalid_token)
+    test_utils:mock_expect(Nodes, connection_auth, handle_handshake, fun(Request, IpAddress) ->
+        case application:get_env(?APP_NAME, test_handshake_failed_attempts, 0) of
+            infinity ->
+                throw(invalid_token);
+            0 ->
+                meck:passthrough([Request, IpAddress]);
+            Num ->
+                application:set_env(?APP_NAME, test_handshake_failed_attempts, Num - 1),
+                throw(invalid_token)
+        end
     end).
 
 
