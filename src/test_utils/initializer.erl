@@ -1212,7 +1212,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, [X || X <- ProviderStorageIds, Y <-maps:keys(StorageIds), X==Y]}
     end),
     
-    test_utils:mock_expect(Workers, space_logic, get_local_storage_id, fun(SpaceId) ->
+    test_utils:mock_expect(Workers, space_logic, get_local_supporting_storage, fun(SpaceId) ->
         {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
         {ok, StorageId}
     end),

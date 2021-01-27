@@ -502,7 +502,7 @@ get_fs_stats_insecure(_UserCtx, FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     %% @TODO VFS-5497 Calc size/occupied for all supporting storages
-    {ok, StorageId} = space_logic:get_local_storage(SpaceId),
+    {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
     {ok, SupportSize} = provider_logic:get_support_size(SpaceId),
     Occupied = space_quota:current_size(SpaceId),
 

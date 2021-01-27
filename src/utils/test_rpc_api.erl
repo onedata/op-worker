@@ -21,13 +21,12 @@
     build_token_credentials/5,
 
     get_storages/0,
-    get_space_local_storage/1,
-    get_space_local_storages/1,
     storage_describe/1,
     is_storage_imported/1,
 
     get_spaces/0,
     get_space_details/1,
+    get_space_local_storages/1,
     get_autocleaning_status/1,
     get_support_size/1,
     get_space_providers/1,
@@ -72,16 +71,6 @@ get_storages() ->
     rpc_api:get_storages().
 
 
--spec get_space_local_storage(od_space:id()) -> {ok, storage:id()}.
-get_space_local_storage(SpaceId) ->
-    space_logic:get_local_storage(SpaceId).
-
-
--spec get_space_local_storages(od_space:id()) -> {ok, [storage:id()]}.
-get_space_local_storages(SpaceId) ->
-    rpc_api:space_logic_get_storages(SpaceId).
-
-
 -spec storage_describe(storage:id()) -> {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
 storage_describe(StorageId) ->
     rpc_api:storage_describe(StorageId).
@@ -100,6 +89,11 @@ get_spaces() ->
 -spec get_space_details(od_space:id()) -> {ok, #{atom() := term()}} | errors:error().
 get_space_details(SpaceId) ->
     rpc_api:get_space_details(SpaceId).
+
+
+-spec get_space_local_storages(od_space:id()) -> {ok, [storage:id()]}.
+get_space_local_storages(SpaceId) ->
+    rpc_api:space_logic_get_storages(SpaceId).
 
 
 -spec get_autocleaning_status(od_space:id()) -> map().

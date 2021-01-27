@@ -51,7 +51,7 @@
 -spec get_preferable_write_block_size(od_space:id()) ->
     undefined | non_neg_integer().
 get_preferable_write_block_size(SpaceId) ->
-    {ok, StorageId} = space_logic:get_local_storage(SpaceId),
+    {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
     get_preferable_storage_write_block_size(StorageId).
 
 

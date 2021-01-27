@@ -32,7 +32,7 @@
 -export([has_eff_privilege/3, has_eff_privileges/3]).
 -export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
-    get_local_storage/1, get_storages_by_provider/2, get_all_storage_ids/1]).
+    get_local_supporting_storage/1, get_storages_by_provider/2, get_all_storage_ids/1]).
 -export([get_provider_ids/1, get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([is_supported_by_storage/2]).
@@ -184,8 +184,8 @@ get_shares(SessionId, SpaceId) ->
 %% This function returns StorageId for given SpaceId.
 %% @end
 %%-------------------------------------------------------------------
--spec get_local_storage(od_space:id()) -> {ok, storage:id()} | errors:error().
-get_local_storage(SpaceId) ->
+-spec get_local_supporting_storage(od_space:id()) -> {ok, storage:id()} | errors:error().
+get_local_supporting_storage(SpaceId) ->
     % called by module to be mocked in tests
     case space_logic:get_local_storages(SpaceId) of
         {ok, []} -> {error, space_not_supported};
