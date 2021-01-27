@@ -43,7 +43,9 @@
     restart_autocleaning_run_test/1,
     autocleaning_should_evict_file_when_it_is_old_enough/1,
     autocleaning_should_not_evict_opened_file_replica/1,
-    cancel_autocleaning_run/1]).
+    cancel_autocleaning_run/1,
+    time_warp_test/1
+]).
 
 all() -> [
     autocleaning_run_should_not_start_when_file_popularity_is_disabled,
@@ -67,7 +69,8 @@ all() -> [
     restart_autocleaning_run_test,
     autocleaning_should_evict_file_when_it_is_old_enough,
     autocleaning_should_not_evict_opened_file_replica,
-    cancel_autocleaning_run
+    cancel_autocleaning_run,
+    time_warp_test
 ].
 
 -define(SPACE_ID, <<"space1">>).
@@ -737,6 +740,76 @@ cancel_autocleaning_run(Config) ->
     end, ?ATTEMPTS).
 
 
+time_warp_test(Config) ->
+    % replica_deletion_max_parallel_requests is decreased in init_per_testcase
+    % so that cleaning will be slower
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESSION(W1, Config),
+    SessId2 = ?SESSION(W2, Config),
+    DomainP1 = ?GET_DOMAIN_BIN(W1),
+    DomainP2 = ?GET_DOMAIN_BIN(W2),
+
+    FilesNum = 100,
+    FileSize = 10,
+    Target = 0,
+    Threshold = FilesNum * FileSize + 1,
+
+    DirName = <<"dir">>,
+    DirPath = ?FILE_PATH(DirName),
+    {ok, _} = lfm_proxy:mkdir(W2, SessId2, DirPath),
+
+    FilePrefix = ?FILE_NAME,
+    Guids = write_files(W2, SessId2, DirPath, FilePrefix, FileSize, FilesNum),
+
+    ExtraFile = <<"extra_file">>,
+    ExtraFileSize = 1,
+    EG = write_file(W2, SessId2, ?FILE_PATH(ExtraFile), ExtraFileSize),
+    TotalSize = FilesNum * FileSize + ExtraFileSize,
+
+    enable_file_popularity(W1, ?SPACE_ID),
+    lists:foreach(fun(G) ->
+        ?assertDistribution(W1, SessId, ?DIST(DomainP2, FileSize), G),
+        schedule_file_replication(W1, SessId, G, DomainP1)
+    end, Guids),
+
+    lists:foreach(fun(G) ->
+        ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [FileSize, FileSize]), G)
+    end, Guids),
+
+    configure_autocleaning(W1, ?SPACE_ID, #{
+        enabled => true,
+        target => Target,
+        threshold => Threshold,
+        rules => #{enabled => false}
+    }),
+
+    ?assertFilesInView(W1, ?SPACE_ID, Guids),
+    ?assertEqual(FilesNum * FileSize, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
+    StartTimeSeconds = 1000000000, % 10 ^ 9
+
+    ok = time_test_utils:set_current_time_seconds(StartTimeSeconds),
+    % "On the fly" replication of the ExtraFile will cause occupancy
+    % to exceed the Threshold.
+
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [ExtraFileSize]), EG),
+    read_file(W1, SessId, EG, ExtraFileSize),
+    {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
+
+    % pretend that there has been a 10 hour backward time warp
+    BackwardTimeWarpSeconds = 36000,
+    time_test_utils:simulate_seconds_passing(-BackwardTimeWarpSeconds),
+
+    ?assertRunFinished(W1, ARId),
+    StartTimeIso8601 = time:seconds_to_iso8601(StartTimeSeconds),
+    % stop time should be equal to start time as it cannot be lower
+    ?assertMatch({ok, #{
+        released_bytes := TotalSize,
+        bytes_to_release := TotalSize,
+        status := ?COMPLETED,
+        started_at := StartTimeIso8601,
+        stopped_at := StartTimeIso8601
+    }}, get_run_report(W1, ARId), ?ATTEMPTS).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -780,6 +853,12 @@ init_per_testcase(default, Config) ->
     ensure_space_empty(?SPACE_ID, Config2),
     Config2;
 
+init_per_testcase(time_warp_test, Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    disable_periodical_spaces_autocleaning_check(W),
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(default, Config);
+
 init_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     ok = enable_periodical_spaces_autocleaning_check(W),
@@ -788,6 +867,10 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(cancel_autocleaning_run, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     ok = test_utils:set_env(W, op_worker, autocleaning_view_batch_size, 1000),
+    end_per_testcase(default, Config);
+
+end_per_testcase(time_warp_test, Config) ->
+    time_test_utils:unfreeze_time(Config),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
