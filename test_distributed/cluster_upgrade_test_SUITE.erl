@@ -115,7 +115,7 @@ upgrade_from_20_02_0_beta3_storages(Config) ->
     {ok, _} = rpc:call(Worker, storage_config, create, [St, #helper{}, undefined]),
     {ok, _} = rpc:call(Worker, datastore_model, update, [storage_config:get_ctx(), St,
         fun(StorageConfig) -> {ok, StorageConfig#storage_config{imported_storage = true}} end]),
-    test_utils:mock_expect(Worker, provider_logic, get_storage_ids, fun() -> {ok, [St]} end),
+    test_utils:mock_expect(Worker, provider_logic, get_storages, fun() -> {ok, [St]} end),
     
     ?assertEqual({ok, 3}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [2])),
     

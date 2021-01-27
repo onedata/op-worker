@@ -181,7 +181,7 @@ get_stats(SpaceId, Type, Window) ->
 -spec get_manual_example(od_space:id()) -> {ok, binary()}.
 get_manual_example(SpaceId) ->
     ?RUN_AND_HANDLE_EXCEPTION(fun() ->
-        {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+        {ok, StorageId} = space_logic:get_local_storage(SpaceId),
         assert_imported_storage(StorageId),
         Domain = oneprovider:get_domain(),
         {ok, str_utils:format_bin(
@@ -256,7 +256,7 @@ migrate_storage_sync_monitoring() ->
     ?info("Starting storage_sync_monitoring migration procedure..."),
     {ok, SpaceIds} = provider_logic:get_spaces(),
     lists:foreach(fun(SpaceId) ->
-        case space_logic:get_local_storage_id(SpaceId) of
+        case space_logic:get_local_storage(SpaceId) of
             {ok, StorageId} ->
                 case storage_sync_monitoring:get(SpaceId, StorageId) of
                     {ok, #document{value = SSM}} ->
@@ -294,7 +294,7 @@ migrate_storage_sync_monitoring() ->
 
 -spec assert_auto_storage_import_supported(od_space:id()) -> ok.
 assert_auto_storage_import_supported(SpaceId) ->
-    case space_logic:get_local_storage_id(SpaceId) of
+    case space_logic:get_local_storage(SpaceId) of
         {ok, StorageId} ->
             assert_imported_storage(StorageId),
             Helper = storage:get_helper(StorageId),
@@ -313,7 +313,7 @@ end.
 
 -spec assert_manual_storage_import_supported(od_space:id()) -> ok.
 assert_manual_storage_import_supported(SpaceId) ->
-    case space_logic:get_local_storage_id(SpaceId) of
+    case space_logic:get_local_storage(SpaceId) of
         {ok, StorageId} ->
             assert_imported_storage(StorageId),
             Helper = storage:get_helper(StorageId),
@@ -341,7 +341,7 @@ assert_auto_import_mode(SpaceId) ->
 
 -spec assert_space_supported_with_imported_storage(od_space:id()) -> ok.
 assert_space_supported_with_imported_storage(SpaceId) ->
-    case space_logic:get_local_storage_id(SpaceId) of
+    case space_logic:get_local_storage(SpaceId) of
         {ok, StorageId} -> assert_imported_storage(StorageId);
         Error -> throw(Error)
     end.

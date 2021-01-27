@@ -21,7 +21,7 @@
     storage_create/6,
     storage_safe_remove/1,
     storage_supports_any_space/1,
-    storage_list_ids/0,
+    get_storages/0,
     storage_get_helper/1,
     storage_update_admin_ctx/2,
     storage_update_helper_args/2,
@@ -62,7 +62,7 @@
     prepare_user_ctx_params/2,
     get_helper_args/1,
     get_helper_admin_ctx/1,
-    space_logic_get_storage_ids/1,
+    space_logic_get_storages/1,
     file_popularity_api_configure/2,
     file_popularity_api_get_configuration/1,
     autocleaning_configure/2,
@@ -153,9 +153,9 @@ storage_supports_any_space(StorageId) ->
     storage:supports_any_space(StorageId).
 
 
--spec storage_list_ids() -> {ok, [storage:id()]} | {error, term()}.
-storage_list_ids() ->
-    provider_logic:get_storage_ids().
+-spec get_storages() -> {ok, [storage:id()]} | {error, term()}.
+get_storages() ->
+    provider_logic:get_storages().
 
 
 -spec storage_get_helper(storage:id()) -> {ok, helpers:helper()}.
@@ -378,9 +378,9 @@ get_helper_admin_ctx(Helper) ->
     helper:get_admin_ctx(Helper).
 
 
--spec space_logic_get_storage_ids(od_space:id()) -> {ok, [storage:id()]}.
-space_logic_get_storage_ids(SpaceId) ->
-    space_logic:get_local_storage_ids(SpaceId).
+-spec space_logic_get_storages(od_space:id()) -> {ok, [storage:id()]}.
+space_logic_get_storages(SpaceId) ->
+    space_logic:get_local_storages(SpaceId).
 
 
 -spec file_popularity_api_configure(file_popularity_config:id(), map()) ->
@@ -444,7 +444,7 @@ support_space(StorageId, Token, SupportSize) ->
 
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.
 revoke_space_support(SpaceId) ->
-    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storages(SpaceId),
     StorageId = hd(StorageIds),
     storage:revoke_space_support(StorageId, SpaceId).
 
@@ -531,7 +531,7 @@ space_quota_current_size(SpaceId) ->
 -spec update_space_support_size(od_space:id(), NewSupportSize :: integer()) ->
     ok | errors:error().
 update_space_support_size(SpaceId, NewSupportSize) ->
-    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storages(SpaceId),
     StorageId = hd(StorageIds),
     storage:update_space_support_size(StorageId, SpaceId, NewSupportSize).
 

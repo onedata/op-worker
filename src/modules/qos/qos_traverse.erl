@@ -202,7 +202,7 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInf
             end;
         <<"reconcile">> ->
             {ok, EffectiveFileQos} = file_qos:get_effective(FileDoc),
-            {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
+            {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
             file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
     end,
     ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries),

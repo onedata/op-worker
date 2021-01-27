@@ -403,7 +403,7 @@ maybe_rename_storage_file(FileCtx) ->
 
 -spec ensure_dir_for_deleted_files_created(od_space:id()) -> ok.
 ensure_dir_for_deleted_files_created(SpaceId) ->
-    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+    {ok, StorageId} = space_logic:get_local_storage(SpaceId),
     RootHandle = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, ?DELETED_OPENED_FILES_DIR),
     case storage_driver:mkdir(RootHandle, ?DELETED_OPENED_FILES_DIR_MODE, false) of
         ok -> ok;

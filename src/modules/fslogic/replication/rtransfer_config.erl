@@ -421,7 +421,7 @@ fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum) ->
 %%--------------------------------------------------------------------
 -spec get_storages(non_neg_integer()) -> [storage:id()] | {error, term()}.
 get_storages(Retries) ->
-    case {provider_logic:get_storage_ids(), Retries} of
+    case {provider_logic:get_storages(), Retries} of
         {{ok, StorageIds}, _} ->
             StorageIds;
         {?ERROR_UNREGISTERED_ONEPROVIDER, 0} ->

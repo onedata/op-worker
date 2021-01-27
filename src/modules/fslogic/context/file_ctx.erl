@@ -800,7 +800,7 @@ get_storage(FileCtx = #file_ctx{storage = undefined}) ->
             {undefined, FileCtx};
         false ->
             SpaceId = get_space_id_const(FileCtx),
-            case space_logic:get_local_storage_ids(SpaceId) of
+            case space_logic:get_local_storages(SpaceId) of
                 {ok, []} ->
                     {undefined, FileCtx};
                 {ok, [StorageId | _]} ->

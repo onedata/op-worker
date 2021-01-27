@@ -1978,7 +1978,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     FileUuid = Doc#document.key,
     SpaceId = Doc#document.scope,
 
-    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
+    {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
     FileId = Path,
     Location0 = #file_location{
         blocks = [#file_block{offset = 0, size = 3}],

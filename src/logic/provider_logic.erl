@@ -34,7 +34,7 @@
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
 -export([get_eff_users/0]).
--export([get_storage_ids/0, get_storage_ids/1]).
+-export([get_storages/0, get_storages/1]).
 -export([has_storage/1]).
 -export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
@@ -259,9 +259,9 @@ get_spaces(SessionId, ProviderId) ->
 %% Retrieves storage_ids of this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids() -> {ok, [storage:id()]} | errors:error().
-get_storage_ids() ->
-    get_storage_ids(?SELF).
+-spec get_storages() -> {ok, [storage:id()]} | errors:error().
+get_storages() ->
+    get_storages(?SELF).
 
 
 %%--------------------------------------------------------------------
@@ -269,8 +269,8 @@ get_storage_ids() ->
 %% Retrieves storage_ids of provider by given ProviderId using current provider's auth.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids(od_provider:id()) -> {ok, [storage:id()]} | errors:error().
-get_storage_ids(ProviderId) ->
+-spec get_storages(od_provider:id()) -> {ok, [storage:id()]} | errors:error().
+get_storages(ProviderId) ->
     case get(?ROOT_SESS_ID, ProviderId) of
         {ok, #document{value = #od_provider{storages = Storages}}} ->
             {ok, Storages};
@@ -280,7 +280,7 @@ get_storage_ids(ProviderId) ->
 
 -spec has_storage(storage:id()) -> boolean().
 has_storage(StorageId) ->
-    case get_storage_ids() of
+    case get_storages() of
         {ok, StorageIds} -> lists:member(StorageId, StorageIds);
         _ -> false
     end.

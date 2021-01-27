@@ -20,9 +20,9 @@
     create_fuse_session/3,
     build_token_credentials/5,
 
-    storage_list_ids/0,
-    get_local_storage_id/1,
-    get_local_storage_ids/1,
+    get_storages/0,
+    get_space_local_storage/1,
+    get_space_local_storages/1,
     storage_describe/1,
     is_storage_imported/1,
 
@@ -67,19 +67,19 @@ build_token_credentials(AccessToken, ConsumerToken, PeerIp, Interface, DataAcces
     auth_manager:build_token_credentials(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy).
 
 
--spec storage_list_ids() -> {ok, [storage:id()]} | {error, term()}.
-storage_list_ids() ->
-    rpc_api:storage_list_ids().
+-spec get_storages() -> {ok, [storage:id()]} | {error, term()}.
+get_storages() ->
+    rpc_api:get_storages().
 
 
--spec get_local_storage_id(od_space:id()) -> {ok, storage:id()}.
-get_local_storage_id(SpaceId) ->
-    space_logic:get_local_storage_id(SpaceId).
+-spec get_space_local_storage(od_space:id()) -> {ok, storage:id()}.
+get_space_local_storage(SpaceId) ->
+    space_logic:get_local_storage(SpaceId).
 
 
--spec get_local_storage_ids(od_space:id()) -> {ok, [storage:id()]}.
-get_local_storage_ids(SpaceId) ->
-    rpc_api:space_logic_get_storage_ids(SpaceId).
+-spec get_space_local_storages(od_space:id()) -> {ok, [storage:id()]}.
+get_space_local_storages(SpaceId) ->
+    rpc_api:space_logic_get_storages(SpaceId).
 
 
 -spec storage_describe(storage:id()) -> {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.

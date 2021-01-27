@@ -5721,7 +5721,7 @@ verify_file_deleted(Worker, FileGuid, Master, Attempts) ->
     end.
 
 clean_luma_db(Worker) ->
-    {ok, StorageIds} = rpc:call(Worker, provider_logic, get_storage_ids, []),
+    {ok, StorageIds} = rpc:call(Worker, provider_logic, get_storages, []),
     lists:foreach(fun(StorageId) ->
         ok = rpc:call(Worker, luma, clear_db, [StorageId])
     end, StorageIds).
@@ -5739,7 +5739,7 @@ add_rdwr_storages(Config) ->
 add_storages(Config, CheckStorageFun) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foldl(fun(W, AccIn) ->
-        {ok, StorageIds} = rpc:call(W, provider_logic, get_storage_ids, []),
+        {ok, StorageIds} = rpc:call(W, provider_logic, get_storages, []),
         Storages = lists:map(fun(StorageId) ->
             {ok, Storage} = rpc:call(W, storage, get, [StorageId]),
             Storage

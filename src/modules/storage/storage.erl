@@ -515,7 +515,7 @@ on_helper_changed(StorageId) ->
 %% @private
 -spec is_name_occupied(name()) -> boolean().
 is_name_occupied(Name) ->
-    {ok, StorageIds} = provider_logic:get_storage_ids(),
+    {ok, StorageIds} = provider_logic:get_storages(),
     lists:member(Name, lists:map(fun(StorageId) ->
         {ok, OccupiedName} = storage_logic:get_name_of_local_storage(StorageId),
         OccupiedName
@@ -696,7 +696,7 @@ migrate_space_support(SpaceId) ->
 -spec migrate_imported_storages_to_zone() -> ok.
 migrate_imported_storages_to_zone() ->
     ?info("Starting imported storages migration procedure..."),
-    {ok, StorageIds} = provider_logic:get_storage_ids(),
+    {ok, StorageIds} = provider_logic:get_storages(),
     lists:foreach(fun(StorageId) ->
         ImportedStorage = storage_config:is_imported_storage(StorageId),
         storage_logic:set_imported(StorageId, ImportedStorage)

@@ -112,7 +112,7 @@ run_scan(SpaceId) ->
 
 -spec run_scan(od_space:id(), storage_import:scan_config() | undefined) -> ok | {error, already_started}.
 run_scan(SpaceId, ScanConfig) ->
-    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+    {ok, StorageId} = space_logic:get_local_storage(SpaceId),
     case storage_import_monitoring:prepare_new_scan(SpaceId) of
         {ok, SSM} ->
             {ok, ScansNum} = storage_import_monitoring:get_finished_scans_num(SSM),
@@ -125,7 +125,7 @@ run_scan(SpaceId, ScanConfig) ->
 
 -spec cancel(od_space:id()) -> ok | {error, term()}.
 cancel(SpaceId) ->
-    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+    {ok, StorageId} = space_logic:get_local_storage(SpaceId),
     case storage_import_monitoring:get(SpaceId) of
         {ok, SSMDoc} ->
             case storage_import_monitoring:is_scan_in_progress(SSMDoc) of
