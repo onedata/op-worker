@@ -33,7 +33,7 @@
 -record(state, {
     session_id :: session:id(),
     session_type :: session:type(),
-    session_grace_period :: session:grace_period(),
+    session_grace_period :: undefined | session:grace_period(),
     identity :: aai:subject(),
     % Possible auth values:
     % auth_manager:token_credentials() -> for user sessions (gui, rest, fuse).
@@ -105,7 +105,7 @@ update_credentials(SessionId, AccessToken, ConsumerToken) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> {ok, state()}.
-init([SessId, SessType]) ->
+init([SessionId, SessionType]) ->
     process_flag(trap_exit, true),
 
     {ok, #document{
@@ -113,19 +113,18 @@ init([SessId, SessType]) ->
             identity = Identity,
             credentials = Credentials
         }
-    }} = mark_session_as_active(SessId),
-
-    GracePeriod = get_session_grace_period(SessType),
-    schedule_session_activity_checkup(GracePeriod),
+    }} = mark_session_as_active(SessionId),
 
     {ok, #state{
-        session_id = SessId,
-        session_type = SessType,
-        session_grace_period = GracePeriod,
+        session_id = SessionId,
+        session_type = SessionType,
         identity = Identity,
         credentials = Credentials,
+        session_grace_period = register_session_activity_checkup_if_not_offline_session(
+            SessionType
+        ),
         validity_checkup_timer = register_auth_validity_checkup_if_user_session(
-            SessType, Credentials
+            SessionType, Credentials
         )
     }}.
 
@@ -141,6 +140,7 @@ init([SessId, SessType]) ->
     {reply, Reply :: term(), NewState :: state(), timeout() | hibernate}.
 handle_call(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), _From, #state{
     session_id = SessionId,
+    session_type = SessionType,
     identity = Identity,
     credentials = OldTokenCredentials,
     validity_checkup_timer = OldTimer
@@ -150,7 +150,7 @@ handle_call(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), _From, #state
     NewTokenCredentials = auth_manager:update_client_tokens(
         OldTokenCredentials, AccessToken, ConsumerToken
     ),
-    case check_auth_validity(NewTokenCredentials, Identity) of
+    case check_auth_validity(SessionType, NewTokenCredentials, Identity) of
         {true, NewTokenTTL} ->
             {ok, TokenCaveats} = auth_manager:get_caveats(NewTokenCredentials),
             {ok, DataConstraints} = data_constraints:get(TokenCaveats),
@@ -225,13 +225,14 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
 
 handle_info(?CHECK_SESSION_VALIDITY, #state{
     session_id = SessionId,
+    session_type = SessionType,
     identity = Identity,
     credentials = Auth,
     validity_checkup_timer = OldTimer
 } = State) ->
     cancel_auth_validity_checkup(OldTimer),
 
-    case check_auth_validity(Auth, Identity) of
+    case check_auth_validity(SessionType, Auth, Identity) of
         {true, TokenTTL} ->
             NewState = State#state{
                 validity_checkup_timer = schedule_auth_validity_checkup(TokenTTL)
@@ -296,19 +297,26 @@ mark_session_as_active(SessionId) ->
 
 
 %% @private
--spec get_session_grace_period(session:type()) -> session:grace_period().
+-spec register_session_activity_checkup_if_not_offline_session(session:type()) ->
+    undefined | session:grace_period().
+register_session_activity_checkup_if_not_offline_session(offline) ->
+    undefined;
+register_session_activity_checkup_if_not_offline_session(SessionType) ->
+    {ok, GracePeriod} = get_session_grace_period(SessionType),
+    schedule_session_activity_checkup(GracePeriod),
+    GracePeriod.
+
+
+%% @private
+-spec get_session_grace_period(session:type()) -> {ok, session:grace_period()}.
 get_session_grace_period(gui) ->
-    {ok, Period} = op_worker:get_env(gui_session_grace_period_seconds),
-    Period;
+    op_worker:get_env(gui_session_grace_period_seconds);
 get_session_grace_period(rest) ->
-    {ok, Period} = op_worker:get_env(rest_session_grace_period_seconds),
-    Period;
+    op_worker:get_env(rest_session_grace_period_seconds);
 get_session_grace_period(provider_incoming) ->
-    {ok, Period} = op_worker:get_env(provider_session_grace_period_seconds),
-    Period;
+    op_worker:get_env(provider_session_grace_period_seconds);
 get_session_grace_period(_) ->
-    {ok, Period} = op_worker:get_env(fuse_session_grace_period_seconds),
-    Period.
+    op_worker:get_env(fuse_session_grace_period_seconds).
 
 
 %% @private
@@ -426,12 +434,25 @@ cancel_auth_validity_checkup(ValidityCheckupTimer) ->
 
 
 %% @private
--spec check_auth_validity(undefined | auth_manager:credentials(), aai:subject()) ->
+-spec check_auth_validity(session:type(), undefined | auth_manager:credentials(), aai:subject()) ->
     {true, TokenTTL :: undefined | time:seconds()} | false.
-check_auth_validity(undefined, _Identity) ->
+check_auth_validity(provider_incoming, undefined, _Identity) ->
     {true, undefined};
-check_auth_validity(TokenCredentials, Identity) ->
-    case auth_manager:verify_credentials(TokenCredentials) of
+check_auth_validity(SessionType, TokenCredentials0, Identity) ->
+    TokenCredentials1 = case SessionType of
+        offline ->
+            AccessToken = auth_manager:get_access_token(TokenCredentials0),
+            {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
+
+            auth_manager:update_client_tokens(
+                TokenCredentials0,
+                AccessToken,
+                ProviderIdentityToken
+            );
+        _ ->
+            TokenCredentials0
+    end,
+    case auth_manager:verify_credentials(TokenCredentials1) of
         {ok, #auth{subject = Identity}, undefined} ->
             {true, undefined};
         {ok, #auth{subject = Identity}, TokenValidUntil} ->
