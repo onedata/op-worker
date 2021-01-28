@@ -41,7 +41,7 @@
 -export([
     credentials_to_gs_auth_override/1,
     get_caveats/1,
-    acquire_offline_user_access_credentials/2,
+    acquire_offline_user_access_token/2,
     verify_credentials/1
 ]).
 
@@ -182,30 +182,19 @@ get_caveats(TokenCredentials) ->
 %% @see provider_offline_access
 %% @end
 %%--------------------------------------------------------------------
--spec acquire_offline_user_access_credentials(od_user:id(), credentials()) ->
+-spec acquire_offline_user_access_token(od_user:id(), credentials()) ->
     {ok, credentials()} | errors:error().
-acquire_offline_user_access_credentials(UserId, TokenCredentials = #token_credentials{
+acquire_offline_user_access_token(UserId, #token_credentials{
     access_token = AccessToken,
     consumer_token = ConsumerToken,
     peer_ip = PeerIp,
     interface = Interface,
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
-    case token_logic:acquire_offline_user_access_token(
+    token_logic:acquire_offline_user_access_token(
         UserId, AccessToken, ConsumerToken,
         PeerIp, Interface, DataAccessCaveatsPolicy
-    ) of
-        {ok, OfflineAccessToken} ->
-            {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
-            {ok, TokenCredentials#token_credentials{
-                access_token = OfflineAccessToken,
-                consumer_token = ProviderIdentityToken,
-                peer_ip = undefined,
-                interface = Interface
-            }};
-        {error, _} = Error ->
-            Error
-    end.
+    ).
 
 
 %%--------------------------------------------------------------------

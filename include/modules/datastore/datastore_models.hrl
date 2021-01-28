@@ -234,6 +234,13 @@
     file_guid :: fslogic_worker:file_guid()
 }).
 
+-record(offline_access_credentials, {
+    user_id :: od_user:id(),
+    access_token :: auth_manager:access_token(),
+    interface :: undefined | cv_interface:interface(),
+    data_access_caveats_policy :: data_access_caveats:policy()
+}).
+
 -record(file_force_proxy, {
     provider_id :: undefined | oneprovider:id()
 }).
