@@ -18,6 +18,7 @@
 
 %% API
 -export([acquire/3, get/1, remove/1]).
+-export([ensure_consumer_token_up_to_date/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -42,11 +43,11 @@
 
 -spec acquire(id(), aai:subject(), auth_manager:credentials()) ->
     {ok, auth_manager:credentials()} | error().
-acquire(OfflineAccessJobId, ?SUB(user, UserId), UserCredentials) ->
+acquire(OfflineCredentialsId, ?SUB(user, UserId), UserCredentials) ->
     case auth_manager:acquire_offline_user_access_token(UserId, UserCredentials) of
         {ok, OfflineAccessToken} ->
             Doc = #document{
-                key = OfflineAccessJobId,
+                key = OfflineCredentialsId,
                 value = OfflineCredentials = #offline_access_credentials{
                     user_id = UserId,
                     access_token = OfflineAccessToken,
@@ -70,8 +71,8 @@ acquire(_, _, _) ->
 
 
 -spec get(id()) -> {ok, auth_manager:credentials()} | error().
-get(CredentialsId) ->
-    case datastore_model:get(?CTX, CredentialsId) of
+get(OfflineCredentialsId) ->
+    case datastore_model:get(?CTX, OfflineCredentialsId) of
         {ok, #document{value = OfflineCredentials}} ->
             {ok, to_token_credentials(OfflineCredentials)};
         {error, _} = Error ->
@@ -80,8 +81,21 @@ get(CredentialsId) ->
 
 
 -spec remove(id()) -> ok.
-remove(CredentialsId) ->
-    ok = datastore_model:delete(?CTX, CredentialsId).
+remove(OfflineCredentialsId) ->
+    ok = datastore_model:delete(?CTX, OfflineCredentialsId).
+
+
+-spec ensure_consumer_token_up_to_date(auth_manager:credentials()) ->
+    auth_manager:credentials().
+ensure_consumer_token_up_to_date(TokenCredentials) ->
+    AccessToken = auth_manager:get_access_token(TokenCredentials),
+    {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
+
+    auth_manager:update_client_tokens(
+        TokenCredentials,
+        AccessToken,
+        ProviderIdentityToken
+    ).
 
 
 %%%===================================================================

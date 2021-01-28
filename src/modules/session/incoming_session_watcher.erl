@@ -441,14 +441,7 @@ check_auth_validity(provider_incoming, undefined, _Identity) ->
 check_auth_validity(SessionType, TokenCredentials0, Identity) ->
     TokenCredentials1 = case SessionType of
         offline ->
-            AccessToken = auth_manager:get_access_token(TokenCredentials0),
-            {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
-
-            auth_manager:update_client_tokens(
-                TokenCredentials0,
-                AccessToken,
-                ProviderIdentityToken
-            );
+            offline_access_credentials:ensure_consumer_token_up_to_date(TokenCredentials0);
         _ ->
             TokenCredentials0
     end,
