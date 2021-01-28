@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -32,6 +32,7 @@
 
 -record(state, {
     session_id :: session:id(),
+    session_type :: session:type(),
     session_grace_period :: session:grace_period(),
     identity :: aai:subject(),
     % Possible auth values:
@@ -44,6 +45,8 @@
     credentials :: undefined | auth_manager:credentials(),
     validity_checkup_timer :: undefined | reference()
 }).
+-type state() :: #state{}.
+
 
 -define(REMOVE_SESSION, remove_session).
 -define(CHECK_SESSION_ACTIVITY, check_session_activity).
@@ -56,8 +59,6 @@
 -define(SESSION_VALIDITY_CHECK_INTERVAL, application:get_env(
     ?APP_NAME, session_validity_check_interval_seconds, 15
 )).
-
--type state() :: #state{}.
 
 
 %%%===================================================================
@@ -103,47 +104,29 @@ update_credentials(SessionId, AccessToken, ConsumerToken) ->
 %% Initializes the session watcher.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term()) ->
-    {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore.
+-spec init(Args :: term()) -> {ok, state()}.
 init([SessId, SessType]) ->
     process_flag(trap_exit, true),
-    Self = self(),
-    {ok, #document{value = #session{
-        identity = Identity,
-        credentials = Credentials
-    }}} = session:update(SessId, fun(#session{} = Sess) ->
-        {ok, Sess#session{
-            status = active,
-            watcher = Self
-        }}
-    end),
+
+    {ok, #document{
+        value = #session{
+            identity = Identity,
+            credentials = Credentials
+        }
+    }} = mark_session_as_active(SessId),
 
     GracePeriod = get_session_grace_period(SessType),
     schedule_session_activity_checkup(GracePeriod),
 
-    ValidityCheckupTimer = case Credentials of
-        undefined ->
-            undefined;
-        TokenCredentials ->
-            AccessTokenBin = auth_manager:get_access_token(TokenCredentials),
-            {ok, AccessToken} = tokens:deserialize(AccessTokenBin),
-
-            NextCheckupDelay = case caveats:infer_ttl(tokens:get_caveats(AccessToken)) of
-                undefined ->
-                    ?SESSION_VALIDITY_CHECK_INTERVAL;
-                TokenTTL ->
-                    min(?SESSION_VALIDITY_CHECK_INTERVAL, TokenTTL)
-            end,
-            schedule_session_validity_checkup(NextCheckupDelay)
-    end,
-
     {ok, #state{
         session_id = SessId,
+        session_type = SessType,
         session_grace_period = GracePeriod,
         identity = Identity,
         credentials = Credentials,
-        validity_checkup_timer = ValidityCheckupTimer
+        validity_checkup_timer = register_auth_validity_checkup_if_user_session(
+            SessType, Credentials
+        )
     }}.
 
 
@@ -153,26 +136,22 @@ init([SessId, SessType]) ->
 %% Handles call messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: state()) ->
+-spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: state()) ->
     {reply, Reply :: term(), NewState :: state()} |
-    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
-    {stop, Reason :: term(), NewState :: state()}.
+    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate}.
 handle_call(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), _From, #state{
     session_id = SessionId,
     identity = Identity,
     credentials = OldTokenCredentials,
     validity_checkup_timer = OldTimer
 } = State) ->
-    cancel_validity_checkup_timer(OldTimer),
+    cancel_auth_validity_checkup(OldTimer),
+
     NewTokenCredentials = auth_manager:update_client_tokens(
         OldTokenCredentials, AccessToken, ConsumerToken
     ),
     case check_auth_validity(NewTokenCredentials, Identity) of
-        {true, NewTimer} ->
+        {true, NewTokenTTL} ->
             {ok, TokenCaveats} = auth_manager:get_caveats(NewTokenCredentials),
             {ok, DataConstraints} = data_constraints:get(TokenCaveats),
             {ok, _} = session:update(SessionId, fun(Session) ->
@@ -183,11 +162,11 @@ handle_call(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), _From, #state
             end),
             NewState = State#state{
                 credentials = NewTokenCredentials,
-                validity_checkup_timer = NewTimer
+                validity_checkup_timer = schedule_auth_validity_checkup(NewTokenTTL)
             },
             {reply, ok, NewState, hibernate};
         false ->
-            mark_inactive(SessionId),
+            mark_session_as_inactive(SessionId),
             schedule_session_removal(0),
             {reply, ok, State}
     end;
@@ -219,12 +198,9 @@ handle_cast(Request, State) ->
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout() | term(), State :: state()) ->
     {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
+    {noreply, NewState :: state(), timeout() | hibernate}.
 handle_info(?REMOVE_SESSION, #state{session_id = SessionId} = State) ->
-    spawn(fun() ->
-        session_manager:terminate_session(SessionId)
-    end),
+    async_terminate_session(SessionId),
     schedule_session_removal(?SESSION_REMOVAL_RETRY_DELAY),
     {noreply, State, hibernate};
 
@@ -232,18 +208,7 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
     session_id = SessionId,
     session_grace_period = GracePeriod
 } = State) ->
-    IsSessionInactive = case session:get(SessionId) of
-        {ok, #document{value = #session{status = inactive}}} ->
-            true;
-        {ok, #document{value = #session{connections = [_ | _]}}} ->
-            {false, GracePeriod};
-        {ok, #document{value = #session{status = active}}} ->
-            mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod);
-        {error, _} = Error ->
-            {false, Error}
-    end,
-
-    case IsSessionInactive of
+    case is_session_inactive(SessionId, GracePeriod) of
         true ->
             schedule_session_removal(0),
             {noreply, State};
@@ -251,10 +216,10 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
             schedule_session_activity_checkup(RemainingTime),
             {noreply, State, hibernate};
         {false, {error, Reason}} ->
-            ?error("Checking session ~p activity error ~p", [SessionId, Reason]),
-            spawn(fun() ->
-                session_manager:terminate_session(SessionId)
-            end),
+            ?error("Checking session ~p activity failed with error: ~p", [
+                SessionId, Reason
+            ]),
+            async_terminate_session(SessionId),
             {noreply, State, hibernate}
     end;
 
@@ -264,21 +229,22 @@ handle_info(?CHECK_SESSION_VALIDITY, #state{
     credentials = Auth,
     validity_checkup_timer = OldTimer
 } = State) ->
-    cancel_validity_checkup_timer(OldTimer),
+    cancel_auth_validity_checkup(OldTimer),
+
     case check_auth_validity(Auth, Identity) of
-        {true, NewTimer} ->
-            NewState = State#state{validity_checkup_timer = NewTimer},
+        {true, TokenTTL} ->
+            NewState = State#state{
+                validity_checkup_timer = schedule_auth_validity_checkup(TokenTTL)
+            },
             {noreply, NewState, hibernate};
         false ->
-            mark_inactive(SessionId),
+            mark_session_as_inactive(SessionId),
             schedule_session_removal(0),
             {noreply, State}
     end;
 
 handle_info({'EXIT', _, shutdown}, #state{session_id = SessionId} = State) ->
-    spawn(fun() ->
-        session_manager:terminate_session(SessionId)
-    end),
+    async_terminate_session(SessionId),
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
@@ -320,19 +286,61 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
+-spec mark_session_as_active(session:id()) -> {ok, session:doc()} | {error, term()}.
+mark_session_as_active(SessionId) ->
+    Self = self(),
+
+    session:update(SessionId, fun(#session{} = SessionRec) ->
+        {ok, SessionRec#session{status = active, watcher = Self}}
+    end).
+
+
+%% @private
 -spec get_session_grace_period(session:type()) -> session:grace_period().
 get_session_grace_period(gui) ->
-    {ok, Period} = application:get_env(?APP_NAME, gui_session_grace_period_seconds),
+    {ok, Period} = op_worker:get_env(gui_session_grace_period_seconds),
     Period;
 get_session_grace_period(rest) ->
-    {ok, Period} = application:get_env(?APP_NAME, rest_session_grace_period_seconds),
+    {ok, Period} = op_worker:get_env(rest_session_grace_period_seconds),
     Period;
 get_session_grace_period(provider_incoming) ->
-    {ok, Period} = application:get_env(?APP_NAME, provider_session_grace_period_seconds),
+    {ok, Period} = op_worker:get_env(provider_session_grace_period_seconds),
     Period;
 get_session_grace_period(_) ->
-    {ok, Period} = application:get_env(?APP_NAME, fuse_session_grace_period_seconds),
+    {ok, Period} = op_worker:get_env(fuse_session_grace_period_seconds),
     Period.
+
+
+%% @private
+-spec schedule_session_activity_checkup(Delay :: time:seconds()) ->
+    TimeRef :: reference().
+schedule_session_activity_checkup(Delay) ->
+    erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_ACTIVITY).
+
+
+%% @private
+-spec is_session_inactive(session:id(), session:grace_period()) ->
+    true | {false, session:grace_period() | {error, term()}}.
+is_session_inactive(SessionId, GracePeriod) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{status = inactive}}} ->
+            true;
+        {ok, #document{value = #session{connections = [_ | _]}}} ->
+            {false, GracePeriod};
+        {ok, #document{value = #session{status = active}}} ->
+            mark_session_as_inactive_if_grace_period_has_passed(SessionId, GracePeriod);
+        {error, _} = Error ->
+            {false, Error}
+    end.
+
+
+%% @private
+-spec mark_session_as_inactive(session:id()) -> ok.
+mark_session_as_inactive(SessionId) ->
+    {ok, _} = session:update(SessionId, fun(#session{} = Session) ->
+        {ok, Session#session{status = inactive}}
+    end),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -345,9 +353,9 @@ get_session_grace_period(_) ->
 %% exceed grace period and true for inactive session that exceeded it.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_inactive_if_grace_period_has_passed(session:id(), session:grace_period()) ->
+-spec mark_session_as_inactive_if_grace_period_has_passed(session:id(), session:grace_period()) ->
     true | {false, RemainingTime :: time:seconds()}.
-mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
+mark_session_as_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
     Diff = fun
         (#session{status = active, accessed = LastAccessTimestamp} = Sess) ->
             Now = global_clock:timestamp_seconds(),
@@ -383,64 +391,76 @@ mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
 
 
 %% @private
+-spec register_auth_validity_checkup_if_user_session(
+    session:type(),
+    undefined | auth_manager:credentials()
+) ->
+    TimeRef :: reference().
+register_auth_validity_checkup_if_user_session(provider_incoming, undefined) ->
+    undefined;
+register_auth_validity_checkup_if_user_session(_UserSession, TokenCredentials) ->
+    AccessTokenBin = auth_manager:get_access_token(TokenCredentials),
+    {ok, AccessToken} = tokens:deserialize(AccessTokenBin),
+    TokenTTL = caveats:infer_ttl(tokens:get_caveats(AccessToken)),
+
+    schedule_auth_validity_checkup(TokenTTL).
+
+
+%% @private
+-spec schedule_auth_validity_checkup(TokenTTL :: undefined | time:seconds()) ->
+    TimeRef :: reference().
+schedule_auth_validity_checkup(TokenTTL) ->
+    Delay = case TokenTTL of
+        undefined -> ?SESSION_VALIDITY_CHECK_INTERVAL;
+        TokenTTL -> min(?SESSION_VALIDITY_CHECK_INTERVAL, TokenTTL)
+    end,
+    erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_VALIDITY).
+
+
+%% @private
+-spec cancel_auth_validity_checkup(undefined | reference()) -> ok.
+cancel_auth_validity_checkup(undefined) ->
+    ok;
+cancel_auth_validity_checkup(ValidityCheckupTimer) ->
+    erlang:cancel_timer(ValidityCheckupTimer, [{async, true}, {info, false}]).
+
+
+%% @private
 -spec check_auth_validity(undefined | auth_manager:credentials(), aai:subject()) ->
-    {true, NewTimer :: undefined | reference()} | false.
+    {true, TokenTTL :: undefined | time:seconds()} | false.
 check_auth_validity(undefined, _Identity) ->
     {true, undefined};
 check_auth_validity(TokenCredentials, Identity) ->
     case auth_manager:verify_credentials(TokenCredentials) of
         {ok, #auth{subject = Identity}, undefined} ->
-            {true, schedule_session_validity_checkup(?SESSION_VALIDITY_CHECK_INTERVAL)};
+            {true, undefined};
         {ok, #auth{subject = Identity}, TokenValidUntil} ->
-            NextCheckupDelay = min(
-                max(0, TokenValidUntil - global_clock:timestamp_seconds()),
-                ?SESSION_VALIDITY_CHECK_INTERVAL
-            ),
-            {true, schedule_session_validity_checkup(NextCheckupDelay)};
+            {true, max(0, TokenValidUntil - global_clock:timestamp_seconds())};
         {ok, #auth{subject = Subject}, _} ->
             ?warning("Token identity verification failure.~nExpected ~p.~nGot: ~p", [
                 Identity, Subject
             ]),
             false;
         {error, Reason} ->
-            ?debug("Token auth verification failure: ~p", [Reason]),
+            ?warning("Token auth verification failure: ~p", [Reason]),
             false
     end.
 
 
 %% @private
--spec mark_inactive(session:id()) -> ok.
-mark_inactive(SessionId) ->
-    {ok, _} = session:update(SessionId, fun(#session{} = Sess) ->
-        {ok, Sess#session{status = inactive}}
-    end),
-    ok.
-
-
-%% @private
--spec schedule_session_activity_checkup(Delay :: time:seconds()) ->
-    TimeRef :: reference().
-schedule_session_activity_checkup(Delay) ->
-    erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_ACTIVITY).
-
-
-%% @private
--spec schedule_session_validity_checkup(Delay :: time:seconds()) ->
-    TimeRef :: reference().
-schedule_session_validity_checkup(Delay) ->
-    erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_VALIDITY).
-
-
-%% @private
--spec cancel_validity_checkup_timer(undefined | reference()) -> ok.
-cancel_validity_checkup_timer(undefined) ->
-    ok;
-cancel_validity_checkup_timer(ValidityCheckupTimer) ->
-    erlang:cancel_timer(ValidityCheckupTimer, [{async, true}, {info, false}]).
-
-
-%% @private
--spec schedule_session_removal(Delay :: time:seconds()) ->
-    TimeRef :: reference().
+-spec schedule_session_removal(time:seconds()) -> TimeRef :: reference().
 schedule_session_removal(Delay) ->
     erlang:send_after(timer:seconds(Delay), self(), ?REMOVE_SESSION).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Spawns process to terminate session. This can't be done by ?MODULE
+%% as it is part of session supervision tree and would result in deadlock.
+%% @end
+%%--------------------------------------------------------------------
+async_terminate_session(SessionId) ->
+    spawn(fun() ->
+        session_manager:terminate_session(SessionId)
+    end).
