@@ -556,7 +556,10 @@ assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileG
                     type = op_handle,
                     id = <<ShareId/binary, "_handle_id">>,
                     aspect = instance,
-                    scope = private
+                    % the share's handle is mocked (with a fake id), consequently
+                    % the user is not a member of the handle and does not have access
+                    % to its private scope, so public scope should be included in the GRI
+                    scope = public
                 }),
                 <<"privateRootFile">> => gri:serialize(#gri{
                     type = op_file,

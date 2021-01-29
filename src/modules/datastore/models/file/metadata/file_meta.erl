@@ -116,8 +116,13 @@ save(Doc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save(doc(), boolean()) -> {ok, doc()} | {error, term()}.
-save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
-    datastore_model:save(?CTX#{memory_copies => all}, Doc);
+save(#document{key = FileUuid, value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
+    % Spaces are handled specially so as to not overwrite file_meta if it already
+    % exists ('make_space_exist' may be called several times for each space)
+    case datastore_model:create(?CTX#{memory_copies => all}, Doc) of
+        ?ERROR_ALREADY_EXISTS -> file_meta:get(FileUuid);
+        Result -> Result
+    end;
 save(Doc, GeneratedKey) ->
     datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc).
 
@@ -203,7 +208,6 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
                 Error
         end
     end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
