@@ -144,13 +144,13 @@ handle_call(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), _From, #state
     identity = Identity,
     credentials = OldTokenCredentials,
     validity_checkup_timer = OldTimer
-} = State) ->
+} = State) when SessionType /= provider_incoming ->
     cancel_auth_validity_checkup(OldTimer),
 
     NewTokenCredentials = auth_manager:update_client_tokens(
         OldTokenCredentials, AccessToken, ConsumerToken
     ),
-    case check_auth_validity(SessionType, NewTokenCredentials, Identity) of
+    case check_auth_validity(NewTokenCredentials, Identity) of
         {true, NewTokenTTL} ->
             {ok, TokenCaveats} = auth_manager:get_caveats(NewTokenCredentials),
             {ok, DataConstraints} = data_constraints:get(TokenCaveats),
@@ -204,6 +204,8 @@ handle_info(?REMOVE_SESSION, #state{session_id = SessionId} = State) ->
     schedule_session_removal(?SESSION_REMOVAL_RETRY_DELAY),
     {noreply, State, hibernate};
 
+handle_info(?CHECK_SESSION_ACTIVITY, #state{session_type = offline} = State) ->
+    {noreply, State, hibernate};
 handle_info(?CHECK_SESSION_ACTIVITY, #state{
     session_id = SessionId,
     session_grace_period = GracePeriod
@@ -223,16 +225,21 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
             {noreply, State, hibernate}
     end;
 
+handle_info(?CHECK_SESSION_VALIDITY, #state{session_type = provider_incoming} = State) ->
+    {noreply, State, hibernate};
 handle_info(?CHECK_SESSION_VALIDITY, #state{
     session_id = SessionId,
     session_type = SessionType,
     identity = Identity,
-    credentials = Auth,
+    credentials = TokenCredentials0,
     validity_checkup_timer = OldTimer
 } = State) ->
     cancel_auth_validity_checkup(OldTimer),
 
-    case check_auth_validity(SessionType, Auth, Identity) of
+    TokenCredentials1 = ensure_credentials_up_to_date_if_offline_session(
+        SessionType, TokenCredentials0
+    ),
+    case check_auth_validity(TokenCredentials1, Identity) of
         {true, TokenTTL} ->
             NewState = State#state{
                 validity_checkup_timer = schedule_auth_validity_checkup(TokenTTL)
@@ -433,19 +440,25 @@ cancel_auth_validity_checkup(ValidityCheckupTimer) ->
     erlang:cancel_timer(ValidityCheckupTimer, [{async, true}, {info, false}]).
 
 
+%%--------------------------------------------------------------------
 %% @private
--spec check_auth_validity(session:type(), undefined | auth_manager:credentials(), aai:subject()) ->
+%% @doc
+%% Ensures consumer token (this provider identity token) is up to date in case
+%% of 'offline' session. In other cases the responsibility to keep credentials
+%% up to date belongs to remote peer.
+%% @end
+%%--------------------------------------------------------------------
+ensure_credentials_up_to_date_if_offline_session(offline, TokenCredentials) ->
+    offline_access_credentials:ensure_consumer_token_up_to_date(TokenCredentials);
+ensure_credentials_up_to_date_if_offline_session(_SessionType, TokenCredentials) ->
+    TokenCredentials.
+
+
+%% @private
+-spec check_auth_validity(auth_manager:credentials(), aai:subject()) ->
     {true, TokenTTL :: undefined | time:seconds()} | false.
-check_auth_validity(provider_incoming, undefined, _Identity) ->
-    {true, undefined};
-check_auth_validity(SessionType, TokenCredentials0, Identity) ->
-    TokenCredentials1 = case SessionType of
-        offline ->
-            offline_access_credentials:ensure_consumer_token_up_to_date(TokenCredentials0);
-        _ ->
-            TokenCredentials0
-    end,
-    case auth_manager:verify_credentials(TokenCredentials1) of
+check_auth_validity(TokenCredentials, Identity) ->
+    case auth_manager:verify_credentials(TokenCredentials) of
         {ok, #auth{subject = Identity}, undefined} ->
             {true, undefined};
         {ok, #auth{subject = Identity}, TokenValidUntil} ->

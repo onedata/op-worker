@@ -129,6 +129,7 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
         initializer:clear_subscriptions(Worker),
+        initializer:mock_auth_manager(NewConfig),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
@@ -192,23 +193,7 @@ end_per_testcase(Case, Config) when
 %%--------------------------------------------------------------------
 -spec session_setup(node()) -> {ok, session:id()}.
 session_setup(Worker) ->
-    session_setup(Worker, <<"nonce">>).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates session document in datastore.
-%% @end
-%%--------------------------------------------------------------------
--spec session_setup(node(), Nonce :: binary()) -> {ok, session:id()}.
-session_setup(Worker, Nonce) ->
-    fuse_test_utils:reuse_or_create_fuse_session(
-        Worker,
-        Nonce,
-        ?SUB(user, <<"user_id">>),
-        undefined,
-        self()
-    ).
+    fuse_test_utils:setup_fuse_session(Worker, <<"user_id">>, <<"nonce">>).
 
 %%--------------------------------------------------------------------
 %% @private

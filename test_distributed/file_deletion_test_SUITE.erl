@@ -554,9 +554,7 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 init_session(Worker, Nonce) ->
-    fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, ?SUB(user, <<"u1">>), undefined, self()
-    ).
+    fuse_test_utils:setup_fuse_session(Worker, <<"u1">>, Nonce).
 
 create_test_file(Config, Worker, SessId, DeferredFileCreation) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
