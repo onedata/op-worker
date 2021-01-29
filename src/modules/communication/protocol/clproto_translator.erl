@@ -1077,7 +1077,7 @@ translate_from_protobuf(#'ChangesBatch'{
     until = Until,
     timestamp = Timestamp,
     compressed_docs = CompressedDocs,
-    reference_provider_id = ReferenceProviderId,
+    mutator_id = MutatorId,
     custom_request_extension = CustomRequestExtension
 }) ->
     Timestamp2 = case Timestamp of
@@ -1090,7 +1090,7 @@ translate_from_protobuf(#'ChangesBatch'{
         until = Until,
         timestamp = Timestamp2,
         compressed_docs = CompressedDocs,
-        reference_provider_id = ReferenceProviderId,
+        mutator_id = MutatorId,
         custom_request_extension = CustomRequestExtension
     };
 translate_from_protobuf(#'ChangesRequest2'{
@@ -1107,14 +1107,14 @@ translate_from_protobuf(#'CustomChangesRequest'{
     space_id = SpaceId,
     since = Since,
     until = Until,
-    reference_provider_id = ReferenceProviderId,
+    mutator_id = MutatorId,
     include_mutators = IncludeMutators
 }) ->
     #custom_changes_request{
         space_id = SpaceId,
         since = Since,
         until = Until,
-        reference_provider_id = ReferenceProviderId,
+        mutator_id = MutatorId,
         include_mutators = IncludeMutators
     };
 
@@ -2150,7 +2150,7 @@ translate_to_protobuf(#changes_batch{} = CB) ->
         until = CB#'changes_batch'.until,
         timestamp = Timestamp,
         compressed_docs = CB#'changes_batch'.compressed_docs,
-        reference_provider_id = CB#'changes_batch'.reference_provider_id,
+        mutator_id = CB#'changes_batch'.mutator_id,
         custom_request_extension = CB#'changes_batch'.custom_request_extension
     }};
 translate_to_protobuf(#changes_request2{} = CR) ->
@@ -2164,7 +2164,7 @@ translate_to_protobuf(#custom_changes_request{} = CCR) ->
         space_id = CCR#'custom_changes_request'.space_id,
         since = CCR#'custom_changes_request'.since,
         until = CCR#'custom_changes_request'.until,
-        reference_provider_id = CCR#'custom_changes_request'.reference_provider_id,
+        mutator_id = CCR#'custom_changes_request'.mutator_id,
         include_mutators = CCR#'custom_changes_request'.include_mutators
     }};
 

@@ -98,8 +98,8 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({changes_batch, MsgId, ReferenceProviderId, Batch}, State) ->
-    {noreply, handle_changes_batch(MsgId, ReferenceProviderId, Batch, State)};
+handle_cast({changes_batch, MsgId, MutatorId, Batch}, State) ->
+    {noreply, handle_changes_batch(MsgId, MutatorId, Batch, State)};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -162,16 +162,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec handle_changes_batch(undefined | dbsync_communicator:msg_id(), od_provider:id(),
     dbsync_worker:internal_changes_batch(), state()) -> state().
-handle_changes_batch(undefined, ReferenceProviderId, Batch, State) ->
-    forward_changes_batch(ReferenceProviderId, Batch, State);
-handle_changes_batch(MsgId, ReferenceProviderId, Batch, State = #state{
+handle_changes_batch(undefined, MutatorId, Batch, State) ->
+    forward_changes_batch(MutatorId, Batch, State);
+handle_changes_batch(MsgId, MutatorId, Batch, State = #state{
     msg_id_history = History
 }) ->
     case queue:member(MsgId, History) of
         true ->
             State;
         false ->
-            forward_changes_batch(ReferenceProviderId, Batch, State#state{
+            forward_changes_batch(MutatorId, Batch, State#state{
                 msg_id_history = save_msg_id(MsgId, History)
             })
     end.
@@ -184,9 +184,9 @@ handle_changes_batch(MsgId, ReferenceProviderId, Batch, State = #state{
 %% @end
 %%--------------------------------------------------------------------
 -spec forward_changes_batch(od_provider:id(), dbsync_worker:internal_changes_batch(), state()) -> state().
-forward_changes_batch(ReferenceProviderId,
+forward_changes_batch(MutatorId,
     Batch = #internal_changes_batch{
-        sender_id = Sender,
+        distributor_id = Distributor,
         since = Since,
         until = Until
     },
@@ -195,28 +195,25 @@ forward_changes_batch(ReferenceProviderId,
         workers = Workers
     }
 ) ->
-    State2 = case {maps:find(ReferenceProviderId, Workers), ReferenceProviderId =:= Sender} of
-        {{ok, Worker}, true} ->
-            gen_server:cast(Worker, {changes_batch, Batch#internal_changes_batch{custom_request_extension = undefined}}),
-            State;
-        {{ok, Worker}, false} ->
+    State2 = case {maps:find(MutatorId, Workers), MutatorId =:= Distributor} of
+        {{ok, Worker}, _} ->
             gen_server:cast(Worker, {changes_batch, Batch}),
             State;
         {error, true} ->
             {ok, Worker} = dbsync_in_stream_worker:start_link(
-                SpaceId, ReferenceProviderId
+                SpaceId, MutatorId
             ),
-            gen_server:cast(Worker, {changes_batch, Batch#internal_changes_batch{custom_request_extension = undefined}}),
+            gen_server:cast(Worker, {changes_batch, Batch}),
             State#state{
-                workers = maps:put(ReferenceProviderId, Worker, Workers)
+                workers = maps:put(MutatorId, Worker, Workers)
             };
         _ ->
-            % Streams are only created if batch contains sender's changes
-            % If batch contains changes of other provider, stream has to exists
-            % (batch had to be requested by stream before)
-            ?error("Changes batch for not existsing stream, sender: ~p, "
+            % Streams are only created if batch contains distributor's changes
+            % If batch contains changes of other provider, stream must exist
+            % (batch must have been requested by stream before)
+            ?error("Changes batch for not existsing stream, distributor: ~p, "
                 "reference provider: ~p, space; ~p, since: ~p, until: ~p",
-                [Sender, ReferenceProviderId, SpaceId, Since, Until]),
+                [Distributor, MutatorId, SpaceId, Since, Until]),
             State
     end,
 

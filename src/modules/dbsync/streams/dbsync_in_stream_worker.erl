@@ -34,6 +34,7 @@
     changes_stash :: dbsync_in_stream_stash:stash(),
     changes_request_ref :: undefined | reference(),
     apply_batch :: undefined | couchbase_changes:until(),
+    % Reference of timer that triggers checking space sync progress in onezone
     zone_check_ref :: reference()
 }).
 
@@ -133,7 +134,7 @@ handle_cast(check_batch_stash, State = #state{
     provider_id = ProviderId,
     seq = Seq
 }) ->
-    {Changes, UpdatedStash} = dbsync_in_stream_stash:get_changes_to_apply(Stash, ProviderId, Seq),
+    {Changes, UpdatedStash} = dbsync_in_stream_stash:take_first_batch_if_applicable(Stash, ProviderId, Seq),
     State2 = State#state{changes_stash = UpdatedStash},
     case Changes of
         {Docs, Until, Timestamp} -> {noreply, apply_changes_batch(Seq, Until, Timestamp, Docs, undefined, State2)};
@@ -160,7 +161,7 @@ handle_info(request_changes, State = #state{
     seq = Seq,
     changes_stash = Stash
 }) ->
-    {UpperRange, UpdatedStash} = dbsync_in_stream_stash:get_request_upper_range(Stash, ProviderId, Seq),
+    {UpperRange, UpdatedStash} = dbsync_in_stream_stash:get_first_matching_and_trim_stalled(Stash, ProviderId, Seq),
     State2 = State#state{changes_stash = UpdatedStash},
     case UpperRange of
         empty_stash ->
@@ -225,24 +226,24 @@ handle_changes_batch(
         until = Until,
         timestamp = Timestamp,
         docs = Docs,
-        sender_id = Sender
+        distributor_id = Distributor
     },
     State = #state{
-        provider_id = Sender,
+        provider_id = Distributor,
         changes_stash = Stash,
         seq = Seq,
         apply_batch = Apply
     }
 ) ->
-    % Provider connected with this stream is sender of changes
+    % Provider connected with this stream is distributor of changes
     case {Since, Apply} of
         {Seq, undefined} ->
             apply_changes_batch(Since, Until, Timestamp, Docs, undefined, State);
         {Higher, undefined} when Higher > Seq ->
-            UpdatedStash = dbsync_in_stream_stash:stash_changes_batch(Stash, Sender, Seq, Since, Until, Timestamp, Docs),
+            UpdatedStash = dbsync_in_stream_stash:stash_changes_batch(Stash, Distributor, Seq, Since, Until, Timestamp, Docs),
             schedule_changes_request(State#state{changes_stash = UpdatedStash});
         {Higher, _} when Higher >= Apply ->
-            UpdatedStash = dbsync_in_stream_stash:stash_changes_batch(Stash, Sender, Seq, Since, Until, Timestamp, Docs),
+            UpdatedStash = dbsync_in_stream_stash:stash_changes_batch(Stash, Distributor, Seq, Since, Until, Timestamp, Docs),
             schedule_changes_request(State#state{changes_stash = UpdatedStash});
         _ ->
             State
@@ -253,13 +254,12 @@ handle_changes_batch(
         until = Until,
         timestamp = Timestamp,
         docs = Docs,
-        custom_request_extension = CustomRequestExtension
+        custom_request_extension = CustomRequestExtension,
+        distributor_id = Distributor
     },
-    State = #state{
-        provider_id = ProviderId
-    }
+    State
 ) ->
-    dbsync_changes:apply_batch(Docs, {Since, Until}, Timestamp, ProviderId, CustomRequestExtension),
+    dbsync_changes:apply_batch(Docs, {Since, Until}, Timestamp, Distributor, CustomRequestExtension),
     State.
 
 %%--------------------------------------------------------------------
@@ -331,7 +331,7 @@ prepare_batch(Docs, Timestamp, Until, State = #state{
     provider_id = ProviderId
 }) ->
     {{{Docs2, Until2, Timestamp2}, ExtendedInfo}, UpdatedStash} =
-        dbsync_in_stream_stash:extend_batch_with_stashed_changes(Stash, ProviderId, Docs, Timestamp, Until),
+        dbsync_in_stream_stash:take_and_extend_if_applicable(Stash, ProviderId, Docs, Timestamp, Until),
     case ExtendedInfo of
         missing_changes -> {Docs2, Timestamp2, Until2, schedule_changes_request(State#state{changes_stash = UpdatedStash})};
         _ -> {Docs2, Timestamp2, Until2, State#state{changes_stash = UpdatedStash}}
@@ -448,15 +448,14 @@ check_seq_in_zone(Delay, State = #state{
             request_changes_from_other_provider(ZoneSeq, State),
             {noreply, increase_delay_and_schedule_seq_check_in_zone(Delay, State)};
         {ok, _} ->
-            case space_logic:get_support_stage_registry(SpaceId) of
-                {ok, SupportStageRegistry} ->
-                    case support_stage:is_provider_retired(SupportStageRegistry, ProviderId) of
-                        false -> {noreply, increase_delay_and_schedule_seq_check_in_zone(Delay, State)};
-                        _ -> {stop, normal, State}
-                    end;
-                SupportGetError ->
-                    ?warning("Error ~p getting support registry for provider ~p in space ~p",
-                        [SupportGetError, ProviderId, SpaceId]),
+            case dbsync_utils:should_terminate_stream(SpaceId, ProviderId) of
+                true ->
+                    {stop, normal, State};
+                false ->
+                    {noreply, increase_delay_and_schedule_seq_check_in_zone(Delay, State)};
+                RetireCheckError ->
+                    ?warning("Error ~p checking support for provider ~p in space ~p",
+                        [RetireCheckError, ProviderId, SpaceId]),
                     {noreply, increase_delay_and_schedule_seq_check_in_zone(Delay, State)}
             end;
         SeqGetError ->

@@ -84,7 +84,7 @@ forward(#tree_broadcast2{
             ]);
         Other ->
             ?error("Wrong provider ids in tree broadcast:"
-                "receiver: ~p, sender: ~p, low_provider: ~p, high_provider: ~p",
+                "consumer: ~p, distributor: ~p, low_provider: ~p, high_provider: ~p",
                 [Other, SrcProviderId, LowProviderId, HighProviderId])
     end.
 
@@ -153,13 +153,13 @@ request_changes(ProviderId, SpaceId, Since, Until) ->
 -spec request_changes(od_provider:id(), oneprovider:id(), od_space:id(),
     couchbase_changes:since(), couchbase_changes:until()) ->
     ok | {error, Reason :: term()}.
-request_changes(TargetProviderId, ReferenceProviderId, SpaceId, Since, Until) ->
+request_changes(TargetProviderId, MutatorId, SpaceId, Since, Until) ->
     dbsync_communicator:send(TargetProviderId, #custom_changes_request{
         space_id = SpaceId,
         since = Since,
         until = Until,
-        reference_provider_id = ReferenceProviderId,
-        include_mutators = reference_provider
+        mutator_id = MutatorId,
+        include_mutators = single_provider
     }).
 
 %%--------------------------------------------------------------------
@@ -178,20 +178,20 @@ send_changes(ProviderId, SpaceId, Since, Until, Timestamp, Docs) ->
         until = Until,
         timestamp = Timestamp,
         compressed_docs = dbsync_utils:compress(Docs),
-        reference_provider_id = oneprovider:get_id()
+        mutator_id = oneprovider:get_id()
     }).
 
 -spec send_changes_and_correlations(od_provider:id(), oneprovider:id(), od_space:id(),
     couchbase_changes:since(), couchbase_changes:until(), dbsync_changes:timestamp(), dbsync_worker:batch_docs(),
     dbsync_processed_seqs_history:encoded_correlations()) -> ok.
-send_changes_and_correlations(ProviderId, ReferenceProviderId, SpaceId, Since, Until, Timestamp, Docs, EncodedCorrelations) ->
+send_changes_and_correlations(ProviderId, MutatorId, SpaceId, Since, Until, Timestamp, Docs, EncodedCorrelations) ->
     dbsync_communicator:send(ProviderId, #changes_batch{
         space_id = SpaceId,
         since = Since,
         until = Until,
         timestamp = Timestamp,
         compressed_docs = dbsync_utils:compress(Docs),
-        reference_provider_id = ReferenceProviderId,
+        mutator_id = MutatorId,
         custom_request_extension = EncodedCorrelations
     }).
 
@@ -211,7 +211,7 @@ broadcast_changes(SpaceId, Since, Until, Timestamp, Docs) ->
         until = Until,
         timestamp = Timestamp,
         compressed_docs = dbsync_utils:compress(Docs),
-        reference_provider_id = oneprovider:get_id()
+        mutator_id = oneprovider:get_id()
     },
     case broadcast(SpaceId, MsgId, Msg, []) of
         true ->

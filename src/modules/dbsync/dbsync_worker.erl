@@ -40,7 +40,7 @@
 
 -type batch_docs() :: [datastore:doc()].
 % Type describing mutators whose changes should be included in stream
--type mutators_to_include() :: reference_provider | all_providers.
+-type mutators_to_include() :: single_provider | all_providers.
 % Extension of changes batch used to handle custom changes requests.
 % TODO VFS-7247: The field usage will be extend in ticket VFS-7247. Define type more in more
 %   detail and prepare functions processing this type (currently this extension is empty or
@@ -157,13 +157,13 @@ get_main_out_stream_opts(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec handle_changes_batch(od_provider:id(), undefined |
 dbsync_communicator:msg_id(), dbsync_communicator:changes_batch()) -> ok.
-handle_changes_batch(Sender, MsgId, #changes_batch{
+handle_changes_batch(Distributor, MsgId, #changes_batch{
     space_id = SpaceId,
     since = Since,
     until = Until,
     timestamp = Timestamp,
     compressed_docs = CompressedDocs,
-    reference_provider_id = ReferenceProviderId,
+    mutator_id = MutatorId,
     custom_request_extension = CustomRequestExtension
 }) ->
     Name = ?IN_STREAM_ID(SpaceId),
@@ -173,11 +173,11 @@ handle_changes_batch(Sender, MsgId, #changes_batch{
         until = Until,
         timestamp = Timestamp,
         docs = Docs,
-        sender_id = Sender,
+        distributor_id = Distributor,
         custom_request_extension = CustomRequestExtension
     },
     gen_server:cast(
-        {global, Name}, {changes_batch, MsgId, ReferenceProviderId, InternalBatch}
+        {global, Name}, {changes_batch, MsgId, MutatorId, InternalBatch}
     ).
 
 %%--------------------------------------------------------------------
@@ -233,31 +233,31 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 -spec handle_custom_changes_request(od_provider:id(), dbsync_communicator:custom_changes_request()) -> ok.
 handle_custom_changes_request(CallerProviderId, #custom_changes_request{
     space_id = SpaceId,
-    reference_provider_id = ReferenceProviderId,
+    mutator_id = MutatorId,
     since = RequestedSince,
     until = RequestedUntil,
     include_mutators = IncludeMutators
 }) ->
     SingleProviderChangesRequested = case IncludeMutators of
-        reference_provider -> true;
+        single_provider -> true;
         all_providers -> false
     end,
     LocalSince = dbsync_seqs_correlations_history:map_remote_seq_to_local_start_seq(
-        SpaceId, ReferenceProviderId, RequestedSince, SingleProviderChangesRequested),
+        SpaceId, MutatorId, RequestedSince, SingleProviderChangesRequested),
     % Information about remote sequences for last batch has to be prepared getting local until sequence
     % see `dbsync_seqs_correlation_history:map_remote_seq_to_local_stop_params` function doc for more information
     {LocalUntil, FinalEncodedCorrelations} =
-        dbsync_seqs_correlations_history:map_remote_seq_to_local_stop_params(SpaceId, ReferenceProviderId, RequestedUntil),
+        dbsync_seqs_correlations_history:map_remote_seq_to_local_stop_params(SpaceId, MutatorId, RequestedUntil),
     case LocalSince < LocalUntil of
         true ->
-            % TODO VFS-7204 - filter documents not mutated by ReferenceProviderId (with remote seq outside range)
+            % TODO VFS-7204 - filter documents not mutated by MutatorId (with remote seq outside range)
             Handler = fun
                 (BatchSince, end_of_stream, Timestamp, Docs) ->
-                    dbsync_communicator:send_changes_and_correlations(CallerProviderId, ReferenceProviderId,
+                    dbsync_communicator:send_changes_and_correlations(CallerProviderId, MutatorId,
                         SpaceId, BatchSince, LocalUntil, Timestamp, Docs, FinalEncodedCorrelations);
                 (BatchSince, BatchUntil, Timestamp, Docs) ->
                     EncodedCorrelations = dbsync_processed_seqs_history:get(SpaceId, BatchUntil),
-                    dbsync_communicator:send_changes_and_correlations(CallerProviderId, ReferenceProviderId,
+                    dbsync_communicator:send_changes_and_correlations(CallerProviderId, MutatorId,
                         SpaceId, BatchSince, BatchUntil, Timestamp, Docs, EncodedCorrelations)
             end,
 

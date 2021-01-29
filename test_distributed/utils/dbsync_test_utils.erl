@@ -41,6 +41,8 @@ are_all_seqs_and_timestamps_equal(Workers, SpaceId, Timestamp0) ->
                     % provider `ProvID` does not support space so there is no synchronization progress data
                     % on this worker
                     Acc2;
+                {error, _} = Error ->
+                    throw({get_seq_and_timestamp_error, Error});
                 {_, Timestamp} = Ans when Timestamp0 =/= undefined ->
                     case Timestamp >= Timestamp0 of
                         true -> ok;

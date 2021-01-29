@@ -133,7 +133,8 @@ status_should_be_broadcast_periodically(Config) ->
                 space_id = SpaceId,
                 since = 1,
                 until = 1,
-                compressed_docs = []
+                compressed_docs = [],
+                mutator_id = <<"p1">>
             }
         }}, ?TIMEOUT)
     end, ?config(spaces, Config)).
@@ -183,7 +184,8 @@ remote_changes_should_be_applied(Config) ->
                         space_id = SpaceId,
                         since = N,
                         until = N + 1,
-                        compressed_docs = [Doc]
+                        compressed_docs = [Doc],
+                        mutator_id = ProviderId
                     }
                 }),
                 Doc
@@ -209,14 +211,16 @@ resent_changes_should_be_applied(Config) ->
                     space_id = SpaceId,
                     since = 2,
                     until = 3,
-                    compressed_docs = [Doc2]
+                    compressed_docs = [Doc2],
+                    mutator_id = ProviderId
                 }
             }),
             ?call(Worker, ProviderId, #changes_batch{
                 space_id = SpaceId,
                 since = 1,
                 until = 2,
-                compressed_docs = [Doc]
+                compressed_docs = [Doc],
+                mutator_id = ProviderId
             }),
             ?assertReceivedMatch({apply, Doc}, ?TIMEOUT),
             ?assertReceivedMatch({apply, Doc2}, ?TIMEOUT)
@@ -237,7 +241,8 @@ remote_changes_duplicates_should_be_ignored(Config) ->
                     space_id = SpaceId,
                     since = 1,
                     until = 2,
-                    compressed_docs = [Doc]
+                    compressed_docs = [Doc],
+                    mutator_id = ProviderId
                 }
             },
             ?call(Worker, ProviderId, Request),
@@ -264,7 +269,8 @@ remote_changes_should_be_forwarded(Config) ->
                         space_id = SpaceId,
                         since = N,
                         until = N + 1,
-                        compressed_docs = [Doc]
+                        compressed_docs = [Doc],
+                        mutator_id = SrcProviderId
                     }
                 },
                 ?call(Worker, SrcProviderId, Request),
@@ -290,7 +296,8 @@ missing_changes_should_be_requested(Config) ->
                     space_id = SpaceId,
                     since = 10,
                     until = 11,
-                    compressed_docs = [Doc]
+                    compressed_docs = [Doc],
+                    mutator_id = SrcProviderId
                 }
             },
             ?call(Worker, SrcProviderId, Request),
@@ -321,7 +328,8 @@ future_changes_should_be_stashed(Config) ->
                         space_id = SpaceId,
                         since = N,
                         until = N + 1,
-                        compressed_docs = [Doc]
+                        compressed_docs = [Doc],
+                        mutator_id = SrcProviderId
                     }
                 },
                 ?call(Worker, SrcProviderId, Request),
@@ -371,7 +379,8 @@ changes_request_should_be_handled(Config) ->
                 space_id = SpaceId,
                 since = 1,
                 until = 2,
-                compressed_docs = [Doc]
+                compressed_docs = [Doc],
+                mutator_id = <<"p1">>
             }}, ?TIMEOUT)
         end, ProviderIds2)
     end, ?config(spaces, Config)).

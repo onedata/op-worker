@@ -33,6 +33,9 @@ all() -> [
     requesting_from_custom_provider
 ].
 
+-define(SPACE_ID, <<"space1_id">>).
+-define(SPACE_NAME, <<"space1">>).
+
 %%%===================================================================
 %%% Test functions
 %%%
@@ -58,8 +61,8 @@ requesting_from_custom_provider(Config0) ->
     % Prepare variables used during test
     User = <<"user1">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {6, 0, 0, 1}, 180),
-    SpaceName = <<"space1">>,
-    SpaceId = SpaceName,
+    SpaceName = ?SPACE_NAME,
+    SpaceId = ?SPACE_ID,
     [Worker1, Worker2 | _] = Workers = ?config(op_worker_nodes, Config),
     WorkerToProviderId = maps:from_list(lists:map(fun(Worker) ->
         {Worker, rpc:call(Worker, oneprovider, get_id_or_undefined, [])}
@@ -67,15 +70,15 @@ requesting_from_custom_provider(Config0) ->
     W2Id = maps:get(Worker2, WorkerToProviderId),
 
     test_utils:mock_expect(Worker1, dbsync_in_stream, handle_cast, fun
-        ({changes_batch, MsgId, ReferenceProvId, #internal_changes_batch{sender_id = SenderId} = Batch}, State)
-            when SenderId =:= W2Id ->
+        ({changes_batch, MsgId, MutatorId, #internal_changes_batch{distributor_id = DistributorId} = Batch}, State)
+            when DistributorId =:= W2Id ->
             case get(requesting_test) of
                 true ->
                     {noreply, State};
                 _ ->
                     put(requesting_test, true),
                     MockedBatch = Batch#internal_changes_batch{since = 0, until = 0, timestamp = 0, docs = []},
-                    meck:passthrough([{changes_batch, MsgId, ReferenceProvId, MockedBatch}, State])
+                    meck:passthrough([{changes_batch, MsgId, MutatorId, MockedBatch}, State])
             end;
         (Msg, State) ->
             meck:passthrough([Msg, State])
@@ -100,7 +103,7 @@ requesting_from_custom_provider(Config0) ->
 
     % TODO VFS-7205 - why dbsync_changes_requesting_test_base:verify_sequences_correlation
     % can be called here when it is expected to fail?
-    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_equal(Workers, SpaceName), 60),
+    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_equal(Workers, SpaceId), 60),
 
     test_utils:mock_expect(Worker1, dbsync_in_stream, handle_cast, fun(Msg, State) ->
         meck:passthrough([Msg, State])
@@ -110,7 +113,7 @@ requesting_from_custom_provider(Config0) ->
     DirsList4 = dbsync_changes_requesting_test_base:create_dirs_batch(Config, SpaceName, Workers, DirSizes),
     dbsync_changes_requesting_test_base:verify_dirs_batch(Config, DirsList4),
 
-    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_and_timestamps_equal(Workers, SpaceName, Timestamp0), 60),
+    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_and_timestamps_equal(Workers, SpaceId, Timestamp0), 60),
     dbsync_changes_requesting_test_base:verify_sequences_correlation(WorkerToProviderId, SpaceId).
 
 %%%===================================================================
@@ -176,18 +179,18 @@ end_per_testcase(handling_changes_separately_test = Case, Config) ->
     dbsync_changes_requesting_test_base:use_default_broadcast_batch_size(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(test_with_simulated_apply_delays = Case, Config) ->
-    [Worker1 | _ ] = Workers = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [dbsync_communicator, dbsync_changes, dbsync_in_stream_worker]),
-    % Restart stream as unmocking kills stream process
-    SpaceId = <<"space1">>,
-    ok = rpc:call(Worker1, internal_services_manager, stop_service,
-        [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
-    ok = rpc:call(Worker1, internal_services_manager, start_service,
-        [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, start_in_stream, stop_in_stream, [SpaceId], SpaceId]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(requesting_from_custom_provider = Case, Config) ->
     [Worker1 | _] =  ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker1, dbsync_in_stream),
+    % Restart stream as unmocking kills stream process
+    SpaceId = <<"space1_id">>,
+    ok = rpc:call(Worker1, internal_services_manager, stop_service,
+        [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
+    ok = rpc:call(Worker1, internal_services_manager, start_service,
+        [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, start_in_stream, stop_in_stream, [SpaceId], SpaceId]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

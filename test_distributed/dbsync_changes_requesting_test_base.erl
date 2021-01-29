@@ -100,11 +100,14 @@
 -define(SINGLE_PROVIDER_CHANGES_REQUEST(Since, Until, ProviderId, WorkerHandlingRequest), #test_action{
     action_type = request_range,
     action_param = Since,
-    include_mutators = reference_provider,
+    include_mutators = single_provider,
     until = Until,
     provider_id = ProviderId,
     worker_handling_request = WorkerHandlingRequest
 }).
+
+-define(SPACE_ID, <<"space1_id">>).
+-define(SPACE_NAME, <<"space1">>).
 
 %%%===================================================================
 %%% Test skeleton
@@ -114,8 +117,8 @@ generic_test_skeleton(Config0, TestSize) ->
     % Prepare variables used during test
     User = <<"user1">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {6, 0, 0, 1}, 180),
-    SpaceName = <<"space1">>,
-    SpaceId = SpaceName,
+    SpaceName = ?SPACE_NAME,
+    SpaceId = ?SPACE_ID,
     [Worker1, Worker2, Worker3, Worker4, Worker5, Worker6] = Workers = ?config(op_worker_nodes, Config),
     WorkerToProviderId = maps:from_list(lists:map(fun(Worker) ->
         {Worker, rpc:call(Worker, oneprovider, get_id_or_undefined, [])}
@@ -160,7 +163,7 @@ generic_test_skeleton(Config0, TestSize) ->
 
     % Prepare test data and verify sequences correlation
     % build after synchronization of test data
-    create_and_verify_dirs(Config, SpaceName, TestSize),
+    create_and_verify_dirs(Config, SpaceName, SpaceId, TestSize),
     verify_sequences_correlation(WorkerToProviderId, SpaceId),
 
     %%%===================================================================
@@ -326,7 +329,7 @@ process_and_send_changes_request(SpaceId, #test_action{
             space_id = SpaceId,
             since = SinceOrSequenceMap,
             until = Until,
-            reference_provider_id = ProviderId,
+            mutator_id = ProviderId,
             include_mutators = IncludeMutators
         }}
     ])),
@@ -377,7 +380,7 @@ verify_synchronization_logs(SynchronizationLogsGeneratedByRequest, InitialSynchr
 %%% Preparing test data and verifying initial state of the environment
 %%%===================================================================
 
-create_and_verify_dirs(Config, SpaceName, TestSize) ->
+create_and_verify_dirs(Config, SpaceName, SpaceId, TestSize) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     Timestamp0 = rpc:call(Worker1, global_clock, timestamp_seconds, []),
 
@@ -388,17 +391,17 @@ create_and_verify_dirs(Config, SpaceName, TestSize) ->
     end,
     
     % Create dirs with sleeps to better mix outgoing changes from different providers
-    create_and_dirs_batch(Config, SpaceName, Workers, DirsCount),
+    create_and_verify_dirs_batch(Config, SpaceName, Workers, DirsCount),
     timer:sleep(10000),
-    create_and_dirs_batch(Config, SpaceName, lists:reverse(Workers), DirsCount),
+    create_and_verify_dirs_batch(Config, SpaceName, lists:reverse(Workers), DirsCount),
     timer:sleep(5000),
-    create_and_dirs_batch(Config, SpaceName, Workers, DirsCount),
+    create_and_verify_dirs_batch(Config, SpaceName, Workers, DirsCount),
 
     % TODO VFS-7205 This check did not work as module was not loaded - fix it
-%%    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_and_timestamps_equal(Workers, SpaceName, Timestamp0), 60).
+%%    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_and_timestamps_equal(Workers, SpaceId, Timestamp0), 60).
     ok.
 
-create_and_dirs_batch(Config, SpaceName, Workers, DirSizes) ->
+create_and_verify_dirs_batch(Config, SpaceName, Workers, DirSizes) ->
     DirsList = create_dirs_batch(Config, SpaceName, Workers, DirSizes),
     verify_dirs_batch(Config, DirsList).
 
@@ -491,7 +494,7 @@ prepare_mocks_gathering_synchronization_logs(Workers, WorkerToProviderId) ->
 
     % Gather information about changes synchronized on demand
     test_utils:mock_expect(Workers, dbsync_communicator, send_changes_and_correlations,
-        fun(_CallerProviderId, _ReferenceProviderId, _SpaceId, _Since, _Until, _Timestamp, Docs, EncodedCorrelations) ->
+        fun(_CallerProviderId, _MutatorId, _SpaceId, _Since, _Until, _Timestamp, Docs, EncodedCorrelations) ->
             ProviderId = maps:get(node(), WorkerToProviderId),
             Master ! #synchronization_log{
                 operation = requested_changes,
