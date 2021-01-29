@@ -302,20 +302,20 @@ mark_session_as_active(SessionId) ->
 register_session_activity_checkup_if_not_offline_session(offline) ->
     undefined;
 register_session_activity_checkup_if_not_offline_session(SessionType) ->
-    {ok, GracePeriod} = get_session_grace_period(SessionType),
+    GracePeriod = get_session_grace_period(SessionType),
     schedule_session_activity_checkup(GracePeriod),
     GracePeriod.
 
 
 %% @private
--spec get_session_grace_period(session:type()) -> {ok, session:grace_period()}.
+-spec get_session_grace_period(session:type()) -> session:grace_period().
 get_session_grace_period(gui) ->
     op_worker:get_env(gui_session_grace_period_seconds);
 get_session_grace_period(rest) ->
     op_worker:get_env(rest_session_grace_period_seconds);
 get_session_grace_period(provider_incoming) ->
     op_worker:get_env(provider_session_grace_period_seconds);
-get_session_grace_period(_) ->
+get_session_grace_period(fuse) ->
     op_worker:get_env(fuse_session_grace_period_seconds).
 
 
