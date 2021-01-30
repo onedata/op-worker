@@ -59,8 +59,13 @@ handling_changes_separately_test_with_simulation_of_apply_errors_and_delays(Conf
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
-    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base, dbsync_changes_requesting_test_base]},
+    Posthook = fun(NewConfig) ->
+        NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
+        dbsync_changes_requesting_test_base:create_tester_session(NewConfig2),
+        NewConfig2
+    end,
+    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base,
+        dbsync_test_utils, dbsync_changes_requesting_test_base]},
         {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->

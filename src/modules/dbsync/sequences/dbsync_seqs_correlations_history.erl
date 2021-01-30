@@ -30,7 +30,7 @@
 %%% Such range reduction is done when TrimSkipped parameter is  'true'
 %%% during mapping (see map_remote_seq_to_local_start_seq function).
 %%%
-%%% TODO VFS-7031 - Rename TrimSkipped parameter after change from inclusive
+%%% TODO VFS-7206 - Rename TrimSkipped parameter after change from inclusive
 %%% to exclusive sequences range
 %%% @end
 %%%-------------------------------------------------------------------
@@ -112,22 +112,24 @@ map_remote_seq_to_local_stop_params(SpaceId, ProviderId, RemoteSeqNum) ->
                     EncodedProcessedSequences = dbsync_processed_seqs_history:get(SpaceId, LastNum),
                     {LastNum, EncodedProcessedSequences};
                 _ ->
-                    % TODO VFS-7031 - change from inclusive to exclusive end (+ 1 will not be used)
-                    EncodedProcessedSequences = dbsync_processed_seqs_history:get(SpaceId, RemoteSeqNum),
+                    % TODO VFS-7206 - change from inclusive to exclusive end (+ 1 will not be used)
+                    Correlation = dbsync_state:get_seqs_correlations(SpaceId), % TODO VFS-7036 - get progress and correlation using one dbsync_state call
+                    EncodedProcessedSequences = dbsync_processed_seqs_history:encode(Correlation),
                     {RemoteSeqNum + 1, EncodedProcessedSequences}
             end;
         _ ->
             case dbsync_seqs_tree:get_next(?CTX, ?KEY(SpaceId), ProviderId, RemoteSeqNum, <<>>) of
                 <<>> ->
                     SyncProgress = dbsync_state:get_sync_progress(SpaceId),
+                    Correlation = dbsync_state:get_seqs_correlations(SpaceId), % TODO VFS-7036 - get progress and correlation using one dbsync_state call
                     {LocalSeq, _} = maps:get(LocalProviderId, SyncProgress, {0, 0}),
-                    EncodedProcessedSequences = dbsync_processed_seqs_history:get(SpaceId, LocalSeq),
+                    EncodedProcessedSequences = dbsync_processed_seqs_history:encode(Correlation),
                     {LocalSeq, EncodedProcessedSequences};
                 EncodedSequences ->
                     LocalSeq = get_local_sequence_from_encoded_range(EncodedSequences, false),
-                    % TODO VFS-7031 - change from inclusive to exclusive end (+ 1 will not be used)
+                    % TODO VFS-7206 - change from inclusive to exclusive end (+ 1 will not be used)
                     % Check also if batch ends on sequence until -1
-                    % TODO VFS-7031 - update sequence number of provider ProviderId in EncodedProcessedSequences
+                    % TODO VFS-7206 - update sequence number of provider ProviderId in EncodedProcessedSequences
                     % to RemoteSeqNum
                     EncodedProcessedSequences = dbsync_processed_seqs_history:get(SpaceId, LocalSeq),
                     {LocalSeq + 1, EncodedProcessedSequences}

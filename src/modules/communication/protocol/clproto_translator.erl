@@ -1076,7 +1076,9 @@ translate_from_protobuf(#'ChangesBatch'{
     since = Since,
     until = Until,
     timestamp = Timestamp,
-    compressed_docs = CompressedDocs
+    compressed_docs = CompressedDocs,
+    mutator_id = MutatorId,
+    custom_request_extension = CustomRequestExtension
 }) ->
     Timestamp2 = case Timestamp of
         0 -> undefined;
@@ -1087,7 +1089,9 @@ translate_from_protobuf(#'ChangesBatch'{
         since = Since,
         until = Until,
         timestamp = Timestamp2,
-        compressed_docs = CompressedDocs
+        compressed_docs = CompressedDocs,
+        mutator_id = MutatorId,
+        custom_request_extension = CustomRequestExtension
     };
 translate_from_protobuf(#'ChangesRequest2'{
     space_id = SpaceId,
@@ -1098,6 +1102,20 @@ translate_from_protobuf(#'ChangesRequest2'{
         space_id = SpaceId,
         since = Since,
         until = Until
+    };
+translate_from_protobuf(#'CustomChangesRequest'{
+    space_id = SpaceId,
+    since = Since,
+    until = Until,
+    mutator_id = MutatorId,
+    include_mutators = IncludeMutators
+}) ->
+    #custom_changes_request{
+        space_id = SpaceId,
+        since = Since,
+        until = Until,
+        mutator_id = MutatorId,
+        include_mutators = IncludeMutators
     };
 
 
@@ -2131,13 +2149,23 @@ translate_to_protobuf(#changes_batch{} = CB) ->
         since = CB#'changes_batch'.since,
         until = CB#'changes_batch'.until,
         timestamp = Timestamp,
-        compressed_docs = CB#'changes_batch'.compressed_docs
+        compressed_docs = CB#'changes_batch'.compressed_docs,
+        mutator_id = CB#'changes_batch'.mutator_id,
+        custom_request_extension = CB#'changes_batch'.custom_request_extension
     }};
 translate_to_protobuf(#changes_request2{} = CR) ->
     {changes_request, #'ChangesRequest2'{
         space_id = CR#'changes_request2'.space_id,
         since = CR#'changes_request2'.since,
         until = CR#'changes_request2'.until
+    }};
+translate_to_protobuf(#custom_changes_request{} = CCR) ->
+    {custom_changes_request, #'CustomChangesRequest'{
+        space_id = CCR#'custom_changes_request'.space_id,
+        since = CCR#'custom_changes_request'.since,
+        until = CCR#'custom_changes_request'.until,
+        mutator_id = CCR#'custom_changes_request'.mutator_id,
+        include_mutators = CCR#'custom_changes_request'.include_mutators
     }};
 
 

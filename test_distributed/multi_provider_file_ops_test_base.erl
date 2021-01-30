@@ -1782,7 +1782,7 @@ mock_sync_and_rtransfer_errors(Config, DelaySend) ->
     test_utils:mock_new(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config], [passthrough]),
 
     test_utils:mock_expect(Workers, dbsync_in_stream_worker, handle_info, fun
-        ({batch_application_result, {Since, Until}, Timestamp, Ans} = Info, State) ->
+        ({batch_application_result, {Since, Until}, Timestamp, CustomRequestExtension, Ans} = Info, State) ->
             case Ans of
                 #dbsync_application_result{min_erroneous_seq = undefined} ->
                     Counter = case get(test_counter) of
@@ -1792,15 +1792,17 @@ mock_sync_and_rtransfer_errors(Config, DelaySend) ->
                     case Counter of
                         1 ->
                             put(test_counter, Counter + 1),
-                            meck:passthrough([{batch_application_result, {Since, max(Until - 10, Since)}, Timestamp, Ans}, State]);
+                            meck:passthrough([{batch_application_result, {Since, max(Until - 10, Since)},
+                                Timestamp, CustomRequestExtension, Ans}, State]);
                         2 ->
                             put(test_counter, Counter + 1),
                             % TODO VFS-7035 - check why tests with `min_erroneous_seq = Since + 1` fail?
                             meck:passthrough([{batch_application_result, {Since, Until}, Timestamp,
-                                #dbsync_application_result{min_erroneous_seq = Since}}, State]);
+                                CustomRequestExtension, #dbsync_application_result{min_erroneous_seq = Since}}, State]);
                         3 ->
                             put(test_counter, Counter + 1),
-                            meck:passthrough([{batch_application_result, {Since, max(Until - 10, Since)}, Timestamp, timeout}, State]);
+                            meck:passthrough([{batch_application_result, {Since, max(Until - 10, Since)},
+                                Timestamp, CustomRequestExtension, timeout}, State]);
                         _ ->
                             put(test_counter, 1),
                             meck:passthrough([Info, State])

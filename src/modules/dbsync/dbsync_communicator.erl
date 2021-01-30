@@ -20,23 +20,24 @@
 
 %% API
 -export([send/2, forward/1, broadcast/4]).
--export([request_changes/4, send_changes/6, broadcast_changes/5]).
+-export([request_changes/4, request_changes/5, send_changes/6, broadcast_changes/5]).
 
 % Test API
--export([send_changes_with_extended_info/7]).
+-export([send_changes_and_correlations/8]).
 
 -type changes_batch() :: #changes_batch{}.
 -type changes_request() :: #changes_request2{}.
+-type custom_changes_request() :: #custom_changes_request{}.
 -type tree_broadcast() :: #tree_broadcast2{}.
 -type msg_id() :: binary().
--type msg() :: changes_batch() | changes_request() | tree_broadcast().
+-type msg() :: changes_batch() | changes_request() | tree_broadcast() | custom_changes_request().
 -type broadcast_opt() :: {src_provider_id, od_provider:id()} |
                          {low_provider_id, od_provider:id()} |
                          {high_provider_id, od_provider:id()} |
                          {low_open, boolean()} |
                          {high_open, boolean()}.
 
--export_type([changes_batch/0, changes_request/0, tree_broadcast/0]).
+-export_type([changes_batch/0, changes_request/0, custom_changes_request/0, tree_broadcast/0]).
 -export_type([msg_id/0, msg/0]).
 
 %%%===================================================================
@@ -83,7 +84,7 @@ forward(#tree_broadcast2{
             ]);
         Other ->
             ?error("Wrong provider ids in tree broadcast:"
-                "receiver: ~p, sender: ~p, low_provider: ~p, high_provider: ~p",
+                "consumer: ~p, distributor: ~p, low_provider: ~p, high_provider: ~p",
                 [Other, SrcProviderId, LowProviderId, HighProviderId])
     end.
 
@@ -145,12 +146,30 @@ request_changes(ProviderId, SpaceId, Since, Until) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Sends direct message to a provider requesting changes of particular provider
+%% in given range. It is possible to request changes of provider other than TargetProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_changes(od_provider:id(), oneprovider:id(), od_space:id(),
+    couchbase_changes:since(), couchbase_changes:until()) ->
+    ok | {error, Reason :: term()}.
+request_changes(TargetProviderId, MutatorId, SpaceId, Since, Until) ->
+    dbsync_communicator:send(TargetProviderId, #custom_changes_request{
+        space_id = SpaceId,
+        since = Since,
+        until = Until,
+        mutator_id = MutatorId,
+        include_mutators = single_provider
+    }).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Sends direct message to a provider containing changes from a space
 %% in given range.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_changes(od_provider:id(), od_space:id(), couchbase_changes:since(),
-    couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()]) ->
+    couchbase_changes:until(), dbsync_changes:timestamp(), dbsync_worker:batch_docs()) ->
     ok | {error, Reason :: term()}.
 send_changes(ProviderId, SpaceId, Since, Until, Timestamp, Docs) ->
     dbsync_communicator:send(ProviderId, #changes_batch{
@@ -158,16 +177,23 @@ send_changes(ProviderId, SpaceId, Since, Until, Timestamp, Docs) ->
         since = Since,
         until = Until,
         timestamp = Timestamp,
-        compressed_docs = dbsync_utils:compress(Docs)
+        compressed_docs = dbsync_utils:compress(Docs),
+        mutator_id = oneprovider:get_id()
     }).
 
-% TODO VFS-7031 - Function for tests - will be implemented when
-% #custom_changes_requests are used in dbsync main messages flow
--spec send_changes_with_extended_info(od_provider:id(), od_space:id(), couchbase_changes:since(),
-    couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()],
+-spec send_changes_and_correlations(od_provider:id(), oneprovider:id(), od_space:id(),
+    couchbase_changes:since(), couchbase_changes:until(), dbsync_changes:timestamp(), dbsync_worker:batch_docs(),
     dbsync_processed_seqs_history:encoded_correlations()) -> ok.
-send_changes_with_extended_info(_ProviderId, _SpaceId, _Since, _Until, _Timestamp, _Docs, _OtherProvidersSeqs) ->
-    ok.
+send_changes_and_correlations(ProviderId, MutatorId, SpaceId, Since, Until, Timestamp, Docs, EncodedCorrelations) ->
+    dbsync_communicator:send(ProviderId, #changes_batch{
+        space_id = SpaceId,
+        since = Since,
+        until = Until,
+        timestamp = Timestamp,
+        compressed_docs = dbsync_utils:compress(Docs),
+        mutator_id = MutatorId,
+        custom_request_extension = EncodedCorrelations
+    }).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -176,7 +202,7 @@ send_changes_with_extended_info(_ProviderId, _SpaceId, _Since, _Until, _Timestam
 %% @end
 %%--------------------------------------------------------------------
 -spec broadcast_changes(od_space:id(), couchbase_changes:since(),
-    couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()]) -> ok.
+    couchbase_changes:until(), dbsync_changes:timestamp(), dbsync_worker:batch_docs()) -> ok.
 broadcast_changes(SpaceId, Since, Until, Timestamp, Docs) ->
     MsgId = dbsync_utils:gen_request_id(),
     Msg = #changes_batch{
@@ -184,7 +210,8 @@ broadcast_changes(SpaceId, Since, Until, Timestamp, Docs) ->
         since = Since,
         until = Until,
         timestamp = Timestamp,
-        compressed_docs = dbsync_utils:compress(Docs)
+        compressed_docs = dbsync_utils:compress(Docs),
+        mutator_id = oneprovider:get_id()
     },
     case broadcast(SpaceId, MsgId, Msg, []) of
         true ->

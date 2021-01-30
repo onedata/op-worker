@@ -15,13 +15,14 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/space_support/support_stage.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([get_bucket/0]).
--export([get_spaces/0, get_provider/1, get_providers/1, is_supported/2]).
+-export([get_spaces/0, get_provider/1, get_providers/1, is_supported/2, should_terminate_stream/2]).
 -export([gen_request_id/0]).
 -export([compress/1, uncompress/1]).
 
@@ -99,12 +100,35 @@ get_providers(SpaceId) ->
 %% Check whether a space is supported by all given providers.
 %% @end
 %%--------------------------------------------------------------------
--spec is_supported(od_space:id(), [od_provider:id()]) -> boolean().
+-spec is_supported(od_space:id(), [od_provider:id()]) ->
+    true | {false, NotSupportingProviders :: [od_provider:id()]}.
 is_supported(SpaceId, ProviderIds) ->
+    % Call 'get_providers' via module to enable mocking in tests
     ValidProviderIds = gb_sets:from_list(dbsync_utils:get_providers(SpaceId)),
-    lists:all(fun(ProviderId) ->
-        gb_sets:is_element(ProviderId, ValidProviderIds)
-    end, ProviderIds).
+    NotSupporting = lists:filter(fun(ProviderId) ->
+        not gb_sets:is_element(ProviderId, ValidProviderIds)
+    end, ProviderIds),
+
+    case NotSupporting of
+        [] -> true;
+        _ -> {false, NotSupporting}
+    end.
+
+-spec should_terminate_stream(od_space:id(), od_provider:id()) -> boolean() | errors:error().
+should_terminate_stream(SpaceId, ProviderId) ->
+    case space_logic:get_support_stage_registry(SpaceId) of
+        {ok, SupportStageRegistry} ->
+            case support_stage:lookup_details(SupportStageRegistry, ProviderId) of
+                error -> % provider has never supported this space
+                    true;
+                ?LEGACY_SUPPORT -> % provider cannot retire before 21.02 release
+                    {error, legacy_provider};
+                {ok, #support_stage_details{provider_stage = Stage}} ->
+                    Stage =:= retired
+            end;
+        {error, _} = Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -120,7 +144,7 @@ gen_request_id() ->
 %% Returns a compressed datastore documents binary.
 %% @end
 %%--------------------------------------------------------------------
--spec compress([datastore:doc()]) -> binary().
+-spec compress(dbsync_worker:batch_docs()) -> binary().
 compress(Docs) ->
     Docs2 = [datastore_json:encode(Doc) || Doc <- Docs],
     zlib:compress(jiffy:encode(Docs2)).
@@ -130,7 +154,8 @@ compress(Docs) ->
 %% Returns a list of uncompressed datastore documents.
 %% @end
 %%--------------------------------------------------------------------
--spec uncompress(binary()) -> [datastore:doc()].
+-spec uncompress(binary()) -> dbsync_worker:batch_docs().
 uncompress(CompressedDocs) ->
+    % TODO VFS-7266 - use json_utils instead of jiffy
     Docs = jiffy:decode(zlib:uncompress(CompressedDocs)),
     [datastore_json:decode(Doc) || Doc <- Docs].

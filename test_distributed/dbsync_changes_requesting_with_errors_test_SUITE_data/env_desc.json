@@ -281,7 +281,7 @@
         "groups": {
         },
         "spaces": {
-            "space1": {
+            "space1_id": {
                 "displayed_name": "space1",
                 "users": [
                     "user1"

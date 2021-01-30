@@ -19,7 +19,7 @@
 -include("modules/dbsync/dbsync.hrl").
 
 % API
--export([add/3, get/2, decode/1]).
+-export([add/3, get/2, encode/1, decode/1]).
 % For tests
 -export([provider_seq_to_binary/2]).
 

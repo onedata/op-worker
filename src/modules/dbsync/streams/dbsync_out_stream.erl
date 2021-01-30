@@ -33,7 +33,7 @@
 -type batch_handler() :: fun((couchbase_changes:since(),
                               couchbase_changes:until() | end_of_stream,
                               dbsync_changes:timestamp(),
-                              [datastore:doc()]) -> any()).
+                              dbsync_worker:batch_docs()) -> any()).
 -type option() :: {main_stream, boolean()} |
                   {local_changes_only, boolean()} |
                   {batch_handler, batch_handler()} |
@@ -49,7 +49,7 @@
     until :: couchbase_changes:until(),
     local_changes_only :: boolean(),
     except_mutator = <<>> :: oneprovider:id(),
-    % TODO VFS-7031 eliminate undefined/null/0 from protocol
+    % TODO VFS-7206 eliminate undefined/null/0 from protocol
     % (init last_timestamp from db, do not clean on flush)
     last_timestamp :: dbsync_changes:timestamp(),
     batch_handler :: batch_handler(),

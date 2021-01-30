@@ -19,6 +19,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("proto/oneprovider/dbsync_messages2.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -97,10 +98,8 @@ handle_call(Request, _From, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}, State) ->
-    {noreply, handle_changes_batch(
-        MsgId, ProviderId, Since, Until, Timestamp, Docs, State
-    )};
+handle_cast({changes_batch, MsgId, MutatorId, Batch}, State) ->
+    {noreply, handle_changes_batch(MsgId, MutatorId, Batch, State)};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -161,19 +160,18 @@ code_change(_OldVsn, State, _Extra) ->
 %% otherwise forwards then to an associated stream worker.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_changes_batch(undefined | dbsync_communicator:msg_id(),
-    od_provider:id(), couchbase_changes:since(), couchbase_changes:until(),
-    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
-handle_changes_batch(undefined, ProviderId, Since, Until, Timestamp, Docs, State) ->
-    forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State);
-handle_changes_batch(MsgId, ProviderId, Since, Until, Timestamp, Docs, State = #state{
+-spec handle_changes_batch(undefined | dbsync_communicator:msg_id(), od_provider:id(),
+    dbsync_worker:internal_changes_batch(), state()) -> state().
+handle_changes_batch(undefined, MutatorId, Batch, State) ->
+    forward_changes_batch(MutatorId, Batch, State);
+handle_changes_batch(MsgId, MutatorId, Batch, State = #state{
     msg_id_history = History
 }) ->
     case queue:member(MsgId, History) of
         true ->
             State;
         false ->
-            forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State#state{
+            forward_changes_batch(MutatorId, Batch, State#state{
                 msg_id_history = save_msg_id(MsgId, History)
             })
     end.
@@ -185,24 +183,38 @@ handle_changes_batch(MsgId, ProviderId, Since, Until, Timestamp, Docs, State = #
 %% it is started.
 %% @end
 %%--------------------------------------------------------------------
--spec forward_changes_batch(od_provider:id(), couchbase_changes:since(), couchbase_changes:until(),
-    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
-forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
-    space_id = SpaceId,
-    workers = Workers
-}) ->
-    State2 = case maps:find(ProviderId, Workers) of
-        {ok, Worker} ->
-            gen_server:cast(Worker, {changes_batch, Since, Until, Timestamp, Docs}),
+-spec forward_changes_batch(od_provider:id(), dbsync_worker:internal_changes_batch(), state()) -> state().
+forward_changes_batch(MutatorId,
+    Batch = #internal_changes_batch{
+        distributor_id = Distributor,
+        since = Since,
+        until = Until
+    },
+    State = #state{
+        space_id = SpaceId,
+        workers = Workers
+    }
+) ->
+    State2 = case {maps:find(MutatorId, Workers), MutatorId =:= Distributor} of
+        {{ok, Worker}, _} ->
+            gen_server:cast(Worker, {changes_batch, Batch}),
             State;
-        error ->
+        {error, true} ->
             {ok, Worker} = dbsync_in_stream_worker:start_link(
-                SpaceId, ProviderId
+                SpaceId, MutatorId
             ),
-            gen_server:cast(Worker, {changes_batch, Since, Until, Timestamp, Docs}),
+            gen_server:cast(Worker, {changes_batch, Batch}),
             State#state{
-                workers = maps:put(ProviderId, Worker, Workers)
-            }
+                workers = maps:put(MutatorId, Worker, Workers)
+            };
+        _ ->
+            % Streams are only created if batch contains distributor's changes
+            % If batch contains changes of other provider, stream must exist
+            % (batch must have been requested by stream before)
+            ?error("Changes batch for not existsing stream, distributor: ~p, "
+                "reference provider: ~p, space; ~p, since: ~p, until: ~p",
+                [Distributor, MutatorId, SpaceId, Since, Until]),
+            State
     end,
 
     case op_worker:get_env(dbsync_in_stream_gc, on) of
