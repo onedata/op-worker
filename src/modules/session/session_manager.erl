@@ -354,7 +354,7 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
     end,
     case session:update_doc_and_time(SessId, Diff) of
         {ok, #document{key = SessId, value = ProxySession}} when is_binary(ProxyVia) ->
-            update_credentials_if_changed(Credentials, ProxySession),
+            update_credentials_if_changed(SessType, Credentials, ProxySession),
             {ok, SessId};
         {ok, #document{key = SessId}} ->
             {ok, SessId};
@@ -383,18 +383,32 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
 
 
 %% @private
--spec update_credentials_if_changed(auth_manager:token_credentials(), session:record()) -> ok.
-update_credentials_if_changed(Credentials, #session{credentials = Credentials}) ->
+-spec update_credentials_if_changed(
+    session:type(),
+    auth_manager:token_credentials(),
+    session:record()
+) ->
+    ok.
+update_credentials_if_changed(_SessType, Credentials, #session{credentials = Credentials}) ->
     ok;
-update_credentials_if_changed(NewCredentials, #session{watcher = SessionWatcher, proxy_via = <<_/binary>>}) ->
+update_credentials_if_changed(offline, NewCredentials, Session) ->
+    update_credentials(NewCredentials, Session);
+update_credentials_if_changed(_SessType, NewCredentials, #session{proxy_via = <<_/binary>>} = Session) ->
+    update_credentials(NewCredentials, Session);
+update_credentials_if_changed(_, _, _) ->
+    % neither offline nor a proxy session
+    ok.
+
+
+%% @private
+-spec update_credentials(auth_manager:token_credentials(), session:record()) ->
+    ok.
+update_credentials(NewCredentials, #session{watcher = SessionWatcher}) ->
     incoming_session_watcher:update_credentials(
         SessionWatcher,
         auth_manager:get_access_token(NewCredentials),
         auth_manager:get_consumer_token(NewCredentials)
-    );
-update_credentials_if_changed(_, _) ->
-    % not a proxy session
-    ok.
+    ).
 
 
 %% @private

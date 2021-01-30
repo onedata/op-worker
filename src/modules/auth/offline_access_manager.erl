@@ -23,6 +23,7 @@
     get_session_id/1,
     close_session/1
 ]).
+-export([ensure_consumer_token_up_to_date/1]).
 
 -type offline_job_id() :: binary().
 
@@ -30,7 +31,7 @@
 
 -type error() :: {error, term()}.
 
--define(CREDENTIALS_EXPIRATION_RATIO, 0.34).
+-define(EXPIRATION_RATIO, 0.34).
 
 
 %%%===================================================================
@@ -44,9 +45,9 @@ init_session(OfflineJobId, TokenCredentials) ->
     Subject = get_subject(TokenCredentials),
 
     case offline_access_credentials:acquire(OfflineJobId, Subject, TokenCredentials) of
-        {ok, OfflineTokenCredentials} ->
+        {ok, #document{value = OfflineCredentials}} ->
             session_manager:reuse_or_create_offline_session(
-                OfflineJobId, Subject, OfflineTokenCredentials
+                OfflineJobId, Subject, to_token_credentials(OfflineCredentials)
             );
         {error, _} = Error ->
             Error
@@ -55,23 +56,33 @@ init_session(OfflineJobId, TokenCredentials) ->
 
 -spec get_session_id(offline_job_id()) -> {ok, session:id()} | error().
 get_session_id(OfflineJobId) ->
-    case session:get(OfflineJobId) of
-        {ok, #document{value = Session}} ->
-            refresh_offline_token_if_near_expiration(OfflineJobId, Session);
-        ?ERROR_NOT_FOUND ->
-            case offline_access_credentials:get(OfflineJobId) of
-                {ok, OfflineTokenCredentials} ->
-                    init_session(OfflineJobId, OfflineTokenCredentials);
-                {error, _} = Error ->
-                    Error
-            end
+    case get_and_refresh_offline_credentials_if_near_expiration(OfflineJobId) of
+        {ok, #offline_access_credentials{user_id = UserId} = OfflineCredentials} ->
+            session_manager:reuse_or_create_offline_session(
+                OfflineJobId, ?SUB(user, UserId), to_token_credentials(OfflineCredentials)
+            );
+        {error, _} = Error ->
+            Error
     end.
 
 
 -spec close_session(offline_job_id()) -> ok.
-close_session(OfflineAccessJobId) ->
-    ok = offline_access_credentials:remove(OfflineAccessJobId),
-    ok = session_manager:terminate_session(OfflineAccessJobId).
+close_session(OfflineJobId) ->
+    ok = offline_access_credentials:remove(OfflineJobId),
+    ok = session_manager:terminate_session(OfflineJobId).
+
+
+-spec ensure_consumer_token_up_to_date(auth_manager:credentials()) ->
+    auth_manager:credentials().
+ensure_consumer_token_up_to_date(TokenCredentials) ->
+    AccessToken = auth_manager:get_access_token(TokenCredentials),
+    {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
+
+    auth_manager:update_client_tokens(
+        TokenCredentials,
+        AccessToken,
+        ProviderIdentityToken
+    ).
 
 
 %%%===================================================================
@@ -88,52 +99,51 @@ get_subject(TokenCredentials) ->
 
 
 %% @private
--spec refresh_offline_token_if_near_expiration(offline_job_id(), session:record()) ->
-    {ok, session:id()} | error().
-refresh_offline_token_if_near_expiration(OfflineJobId, #session{
-    credentials = TokenCredentials
-} = Session) ->
+-spec get_and_refresh_offline_credentials_if_near_expiration(offline_job_id()) ->
+    {ok, offline_access_credentials:record()} | error().
+get_and_refresh_offline_credentials_if_near_expiration(OfflineJobId) ->
     Now = global_clock:timestamp_seconds(),
-    CredentialsValidUntil = credentials_valid_until(TokenCredentials),
 
-    case Now > ?CREDENTIALS_EXPIRATION_RATIO * CredentialsValidUntil of
-        true -> refresh_offline_token(OfflineJobId, Session);
-        false -> {ok, OfflineJobId}
-    end.
-
-
-%% @private
--spec credentials_valid_until(auth_manager:credentials()) -> non_neg_integer().
-credentials_valid_until(TokenCredentials) ->
-    AccessTokenBin = auth_manager:get_access_token(TokenCredentials),
-    {ok, AccessToken} = tokens:deserialize(AccessTokenBin),
-
-    lists:foldl(fun
-        (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
-        (#cv_time{valid_until = ValidUntil}, Acc) -> min(ValidUntil, Acc)
-    end, undefined, caveats:filter([cv_time], tokens:get_caveats(AccessToken))).
-
-
-%% @private
--spec refresh_offline_token(offline_job_id(), session:record()) ->
-    {ok, session:id()} | error().
-refresh_offline_token(OfflineJobId, #session{
-    identity = Subject,
-    credentials = Credentials,
-    watcher = SessionWatcher
-}) ->
-    case offline_access_credentials:acquire(OfflineJobId, Subject, Credentials) of
-        {ok, OfflineTokenCredentials} ->
-            ok = incoming_session_watcher:update_credentials(
-                SessionWatcher,
-                auth_manager:get_access_token(OfflineTokenCredentials),
-                auth_manager:get_consumer_token(OfflineTokenCredentials)
-            ),
-            {ok, OfflineJobId};
-        ?ERROR_TOKEN_INVALID ->
+    case offline_access_credentials:get(OfflineJobId) of
+        {ok, #document{value = #offline_access_credentials{
+            user_id = UserId,
+            acquirement_timestamp = AcquiredAt,
+            valid_until = ValidUntil
+        } = OfflineCredentials}} when ValidUntil =< Now ->
+            case Now > AcquiredAt + ?EXPIRATION_RATIO * (ValidUntil - AcquiredAt) of
+                true ->
+                    case offline_access_credentials:acquire(
+                        OfflineJobId, ?SUB(user, UserId), OfflineCredentials
+                    ) of
+                        {ok, _NewOfflineCredentials} = Result ->
+                            Result;
+                        ?ERROR_TOKEN_INVALID ->
+                            ?ERROR_TOKEN_INVALID;
+                        {error, _} ->
+                            % If refresh failed return current credentials -
+                            % there is still some time left to retry later
+                            {ok, OfflineCredentials}
+                    end;
+                false ->
+                    {ok, OfflineCredentials}
+            end;
+        {ok, _} ->
             ?ERROR_TOKEN_INVALID;
-        {error, _} ->
-            % Ignore other errors - token refresh will be retried on next call
-            % to `get_session_id`
-            {ok, OfflineJobId}
+        {error, _} = Error ->
+            Error
     end.
+
+
+%% @private
+-spec to_token_credentials(offline_access_credentials:record()) -> auth_manager:credentials().
+to_token_credentials(#offline_access_credentials{
+    access_token = OfflineAccessToken,
+    interface = Interface,
+    data_access_caveats_policy = DataAccessCaveatsPolicy
+}) ->
+    {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
+
+    auth_manager:build_token_credentials(
+        OfflineAccessToken, ProviderIdentityToken,
+        undefined, Interface, DataAccessCaveatsPolicy
+    ).

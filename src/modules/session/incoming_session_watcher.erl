@@ -144,7 +144,10 @@ handle_call(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), _From, #state
     identity = Identity,
     credentials = OldTokenCredentials,
     validity_checkup_timer = OldTimer
-} = State) when SessionType /= provider_incoming ->
+} = State) when
+    SessionType == fuse;
+    SessionType == offline
+->
     cancel_auth_validity_checkup(OldTimer),
 
     NewTokenCredentials = auth_manager:update_client_tokens(
@@ -449,7 +452,7 @@ cancel_auth_validity_checkup(ValidityCheckupTimer) ->
 %% @end
 %%--------------------------------------------------------------------
 ensure_credentials_up_to_date_if_offline_session(offline, TokenCredentials) ->
-    offline_access_credentials:ensure_consumer_token_up_to_date(TokenCredentials);
+    offline_access_manager:ensure_consumer_token_up_to_date(TokenCredentials);
 ensure_credentials_up_to_date_if_offline_session(_SessionType, TokenCredentials) ->
     TokenCredentials.
 

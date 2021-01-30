@@ -18,7 +18,6 @@
 
 %% API
 -export([acquire/3, get/1, remove/1]).
--export([ensure_consumer_token_up_to_date/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -43,26 +42,23 @@
 
 -spec acquire(id(), aai:subject(), auth_manager:credentials()) ->
     {ok, auth_manager:credentials()} | error().
-acquire(OfflineCredentialsId, ?SUB(user, UserId), UserCredentials) ->
+acquire(Id, ?SUB(user, UserId), UserCredentials) ->
     case auth_manager:acquire_offline_user_access_token(UserId, UserCredentials) of
         {ok, OfflineAccessToken} ->
             Doc = #document{
-                key = OfflineCredentialsId,
-                value = OfflineCredentials = #offline_access_credentials{
+                key = Id,
+                value = #offline_access_credentials{
                     user_id = UserId,
                     access_token = OfflineAccessToken,
                     interface = auth_manager:get_interface(UserCredentials),
                     data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(
                         UserCredentials
-                    )
+                    ),
+                    acquirement_timestamp = global_clock:timestamp_seconds(),
+                    valid_until = token_valid_until(OfflineAccessToken)
                 }
             },
-            case datastore_model:save(?CTX, Doc) of
-                {ok, _} ->
-                    {ok, to_token_credentials(OfflineCredentials)};
-                {error, _} = Err1 ->
-                    Err1
-            end;
+            datastore_model:save(?CTX, Doc);
         {error, _} = Err2 ->
             Err2
     end;
@@ -71,31 +67,13 @@ acquire(_, _, _) ->
 
 
 -spec get(id()) -> {ok, auth_manager:credentials()} | error().
-get(OfflineCredentialsId) ->
-    case datastore_model:get(?CTX, OfflineCredentialsId) of
-        {ok, #document{value = OfflineCredentials}} ->
-            {ok, to_token_credentials(OfflineCredentials)};
-        {error, _} = Error ->
-            Error
-    end.
+get(Id) ->
+    datastore_model:get(?CTX, Id).
 
 
 -spec remove(id()) -> ok.
-remove(OfflineCredentialsId) ->
-    ok = datastore_model:delete(?CTX, OfflineCredentialsId).
-
-
--spec ensure_consumer_token_up_to_date(auth_manager:credentials()) ->
-    auth_manager:credentials().
-ensure_consumer_token_up_to_date(TokenCredentials) ->
-    AccessToken = auth_manager:get_access_token(TokenCredentials),
-    {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
-
-    auth_manager:update_client_tokens(
-        TokenCredentials,
-        AccessToken,
-        ProviderIdentityToken
-    ).
+remove(Id) ->
+    ok = datastore_model:delete(?CTX, Id).
 
 
 %%%===================================================================
@@ -145,15 +123,11 @@ get_record_struct(1) ->
 
 
 %% @private
--spec to_token_credentials(record()) -> auth_manager:credentials().
-to_token_credentials(#offline_access_credentials{
-    access_token = OfflineAccessToken,
-    interface = Interface,
-    data_access_caveats_policy = DataAccessCaveatsPolicy
-}) ->
-    {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
+-spec token_valid_until(tokens:serialized()) -> time:seconds().
+token_valid_until(OfflineAccessTokenBin) ->
+    {ok, OfflineAccessToken} = tokens:deserialize(OfflineAccessTokenBin),
 
-    auth_manager:build_token_credentials(
-        OfflineAccessToken, ProviderIdentityToken,
-        undefined, Interface, DataAccessCaveatsPolicy
-    ).
+    lists:foldl(fun
+        (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
+        (#cv_time{valid_until = ValidUntil}, Acc) -> min(ValidUntil, Acc)
+    end, undefined, caveats:filter([cv_time], tokens:get_caveats(OfflineAccessToken))).
