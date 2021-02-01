@@ -14,10 +14,6 @@
 
 -include("api_file_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/common_messages.hrl").
--include_lib("ctool/include/graph_sync/gri.hrl").
--include_lib("ctool/include/http/codes.hrl").
--include_lib("ctool/include/http/headers.hrl").
 
 -export([
     all/0,
@@ -28,7 +24,7 @@
 -export([
     offline_session_creation_for_root_should_fail_test/1,
     offline_session_creation_for_guest_should_fail_test/1,
-
+    offline_session_should_work_as_any_other_session_test/1,
     offline_token_should_be_refreshed_if_needed_test/1,
     offline_session_should_properly_react_to_time_warps_test/1
 ]).
@@ -36,7 +32,7 @@
 all() -> [
     offline_session_creation_for_root_should_fail_test,
     offline_session_creation_for_guest_should_fail_test,
-
+    offline_session_should_work_as_any_other_session_test,
     offline_token_should_be_refreshed_if_needed_test,
     offline_session_should_properly_react_to_time_warps_test
 ].
@@ -62,6 +58,29 @@ offline_session_creation_for_root_should_fail_test(_Config) ->
 offline_session_creation_for_guest_should_fail_test(_Config) ->
     JobId = str_utils:rand_hex(10),
     ?assertMatch(?ERROR_TOKEN_SUBJECT_INVALID, init_offline_session(JobId, ?GUEST_CREDENTIALS)).
+
+
+offline_session_should_work_as_any_other_session_test(_Config) ->
+    JobId = str_utils:rand_hex(10),
+    UserId = oct_background:get_user_id(user1),
+    UserCredentials = get_user_credentials(),
+
+    {ok, SessionId} = ?assertMatch({ok, _}, init_offline_session(JobId, UserCredentials)),
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+    SpaceKrkGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceKrkId),
+    UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserId),
+
+    ?assertMatch(
+        {ok, [{SpaceKrkGuid, _}]},
+        lfm_proxy:get_children(?NODE, SessionId, {guid, UserRootDirGuid}, 0, 100)
+    ),
+
+    clear_auth_cache(),
+
+    ?assertMatch(
+        {ok, #file_attr{guid = SpaceKrkGuid}},
+        lfm_proxy:stat(?NODE, SessionId, {guid, SpaceKrkGuid})
+    ).
 
 
 offline_token_should_be_refreshed_if_needed_test(_Config) ->
@@ -217,6 +236,12 @@ offline_credentials_exists(JobId) ->
         {ok, _} -> true;
         ?ERROR_NOT_FOUND -> false
     end.
+
+
+%% @private
+-spec clear_auth_cache() -> ok.
+clear_auth_cache() ->
+    rpc:call(?NODE, ets, delete_all_objects, [auth_cache]).
 
 
 %% @private
