@@ -26,27 +26,42 @@
 ]).
 
 -export([
+    offline_session_creation_for_root_should_fail_test/1,
+    offline_session_creation_for_guest_should_fail_test/1,
+
     offline_token_should_be_refreshed_if_needed_test/1,
     offline_session_should_properly_react_to_time_warps_test/1
 ]).
 
 all() -> [
+    offline_session_creation_for_root_should_fail_test,
+    offline_session_creation_for_guest_should_fail_test,
+
     offline_token_should_be_refreshed_if_needed_test,
     offline_session_should_properly_react_to_time_warps_test
 ].
 
 
--define(NODE, hd(oct_background:get_provider_nodes(krakow))).
-
 -define(HOUR, 3600).
 -define(DAY, 24 * ?HOUR).
 
+-define(NODE, hd(oct_background:get_provider_nodes(krakow))).
 -define(ATTEMPTS, 30).
 
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+
+offline_session_creation_for_root_should_fail_test(_Config) ->
+    JobId = str_utils:rand_hex(10),
+    ?assertMatch(?ERROR_TOKEN_SUBJECT_INVALID, init_offline_session(JobId, ?ROOT_CREDENTIALS)).
+
+
+offline_session_creation_for_guest_should_fail_test(_Config) ->
+    JobId = str_utils:rand_hex(10),
+    ?assertMatch(?ERROR_TOKEN_SUBJECT_INVALID, init_offline_session(JobId, ?GUEST_CREDENTIALS)).
 
 
 offline_token_should_be_refreshed_if_needed_test(_Config) ->
@@ -104,17 +119,16 @@ offline_session_should_properly_react_to_time_warps_test(_Config) ->
     ?assertEqual(OfflineCredentials1, get_session_access_token(SessionId)),
 
     % In case of forward time warp token may expire and session may terminate (after some
-    % time of inertia as credentials are validate only so often) but offline credentials
-    % docs are not automatically removed - it is responsibility of offline job to do so by
-    % calling `offline_access_manager:close_session`.
+    % time of inertia) but offline credentials docs are not automatically removed - it is
+    % responsibility of offline job to do so by calling `offline_access_manager:close_session`.
     time_test_utils:simulate_seconds_passing(7 * ?DAY),
     ?assertMatch(?ERROR_TOKEN_INVALID, get_offline_session_id(JobId)),
     force_session_validity_check(SessionId),
     ?assertEqual(false, session_exists(SessionId), ?ATTEMPTS),
     ?assert(offline_credentials_exists(JobId)),
 
-    % If it is not called it is still possible to recreate session if backward time warp
-    % happens
+    % close_session hasn't been called yet, it is still possible to recreate session
+    % if backward time warp happens
     time_test_utils:simulate_seconds_passing(-3 * ?DAY),
     ?assertMatch({ok, SessionId}, get_offline_session_id(JobId), ?ATTEMPTS),
     ?assertEqual(true, session_exists(SessionId)),
@@ -243,6 +257,7 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(_Case, Config) ->
+    unmock_acquire_offline_user_access_token_failure(),
     ok = time_test_utils:freeze_time(Config),
     ct:timetrap({minutes, 20}),
     lfm_proxy:init(Config).
