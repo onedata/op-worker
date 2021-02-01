@@ -6,13 +6,27 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Provides utility functions to manage offline sessions.
+%%% Provides utility functions to manage offline sessions. Such sessions are
+%%% required to perform long-lasting operations/jobs that need to progress even
+%%% if the ordering client disconnected.
+%%%
+%%% The lifecycle of such session is as follows:
+%%% 1) it is started with by calling 'init_session' with unique offline job id,
+%%%    as resulting session will be associated with that job, and valid user
+%%%    credentials.
+%%% 2) while in use 'get_session_id' must be periodically called. This informs
+%%%    that session is active and offline credentials may need to be refreshed
+%%%    (default expiration period is 7 days).
+%%% 3) after finishing its tasks it is offline job responsibility to terminate
+%%%    session and remove no longer used docs by calling 'close_session'.
+%%%    It will not be done automatically even if credentials expired.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(offline_access_manager).
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -41,6 +55,10 @@
 
 -spec init_session(offline_job_id(), auth_manager:credentials()) ->
     {ok, session:id()} | error().
+init_session(_OfflineJobId, ?ROOT_CREDENTIALS) ->
+    ?ERROR_TOKEN_SUBJECT_INVALID;
+init_session(_OfflineJobId, ?GUEST_CREDENTIALS) ->
+    ?ERROR_TOKEN_SUBJECT_INVALID;
 init_session(OfflineJobId, TokenCredentials) ->
     Subject = get_subject(TokenCredentials),
 
@@ -72,8 +90,8 @@ close_session(OfflineJobId) ->
     ok = session_manager:terminate_session(OfflineJobId).
 
 
--spec ensure_consumer_token_up_to_date(auth_manager:credentials()) ->
-    auth_manager:credentials().
+-spec ensure_consumer_token_up_to_date(auth_manager:token_credentials()) ->
+    auth_manager:token_credentials().
 ensure_consumer_token_up_to_date(TokenCredentials) ->
     AccessToken = auth_manager:get_access_token(TokenCredentials),
     {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
@@ -91,7 +109,7 @@ ensure_consumer_token_up_to_date(TokenCredentials) ->
 
 
 %% @private
--spec get_subject(auth_manager:credentials()) -> aai:subject().
+-spec get_subject(auth_manager:token_credentials()) -> aai:subject().
 get_subject(TokenCredentials) ->
     AccessToken = auth_manager:get_access_token(TokenCredentials),
     {ok, #token{subject = Subject}} = tokens:deserialize(AccessToken),
@@ -107,7 +125,7 @@ get_and_refresh_offline_credentials_if_near_expiration(OfflineJobId) ->
     case offline_access_credentials:get(OfflineJobId) of
         {ok, #document{value = #offline_access_credentials{
             user_id = UserId,
-            acquirement_timestamp = AcquiredAt,
+            acquired_at = AcquiredAt,
             valid_until = ValidUntil
         } = OfflineCredentials}} when Now =< ValidUntil ->
             case Now > AcquiredAt + ?EXPIRATION_RATIO * (ValidUntil - AcquiredAt) of
@@ -128,8 +146,7 @@ get_and_refresh_offline_credentials_if_near_expiration(OfflineJobId) ->
                 false ->
                     {ok, OfflineCredentials}
             end;
-        {ok, QWE} ->
-            ?error("ZXC: ~p~n~p", [Now, QWE]),
+        {ok, _} ->
             ?ERROR_TOKEN_INVALID;
         {error, _} = Error ->
             Error
@@ -137,7 +154,8 @@ get_and_refresh_offline_credentials_if_near_expiration(OfflineJobId) ->
 
 
 %% @private
--spec to_token_credentials(offline_access_credentials:record()) -> auth_manager:credentials().
+-spec to_token_credentials(offline_access_credentials:record()) ->
+    auth_manager:token_credentials().
 to_token_credentials(#offline_access_credentials{
     access_token = OfflineAccessToken,
     interface = Interface,

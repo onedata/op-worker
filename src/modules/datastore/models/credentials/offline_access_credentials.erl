@@ -40,21 +40,21 @@
 %%%===================================================================
 
 
--spec acquire(id(), aai:subject(), auth_manager:credentials()) ->
+-spec acquire(id(), aai:subject(), auth_manager:token_credentials()) ->
     {ok, doc()} | error().
-acquire(Id, ?SUB(user, UserId), UserCredentials) ->
-    case auth_manager:acquire_offline_user_access_token(UserId, UserCredentials) of
+acquire(Id, ?SUB(user, UserId), TokenCredentials) ->
+    case auth_manager:acquire_offline_user_access_token(UserId, TokenCredentials) of
         {ok, OfflineAccessToken} ->
             Doc = #document{
                 key = Id,
                 value = #offline_access_credentials{
                     user_id = UserId,
                     access_token = OfflineAccessToken,
-                    interface = auth_manager:get_interface(UserCredentials),
+                    interface = auth_manager:get_interface(TokenCredentials),
                     data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(
-                        UserCredentials
+                        TokenCredentials
                     ),
-                    acquirement_timestamp = global_clock:timestamp_seconds(),
+                    acquired_at = global_clock:timestamp_seconds(),
                     valid_until = token_valid_until(OfflineAccessToken)
                 }
             },
@@ -114,7 +114,7 @@ get_record_struct(1) ->
         {access_token, string},
         {interface, atom},
         {data_access_caveats_policy, atom},
-        {acquirement_timestamp, integer},
+        {acquired_at, integer},
         {valid_until, integer}
     ]}.
 

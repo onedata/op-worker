@@ -239,7 +239,7 @@
     access_token :: auth_manager:access_token(),
     interface :: undefined | cv_interface:interface(),
     data_access_caveats_policy :: data_access_caveats:policy(),
-    acquirement_timestamp :: time:seconds(),
+    acquired_at :: time:seconds(),
     valid_until :: time:seconds()
 }).
 

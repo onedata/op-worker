@@ -182,7 +182,7 @@ get_caveats(TokenCredentials) ->
 %% @see provider_offline_access
 %% @end
 %%--------------------------------------------------------------------
--spec acquire_offline_user_access_token(od_user:id(), credentials()) ->
+-spec acquire_offline_user_access_token(od_user:id(), token_credentials()) ->
     {ok, tokens:serialized()} | errors:error().
 acquire_offline_user_access_token(UserId, #token_credentials{
     access_token = AccessToken,
