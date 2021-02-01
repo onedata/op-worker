@@ -109,14 +109,15 @@ get_and_refresh_offline_credentials_if_near_expiration(OfflineJobId) ->
             user_id = UserId,
             acquirement_timestamp = AcquiredAt,
             valid_until = ValidUntil
-        } = OfflineCredentials}} when ValidUntil =< Now ->
+        } = OfflineCredentials}} when Now =< ValidUntil ->
             case Now > AcquiredAt + ?EXPIRATION_RATIO * (ValidUntil - AcquiredAt) of
                 true ->
                     case offline_access_credentials:acquire(
-                        OfflineJobId, ?SUB(user, UserId), OfflineCredentials
+                        OfflineJobId, ?SUB(user, UserId),
+                        to_token_credentials(OfflineCredentials)
                     ) of
-                        {ok, _NewOfflineCredentials} = Result ->
-                            Result;
+                        {ok, #document{value = NewOfflineCredentials}} ->
+                            {ok, NewOfflineCredentials};
                         ?ERROR_TOKEN_INVALID ->
                             ?ERROR_TOKEN_INVALID;
                         {error, _} ->
@@ -127,7 +128,8 @@ get_and_refresh_offline_credentials_if_near_expiration(OfflineJobId) ->
                 false ->
                     {ok, OfflineCredentials}
             end;
-        {ok, _} ->
+        {ok, QWE} ->
+            ?error("ZXC: ~p~n~p", [Now, QWE]),
             ?ERROR_TOKEN_INVALID;
         {error, _} = Error ->
             Error

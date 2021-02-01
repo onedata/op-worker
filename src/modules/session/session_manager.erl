@@ -353,10 +353,8 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
             end
     end,
     case session:update_doc_and_time(SessId, Diff) of
-        {ok, #document{key = SessId, value = ProxySession}} when is_binary(ProxyVia) ->
-            update_credentials_if_changed(SessType, Credentials, ProxySession),
-            {ok, SessId};
-        {ok, #document{key = SessId}} ->
+        {ok, #document{key = SessId, value = UpdatedSession}} ->
+            update_credentials_if_needed(SessType, Credentials, UpdatedSession),
             {ok, SessId};
         {error, not_found} = Error ->
             case start_session(#document{key = SessId, value = Sess}) of
@@ -383,20 +381,20 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
 
 
 %% @private
--spec update_credentials_if_changed(
+-spec update_credentials_if_needed(
     session:type(),
     auth_manager:token_credentials(),
     session:record()
 ) ->
     ok.
-update_credentials_if_changed(_SessType, Credentials, #session{credentials = Credentials}) ->
+update_credentials_if_needed(_SessType, Credentials, #session{credentials = Credentials}) ->
     ok;
-update_credentials_if_changed(offline, NewCredentials, Session) ->
+update_credentials_if_needed(offline, NewCredentials, Session) ->
     update_credentials(NewCredentials, Session);
-update_credentials_if_changed(_SessType, NewCredentials, #session{proxy_via = <<_/binary>>} = Session) ->
+update_credentials_if_needed(fuse, NewCredentials, #session{proxy_via = <<_/binary>>} = Session) ->
     update_credentials(NewCredentials, Session);
-update_credentials_if_changed(_, _, _) ->
-    % neither offline nor a proxy session
+update_credentials_if_needed(_, _, _) ->
+    % neither offline nor a proxy fuse session
     ok.
 
 

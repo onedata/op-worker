@@ -36,10 +36,10 @@
     session_grace_period :: undefined | session:grace_period(),
     identity :: aai:subject(),
     % Possible auth values:
-    % auth_manager:token_credentials() -> for user sessions (gui, rest, fuse).
-    %                                     It needs to be periodically verified
-    %                                     whether it's still valid (it could
-    %                                     be revoked)
+    % auth_manager:token_credentials() -> for user sessions (gui, rest, fuse,
+    %                                     offline). It needs to be periodically
+    %                                     verified whether it's still valid (it
+    %                                     could be revoked)
     % undefined  -> for provider_incoming sessions. No periodic peer
     %               verification is needed.
     credentials :: undefined | auth_manager:credentials(),
@@ -141,7 +141,6 @@ init([SessionId, SessionType]) ->
 handle_call(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), _From, #state{
     session_id = SessionId,
     session_type = SessionType,
-    identity = Identity,
     credentials = OldTokenCredentials,
     validity_checkup_timer = OldTimer
 } = State) when
@@ -153,7 +152,7 @@ handle_call(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), _From, #state
     NewTokenCredentials = auth_manager:update_client_tokens(
         OldTokenCredentials, AccessToken, ConsumerToken
     ),
-    case check_auth_validity(NewTokenCredentials, Identity) of
+    case check_auth_validity(NewTokenCredentials, State) of
         {true, NewTokenTTL} ->
             {ok, TokenCaveats} = auth_manager:get_caveats(NewTokenCredentials),
             {ok, DataConstraints} = data_constraints:get(TokenCaveats),
@@ -233,7 +232,6 @@ handle_info(?CHECK_SESSION_VALIDITY, #state{session_type = provider_incoming} = 
 handle_info(?CHECK_SESSION_VALIDITY, #state{
     session_id = SessionId,
     session_type = SessionType,
-    identity = Identity,
     credentials = TokenCredentials0,
     validity_checkup_timer = OldTimer
 } = State) ->
@@ -242,7 +240,7 @@ handle_info(?CHECK_SESSION_VALIDITY, #state{
     TokenCredentials1 = ensure_credentials_up_to_date_if_offline_session(
         SessionType, TokenCredentials0
     ),
-    case check_auth_validity(TokenCredentials1, Identity) of
+    case check_auth_validity(TokenCredentials1, State) of
         {true, TokenTTL} ->
             NewState = State#state{
                 validity_checkup_timer = schedule_auth_validity_checkup(TokenTTL)
@@ -458,21 +456,24 @@ ensure_credentials_up_to_date_if_offline_session(_SessionType, TokenCredentials)
 
 
 %% @private
--spec check_auth_validity(auth_manager:credentials(), aai:subject()) ->
+-spec check_auth_validity(auth_manager:credentials(), state()) ->
     {true, TokenTTL :: undefined | time:seconds()} | false.
-check_auth_validity(TokenCredentials, Identity) ->
+check_auth_validity(TokenCredentials, #state{
+    session_id = SessionId,
+    identity = Identity
+}) ->
     case auth_manager:verify_credentials(TokenCredentials) of
         {ok, #auth{subject = Identity}, undefined} ->
             {true, undefined};
         {ok, #auth{subject = Identity}, TokenValidUntil} ->
             {true, max(0, TokenValidUntil - global_clock:timestamp_seconds())};
         {ok, #auth{subject = Subject}, _} ->
-            ?warning("Token identity verification failure.~nExpected ~p.~nGot: ~p", [
-                Identity, Subject
+            ?warning("[SESSION ~s] Token identity verification failure.~nExpected ~p.~nGot: ~p", [
+                SessionId, Identity, Subject
             ]),
             false;
         {error, Reason} ->
-            ?warning("Token auth verification failure: ~p", [Reason]),
+            ?warning("[SESSION ~s] Token auth verification failure: ~p", [SessionId, Reason]),
             false
     end.
 

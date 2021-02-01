@@ -41,7 +41,7 @@
 
 
 -spec acquire(id(), aai:subject(), auth_manager:credentials()) ->
-    {ok, auth_manager:credentials()} | error().
+    {ok, doc()} | error().
 acquire(Id, ?SUB(user, UserId), UserCredentials) ->
     case auth_manager:acquire_offline_user_access_token(UserId, UserCredentials) of
         {ok, OfflineAccessToken} ->
@@ -66,7 +66,7 @@ acquire(_, _, _) ->
     ?ERROR_TOKEN_SUBJECT_INVALID.
 
 
--spec get(id()) -> {ok, auth_manager:credentials()} | error().
+-spec get(id()) -> {ok, doc()} | error().
 get(Id) ->
     datastore_model:get(?CTX, Id).
 
@@ -113,7 +113,9 @@ get_record_struct(1) ->
         {user_id, string},
         {access_token, string},
         {interface, atom},
-        {data_access_caveats_policy, atom}
+        {data_access_caveats_policy, atom},
+        {acquirement_timestamp, integer},
+        {valid_until, integer}
     ]}.
 
 
