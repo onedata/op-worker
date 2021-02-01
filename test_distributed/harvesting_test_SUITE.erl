@@ -216,11 +216,14 @@ all() ->
                     __ProviderId
                 ) ->
                     ElapsedTime = stopwatch:read_seconds(Stopwatch),
-                    case subtract_batches(__Batch, __ReceivedBatch) of
-                        {__Batch, __NewUnexpected} ->
+                    {__Batch2, __NewUnexpected} = subtract_batches(__Batch, __ReceivedBatch),
+                    case length(__Batch2) < length(__Batch) of
+                        false ->
                             AssertFun(__SpaceId, __Destination, __Batch, __Unexpected ++ __NewUnexpected,
                                 __ProviderId, max(__Timeout - ElapsedTime, 0));
-                        _ ->
+                        true ->
+                            % __Batch2 is smaller than __Batch which means that one of changes, which was
+                            % expected not to occur, actually occurred
                             __Args = [
                                 {module, ?MODULE},
                                 {line, ?LINE}
