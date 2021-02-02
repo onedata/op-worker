@@ -992,7 +992,7 @@ connect_via_gs(Node, Client) ->
 -spec gs_endpoint(node()) -> URL :: binary().
 gs_endpoint(Node) ->
     Port = get_https_server_port_str(Node),
-    Domain = op_test_rpc:get_provider_domain(Node),
+    Domain = opw_test_rpc:get_provider_domain(Node),
 
     str_utils:join_as_binaries(
         ["wss://", Domain, Port, "/graph_sync/gui"],

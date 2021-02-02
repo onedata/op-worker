@@ -38,7 +38,7 @@
     get_provider_name/0,
     get_provider_eff_users/0,
 
-    get_cert_chain_pems/0,
+    get_cert_chain_ders/0,
     gs_protocol_supported_versions/0
 ]).
 
@@ -141,9 +141,9 @@ get_provider_eff_users() ->
     provider_logic:get_eff_users().
 
 
--spec get_cert_chain_pems() -> [public_key:der_encoded()] | no_return().
-get_cert_chain_pems() ->
-    https_listener:get_cert_chain_pems().
+-spec get_cert_chain_ders() -> [public_key:der_encoded()] | no_return().
+get_cert_chain_ders() ->
+    https_listener:get_cert_chain_ders().
 
 
 -spec gs_protocol_supported_versions() -> [gs_protocol:protocol_version()].
