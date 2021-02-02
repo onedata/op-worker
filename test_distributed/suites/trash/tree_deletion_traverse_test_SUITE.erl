@@ -146,13 +146,7 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedS
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    oct_background:init_per_suite(Config, #onenv_test_config{
-        onenv_scenario = "trash_tests",
-        envs = [
-%%            {oz_worker, oz_worker, [{offline_access_token_ttl, 604800}]},  % 1 week
-%%            {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
-        ]
-    }).
+    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "trash_tests"}).
 
 end_per_suite(_Config) ->
     hackney:stop(),
