@@ -373,7 +373,9 @@ list_children(#tree_traverse{
 }, #{task_id := TaskId}) ->
     SessionId = case UserId =:= ?ROOT_USER_ID of
         true -> ?ROOT_SESS_ID;
-        false -> offline_access_manager:get_session_id(TaskId)
+        false ->
+            {ok, SessId} = offline_access_manager:get_session_id(TaskId),
+            SessId
     end,
     UserCtx = user_ctx:new(SessionId),
     dir_req:get_children_ctxs(UserCtx, FileCtx, 0, BatchSize, Token, LastName, LastTree).

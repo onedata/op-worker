@@ -132,7 +132,7 @@ do_slave_job(#tree_traverse_slave{
     traverse_info = TraverseInfo = #{
         emit_events := EmitEvents
 }}, TaskId) ->
-    SessionId = offline_access_manager:get_session_id(TaskId),
+    {ok, SessionId} = offline_access_manager:get_session_id(TaskId),
     UserCtx = user_ctx:new(SessionId),
     delete_req:delete(UserCtx, FileCtx, not EmitEvents),
     file_processed(FileCtx, TaskId, TraverseInfo).
@@ -144,7 +144,7 @@ do_slave_job(#tree_traverse_slave{
 %% @private
 -spec file_processed(file_ctx:ctx(), id(), info()) -> ok.
 file_processed(FileCtx, TaskId, TraverseInfo = #{root_original_parent_uuid := RootOriginalParentUuid}) ->
-    SessionId = offline_access_manager:get_session_id(TaskId),
+    {ok, SessionId} = offline_access_manager:get_session_id(TaskId),
     UserCtx = user_ctx:new(SessionId),
     {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
     case file_qos:get_effective(RootOriginalParentUuid) of
@@ -178,7 +178,7 @@ delete_dir(FileCtx, TaskId, TraverseInfo = #{
     root_original_parent_uuid := RootOriginalParentUuid,
     root_storage_file_basename := RootStorageFileBasename
 }) ->
-    SessionId = offline_access_manager:get_session_id(TaskId),
+    {ok, SessionId} = offline_access_manager:get_session_id(TaskId),
     UserCtx = user_ctx:new(SessionId),
     delete_req:delete(UserCtx, FileCtx, not EmitEvents),
     tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
