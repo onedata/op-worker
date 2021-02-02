@@ -133,7 +133,7 @@ for_random_op_worker_node(Callback) ->
 is_connected_to_oz(Worker) ->
     Domain = rpc:call(Worker, oneprovider, get_domain, []),
     Url = str_utils:format_bin("https://~s~s", [Domain, ?NAGIOS_OZ_CONNECTIVITY_PATH]),
-    CaCerts = rpc:call(Worker, https_listener, get_cert_chain_pems, []),
+    CaCerts = rpc:call(Worker, https_listener, get_cert_chain_ders, []),
     Opts = [{ssl_options, [{cacerts, CaCerts}, {hostname, str_utils:to_binary(Domain)}]}],
     Result = case http_client:get(Url, #{}, <<>>, Opts) of
         {ok, 200, _, Body} ->
