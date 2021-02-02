@@ -29,13 +29,13 @@
     {recv_timeout, timer:seconds(application:get_env(?APP_NAME, onepanel_proxy_recv_timeout_sec, 30))},
     {ssl_options, [
         {secure, only_verify_peercert},
-        {cacerts, get_cert_chain_pems()}
+        {cacerts, get_cert_chain_ders()}
     ]}
 ] end).
 
 %% listener_behaviour callbacks
--export([port/0, start/0, stop/0, restart_and_reload_web_certs/0, healthcheck/0]).
--export([get_cert_chain_pems/0]).
+-export([port/0, start/0, stop/0, reload_web_certs/0, healthcheck/0]).
+-export([get_cert_chain_ders/0]).
 
 
 %%%===================================================================
@@ -75,12 +75,12 @@ stop() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_behaviour} callback restart_and_reload_web_certs/0.
+%% {@link listener_behaviour} callback reload_web_certs/0.
 %% @end
 %%--------------------------------------------------------------------
--spec restart_and_reload_web_certs() -> ok | {error, term()}.
-restart_and_reload_web_certs() ->
-    gui:restart_and_reload_web_certs(gui_config()).
+-spec reload_web_certs() -> ok | {error, term()}.
+reload_web_certs() ->
+    gui:reload_web_certs(gui_config()).
 
 
 %%--------------------------------------------------------------------
@@ -95,12 +95,12 @@ healthcheck() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns intermediate CA chain in PEM format for gui web cert.
+%% Returns intermediate CA chain in DER format for gui web cert.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cert_chain_pems() -> [public_key:der_encoded()].
-get_cert_chain_pems() ->
-    gui:get_cert_chain_pems().
+-spec get_cert_chain_ders() -> [public_key:der_encoded()].
+get_cert_chain_ders() ->
+    gui:get_cert_chain_ders().
 
 
 %%%===================================================================
