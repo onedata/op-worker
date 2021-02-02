@@ -978,7 +978,7 @@ connect_via_gs(Node, Client) ->
     end,
     GsEndpoint = gs_endpoint(Node),
     GsSupportedVersions = opw_test_rpc:gs_protocol_supported_versions(Node),
-    Opts = [{cacerts, opw_test_rpc:get_cert_chain_pems(Node)}],
+    Opts = [{cacerts, opw_test_rpc:get_cert_chain_ders(Node)}],
 
     case gs_client:start_link(GsEndpoint, Auth, GsSupportedVersions, fun(_) -> ok end, Opts) of
         {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} ->
@@ -992,7 +992,7 @@ connect_via_gs(Node, Client) ->
 -spec gs_endpoint(node()) -> URL :: binary().
 gs_endpoint(Node) ->
     Port = get_https_server_port_str(Node),
-    Domain = opw_test_rpc:get_provider_domain(Node),
+    Domain = op_test_rpc:get_provider_domain(Node),
 
     str_utils:join_as_binaries(
         ["wss://", Domain, Port, "/graph_sync/gui"],
@@ -1011,7 +1011,7 @@ make_rest_request(Config, Node, Client, #rest_args{
 }) ->
     URL = get_rest_endpoint(Node, Path),
     HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
-    CaCerts = opw_test_rpc:get_cert_chain_pems(Node),
+    CaCerts = opw_test_rpc:get_cert_chain_ders(Node),
     Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 15000}],
 
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of

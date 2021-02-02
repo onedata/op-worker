@@ -25,7 +25,7 @@
 
 % Performs a single request using http_client
 do_request(Node, CdmiSubPath, Method, Headers, Body) ->
-    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
+    CaCerts = rpc:call(Node, https_listener, get_cert_chain_ders, []),
     {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
     Result = http_client:request(
         Method,

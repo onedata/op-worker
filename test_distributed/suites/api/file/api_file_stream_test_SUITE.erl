@@ -236,7 +236,7 @@ get_file_download_code_doc(Node, DownloadCode, Location) ->
 -spec download_file_with_gui_endpoint(node(), FileDownloadUrl :: binary()) ->
     {ok, Content :: binary()} | {error, term()}.
 download_file_with_gui_endpoint(Node, FileDownloadUrl) ->
-    CaCerts = opw_test_rpc:get_cert_chain_pems(Node),
+    CaCerts = op_test_rpc:get_cert_chain_pems(Node),
     Opts = [{ssl_options, [{cacerts, CaCerts}]}],
 
     case http_client:request(get, FileDownloadUrl, #{}, <<>>, Opts) of
