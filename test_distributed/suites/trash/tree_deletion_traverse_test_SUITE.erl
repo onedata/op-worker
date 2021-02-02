@@ -31,7 +31,10 @@
     delete_regular_files_test/1,
     delete_empty_dirs_test/1,
     delete_empty_dirs2_test/1,
-    delete_tree_test/1
+    delete_tree_test/1,
+    negative_time_warp_test/1,
+    positive_time_warp_smaller_than_7_days_test/1,
+    positive_time_warp_greater_than_7_days_test/1
 ]).
 
 
@@ -40,7 +43,10 @@ all() -> ?ALL([
     delete_regular_files_test,
     delete_empty_dirs_test,
     delete_empty_dirs2_test,
-    delete_tree_test
+    delete_tree_test,
+    negative_time_warp_test,
+    positive_time_warp_smaller_than_7_days_test,
+    positive_time_warp_greater_than_7_days_test
 ]).
 
 -define(SPACE_PLACEHOLDER, space1).
@@ -57,28 +63,46 @@ all() -> ?ALL([
 %%% Test functions
 %%%===================================================================
 
-delete_empty_dir_test(_Config) ->
-    delete_files_structure_test_base([]).
+delete_empty_dir_test(Config) ->
+    delete_files_structure_test_base(Config, []).
 
-delete_regular_files_test(_Config) ->
-    delete_files_structure_test_base([{0, 1000}]).
+delete_regular_files_test(Config) ->
+    delete_files_structure_test_base(Config, [{0, 1000}]).
 
-delete_empty_dirs_test(_Config) ->
-    delete_files_structure_test_base([{1000, 0}]).
+delete_empty_dirs_test(Config) ->
+    delete_files_structure_test_base(Config, [{1000, 0}]).
 
-delete_empty_dirs2_test(_Config) ->
-    delete_files_structure_test_base([{10, 0}, {10, 0}, {10, 0}]).
+delete_empty_dirs2_test(Config) ->
+    delete_files_structure_test_base(Config, [{10, 0}, {10, 0}, {10, 0}]).
 
-delete_tree_test(_Config) ->
-    delete_files_structure_test_base([{10, 10}, {10, 10}, {10, 10}]).
+delete_tree_test(Config) ->
+    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}]).
 
+negative_time_warp_test(Config) ->
+    TimeWarp = - 3600 * 24 * 10, % -10 days
+    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, true).
+
+positive_time_warp_smaller_than_7_days_test(Config) ->
+    TimeWarp = 3600 * 24 * 6, % 6 days
+    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, true).
+
+positive_time_warp_greater_than_7_days_test(Config) ->
+    TimeWarp = 3600 * 24 * 8, % 8 days
+    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, false).
 
 %%%===================================================================
 %%% Test bases
 %%%===================================================================
 
-delete_files_structure_test_base(FilesStructure) ->
+delete_files_structure_test_base(Config, FilesStructure) ->
+    delete_files_structure_test_base(Config, FilesStructure, undefined, true).
+
+delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedSuccess) ->
+    % TimeWarpSecs arg allows to set period (and direction future/past as +/-) of
+    % of TimeWarp that occurs during traverse
+    % if TimeWarpSecs is undefined, TimeWarp won't occur
     [P1Node] = oct_background:get_provider_nodes(krakow),
+    ShouldFreezeTime = TimeWarpSecs =/= undefined,
 
     mock_traverse_finished(P1Node, self()),
     DirName = ?RAND_DIR_NAME,
@@ -88,13 +112,32 @@ delete_files_structure_test_base(FilesStructure) ->
     RootDirCtx = file_ctx:new_by_guid(RootGuid),
     UserCtx = rpc:call(P1Node, user_ctx, new, [UserSessIdP1]),
 
+    freeze_time_if_applicable(Config, ShouldFreezeTime),
+
     {ok, TaskId} = rpc:call(P1Node, tree_deletion_traverse, start, [RootDirCtx, UserCtx, false, ?SPACE_UUID]),
+    simulate_passing_time_if_applicable(TimeWarpSecs),
+
     await_traverse_finished(TaskId),
 
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?SPACE_GUID}, 0, 10000)),
-    lists:foreach(fun(Guid) ->
-        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(P1Node, UserSessIdP1, {guid, Guid}))
-    end, [RootGuid | DirGuids] ++ FileGuids).
+    % below assertions are performed with ?ROOT_SESS_ID because user sessions may have expired
+    case ExpectedSuccess of
+        true ->
+            % all files should have been deleted
+            ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, {guid, ?SPACE_GUID}, 0, 10000)),
+            lists:foreach(fun(Guid) ->
+                ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, Guid}))
+            end, [RootGuid | DirGuids] ++ FileGuids);
+        false ->
+            % failure was expected so there should be files which weren't deleted
+            AllFilesNum = length([RootGuid | DirGuids] ++ FileGuids),
+            DeletedFilesNum = lists:foldl(fun(Guid, Acc) ->
+                case lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, Guid}) of
+                    {ok, _} -> Acc;
+                    {error, ?ENOENT} -> Acc + 1
+                end
+            end, 0, [RootGuid | DirGuids] ++ FileGuids),
+            ?assertNotEqual(AllFilesNum, DeletedFilesNum)
+    end.
 
 %===================================================================
 % SetUp and TearDown functions
@@ -103,19 +146,28 @@ delete_files_structure_test_base(FilesStructure) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "trash_tests"}).
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "trash_tests",
+        envs = [
+%%            {oz_worker, oz_worker, [{offline_access_token_ttl, 604800}]},  % 1 week
+%%            {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
+        ]
+    }).
 
 end_per_suite(_Config) ->
     hackney:stop(),
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->
-    lfm_proxy:init(Config).
+    % update background config to update sessions
+    Config2 = oct_background:update_background_config(Config),
+    lfm_proxy:init(Config2).
 
 end_per_testcase(_Case, Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     AllNodes = [P1Node, P2Node],
+    time_test_utils:unfreeze_time(Config),
     lfm_test_utils:clean_space(P1Node, AllNodes, ?SPACE_ID, ?ATTEMPTS),
     lfm_proxy:teardown(Config).
 
@@ -133,3 +185,13 @@ mock_traverse_finished(Worker, TestProcess) ->
 
 await_traverse_finished(TaskId) ->
     receive {traverse_finished, TaskId} -> ok end.
+
+freeze_time_if_applicable(_Config, false) ->
+    ok;
+freeze_time_if_applicable(Config, true) ->
+    time_test_utils:freeze_time(Config).
+
+simulate_passing_time_if_applicable(undefined) ->
+    ok;
+simulate_passing_time_if_applicable(TimeWarpSecs) ->
+    time_test_utils:simulate_seconds_passing(TimeWarpSecs).

@@ -83,7 +83,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
             root_storage_file_basename => filename:basename(StorageFileId)
         }
     },
-    offline_access_manager:init_session(TaskId, user_ctx:get_credentials(UserCtx)),
+    {ok, _} = offline_access_manager:init_session(TaskId, user_ctx:get_credentials(UserCtx)),
     tree_traverse:run(?POOL_NAME, RootDirCtx2, user_ctx:get_user_id(UserCtx), Options).
 
 

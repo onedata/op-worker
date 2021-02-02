@@ -55,7 +55,8 @@
     qos_set_on_file_does_not_affect_file_in_trash/1,
     qos_set_on_parent_directory_does_not_affect_files_in_trash/1,
     qos_set_on_space_directory_does_not_affect_files_in_trash/1,
-    files_from_trash_are_not_reimported/1
+    files_from_trash_are_not_reimported/1,
+    move_to_trash_and_delete_forward_time_warp_test/1
 ]).
 
 
@@ -87,7 +88,8 @@ all() -> ?ALL([
     qos_set_on_file_does_not_affect_file_in_trash,
     qos_set_on_parent_directory_does_not_affect_files_in_trash,
     qos_set_on_space_directory_does_not_affect_files_in_trash,
-    files_from_trash_are_not_reimported
+    files_from_trash_are_not_reimported,
+    move_to_trash_and_delete_forward_time_warp_test
 ]).
 
 -define(SPACE1_PLACEHOLDER, space1).
@@ -470,6 +472,31 @@ files_from_trash_are_not_reimported(_Config) ->
     % files which are currently in trash shouldn't have been reimported
     ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?SPACE_GUID(?SPACE_ID2)}, 0, 1000)).
 
+move_to_trash_and_delete_forward_time_warp_test(Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    DirName = ?RAND_DIR_NAME,
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
+    DirCtx = file_ctx:new_by_guid(DirGuid),
+
+    move_to_trash(P1Node, DirCtx, UserSessIdP1),
+    delete_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
+    time_test_utils:freeze_time(Config),
+    time_test_utils:simulate_seconds_passing(4 * 3600 * 24), % 4 days
+
+    % use ?ROOT_SESS_ID in below assert ase normal sessions may have expired
+    lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID, ?ATTEMPTS),
+    lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID, ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+
+    lists:foreach(fun(G) ->
+        ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, G}), ?ATTEMPTS),
+        ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P2Node, ?ROOT_SESS_ID, {guid, G}), ?ATTEMPTS)
+    end, DirGuids ++ FileGuids ++ [DirGuid]).
+
 %===================================================================
 % Test base functions
 %===================================================================
@@ -544,12 +571,15 @@ end_per_suite(_Config) ->
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->
-    lfm_proxy:init(Config).
+    % update background config to update sessions
+    Config2 = oct_background:update_background_config(Config),
+    lfm_proxy:init(Config2).
 
 end_per_testcase(_Case, Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     AllNodes = [P1Node, P2Node],
+    time_test_utils:unfreeze_time(Config),
     lfm_test_utils:clean_space(P1Node, AllNodes, ?SPACE_ID, ?ATTEMPTS),
     lfm_proxy:teardown(Config).
 
