@@ -12,7 +12,7 @@
 %%% currently being deleted.
 %%% It is implemented using datastore links.
 %%% Exactly one links forest (with only one tree) is associated with
-%%% one file or directory.
+%%% one directory.
 %%%
 %%% Deletion markers allow storage import to determine that given
 %%% storage file should not be imported, to prevent re-imports.

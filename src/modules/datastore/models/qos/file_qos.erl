@@ -367,7 +367,7 @@ file_qos_to_eff_file_qos(#file_qos{
 %% effective_file_qos.
 %% @end
 %%--------------------------------------------------------------------
--spec merge_file_qos(undefined | effective_file_qos(), effective_file_qos()) -> effective_file_qos().
+-spec merge_file_qos(undefined | effective_file_qos(), effective_file_qos() | record()) -> effective_file_qos().
 merge_file_qos(ParentEffQos, ChildQos = #file_qos{}) ->
     merge_file_qos(ParentEffQos, file_qos_to_eff_file_qos(ChildQos));
 merge_file_qos(undefined, ChildEffQos = #effective_file_qos{}) ->
