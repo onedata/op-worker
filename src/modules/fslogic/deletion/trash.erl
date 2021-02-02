@@ -89,7 +89,6 @@ move_to_trash(FileCtx, UserCtx) ->
     {ok, tree_deletion_traverse:id()}.
 delete_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     file_ctx:assert_not_special_const(FileCtx),
-    % TODO VFS-7101 use offline access token in tree_traverse
     tree_deletion_traverse:start(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid).
 
 

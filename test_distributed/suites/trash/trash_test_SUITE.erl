@@ -372,8 +372,7 @@ move_to_trash_test(_Config) ->
     DirName = ?RAND_DIR_NAME,
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
     DirCtx = file_ctx:new_by_guid(DirGuid),
-    % TODO VFS-7101 add one more level in the tree after introducing offline access token
-    lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}], DirGuid),
+    lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
 
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
 
@@ -406,8 +405,7 @@ move_to_trash_and_delete_test(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
-    % TODO VFS-7101 add one more level in the tree after introducing offline access token
-    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}], DirGuid),
+    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
     DirCtx = file_ctx:new_by_guid(DirGuid),
 
     move_to_trash(P1Node, DirCtx, UserSessIdP1),

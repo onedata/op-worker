@@ -61,20 +61,16 @@ delete_empty_dir_test(_Config) ->
     delete_files_structure_test_base([]).
 
 delete_regular_files_test(_Config) ->
-    % TODO VFS-7101 increase number of file to 1000 after introducing offline access token
-    delete_files_structure_test_base([{0, 100}]).
+    delete_files_structure_test_base([{0, 1000}]).
 
 delete_empty_dirs_test(_Config) ->
-    % TODO VFS-7101 increase number of file to 1000 after introducing offline access token
-    delete_files_structure_test_base([{100, 0}]).
+    delete_files_structure_test_base([{1000, 0}]).
 
 delete_empty_dirs2_test(_Config) ->
-    % TODO VFS-7101 add one more level in the tree after introducing offline access token
-    delete_files_structure_test_base([{10, 0}, {10, 0}]).
+    delete_files_structure_test_base([{10, 0}, {10, 0}, {10, 0}]).
 
 delete_tree_test(_Config) ->
-    % TODO VFS-7101 add one more level in the tree after introducing offline access token
-    delete_files_structure_test_base([{10, 10}, {10, 10}]).
+    delete_files_structure_test_base([{10, 10}, {10, 10}, {10, 10}]).
 
 
 %%%===================================================================

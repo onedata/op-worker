@@ -15,6 +15,16 @@
 %%% The traverse jobs (see traverse.erl for jobs definition) are persisted using tree_traverse_job datastore model
 %%% which stores jobs locally and synchronizes main job for each task between providers (to allow tasks execution
 %%% on other provider resources).
+%%%
+%%% It is possible to perform traverse in context of a ?ROOT_USER or a normal user.
+%%% ?ROOT_USER is used by default.
+%%% If traverse is schedule in context of a normal user, its offline session
+%%% will be used to ensure that traverse may progress even when client disconnects
+%%% from provider.
+%%%
+%%% NOTE !!!
+%%% It is a responsibility of the calling module to init and close
+%%% offline access session !!!
 %%% @end
 %%%-------------------------------------------------------------------
 -module(tree_traverse).
@@ -117,24 +127,19 @@ stop(Pool) ->
 
 -spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), run_options()) -> {ok, id()}.
 run(Pool, DocOrCtx, Opts)  ->
-    run(Pool, DocOrCtx, undefined, Opts).
+    run(Pool, DocOrCtx, ?ROOT_USER_ID, Opts).
 
--spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), user_ctx:ctx() | undefined, run_options()) ->
+-spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), od_user:id(), run_options()) ->
     {ok, id()}.
-run(Pool, DocOrCtx, UserCtx, Opts) when is_atom(Pool) ->
-    run(atom_to_binary(Pool, utf8), DocOrCtx, UserCtx, Opts);
-run(Pool, FileDoc = #document{scope = SpaceId, value = #file_meta{}}, UserCtx, Opts) ->
+run(Pool, DocOrCtx, UserId, Opts) when is_atom(Pool) ->
+    run(atom_to_binary(Pool, utf8), DocOrCtx, UserId, Opts);
+run(Pool, FileDoc = #document{scope = SpaceId, value = #file_meta{}}, UserId, Opts) ->
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    run(Pool, FileCtx, UserCtx, Opts);
-run(Pool, FileCtx, UserCtx, Opts) ->
+    run(Pool, FileCtx, UserId, Opts);
+run(Pool, FileCtx, UserId, Opts) ->
     TaskId = case maps:get(task_id, Opts, undefined) of
         undefined -> datastore_key:new();
         Id -> Id
-    end,
-    % TODO VFS-7101 use offline access token in tree_traverse
-    UserCtx2 = case UserCtx =/= undefined of
-        true -> UserCtx;
-        false -> user_ctx:new(?ROOT_SESS_ID)
     end,
     BatchSize = maps:get(batch_size, Opts, ?DEFAULT_BATCH_SIZE),
     ExecuteSlaveOnDir = maps:get(execute_slave_on_dir, Opts, ?DEFAULT_EXEC_SLAVE_ON_DIR),
@@ -165,7 +170,7 @@ run(Pool, FileCtx, UserCtx, Opts) ->
 
     Job = #tree_traverse{
         file_ctx = FileCtx,
-        user_ctx = UserCtx2,
+        user_id = UserId,
         token = Token,
         execute_slave_on_dir = ExecuteSlaveOnDir,
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -255,7 +260,7 @@ do_master_job(Job = #tree_traverse{
     file_ctx = FileCtx,
     children_master_jobs_mode = ChildrenMasterJobsMode
 },
-    #{task_id := TaskId},
+    MasterJobArgs = #{task_id := TaskId},
     NewJobsPreprocessor
 ) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
@@ -264,7 +269,7 @@ do_master_job(Job = #tree_traverse{
         ?REGULAR_FILE_TYPE ->
             {ok, #{slave_jobs => [get_child_slave_job(Job2, FileCtx2)]}};
         ?DIRECTORY_TYPE ->
-            {ChildrenCtxs, ListExtendedInfo, FileCtx3, IsLast} = list_children(Job2),
+            {ChildrenCtxs, ListExtendedInfo, FileCtx3, IsLast} = list_children(Job2, MasterJobArgs),
             LastName2 = maps:get(last_name, ListExtendedInfo),
             LastTree2 = maps:get(last_tree, ListExtendedInfo),
             Token2 = maps:get(token, ListExtendedInfo, undefined),
@@ -351,7 +356,7 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 %% Tracking subtree progress status API
 %%%===================================================================
 
--spec list_children(master_job()) ->
+-spec list_children(master_job(), traverse:master_job_extended_args()) ->
     {
         Children :: [file_ctx:ctx()],
         ListExtendedInfo :: file_meta:list_extended_info(),
@@ -360,12 +365,17 @@ delete_subtree_status_doc(TaskId, Uuid) ->
     }.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
-    user_ctx = UserCtx,
+    user_id = UserId,
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
     batch_size = BatchSize
-}) ->
+}, #{task_id := TaskId}) ->
+    SessionId = case UserId =:= ?ROOT_USER_ID of
+        true -> ?ROOT_SESS_ID;
+        false -> offline_access_manager:get_session_id(TaskId)
+    end,
+    UserCtx = user_ctx:new(SessionId),
     dir_req:get_children_ctxs(UserCtx, FileCtx, 0, BatchSize, Token, LastName, LastTree).
 
 
