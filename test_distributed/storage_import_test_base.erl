@@ -6216,6 +6216,7 @@ init_per_suite(Config) ->
         hackney:start(),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
+        initializer:mock_auth_manager(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
         [W1 | _] = ?config(op_worker_nodes, NewConfig2),
         rpc:call(W1, auto_storage_import_worker, notify_connection_to_oz, []),
@@ -6227,7 +6228,9 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     ok = wpool:stop_sup_pool(?VERIFY_POOL),
-    multi_provider_file_ops_test_base:teardown_env(Config).
+    multi_provider_file_ops_test_base:teardown_env(Config),
+    initializer:unmock_auth_manager(Config),
+    initializer:unmock_provider_ids(Config).
 
 
 init_per_testcase(Case, Config)

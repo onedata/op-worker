@@ -786,6 +786,7 @@ init_per_suite(Config) ->
         NewConfig1 = [{space_storage_mock, false} | NewConfig],
         NewConfig2 = initializer:setup_storage(NewConfig1),
         initializer:mock_provider_ids(NewConfig2),
+        initializer:mock_auth_manager(NewConfig2),
         multi_provider_file_ops_test_base:init_env(NewConfig2)
     end,
     [
@@ -796,6 +797,8 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config),
+    initializer:unmock_auth_manager(Config),
+    initializer:unmock_provider_ids(Config),
     initializer:teardown_storage(Config).
 
 init_per_testcase(_Case, Config) ->

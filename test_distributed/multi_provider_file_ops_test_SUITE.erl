@@ -1117,11 +1117,15 @@ meck_get_num_calls(Nodes, Module, Fun, Args) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
+    Posthook = fun(NewConfig) ->
+        initializer:mock_auth_manager(NewConfig),
+        multi_provider_file_ops_test_base:init_env(NewConfig)
+    end,
     [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
-    multi_provider_file_ops_test_base:teardown_env(Config).
+    multi_provider_file_ops_test_base:teardown_env(Config),
+    initializer:unmock_auth_manager(Config).
 
 
 init_per_testcase(file_consistency_test, Config) ->

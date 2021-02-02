@@ -1012,7 +1012,7 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?APP_NAME, qos_retry_failed_files_interval_seconds, 5)
         end, ?config(op_worker_nodes, NewConfig)),
-
+        initializer:mock_auth_manager(NewConfig),
         application:start(ssl),
         hackney:start(),
         NewConfig
@@ -1024,9 +1024,10 @@ init_per_suite(Config) ->
     ].
 
 
-end_per_suite(_Config) ->
+end_per_suite(Config) ->
     hackney:stop(),
-    application:stop(ssl).
+    application:stop(ssl),
+    initializer:unmock_auth_manager(Config).
 
 
 init_per_testcase(Case, Config) when

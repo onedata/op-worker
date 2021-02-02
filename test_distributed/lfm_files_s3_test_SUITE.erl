@@ -383,10 +383,14 @@ sparse_files_should_be_created(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{storage_type, s3}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
+    Posthook = fun(NewConfig) ->
+        initializer:mock_auth_manager(NewConfig),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {storage_type, s3}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
 
 end_per_suite(Config) ->
-    Config.
+    initializer:unmock_auth_manager(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= lfm_open_in_direct_mode_test orelse

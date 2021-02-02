@@ -646,6 +646,7 @@ migration_job_should_fail(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         initializer:mock_provider_ids(NewConfig),
+        initializer:mock_auth_manager(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
         sort_workers(NewConfig2)
     end,
@@ -656,7 +657,9 @@ init_per_suite(Config) ->
     ].
 
 end_per_suite(Config) ->
-    multi_provider_file_ops_test_base:teardown_env(Config).
+    multi_provider_file_ops_test_base:teardown_env(Config),
+    initializer:unmock_auth_manager(Config),
+    initializer:unmock_provider_ids(Config).
 
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
