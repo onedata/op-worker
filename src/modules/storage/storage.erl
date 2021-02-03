@@ -93,14 +93,24 @@
 -spec create(name(), helpers:helper(), luma_config(),
     imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    lock_on_storage_by_name(Name, fun() ->
-        case is_name_occupied(Name) of
-            true ->
-                ?ERROR_ALREADY_EXISTS;
-            false ->
-                create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters)
-        end
-    end).
+    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
+        {ok, Id} ->
+            case storage_config:create(Id, Helper, LumaConfig) of
+                {ok, Id} ->
+                    on_storage_created(Id),
+                    {ok, Id};
+                StorageConfigError ->
+                    case storage_logic:delete_in_zone(Id) of
+                        ok -> ok;
+                        {error, _} = Error ->
+                            ?error("Could not revert creation of storage ~p in Onezone: ~p",
+                                [Id, Error])
+                    end,
+                    StorageConfigError
+            end;
+        StorageLogicError ->
+            StorageLogicError
+    end.
 
 
 -spec get(id() | data()) -> {ok, data()} | {error, term()}.
@@ -467,49 +477,9 @@ on_helper_changed(StorageId) ->
 
 
 %% @private
--spec is_name_occupied(name()) -> boolean().
-is_name_occupied(Name) ->
-    {ok, StorageIds} = provider_logic:get_storage_ids(),
-    lists:member(Name, lists:map(fun(StorageId) ->
-        {ok, OccupiedName} = storage_logic:get_name_of_local_storage(StorageId),
-        OccupiedName
-    end, StorageIds)).
-
-
-%% @private
 -spec lock_on_storage_by_id(id(), fun(() -> Result)) -> Result.
 lock_on_storage_by_id(Identifier, Fun) ->
     critical_section:run({storage_id, Identifier}, Fun).
-
-
-%% @private
--spec lock_on_storage_by_name(name(), fun(() -> Result)) -> Result.
-lock_on_storage_by_name(Identifier, Fun) ->
-    critical_section:run({storage_name, Identifier}, Fun).
-
-
-%% @private
--spec create_insecure(name(), helpers:helper(), luma_config(),
-    imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
-create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
-        {ok, Id} ->
-            case storage_config:create(Id, Helper, LumaConfig) of
-                {ok, Id} ->
-                    on_storage_created(Id),
-                    {ok, Id};
-                StorageConfigError ->
-                    case storage_logic:delete_in_zone(Id) of
-                        ok -> ok;
-                        {error, _} = Error ->
-                            ?error("Could not revert creation of storage ~p in Onezone: ~p",
-                                [Id, Error])
-                    end,
-                    StorageConfigError
-            end;
-        StorageLogicError ->
-            StorageLogicError
-    end.
 
 
 %% @private
