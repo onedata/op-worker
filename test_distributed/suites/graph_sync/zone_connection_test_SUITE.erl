@@ -79,15 +79,15 @@ oneprovider_should_not_connect_to_onezone_if_incompatible(_Config) ->
 oneprovider_should_not_connect_to_onezone_if_incompatible_test_base(CompatRegistryContent) ->
     foreach_op_worker_node(fun(Node) ->
         CurrentRegistryPath = rpc:call(Node, ctool, get_env, [current_compatibility_registry_file]),
-        rpc:call(Node, ctool, set_env, [compatibility_registry_mirrors, []]),
-        rpc:call(Node, file, write_file, [CurrentRegistryPath, json_utils:encode(CompatRegistryContent#{
+        ok = rpc:call(Node, ctool, set_env, [compatibility_registry_mirrors, []]),
+        ok = rpc:call(Node, file, write_file, [CurrentRegistryPath, json_utils:encode(CompatRegistryContent#{
             <<"revision">> => 2099123199 % use a future revision to ensure registry is not updated
         })]),
-        rpc:call(Node, compatibility, clear_registry_cache, [])
+        ok = rpc:call(Node, compatibility, clear_registry_cache, [])
     end),
 
     for_random_op_worker_node(fun(Node) ->
-        rpc:call(Node, gs_channel_service, force_restart_connection, [])
+        ok = rpc:call(Node, gs_channel_service, force_restart_connection, [])
     end),
 
     timer:sleep(timer:seconds(10)),
@@ -98,19 +98,20 @@ oneprovider_should_not_connect_to_onezone_if_incompatible_test_base(CompatRegist
 
 
 oneprovider_should_fetch_registry_from_onezone_if_newer(_Config) ->
+    % place some initial, outdated compatibility registry on all nodes
     OldRevision = 2000010100,
     foreach_op_worker_node(fun(Node) ->
         CurrentRegistryPath = rpc:call(Node, ctool, get_env, [current_compatibility_registry_file]),
         DefaultRegistryPath = rpc:call(Node, ctool, get_env, [default_compatibility_registry_file]),
         OldRegistry = #{<<"revision">> => OldRevision},
-        rpc:call(Node, ctool, set_env, [compatibility_registry_mirrors, []]),
-        rpc:call(Node, file, write_file, [CurrentRegistryPath, json_utils:encode(OldRegistry)]),
-        rpc:call(Node, file, write_file, [DefaultRegistryPath, json_utils:encode(OldRegistry)]),
-        rpc:call(Node, compatibility, clear_registry_cache, [])
+        ok = rpc:call(Node, ctool, set_env, [compatibility_registry_mirrors, []]),
+        ok = rpc:call(Node, file, write_file, [CurrentRegistryPath, json_utils:encode(OldRegistry)]),
+        ok = rpc:call(Node, file, write_file, [DefaultRegistryPath, json_utils:encode(OldRegistry)]),
+        ok = rpc:call(Node, compatibility, clear_registry_cache, [])
     end),
 
     NewerRevision = for_random_op_worker_node(fun(Node) ->
-        rpc:call(Node, gs_channel_service, force_restart_connection, []),
+        ok = rpc:call(Node, gs_channel_service, force_restart_connection, []),
         Rev = peek_current_registry_revision_on_node(Node),
         ?assertNotEqual(Rev, OldRevision),
         Rev
@@ -128,18 +129,18 @@ oneprovider_should_unify_registry_on_multinode_clusters(_Config) ->
     OldRevision = 2134010100,
     foreach_op_worker_node(fun(Node) ->
         CurrentRegistryPath = rpc:call(Node, ctool, get_env, [current_compatibility_registry_file]),
-        rpc:call(Node, ctool, set_env, [compatibility_registry_mirrors, []]),
-        rpc:call(Node, file, write_file, [CurrentRegistryPath, json_utils:encode(#{
+        ok = rpc:call(Node, ctool, set_env, [compatibility_registry_mirrors, []]),
+        ok = rpc:call(Node, file, write_file, [CurrentRegistryPath, json_utils:encode(#{
             <<"revision">> => OldRevision
         })]),
-        rpc:call(Node, compatibility, clear_registry_cache, [])
+        ok = rpc:call(Node, compatibility, clear_registry_cache, [])
     end),
 
     % place a newer default registry on one of the nodes
     NewerRevision = 2189010100,
     ChosenNode = for_random_op_worker_node(fun(Node) ->
         DefaultRegistryPath = rpc:call(Node, ctool, get_env, [default_compatibility_registry_file]),
-        rpc:call(Node, file, write_file, [DefaultRegistryPath, json_utils:encode(#{<<"revision">> => NewerRevision})]),
+        ok = rpc:call(Node, file, write_file, [DefaultRegistryPath, json_utils:encode(#{<<"revision">> => NewerRevision})]),
         Node
     end),
 
