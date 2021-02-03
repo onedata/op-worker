@@ -410,7 +410,12 @@ mark_session_as_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
     TimeRef :: reference().
 register_auth_validity_checkup_if_user_session(provider_incoming, undefined) ->
     undefined;
-register_auth_validity_checkup_if_user_session(_UserSession, TokenCredentials) ->
+register_auth_validity_checkup_if_user_session(UserSession, TokenCredentials) when
+    UserSession == gui;
+    UserSession == rest;
+    UserSession == fuse;
+    UserSession == offline
+->
     AccessTokenBin = auth_manager:get_access_token(TokenCredentials),
     {ok, AccessToken} = tokens:deserialize(AccessTokenBin),
     TokenTTL = caveats:infer_ttl(tokens:get_caveats(AccessToken)),

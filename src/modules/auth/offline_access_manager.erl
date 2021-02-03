@@ -11,9 +11,9 @@
 %%% if the ordering client has disconnected.
 %%%
 %%% The lifecycle of such session is as follows:
-%%% 1) it is started by calling 'init_session' with unique offline job id,
-%%%    as resulting session will be associated with that job, and valid user
-%%%    credentials.
+%%% 1) it is started by calling 'init_session' with a unique offline job id
+%%%    (opaque to this module), as resulting session will be associated with
+%%%    that job, and valid user credentials.
 %%% 2) while in use 'get_session_id' must be periodically called.
 %%%    This ensures that offline credentials are appropriately refreshed
 %%%    (default expiration period is 7 days).
@@ -28,6 +28,8 @@
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
+-include("modules/auth/offline_access_manager.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -47,7 +49,7 @@
 
 -type error() :: {error, term()}.
 
-% Tells after what chunk of token TTL to try to refresh token
+% Tells after what chunk of token TTL to try to renew offline credentials
 -define(TOKEN_REFRESH_THRESHOLD, 0.34).
 
 
@@ -57,16 +59,16 @@
 
 
 -spec init_session(offline_job_id(), auth_manager:credentials()) ->
-    {ok, session:id()} | error().
+    {ok, session:id()} | errors:error().
 init_session(_OfflineJobId, ?ROOT_CREDENTIALS) ->
     ?ERROR_TOKEN_SUBJECT_INVALID;
 init_session(_OfflineJobId, ?GUEST_CREDENTIALS) ->
     ?ERROR_TOKEN_SUBJECT_INVALID;
 init_session(OfflineJobId, TokenCredentials) ->
-    Subject = get_subject(TokenCredentials),
+    Subject = auth_manager:get_subject(TokenCredentials),
 
-    case offline_access_credentials:acquire(OfflineJobId, Subject, TokenCredentials) of
-        {ok, #document{value = OfflineCredentials}} ->
+    case acquire_offline_credentials(OfflineJobId, Subject, TokenCredentials) of
+        {ok, OfflineCredentials} ->
             session_manager:reuse_or_create_offline_session(
                 OfflineJobId, Subject, to_token_credentials(OfflineCredentials)
             );
@@ -75,9 +77,9 @@ init_session(OfflineJobId, TokenCredentials) ->
     end.
 
 
--spec get_session_id(offline_job_id()) -> {ok, session:id()} | error().
+-spec get_session_id(offline_job_id()) -> {ok, session:id()} | errors:error().
 get_session_id(OfflineJobId) ->
-    case get_and_refresh_offline_credentials_if_near_expiration(OfflineJobId) of
+    case reuse_or_renew_offline_credentials(OfflineJobId) of
         {ok, #offline_access_credentials{user_id = UserId} = OfflineCredentials} ->
             session_manager:reuse_or_create_offline_session(
                 OfflineJobId, ?SUB(user, UserId), to_token_credentials(OfflineCredentials)
@@ -99,48 +101,113 @@ close_session(OfflineJobId) ->
 
 
 %% @private
--spec get_subject(auth_manager:token_credentials()) -> aai:subject().
-get_subject(TokenCredentials) ->
-    AccessToken = auth_manager:get_access_token(TokenCredentials),
-    {ok, #token{subject = Subject}} = tokens:deserialize(AccessToken),
-    Subject.
-
-
-%% @private
--spec get_and_refresh_offline_credentials_if_near_expiration(offline_job_id()) ->
-    {ok, offline_access_credentials:record()} | error().
-get_and_refresh_offline_credentials_if_near_expiration(OfflineJobId) ->
+-spec reuse_or_renew_offline_credentials(offline_job_id()) ->
+    {ok, offline_access_credentials:record()} | errors:error().
+reuse_or_renew_offline_credentials(OfflineJobId) ->
     Now = global_clock:timestamp_seconds(),
 
     case offline_access_credentials:get(OfflineJobId) of
         {ok, #document{value = #offline_access_credentials{
             user_id = UserId,
-            acquired_at = AcquiredAt,
             valid_until = ValidUntil
         } = OfflineCredentials}} when Now =< ValidUntil ->
-            case Now > AcquiredAt + ?TOKEN_REFRESH_THRESHOLD * (ValidUntil - AcquiredAt) of
+            case should_try_to_renew_offline_credentials(Now, OfflineCredentials) of
                 true ->
-                    case offline_access_credentials:acquire(
+                    case acquire_offline_credentials(
                         OfflineJobId, ?SUB(user, UserId),
                         to_token_credentials(OfflineCredentials)
                     ) of
-                        {ok, #document{value = NewOfflineCredentials}} ->
+                        {ok, NewOfflineCredentials} ->
                             {ok, NewOfflineCredentials};
                         ?ERROR_TOKEN_INVALID ->
                             ?ERROR_TOKEN_INVALID;
                         {error, _} ->
                             % If refresh failed return current credentials -
                             % there is still some time left to retry later
+                            increase_next_renewal_backoff(OfflineJobId, Now),
                             {ok, OfflineCredentials}
                     end;
                 false ->
                     {ok, OfflineCredentials}
             end;
         {ok, _} ->
+            % Offline access token expired
             ?ERROR_TOKEN_INVALID;
-        {error, _} = Error ->
+        ?ERROR_NOT_FOUND = Error ->
             Error
     end.
+
+
+%% @private
+-spec should_try_to_renew_offline_credentials(time:seconds(), offline_access_credentials:record()) ->
+    boolean().
+should_try_to_renew_offline_credentials(Now, #offline_access_credentials{
+    acquired_at = AcquiredAt,
+    valid_until = ValidUntil,
+    next_renewal_attempt = NextRenewalAttempt
+}) when Now > AcquiredAt + ?TOKEN_REFRESH_THRESHOLD * (ValidUntil - AcquiredAt) ->
+    Now > NextRenewalAttempt;
+should_try_to_renew_offline_credentials(_, _) ->
+    false.
+
+
+%% @private
+-spec increase_next_renewal_backoff(offline_job_id(), time:seconds()) ->
+    ok.
+increase_next_renewal_backoff(OfflineJobId, Now) ->
+    ?extract_ok(offline_access_credentials:update(OfflineJobId, fun(#offline_access_credentials{
+        next_renewal_attempt = NextRenewalAttempt,
+        next_renewal_attempt_backoff = NextRenewalInterval
+    } = OfflineCredentials) ->
+
+        {ok, OfflineCredentials#offline_access_credentials{
+            next_renewal_attempt = max(
+                Now + NextRenewalInterval,
+                NextRenewalAttempt
+            ),
+            next_renewal_attempt_backoff = min(
+                NextRenewalInterval * ?OFFLINE_TOKEN_RENEWAL_BACKOFF_RATE,
+                ?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC
+            )
+        }}
+    end)).
+
+
+%% @private
+-spec acquire_offline_credentials(offline_job_id(), aai:subject(), auth_manager:token_credentials()) ->
+    {ok, offline_access_credentials:record()} | errors:error().
+acquire_offline_credentials(OfflineJobId, ?SUB(user, UserId), TokenCredentials) ->
+    case auth_manager:acquire_offline_user_access_token(UserId, TokenCredentials) of
+        {ok, OfflineAccessToken} ->
+            {ok, Doc} = offline_access_credentials:save(OfflineJobId, #offline_access_credentials{
+                user_id = UserId,
+                access_token = OfflineAccessToken,
+                interface = auth_manager:get_interface(TokenCredentials),
+                data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(
+                    TokenCredentials
+                ),
+                acquired_at = global_clock:timestamp_seconds(),
+                valid_until = token_valid_until(OfflineAccessToken),
+                next_renewal_attempt = 0,
+                next_renewal_attempt_backoff = ?MIN_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC
+            }),
+            {ok, Doc#document.value};
+        {error, _} = Error ->
+            Error
+    end;
+acquire_offline_credentials(_, _, _) ->
+    ?ERROR_TOKEN_SUBJECT_INVALID.
+
+
+%% @private
+-spec token_valid_until(tokens:serialized()) -> time:seconds().
+token_valid_until(OfflineAccessTokenBin) ->
+    {ok, OfflineAccessToken} = tokens:deserialize(OfflineAccessTokenBin),
+
+    lists:foldl(fun
+        (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
+        (#cv_time{valid_until = ValidUntil}, Acc) -> min(ValidUntil, Acc)
+    end, undefined, caveats:filter([cv_time], tokens:get_caveats(OfflineAccessToken))).
 
 
 %% @private

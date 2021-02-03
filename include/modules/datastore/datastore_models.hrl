@@ -240,7 +240,9 @@
     interface :: undefined | cv_interface:interface(),
     data_access_caveats_policy :: data_access_caveats:policy(),
     acquired_at :: time:seconds(),
-    valid_until :: time:seconds()
+    valid_until :: time:seconds(),
+    next_renewal_attempt :: time:seconds(),
+    next_renewal_attempt_backoff :: time:seconds()
 }).
 
 -record(file_force_proxy, {

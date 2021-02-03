@@ -40,6 +40,7 @@
 ]).
 -export([
     credentials_to_gs_auth_override/1,
+    get_subject/1,
     get_caveats/1,
     acquire_offline_user_access_token/2,
     verify_credentials/1
@@ -158,9 +159,19 @@ credentials_to_gs_auth_override(#token_credentials{
         client_auth = {token, AccessToken},
         peer_ip = PeerIp,
         interface = Interface,
-        consumer_token = fetch_provider_identity_token_if_needed(ConsumerToken),
+        consumer_token = resolve_consumer_token(ConsumerToken),
         data_access_caveats_policy = DataAccessCaveatsPolicy
     }.
+
+
+-spec get_subject(credentials()) -> aai:subject().
+get_subject(?ROOT_CREDENTIALS) ->
+    ?ROOT_IDENTITY;
+get_subject(?GUEST_CREDENTIALS) ->
+    ?GUEST_IDENTITY;
+get_subject(#token_credentials{access_token = AccessToken}) ->
+    {ok, #token{subject = Subject}} = tokens:deserialize(AccessToken),
+    Subject.
 
 
 -spec get_caveats(credentials()) -> {ok, [caveats:caveat()]} | errors:error().
@@ -192,7 +203,7 @@ acquire_offline_user_access_token(UserId, #token_credentials{
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
     token_logic:acquire_offline_user_access_token(
-        UserId, AccessToken, fetch_provider_identity_token_if_needed(ConsumerToken),
+        UserId, AccessToken, resolve_consumer_token(ConsumerToken),
         PeerIp, Interface, DataAccessCaveatsPolicy
     ).
 
@@ -212,15 +223,18 @@ verify_credentials(?ROOT_CREDENTIALS) ->
 verify_credentials(?GUEST_CREDENTIALS) ->
     {ok, #auth{subject = ?GUEST_IDENTITY}, undefined};
 
-verify_credentials(TokenCredentials) ->
-    case auth_cache:get_token_credentials_verification_result(TokenCredentials) of
+verify_credentials(#token_credentials{consumer_token = ConsumerToken} = TokenCredentials0) ->
+    TokenCredentials1 = TokenCredentials0#token_credentials{
+        consumer_token = resolve_consumer_token(ConsumerToken)
+    },
+    case auth_cache:get_token_credentials_verification_result(TokenCredentials1) of
         {ok, CachedVerificationResult} ->
             CachedVerificationResult;
         ?ERROR_NOT_FOUND ->
             try
-                {TokenRef, VerificationResult} = verify_token_credentials(TokenCredentials),
+                {TokenRef, VerificationResult} = verify_token_credentials(TokenCredentials1),
                 auth_cache:save_token_credentials_verification_result(
-                    TokenCredentials, TokenRef, VerificationResult
+                    TokenCredentials1, TokenRef, VerificationResult
                 ),
                 VerificationResult
             catch Type:Reason ->
@@ -251,7 +265,7 @@ verify_token_credentials(#token_credentials{
         % required to extract caveats, plus serves as a sanity check of token structure
         Token = try_to_deserialize_token(AccessToken),
         case token_logic:verify_access_token(
-            AccessToken, fetch_provider_identity_token_if_needed(ConsumerToken),
+            AccessToken, ConsumerToken,
             PeerIp, Interface, DataAccessCaveatsPolicy
         ) of
             {ok, Subject, TokenTTL} ->
@@ -308,10 +322,10 @@ ensure_subject_is_a_supported_user(_) ->
 
 
 %% @private
--spec fetch_provider_identity_token_if_needed(consumer_token()) ->
+-spec resolve_consumer_token(consumer_token()) ->
     undefined | tokens:serialized().
-fetch_provider_identity_token_if_needed(provider_identity_token) ->
+resolve_consumer_token(provider_identity_token) ->
     {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
     ProviderIdentityToken;
-fetch_provider_identity_token_if_needed(ConsumerToken) ->
+resolve_consumer_token(ConsumerToken) ->
     ConsumerToken.

@@ -40,7 +40,7 @@ db_error_test(Config) ->
     [Worker] = oct_background:get_provider_nodes(krakow),
     ProviderId = oct_background:get_provider_id(krakow),
     [User1] = oct_background:get_provider_eff_users(krakow),
-    SessId = oct_background:get_user_session_id(joe, krakow),
+    SessId = oct_background:get_user_session_id(user1, krakow),
     [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 

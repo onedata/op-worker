@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/auth/offline_access_manager.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 -export([
@@ -25,7 +26,8 @@
     offline_session_creation_for_root_should_fail_test/1,
     offline_session_creation_for_guest_should_fail_test/1,
     offline_session_should_work_as_any_other_session_test/1,
-    offline_token_should_be_refreshed_if_needed_test/1,
+    offline_session_should_internally_refresh_provider_identity_token/1,
+    offline_token_should_be_renew_if_needed_test/1,
     offline_session_should_properly_react_to_time_warps_test/1
 ]).
 
@@ -33,7 +35,8 @@ all() -> [
     offline_session_creation_for_root_should_fail_test,
     offline_session_creation_for_guest_should_fail_test,
     offline_session_should_work_as_any_other_session_test,
-    offline_token_should_be_refreshed_if_needed_test,
+    offline_session_should_internally_refresh_provider_identity_token,
+    offline_token_should_be_renew_if_needed_test,
     offline_session_should_properly_react_to_time_warps_test
 ].
 
@@ -41,7 +44,10 @@ all() -> [
 -define(HOUR, 3600).
 -define(DAY, 24 * ?HOUR).
 
+-define(PROVIDER_TOKEN_TTL, 3).
 -define(OFFLINE_ACCESS_TOKEN_TTL, 7 * ?DAY).
+
+-define(RAND_JOB_ID(), str_utils:rand_hex(10)).
 
 -define(NODE, hd(oct_background:get_provider_nodes(krakow))).
 -define(ATTEMPTS, 30).
@@ -53,17 +59,15 @@ all() -> [
 
 
 offline_session_creation_for_root_should_fail_test(_Config) ->
-    JobId = str_utils:rand_hex(10),
-    ?assertMatch(?ERROR_TOKEN_SUBJECT_INVALID, init_offline_session(JobId, ?ROOT_CREDENTIALS)).
+    ?assertMatch(?ERROR_TOKEN_SUBJECT_INVALID, init_offline_session(?RAND_JOB_ID(), ?ROOT_CREDENTIALS)).
 
 
 offline_session_creation_for_guest_should_fail_test(_Config) ->
-    JobId = str_utils:rand_hex(10),
-    ?assertMatch(?ERROR_TOKEN_SUBJECT_INVALID, init_offline_session(JobId, ?GUEST_CREDENTIALS)).
+    ?assertMatch(?ERROR_TOKEN_SUBJECT_INVALID, init_offline_session(?RAND_JOB_ID(), ?GUEST_CREDENTIALS)).
 
 
 offline_session_should_work_as_any_other_session_test(_Config) ->
-    JobId = str_utils:rand_hex(10),
+    JobId = ?RAND_JOB_ID(),
     UserId = oct_background:get_user_id(user1),
     UserCredentials = get_user_credentials(),
 
@@ -77,42 +81,106 @@ offline_session_should_work_as_any_other_session_test(_Config) ->
         lfm_proxy:get_children(?NODE, SessionId, {guid, UserRootDirGuid}, 0, 100)
     ),
 
-    clear_auth_cache(),
+    % Check that even in case of various environment situations everything is resolved
+    % internally and session works properly (possibly after some time though)
+    lists:foreach(fun(MessUpSthFun) ->
+        MessUpSthFun(),
 
-    ?assertMatch(
-        {ok, #file_attr{guid = SpaceKrkGuid}},
-        lfm_proxy:stat(?NODE, SessionId, {guid, SpaceKrkGuid})
-    ).
+        ?assertMatch(
+            {ok, #file_attr{guid = SpaceKrkGuid}},
+            lfm_proxy:stat(?NODE, SessionId, {guid, SpaceKrkGuid}),
+            ?ATTEMPTS
+        )
+    end, [
+        fun clear_auth_cache/0,
+        fun force_oz_connection_restart/0
+    ]).
 
 
-offline_token_should_be_refreshed_if_needed_test(_Config) ->
-    JobId = str_utils:rand_hex(10),
+offline_session_should_internally_refresh_provider_identity_token(_Config) ->
+    JobId = ?RAND_JOB_ID(),
     UserCredentials = get_user_credentials(),
 
     {ok, SessionId} = ?assertMatch({ok, _}, init_offline_session(JobId, UserCredentials)),
-    OfflineCredentials1 = get_session_access_token(SessionId),
+    OfflineCredentials = get_session_credentials(SessionId),
+    OfflineAccessToken = auth_manager:get_access_token(OfflineCredentials),
 
-    % Credentials are refreshed on call to `offline_access_manager:get_session_id`
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+    SpaceKrkGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceKrkId),
+
+    mock_verify_token_to_inform_about_consumer_token_used(OfflineAccessToken),
+
+    ProviderIdentityTokens = lists:map(fun(_) ->
+        % Wait for current provider identity token to expire
+        timer:sleep(timer:seconds(?PROVIDER_TOKEN_TTL + 1)),
+
+        % Then try to perform any lfm operation - it should work properly
+        % as identity token should be internally refreshed
+        ?assertMatch(
+            {ok, #file_attr{guid = SpaceKrkGuid}},
+            lfm_proxy:stat(?NODE, SessionId, {guid, SpaceKrkGuid}),
+            ?ATTEMPTS
+        ),
+
+        receive {consumer_token, ConsumerToken} ->
+            ConsumerToken
+        after 100 ->
+            throw(consumer_token_not_refreshed)
+        end
+    end, lists:seq(1, 5)),
+
+    ?assertEqual(5, length(lists:usort(ProviderIdentityTokens))),
+
+    unmock_verify_token_to_inform_about_consumer_token_used().
+
+
+offline_token_should_be_renew_if_needed_test(_Config) ->
+    JobId = ?RAND_JOB_ID(),
+    UserCredentials = get_user_credentials(),
+
+    {ok, SessionId} = ?assertMatch({ok, _}, init_offline_session(JobId, UserCredentials)),
+    OfflineCredentials1 = get_session_credentials(SessionId),
+
+    % Credentials renew is attempted on call to `offline_access_manager:get_session_id`
     % but only if at least 1/3 of token TTL has passed
     time_test_utils:simulate_seconds_passing(?HOUR),
     ?assertMatch({ok, SessionId}, get_offline_session_id(JobId)),
-    ?assertEqual(OfflineCredentials1, get_session_access_token(SessionId)),
+    ?assertEqual(OfflineCredentials1, get_session_credentials(SessionId)),
     force_session_validity_check(SessionId),
     ?assertEqual(true, session_exists(SessionId)),
 
-    % After that time token refresh should be attempted. In case of failure
+    % After that time token renewal should be attempted. In case of failure
     % (e.g. lost connection to oz) old credentials should be returned (they
     % would be still valid for some time).
     time_test_utils:simulate_seconds_passing(4 * ?DAY),
 
     mock_acquire_offline_user_access_token_failure(),
-    ?assertMatch({ok, SessionId}, get_offline_session_id(JobId)),
-    ?assertEqual(OfflineCredentials1, get_session_access_token(SessionId)),
+
+    AssertRenewalFailureFun = fun() ->
+        ?assertMatch({ok, SessionId}, get_offline_session_id(JobId)),
+        ?assertEqual(OfflineCredentials1, get_session_credentials(SessionId))
+    end,
+
+    lists:foreach(fun(BackoffInterval) ->
+        AssertRenewalFailureFun(),
+        ?assertEqual(1, count_offline_token_acquisition_attempts()),
+
+        % Credentials renewal failure sets backoff so that next attempt wouldn't be
+        % tried immediately
+        lists:foreach(fun(_) -> AssertRenewalFailureFun() end, lists:seq(1, 100)),
+        ?assertEqual(0, count_offline_token_acquisition_attempts()),
+
+        time_test_utils:simulate_seconds_passing(BackoffInterval + 1)
+    end, get_offline_token_renewal_backoff_Intervals(
+        ?MIN_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC, []
+    )),
     unmock_acquire_offline_user_access_token_failure(),
 
-    % If there are no errors token should be properly refreshed
+    % If there are no such failures and backoff interval has passed,
+    % then token should be properly renewed
+    time_test_utils:simulate_seconds_passing(?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC + 1),
     ?assertMatch({ok, SessionId}, get_offline_session_id(JobId)),
-    ?assertNotEqual(OfflineCredentials1, get_session_access_token(SessionId)),
+    ?assertNotEqual(OfflineCredentials1, get_session_credentials(SessionId)),
     force_session_validity_check(SessionId),
     ?assertEqual(true, session_exists(SessionId)),
 
@@ -120,24 +188,24 @@ offline_token_should_be_refreshed_if_needed_test(_Config) ->
 
 
 offline_session_should_properly_react_to_time_warps_test(_Config) ->
-    JobId = str_utils:rand_hex(10),
+    JobId = ?RAND_JOB_ID(),
     UserCredentials = get_user_credentials(),
 
     {ok, SessionId} = ?assertMatch({ok, _}, init_offline_session(JobId, UserCredentials)),
-    OfflineCredentials1 = get_session_access_token(SessionId),
+    OfflineCredentials1 = get_session_credentials(SessionId),
 
     % Offline session/token shouldn't react to backward time warp as it will
     % just extend the token validity period.
     time_test_utils:simulate_seconds_passing(-6 * ?DAY),
     ?assertMatch({ok, SessionId}, get_offline_session_id(JobId)),
-    ?assertEqual(OfflineCredentials1, get_session_access_token(SessionId)),
+    ?assertEqual(OfflineCredentials1, get_session_credentials(SessionId)),
 
     % With previous backward time warp session should still exist even after 8 day passage
-    % (offline_access_token_ttl is set to 7 days by default). Also no token refresh should
+    % (offline_access_token_ttl is set to 7 days by default). Also no token renewal should
     % be performed until 1/3 of token TTL has elapsed after original acquirement timestamp
     time_test_utils:simulate_seconds_passing(8 * ?DAY),
     ?assertMatch({ok, SessionId}, get_offline_session_id(JobId)),
-    ?assertEqual(OfflineCredentials1, get_session_access_token(SessionId)),
+    ?assertEqual(OfflineCredentials1, get_session_credentials(SessionId)),
 
     % In case of forward time warp token may expire and session may terminate (after some
     % time of inertia) but offline credentials docs are not automatically removed - it is
@@ -205,10 +273,10 @@ close_offline_session(JobId) ->
 
 
 %% @private
--spec get_session_access_token(session:id()) -> tokens:serialized().
-get_session_access_token(SessionId) ->
+-spec get_session_credentials(session:id()) -> auth_manager:credentials().
+get_session_credentials(SessionId) ->
     {ok, #document{value = #session{credentials = Credentials}}} = get_session_doc(SessionId),
-    auth_manager:get_access_token(Credentials).
+    Credentials.
 
 
 %% @private
@@ -247,10 +315,42 @@ clear_auth_cache() ->
 
 
 %% @private
+-spec force_oz_connection_restart() -> ok.
+force_oz_connection_restart() ->
+    rpc:call(?NODE, gs_channel_service, force_restart_connection, []).
+
+
+%% @private
+-spec mock_verify_token_to_inform_about_consumer_token_used(tokens:serialized()) -> ok.
+mock_verify_token_to_inform_about_consumer_token_used(OfflineAccessToken) ->
+    Self = self(),
+
+    test_utils:mock_new(?NODE, token_logic, [passthrough]),
+    test_utils:mock_expect(?NODE, token_logic, verify_access_token,
+        fun(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+            case AccessToken == OfflineAccessToken of
+                true -> Self ! {consumer_token, ConsumerToken};
+                false -> ok
+            end,
+            meck:passthrough([AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy])
+        end
+    ).
+
+
+%% @private
+-spec unmock_verify_token_to_inform_about_consumer_token_used() -> ok.
+unmock_verify_token_to_inform_about_consumer_token_used() ->
+    test_utils:mock_unload(?NODE, token_logic).
+
+
+%% @private
 -spec mock_acquire_offline_user_access_token_failure() -> ok.
 mock_acquire_offline_user_access_token_failure() ->
+    Self = self(),
+
     test_utils:mock_new(?NODE, auth_manager, [passthrough]),
     test_utils:mock_expect(?NODE, auth_manager, acquire_offline_user_access_token, fun(_, _) ->
+        Self ! acquire_offline_access_token,
         ?ERROR_NO_CONNECTION_TO_ONEZONE
     end).
 
@@ -259,6 +359,37 @@ mock_acquire_offline_user_access_token_failure() ->
 -spec unmock_acquire_offline_user_access_token_failure() -> ok.
 unmock_acquire_offline_user_access_token_failure() ->
     test_utils:mock_unload(?NODE, auth_manager).
+
+
+%% @private
+-spec count_offline_token_acquisition_attempts() -> non_neg_integer().
+count_offline_token_acquisition_attempts() ->
+    count_offline_token_acquisition_attempts(0).
+
+
+%% @private
+-spec count_offline_token_acquisition_attempts(non_neg_integer()) -> non_neg_integer().
+count_offline_token_acquisition_attempts(Num) ->
+    receive acquire_offline_access_token ->
+        count_offline_token_acquisition_attempts(Num + 1)
+    after 100 ->
+        Num
+    end.
+
+
+%% @private
+-spec get_offline_token_renewal_backoff_Intervals(time:seconds(), [time:seconds()]) ->
+    [time:seconds()].
+get_offline_token_renewal_backoff_Intervals(?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC, Intervals) ->
+    lists:reverse([?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC | Intervals]);
+get_offline_token_renewal_backoff_Intervals(Interval, Intervals) ->
+    get_offline_token_renewal_backoff_Intervals(
+        min(
+            Interval * ?OFFLINE_TOKEN_RENEWAL_BACKOFF_RATE,
+            ?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC
+        ),
+        [Interval | Intervals]
+    ).
 
 
 %%%===================================================================
@@ -270,10 +401,13 @@ init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
-        onenv_scenario = "auth_tests",
+        onenv_scenario = "1op",
         envs = [
             {oz_worker, oz_worker, [{offline_access_token_ttl, ?OFFLINE_ACCESS_TOKEN_TTL}]},
-            {op_worker, op_worker, [{fuse_session_grace_period_seconds, ?DAY}]}
+            {op_worker, op_worker, [
+                {provider_token_ttl_sec, ?PROVIDER_TOKEN_TTL},
+                {fuse_session_grace_period_seconds, ?DAY}
+            ]}
         ]
     }).
 
@@ -283,13 +417,25 @@ end_per_suite(_Config) ->
     ssl:stop().
 
 
+init_per_testcase(Case, Config) when
+    Case == offline_token_should_be_renew_if_needed_test;
+    Case == offline_session_should_properly_react_to_time_warps_test
+->
+    ok = time_test_utils:freeze_time(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     unmock_acquire_offline_user_access_token_failure(),
-    ok = time_test_utils:freeze_time(Config),
     ct:timetrap({minutes, 20}),
     lfm_proxy:init(Config).
 
 
-end_per_testcase(_Case, Config) ->
+end_per_testcase(Case, Config) when
+    Case == offline_token_should_be_renew_if_needed_test;
+    Case == offline_session_should_properly_react_to_time_warps_test
+->
     ok = time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
