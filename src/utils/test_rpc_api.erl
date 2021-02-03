@@ -118,7 +118,7 @@ get_space_providers(SpaceId) ->
     space_logic:get_provider_ids(SpaceId).
 
 
--spec supports_space(od:space_id()) -> boolean().
+-spec supports_space(od_space:id()) -> boolean().
 supports_space(SpaceId) ->
     provider_logic:supports_space(SpaceId).
 

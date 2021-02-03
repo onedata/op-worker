@@ -218,7 +218,7 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
                 true ->
                     [];
                 false ->
-                    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
+                    {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
                     file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
             end
     end,

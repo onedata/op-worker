@@ -61,7 +61,7 @@ assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
                 % trash directory should be empty
                 ?assertMatch({ok, []},
                     lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)}, 0, 100), Attempts),
-                ?assertEqual(0, opw_test_rpc:space_capacity_usage(W, SpaceId), Attempts);
+                ?assertEqual(0, opw_test_rpc:get_space_capacity_usage(W, SpaceId), Attempts);
             false ->
                 ok
         end
