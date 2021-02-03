@@ -87,7 +87,7 @@ oneprovider_should_not_connect_to_onezone_if_incompatible_test_base(CompatRegist
     end),
 
     for_random_op_worker_node(fun(Node) ->
-        ok = rpc:call(Node, gs_channel_service, force_restart_connection, [])
+        ?assertNot(rpc:call(Node, gs_channel_service, force_restart_connection, []))
     end),
 
     timer:sleep(timer:seconds(10)),
@@ -111,7 +111,7 @@ oneprovider_should_fetch_registry_from_onezone_if_newer(_Config) ->
     end),
 
     NewerRevision = for_random_op_worker_node(fun(Node) ->
-        ok = rpc:call(Node, gs_channel_service, force_restart_connection, []),
+        ?assert(rpc:call(Node, gs_channel_service, force_restart_connection, [])),
         Rev = peek_current_registry_revision_on_node(Node),
         ?assertNotEqual(Rev, OldRevision),
         Rev
@@ -190,7 +190,7 @@ peek_current_registry_revision_on_node(Node) ->
 is_connected_to_oz(Worker) ->
     Domain = rpc:call(Worker, oneprovider, get_domain, []),
     Url = str_utils:format_bin("https://~s~s", [Domain, ?NAGIOS_OZ_CONNECTIVITY_PATH]),
-    CaCerts = rpc:call(Worker, https_listener, get_cert_chain_pems, []),
+    CaCerts = rpc:call(Worker, https_listener, get_cert_chain_ders, []),
     Opts = [{ssl_options, [{cacerts, CaCerts}, {hostname, str_utils:to_binary(Domain)}]}],
     Result = case http_client:get(Url, #{}, <<>>, Opts) of
         {ok, 200, _, Body} ->
