@@ -45,7 +45,7 @@
     | delete_synced_documents | delete_local_documents.
 -type job() :: space_unsupport_job:record().
 % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
--type subtask_id() :: qos_entry:id() | unsupport_cleanup_traverse:id().
+-type subtask_id() :: qos_entry:id() | unsupport_cleanup_traverse:task_id().
 
 -export_type([stage/0, subtask_id/0]).
 

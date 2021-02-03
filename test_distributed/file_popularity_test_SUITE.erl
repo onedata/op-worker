@@ -15,7 +15,8 @@
 -behaviour(view_traverse).
 
 -include("global_definitions.hrl").
--include("modules/fslogic/file_popularity_view.hrl").
+-include("modules/file_popularity/file_popularity_view.hrl").
+-include("lfm_test_utils.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -76,9 +77,7 @@ all() -> [
 -define(FILE_PATH(FileName), filename:join(["/", ?SPACE_ID, FileName])).
 
 -define(USER, <<"user1">>).
--define(SESSION(Worker, Config), ?SESSION(?USER, Worker, Config)).
--define(SESSION(User, Worker, Config),
-    ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config)).
+-define(SESSION(Worker, Config), ?SESS_ID(?USER, Worker, Config)).
 
 -define(ATTEMPTS, 10).
 
@@ -400,7 +399,8 @@ end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     disable_file_popularity(W, ?SPACE_ID),
     ensure_collector_stopped(W),
-    clean_space(?SPACE_ID, Config),
+    test_utils:mock_unload(W, file_popularity),
+    lfm_test_utils:clean_space(W, ?SPACE_ID, ?ATTEMPTS),
     lfm_proxy:teardown(Config).
 
 end_per_suite(Config) ->
@@ -505,29 +505,6 @@ configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCount
 
 disable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, disable, [SpaceId]).
-
-clean_space(SpaceId, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESSION(Worker, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    BatchSize = 1000,
-    clean_space(Worker, SessId, SpaceGuid, 0, BatchSize).
-
-clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
-    {ok, GuidsAndPaths} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
-    FilesNum = length(GuidsAndPaths),
-    delete_files(Worker, SessId, GuidsAndPaths),
-    case FilesNum < BatchSize of
-        true ->
-            ok;
-        false ->
-            clean_space(Worker, SessId, SpaceGuid, Offset + BatchSize, BatchSize)
-    end.
-
-delete_files(Worker, SessId, GuidsAndPaths) ->
-    lists:foreach(fun({G, _}) ->
-        ok = lfm_proxy:rm_recursive(Worker, SessId, {guid, G})
-    end, GuidsAndPaths).
 
 open_and_close_file(Worker, SessId, Guid, Times) ->
     lists:foreach(fun(_) ->

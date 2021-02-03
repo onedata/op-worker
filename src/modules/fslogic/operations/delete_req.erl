@@ -17,7 +17,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([delete/3]).
+-export([delete/3, delete_using_trash/3]).
 
 
 %%%===================================================================
@@ -36,10 +36,29 @@
 delete(UserCtx, FileCtx, Silent) ->
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
+            file_ctx:assert_not_special_const(FileCtx2),
             delete_dir(UserCtx, FileCtx2, Silent);
         {false, FileCtx2} ->
             delete_file(UserCtx, FileCtx2, Silent)
     end.
+
+
+-spec delete_using_trash(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
+    fslogic_worker:fuse_response().
+delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
+    file_ctx:assert_not_special_const(FileCtx0),
+    FileCtx1 = file_ctx:assert_is_dir(FileCtx0),
+
+    {FileParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
+    FileCtx3 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx2,
+        [traverse_ancestors, ?delete, ?list_container]
+    ),
+    fslogic_authz:ensure_authorized(
+        UserCtx, FileParentCtx,
+        [traverse_ancestors, ?delete_subcontainer]
+    ),
+    delete_using_trash_insecure(UserCtx, FileCtx3, EmitEvents).
 
 
 %%%===================================================================
@@ -102,6 +121,15 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
     end.
 
 
+-spec delete_using_trash_insecure(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
+    fslogic_worker:fuse_response().
+delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
+    {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    FileCtx3 = trash:move_to_trash(FileCtx2, UserCtx),
+    {ok, _} = trash:delete_from_trash(FileCtx3, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid)),
+    ?FUSE_OK_RESP.
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -117,4 +145,4 @@ delete_insecure(UserCtx, FileCtx, Silent) ->
         {ok, FileMeta#file_meta{deleted = true}}
     end),
     fslogic_delete:delete_file_locally(UserCtx, FileCtx, Silent),
-    #fuse_response{status = #status{code = ?OK}}.
+    ?FUSE_OK_RESP.

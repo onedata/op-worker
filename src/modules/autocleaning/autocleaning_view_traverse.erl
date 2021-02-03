@@ -16,7 +16,7 @@
 
 -behaviour(view_traverse).
 
--include("modules/fslogic/file_popularity_view.hrl").
+-include("modules/file_popularity/file_popularity_view.hrl").
 -include("modules/replica_deletion/replica_deletion.hrl").
 -include_lib("cluster_worker/include/traverse/view_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").

@@ -37,7 +37,7 @@
 
 %% tests
 -export([
-    harvest_space_doc/1,
+    harvest_space_doc_and_do_not_harvest_trash_doc/1,
     create_file/1,
     rename_file/1,
     delete_file/1,
@@ -68,7 +68,7 @@
 
 all() ->
     ?ALL([
-        harvest_space_doc,
+        harvest_space_doc_and_do_not_harvest_trash_doc,
         create_file,
         rename_file,
         delete_file,
@@ -172,10 +172,12 @@ all() ->
 -define(assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout),
     (
         (fun
-            AssertFun(__SpaceId, __Destination, [], __ProviderId, __Timeout) ->
+            AssertFun(__SpaceId, __Destination, [], __Unexpected, __ProviderId, __Timeout) ->
                 % all expected changes has been received
+                % resend these entries that were unexpected
+                self() ! ?HARVEST_METADATA(__SpaceId, __Destination, __Unexpected, __ProviderId),
                 ok;
-            AssertFun(__SpaceId, __Destination, __Batch, __ProviderId, __Timeout) ->
+            AssertFun(__SpaceId, __Destination, __Batch, __Unexpected, __ProviderId, __Timeout) ->
                 __TimeoutInMillis = timer:seconds(__Timeout),
                 receive
                     ?HARVEST_METADATA(
@@ -184,7 +186,8 @@ all() ->
                         __ReceivedBatch,
                         __ProviderId
                     ) ->
-                        AssertFun(__SpaceId, __Destination, subtract_batches(__Batch, __ReceivedBatch),
+                        {__ExpBatchLeft, __NewUnexpected} = subtract_batches(__Batch, __ReceivedBatch),
+                        AssertFun(__SpaceId, __Destination, __ExpBatchLeft, __Unexpected ++ __NewUnexpected,
                             __ProviderId, __Timeout)
                 after
                     __TimeoutInMillis ->
@@ -195,14 +198,14 @@ all() ->
                         ct:print("assertReceivedHarvestMetadata_failed: ~p~n", [__Args]),
                         erlang:error({assertReceivedHarvestMetadata_failed, __Args})
                 end
-        end)(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout)
+        end)(ExpSpaceId, ExpDestination, ExpBatch, [], ExpProviderId, Timeout)
     )).
 
 -define(assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId),
     ?assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, ?ATTEMPTS)).
 -define(assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout),
     (
-        (fun AssertFun(__SpaceId, __Destination, __Batch, __ProviderId, __Timeout) ->
+        (fun AssertFun(__SpaceId, __Destination, __Batch, __Unexpected, __ProviderId, __Timeout) ->
             Stopwatch = stopwatch:start(),
             __TimeoutInMillis = timer:seconds(__Timeout),
             receive
@@ -213,10 +216,14 @@ all() ->
                     __ProviderId
                 ) ->
                     ElapsedTime = stopwatch:read_seconds(Stopwatch),
-                    case subtract_batches(__Batch, __ReceivedBatch) of
-                        __Batch ->
-                            AssertFun(__SpaceId, __Destination, __Batch, __ProviderId, max(__Timeout - ElapsedTime, 0));
-                        _ ->
+                    {__Batch2, __NewUnexpected} = subtract_batches(__Batch, __ReceivedBatch),
+                    case length(__Batch2) < length(__Batch) of
+                        false ->
+                            AssertFun(__SpaceId, __Destination, __Batch, __Unexpected ++ __NewUnexpected,
+                                __ProviderId, max(__Timeout - ElapsedTime, 0));
+                        true ->
+                            % __Batch2 is smaller than __Batch which means that one of changes, which was
+                            % expected not to occur, actually occurred
                             __Args = [
                                 {module, ?MODULE},
                                 {line, ?LINE}
@@ -227,9 +234,11 @@ all() ->
                     end
             after
                 __TimeoutInMillis ->
+                    % resend these entries that were unexpected
+                    self() ! ?HARVEST_METADATA(__SpaceId, __Destination, __Unexpected, __ProviderId),
                     ok
             end
-        end)(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout)
+        end)(ExpSpaceId, ExpDestination, ExpBatch, [], ExpProviderId, Timeout)
     )).
 
 -define(INDEX(N), <<"index", (integer_to_binary(N))/binary>>).
@@ -249,27 +258,38 @@ all() ->
 %%% Test function
 %%%====================================================================
 
-harvest_space_doc(Config) ->
+harvest_space_doc_and_do_not_harvest_trash_doc(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID1),
-    {ok, FileId} = file_id:guid_to_objectid(SpaceGuid),
+    TrashGuid = fslogic_uuid:spaceid_to_trash_dir_guid(?SPACE_ID1),
+    {ok, SpaceFileId} = file_id:guid_to_objectid(SpaceGuid),
+    {ok, TrashFileId} = file_id:guid_to_objectid(TrashGuid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
     ProviderId2 = ?PROVIDER_ID(Worker2),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
+        <<"fileId">> => SpaceFileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => ?SPACE_NAME1,
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+    
+    % trash doc should not be harvested
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => TrashFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => ?TRASH_DIR_NAME,
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
 
     % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
-        <<"fileId">> => FileId,
+        <<"fileId">> => SpaceFileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => ?SPACE_NAME1,
         <<"operation">> => <<"submit">>,
@@ -1440,10 +1460,17 @@ sort_batch(Batch) ->
         (#{<<"fileId">> := FileId1}, #{<<"fileId">> := FileId2}) -> FileId1 =< FileId2
     end, Batch).
 
-subtract_sorted_batches(B1, []) ->
-    B1;
-subtract_sorted_batches([], _B2) ->
-    [];
+%% @doc this function returns a 2-element tuple in which:
+%%  * the 1st element is a list of expected batch entries that have not been received yet
+%%  * the 2nd element is a list of unexpected batch entries that have been received
+subtract_sorted_batches(ExpectedBatchSorted, ReceivedBatchSorted) ->
+    subtract_sorted_batches(ExpectedBatchSorted, ReceivedBatchSorted, []).
+
+
+subtract_sorted_batches(B1, [], UnexpectedReversed) ->
+    {B1, lists:reverse(UnexpectedReversed)};
+subtract_sorted_batches([], B2, RestReversed) ->
+    {[], lists:reverse(RestReversed) ++ B2};
 subtract_sorted_batches([#{
     <<"fileId">> := FileId,
     <<"operation">> := <<"submit">>,
@@ -1456,15 +1483,15 @@ subtract_sorted_batches([#{
     <<"payload">> := Payload,
     <<"spaceId">> := SpaceId,
     <<"fileName">> := FileName
-} | T2]) ->
-    subtract_sorted_batches(T, T2);
+} | T2], UnexpectedReversed) ->
+    subtract_sorted_batches(T, T2, UnexpectedReversed);
 subtract_sorted_batches([#{
     <<"fileId">> := FileId,
     <<"operation">> := <<"delete">>
 } | T], [#{
     <<"fileId">> := FileId,
     <<"operation">> := <<"delete">>
-} | T2]) ->
-    subtract_batches(T, T2);
-subtract_sorted_batches(B1, [_H | T2]) ->
-    subtract_batches(B1, T2).
+} | T2], UnexpectedReversed) ->
+    subtract_sorted_batches(T, T2, UnexpectedReversed);
+subtract_sorted_batches(B1, [H | T2], UnexpectedReversed) ->
+    subtract_sorted_batches(B1, T2, [H | UnexpectedReversed]).

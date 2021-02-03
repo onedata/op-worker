@@ -27,9 +27,11 @@
     get_spaces/0,
     get_space_details/1,
     get_space_local_storages/1,
+    get_space_capacity_usage/1,
     get_autocleaning_status/1,
     get_support_size/1,
     get_space_providers/1,
+    supports_space/1,
     support_space/3,
     revoke_space_support/1,
 
@@ -96,6 +98,11 @@ get_space_local_storages(SpaceId) ->
     rpc_api:space_logic_get_storages(SpaceId).
 
 
+-spec get_space_capacity_usage(od_space:id()) -> integer().
+get_space_capacity_usage(SpaceId) ->
+    space_quota:current_size(SpaceId).
+
+
 -spec get_autocleaning_status(od_space:id()) -> map().
 get_autocleaning_status(SpaceId) ->
     rpc_api:autocleaning_status(SpaceId).
@@ -109,6 +116,11 @@ get_support_size(SpaceId) ->
 -spec get_space_providers(od_space:id()) -> {ok, [od_provider:id()]}.
 get_space_providers(SpaceId) ->
     space_logic:get_provider_ids(SpaceId).
+
+
+-spec supports_space(od:space_id()) -> boolean().
+supports_space(SpaceId) ->
+    provider_logic:supports_space(SpaceId).
 
 
 -spec support_space(storage:id(), tokens:serialized(), SupportSize :: integer()) -> {ok, od_space:id()} | errors:error().

@@ -14,6 +14,7 @@
 
 -behaviour(traverse_behaviour).
 
+-include("tree_traverse.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -727,7 +728,11 @@ build_traverse_tree(Worker, SessId, Dir, Num) ->
 do_master_job(Job, TaskID) ->
     tree_traverse:do_master_job(Job, TaskID).
 
-do_slave_job({#document{value = #file_meta{name = Name}}, TraverseInfo}, _TaskID) ->
+do_slave_job(#tree_traverse_slave{
+    file_ctx = FileCtx,
+    traverse_info = TraverseInfo
+}, _TaskID) ->
+    {#document{value = #file_meta{name = Name}}, _} = file_ctx:get_file_doc(FileCtx),
     TraverseInfo ! {slave, binary_to_integer(Name)},
     ok.
 

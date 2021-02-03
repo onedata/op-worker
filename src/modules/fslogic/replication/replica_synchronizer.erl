@@ -569,7 +569,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
         {_, NewRefs, _} = lists:unzip3(NewTransfers),
         case ExistingRefs ++ NewRefs of
             [] ->
-                FileLocation = location_and_link_utils:get_local_blocks_and_fill_location_gaps([Block],
+                FileLocation = fslogic_location:get_local_blocks_and_fill_location_gaps([Block],
                     fslogic_cache:get_local_location(), fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()
                 ),
                 {ChangeOffset, ChangeEnd} = fslogic_location_cache:get_blocks_range(FileLocation, [Block]),
@@ -1456,7 +1456,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
     | {threshold, non_neg_integer()}) -> #file_location_changed{}.
 flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
     #file_location{blocks = FinalBlocks} = Location =
-        location_and_link_utils:get_local_blocks_and_fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
+        fslogic_location:get_local_blocks_and_fill_location_gaps(AllBlocks, fslogic_cache:get_local_location(),
             fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
     {ChangeOffset, ChangeSize} = fslogic_location_cache:get_blocks_range(Location, AllBlocks),
 

@@ -110,7 +110,7 @@ get_file_attr_insecure(UserCtx, FileCtx, Opts) ->
 -spec get_file_attr_and_conflicts_insecure(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts()) ->
     {
         fslogic_worker:fuse_response(),
-        Conflicts :: [{file_meta:uuid(), file_meta:name()}],
+        Conflicts :: file_meta:conflicts(),
         IsDeleted :: boolean()
     }.
 get_file_attr_and_conflicts_insecure(UserCtx, FileCtx, Opts) ->
@@ -186,6 +186,7 @@ get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus) ->
 -spec chmod(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
 chmod(UserCtx, FileCtx0, Mode) ->
+    file_ctx:assert_not_special_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, owner]
@@ -463,14 +464,16 @@ get_masked_private_attrs(ShareId, FileCtx, #document{
 ) ->
     {
         file_meta:name(),
-        ConflictingFiles :: [{file_meta:uuid(), file_meta:name()}],
+        ConflictingFiles :: file_meta:conflicts(),
         file_ctx:ctx()
     }.
 resolve_file_name(UserCtx, FileDoc, FileCtx0, <<_/binary>> = ParentGuid, resolve_name_conflicts) ->
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
+    ProviderId = file_meta:get_provider_id(FileDoc),
+    {ok, FileUuid} = file_meta:get_uuid(FileDoc),
 
-    case file_meta:check_name(ParentUuid, FileName, FileDoc) of
+    case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId) of
         {conflicting, ExtendedName, ConflictingFiles} ->
             {ExtendedName, ConflictingFiles, FileCtx1};
         _ ->

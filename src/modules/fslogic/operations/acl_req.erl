@@ -48,6 +48,7 @@ get_acl(UserCtx, FileCtx0) ->
 -spec set_acl(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
     fslogic_worker:provider_response().
 set_acl(UserCtx, FileCtx0, Acl) ->
+    file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_acl]
@@ -62,6 +63,7 @@ set_acl(UserCtx, FileCtx0, Acl) ->
 -spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 remove_acl(UserCtx, FileCtx0) ->
+    file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_acl]
