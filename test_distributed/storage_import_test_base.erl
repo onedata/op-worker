@@ -5571,7 +5571,6 @@ time_warp_between_scans_test(Config) ->
     RDWRStorage = get_rdwr_storage(Config, W1),
 
     %% Create file on storage
-    timer:sleep(timer:seconds(1)),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
     ok = sd_test_utils:create_file(W1, SDHandle, 8#664),
     enable_initial_scan(Config, ?SPACE_ID),
@@ -5585,16 +5584,11 @@ time_warp_between_scans_test(Config) ->
     #{<<"scanStopTime">> := ScanStopTimeMillis} = ?assertMonitoring(W1, #{
         <<"scans">> => 1,
         <<"created">> => 1,
-        <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0,
@@ -5635,7 +5629,6 @@ time_warp_during_scan_test(Config) ->
     TestPid = self(),
 
     %% Create file on storage
-    timer:sleep(timer:seconds(1)),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
     ok = sd_test_utils:create_file(W1, SDHandle, 8#664),
 
@@ -5665,16 +5658,11 @@ time_warp_during_scan_test(Config) ->
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
         <<"created">> => 1,
-        <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"unmodified">> => 0,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0,
