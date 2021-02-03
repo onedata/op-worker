@@ -751,7 +751,7 @@ time_warp_test(Config) ->
 
     FilesNum = 100,
     FileSize = 10,
-    Target = 0,
+    Target = 10,
     Threshold = FilesNum * FileSize + 1,
 
     DirName = <<"dir">>,
@@ -765,6 +765,7 @@ time_warp_test(Config) ->
     ExtraFileSize = 1,
     EG = write_file(W2, SessId2, ?FILE_PATH(ExtraFile), ExtraFileSize),
     TotalSize = FilesNum * FileSize + ExtraFileSize,
+    BytesToRelease = TotalSize - Target,
 
     enable_file_popularity(W1, ?SPACE_ID),
     lists:foreach(fun(G) ->
@@ -802,13 +803,17 @@ time_warp_test(Config) ->
     ?assertRunFinished(W1, ARId),
     StartTimeIso8601 = time:seconds_to_iso8601(StartTimeSeconds),
     % stop time should be equal to start time as it cannot be lower
-    ?assertMatch({ok, #{
-        released_bytes := TotalSize,
-        bytes_to_release := TotalSize,
-        status := ?COMPLETED,
-        started_at := StartTimeIso8601,
-        stopped_at := StartTimeIso8601
-    }}, get_run_report(W1, ARId), ?ATTEMPTS).
+    ?assertRunFinished(W1, ARId),
+    ?assertEqual(true, begin
+        {ok, #{
+            released_bytes := ReleasedBytes,
+            bytes_to_release := BytesToRelease,
+            status := ?COMPLETED,
+            started_at := StartTimeIso8601,
+            stopped_at := StartTimeIso8601
+        }} = get_run_report(W1, ARId),
+        BytesToRelease =< ReleasedBytes
+    end, ?ATTEMPTS).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
