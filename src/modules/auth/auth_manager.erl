@@ -46,7 +46,7 @@
 ]).
 
 -type access_token() :: tokens:serialized().
--type consumer_token() :: undefined | tokens:serialized().
+-type consumer_token() :: undefined | provider_identity_token | tokens:serialized().
 -type client_tokens() :: #client_tokens{}.
 
 % Record containing access token for user authorization in OZ.
@@ -158,7 +158,7 @@ credentials_to_gs_auth_override(#token_credentials{
         client_auth = {token, AccessToken},
         peer_ip = PeerIp,
         interface = Interface,
-        consumer_token = ConsumerToken,
+        consumer_token = fetch_provider_identity_token_if_needed(ConsumerToken),
         data_access_caveats_policy = DataAccessCaveatsPolicy
     }.
 
@@ -192,7 +192,7 @@ acquire_offline_user_access_token(UserId, #token_credentials{
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
     token_logic:acquire_offline_user_access_token(
-        UserId, AccessToken, ConsumerToken,
+        UserId, AccessToken, fetch_provider_identity_token_if_needed(ConsumerToken),
         PeerIp, Interface, DataAccessCaveatsPolicy
     ).
 
@@ -251,7 +251,7 @@ verify_token_credentials(#token_credentials{
         % required to extract caveats, plus serves as a sanity check of token structure
         Token = try_to_deserialize_token(AccessToken),
         case token_logic:verify_access_token(
-            AccessToken, ConsumerToken,
+            AccessToken, fetch_provider_identity_token_if_needed(ConsumerToken),
             PeerIp, Interface, DataAccessCaveatsPolicy
         ) of
             {ok, Subject, TokenTTL} ->
@@ -305,3 +305,13 @@ ensure_subject_is_a_supported_user(?SUB(user, UserId)) ->
     end;
 ensure_subject_is_a_supported_user(_) ->
     throw(?ERROR_TOKEN_SUBJECT_INVALID).
+
+
+%% @private
+-spec fetch_provider_identity_token_if_needed(consumer_token()) ->
+    undefined | tokens:serialized().
+fetch_provider_identity_token_if_needed(provider_identity_token) ->
+    {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
+    ProviderIdentityToken;
+fetch_provider_identity_token_if_needed(ConsumerToken) ->
+    ConsumerToken.

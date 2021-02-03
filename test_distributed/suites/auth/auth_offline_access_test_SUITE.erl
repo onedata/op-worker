@@ -41,6 +41,8 @@ all() -> [
 -define(HOUR, 3600).
 -define(DAY, 24 * ?HOUR).
 
+-define(OFFLINE_ACCESS_TOKEN_TTL, 7 * ?DAY).
+
 -define(NODE, hd(oct_background:get_provider_nodes(krakow))).
 -define(ATTEMPTS, 30).
 
@@ -144,26 +146,26 @@ offline_session_should_properly_react_to_time_warps_test(_Config) ->
     ?assertMatch(?ERROR_TOKEN_INVALID, get_offline_session_id(JobId)),
     force_session_validity_check(SessionId),
     ?assertEqual(false, session_exists(SessionId), ?ATTEMPTS),
-    ?assert(offline_credentials_exists(JobId)),
+    ?assert(offline_credentials_exist(JobId)),
 
     % close_session hasn't been called yet, it is still possible to recreate session
     % if backward time warp happens
     time_test_utils:simulate_seconds_passing(-3 * ?DAY),
     ?assertMatch({ok, SessionId}, get_offline_session_id(JobId), ?ATTEMPTS),
     ?assertEqual(true, session_exists(SessionId)),
-    ?assertEqual(true, offline_credentials_exists(JobId)),
+    ?assertEqual(true, offline_credentials_exist(JobId)),
 
     % If `close_session` is called the session is terminated and credentials removed even
     % if token has not expired yet
     close_offline_session(JobId),
     ?assertEqual(false, session_exists(SessionId), ?ATTEMPTS),
-    ?assertEqual(false, offline_credentials_exists(JobId)),
+    ?assertEqual(false, offline_credentials_exist(JobId)),
 
     % After offline session credentials are deleted it should be impossible to
     % recreate offline session
     ?assertMatch(?ERROR_NOT_FOUND, get_offline_session_id(JobId)),
     ?assertEqual(false, session_exists(SessionId)),
-    ?assertEqual(false, offline_credentials_exists(JobId)),
+    ?assertEqual(false, offline_credentials_exist(JobId)),
 
     ok.
 
@@ -230,8 +232,8 @@ get_session_doc(SessionId) ->
 
 
 %% @private
--spec offline_credentials_exists(offline_access_credentials:id()) -> boolean().
-offline_credentials_exists(JobId) ->
+-spec offline_credentials_exist(offline_access_credentials:id()) -> boolean().
+offline_credentials_exist(JobId) ->
     case rpc:call(?NODE, offline_access_credentials, get, [JobId]) of
         {ok, _} -> true;
         ?ERROR_NOT_FOUND -> false
@@ -270,8 +272,8 @@ init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "auth_tests",
         envs = [
-            {oz_worker, oz_worker, [{offline_access_token_ttl, 604800}]},  % 1 week
-            {op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}
+            {oz_worker, oz_worker, [{offline_access_token_ttl, ?OFFLINE_ACCESS_TOKEN_TTL}]},
+            {op_worker, op_worker, [{fuse_session_grace_period_seconds, ?DAY}]}
         ]
     }).
 

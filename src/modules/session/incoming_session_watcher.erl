@@ -231,16 +231,12 @@ handle_info(?CHECK_SESSION_VALIDITY, #state{session_type = provider_incoming} = 
     {noreply, State, hibernate};
 handle_info(?CHECK_SESSION_VALIDITY, #state{
     session_id = SessionId,
-    session_type = SessionType,
-    credentials = TokenCredentials0,
+    credentials = TokenCredentials,
     validity_checkup_timer = OldTimer
 } = State) ->
     cancel_auth_validity_checkup(OldTimer),
 
-    TokenCredentials1 = ensure_credentials_up_to_date_if_offline_session(
-        SessionType, TokenCredentials0
-    ),
-    case check_auth_validity(TokenCredentials1, State) of
+    case check_auth_validity(TokenCredentials, State) of
         {true, TokenTTL} ->
             NewState = State#state{
                 validity_checkup_timer = schedule_auth_validity_checkup(TokenTTL)
@@ -439,20 +435,6 @@ cancel_auth_validity_checkup(undefined) ->
     ok;
 cancel_auth_validity_checkup(ValidityCheckupTimer) ->
     erlang:cancel_timer(ValidityCheckupTimer, [{async, true}, {info, false}]).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures consumer token (this provider identity token) is up to date in case
-%% of 'offline' session. In other cases the responsibility to keep credentials
-%% up to date belongs to remote peer.
-%% @end
-%%--------------------------------------------------------------------
-ensure_credentials_up_to_date_if_offline_session(offline, TokenCredentials) ->
-    offline_access_manager:ensure_consumer_token_up_to_date(TokenCredentials);
-ensure_credentials_up_to_date_if_offline_session(_SessionType, TokenCredentials) ->
-    TokenCredentials.
 
 
 %% @private
