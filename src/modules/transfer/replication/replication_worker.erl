@@ -87,11 +87,17 @@ view_querying_chunk_size() ->
 %%--------------------------------------------------------------------
 -spec enqueue_data_transfer(file_ctx:ctx(), transfer_params(),
     undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
-enqueue_data_transfer(FileCtx, TransferParams, RetriesLeft, NextRetry) ->
-    RetriesLeft2 = utils:ensure_defined(RetriesLeft, max_transfer_retries()),
-    worker_pool:cast(?REPLICATION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
-        FileCtx, TransferParams, RetriesLeft2, NextRetry
-    )),
+enqueue_data_transfer(FileCtx, TransferParams = #transfer_params{transfer_id = TransferId}, RetriesLeft, NextRetry) ->
+    case file_ctx:is_trash_dir_const(FileCtx) of
+        true ->
+            % ignore trash directory
+            transfer:increment_files_processed_counter(TransferId);
+        false ->
+            RetriesLeft2 = utils:ensure_defined(RetriesLeft, max_transfer_retries()),
+            worker_pool:cast(?REPLICATION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
+                FileCtx, TransferParams, RetriesLeft2, NextRetry
+            ))
+    end,
     ok.
 
 %%--------------------------------------------------------------------

@@ -77,4 +77,7 @@
 -define(SHARE_UID, ?UID_MAX-1).
 -define(SHARE_GID, ?SHARE_UID).
 
+% Trash associated macros
+-define(TRASH_DIR_NAME, <<".trash">>).
+
 -endif.

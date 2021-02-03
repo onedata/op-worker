@@ -27,6 +27,9 @@
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
+% exported for RPC
+-export([schedule_init_paths_caches/1]).
+
 %%%===================================================================
 %%% Types
 %%%===================================================================
@@ -149,7 +152,7 @@ supervisor_children_spec() ->
 -spec init_paths_caches(od_space:id() | all) -> ok.
 init_paths_caches(Space) ->
     lists:foreach(fun(Node) ->
-        rpc:call(Node, erlang, send_after, [0, fslogic_worker, {sync_timer, ?INIT_PATHS_CACHES(Space)}])
+        rpc:call(Node, ?MODULE, schedule_init_paths_caches, [Space])
     end, consistent_hashing:get_all_nodes()).
 
 %%%===================================================================
@@ -164,13 +167,14 @@ init_paths_caches(Space) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    location_and_link_utils:init_paths_cache_group(),
-    erlang:send_after(0, self(), {sync_timer, ?INIT_PATHS_CACHES(all)}),
+    paths_cache:init_group(),
+    schedule_init_paths_caches(all),
 
     transfer:init(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
+    tree_deletion_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
 
     schedule_invalidate_permissions_cache(),
@@ -250,7 +254,7 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
 handle(?INIT_PATHS_CACHES(Space)) ->
-    location_and_link_utils:init_paths_caches(Space);
+    paths_cache:init_caches(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -268,6 +272,7 @@ cleanup() ->
     autocleaning_view_traverse:stop_pool(),
     file_registration:stop_pool(),
     replica_deletion_master:stop_workers_pool(),
+    tree_deletion_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
     ok.
 
@@ -486,6 +491,8 @@ handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime =
     attr_req:update_times(UserCtx, FileCtx, ATime, MTime, CTime);
 handle_file_request(UserCtx, #delete_file{silent = Silent}, FileCtx) ->
     delete_req:delete(UserCtx, FileCtx, Silent);
+handle_file_request(UserCtx, #move_to_trash{emit_events = EmitEvents}, FileCtx) ->
+    delete_req:delete_using_trash(UserCtx, FileCtx, EmitEvents);
 handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCtx) ->
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #get_file_children{
@@ -692,9 +699,12 @@ schedule_restart_autocleaning_runs() ->
 schedule_periodical_spaces_autocleaning_check() ->
     schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL).
 
+schedule_init_paths_caches(Space) ->
+    schedule(?INIT_PATHS_CACHES(Space), 0).
+
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
-    erlang:send_after(Timeout, self(), {sync_timer, Request}),
+    erlang:send_after(Timeout, ?MODULE, {sync_timer, Request}),
     ok.
 
 -spec invalidate_permissions_cache() -> ok.
