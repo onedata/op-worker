@@ -227,7 +227,7 @@ is_fully_replicated(_, _) ->
     location_changes_description().
 blocks_changes_to_location_changes_description(Location, ChangeDescription) ->
     lists:map(fun({BlocksTriggeringChange, BlocksSaved}) ->
-        LocationWithFilledGaps = location_and_link_utils:fill_location_gaps(BlocksTriggeringChange, Location, BlocksSaved,
+        LocationWithFilledGaps = fslogic_location:fill_location_gaps(BlocksTriggeringChange, Location, BlocksSaved,
             fslogic_cache:get_all_locations(), fslogic_cache:get_uuid()),
         {EventOffset, EventSize} = fslogic_location_cache:get_blocks_range(LocationWithFilledGaps, BlocksTriggeringChange),
         {LocationWithFilledGaps, EventOffset, EventSize}

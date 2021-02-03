@@ -641,17 +641,13 @@ gather_not_matching_statuses_on_all_workers(Config, Guids, QosList, ExpectedStat
         {error, _} -> ExpectedStatus;
         _ -> {ok, ExpectedStatus}
     end, 
-    lists:filtermap(fun(Worker) ->
-        Res = lists:filtermap(fun(Guid) ->
+    lists:flatmap(fun(Worker) ->
+        lists:filtermap(fun(Guid) ->
             case lfm_proxy:check_qos_status(Worker, SessId(Worker), QosList, {guid, Guid}) of
                 ExpectedStatusMatcher -> false;
                 NotExpectedStatus -> {true, {Worker, Guid, NotExpectedStatus}}
             end
-        end, Guids),
-        case Res of
-            [] -> false;
-            _ -> {true, Res}
-        end
+        end, Guids)
     end, Workers).
 
 %%%====================================================================

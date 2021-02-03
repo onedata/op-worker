@@ -645,7 +645,7 @@ delete_dir(Config) ->
     ?assert(object_exists(Config, "/")),
     {ok, Code3, _Headers3, Response3} =
         do_request(Workers, "/", delete, RequestHeaders3, []),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EPERM)),
     ?assertMatch(ExpRestError, {Code3, json_utils:decode(Response3)}),
     ?assert(object_exists(Config, "/")).
 %%------------------------------

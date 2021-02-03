@@ -93,6 +93,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     IsManualImport = maps:get(manual, Info, false),
     case file_ctx:is_root_dir_const(ParentCtx) of
         true ->
@@ -107,12 +108,12 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                 false -> {false, undefined, FileName}
             end,
 
-            case link_utils:try_to_resolve_child_link(FileBaseName, ParentCtx) of
+            case canonical_path:to_uuid(ParentUuid, FileBaseName) of
                 {error, not_found} ->
                     % Link from Parent to FileBaseName is missing.
-                    % We must check deletion_link to ensure that file may be synced.
-                    % Deletion links are removed if and only if file was successfully deleted from storage.
-                    case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+                    % We must check deletion marker to ensure that file may be synced.
+                    % Deletion markers are removed if and only if file was successfully deleted from storage.
+                    case deletion_marker:check(ParentUuid, FileName) of
                         {error, not_found} when HasSuffix =:= false ->
                             % We must ensure whether file is still on storage at the very moment
                             % to avoid stat/delete race.
@@ -133,19 +134,18 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                                             case storage_sync_info:get_guid(SSIDoc) of
                                                 undefined ->
                                                     maybe_import_file(StorageFileCtx, Info);
-                                                Guid ->
-                                                    FileCtx = file_ctx:new_by_guid(Guid),
-                                                    check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info)
+                                                _Guid ->
+                                                    {?FILE_UNMODIFIED, undefined, StorageFileCtx}
                                             end
                                     end
                             end;
-                        % It's impossible that deletion link is not found and HasSuffix == true,
+                        % It's impossible that deletion marker is not found and HasSuffix == true,
                         % which is proved below:
                         %
                         % Assumptions:
                         %  - file with name FileName is processed
                         %  - link from Parent to FileBaseName is not found
-                        %  - deletion link from Parent to Filename is not found
+                        %  - deletion marker from Parent to Filename is not found
                         % Thesis:
                         % - FileName == FileBaseName (FileName has no suffix)
                         %
@@ -153,22 +153,22 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                         % Let's assume, contradictory to thesis, that:
                         %  - file with name FileName is processed
                         %  - link from Parent to FileBaseName is not found
-                        %  - deletion link from Parent to Filename is not found
+                        %  - deletion marker from Parent to Filename is not found
                         %  - FileName != FileBaseName (FileName has suffix)
                         % File is created on storage with suffix if and only if
                         % file with FileBaseName exists on storage.
                         % It's impossible that such file exists on storage if link from parent
-                        % to FileBaseName is not found and if deletion link from parent to FileName
+                        % to FileBaseName is not found and if deletion marker from parent to FileName
                         % is not found either.
                         % Here we have contradiction which proves the thesis.
                         {ok, _FileUuid} ->
-                            % deletion_link exists, it means that deletion of the file has been scheduled
+                            % deletion marker exists, it means that deletion of the file has been scheduled
                             % we may ignore this file
                             {?FILE_UNMODIFIED, undefined, StorageFileCtx}
                     end;
                 {ok, ResolvedUuid} ->
                     FileUuid2 = utils:ensure_defined(FileUuid, ResolvedUuid),
-                    case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+                    case deletion_marker:check(ParentUuid, FileName) of
                         {error, not_found} ->
                             FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
                             FileCtx = file_ctx:new_by_guid(FileGuid),
@@ -599,7 +599,7 @@ try_to_delete_file(ParentCtx, ChildName) ->
             SpaceId = file_ctx:get_space_id_const(ParentCtx),
             case canonical_path:to_uuid(ParentUuid, ChildName) of
                 {ok, FileUuid} ->
-                    file_meta:delete_child_link(ParentUuid, SpaceId, FileUuid, ChildName);
+                    file_meta_links:delete(ParentUuid, SpaceId, ChildName, FileUuid);
                 {error, not_found} ->
                     ok
             end
@@ -695,7 +695,7 @@ create_file_location(FileUuid, OwnerId, StorageFileCtx) ->
         true -> StGid;
         false -> undefined
     end,
-    ok = location_and_link_utils:create_imported_file_location(SpaceId, StorageId, FileUuid, StorageFileId,
+    ok = fslogic_location:create_imported_file_doc(SpaceId, StorageId, FileUuid, StorageFileId,
         StSize, OwnerId, SyncedGid),
     {ok, StorageFileCtx3}.
 
@@ -758,7 +758,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
                             ?warning(
                                 "Stalled file_meta link ~p from parent ~p pointing to uuid ~p detected. "
                                 "The link will be deleted", [FileName, ParentUuid, FileUuid2]),
-                            ok = file_meta:delete_child_link(ParentUuid, SpaceId, FileUuid2, FileName),
+                            ok = file_meta_links:delete(ParentUuid, SpaceId, FileName, FileUuid2),
                             stalled_link;
                         false ->
                             % FileUuid2 was found in a remote links tree.
@@ -777,7 +777,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
     end,
     case CreationResult of
         {ok, FinalDoc2} ->
-            FileCtx = file_ctx:new_by_doc(FinalDoc2, SpaceId, undefined),
+            FileCtx = file_ctx:new_by_doc(FinalDoc2, SpaceId),
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, true, []),
             {ok, FileCtx};
         stalled_link ->
@@ -809,7 +809,6 @@ create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber) ->
 prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
     Type = file_meta:type(Mode),
     file_meta:new_doc(FileUuid, FileName, Type, Mode band 8#1777, OwnerId, ParentUuid, SpaceId).
-
 
 -spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->
     {ok, storage_file_ctx:ctx()}.
@@ -1006,7 +1005,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
 
         {true, undefined, undefined} when MTime < StMtime ->
             % file created locally and modified on storage
-            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
+            fslogic_location:update_imported_file_doc(FileCtx4, StSize),
             true;
 
         {true, undefined, undefined} ->
@@ -1026,7 +1025,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
         {true, undefined, #document{value = #storage_sync_info{}}} ->
             case (MTime < StMtime) or (Size =/= StSize) of
                 true ->
-                    location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
+                    fslogic_location:update_imported_file_doc(FileCtx4, StSize),
                     true;
                 false ->
                     false
@@ -1039,7 +1038,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
                     case (MTime < StMtime) of
                         true ->
                             % file was modified on storage
-                            location_and_link_utils:update_imported_file_location(FileCtx3, StSize),
+                            fslogic_location:update_imported_file_doc(FileCtx3, StSize),
                             true;
                         false ->
                             % file was modified via onedata
@@ -1067,7 +1066,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
                     case (MTime < StMtime) of
                         true ->
                             %there was modified on storage
-                            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
+                            fslogic_location:update_imported_file_doc(FileCtx4, StSize),
                             true;
                         false ->
                             % file was modified via onedata

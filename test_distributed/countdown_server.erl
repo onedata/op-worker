@@ -231,28 +231,38 @@ handle_cast(?DECREASE_BY_VALUE(Value, CounterId), State = #state{
     node = Node,
     counters = Counters
 }) ->
-    Counter = maps:get(CounterId, Counters),
-    Counter2 = decrease_by_value(Counter, Value),
-    case Counter2#counter.value of
-        0 ->
-            notify_parent(Parent, Node, CounterId, Counter2#counter.data),
-            {noreply, State#state{counters = maps:remove(CounterId, Counters)}};
-        _ ->
-            {noreply, State#state{counters = maps:update(CounterId, Counter2, Counters)}}
+    case maps:get(CounterId, Counters, undefined) of
+        undefined ->
+            % ignore as message was probably intended for countdown_server in previous test which probably failed
+            {noreply, State};
+        Counter ->
+            Counter2 = decrease_by_value(Counter, Value),
+            case Counter2#counter.value of
+                0 ->
+                    notify_parent(Parent, Node, CounterId, Counter2#counter.data),
+                    {noreply, State#state{counters = maps:remove(CounterId, Counters)}};
+                _ ->
+                    {noreply, State#state{counters = maps:update(CounterId, Counter2, Counters)}}
+            end
     end;
 handle_cast(?DECREASE(Data, CounterId), State = #state{
     parent = Parent,
     node = Node,
     counters = Counters
 }) ->
-    Counter = maps:get(CounterId, Counters),
-    Counter2 = decrease_and_save_data(Counter, Data),
-    case Counter2#counter.value of
-        0 ->
-            notify_parent(Parent, Node, CounterId, Counter2#counter.data),
-            {noreply, State#state{counters = maps:remove(CounterId, Counters)}};
-        _ ->
-            {noreply, State#state{counters = maps:update(CounterId, Counter2, Counters)}}
+    case maps:get(CounterId, Counters, undefined) of
+        undefined ->
+            % ignore as message was probably intended for countdown_server in previous test which probably failed
+            {noreply, State};
+        Counter ->
+            Counter2 = decrease_and_save_data(Counter, Data),
+            case Counter2#counter.value of
+                0 ->
+                    notify_parent(Parent, Node, CounterId, Counter2#counter.data),
+                    {noreply, State#state{counters = maps:remove(CounterId, Counters)}};
+                _ ->
+                    {noreply, State#state{counters = maps:update(CounterId, Counter2, Counters)}}
+            end
     end;
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
