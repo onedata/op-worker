@@ -112,9 +112,8 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedS
     RootDirCtx = file_ctx:new_by_guid(RootGuid),
     UserCtx = rpc:call(P1Node, user_ctx, new, [UserSessIdP1]),
 
-    freeze_time_if_applicable(Config, ShouldFreezeTime),
-
     {ok, TaskId} = rpc:call(P1Node, tree_deletion_traverse, start, [RootDirCtx, UserCtx, false, ?SPACE_UUID]),
+    freeze_time_if_applicable(Config, ShouldFreezeTime),
     simulate_passing_time_if_applicable(TimeWarpSecs),
 
     await_traverse_finished(TaskId),
