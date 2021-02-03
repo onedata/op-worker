@@ -42,7 +42,7 @@
 %% Main API
 -export([init/4, init/5, stop/1, run/3, run/4, cancel/2]).
 % Getters API
--export([get_traverse_info/1, set_traverse_info/2, get_task/2, get_sync_info/0]).
+-export([get_traverse_info/1, set_traverse_info/2, get_task/2, get_sync_info/0, get_session_id_for_scheduling_user/2]).
 %% Behaviour callbacks
 -export([do_master_job/2, do_master_job/3, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
@@ -234,6 +234,19 @@ get_sync_info() ->
         local_links_tree_id => Provider
     }.
 
+
+
+-spec get_session_id_for_scheduling_user(master_job() | slave_job() | od_user:id(), id()) -> session:id().
+get_session_id_for_scheduling_user(#tree_traverse{user_id = UserId}, TaskId) ->
+    get_session_id_for_scheduling_user(UserId, TaskId);
+get_session_id_for_scheduling_user(#tree_traverse_slave{user_id = UserId}, TaskId) ->
+    get_session_id_for_scheduling_user(UserId, TaskId);
+get_session_id_for_scheduling_user(?ROOT_USER_ID, _TaskId) ->
+    ?ROOT_SESS_ID;
+get_session_id_for_scheduling_user(_UserId, TaskId) ->
+    {ok, SessId} = offline_access_manager:get_session_id(TaskId),
+    SessId.
+
 %%%===================================================================
 %%% Behaviour callbacks
 %%%===================================================================
@@ -363,20 +376,14 @@ delete_subtree_status_doc(TaskId, Uuid) ->
         NewFileCtx :: file_ctx:ctx(),
         IsLast :: boolean()
     }.
-list_children(#tree_traverse{
+list_children(Job = #tree_traverse{
     file_ctx = FileCtx,
-    user_id = UserId,
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
     batch_size = BatchSize
 }, #{task_id := TaskId}) ->
-    SessionId = case UserId =:= ?ROOT_USER_ID of
-        true -> ?ROOT_SESS_ID;
-        false ->
-            {ok, SessId} = offline_access_manager:get_session_id(TaskId),
-            SessId
-    end,
+    SessionId = get_session_id_for_scheduling_user(Job, TaskId),
     UserCtx = user_ctx:new(SessionId),
     dir_req:get_children_ctxs(UserCtx, FileCtx, 0, BatchSize, Token, LastName, LastTree).
 
@@ -416,10 +423,12 @@ get_child_master_job(MasterJob, ChildCtx) ->
 
 -spec get_child_slave_job(master_job(), file_ctx:ctx()) -> slave_job().
 get_child_slave_job(#tree_traverse{
+    user_id = UserId,
     traverse_info = TraverseInfo,
     track_subtree_status = TrackSubtreeStatus
 }, ChildCtx) ->
     #tree_traverse_slave{
+        user_id = UserId,
         file_ctx = ChildCtx,
         traverse_info = TraverseInfo,
         track_subtree_status = TrackSubtreeStatus

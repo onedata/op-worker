@@ -146,7 +146,7 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedS
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "trash_tests"}).
+    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op-manual-import"}).
 
 end_per_suite(_Config) ->
     hackney:stop(),

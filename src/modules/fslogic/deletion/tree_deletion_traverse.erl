@@ -83,7 +83,12 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
             root_storage_file_basename => filename:basename(StorageFileId)
         }
     },
-    {ok, _} = offline_access_manager:init_session(TaskId, user_ctx:get_credentials(UserCtx)),
+    case user_ctx:is_normal_user(UserCtx) of
+        true ->
+            {ok, _} = offline_access_manager:init_session(TaskId, user_ctx:get_credentials(UserCtx));
+        false ->
+            ok
+    end,
     tree_traverse:run(?POOL_NAME, RootDirCtx2, user_ctx:get_user_id(UserCtx), Options).
 
 
@@ -116,35 +121,37 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job = #tree_traverse{
     file_ctx = FileCtx,
+    user_id = UserId,
     traverse_info = TraverseInfo
 },
     MasterJobArgs = #{task_id := TaskId}
 ) ->
     BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListExtendedInfo, SubtreeProcessingStatus) ->
-        delete_dir_if_subtree_processed(SubtreeProcessingStatus, FileCtx, TaskId, TraverseInfo)
+        delete_dir_if_subtree_processed(SubtreeProcessingStatus, FileCtx, UserId, TaskId, TraverseInfo)
     end,
     tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(#tree_traverse_slave{
+do_slave_job(Job = #tree_traverse_slave{
     file_ctx = FileCtx,
+    user_id = UserId,
     traverse_info = TraverseInfo = #{
         emit_events := EmitEvents
 }}, TaskId) ->
-    {ok, SessionId} = offline_access_manager:get_session_id(TaskId),
+    SessionId = tree_traverse:get_session_id_for_scheduling_user(Job, TaskId),
     UserCtx = user_ctx:new(SessionId),
     delete_req:delete(UserCtx, FileCtx, not EmitEvents),
-    file_processed(FileCtx, TaskId, TraverseInfo).
+    file_processed(FileCtx, UserId, TaskId, TraverseInfo).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %% @private
--spec file_processed(file_ctx:ctx(), id(), info()) -> ok.
-file_processed(FileCtx, TaskId, TraverseInfo = #{root_original_parent_uuid := RootOriginalParentUuid}) ->
-    {ok, SessionId} = offline_access_manager:get_session_id(TaskId),
+-spec file_processed(file_ctx:ctx(), od_user:id(), id(), info()) -> ok.
+file_processed(FileCtx, UserId, TaskId, TraverseInfo = #{root_original_parent_uuid := RootOriginalParentUuid}) ->
+    SessionId = tree_traverse:get_session_id_for_scheduling_user(UserId, TaskId),
     UserCtx = user_ctx:new(SessionId),
     {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
     case file_qos:get_effective(RootOriginalParentUuid) of
@@ -159,26 +166,26 @@ file_processed(FileCtx, TaskId, TraverseInfo = #{root_original_parent_uuid := Ro
     end,
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
-    delete_dir_if_subtree_processed(ParentStatus, ParentFileCtx, TaskId, TraverseInfo).
+    delete_dir_if_subtree_processed(ParentStatus, ParentFileCtx, UserId, TaskId, TraverseInfo).
 
 
 %% @private
--spec delete_dir_if_subtree_processed(tree_traverse_progress:status(), file_ctx:ctx(), id(), info()) -> ok.
-delete_dir_if_subtree_processed(?SUBTREE_PROCESSED, FileCtx, TaskId, TraverseInfo) ->
-    delete_dir(FileCtx, TaskId, TraverseInfo);
-delete_dir_if_subtree_processed(?SUBTREE_NOT_PROCESSED, _FileCtx, _TaskId, _TraverseInfo) ->
+-spec delete_dir_if_subtree_processed(tree_traverse_progress:status(), file_ctx:ctx(), od_user:id(), id(), info()) -> ok.
+delete_dir_if_subtree_processed(?SUBTREE_PROCESSED, FileCtx, UserId, TaskId, TraverseInfo) ->
+    delete_dir(FileCtx, UserId, TaskId, TraverseInfo);
+delete_dir_if_subtree_processed(?SUBTREE_NOT_PROCESSED, _FileCtx, _UserId, _TaskId, _TraverseInfo) ->
     ok.
 
 
 %% @private
--spec delete_dir(file_ctx:ctx(), id(), info()) -> ok.
-delete_dir(FileCtx, TaskId, TraverseInfo = #{
+-spec delete_dir(file_ctx:ctx(), od_user:id(), id(), info()) -> ok.
+delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
     root_guid := RootGuid,
     emit_events := EmitEvents,
     root_original_parent_uuid := RootOriginalParentUuid,
     root_storage_file_basename := RootStorageFileBasename
 }) ->
-    {ok, SessionId} = offline_access_manager:get_session_id(TaskId),
+    SessionId = tree_traverse:get_session_id_for_scheduling_user(UserId, TaskId),
     UserCtx = user_ctx:new(SessionId),
     delete_req:delete(UserCtx, FileCtx, not EmitEvents),
     tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
@@ -188,5 +195,5 @@ delete_dir(FileCtx, TaskId, TraverseInfo = #{
             % there will be no need to delete deletion_marker here, it may be deleted in fslogic_delete
             deletion_marker:remove_by_name(RootOriginalParentUuid, RootStorageFileBasename);
         false ->
-            file_processed(FileCtx, TaskId, TraverseInfo)
+            file_processed(FileCtx, UserId, TaskId, TraverseInfo)
     end.
