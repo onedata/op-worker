@@ -17,7 +17,7 @@
 
 %% API
 -export([
-    get_cert_chain_pems/1,
+    get_cert_chain_ders/1,
     gs_protocol_supported_versions/1,
 
     get_provider_id/1,
@@ -36,9 +36,9 @@
 %%%===================================================================
 
 
--spec get_cert_chain_pems(node()) -> [public_key:der_encoded()] | no_return().
-get_cert_chain_pems(Node) ->
-    ?assertMatch([_ | _], rpc:call(Node, https_listener, get_cert_chain_pems, [])).
+-spec get_cert_chain_ders(node()) -> [public_key:der_encoded()] | no_return().
+get_cert_chain_ders(Node) ->
+    ?assertMatch([_ | _], rpc:call(Node, https_listener, get_cert_chain_ders, [])).
 
 
 -spec gs_protocol_supported_versions(node()) -> [gs_protocol:protocol_version()].
