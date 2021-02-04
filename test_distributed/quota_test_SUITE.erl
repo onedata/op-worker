@@ -74,7 +74,7 @@ all() ->
         remove_file_on_remote_provider_should_unlock_space,
         replicate_file_smaller_than_quota_should_not_fail,
         % TODO uncomment after fixing rtransfer not respecting quota
-%        replicate_file_bigger_than_quota_should_fail,
+        replicate_file_bigger_than_quota_should_fail,
 
         % gui upload tests
         quota_updated_on_gui_upload,
@@ -646,7 +646,7 @@ write_to_file(Worker, SessionId, FileKey, Offset, Data) ->
     {ok, FileHandle} = open_file(Worker, SessionId, FileKey, write),
     Result = lfm_proxy:write(Worker, FileHandle, Offset, Data),
     lfm_proxy:fsync(Worker, FileHandle),
-    timer:sleep(500), %% @todo: remove after fixing fsync
+    %% @todo: remove after fixing fsync
     lfm_proxy:close(Worker, FileHandle),
     Result.
 
@@ -665,7 +665,7 @@ truncate(Worker, SessionId, FileKey, Size) ->
     {ok, FileHandle} = open_file(Worker, SessionId, FileKey, write),
     Result = lfm_proxy:truncate(Worker, SessionId, FileKey, Size),
     lfm_proxy:fsync(Worker, FileHandle),
-    timer:sleep(500), %% @todo: remove after fixing fsync
+    %@todo: remove after fixing fsync
     lfm_proxy:close(Worker, FileHandle),
     Result.
 

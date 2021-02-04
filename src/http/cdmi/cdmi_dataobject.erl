@@ -352,7 +352,7 @@ get_file_info(RequestedInfo, #cdmi_req{
                 _ ->
                     Acc#{<<"valuerange">> => iolist_to_binary(
                         [<<"0-">>, integer_to_binary(FileSize - 1)]
-                    )} %todo fix 0--1 when file is empty
+                    )} %TODO VFS-7289 fix 0--1 when file is empty
             end;
         (_, Acc) ->
             Acc

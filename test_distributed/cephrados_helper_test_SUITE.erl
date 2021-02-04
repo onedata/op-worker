@@ -80,9 +80,7 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
     {parameters, Params}
 ]}).
 
-% TODO - change to 10 when seg fault is fixed
 -define(REPEATS, 10).
-% TODO - change to 5 when seg fault is fixed
 -define(TEST_SIZE_BASE, 5).
 
 %%%===================================================================

@@ -296,10 +296,10 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
             % Spawn processes that execute both test functions
             spawn_workers(Dirs, Fun, Fun2, SpawnBegLevel, SpawnEndLevel),
             LastLevelDirs = math:pow(DirsPerParent, DirLevel - SpawnBegLevel + 1),
-            DirsToDo = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
+            DirsToProcess = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
             % Gather test results
             GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}},
-                {other, {0,0}}], round(DirsToDo + LastLevelDirs)),
+                {other, {0,0}}], round(DirsToProcess + LastLevelDirs)),
 
             % Calculate and log output
             NewLevels = lists:foldl(fun
