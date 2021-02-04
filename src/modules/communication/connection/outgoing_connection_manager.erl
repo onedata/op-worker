@@ -40,14 +40,14 @@
 ]).
 
 % Definitions of renewal intervals for provider connections.
--define(INITIAL_RENEWAL_INTERVAL, op_worker:get_env(
-    conn_manager_initial_backoff_interval, 2000  % 2 seconds
-)).
--define(RENEWAL_INTERVAL_BACKOFF_RATE, op_worker:get_env(
-    conn_manager_backoff_interval_rate, 1.2
+-define(MIN_RENEWAL_INTERVAL, op_worker:get_env(
+    conn_manager_min_backoff_interval, 2000  % 2 seconds
 )).
 -define(MAX_RENEWAL_INTERVAL, op_worker:get_env(
     conn_manager_max_backoff_interval, 180000  % 3 minutes
+)).
+-define(RENEWAL_INTERVAL_BACKOFF_RATE, op_worker:get_env(
+    conn_manager_backoff_interval_rate, 1.2
 )).
 
 % how often logs appear when waiting for peer provider connection
@@ -68,7 +68,7 @@
     connected = #{} :: #{pid() => host()},
 
     renewal_timer = undefined :: undefined | reference(),
-    renewal_interval = ?INITIAL_RENEWAL_INTERVAL :: pos_integer(),
+    renewal_interval = 0 :: non_neg_integer(),
 
     is_stopping = false :: boolean()
 }).
@@ -148,7 +148,7 @@ handle_cast(?HANDSHAKE_SUCCEEDED(ConnPid), #state{
             State#state{
                 connecting = LeftoverConnecting,
                 connected = Connected#{ConnPid => Host},
-                renewal_interval = ?INITIAL_RENEWAL_INTERVAL
+                renewal_interval = 0
             };
         error ->
             State
@@ -255,26 +255,26 @@ code_change(_OldVsn, State, _Extra) ->
 renew_connections(#state{
     peer_id = PeerId,
     session_id = SessionId,
-    renewal_timer = undefined,
-    renewal_interval = Interval
-} = State) ->
-    NewState = try
-        renew_connections_insecure(State)
+    renewal_timer = undefined
+} = State0) ->
+    State2 = try
+        renew_connections_insecure(State0)
     catch Type:Reason ->
+        State1 = schedule_next_renewal(State0),
         ?debug("Failed to establish connection with provider ~ts due to ~p:~p.~n"
                "Next retry not sooner than ~B s.", [
             provider_logic:to_printable(PeerId), Type, Reason,
-            Interval div 1000
+            State1#state.renewal_interval div 1000
         ]),
         utils:throttle({?MODULE, SessionId}, ?CONNECTION_AWAIT_LOG_INTERVAL_SEC, fun() ->
-            log_error(State, Type, Reason)
+            log_error(State1, Type, Reason)
         end),
-        schedule_next_renewal(State)
+        State1
     end,
 
-    case failed_connection_attempts_limit_exceeded(NewState) of
-        true -> terminate_session(NewState);
-        false -> NewState
+    case failed_connection_attempts_limit_exceeded(State2) of
+        true -> terminate_session(State2);
+        false -> State2
     end;
 renew_connections(State) ->
     State.
@@ -322,29 +322,25 @@ renew_connections_insecure(#state{
 -spec schedule_next_renewal(state()) -> state().
 schedule_next_renewal(#state{
     renewal_timer = undefined,
-    renewal_interval = Interval
+    renewal_interval = PrevInterval
 } = State) ->
     MaxRenewalInterval = ?MAX_RENEWAL_INTERVAL,
 
-    case Interval =< MaxRenewalInterval of
+    case PrevInterval >= MaxRenewalInterval of
         true ->
-            State#state{
-                renewal_timer = erlang:send_after(Interval, self(), ?RENEW_CONNECTIONS_REQ),
-                renewal_interval = next_renewal_interval(Interval, MaxRenewalInterval)
-            };
+            State;
         false ->
-            State
+            CurrInterval = min(
+                max(ceil(PrevInterval * ?RENEWAL_INTERVAL_BACKOFF_RATE), ?MIN_RENEWAL_INTERVAL),
+                MaxRenewalInterval
+            ),
+            State#state{
+                renewal_timer = erlang:send_after(CurrInterval, self(), ?RENEW_CONNECTIONS_REQ),
+                renewal_interval = CurrInterval
+            }
     end;
 schedule_next_renewal(State) ->
     State.
-
-
-%% @private
--spec next_renewal_interval(pos_integer(), pos_integer()) -> pos_integer().
-next_renewal_interval(MaxRenewalInterval, MaxRenewalInterval) ->
-    MaxRenewalInterval + 1;
-next_renewal_interval(Interval, MaxRenewalInterval) ->
-    min(round(Interval * ?RENEWAL_INTERVAL_BACKOFF_RATE), MaxRenewalInterval).
 
 
 %% @private
@@ -353,9 +349,9 @@ failed_connection_attempts_limit_exceeded(#state{
     connecting = Connecting,
     connected = Connected,
     renewal_timer = undefined,
-    renewal_interval = Interval
+    renewal_interval = PrevInterval
 }) when map_size(Connecting) == 0, map_size(Connected) == 0 ->
-    Interval > ?MAX_RENEWAL_INTERVAL;
+    PrevInterval >= ?MAX_RENEWAL_INTERVAL;
 failed_connection_attempts_limit_exceeded(_) ->
     false.
 

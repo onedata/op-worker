@@ -43,7 +43,7 @@ all() -> [
     crashed_connection_should_be_restarted_test
 ].
 
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 40).
 
 
 %%%===================================================================
@@ -213,9 +213,9 @@ set_conn_manager_backoff_parameters(Node) ->
     lists:foreach(fun({Env, Val}) ->
         ok = rpc:call(Node, application, set_env, [op_worker, Env, Val])
     end, [
-        {conn_manager_initial_backoff_interval, 2000},
-        {conn_manager_backoff_interval_rate, 2},
-        {conn_manager_max_backoff_interval, 10000}
+        {conn_manager_min_backoff_interval, 2000},
+        {conn_manager_max_backoff_interval, 10000},
+        {conn_manager_backoff_interval_rate, 2}
     ]).
 
 
