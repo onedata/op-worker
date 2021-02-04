@@ -27,7 +27,7 @@
     offline_session_creation_for_guest_should_fail_test/1,
     offline_session_should_work_as_any_other_session_test/1,
     offline_session_should_internally_refresh_provider_identity_token/1,
-    offline_token_should_be_renew_if_needed_test/1,
+    offline_token_should_be_renewed_if_needed_test/1,
     offline_session_should_properly_react_to_time_warps_test/1
 ]).
 
@@ -36,7 +36,7 @@ all() -> [
     offline_session_creation_for_guest_should_fail_test,
     offline_session_should_work_as_any_other_session_test,
     offline_session_should_internally_refresh_provider_identity_token,
-    offline_token_should_be_renew_if_needed_test,
+    offline_token_should_be_renewed_if_needed_test,
     offline_session_should_properly_react_to_time_warps_test
 ].
 
@@ -134,7 +134,7 @@ offline_session_should_internally_refresh_provider_identity_token(_Config) ->
     unmock_verify_token_to_inform_about_consumer_token_used().
 
 
-offline_token_should_be_renew_if_needed_test(_Config) ->
+offline_token_should_be_renewed_if_needed_test(_Config) ->
     JobId = ?RAND_JOB_ID(),
     UserCredentials = get_user_credentials(),
 
@@ -425,7 +425,7 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(Case, Config) when
-    Case == offline_token_should_be_renew_if_needed_test;
+    Case == offline_token_should_be_renewed_if_needed_test;
     Case == offline_session_should_properly_react_to_time_warps_test
 ->
     ok = time_test_utils:freeze_time(Config),
@@ -438,7 +438,7 @@ init_per_testcase(_Case, Config) ->
 
 
 end_per_testcase(Case, Config) when
-    Case == offline_token_should_be_renew_if_needed_test;
+    Case == offline_token_should_be_renewed_if_needed_test;
     Case == offline_session_should_properly_react_to_time_warps_test
 ->
     ok = time_test_utils:unfreeze_time(Config),

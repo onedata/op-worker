@@ -14,8 +14,8 @@
 -define(OFFLINE_ACCESS_MANAGER_HRL, 1).
 
 % Variables controlling offline token renewal backoff
--define(MIN_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC, 2).
+-define(MIN_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC, 300).  % 5 minutes
+-define(MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC, 3600).  % 1 hour
 -define(OFFLINE_TOKEN_RENEWAL_BACKOFF_RATE, 2).
--define(MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC, 180).  % 3 minutes
 
 -endif.

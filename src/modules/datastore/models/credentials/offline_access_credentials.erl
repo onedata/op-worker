@@ -38,19 +38,24 @@
 %%%===================================================================
 
 
--spec save(id(), record()) -> {ok, doc()} | {error, term()}.
+-spec save(id(), record()) -> ok.
 save(Id, Record) ->
-    datastore_model:save(?CTX, #document{key = Id, value = Record}).
+    {ok, _} = datastore_model:save(?CTX, #document{key = Id, value = Record}),
+    ok.
 
 
--spec get(id()) -> {ok, doc()} | {error, term()}.
+-spec get(id()) -> {ok, record()} | ?ERROR_NOT_FOUND.
 get(Id) ->
-    datastore_model:get(?CTX, Id).
+    case datastore_model:get(?CTX, Id) of
+        {ok, Doc} -> {ok, Doc#document.value};
+        {error, not_found} -> ?ERROR_NOT_FOUND
+    end.
 
 
--spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
+-spec update(id(), diff()) -> {ok, record()}.
 update(Id, Diff) ->
-    datastore_model:update(?CTX, Id, Diff).
+    {ok, UpdatedDoc} = datastore_model:update(?CTX, Id, Diff),
+    {ok, UpdatedDoc#document.value}.
 
 
 -spec remove(id()) -> ok.

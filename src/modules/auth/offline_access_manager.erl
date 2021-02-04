@@ -32,6 +32,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -44,8 +45,6 @@
 -type offline_job_id() :: binary().
 
 -export_type([offline_job_id/0]).
-
--type error() :: {error, term()}.
 
 % Tells after what chunk of token TTL to try to renew offline credentials
 -define(TOKEN_RENEWAL_THRESHOLD, 0.34).
@@ -105,11 +104,11 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
     Now = global_clock:timestamp_seconds(),
 
     case offline_access_credentials:get(OfflineJobId) of
-        {ok, #document{value = #offline_access_credentials{
+        {ok, #offline_access_credentials{
             user_id = UserId,
             next_renewal_threshold = NextRenewalThreshold,
             valid_until = ValidUntil
-        } = OfflineCredentials}} when Now =< ValidUntil ->
+        } = OfflineCredentials} when Now =< ValidUntil ->
             case Now > NextRenewalThreshold of
                 true ->
                     case acquire_offline_credentials(
@@ -118,22 +117,24 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
                     ) of
                         {ok, NewOfflineCredentials} ->
                             {ok, NewOfflineCredentials};
-                        ?ERROR_TOKEN_INVALID ->
-                            ?ERROR_TOKEN_INVALID;
-                        {error, _} ->
-                            % If renewal failed return current credentials -
-                            % there is still some time left to retry later
+                        {error, _} = OzConnError when
+                            OzConnError == ?ERROR_TIMEOUT;
+                            OzConnError == ?ERROR_NO_CONNECTION_TO_ONEZONE;
+                            OzConnError == ?ERROR_TEMPORARY_FAILURE;
+                            OzConnError == ?ERROR_INTERNAL_SERVER_ERROR
+                        ->
                             update_next_renewal_backoff(OfflineJobId, Now),
-                            {ok, OfflineCredentials}
+                            {ok, OfflineCredentials};
+                        {error, _} = TokenError ->
+                            TokenError
                     end;
                 false ->
                     {ok, OfflineCredentials}
             end;
-        {ok, _} ->
-            % Offline access token expired
-            ?ERROR_TOKEN_INVALID;
-        ?ERROR_NOT_FOUND = Error ->
-            Error
+        {ok, #offline_access_credentials{valid_until = ValidUntil}} ->
+            ?ERROR_TOKEN_CAVEAT_UNVERIFIED(#cv_time{valid_until = ValidUntil});
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND
     end.
 
 
@@ -145,7 +146,6 @@ update_next_renewal_backoff(OfflineJobId, Now) ->
         next_renewal_threshold = NextRenewalThreshold,
         next_renewal_backoff = NextRenewalBackoff
     } = OfflineCredentials) ->
-
         {ok, OfflineCredentials#offline_access_credentials{
             next_renewal_threshold = max(
                 Now + NextRenewalBackoff,
@@ -169,7 +169,7 @@ acquire_offline_credentials(OfflineJobId, ?SUB(user, UserId), TokenCredentials) 
             ValidUntil = token_valid_until(OfflineAccessToken),
             TokenTTL = ValidUntil - AcquiredAt,
 
-            {ok, Doc} = offline_access_credentials:save(OfflineJobId, #offline_access_credentials{
+            OfflineAccessCredentials = #offline_access_credentials{
                 user_id = UserId,
                 access_token = OfflineAccessToken,
                 interface = auth_manager:get_interface(TokenCredentials),
@@ -179,8 +179,9 @@ acquire_offline_credentials(OfflineJobId, ?SUB(user, UserId), TokenCredentials) 
                 valid_until = ValidUntil,
                 next_renewal_threshold = AcquiredAt + ceil(?TOKEN_RENEWAL_THRESHOLD * TokenTTL),
                 next_renewal_backoff = ?MIN_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC
-            }),
-            {ok, Doc#document.value};
+            },
+            offline_access_credentials:save(OfflineJobId, OfflineAccessCredentials),
+            {ok, OfflineAccessCredentials};
         {error, _} = Error ->
             Error
     end;
