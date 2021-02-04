@@ -90,8 +90,8 @@ reconcile_qos(FileUuid, SpaceId) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
+%% @doc
 %% Schedules file replication if it is required by effective_file_qos.
 %% Uses QoS traverse pool.
 %% If `ignore_missing_files` is not provided in Options, file_meta_posthook 
@@ -114,8 +114,13 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
                     ?MODULE, reconcile_qos, [FileUuid, SpaceId]),
             ok;
         {ok, EffFileQos} ->
-            QosEntriesToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
-            ok = qos_traverse:reconcile_file_for_qos_entries(FileCtx1, QosEntriesToUpdate);
+            case file_qos:is_in_trash(EffFileQos) of
+                false ->
+                    QosEntriesToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
+                    ok = qos_traverse:reconcile_file_for_qos_entries(FileCtx1, QosEntriesToUpdate);
+                true ->
+                    ok
+            end;
         undefined ->
             ok
     end.

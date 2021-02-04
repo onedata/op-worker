@@ -23,6 +23,7 @@
 -define(call_with_time(N, M, F, A), rpc:call(N, ?MODULE, exec_and_check_time, [M, F, A])).
 
 -export([basic_operations_test_core/2, exec_and_check_time/3]).
+-export([list_children/4, list_children/7, list_children_using_token/3, list_children_using_token/4]).
 
 %%%===================================================================
 %%% Functions cores (to be reused in standard and stress tests)
@@ -142,15 +143,15 @@ basic_operations_test_core(Config, LastLevel) ->
         ?call_with_time(Worker2, get_scope_id, [UL20])
     ),
 
-    ?assertMatch({ok, [#child_link_uuid{uuid = Space1Uuid}], #{}}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/">>}, 0, 10])),
-    ?assertMatch({ok, [], #{}}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space 1/dir2/file3">>}, 0, 10])),
+    ?assertMatch({ok, [{_, Space1Uuid}], #{}}, list_children(Worker1, <<"/">>, 0, 10)),
+    ?assertMatch({ok, [], #{}}, list_children(Worker1, <<"/Space 1/dir2/file3">>, 0, 10)),
 
-    {{A15, U15, #{}}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 20]),
-    {{A15_2, U15_2, #{}}, ListUuids100_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 100]),
-    {{A15_3, U15_3, #{}}, ListUuids1000_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 1000]),
-    {{A15_4, U15_4, #{}}, ListUuids1_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 1]),
-    {{A16, U16, #{}}, ListUuids50_60_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 50, 10]),
-    {{AL20_4, UL20_4, #{}}, ListUuidsLevel20} = ?call_with_time(Worker1, list_children, [{path, Level20Path}, 0, 1]),
+    {{A15, U15, #{}}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 20, undefined]),
+    {{A15_2, U15_2, #{}}, ListUuids100_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 100, undefined]),
+    {{A15_3, U15_3, #{}}, ListUuids1000_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 1000, undefined]),
+    {{A15_4, U15_4, #{}}, ListUuids1_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 1, undefined]),
+    {{A16, U16, #{}}, ListUuids50_60_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 50, 10, undefined]),
+    {{AL20_4, UL20_4, #{}}, ListUuidsLevel20} = ?call_with_time(Worker1, list_children, [{path, Level20Path}, 0, 1, undefined]),
 
     ?assertMatch({ok, _}, {A15, U15}),
     ?assertMatch({ok, _}, {A15_2, U15_2}),
@@ -175,7 +176,7 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(true, AE3),
     {AE4, ExistsTrueLevel20} = ?call_with_time(Worker1, exists, [{path, Level20Path}]),
     ?assertMatch(true, AE4),
-    ?assertMatch({ok, [_, _, _], #{}}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
+    ?assertMatch({ok, [_, _, _], #{}}, list_children(Worker1, <<"/Space 1/dir2">>, 0, 10)),
 
     {AD1, DeleteOkPathLevel4} = ?call_with_time(Worker1, delete, [{path, <<"/Space 1/dir2/file1">>}]),
     ?assertMatch(ok, AD1),
@@ -189,7 +190,7 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(false, rpc:call(Worker1, file_meta, exists, [{path, <<"/Space 1/dir2/file1">>}])),
     ?assertMatch(false, rpc:call(Worker1, file_meta, exists, [{path, <<"/Space 1/dir2/file2">>}])),
 
-    ?assertMatch({ok, [#child_link_uuid{uuid = Dir2File3Uuid}], #{}}, rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
+    ?assertMatch({ok, [{_Name, Dir2File3Uuid}], #{}}, list_children(Worker1, <<"/Space 1/dir2">>, 0, 10)),
 
     BigDirDel(0),
 
@@ -258,6 +259,22 @@ basic_operations_test_core(Config, LastLevel) ->
         #parameter{name = delete_ok_path_level20, value = DeleteOkPathLevel20, unit = "us",
             description = "Time of delete by path opertion at level 20 (20 dirs above file) when file exists"}
     ].
+
+%%%===================================================================
+%%% Util functions
+%%%===================================================================
+
+list_children(Worker, ParentPath, Offset, Size) ->
+    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, Offset, Size, undefined]).
+
+list_children(Worker, ParentPath, Offset, Size, Token, LastName, LastTree) ->
+    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, Offset, Size, Token, LastName, LastTree]).
+
+list_children_using_token(Worker, ParentPath, Size) ->
+    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, undefined, Size, #link_token{}]).
+
+list_children_using_token(Worker, ParentPath, Size, Token) ->
+    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, undefined, Size, Token]).
 
 %%%===================================================================
 %%% Internal functions

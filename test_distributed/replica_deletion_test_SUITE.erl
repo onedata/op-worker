@@ -257,10 +257,7 @@ init_per_suite(Config) ->
         NewConfig2 = initializer:setup_storage(NewConfig1),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_out_stream_handling_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false),
             test_utils:set_env(Worker, op_worker, max_file_replication_retries_per_file, 5),
             test_utils:set_env(Worker, op_worker, max_eviction_retries_per_file_replica, 5)

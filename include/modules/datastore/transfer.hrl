@@ -9,6 +9,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
+-ifndef(TRANSFER_HRL).
+-define(TRANSFER_HRL, 1).
+
 -include("global_definitions.hrl").
 
 -define(SCHEDULED_STATUS, scheduled).
@@ -105,3 +108,5 @@
 }).
 
 -type transfer_params() :: #transfer_params{}.
+
+-endif.

@@ -42,6 +42,7 @@ end).
 -spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name(), od_share:description()) ->
     fslogic_worker:provider_response().
 create_share(UserCtx, FileCtx0, Name, Description) ->
+    file_ctx:assert_not_trash_dir_const(FileCtx0),
     data_constraints:assert_not_readonly_mode(UserCtx),
 
     FileCtx1 = fslogic_authz:ensure_authorized(

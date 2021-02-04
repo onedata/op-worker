@@ -142,7 +142,7 @@ evict_regular_file_replica(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
     ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
-    
+
     transfers_test_mechanism:run_test(
         Config, #transfer_test_spec{
             setup = #setup{
@@ -1651,10 +1651,7 @@ init_per_suite(Config) ->
         NewConfig2 = initializer:setup_storage(NewConfig1),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_out_stream_handling_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
         end, ?config(op_worker_nodes, NewConfig2)),
 

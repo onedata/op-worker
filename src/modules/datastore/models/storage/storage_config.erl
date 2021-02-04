@@ -36,9 +36,6 @@
 
 -export([delete_all/0]).
 
-%% function for migrating old #storage{} record
--export([migrate_to_storage_config_v1/1]).
-
 %% datastore_model callbacks
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -189,24 +186,6 @@ delete_all() ->
     lists:foreach(fun(#document{key = StorageId}) ->
         delete(StorageId)
     end, StorageList).
-
-%%%===================================================================
-%%% Migration functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% This function upgrades old `storage` record to `storage_config`
-%% in version 1.
-%% @end
-%%--------------------------------------------------------------------
--spec migrate_to_storage_config_v1(#storage{}) -> tuple().
-migrate_to_storage_config_v1(#storage{
-    helpers = [Helper],
-    readonly = Readonly,
-    luma_config = LumaConfig
-}) ->
-    {?MODULE, Helper, Readonly, LumaConfig, false}.
 
 %%%===================================================================
 %%% datastore_model callbacks

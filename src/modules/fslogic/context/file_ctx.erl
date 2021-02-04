@@ -52,7 +52,7 @@
 -export_type([ctx/0]).
 
 %% Functions creating context and filling its data
--export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
+-export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/2, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, set_file_location/2, set_file_id/2,
     set_is_dir/2]).
 
@@ -60,9 +60,10 @@
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_guid_const/1, get_uuid_const/1, get_dir_location_doc_const/1
 ]).
--export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
-    is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
-    is_in_user_space_const/2]).
+-export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2, is_special_const/1,
+    is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
+    is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1,
+    assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -72,12 +73,13 @@
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
-    get_file_doc_including_deleted/1, get_parent/2, get_and_check_parent/2,
+    get_file_doc_including_deleted/1, get_parent/2, get_and_check_parent/2, get_original_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
     get_display_credentials/1, get_times/1,
     get_parent_guid/2, get_child/3,
-    get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
+    get_file_children/4, get_file_children/5, get_file_children/6,
+    get_file_children/7, get_file_children_whitelisted/5,
     get_logical_path/2,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2,
@@ -123,9 +125,15 @@ new_by_canonical_path(UserCtx, Path) ->
 new_by_guid(Guid) ->
     #file_ctx{guid = Guid}.
 
+
+-spec new_by_doc(file_meta:doc(), od_space:id()) -> ctx().
+new_by_doc(Doc, SpaceId) ->
+    new_by_doc(Doc, SpaceId, undefined).
+
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new file context using file's GUID.
+%% Creates new file context using file's file_meta doc.
 %% @end
 %%--------------------------------------------------------------------
 -spec new_by_doc(file_meta:doc(), od_space:id(), undefined | od_share:id()) -> ctx().
@@ -148,7 +156,7 @@ new_by_partial_context(FilePartialCtx) ->
     {CanonicalPath, FilePartialCtx2} = file_partial_ctx:get_canonical_path(FilePartialCtx),
     {ok, FileDoc} = canonical_path:resolve(CanonicalPath),
     SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx2),
-    {new_by_doc(FileDoc, SpaceId, undefined), SpaceId}.
+    {new_by_doc(FileDoc, SpaceId), SpaceId}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -456,6 +464,29 @@ get_parent_guid(#file_ctx{guid = FileGuid} = FileCtx, UserCtx) ->
             {ParentGuid, FileCtx2}
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% This function returns original parent of a file.
+%% It means that it checks whether file is not a child of trash.
+%% If it is, it returns ctx() of directory which was parent of the file
+%% before it was moved to trash.
+%% TODO VFS-7133 original parent uuid should be stored in file_meta doc
+%% @end
+%%--------------------------------------------------------------------
+-spec get_original_parent(ctx(), ctx() | undefined) -> {ctx(), ctx()}.
+get_original_parent(FileCtx, undefined) ->
+    file_ctx:get_parent(FileCtx, undefined);
+get_original_parent(FileCtx, OriginalParentCtx) ->
+    {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+    case file_ctx:is_trash_dir_const(ParentCtx) of
+        true ->
+            {OriginalParentCtx, FileCtx2};
+        false ->
+            {ParentCtx, FileCtx2}
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv get_storage_file_id(FileCtx, true).
@@ -689,7 +720,25 @@ get_child(FileCtx, Name, UserCtx) ->
 ) ->
     {Children :: [ctx()], NewFileCtx :: ctx()}.
 get_file_children(FileCtx, UserCtx, Offset, Limit) ->
-    get_file_children(FileCtx, UserCtx, Offset, Limit, undefined).
+    case get_file_children(FileCtx, UserCtx, Offset, Limit, undefined) of
+        {Children, FileCtx2} -> {Children, FileCtx2};
+        {Children, _ExtendedInfo, FileCtx2} -> {Children, FileCtx2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv get_file_children(FileCToken2tx, UserCtx, Offset, Limit, Token, undefined).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_children(ctx(), user_ctx:ctx(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
+    Token :: undefined | datastore_links_iter:token()
+) ->
+    {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()} |
+    {Children :: [ctx()], NewFileCtx :: ctx()}.
+get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
+    get_file_children(FileCtx, UserCtx, Offset, Limit, Token, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -699,12 +748,13 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
 -spec get_file_children(ctx(), user_ctx:ctx(),
     Offset :: file_meta:offset(),
     Limit :: file_meta:limit(),
-    Token :: undefined | datastore_links_iter:token()
+    Token :: undefined | datastore_links_iter:token(),
+    StartId :: undefined | file_meta:name()
 ) ->
-    {Children :: [ctx()], NewToken :: datastore_links_iter:token(), NewFileCtx :: ctx()} |
+    {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()} |
     {Children :: [ctx()], NewFileCtx :: ctx()}.
-get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
-    get_file_children(FileCtx, UserCtx, Offset, Limit, Token, undefined).
+get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
+    get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -715,11 +765,12 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
     Offset :: file_meta:offset(),
     Limit :: file_meta:limit(),
     Token :: undefined | datastore_links_iter:token(),
-    StartId :: undefined | file_meta:name()
+    StartId :: undefined | file_meta:name(),
+    PrevTreeId :: undefined | oneprovider:id()
 ) ->
-    {Children :: [ctx()], NewToken :: datastore_links_iter:token(), NewFileCtx :: ctx()} |
+    {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()} |
     {Children :: [ctx()], NewFileCtx :: ctx()}.
-get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
+get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, PrevTreeId) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             {list_user_spaces(UserCtx, Offset, Limit, undefined), FileCtx};
@@ -731,16 +782,12 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
             ShareId = get_share_id_const(FileCtx2),
             case FileType of
                 ?DIRECTORY_TYPE ->
-                    MapFun = fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
+                    MapFun = fun({Name, Uuid}) ->
                         new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
                     end,
-
-                    case file_meta:list_children(FileDoc, Offset, Limit, Token, StartId) of
-                        {ok, ChildrenLinks, #{token := Token2}} ->
-                            {lists:map(MapFun, ChildrenLinks), Token2, FileCtx2};
-                        {ok, ChildrenLinks, _} ->
-                            {lists:map(MapFun, ChildrenLinks), FileCtx2}
-                    end;
+                    {ok, ChildrenLinks, ListExtendedInfo} =
+                        file_meta:list_children(FileDoc, Offset, Limit, Token, StartId, PrevTreeId),
+                    {lists:map(MapFun, ChildrenLinks), ListExtendedInfo, FileCtx2};
                 _ ->
                     % In case of listing regular file - return it
                     {[FileCtx2], FileCtx2}
@@ -772,7 +819,7 @@ get_file_children_whitelisted(
             {ok, ChildrenLinks} = file_meta:list_children_whitelisted(
                 FileDoc, NonNegOffset, Limit, ChildrenWhiteList
             ),
-            ChildrenCtxs = lists:map(fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
+            ChildrenCtxs = lists:map(fun({Name, Uuid}) ->
                 new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
             end, ChildrenLinks),
             {ChildrenCtxs, FileCtx2}
@@ -842,7 +889,7 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange)
     {Locations, FileCtx2} = get_file_location_docs(FileCtx),
     {FileLocationDoc, FileCtx3} =
         get_or_create_local_file_location_doc(FileCtx2),
-    {location_and_link_utils:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
+    {fslogic_location:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
         get_uuid_const(FileCtx3)), FileCtx3};
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     get_file_location_with_filled_gaps(FileCtx, [ReqRange]).
@@ -1133,14 +1180,50 @@ is_file_ctx_const(#file_ctx{}) ->
 is_file_ctx_const(_) ->
     false.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if file is a space root dir.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec is_space_dir_const(ctx()) -> boolean().
 is_space_dir_const(#file_ctx{guid = Guid}) ->
     fslogic_uuid:is_space_dir_guid(Guid).
+
+
+-spec is_trash_dir_const(ctx()) -> boolean().
+is_trash_dir_const(#file_ctx{guid = Guid}) ->
+    fslogic_uuid:is_trash_dir_guid(Guid).
+
+
+-spec is_trash_dir_const(ctx(), file_meta:name()) -> boolean().
+is_trash_dir_const(ParentCtx, Name) ->
+    file_ctx:is_space_dir_const(ParentCtx)
+        andalso (Name =:= ?TRASH_DIR_NAME).
+
+
+-spec is_special_const(ctx()) -> boolean().
+is_special_const(#file_ctx{guid = Guid}) ->
+    fslogic_uuid:is_special_guid(Guid).
+
+
+-spec assert_not_special_const(ctx()) -> ok.
+assert_not_special_const(FileCtx) ->
+    case is_special_const(FileCtx) of
+        true -> throw(?EPERM);
+        false -> ok
+    end.
+
+
+-spec assert_not_trash_dir_const(file_ctx:ctx()) -> ok.
+assert_not_trash_dir_const(FileCtx) ->
+    case is_trash_dir_const(FileCtx) of
+        true -> throw(?EPERM);
+        false -> ok
+    end.
+
+
+-spec assert_not_trash_dir_const(file_ctx:ctx(), file_meta:name()) -> ok.
+assert_not_trash_dir_const(ParentCtx, Name) ->
+    case is_trash_dir_const(ParentCtx, Name) of
+        true -> throw(?EPERM);
+        false -> ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1166,8 +1249,7 @@ is_user_root_dir_const(#file_ctx{}, _UserCtx) ->
 is_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
     true;
 is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
-    Uuid = file_id:guid_to_uuid(Guid),
-    fslogic_uuid:is_root_dir_uuid(Uuid);
+    fslogic_uuid:is_root_dir_guid(Guid);
 is_root_dir_const(#file_ctx{}) ->
     false.
 
@@ -1242,6 +1324,14 @@ is_dir(FileCtx = #file_ctx{is_dir = undefined}) ->
     {IsDir, FileCtx2#file_ctx{is_dir = IsDir}};
 is_dir(FileCtx = #file_ctx{is_dir = IsDir}) ->
     {IsDir, FileCtx}.
+
+
+-spec assert_is_dir(ctx()) -> ctx().
+assert_is_dir(FileCtx) ->
+    case is_dir(FileCtx) of
+        {false, _} -> throw(?ENOTDIR);
+        {true, FileCtx2} -> FileCtx2
+    end.
 
 -spec is_readonly_storage(ctx()) -> {boolean(), ctx()}.
 is_readonly_storage(FileCtx) ->
@@ -1318,8 +1408,8 @@ resolve_and_cache_path(FileCtx, Type) ->
     {#document{key = Uuid, value = #file_meta{type = FileType, name = Filename}, scope = SpaceId} = Doc, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
     {FilenameOrUuid, CacheName} = case Type of
-        name -> {Filename, location_and_link_utils:get_canonical_paths_cache_name(SpaceId)};
-        uuid -> {Uuid, location_and_link_utils:get_uuid_based_paths_cache_name(SpaceId)}
+        name -> {Filename, paths_cache:get_canonical_paths_cache_name(SpaceId)};
+        uuid -> {Uuid, paths_cache:get_uuid_based_paths_cache_name(SpaceId)}
     end,
     case FileType of
         ?DIRECTORY_TYPE ->
@@ -1356,7 +1446,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true) ->
             {Location, FileCtx2}
     end;
 get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocationExists) ->
-    case location_and_link_utils:create_new_file_location_doc(FileCtx, false, false) of
+    case fslogic_location:create_doc(FileCtx, false, false) of
         {{ok, _}, FileCtx2} ->
             {LocationDocs, FileCtx3} = get_file_location_docs(FileCtx2, true, false),
             lists:foreach(fun(ChangedLocation) ->

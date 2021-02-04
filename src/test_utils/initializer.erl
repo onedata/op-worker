@@ -920,9 +920,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
     {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_grace_period_seconds, FuseSessionTTL]),
 
     lists:foreach(fun(Worker) ->
-        test_utils:set_env(Worker, ?APP_NAME, dbsync_out_stream_handling_interval, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_out_stream_handling_interval, timer:seconds(1))
     end, AllWorkers),
     rpc:multicall(AllWorkers, dbsync_worker, start_streams, []),
 
@@ -1268,7 +1266,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     test_utils:mock_expect(Workers, space_logic, report_provider_sync_progress, fun(_SpaceId, _) ->
         ok
     end),
-    
+
     test_utils:mock_expect(Workers, space_logic, has_eff_user, fun(SessionId, SpaceId, UserId) ->
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(SessionId, SpaceId),
         maps:is_key(UserId, EffUsers)
@@ -1664,7 +1662,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
             NewStorageMap = PreviousStorageMap#{StorageId => NewStorageDesc},
             ok = meck:expect(storage_logic, get, GetStorageFun(NewStorageMap))
         end),
-    
+
     ok = test_utils:mock_expect(Workers, storage_logic, init_space_support, fun(_,_,_) -> ok end),
     ok = test_utils:mock_expect(Workers, storage_logic, apply_unsupport_step, fun(_,_,_) -> ok end).
 

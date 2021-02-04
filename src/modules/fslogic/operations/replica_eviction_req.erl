@@ -47,6 +47,7 @@ schedule_replica_eviction(
         true ->
             ok;
         false ->
+            file_ctx:assert_not_trash_dir_const(FileCtx0),
             file_ctx:assert_not_readonly_target_storage_const(FileCtx0, MigrationProviderId)
     end,
 

@@ -278,10 +278,11 @@ is_clock_sync_satisfied() ->
 check_compatibility_with_onezone() ->
     case provider_logic:fetch_service_configuration(onezone) of
         {ok, OzConfiguration} ->
-            check_for_compatibility_registry_updates(OzConfiguration),
+            Resolver = compatibility:build_resolver(consistent_hashing:get_all_nodes(), oneprovider:trusted_ca_certs()),
+            check_for_compatibility_registry_updates(Resolver, OzConfiguration),
             OzVersion = maps:get(<<"version">>, OzConfiguration, <<"unknown">>),
             OpVersion = op_worker:get_release_version(),
-            case compatibility:check_products_compatibility(?ONEPROVIDER, OpVersion, ?ONEZONE, OzVersion) of
+            case compatibility:check_products_compatibility(Resolver, ?ONEPROVIDER, OpVersion, ?ONEZONE, OzVersion) of
                 true ->
                     true;
                 {false, CompOzVersions} ->
@@ -320,19 +321,18 @@ check_compatibility_with_onezone() ->
 
 
 %% @private
--spec check_for_compatibility_registry_updates(json_utils:json_term()) -> ok.
-check_for_compatibility_registry_updates(OzConfiguration) ->
+-spec check_for_compatibility_registry_updates(compatibility:resolver(), json_utils:json_term()) -> ok.
+check_for_compatibility_registry_updates(Resolver, OzConfiguration) ->
     case maps:get(<<"compatibilityRegistryRevision">>, OzConfiguration, <<"unknown">>) of
         RemoteRevision when is_integer(RemoteRevision) ->
-            LocalRevision = case compatibility:peek_current_registry_revision() of
+            LocalRevision = case compatibility:peek_current_registry_revision(Resolver) of
                 {ok, R} -> R;
                 _ -> 0
             end,
             case RemoteRevision > LocalRevision of
                 true ->
                     compatibility:check_for_updates(
-                        [oneprovider:get_oz_url(?ZONE_COMPATIBILITY_REGISTRY_PATH)],
-                        oneprovider:trusted_ca_certs()
+                        Resolver, [oneprovider:get_oz_url(?ZONE_COMPATIBILITY_REGISTRY_PATH)]
                     );
                 false ->
                     ?debug(

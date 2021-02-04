@@ -78,11 +78,12 @@ get_models() -> [
     storage_traverse_job,
     qos_status,
     space_unsupport_job,
-    cleanup_traverse_status,
     luma_db,
     storage_import_config,
     storage_import_monitoring,
     process_handles,
+    deletion_marker,
+    tree_traverse_progress,
     supported_spaces,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
