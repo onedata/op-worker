@@ -38,6 +38,8 @@
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
+    file_ctx:assert_not_special_const(SourceFileCtx),
+    file_ctx:assert_not_trash_dir_const(TargetParentFileCtx, TargetName),
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
     TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
     case SourceSpaceId =:= TargetSpaceId of
@@ -188,7 +190,7 @@ rename_into_itself(FileGuid) ->
 -spec rename_into_different_place_within_space(user_ctx:ctx(),
     SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
-    TargetFileType :: file_meta:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
+    TargetFileType :: file_meta:type() | undefined, TargetParentFileCtx :: file_ctx:ctx() | undefined) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx,
     TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
@@ -215,7 +217,7 @@ rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFil
 -spec rename_into_different_place_within_posix_space(user_ctx:ctx(),
     SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
-    TargetFileType :: file_meta:type(), TargetFileCtx :: file_ctx:ctx()) ->
+    TargetFileType :: file_meta:type() | undefined, TargetFileCtx :: file_ctx:ctx() | undefined) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?DIRECTORY_TYPE, undefined, _
@@ -512,7 +514,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx3),
     case InvalidateCache of
-        true -> location_and_link_utils:invalidate_paths_caches(SpaceId);
+        true -> paths_cache:invalidate_paths_caches(SpaceId);
         _ -> ok
     end,
 

@@ -38,7 +38,7 @@
 ]).
 -export([fetch_name/1, fetch_name_of_remote_storage/2, fetch_provider_id_of_remote_storage/2,
     fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, 
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1,
     is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
@@ -52,7 +52,7 @@
 
 %%% Support related functions
 -export([init_space_support/3, update_space_support_size/3]).
--export([init_unsupport/2, complete_unsupport_resize/2, complete_unsupport_purge/2, 
+-export([init_unsupport/2, complete_unsupport_resize/2, complete_unsupport_purge/2,
     finalize_unsupport/2]).
 
 % exported for initializer and env_up escripts

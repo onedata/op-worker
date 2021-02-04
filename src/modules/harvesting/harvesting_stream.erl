@@ -530,10 +530,9 @@ maybe_add_doc_to_batch(State = #hs_state{
     provider_id = ProviderId
 }, Doc = #document{
     seq = Seq,
-    value = ModelRecord,
     mutators = [ProviderId | _]
 }) ->
-    case is_harvested_model(ModelRecord) of
+    case should_doc_be_harvested(Doc) of
         true ->
             Batch2 = harvesting_batch:accumulate(Doc, Batch),
             State#hs_state{batch = Batch2, last_seen_seq = Seq};
@@ -766,7 +765,21 @@ stream_limit_exceeded(_Since, infinity) ->
 stream_limit_exceeded(Since, Until) ->
     Since >= Until.
 
+
+-spec should_doc_be_harvested(datastore:doc()) -> boolean().
+should_doc_be_harvested(#document{
+    key = Key,
+    value = ModelRecord
+}) ->
+    is_harvested_model(ModelRecord) andalso not is_uuid_restricted(Key).
+
+
 -spec is_harvested_model(datastore:value()) -> boolean().
 is_harvested_model(#file_meta{}) -> true;
 is_harvested_model(#custom_metadata{}) -> true;
 is_harvested_model(_) -> false.
+
+
+-spec is_uuid_restricted(file_meta:uuid()) -> boolean().
+is_uuid_restricted(Uuid) ->
+    fslogic_uuid:is_trash_dir_uuid(Uuid).

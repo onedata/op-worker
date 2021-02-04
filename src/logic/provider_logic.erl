@@ -779,10 +779,10 @@ provider_connection_ssl_opts(Domain) ->
 assert_provider_compatibility(Domain) ->
     case fetch_peer_version({oneprovider, Domain, Domain}) of
         {ok, RemoteOpVersion} ->
+            Resolver = compatibility:build_resolver(consistent_hashing:get_all_nodes(), oneprovider:trusted_ca_certs()),
             OpVersion = op_worker:get_release_version(),
-
             case compatibility:check_products_compatibility(
-                ?ONEPROVIDER, RemoteOpVersion, ?ONEPROVIDER, OpVersion
+                Resolver, ?ONEPROVIDER, RemoteOpVersion, ?ONEPROVIDER, OpVersion
             ) of
                 true ->
                     ok;

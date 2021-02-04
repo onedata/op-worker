@@ -373,19 +373,16 @@
     parent_uuid :: undefined | file_meta:uuid()
 }).
 
+
+% An empty model used for creating deletion_markers
+% For more information see deletion_marker.erl
+-record(deletion_marker, {}).
+
+
 -record(storage_config, {
     helper :: helpers:helper(),
     luma_config :: storage:luma_config(),
     imported_storage = false :: boolean()
-}).
-
-
-%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
--record(storage, {
-    name = <<>> :: storage_config:name(),
-    helpers = [] :: [helpers:helper()],
-    readonly = false :: boolean(),
-    luma_config = undefined :: undefined | luma_config:config()
 }).
 
 
@@ -415,15 +412,6 @@
     %% Forced strategy indicates that the provider has been forcefully removed from the space supporters.
     %% In such case, only necessary cleanup is performed and stages such as data replication are omitted.
     strategy = graceful :: space_unsupport_engine:strategy()
-}).
-
-%% Model that holds information necessary to tell whether whole subtree
-%% of a directory was traversed so this directory can be cleaned up.
--record(cleanup_traverse_status, {
-    % number of children listed but not yet traversed
-    pending_children_count = 0 :: non_neg_integer(),
-    % flag that informs whether all batches of children have been listed
-    all_batches_listed = false :: boolean()
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.
@@ -934,13 +922,29 @@
     task_id :: traverse:id(),
     % Uuid of processed directory/file
     doc_id :: file_meta:uuid(),
+    % TODO VFS-7101 use offline access token
+    session_id :: session:id(),
     % Information needed to restart directory listing
+    use_listing_token = true :: boolean(),
     last_name :: file_meta:name(),
     last_tree :: od_provider:id(),
     % Traverse task specific info
     execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
+    children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
+    track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),
     traverse_info :: binary()
+}).
+
+%% Model that holds information necessary to tell whether whole subtree
+%% of a directory was traversed so this directory can be cleaned up.
+-record(tree_traverse_progress, {
+    % number of children jobs listed but not yet processed
+    to_process = 0 :: non_neg_integer(),
+    % number of children jobs processed
+    processed = 0 :: non_neg_integer(),
+    % flag that informs whether all batches of children have been listed
+    all_batches_listed = false :: boolean()
 }).
 
 -endif.

@@ -173,13 +173,13 @@ create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
             % TODO VFS-5270
             replica_synchronizer:apply(FileCtx, fun() ->
                 try
-                    case location_and_link_utils:is_location_created(FileUuid, FileLocationId) of
+                    case fslogic_location:is_file_created(FileUuid, FileLocationId) of
                         true ->
                             Ans;
                         _ ->
                             {ok, FileCtx4} = sd_utils:generic_create_deferred(UserCtx, FileCtx3, VerifyDeletionLink),
                             {StorageFileId, FileCtx5} = file_ctx:get_storage_file_id(FileCtx4),
-                            {ok, Doc} = location_and_link_utils:mark_location_created(FileUuid,
+                            {ok, Doc} = fslogic_location:mark_file_created(FileUuid,
                                 FileLocationId, StorageFileId),
                             {Doc, FileCtx5}
                     end
@@ -526,7 +526,7 @@ handle_conflicting_directory(FileCtx) ->
     %%        _ ->
     %%            {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
     %%            {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
-    %%            case location_and_link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
+    %%            case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
     %%                {error, not_found} ->
     %%                    % Try once again to prevent races
     %%                    storage_driver:create(SDHandle, Mode);

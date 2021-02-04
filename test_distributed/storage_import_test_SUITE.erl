@@ -102,7 +102,9 @@
     sync_should_not_delete_dir_created_in_remote_provider/1,
     sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1,
     should_not_sync_file_during_replication/1,
-    sync_should_not_invalidate_file_after_replication/1
+    sync_should_not_invalidate_file_after_replication/1,
+    time_warp_between_scans_test/1,
+    time_warp_during_scan_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -187,7 +189,9 @@
     sync_should_not_delete_dir_created_in_remote_provider,
     sync_should_not_delete_not_replicated_files_created_in_remote_provider2,
     should_not_sync_file_during_replication,
-    sync_should_not_invalidate_file_after_replication
+    sync_should_not_invalidate_file_after_replication,
+    time_warp_between_scans_test,
+    time_warp_during_scan_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -423,6 +427,12 @@ should_not_sync_file_during_replication(Config) ->
 
 sync_should_not_invalidate_file_after_replication(Config) ->
     storage_import_test_base:sync_should_not_invalidate_file_after_replication(Config).
+
+time_warp_between_scans_test(Config) ->
+    storage_import_test_base:time_warp_between_scans_test(Config).
+
+time_warp_during_scan_test(Config) ->
+    storage_import_test_base:time_warp_during_scan_test(Config).
 
 %===================================================================
 % SetUp and TearDown functions
