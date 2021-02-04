@@ -40,6 +40,7 @@
 ]).
 -export([
     credentials_to_gs_auth_override/1,
+    infer_access_token_ttl/1,
     get_subject/1,
     get_caveats/1,
     acquire_offline_user_access_token/2,
@@ -47,7 +48,13 @@
 ]).
 
 -type access_token() :: tokens:serialized().
--type consumer_token() :: undefined | provider_identity_token | tokens:serialized().
+-type consumer_token() ::
+    % no consumer
+    undefined |
+    % consumer is this provider - be careful to substitute valid identity token
+    % before making any requests to oz
+    provider_identity_token |
+    tokens:serialized().
 -type client_tokens() :: #client_tokens{}.
 
 % Record containing access token for user authorization in OZ.
@@ -162,6 +169,12 @@ credentials_to_gs_auth_override(#token_credentials{
         consumer_token = resolve_consumer_token(ConsumerToken),
         data_access_caveats_policy = DataAccessCaveatsPolicy
     }.
+
+
+-spec infer_access_token_ttl(token_credentials()) -> time:seconds().
+infer_access_token_ttl(#token_credentials{access_token = AccessTokenBin}) ->
+    {ok, AccessToken} = tokens:deserialize(AccessTokenBin),
+    caveats:infer_ttl(tokens:get_caveats(AccessToken)).
 
 
 -spec get_subject(credentials()) -> aai:subject().

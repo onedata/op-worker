@@ -15,7 +15,7 @@
 %%%    (opaque to this module), as resulting session will be associated with
 %%%    that job, and valid user credentials.
 %%% 2) while in use 'get_session_id' must be periodically called.
-%%%    This ensures that offline credentials are appropriately refreshed
+%%%    This ensures that offline credentials are appropriately renewed
 %%%    (default expiration period is 7 days).
 %%% 3) after finishing its tasks it is offline job's responsibility to terminate
 %%%    session and remove no longer used docs by calling 'close_session'.
@@ -27,13 +27,11 @@
 -module(offline_access_manager).
 -author("Bartosz Walkowicz").
 
--include("global_definitions.hrl").
 -include("modules/auth/offline_access_manager.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -50,7 +48,7 @@
 -type error() :: {error, term()}.
 
 % Tells after what chunk of token TTL to try to renew offline credentials
--define(TOKEN_REFRESH_THRESHOLD, 0.34).
+-define(TOKEN_RENEWAL_THRESHOLD, 0.34).
 
 
 %%%===================================================================
@@ -109,9 +107,10 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
     case offline_access_credentials:get(OfflineJobId) of
         {ok, #document{value = #offline_access_credentials{
             user_id = UserId,
+            next_renewal_threshold = NextRenewalThreshold,
             valid_until = ValidUntil
         } = OfflineCredentials}} when Now =< ValidUntil ->
-            case should_try_to_renew_offline_credentials(Now, OfflineCredentials) of
+            case Now > NextRenewalThreshold of
                 true ->
                     case acquire_offline_credentials(
                         OfflineJobId, ?SUB(user, UserId),
@@ -122,9 +121,9 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
                         ?ERROR_TOKEN_INVALID ->
                             ?ERROR_TOKEN_INVALID;
                         {error, _} ->
-                            % If refresh failed return current credentials -
+                            % If renewal failed return current credentials -
                             % there is still some time left to retry later
-                            increase_next_renewal_backoff(OfflineJobId, Now),
+                            update_next_renewal_backoff(OfflineJobId, Now),
                             {ok, OfflineCredentials}
                     end;
                 false ->
@@ -139,34 +138,21 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
 
 
 %% @private
--spec should_try_to_renew_offline_credentials(time:seconds(), offline_access_credentials:record()) ->
-    boolean().
-should_try_to_renew_offline_credentials(Now, #offline_access_credentials{
-    acquired_at = AcquiredAt,
-    valid_until = ValidUntil,
-    next_renewal_attempt = NextRenewalAttempt
-}) when Now > AcquiredAt + ?TOKEN_REFRESH_THRESHOLD * (ValidUntil - AcquiredAt) ->
-    Now > NextRenewalAttempt;
-should_try_to_renew_offline_credentials(_, _) ->
-    false.
-
-
-%% @private
--spec increase_next_renewal_backoff(offline_job_id(), time:seconds()) ->
+-spec update_next_renewal_backoff(offline_job_id(), time:seconds()) ->
     ok.
-increase_next_renewal_backoff(OfflineJobId, Now) ->
+update_next_renewal_backoff(OfflineJobId, Now) ->
     ?extract_ok(offline_access_credentials:update(OfflineJobId, fun(#offline_access_credentials{
-        next_renewal_attempt = NextRenewalAttempt,
-        next_renewal_attempt_backoff = NextRenewalInterval
+        next_renewal_threshold = NextRenewalThreshold,
+        next_renewal_backoff = NextRenewalBackoff
     } = OfflineCredentials) ->
 
         {ok, OfflineCredentials#offline_access_credentials{
-            next_renewal_attempt = max(
-                Now + NextRenewalInterval,
-                NextRenewalAttempt
+            next_renewal_threshold = max(
+                Now + NextRenewalBackoff,
+                NextRenewalThreshold
             ),
-            next_renewal_attempt_backoff = min(
-                NextRenewalInterval * ?OFFLINE_TOKEN_RENEWAL_BACKOFF_RATE,
+            next_renewal_backoff = min(
+                NextRenewalBackoff * ?OFFLINE_TOKEN_RENEWAL_BACKOFF_RATE,
                 ?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC
             )
         }}
@@ -179,6 +165,10 @@ increase_next_renewal_backoff(OfflineJobId, Now) ->
 acquire_offline_credentials(OfflineJobId, ?SUB(user, UserId), TokenCredentials) ->
     case auth_manager:acquire_offline_user_access_token(UserId, TokenCredentials) of
         {ok, OfflineAccessToken} ->
+            AcquiredAt = global_clock:timestamp_seconds(),
+            ValidUntil = token_valid_until(OfflineAccessToken),
+            TokenTTL = ValidUntil - AcquiredAt,
+
             {ok, Doc} = offline_access_credentials:save(OfflineJobId, #offline_access_credentials{
                 user_id = UserId,
                 access_token = OfflineAccessToken,
@@ -186,10 +176,9 @@ acquire_offline_credentials(OfflineJobId, ?SUB(user, UserId), TokenCredentials) 
                 data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(
                     TokenCredentials
                 ),
-                acquired_at = global_clock:timestamp_seconds(),
-                valid_until = token_valid_until(OfflineAccessToken),
-                next_renewal_attempt = 0,
-                next_renewal_attempt_backoff = ?MIN_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC
+                valid_until = ValidUntil,
+                next_renewal_threshold = AcquiredAt + ceil(?TOKEN_RENEWAL_THRESHOLD * TokenTTL),
+                next_renewal_backoff = ?MIN_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC
             }),
             {ok, Doc#document.value};
         {error, _} = Error ->

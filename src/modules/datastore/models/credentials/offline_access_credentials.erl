@@ -96,8 +96,7 @@ get_record_struct(1) ->
         {access_token, string},
         {interface, atom},
         {data_access_caveats_policy, atom},
-        {acquired_at, integer},
         {valid_until, integer},
-        {next_renewal_attempt, integer},
-        {next_renewal_attempt_backoff, integer}
+        {next_renewal_threshold, integer},
+        {next_renewal_backoff, integer}
     ]}.

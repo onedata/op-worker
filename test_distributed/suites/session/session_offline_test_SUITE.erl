@@ -9,7 +9,7 @@
 %%% This file contains tests concerning offline access management.
 %%% @end
 %%%-------------------------------------------------------------------
--module(auth_offline_access_test_SUITE).
+-module(session_offline_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
@@ -167,10 +167,11 @@ offline_token_should_be_renew_if_needed_test(_Config) ->
 
         % Credentials renewal failure sets backoff so that next attempt wouldn't be
         % tried immediately
+        time_test_utils:simulate_seconds_passing(BackoffInterval - 1),
         lists:foreach(fun(_) -> AssertRenewalFailureFun() end, lists:seq(1, 100)),
         ?assertEqual(0, count_offline_token_acquisition_attempts()),
 
-        time_test_utils:simulate_seconds_passing(BackoffInterval + 1)
+        time_test_utils:simulate_seconds_passing(2)
     end, get_offline_token_renewal_backoff_Intervals(
         ?MIN_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC, []
     )),
@@ -381,7 +382,13 @@ count_offline_token_acquisition_attempts(Num) ->
 -spec get_offline_token_renewal_backoff_Intervals(time:seconds(), [time:seconds()]) ->
     [time:seconds()].
 get_offline_token_renewal_backoff_Intervals(?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC, Intervals) ->
-    lists:reverse([?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC | Intervals]);
+    lists:reverse([
+        % Test 3 times maximum backoff to assert that it will not be increased
+        % infinitely but will stop at tha value
+        ?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC,
+        ?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC,
+        ?MAX_OFFLINE_TOKEN_RENEWAL_INTERVAL_SEC
+        | Intervals]);
 get_offline_token_renewal_backoff_Intervals(Interval, Intervals) ->
     get_offline_token_renewal_backoff_Intervals(
         min(

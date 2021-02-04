@@ -416,11 +416,7 @@ register_auth_validity_checkup_if_user_session(UserSession, TokenCredentials) wh
     UserSession == fuse;
     UserSession == offline
 ->
-    AccessTokenBin = auth_manager:get_access_token(TokenCredentials),
-    {ok, AccessToken} = tokens:deserialize(AccessTokenBin),
-    TokenTTL = caveats:infer_ttl(tokens:get_caveats(AccessToken)),
-
-    schedule_auth_validity_checkup(TokenTTL).
+    schedule_auth_validity_checkup(auth_manager:infer_access_token_ttl(TokenCredentials)).
 
 
 %% @private
