@@ -40,14 +40,14 @@
 ]).
 
 % Definitions of renewal intervals for provider connections.
--define(INITIAL_RENEWAL_INTERVAL, application:get_env(
-    ?APP_NAME, conn_manager_initial_backoff_interval, 2000  % 2 seconds
+-define(INITIAL_RENEWAL_INTERVAL, op_worker:get_env(
+    conn_manager_initial_backoff_interval, 2000  % 2 seconds
 )).
--define(RENEWAL_INTERVAL_BACKOFF_RATE, application:get_env(
-    ?APP_NAME, conn_manager_backoff_interval_rate, 1.2
+-define(RENEWAL_INTERVAL_BACKOFF_RATE, op_worker:get_env(
+    conn_manager_backoff_interval_rate, 1.2
 )).
--define(MAX_RENEWAL_INTERVAL, application:get_env(
-    ?APP_NAME, conn_manager_max_backoff_interval, 180000  % 3 minutes
+-define(MAX_RENEWAL_INTERVAL, op_worker:get_env(
+    conn_manager_max_backoff_interval, 180000  % 3 minutes
 )).
 
 % how often logs appear when waiting for peer provider connection
@@ -57,20 +57,23 @@
 -define(HANDSHAKE_SUCCEEDED(__PID), {handshake_succeeded, __PID}).
 
 
+% provider's ip address or domain
+-type host() :: binary().
+
 -record(state, {
     session_id :: session:id(),
     peer_id :: od_provider:id(),
 
-    connecting = #{} :: #{pid() => Hostname :: binary()},
-    connected = #{} :: #{pid() => Hostname :: binary()},
+    connecting = #{} :: #{pid() => host()},
+    connected = #{} :: #{pid() => host()},
 
     renewal_timer = undefined :: undefined | reference(),
     renewal_interval = ?INITIAL_RENEWAL_INTERVAL :: pos_integer(),
 
     is_stopping = false :: boolean()
 }).
-
 -type state() :: #state{}.
+
 -type error() :: {error, Reason :: term()}.
 
 

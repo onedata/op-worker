@@ -6,7 +6,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-
 %%% This test suite verifies correct behaviour of outgoing_connection_manager
 %%% that should (re)start connections to peer providers until backoff limit
 %%% is reached.
@@ -34,14 +33,14 @@
     consecutive_failures_to_verify_peer_should_terminate_session_test/1,
     consecutive_failures_to_perform_handshake_should_terminate_session_test/1,
     reconnects_should_be_performed_with_backoff_test/1,
-    crushed_connection_should_be_restarted_test/1
+    crashed_connection_should_be_restarted_test/1
 ]).
 
 all() -> [
     consecutive_failures_to_verify_peer_should_terminate_session_test,
     consecutive_failures_to_perform_handshake_should_terminate_session_test,
     reconnects_should_be_performed_with_backoff_test,
-    crushed_connection_should_be_restarted_test
+    crashed_connection_should_be_restarted_test
 ].
 
 -define(ATTEMPTS, 30).
@@ -52,6 +51,7 @@ all() -> [
 %%%===================================================================
 
 
+% identity verification is mocked in init_per_testcase to always fail
 consecutive_failures_to_verify_peer_should_terminate_session_test(_Config) ->
     ParisId = oct_background:get_provider_id(paris),
     [KrakowNode] = oct_background:get_provider_nodes(krakow),
@@ -69,6 +69,7 @@ consecutive_failures_to_verify_peer_should_terminate_session_test(_Config) ->
     ok.
 
 
+% handshake is mocked in init_per_testcase to always fail
 consecutive_failures_to_perform_handshake_should_terminate_session_test(_Config) ->
     ParisId = oct_background:get_provider_id(paris),
     [KrakowNode] = oct_background:get_provider_nodes(krakow),
@@ -86,6 +87,7 @@ consecutive_failures_to_perform_handshake_should_terminate_session_test(_Config)
     ok.
 
 
+% handshake is mocked in init_per_testcase to succeed only after 2 retries
 reconnects_should_be_performed_with_backoff_test(_Config) ->
     ParisId = oct_background:get_provider_id(paris),
     [KrakowNode] = oct_background:get_provider_nodes(krakow),
@@ -97,6 +99,11 @@ reconnects_should_be_performed_with_backoff_test(_Config) ->
     start_outgoing_provider_session(KrakowNode, SessId),
     ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
+    % Normally session exists entire time while next connection retries are
+    % performed and terminates only after last failed attempt. Only if any
+    % connection attempt succeeded it will persist. So to check if backoff
+    % worked properly checking whether session exists must be performed after
+    % time the session could die
     timer:sleep(timer:seconds(?ATTEMPTS)),
 
     ?assertEqual(true, session_exists(KrakowNode, SessId)),
@@ -104,7 +111,7 @@ reconnects_should_be_performed_with_backoff_test(_Config) ->
     ok.
 
 
-crushed_connection_should_be_restarted_test(_Config) ->
+crashed_connection_should_be_restarted_test(_Config) ->
     ParisId = oct_background:get_provider_id(paris),
     [KrakowNode] = oct_background:get_provider_nodes(krakow),
 
@@ -116,9 +123,12 @@ crushed_connection_should_be_restarted_test(_Config) ->
     ?assertEqual(true, session_exists(KrakowNode, SessId)),
     [Conn1] = ?assertMatch([_], get_session_connections(KrakowNode, SessId), ?ATTEMPTS),
 
+    % Close connection and wait some time after so that it would be unregistered
+    % from session connections before waiting for new connection to be made.
+    % Unfortunately, it can't be made without sleep as this would introduce races
+    % (e.g. Conn1 has not been unregistered and was fetched once again)
     connection:close(Conn1),
     timer:sleep(timer:seconds(5)),
-
     [Conn2] = ?assertMatch([_], get_session_connections(KrakowNode, SessId), ?ATTEMPTS),
 
     ?assertNotEqual(Conn1, Conn2),
@@ -135,7 +145,7 @@ init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
-        onenv_scenario = "connection_tests",
+        onenv_scenario = "2op_no_common_spaces",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
     }).
 
@@ -147,17 +157,17 @@ end_per_suite(_Config) ->
 
 init_per_testcase(consecutive_failures_to_verify_peer_should_terminate_session_test = Case, Config) ->
     [Node] = oct_background:get_provider_nodes(krakow),
-    mock_provider_identity_verification(Node),
+    mock_provider_identity_verification_to_always_fail(Node),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(consecutive_failures_to_perform_handshake_should_terminate_session_test = Case, Config) ->
     Nodes = oct_background:get_provider_nodes(paris),
-    mock_provider_handshake(Nodes, infinity),
+    mock_handshake_to_succeed_after_n_retries(Nodes, infinity),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(reconnects_should_be_performed_with_backoff_test = Case, Config) ->
     Nodes = oct_background:get_provider_nodes(paris),
-    mock_provider_handshake(Nodes, 2),
+    mock_handshake_to_succeed_after_n_retries(Nodes, 2),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
@@ -248,8 +258,8 @@ get_session_connections(Node, SessionId) ->
 
 
 %% @private
--spec mock_provider_identity_verification(node()) -> ok.
-mock_provider_identity_verification(Node) ->
+-spec mock_provider_identity_verification_to_always_fail(node()) -> ok.
+mock_provider_identity_verification_to_always_fail(Node) ->
     ok = test_utils:mock_new(Node, provider_logic, [passthrough]),
     ok = test_utils:mock_expect(Node, provider_logic, verify_provider_identity, fun(_) ->
         {error, unverified_provider}
@@ -263,8 +273,8 @@ unmock_provider_identity_verification(Node) ->
 
 
 %% @private
--spec mock_provider_handshake([node()], infinity | non_neg_integer()) -> ok.
-mock_provider_handshake(Nodes, MaxFailedAttempts) ->
+-spec mock_handshake_to_succeed_after_n_retries([node()], infinity | non_neg_integer()) -> ok.
+mock_handshake_to_succeed_after_n_retries(Nodes, MaxFailedAttempts) ->
     {_, []} = rpc:multicall(Nodes, application, set_env, [
         ?APP_NAME, test_handshake_failed_attempts, MaxFailedAttempts
     ]),
