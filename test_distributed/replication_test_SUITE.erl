@@ -1336,7 +1336,7 @@ override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
         fun(_Client, SpId, ProvId) when SpId =:= SpaceId ->
             lists:member(ProvId, Providers)
         end),
-    test_utils:mock_expect(Workers, space_logic, get_local_storage_ids,
+    test_utils:mock_expect(Workers, space_logic, get_local_storages,
         fun(SpId) when SpId =:= SpaceId ->
             {ok, lists:foldl(fun(Worker, Acc) ->
                 case ?config({storage_id, ?GET_DOMAIN(Worker)}, Config) of
