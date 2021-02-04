@@ -605,8 +605,8 @@ migrate_to_zone() ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
+%% @doc
 %% Renames old `storage` record to `storage_config` and creates
 %% appropriate storages in Onezone.
 %% @end

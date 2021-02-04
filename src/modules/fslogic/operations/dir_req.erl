@@ -20,7 +20,8 @@
 %% API
 -export([
     mkdir/4,
-    get_children/5, get_children/6,
+    get_children_ctxs/7,
+    get_children/5, get_children/6, get_children/7,
     get_children_attrs/6,
     get_children_details/5
 ]).
@@ -34,10 +35,6 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @equiv mkdir_insecure/4 with permission checks
-%% @end
-%%--------------------------------------------------------------------
 -spec mkdir(
     user_ctx:ctx(),
     ParentFileCtx :: file_ctx:ctx(),
@@ -46,6 +43,8 @@
 ) ->
     fslogic_worker:fuse_response().
 mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
+    % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
+    file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [traverse_ancestors, ?traverse_container, ?add_subcontainer]
@@ -53,11 +52,6 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
     mkdir_insecure(UserCtx, ParentFileCtx1, Name, Mode).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv get_children(UserCtx, FileCtx, Offset, Limit, Token, undefined).
-%% @end
-%%--------------------------------------------------------------------
 -spec get_children(
     user_ctx:ctx(),
     file_ctx:ctx(),
@@ -70,11 +64,6 @@ get_children(UserCtx, FileCtx, Offset, Limit, Token) ->
     get_children(UserCtx, FileCtx, Offset, Limit, Token, undefined).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv get_children_insecure/7 with permission checks
-%% @end
-%%--------------------------------------------------------------------
 -spec get_children(
     user_ctx:ctx(),
     file_ctx:ctx(),
@@ -85,6 +74,86 @@ get_children(UserCtx, FileCtx, Offset, Limit, Token) ->
 ) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
+    get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId, undefined).
+
+
+-spec get_children(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
+    Token :: undefined | binary(),
+    StartId :: undefined | file_meta:name(),
+    StartTree :: undefined | oneprovider:id()
+) ->
+    fslogic_worker:fuse_response().
+get_children(UserCtx, FileCtx0, Offset, Limit, EncodedToken, StartId, StartTree) ->
+    ParentGuid = file_ctx:get_guid_const(FileCtx0),
+    Token = decode_token(EncodedToken),
+    {ChildrenCtxs, ExtendedInfo, FileCtx1, IsLast} =
+        get_children_ctxs(UserCtx, FileCtx0, Offset, Limit, Token, StartId, StartTree),
+    ChildrenNum = length(ChildrenCtxs),
+
+    ChildrenLinks = lists:filtermap(fun({Num, ChildCtx}) ->
+        ChildGuid = file_ctx:get_guid_const(ChildCtx),
+        {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
+        case Num == 1 orelse Num == ChildrenNum of
+            true ->
+                try
+                    {FileDoc, _ChildCtx3} = file_ctx:get_file_doc(ChildCtx2),
+                    ProviderId = file_meta:get_provider_id(FileDoc),
+                    {ok, FileUuid} = file_meta:get_uuid(FileDoc),
+                    case file_meta:check_name_and_get_conflicting_files(file_id:guid_to_uuid(ParentGuid), ChildName, FileUuid, ProviderId) of
+                        {conflicting, ExtendedName, _ConflictingFiles} ->
+                            {true, #child_link{name = ExtendedName, guid = ChildGuid}};
+                        _ ->
+                            {true, #child_link{name = ChildName, guid = ChildGuid}}
+                    end
+                catch _:_ ->
+                    % Documents for file have not yet synchronized
+                    false
+                end;
+            false ->
+                % Other files than first and last don't need to resolve name
+                % conflicts (to check for collisions) as list_children
+                % (file_meta:tag_children to be precise) already did it
+                {true, #child_link{name = ChildName, guid = ChildGuid}}
+        end
+    end, lists:zip(lists:seq(1, ChildrenNum), ChildrenCtxs)),
+
+    NewTokenOrUndefined = maps:get(token, ExtendedInfo, undefined),
+    fslogic_times:update_atime(FileCtx1),
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #file_children{
+            child_links = ChildrenLinks,
+            index_token = encode_token(NewTokenOrUndefined),
+            is_last = IsLast
+        }
+    }.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% list_children/8 with permissions_check
+%% TODO VFS-7149 untangle permissions_check and fslogic_worker
+%% @end
+%%--------------------------------------------------------------------
+-spec get_children_ctxs(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
+    Token :: undefined | file_meta_links:token(),
+    StartId :: undefined | file_meta:name(),
+    StartTree :: undefined | oneprovider:id()
+) ->
+    {
+        ChildrenCtxs :: [file_ctx:ctx()],
+        ExtendedListInfo :: file_meta:list_extended_info(),
+        NewFileCtx :: file_ctx:ctx(),
+        IsLast :: boolean()
+    }.
+get_children_ctxs(UserCtx, FileCtx0, Offset, Limit, Token, StartId, StartTree) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     PermsToCheck = case IsDir of
         true -> [traverse_ancestors, ?list_container];
@@ -93,8 +162,8 @@ get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, PermsToCheck
     ),
-    get_children_insecure(
-        UserCtx, FileCtx2, Offset, Limit, Token, StartId, ChildrenWhiteList
+    list_children(
+        UserCtx, FileCtx2, Offset, Limit, Token, StartId, StartTree, ChildrenWhiteList
     ).
 
 
@@ -210,65 +279,6 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Gets {Guid, Name} for each directory children starting with Offset-th
-%% from specified StartId or Token entry and up to Limit of entries
-%% and allowed by ChildrenWhiteList.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_insecure(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | binary(),
-    StartId :: undefined | file_meta:name(),
-    ChildrenWhiteList :: undefined | [file_meta:name()]
-) ->
-    fslogic_worker:fuse_response().
-get_children_insecure(UserCtx, FileCtx0, Offset, Limit, Token, StartId, ChildrenWhiteList) ->
-    ParentGuid = file_ctx:get_guid_const(FileCtx0),
-    {Children, NewToken, IsLast, FileCtx1} = list_children(
-        UserCtx, FileCtx0, Offset, Limit, Token, StartId, ChildrenWhiteList
-    ),
-    ChildrenNum = length(Children),
-    ChildrenLinks = lists:filtermap(fun({Num, ChildCtx}) ->
-        ChildGuid = file_ctx:get_guid_const(ChildCtx),
-        {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
-        case Num == 1 orelse Num == ChildrenNum of
-            true ->
-                try
-                    {FileDoc, _ChildCtx3} = file_ctx:get_file_doc(ChildCtx2),
-                    case file_meta:check_name(file_id:guid_to_uuid(ParentGuid), ChildName, FileDoc) of
-                        {conflicting, ExtendedName, _Others} ->
-                            {true, #child_link{name = ExtendedName, guid = ChildGuid}};
-                        _ ->
-                            {true, #child_link{name = ChildName, guid = ChildGuid}}
-                    end
-                catch _:_ ->
-                    % Documents for file have not yet synchronized
-                    false
-                end;
-            false ->
-                % Other files than first and last don't need to resolve name
-                % conflicts (to check for collisions) as list_children
-                % (file_meta:tag_children to be precise) already did it
-                {true, #child_link{name = ChildName, guid = ChildGuid}}
-        end
-    end, lists:zip(lists:seq(1, ChildrenNum), Children)),
-
-    fslogic_times:update_atime(FileCtx1),
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_children{
-            child_links = ChildrenLinks,
-            index_token = NewToken,
-            is_last = IsLast
-        }
-    }.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Gets file basic attributes (see file_attr.hrl) for each directory children
 %% starting with Offset-th from specified Token entry and up to Limit of entries.
 %% and allowed by ChildrenWhiteList.
@@ -284,9 +294,10 @@ get_children_insecure(UserCtx, FileCtx0, Offset, Limit, Token, StartId, Children
     ChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
-get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, IncludeReplicationStatus, ChildrenWhiteList) ->
-    {Children, NewToken, IsLast, FileCtx1} = list_children(
-        UserCtx, FileCtx0, Offset, Limit, Token, undefined, ChildrenWhiteList
+get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, EncodedToken, IncludeReplicationStatus, ChildrenWhiteList) ->
+    Token = decode_token(EncodedToken),
+    {Children, ExtendedInfo, FileCtx1, IsLast} = list_children(
+        UserCtx, FileCtx0, Offset, Limit, Token, undefined, undefined, ChildrenWhiteList
     ),
     ChildrenAttrs = map_children(
         UserCtx,
@@ -297,10 +308,11 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, IncludeRepl
 
     fslogic_times:update_atime(FileCtx1),
 
+    NewTokenOrUndefined = maps:get(token, ExtendedInfo, undefined),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
-            index_token = NewToken,
+            index_token = encode_token(NewTokenOrUndefined),
             is_last = IsLast
         }
     }.
@@ -325,9 +337,8 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, IncludeRepl
     fslogic_worker:fuse_response().
 get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWhiteList) ->
     file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
-
-    {Children, _NewToken, IsLast, FileCtx1} = list_children(
-        UserCtx, FileCtx0, Offset, Limit, undefined, StartId, ChildrenWhiteList
+    {Children, _ExtendedInfo, FileCtx1, IsLast} = list_children(
+        UserCtx, FileCtx0, Offset, Limit, undefined, StartId, undefined, ChildrenWhiteList
     ),
     ChildrenDetails = map_children(
         UserCtx,
@@ -335,9 +346,7 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
         Children,
         false
     ),
-
     fslogic_times:update_atime(FileCtx1),
-
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_details{
             child_details = ChildrenDetails,
@@ -350,31 +359,29 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
 -spec list_children(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: file_meta:offset(),
     Limit :: file_meta:limit(),
-    Token :: undefined | datastore_links_iter:token(),
+    Token :: undefined | file_meta_links:token(),
     StartId :: undefined | file_meta:name(),
+    StartTree :: undefined | oneprovider:id(),
     ChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     {
         Children :: [file_ctx:ctx()],
-        NewToken :: binary(),
-        IsLast :: boolean(),
-        NewFileCtx :: file_ctx:ctx()
+        ExtendedInfo :: file_meta:list_extended_info(),
+        NewFileCtx :: file_ctx:ctx(),
+        IsLast :: boolean()
     }.
-list_children(UserCtx, FileCtx, Offset, Limit, Token, StartId, undefined) ->
-    {Token2, CachePid} = get_cached_token(Token),
-
-    case file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit, Token2, StartId) of
-        {C, FC}  ->
-            {C, <<"">>, length(C) < Limit, FC};
-        {C, NT, FC} ->
-            IL = NT#link_token.is_last,
-            NT2 = case IL of
-                true -> <<"">>;
-                _ -> cache_token(NT, CachePid)
+list_children(UserCtx, FileCtx, Offset, Limit, Token, StartId, StartTree, undefined) ->
+    case file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, StartTree) of
+        {Children, FileCtx2}  ->
+            {Children, #{}, FileCtx2, length(Children) < Limit};
+        {Children, ExtendedInfo, FileCtx2} ->
+            IsLast = case maps:get(token, ExtendedInfo, undefined) of
+                undefined -> length(Children) < Limit;
+                NewToken -> NewToken#link_token.is_last
             end,
-            {C, NT2, IL, FC}
+            {Children, ExtendedInfo, FileCtx2, IsLast}
     end;
-list_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, ChildrenWhiteList0) ->
+list_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, _StartTree, ChildrenWhiteList0) ->
     ChildrenWhiteList1 = case StartId of
         undefined ->
             ChildrenWhiteList0;
@@ -384,7 +391,7 @@ list_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, ChildrenWhiteList0) 
     {Children, FileCtx1} = file_ctx:get_file_children_whitelisted(
         FileCtx0, UserCtx, Offset, Limit, ChildrenWhiteList1
     ),
-    {Children, <<>>, length(Children) < Limit, FileCtx1}.
+    {Children, #{}, FileCtx1, length(Children) < Limit}.
 
 
 %%--------------------------------------------------------------------
@@ -446,82 +453,21 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus) ->
     ).
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets token value from cache or via decoding.
-%% @end
-%%--------------------------------------------------------------------
--spec get_cached_token(Token :: undefined | binary()) ->
-    {CachedToken :: datastore_links_iter:token(), CachePid :: pid() | undefined}.
-get_cached_token(<<"">>) ->
-    {#link_token{}, undefined};
-get_cached_token(undefined) ->
-    {#link_token{}, undefined};
-get_cached_token(Token) ->
-    case application:get_env(?APP_NAME, cache_list_dir_token, false) of
-        true ->
-            CachePid = binary_to_term(Token),
-            CachePid ! {get_token, self()},
-            receive
-                {link_token, CachedToken} -> {CachedToken, CachePid}
-            after
-                1000 -> {#link_token{}, undefined}
-            end;
-        _ ->
-            {binary_to_term(Token), undefined}
-    end.
+
+-spec decode_token(binary()) -> file_meta_links:token() | undefined.
+decode_token(undefined) ->
+    undefined;
+decode_token(<<>>) ->
+    #link_token{};
+decode_token(Token) ->
+    binary_to_term(Token).
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Encodes and caches token if needed.
-%% @end
-%%--------------------------------------------------------------------
--spec cache_token(Token :: datastore_links_iter:token(),
-    CachePid :: pid() | undefined) -> binary().
-cache_token(NT, undefined) ->
-    case application:get_env(?APP_NAME, cache_list_dir_token, false) of
-        true ->
-            Pid = spawn(fun() ->
-                cache_proc(NT)
-            end),
-            term_to_binary(Pid);
-        _ ->
-            term_to_binary(NT)
-    end;
-cache_token(NT, CachePid) ->
-    case rpc:call(node(CachePid), erlang, is_process_alive, [CachePid]) of
-        true ->
-            CachePid ! {cache_token, NT},
-            term_to_binary(CachePid);
-        _ ->
-            cache_token(NT, undefined)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Token cache process.
-%% @end
-%%--------------------------------------------------------------------
--spec cache_proc(Token :: datastore_links_iter:token()) -> ok.
-cache_proc(Token) ->
-    Timeout = application:get_env(?APP_NAME,
-        list_dir_token_cache_timeout, timer:seconds(30)),
-    receive
-        {get_token, Pid} ->
-            Pid ! {link_token, Token},
-            cache_proc(Token);
-        {cache_token, NT} ->
-            cache_proc(NT)
-    after
-        Timeout ->
-            ok
-    end.
-
+-spec encode_token(file_meta_links:token() | undefined) -> binary().
+encode_token(undefined) ->
+    <<>>;
+encode_token(Token) ->
+    term_to_binary(Token).
 
 %%--------------------------------------------------------------------
 %% @private

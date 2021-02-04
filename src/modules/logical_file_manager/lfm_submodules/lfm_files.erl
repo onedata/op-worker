@@ -18,11 +18,14 @@
 
 %% API
 %% Functions operating on directories or files
--export([unlink/3, rm/2, mv/3, mv/4, cp/3, cp/4, get_parent/2, get_file_path/2,
-    get_file_guid/2,
+-export([
+    unlink/3, rm_recursive/2,
+    mv/3, mv/4, cp/3, cp/4,
+    get_parent/2, get_file_path/2, get_file_guid/2,
     schedule_file_transfer/5, schedule_view_transfer/7,
     schedule_file_replication/4, schedule_replica_eviction/4,
-    schedule_replication_by_view/6, schedule_replica_eviction_by_view/6
+    schedule_replication_by_view/6, schedule_replica_eviction_by_view/6,
+    is_dir/2
 ]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, get_file_location/2, fsync/1, fsync/3, write/3,
@@ -60,13 +63,29 @@ unlink(SessId, FileEntry, Silent) ->
     remote_utils:call_fslogic(SessId, file_request, Guid, #delete_file{silent = Silent},
         fun(_) -> ok end).
 
+
 %%--------------------------------------------------------------------
-%% @equiv remove_utils:rm(SessId, FileKey).
+%% @doc
+%% Removes a file or directory.
+%% NOTE!!!
+%% Directory will be moved to trash.
+%% @end
 %%--------------------------------------------------------------------
--spec rm(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec rm_recursive(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | lfm:error_reply().
-rm(SessId, FileKey) ->
-    remove_utils:rm(SessId, FileKey).
+rm_recursive(SessId, FileKey) ->
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
+    case is_dir(SessId, FileKey) of
+        true ->
+            rm_using_trash(SessId, {guid, Guid});
+        false ->
+            unlink(SessId, {guid, Guid}, false);
+        {error, ?ENOENT} ->
+            ok;
+        Error ->
+            Error
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -168,6 +187,22 @@ get_file_path(SessId, FileGuid) ->
 get_file_guid(SessId, FilePath) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, {path, FilePath}),
     {ok, FileGuid}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if a file is directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_dir(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    true | false | lfm:error_reply().
+is_dir(SessId, FileKey) ->
+    case lfm_attrs:stat(SessId, FileKey) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
+        {ok, _} -> false;
+        Error -> Error
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -815,3 +850,18 @@ maybe_retry_sync(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum, Erro
             timer:sleep(min(SleepTime, ?SYNC_MAX_BACKOFF)),
             sync_block(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum + 1)
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Deletes directory and all its children by moving it to trash.
+%% @end
+%%--------------------------------------------------------------------
+-spec rm_using_trash(session:id(), fslogic_worker:ext_file()) ->
+    ok | lfm:error_reply().
+rm_using_trash(SessId, FileEntry) ->
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileEntry),
+    remote_utils:call_fslogic(SessId, file_request, Guid, #move_to_trash{},
+        fun(_) -> ok end
+    ).

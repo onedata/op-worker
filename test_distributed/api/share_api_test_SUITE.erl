@@ -556,7 +556,10 @@ assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileG
                     type = op_handle,
                     id = <<ShareId/binary, "_handle_id">>,
                     aspect = instance,
-                    scope = private
+                    % the share's handle is mocked (with a fake id), consequently
+                    % the user is not a member of the handle and does not have access
+                    % to its private scope, so public scope should be included in the GRI
+                    scope = public
                 }),
                 <<"privateRootFile">> => gri:serialize(#gri{
                     type = op_file,
@@ -605,11 +608,8 @@ init_per_suite(Config) ->
         lists:foreach(fun(Worker) ->
             % TODO VFS-6251
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
-            test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
             test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
         end, ?config(op_worker_nodes, NewConfig2)),

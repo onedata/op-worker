@@ -17,11 +17,15 @@
 
 %% API
 -export([
-    get_cert_chain_pems/1,
+    get_cert_chain_ders/1,
     gs_protocol_supported_versions/1,
 
     get_provider_id/1,
     get_provider_domain/1,
+
+    supports_space/2,
+    get_supporting_storage_id/2,
+    space_capacity_usage/2,
 
     create_fuse_session/4
 ]).
@@ -32,9 +36,9 @@
 %%%===================================================================
 
 
--spec get_cert_chain_pems(node()) -> [public_key:der_encoded()] | no_return().
-get_cert_chain_pems(Node) ->
-    ?assertMatch([_ | _], rpc:call(Node, https_listener, get_cert_chain_pems, [])).
+-spec get_cert_chain_ders(node()) -> [public_key:der_encoded()] | no_return().
+get_cert_chain_ders(Node) ->
+    ?assertMatch([_ | _], rpc:call(Node, https_listener, get_cert_chain_ders, [])).
 
 
 -spec gs_protocol_supported_versions(node()) -> [gs_protocol:protocol_version()].
@@ -50,6 +54,22 @@ get_provider_id(Node) ->
 -spec get_provider_domain(node()) -> binary() | no_return().
 get_provider_domain(Node) ->
     ?assertMatch(<<_/binary>>, rpc:call(Node, oneprovider, get_domain, [])).
+
+
+-spec supports_space(node(), od_space:id()) -> boolean().
+supports_space(Node, SpaceId) ->
+    rpc:call(Node, provider_logic, supports_space, [SpaceId]).
+
+
+-spec get_supporting_storage_id(node(), od_space:id()) -> storage:id().
+get_supporting_storage_id(Node, SpaceId) ->
+    {ok, [StorageId]} = rpc:call(Node, space_logic, get_local_storage_ids, [SpaceId]),
+    StorageId.
+
+
+-spec space_capacity_usage(node(), od_space:id()) -> non_neg_integer().
+space_capacity_usage(Node, SpaceId) ->
+    rpc:call(Node, space_quota, current_size, [SpaceId]).
 
 
 -spec create_fuse_session(node(), binary(), aai:subject(),

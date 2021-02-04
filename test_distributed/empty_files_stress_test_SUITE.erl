@@ -16,6 +16,7 @@
 -behaviour(traverse_behaviour).
 
 -include("global_definitions.hrl").
+-include("tree_traverse.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -139,10 +140,10 @@ end_per_testcase(_Case, Config) ->
 %%% Pool callbacks
 %%%===================================================================
 
-do_master_job(Job, TaskID) ->
+do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, TaskID) ->
     case tree_traverse:get_traverse_info(Job) of
         precalculate_dir ->
-            Doc = tree_traverse:get_doc(Job),
+            {Doc, _} = file_ctx:get_file_doc(FileCtx),
             Callback = fun(Args) -> get_file_level(Args) end,
             {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, 0, []),
             case CalculationInfo of
@@ -157,8 +158,9 @@ do_master_job(Job, TaskID) ->
             tree_traverse:do_master_job(Job, TaskID)
     end.
 
-do_slave_job({Doc, _TraverseInfo}, _TaskID) ->
+do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, _TaskID) ->
     Callback = fun(Args) -> get_file_level(Args) end,
+    {Doc, _} = file_ctx:get_file_doc(FileCtx),
     {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, 0, []),
     case CalculationInfo of
         1 -> ok;

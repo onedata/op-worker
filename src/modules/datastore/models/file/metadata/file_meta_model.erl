@@ -291,9 +291,12 @@ upgrade_record(9, {
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), file_meta:doc(), file_meta:doc()) -> default.
 resolve_conflict(_Ctx,
-    #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
-    #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}
+    NewDoc = #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
+    PrevDoc = #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}
 ) ->
+    spawn(fun() ->
+        invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc)
+    end),
     case NewName =/= PrevName of
         true ->
             spawn(fun() ->
@@ -308,3 +311,24 @@ resolve_conflict(_Ctx,
     end,
 
     default.
+
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec invalidate_qos_bounded_cache_if_moved_to_trash(file_meta:doc(), file_meta:doc()) -> ok.
+invalidate_qos_bounded_cache_if_moved_to_trash(
+    #document{key = Uuid, value = #file_meta{parent_uuid = NewParentUuid}, scope = SpaceId}, #document{value = #file_meta{parent_uuid = PrevParentUuid}
+}) ->
+    case PrevParentUuid =/= NewParentUuid andalso fslogic_uuid:is_trash_dir_uuid(NewParentUuid) of
+        true ->
+            % the file has been moved to trash
+            FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
+            PrevParentCtx = file_ctx:new_by_guid(file_id:pack_guid(PrevParentUuid, SpaceId)),
+            file_qos:clean_up(FileCtx, PrevParentCtx),
+            qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        false ->
+            ok
+    end.

@@ -10,6 +10,9 @@
 %%%-------------------------------------------------------------------
 -author("Lukasz Opiola").
 
+-ifndef(METADATA_HRL).
+-define(METADATA_HRL, 1).
+
 -include_lib("ctool/include/posix/acl.hrl").
 
 -define(ONEDATA_PREFIX, <<"onedata_">>).
@@ -29,3 +32,5 @@
 -define(RDF_METADATA_KEY, <<?ONEDATA_PREFIX_STR, "rdf">>).
 
 -define(METADATA_INTERNAL_PREFIXES, [?ONEDATA_PREFIX, ?CDMI_PREFIX]).
+
+-endif.

@@ -192,11 +192,7 @@ acquire_offline_credentials(_, _, _) ->
 -spec token_valid_until(tokens:serialized()) -> time:seconds().
 token_valid_until(OfflineAccessTokenBin) ->
     {ok, OfflineAccessToken} = tokens:deserialize(OfflineAccessTokenBin),
-
-    lists:foldl(fun
-        (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
-        (#cv_time{valid_until = ValidUntil}, Acc) -> min(ValidUntil, Acc)
-    end, undefined, caveats:filter([cv_time], tokens:get_caveats(OfflineAccessToken))).
+    caveats:infer_expiration_timestamp(tokens:get_caveats(OfflineAccessToken)).
 
 
 %% @private
