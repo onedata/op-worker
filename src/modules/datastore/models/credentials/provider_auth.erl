@@ -57,7 +57,7 @@
 -define(NOW(), global_clock:timestamp_seconds()).
 
 -define(FILE_COMMENT,
-    <<"This file holds the Oneprovider root token "
+    <<"This file holds the Oneprovider root access token "
     "carrying its identity and full authorization. "
     "It can be used to authorize operations in Onezone's "
     "REST API on behalf of the Oneprovider when sent in the "

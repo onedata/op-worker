@@ -25,7 +25,9 @@
 
     create_identity_token/1,
     verify_access_token/5,
-    verify_provider_identity_token/1
+    verify_provider_identity_token/1,
+
+    acquire_offline_user_access_token/6
 ]).
 
 
@@ -175,10 +177,41 @@ verify_provider_identity_token(IdentityToken) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Requests an access token on behalf of given user for the purpose of offline
+%% access. Requires an access token of the user and authorization context in
+%% which the token is valid.
+%% @see provider_offline_access
+%% @end
+%%--------------------------------------------------------------------
+-spec acquire_offline_user_access_token(
+    od_user:id(),
+    auth_manager:access_token(),
+    auth_manager:consumer_token(),
+    PeerIp :: undefined | ip_utils:ip(),
+    Interface :: undefined | cv_interface:interface(),
+    data_access_caveats:policy()
+) ->
+    {ok, tokens:serialized()} | errors:error().
+acquire_offline_user_access_token(UserId, AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{
+            type = od_token,
+            id = undefined,
+            aspect = {offline_user_access_token, UserId},
+            scope = private
+        },
+        data = build_verification_payload(
+            AccessToken, ConsumerToken,
+            PeerIp, Interface, DataAccessCaveatsPolicy
+        )
+    }).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 
 %% @private
 -spec build_verification_payload(
@@ -204,18 +237,8 @@ build_verification_payload(AccessToken, ConsumerToken, PeerIp, Interface, DataAc
             disallow_data_access_caveats -> false
         end
     },
-    Json1 = case Interface of
-        undefined ->
-            Json0;
-        _ ->
-            Json0#{<<"interface">> => atom_to_binary(Interface, utf8)}
-    end,
-    case ConsumerToken of
-        undefined ->
-            Json1;
-        _ ->
-            Json1#{<<"consumerToken">> => ConsumerToken}
-    end.
+    Json1 = maps_utils:put_if_defined(Json0, <<"interface">>, Interface),
+    maps_utils:put_if_defined(Json1, <<"consumerToken">>, ConsumerToken).
 
 
 %% @private
