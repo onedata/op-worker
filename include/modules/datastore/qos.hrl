@@ -57,7 +57,8 @@
 % of the file and all its parents.
 -record(effective_file_qos, {
     qos_entries = [] :: [qos_entry:id()],
-    assigned_entries = #{} :: file_qos:assigned_entries()
+    assigned_entries = #{} :: file_qos:assigned_entries(),
+    in_trash = false :: boolean()
 }).
 
 -endif.

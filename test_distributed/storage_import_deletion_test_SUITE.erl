@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("lfm_test_utils.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -78,7 +79,7 @@ all() -> ?ALL(?TEST_CASES).
         initializer:get_supporting_storage_id(W, SpaceId))
 end).
 -define(FILE_CTX(FileGuid), file_ctx:new_by_guid(FileGuid)).
--define(SESSION_ID(Config, Worker), ?config({session_id, {?USER1, ?GET_DOMAIN(Worker)}}, Config)).
+-define(SESSION_ID(Config, Worker), ?SESS_ID(?USER1, Worker, Config)).
 
 % {StorageType, IsImportedStorage}
 -define(BLOCK_STORAGE_CONFIGS, [{block_storage, false}, {block_storage, true}]).
@@ -438,27 +439,9 @@ run_deletion(Worker, StorageFileCtx, FileCtx) ->
 clean_spaces(Worker) ->
     lfm_proxy:close_all(Worker),
     lists:foreach(fun(SpaceId) ->
-        clean_space(Worker, SpaceId)
+        lfm_test_utils:clean_space(Worker, SpaceId, 30)
     end, ?SPACE_IDS).
 
-clean_space(Worker, SpaceId) ->
-    SpaceGuid = ?SPACE_GUID(SpaceId),
-    clean_space(Worker, SpaceGuid, 0, 1000),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, {guid, SpaceGuid}, 0, 1000)).
-
-
-clean_space(Worker, SpaceGuid, Offset, Count) ->
-    {ok, Children} = lfm_proxy:get_children(Worker, ?ROOT_SESS_ID, {guid, SpaceGuid}, Offset, Count),
-    lists:foreach(fun({ChildGuid, _}) ->
-        lfm_proxy:rm_recursive(Worker, ?ROOT_SESS_ID, {guid, ChildGuid}),
-        ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, ?ROOT_SESS_ID,  {guid, ChildGuid}))
-    end, Children),
-    case length(Children) < Count of
-        true ->
-            ok;
-        false ->
-            clean_space(Worker, SpaceGuid, Offset + length(Children), Count)
-    end.
 
 clean_storage_sync_links(Worker) ->
     lists:foreach(fun(SpaceId) ->

@@ -24,7 +24,7 @@
 
 -define(CTX, (index:get_ctx())).
 -define(LINK_PREFIX, <<"INDEXES">>).
--define(VIEW_ID_TREE_ID_SEPARATOR, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR).
+-define(VIEW_ID_TREE_ID_SEPARATOR, <<"@">>).
 
 
 %%%===================================================================

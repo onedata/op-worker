@@ -55,7 +55,7 @@ change_replicated_internal(SpaceId, #document{
     deleted = Del2
 } = FileDoc) when Del1 or Del2 ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     fslogic_delete:handle_remotely_deleted_file(FileCtx2),
     ok;
@@ -64,7 +64,7 @@ change_replicated_internal(SpaceId, #document{
     value = #file_meta{mode = CurrentMode, type = ?REGULAR_FILE_TYPE}
 } = FileDoc) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
     ok = file_meta_posthooks:execute_hooks(FileUuid);
@@ -74,7 +74,7 @@ change_replicated_internal(SpaceId, #document{
     value = #file_meta{mode = CurrentMode}
 } = FileDoc) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
     ok = file_meta_posthooks:execute_hooks(FileUuid);

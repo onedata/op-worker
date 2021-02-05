@@ -138,7 +138,7 @@ cleanup_traverse_stage_test(Config) ->
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
     AllPathsWithoutSpace = [DirPath, F1Path, F2Path],
     check_files_on_storage(Worker, AllPaths, true, false),
-    
+
     StageJob = #space_unsupport_job{
         stage = cleanup_traverse,
         space_id = ?SPACE_ID,

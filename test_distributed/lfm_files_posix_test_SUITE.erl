@@ -40,7 +40,10 @@
     lfm_truncate_test/1,
     lfm_truncate_and_write/1,
     lfm_acl_test/1,
+    lfm_rmdir_test/1,
+    lfm_rmdir_fails_with_eperm_on_space_directory_test/1,
     rm_recursive_test/1,
+    rm_recursive_fails_with_eperm_on_space_directory_test/1,
     file_gap_test/1,
     ls_test/1,
     ls_with_stats_test/1,
@@ -90,7 +93,6 @@
     lfm_open_failure_multiple_users_test/1,
     lfm_open_and_create_open_failure_test/1,
     lfm_copy_failure_multiple_users_test/1,
-    lfm_rmdir_test/1,
     sparse_files_should_be_created/1,
     rename_removed_opened_file_test/1,
     mkdir_removed_opened_file_test/1,
@@ -116,7 +118,10 @@
     lfm_truncate_test,
     lfm_truncate_and_write,
     lfm_acl_test,
+    lfm_rmdir_test,
+    lfm_rmdir_fails_with_eperm_on_space_directory_test,
     rm_recursive_test,
+    rm_recursive_fails_with_eperm_on_space_directory_test,
     file_gap_test,
     ls_test,
     ls_with_stats_test,
@@ -166,7 +171,6 @@
     lfm_open_failure_multiple_users_test,
     lfm_open_and_create_open_failure_test,
     lfm_copy_failure_multiple_users_test,
-    lfm_rmdir_test,
     sparse_files_should_be_created,
     rename_removed_opened_file_test,
     mkdir_removed_opened_file_test,
@@ -250,8 +254,20 @@ lfm_acl_test(Config) ->
     lfm_files_test_base:lfm_acl(Config).
 
 
+lfm_rmdir_test(Config) ->
+    lfm_files_test_base:lfm_rmdir(Config).
+
+
+lfm_rmdir_fails_with_eperm_on_space_directory_test(Config) ->
+    lfm_files_test_base:lfm_rmdir_fails_with_eperm_on_space_directory(Config).
+
+
 rm_recursive_test(Config) ->
     lfm_files_test_base:rm_recursive(Config).
+
+
+rm_recursive_fails_with_eperm_on_space_directory_test(Config) ->
+    lfm_files_test_base:rm_recursive_fails_with_eperm_on_space_directory(Config).
 
 
 file_gap_test(Config) ->
@@ -448,10 +464,6 @@ lfm_open_and_create_open_failure_test(Config) ->
 
 lfm_copy_failure_multiple_users_test(Config) ->
     lfm_files_test_base:lfm_copy_failure_multiple_users(Config).
-
-
-lfm_rmdir_test(Config) ->
-    lfm_files_test_base:lfm_rmdir(Config).
 
 sparse_files_should_be_created(Config) ->
     lfm_files_test_base:sparse_files_should_be_created(Config, read).

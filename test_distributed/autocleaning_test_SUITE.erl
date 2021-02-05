@@ -13,6 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("distribution_assert.hrl").
+-include("lfm_test_utils.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -79,9 +80,7 @@ all() -> [
 -define(FILE_PATH(FileName), filename:join(["/", ?SPACE_ID, FileName])).
 
 -define(USER, <<"user1">>).
--define(SESSION(Worker, Config), ?SESSION(?USER, Worker, Config)).
--define(SESSION(User, Worker, Config),
-    ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config)).
+-define(SESSION(Worker, Config), ?SESS_ID(?USER, Worker, Config)).
 
 -define(ATTEMPTS, 300).
 -define(LIMIT, 10).
@@ -751,7 +750,7 @@ time_warp_test(Config) ->
 
     FilesNum = 100,
     FileSize = 10,
-    Target = 0,
+    Target = 10,
     Threshold = FilesNum * FileSize + 1,
 
     DirName = <<"dir">>,
@@ -765,6 +764,7 @@ time_warp_test(Config) ->
     ExtraFileSize = 1,
     EG = write_file(W2, SessId2, ?FILE_PATH(ExtraFile), ExtraFileSize),
     TotalSize = FilesNum * FileSize + ExtraFileSize,
+    BytesToRelease = TotalSize - Target,
 
     enable_file_popularity(W1, ?SPACE_ID),
     lists:foreach(fun(G) ->
@@ -802,13 +802,17 @@ time_warp_test(Config) ->
     ?assertRunFinished(W1, ARId),
     StartTimeIso8601 = time:seconds_to_iso8601(StartTimeSeconds),
     % stop time should be equal to start time as it cannot be lower
-    ?assertMatch({ok, #{
-        released_bytes := TotalSize,
-        bytes_to_release := TotalSize,
-        status := ?COMPLETED,
-        started_at := StartTimeIso8601,
-        stopped_at := StartTimeIso8601
-    }}, get_run_report(W1, ARId), ?ATTEMPTS).
+    ?assertRunFinished(W1, ARId),
+    ?assertEqual(true, begin
+        {ok, #{
+            released_bytes := ReleasedBytes,
+            bytes_to_release := BytesToRelease,
+            status := ?COMPLETED,
+            started_at := StartTimeIso8601,
+            stopped_at := StartTimeIso8601
+        }} = get_run_report(W1, ARId),
+        BytesToRelease =< ReleasedBytes
+    end, ?ATTEMPTS).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -850,7 +854,7 @@ init_per_testcase(default, Config) ->
     ensure_controller_stopped(W, ?SPACE_ID),
     clean_autocleaning_run_model(W, ?SPACE_ID),
     Config2 = lfm_proxy:init(Config),
-    ensure_space_empty(?SPACE_ID, Config2),
+    lfm_test_utils:assert_space_and_trash_are_empty(Workers, ?SPACE_ID, ?ATTEMPTS),
     Config2;
 
 init_per_testcase(time_warp_test, Config) ->
@@ -874,16 +878,16 @@ end_per_testcase(time_warp_test, Config) ->
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [W | _] = Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:close_all(W),
     ensure_controller_stopped(W, ?SPACE_ID),
     clean_autocleaning_run_model(W, ?SPACE_ID),
     delete_file_popularity_config(W, ?SPACE_ID),
     delete_auto_cleaning_config(W, ?SPACE_ID),
-    clean_space(?SPACE_ID, Config),
+    lfm_test_utils:clean_space(W, Workers, ?SPACE_ID, ?ATTEMPTS),
     ok = test_utils:set_env(W, op_worker, autocleaning_view_batch_size, 1000),
     ok = test_utils:set_env(W, op_worker, replica_deletion_max_parallel_requests, 1000),
-    ensure_space_empty(?SPACE_ID, Config),
+%%    ensure_space_empty(?SPACE_ID, Config),
     lfm_proxy:teardown(Config).
 
 end_per_suite(Config) ->
@@ -958,37 +962,6 @@ enable_file_popularity(Worker, SpaceId) ->
 
 delete_file_popularity_config(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, delete_config, [SpaceId]).
-
-clean_space(SpaceId, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESSION(W1, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    BatchSize = 1000,
-    clean_space(W1, SessId, SpaceGuid, 0, BatchSize).
-
-clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
-    {ok, GuidsAndPaths} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
-    FilesNum = length(GuidsAndPaths),
-    delete_files(Worker, SessId, GuidsAndPaths),
-    case FilesNum < BatchSize of
-        true ->
-            ok;
-        false ->
-            clean_space(Worker, SessId, SpaceGuid, Offset + BatchSize, BatchSize)
-    end.
-
-delete_files(Worker, SessId, GuidsAndPaths) ->
-    lists:foreach(fun({G, _P}) ->
-        ok = lfm_proxy:rm_recursive(Worker, SessId, {guid, G})
-    end, GuidsAndPaths).
-
-ensure_space_empty(SpaceId, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    lists:foreach(fun(W) ->
-        ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?SESSION(W, Config), {guid, Guid}, 0, 1), ?ATTEMPTS),
-        ?assertEqual(0, current_size(W, SpaceId), ?ATTEMPTS)
-    end, Workers).
 
 
 clean_autocleaning_run_model(Worker, SpaceId) ->

@@ -264,8 +264,9 @@ connect_via_token(Node, SocketOpts, Nonce) ->
 connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
     % given
     OpVersion = rpc:call(Node, op_worker, get_release_version, []),
+    Resolver = compatibility:build_resolver([Node], []),
     {ok, [Version | _]} = rpc:call(
-        Node, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
+        Node, compatibility, get_compatible_versions, [Resolver, ?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,

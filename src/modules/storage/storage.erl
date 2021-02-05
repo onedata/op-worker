@@ -605,8 +605,8 @@ migrate_to_zone() ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
+%% @doc
 %% Renames old `storage` record to `storage_config` and creates
 %% appropriate storages in Onezone.
 %% @end
@@ -666,7 +666,7 @@ migrate_space_support(SpaceId) ->
 -spec migrate_imported_storages_to_zone() -> ok.
 migrate_imported_storages_to_zone() ->
     ?info("Starting imported storages migration procedure..."),
-    {ok, StorageIds} = provider_logic:get_storage_ids(),
+    {ok, StorageIds} = provider_logic:get_storages(),
     lists:foreach(fun(StorageId) ->
         ImportedStorage = storage_config:is_imported_storage(StorageId),
         storage_logic:set_imported(StorageId, ImportedStorage)

@@ -751,7 +751,7 @@ connect_via_gs(Node, ?USER(UserId)) ->
         Node,
         ?SUB(user, UserId),
         {token, initializer:create_access_token(UserId)},
-        [{cacerts, rpc:call(Node, https_listener, get_cert_chain_pems, [])}]
+        [{cacerts, rpc:call(Node, https_listener, get_cert_chain_ders, [])}]
     ).
 
 
@@ -802,7 +802,7 @@ make_rest_request(_Config, Node, Client, #rest_args{
 }) ->
     URL = get_rest_endpoint(Node, Path),
     HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
-    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
+    CaCerts = rpc:call(Node, https_listener, get_cert_chain_ders, []),
     Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 10000}],
 
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of

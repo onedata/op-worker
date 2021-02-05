@@ -6,8 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing aggregated statistics about transfers
-%%% featuring given space and target provider.
+%%% Model defining custom couchbase view created by user.
+%%% Name of the module (index) is deprecated and was abandoned so that
+%%% it's not confused with harvesters' indices.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(index).
@@ -15,7 +16,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/fslogic/file_popularity_view.hrl").
+-include("modules/file_popularity/file_popularity_view.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 

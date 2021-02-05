@@ -363,6 +363,7 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
             Doc
     end.
 
+
 %%-------------------------------------------------------------------
 %% @doc
 %% Clear blocks in location document.

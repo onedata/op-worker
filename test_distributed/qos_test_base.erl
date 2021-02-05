@@ -60,7 +60,7 @@
     qos_status_after_failed_transfer_deleted_entry/3
 ]).
 
--define(ATTEMPTS, 60).
+-define(ATTEMPTS, 120).
 
 %%%===================================================================
 %%% Group of tests that adds single QoS expression for file or directory
@@ -1129,11 +1129,13 @@ qos_status_during_traverse_with_dir_deletion_test_base(Config, SpaceId, NumberOf
         {SpaceId, [
             {Name, [ % Dir1
                 {?filename(Name, 1), % Dir2
-                    lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]} end, lists:seq(1, NumberOfFilesInDir)) 
+                    lists:map(fun(Num) ->
+                        {?filename(Name, Num), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}
+                    end, lists:seq(1, NumberOfFilesInDir))
                 }
             ]}
         ]},
-    
+
     {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
     
     Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),

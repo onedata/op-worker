@@ -136,8 +136,9 @@ provider_connection_test(Config) ->
 client_connection_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     OpVersion = rpc:call(Worker1, op_worker, get_release_version, []),
+    Resolver = compatibility:build_resolver([Worker1], []),
     {ok, [CompatibleVersion | _]} = rpc:call(
-        Worker1, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
+        Worker1, compatibility, get_compatible_versions, [Resolver, ?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
     UserId = <<"user">>,
@@ -181,8 +182,9 @@ python_client_test_base(Config) ->
     PacketRaw = messages:encode_msg(Packet),
 
     OpVersion = rpc:call(Worker1, op_worker, get_release_version, []),
+    Resolver = compatibility:build_resolver([Worker1], []),
     {ok, [Version | _]} = rpc:call(
-        Worker1, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
+        Worker1, compatibility, get_compatible_versions, [Resolver, ?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
     UserId = <<"user">>,
