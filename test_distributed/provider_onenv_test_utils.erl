@@ -60,7 +60,7 @@ find_importing_provider(Config, SpaceId) ->
     lists:foldl(fun
         (ProviderId, undefined) ->
             [OpNode | _] = oct_background:get_provider_nodes(ProviderId),
-            {ok, StorageId} = rpc:call(OpNode, space_logic, get_local_storage_id, [SpaceId]),
+            {ok, StorageId} = rpc:call(OpNode, space_logic, get_local_supporting_storage, [SpaceId]),
             case rpc:call(OpNode, storage, is_imported, [StorageId]) of
                 true -> ProviderId;
                 false -> undefined

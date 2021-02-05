@@ -115,7 +115,7 @@ upgrade_from_20_02_0_beta3_storages(Config) ->
     {ok, _} = rpc:call(Worker, storage_config, create, [St, #helper{}, undefined]),
     {ok, _} = rpc:call(Worker, datastore_model, update, [storage_config:get_ctx(), St,
         fun(StorageConfig) -> {ok, StorageConfig#storage_config{imported_storage = true}} end]),
-    test_utils:mock_expect(Worker, provider_logic, get_storage_ids, fun() -> {ok, [St]} end),
+    test_utils:mock_expect(Worker, provider_logic, get_storages, fun() -> {ok, [St]} end),
     
     ?assertEqual({ok, 3}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [2])),
     
@@ -252,15 +252,15 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     SSMCtx = storage_sync_monitoring:get_ctx(),
 
     SpaceId1 = <<"space_id1">>,
-    {ok, Storage1} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId1]),
+    {ok, Storage1} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId1]),
     SpaceId2 = <<"space_id2">>,
-    {ok, Storage2} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId2]),
+    {ok, Storage2} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId2]),
     SpaceId3 = <<"space_id3">>,
-    {ok, Storage3} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId3]),
+    {ok, Storage3} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId3]),
     SpaceId4 = <<"space_id4">>,
-    {ok, Storage4} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId4]),
+    {ok, Storage4} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId4]),
     SpaceId5 = <<"space_id5">>,
-    {ok, Storage5} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId5]),
+    {ok, Storage5} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId5]),
 
     Scans = 10,
     ToProcess = 100,
