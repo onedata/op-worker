@@ -450,7 +450,7 @@ upgrade_supports_to_21_02() ->
     ?info("Upgrading all space supports to the new model (~s)...", [?LINE_21_02]),
     {ok, Spaces} = provider_logic:get_spaces(),
     lists:foreach(fun(SpaceId) ->
-        {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+        {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
         {ok, Name} = space_logic:get_name(SpaceId),
         ok = storage_logic:upgrade_support_to_21_02(StorageId, SpaceId),
         ?info("  * space '~ts' (~ts) OK", [Name, SpaceId])
