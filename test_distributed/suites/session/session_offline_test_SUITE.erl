@@ -15,6 +15,7 @@
 -include("api_file_test_utils.hrl").
 -include("modules/auth/offline_access_manager.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 -export([
     all/0,
@@ -93,7 +94,8 @@ offline_session_should_work_as_any_other_session_test(_Config) ->
         )
     end, [
         fun clear_auth_cache/0,
-        fun force_oz_connection_restart/0
+        fun force_oz_connection_restart/0,
+        fun() -> ozw_test_rpc:simulate_downtime(5) end
     ]).
 
 
@@ -114,6 +116,12 @@ offline_session_should_internally_refresh_provider_identity_token(_Config) ->
         % Wait for current provider identity token to expire
         timer:sleep(timer:seconds(?PROVIDER_TOKEN_TTL + 1)),
 
+        % Clear auth cache so that session credentials would be once again verified
+        % on next operation execution. Otherwise it would be impossible to see what
+        % consumer token is used (normally it is kept as atom placeholder and
+        % substituted only on call to oz)
+        clear_auth_cache(),
+
         % Then try to perform any lfm operation - it should work properly
         % as identity token should be internally refreshed
         ?assertMatch(
@@ -125,7 +133,7 @@ offline_session_should_internally_refresh_provider_identity_token(_Config) ->
         receive {consumer_token, ConsumerToken} ->
             ConsumerToken
         after 100 ->
-            throw(consumer_token_not_refreshed)
+            ct:fail("Consumer token not renewed")
         end
     end, lists:seq(1, 5)),
 
@@ -212,7 +220,7 @@ offline_session_should_properly_react_to_time_warps_test(_Config) ->
     % time of inertia) but offline credentials docs are not automatically removed - it is
     % responsibility of offline job to do so by calling `offline_access_manager:close_session`.
     time_test_utils:simulate_seconds_passing(7 * ?DAY),
-    ?assertMatch(?ERROR_TOKEN_INVALID, get_offline_session_id(JobId)),
+    ?assertMatch(?ERROR_TOKEN_CAVEAT_UNVERIFIED(#cv_time{}), get_offline_session_id(JobId)),
     force_session_validity_check(SessionId),
     ?assertEqual(false, session_exists(SessionId), ?ATTEMPTS),
     ?assert(offline_credentials_exist(JobId)),
@@ -429,7 +437,8 @@ init_per_testcase(Case, Config) when
     Case == offline_session_should_properly_react_to_time_warps_test
 ->
     ok = time_test_utils:freeze_time(Config),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
+    CurrTime = time_test_utils:get_frozen_time_seconds(),
+    init_per_testcase(?DEFAULT_CASE(Case), [{frozen_time, CurrTime} | Config]);
 
 init_per_testcase(_Case, Config) ->
     unmock_acquire_offline_user_access_token_failure(),
@@ -437,10 +446,17 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 
+end_per_testcase(offline_session_should_work_as_any_other_session_test = Case, Config) ->
+    % Await renewal of oz connection (it is teardown as part of test).
+    ?assertMatch(true, rpc:call(?NODE, gs_channel_service, is_connected, []), ?ATTEMPTS),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
 end_per_testcase(Case, Config) when
     Case == offline_token_should_be_renewed_if_needed_test;
     Case == offline_session_should_properly_react_to_time_warps_test
 ->
+    OriginalTime = ?config(frozen_time, Config),
+    time_test_utils:set_current_time_seconds(OriginalTime),
     ok = time_test_utils:unfreeze_time(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 

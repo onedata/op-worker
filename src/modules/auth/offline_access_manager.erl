@@ -88,7 +88,7 @@ get_session_id(OfflineJobId) ->
 
 -spec close_session(offline_job_id()) -> ok.
 close_session(OfflineJobId) ->
-    ok = offline_access_credentials:remove(OfflineJobId),
+    ok = offline_access_credentials:delete(OfflineJobId),
     ok = session_manager:terminate_session(OfflineJobId).
 
 
@@ -193,7 +193,7 @@ acquire_offline_credentials(_, _, _) ->
 -spec token_valid_until(tokens:serialized()) -> time:seconds().
 token_valid_until(OfflineAccessTokenBin) ->
     {ok, OfflineAccessToken} = tokens:deserialize(OfflineAccessTokenBin),
-    caveats:infer_expiration_timestamp(tokens:get_caveats(OfflineAccessToken)).
+    caveats:infer_expiration_time(tokens:get_caveats(OfflineAccessToken)).
 
 
 %% @private

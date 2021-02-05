@@ -16,7 +16,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([save/2, get/1, update/2, remove/1]).
+-export([save/2, get/1, update/2, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -58,8 +58,8 @@ update(Id, Diff) ->
     {ok, UpdatedDoc#document.value}.
 
 
--spec remove(id()) -> ok.
-remove(Id) ->
+-spec delete(id()) -> ok.
+delete(Id) ->
     ok = datastore_model:delete(?CTX, Id).
 
 
