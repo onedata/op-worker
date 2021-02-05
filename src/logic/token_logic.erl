@@ -35,6 +35,7 @@
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new temporary identity token for this provider with given TTL.
@@ -209,9 +210,11 @@ acquire_offline_user_access_token(UserId, AccessToken, ConsumerToken, PeerIp, In
         )
     }).
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %% @private
 -spec build_verification_payload(

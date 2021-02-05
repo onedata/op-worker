@@ -33,7 +33,8 @@
 -include_lib("clproto/include/messages.hrl").
 
 -export([
-    reuse_or_create_fuse_session/4, reuse_or_create_fuse_session/5,
+    reuse_or_create_fuse_session/4,
+    setup_fuse_session/3, setup_fuse_session/4, setup_fuse_session/5,
 
     connect_as_provider/3, connect_as_client/4,
 
@@ -117,23 +118,22 @@ reuse_or_create_fuse_session(Nonce, Identity, Credentials, Conn) ->
     {ok, SessId}.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Calls reuse_or_create_fuse_session/4 on specified Worker.
-%% @end
-%%--------------------------------------------------------------------
--spec reuse_or_create_fuse_session(
-    node(),
-    Nonce :: binary(),
-    Identity :: aai:subject(),
-    undefined | auth_manager:credentials(),
-    pid()
-) ->
-    {ok, session:id()} | {error, term()}.
-reuse_or_create_fuse_session(Worker, Nonce, Identity, Credentials, Conn) ->
-    ?assertMatch({ok, _}, rpc:call(Worker, ?MODULE,
-        reuse_or_create_fuse_session, [Nonce, Identity, Credentials, Conn]
-    )).
+setup_fuse_session(Worker, UserId, Nonce) ->
+    setup_fuse_session(Worker, UserId, Nonce, initializer:create_access_token(UserId)).
+
+
+setup_fuse_session(Worker, UserId, Nonce, AccessToken) ->
+    setup_fuse_session(Worker, UserId, Nonce, AccessToken, self()).
+
+
+setup_fuse_session(Worker, UserId, Nonce, AccessToken, Conn) ->
+    TokenCredentials = auth_manager:build_token_credentials(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
+    ?assertMatch({ok, _}, rpc:call(Worker, ?MODULE, reuse_or_create_fuse_session, [
+        Nonce, ?SUB(user, UserId), TokenCredentials, Conn
+    ])).
 
 
 generate_msg_id() ->

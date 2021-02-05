@@ -28,6 +28,7 @@
     reuse_or_create_outgoing_provider_session/2,
     reuse_or_create_proxied_session/4,
     reuse_or_create_gui_session/2,
+    reuse_or_create_offline_session/3,
     create_root_session/0, create_guest_session/0
 ]).
 -export([
@@ -49,11 +50,6 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates FUSE session or if session exists reuses it.
-%% @end
-%%--------------------------------------------------------------------
 -spec reuse_or_create_fuse_session(Nonce :: binary(), aai:subject(),
     auth_manager:credentials()) -> {ok, session:id()} | error().
 reuse_or_create_fuse_session(Nonce, Identity, Credentials) ->
@@ -61,11 +57,6 @@ reuse_or_create_fuse_session(Nonce, Identity, Credentials) ->
     reuse_or_create_session(SessId, fuse, Identity, Credentials).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates incoming provider's session or if session exists reuses it.
-%% @end
-%%--------------------------------------------------------------------
 -spec reuse_or_create_incoming_provider_session(aai:subject()) ->
     {ok, session:id()} | error().
 reuse_or_create_incoming_provider_session(?SUB(?ONEPROVIDER, ProviderId) = Identity) ->
@@ -73,22 +64,12 @@ reuse_or_create_incoming_provider_session(?SUB(?ONEPROVIDER, ProviderId) = Ident
     reuse_or_create_session(SessId, provider_incoming, Identity, undefined).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates outgoing provider's session or if session exists reuses it.
-%% @end
-%%--------------------------------------------------------------------
 -spec reuse_or_create_outgoing_provider_session(session:id(),
     aai:subject()) -> {ok, session:id()} | error().
 reuse_or_create_outgoing_provider_session(SessId, Identity) ->
     reuse_or_create_session(SessId, provider_outgoing, Identity, undefined).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates or reuses proxy session and starts session supervisor.
-%% @end
-%%--------------------------------------------------------------------
 -spec reuse_or_create_proxied_session(session:id(), ProxyVia :: oneprovider:id(),
     auth_manager:credentials(), SessionType :: atom()) ->
     {ok, session:id()} | error().
@@ -103,11 +84,6 @@ reuse_or_create_proxied_session(SessId, ProxyVia, Credentials, SessionType) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates REST session or if session exists reuses it.
-%% @end
-%%--------------------------------------------------------------------
 -spec reuse_or_create_rest_session(aai:subject(), auth_manager:credentials()) ->
     {ok, session:id()} | error().
 reuse_or_create_rest_session(?SUB(user, UserId) = Identity, Credentials) ->
@@ -120,11 +96,6 @@ reuse_or_create_rest_session(?SUB(user, UserId) = Identity, Credentials) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates GUI session and starts session supervisor.
-%% @end
-%%--------------------------------------------------------------------
 -spec reuse_or_create_gui_session(aai:subject(), auth_manager:credentials()) ->
     {ok, session:id()} | error().
 reuse_or_create_gui_session(Identity, Credentials) ->
@@ -132,11 +103,12 @@ reuse_or_create_gui_session(Identity, Credentials) ->
     reuse_or_create_session(SessId, gui, Identity, Credentials).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates root session and starts session supervisor.
-%% @end
-%%--------------------------------------------------------------------
+-spec reuse_or_create_offline_session(session:id(), aai:subject(), auth_manager:credentials()) ->
+    {ok, session:id()} | error().
+reuse_or_create_offline_session(SessId, Identity, Credentials) ->
+    reuse_or_create_session(SessId, offline, Identity, Credentials).
+
+
 -spec create_root_session() -> {ok, session:id()} | error().
 create_root_session() ->
     start_session(#document{
@@ -151,11 +123,6 @@ create_root_session() ->
     }).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates guest session and starts session supervisor.
-%% @end
-%%--------------------------------------------------------------------
 -spec create_guest_session() -> {ok, session:id()} | error().
 create_guest_session() ->
     start_session(#document{
@@ -179,11 +146,6 @@ restart_dead_sessions() ->
     end, AllSessions).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if session processes are still alive and if not restarts them.
-%% @end
-%%--------------------------------------------------------------------
 -spec restart_session_if_dead(SessId :: session:id()) -> ok.
 restart_session_if_dead(SessId) ->
     case session:update_doc_and_time(SessId, fun try_to_clear_dead_connections/1) of
@@ -391,10 +353,8 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
             end
     end,
     case session:update_doc_and_time(SessId, Diff) of
-        {ok, #document{key = SessId, value = ProxySession}} when is_binary(ProxyVia) ->
-            update_credentials_if_changed(Credentials, ProxySession),
-            {ok, SessId};
-        {ok, #document{key = SessId}} ->
+        {ok, #document{key = SessId, value = UpdatedSession}} ->
+            update_credentials_if_needed(SessType, Credentials, UpdatedSession),
             {ok, SessId};
         {error, not_found} = Error ->
             case start_session(#document{key = SessId, value = Sess}) of
@@ -421,18 +381,32 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
 
 
 %% @private
--spec update_credentials_if_changed(auth_manager:token_credentials(), session:record()) -> ok.
-update_credentials_if_changed(Credentials, #session{credentials = Credentials}) ->
+-spec update_credentials_if_needed(
+    session:type(),
+    auth_manager:token_credentials(),
+    session:record()
+) ->
+    ok.
+update_credentials_if_needed(_SessType, Credentials, #session{credentials = Credentials}) ->
     ok;
-update_credentials_if_changed(NewCredentials, #session{watcher = SessionWatcher, proxy_via = <<_/binary>>}) ->
+update_credentials_if_needed(offline, NewCredentials, Session) ->
+    update_credentials(NewCredentials, Session);
+update_credentials_if_needed(fuse, NewCredentials, #session{proxy_via = <<_/binary>>} = Session) ->
+    update_credentials(NewCredentials, Session);
+update_credentials_if_needed(_, _, _) ->
+    % neither offline nor a proxy fuse session
+    ok.
+
+
+%% @private
+-spec update_credentials(auth_manager:token_credentials(), session:record()) ->
+    ok.
+update_credentials(NewCredentials, #session{watcher = SessionWatcher}) ->
     incoming_session_watcher:update_credentials(
         SessionWatcher,
         auth_manager:get_access_token(NewCredentials),
         auth_manager:get_consumer_token(NewCredentials)
-    );
-update_credentials_if_changed(_, _) ->
-    % not a proxy session
-    ok.
+    ).
 
 
 %% @private
