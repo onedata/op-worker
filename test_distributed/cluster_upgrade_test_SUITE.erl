@@ -176,15 +176,15 @@ upgrade_20_02_1_to_20_02_2_storage_sync_monitoring(Config) ->
     SSMCtx = storage_sync_monitoring:get_ctx(),
 
     SpaceId1 = <<"space_id1">>,
-    {ok, Storage1} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId1]),
+    {ok, Storage1} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId1]),
     SpaceId2 = <<"space_id2">>,
-    {ok, Storage2} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId2]),
+    {ok, Storage2} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId2]),
     SpaceId3 = <<"space_id3">>,
-    {ok, Storage3} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId3]),
+    {ok, Storage3} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId3]),
     SpaceId4 = <<"space_id4">>,
-    {ok, Storage4} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId4]),
+    {ok, Storage4} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId4]),
     SpaceId5 = <<"space_id5">>,
-    {ok, Storage5} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId5]),
+    {ok, Storage5} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId5]),
 
     Scans = 10,
     ToProcess = 100,
@@ -368,7 +368,7 @@ upgrade_20_02_x_to_21_02_1_space_supports(Config) ->
     ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, upgrade_support_to_21_02, 2, 5),
     lists:foreach(fun(SpaceId) ->
-        {ok, StorageId} = rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId]),
+        {ok, StorageId} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId]),
         test_utils:mock_assert_num_calls_sum(Worker, storage_logic, upgrade_support_to_21_02, [StorageId, SpaceId], 1)
     end, AllSpaces).
 

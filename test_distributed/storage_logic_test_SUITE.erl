@@ -227,7 +227,7 @@ resupport_cleanup_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space1">>,
     
-    {ok, StorageId} = rpc:call(Node, space_logic, get_local_storage_id, [SpaceId]),
+    {ok, StorageId} = rpc:call(Node, space_logic, get_local_supporting_storage, [SpaceId]),
     
     ok = rpc:call(Node, storage_import, set_or_configure_auto_mode, [SpaceId,
         #{enabled => true, max_depth => 5, sync_acl => true}]),
@@ -302,7 +302,7 @@ init_per_testcase(resupport_cleanup_test, Config) ->
     Config1 = initializer:setup_storage(Config),
     lists:foreach(fun(Node) ->
         StorageId = ?config({storage_id, ?GET_DOMAIN(Node)}, Config1),
-        test_utils:mock_expect(Node, space_logic, get_local_storage_id, fun(_) -> {ok, StorageId} end)
+        test_utils:mock_expect(Node, space_logic, get_local_supporting_storage, fun(_) -> {ok, StorageId} end)
     end, Nodes),
     test_utils:mock_expect(Nodes, storage_logic, init_space_support, fun(_, _, _) ->  {ok, <<"space1">>} end),
     test_utils:mock_expect(Nodes, storage_logic, is_imported, fun(_) ->  {ok, true} end),
@@ -314,7 +314,7 @@ init_per_testcase(revise_supported_spaces_test, Config) ->
     test_utils:mock_new(Nodes, space_logic, [passthrough]),
     test_utils:mock_expect(Nodes, space_unsupport_engine, schedule_start, fun(_, _, _) -> ok end),
     test_utils:mock_expect(Nodes, provider_logic, get_spaces, fun() -> {ok, [<<"a">>, <<"b">>]} end),
-    test_utils:mock_expect(Nodes, space_logic, get_local_storage_ids,
+    test_utils:mock_expect(Nodes, space_logic, get_local_storages,
         fun
             (<<"a">>) -> {ok, [<<"st1">>, <<"st2">>]};
             (<<"b">>) -> {ok, [<<"st2">>, <<"st3">>]}

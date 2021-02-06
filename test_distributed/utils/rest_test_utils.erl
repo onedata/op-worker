@@ -122,7 +122,7 @@ rest_endpoint(Node) ->
             PStr;
         P -> P
     end,
-    Domain = op_test_rpc:get_provider_domain(Node),
+    Domain = opw_test_rpc:get_provider_domain(Node),
     <<"https://", (str_utils:to_binary(Domain))/binary, Port/binary, "/api/v3/oneprovider/">>.
 
 print_request(URL, Method, Headers, Body, Opts) ->

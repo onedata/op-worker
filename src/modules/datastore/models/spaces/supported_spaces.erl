@@ -76,7 +76,7 @@ remove(SpaceId, StorageId) ->
 revise() ->
     {ok, SupportedSpaces} = provider_logic:get_spaces(),
     ActualSupports = lists:flatmap(fun(SpaceId) ->
-        {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
+        {ok, StorageIds} = space_logic:get_local_storages(SpaceId),
         lists:map(fun(StorageId) -> {SpaceId, StorageId} end, StorageIds)
     end, SupportedSpaces),
     PreviouslyKnownSupports = get_supports(),

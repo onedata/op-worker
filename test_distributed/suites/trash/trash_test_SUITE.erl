@@ -384,7 +384,7 @@ move_to_trash_test(_Config) ->
 
 
     StorageFileId = filename:join(["/", DirName]),
-    StorageId = op_test_rpc:get_supporting_storage_id(P1Node, ?SPACE_ID),
+    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID),
 
     % file registration should fail because there is a deletion marker added for the file
     % which prevents file to be imported
@@ -424,7 +424,7 @@ move_to_trash_and_delete_test(_Config) ->
     end, DirGuids ++ FileGuids ++ [DirGuid]),
 
     StorageFileId = filename:join([?DIRECTORY_SEPARATOR, DirName]),
-    StorageId = op_test_rpc:get_supporting_storage_id(P1Node, ?SPACE_ID),
+    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID),
 
     Size = 10,
     % file registration should succeed because the file has already been deleted
@@ -487,7 +487,7 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
     %  - file
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    StorageId = op_test_rpc:get_supporting_storage_id(P1Node, ?SPACE_ID),
+    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID),
     ok = rpc:call(P1Node, storage_logic, set_qos_parameters, [StorageId, #{<<"key">> => <<"value">>}]),
 
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
