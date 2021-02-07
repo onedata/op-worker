@@ -543,7 +543,7 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
             % For share request it should fail on validation step
             % (checks if space is supported by provider)
             {error_fun, fun(#api_test_ctx{node = Node}) ->
-                ProvId = op_test_rpc:get_provider_id(Node),
+                ProvId = opw_test_rpc:get_provider_id(Node),
                 ?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId)
             end}
     end,

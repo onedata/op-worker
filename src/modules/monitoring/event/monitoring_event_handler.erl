@@ -323,5 +323,5 @@ get_monitoring_id(SpaceId, UserId) ->
 %%--------------------------------------------------------------------
 -spec are_all_local_storages_readonly(od_space:id()) -> boolean().
 are_all_local_storages_readonly(SpaceId) ->
-    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_local_storages(SpaceId),
     lists:all(fun storage:should_skip_storage_detection/1, StorageIds).

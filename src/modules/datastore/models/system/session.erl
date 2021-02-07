@@ -46,7 +46,7 @@
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
--type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
+-type type() :: fuse | rest | gui | offline | provider_outgoing | provider_incoming | root | guest.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
 % gets up (either incoming_session_watcher or outgoing_connection_manager),

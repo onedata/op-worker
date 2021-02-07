@@ -265,6 +265,7 @@ init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     mock_router(Workers),
     mock_communicator(Workers),
+    initializer:mock_auth_manager(Config),
     Config.
 
 end_per_suite(_Config) ->
@@ -289,19 +290,7 @@ end_per_testcase(_Case, Config) ->
 -spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
 session_setup(Worker) ->
     Nonce = base64:encode(crypto:strong_rand_bytes(20)),
-    session_setup(Worker, Nonce).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates session document in datastore with given ID.
-%% @end
-%%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), Nonce :: binary()) -> {ok, session:id()}.
-session_setup(Worker, Nonce) ->
-    fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, ?SUB(user, <<"user_id">>), undefined, self()
-    ).
+    fuse_test_utils:setup_fuse_session(Worker, <<"user_id">>, Nonce).
 
 %%--------------------------------------------------------------------
 %% @private

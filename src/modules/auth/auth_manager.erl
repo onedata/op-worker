@@ -40,13 +40,21 @@
 ]).
 -export([
     credentials_to_gs_auth_override/1,
+    infer_access_token_ttl/1,
+    get_subject/1,
     get_caveats/1,
-    acquire_offline_user_access_credentials/2,
+    acquire_offline_user_access_token/2,
     verify_credentials/1
 ]).
 
 -type access_token() :: tokens:serialized().
--type consumer_token() :: undefined | tokens:serialized().
+-type consumer_token() ::
+    % no consumer
+    undefined |
+    % consumer is this provider - must be substituted with a valid identity
+    % token whenever the credentials are used for authorization
+    provider_identity_token |
+    tokens:serialized().
 -type client_tokens() :: #client_tokens{}.
 
 % Record containing access token for user authorization in OZ.
@@ -158,9 +166,24 @@ credentials_to_gs_auth_override(#token_credentials{
         client_auth = {token, AccessToken},
         peer_ip = PeerIp,
         interface = Interface,
-        consumer_token = ConsumerToken,
+        consumer_token = resolve_consumer_token(ConsumerToken),
         data_access_caveats_policy = DataAccessCaveatsPolicy
     }.
+
+
+-spec infer_access_token_ttl(token_credentials()) -> time:seconds().
+infer_access_token_ttl(#token_credentials{access_token = AccessToken}) ->
+    caveats:infer_ttl(tokens:get_caveats(try_to_deserialize_token(AccessToken))).
+
+
+-spec get_subject(credentials()) -> aai:subject().
+get_subject(?ROOT_CREDENTIALS) ->
+    ?ROOT_IDENTITY;
+get_subject(?GUEST_CREDENTIALS) ->
+    ?GUEST_IDENTITY;
+get_subject(#token_credentials{access_token = AccessToken}) ->
+    #token{subject = Subject} = try_to_deserialize_token(AccessToken),
+    Subject.
 
 
 -spec get_caveats(credentials()) -> {ok, [caveats:caveat()]} | errors:error().
@@ -182,30 +205,19 @@ get_caveats(TokenCredentials) ->
 %% @see provider_offline_access
 %% @end
 %%--------------------------------------------------------------------
--spec acquire_offline_user_access_credentials(od_user:id(), credentials()) ->
-    {ok, credentials()} | errors:error().
-acquire_offline_user_access_credentials(UserId, TokenCredentials = #token_credentials{
+-spec acquire_offline_user_access_token(od_user:id(), token_credentials()) ->
+    {ok, tokens:serialized()} | errors:error().
+acquire_offline_user_access_token(UserId, #token_credentials{
     access_token = AccessToken,
     consumer_token = ConsumerToken,
     peer_ip = PeerIp,
     interface = Interface,
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
-    case token_logic:acquire_offline_user_access_token(
-        UserId, AccessToken, ConsumerToken,
+    token_logic:acquire_offline_user_access_token(
+        UserId, AccessToken, resolve_consumer_token(ConsumerToken),
         PeerIp, Interface, DataAccessCaveatsPolicy
-    ) of
-        {ok, OfflineAccessToken} ->
-            {ok, ProviderIdentityToken} = provider_auth:acquire_identity_token(),
-            {ok, TokenCredentials#token_credentials{
-                access_token = OfflineAccessToken,
-                consumer_token = ProviderIdentityToken,
-                peer_ip = undefined,
-                interface = Interface
-            }};
-        {error, _} = Error ->
-            Error
-    end.
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -262,7 +274,7 @@ verify_token_credentials(#token_credentials{
         % required to extract caveats, plus serves as a sanity check of token structure
         Token = try_to_deserialize_token(AccessToken),
         case token_logic:verify_access_token(
-            AccessToken, ConsumerToken,
+            AccessToken, resolve_consumer_token(ConsumerToken),
             PeerIp, Interface, DataAccessCaveatsPolicy
         ) of
             {ok, Subject, TokenTTL} ->
@@ -316,3 +328,15 @@ ensure_subject_is_a_supported_user(?SUB(user, UserId)) ->
     end;
 ensure_subject_is_a_supported_user(_) ->
     throw(?ERROR_TOKEN_SUBJECT_INVALID).
+
+
+%% @private
+-spec resolve_consumer_token(consumer_token()) ->
+    undefined | tokens:serialized() | no_return().
+resolve_consumer_token(provider_identity_token) ->
+    case provider_auth:acquire_identity_token() of
+        {ok, ProviderIdentityToken} -> ProviderIdentityToken;
+        {error, _} = Error -> throw(Error)
+    end;
+resolve_consumer_token(ConsumerToken) ->
+    ConsumerToken.

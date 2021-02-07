@@ -36,12 +36,14 @@
 %%--------------------------------------------------------------------
 -spec freeze_time(Config :: term()) -> ok.
 freeze_time(Config) ->
-    clock_freezer_mock:setup_on_nodes(?config(op_worker_nodes, Config), [global_clock]).
+    Nodes = ?config(oz_worker_nodes, Config) ++ ?config(op_worker_nodes, Config),
+    clock_freezer_mock:setup_on_nodes(Nodes, [global_clock]).
 
 
 -spec unfreeze_time(Config :: term()) -> ok.
 unfreeze_time(Config) ->
-    clock_freezer_mock:teardown_on_nodes(?config(op_worker_nodes, Config)).
+    Nodes = ?config(oz_worker_nodes, Config) ++ ?config(op_worker_nodes, Config),
+    clock_freezer_mock:teardown_on_nodes(Nodes).
 
 
 -spec get_frozen_time_seconds() -> time:seconds().

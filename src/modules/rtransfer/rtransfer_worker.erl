@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Worker_plugin used only for adding rtransfer_server to supervision
+%%% Worker_plugin used only for adding rtransfer to supervision
 %%% tree.
 %%% @end
 %%%-------------------------------------------------------------------

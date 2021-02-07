@@ -23,6 +23,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/luma/luma.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([get_or_acquire/2, delete/2, clear_all/1, get_and_describe/2, store/3]).
@@ -45,20 +46,25 @@ get_or_acquire(Storage, SpaceId) ->
 
 -spec store(storage(), key(), luma_posix_credentials:credentials_map()) -> ok | {error, term()}.
 store(Storage, SpaceId, PosixDefaultsMap) ->
-    case luma_sanitizer:sanitize_posix_credentials(PosixDefaultsMap) of
-        {ok, PosixDefaultsMap2} ->
-            PosixDefaultsMap3 = ensure_all_fields_are_defined(PosixDefaultsMap2, Storage, SpaceId),
-            Record = luma_posix_credentials:new(PosixDefaultsMap3),
-            case luma_db:store(Storage, SpaceId, ?MODULE, Record, ?LOCAL_FEED, ?FORCE_OVERWRITE,
-                [?POSIX_STORAGE, ?NON_IMPORTED_STORAGE])
-            of
-                ok ->
-                    luma_spaces_display_defaults:delete_if_auto_feed(Storage, SpaceId);
-                Error ->
-                    Error
+    case storage:is_posix_compatible(Storage) of
+        true ->
+            case luma_sanitizer:sanitize_posix_credentials(PosixDefaultsMap) of
+                {ok, PosixDefaultsMap2} ->
+                    PosixDefaultsMap3 = ensure_all_fields_are_defined(PosixDefaultsMap2, Storage, SpaceId),
+                    Record = luma_posix_credentials:new(PosixDefaultsMap3),
+                    case luma_db:store(Storage, SpaceId, ?MODULE, Record, ?LOCAL_FEED, ?FORCE_OVERWRITE,
+                        [?POSIX_STORAGE, ?NON_IMPORTED_STORAGE])
+                    of
+                        ok ->
+                            luma_spaces_display_defaults:delete_if_auto_feed(Storage, SpaceId);
+                        Error ->
+                            Error
+                    end;
+                Error2 ->
+                    Error2
             end;
-        Error2 ->
-            Error2
+        false ->
+            ?ERROR_REQUIRES_POSIX_COMPATIBLE_STORAGE(storage:get_id(Storage), ?POSIX_COMPATIBLE_HELPERS)
     end.
 
 -spec delete(storage:id(), key()) -> ok.

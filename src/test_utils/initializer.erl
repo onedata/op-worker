@@ -714,13 +714,13 @@ put_into_cache(Doc = #document{key = Id, value = Record}) ->
 
 -spec get_storage_id(node()) -> storage:id().
 get_storage_id(Worker) ->
-    {ok, [StorageId]} = rpc:call(Worker, provider_logic, get_storage_ids, []),
+    {ok, [StorageId]} = rpc:call(Worker, provider_logic, get_storages, []),
     StorageId.
 
 
 -spec get_supporting_storage_id(node(), od_space:id()) -> storage:id().
 get_supporting_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
+    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storages, [SpaceId]),
     StorageId.
 
 
@@ -921,7 +921,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
 
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
     end, AllWorkers),
     rpc:multicall(AllWorkers, dbsync_worker, start_streams, []),
@@ -1206,14 +1205,14 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, EffUsers}
     end),
 
-    test_utils:mock_expect(Workers, space_logic, get_local_storage_ids, fun(SpaceId) ->
+    test_utils:mock_expect(Workers, space_logic, get_local_storages, fun(SpaceId) ->
         {ok, #document{value = #od_space{storages = StorageIds}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
         {ok, #document{value = #od_provider{storages = ProviderStorageIds}}} = provider_logic:get(),
         {ok, [X || X <- ProviderStorageIds, Y <-maps:keys(StorageIds), X==Y]}
     end),
     
-    test_utils:mock_expect(Workers, space_logic, get_local_storage_id, fun(SpaceId) ->
-        {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
+    test_utils:mock_expect(Workers, space_logic, get_local_supporting_storage, fun(SpaceId) ->
+        {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
         {ok, StorageId}
     end),
 
@@ -1452,18 +1451,18 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
         end),
 
 
-    test_utils:mock_expect(AllWorkers, provider_logic, get_storage_ids,
+    test_utils:mock_expect(AllWorkers, provider_logic, get_storages,
         fun(PID) ->
             GetStorageIdsFun(PID)
         end),
 
-    test_utils:mock_expect(AllWorkers, provider_logic, get_storage_ids,
+    test_utils:mock_expect(AllWorkers, provider_logic, get_storages,
         fun() ->
             GetStorageIdsFun(oneprovider:get_id())
         end),
 
 
-    test_utils:mock_expect(AllWorkers, provider_logic, get_storage_ids,
+    test_utils:mock_expect(AllWorkers, provider_logic, get_storages,
         fun(PID) ->
             GetStorageIdsFun(PID)
         end),

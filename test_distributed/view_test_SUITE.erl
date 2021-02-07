@@ -55,7 +55,7 @@
     filename:join(["/", SpaceName, FileName])
 end).
 
--define(MODE, 8#664).
+-define(SPEC, 8#664).
 
 -define(USER_ID, <<"user1">>).
 -define(SESS_ID(Worker),
@@ -134,8 +134,11 @@ query_view_using_file_meta(Config) ->
     SpaceId = <<"space_id1">>,
     ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
+    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    TrashGuid = fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
+    {ok, TrashObjectId} = file_id:guid_to_objectid(TrashGuid),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
             if(type == 'file_meta')
@@ -144,19 +147,36 @@ query_view_using_file_meta(Config) ->
     ">>,
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
     SpaceOwnerId = ?SPACE_OWNER_ID(SpaceId),
-    ?assertQuery([#{
-        <<"id">> := _,
-        <<"key">> := CdmiId,
-        <<"value">> := #{
-            <<"name">> := ?SPACE_ID,
-            <<"type">> := <<"DIR">>,
-            <<"mode">> := 8#775,
-            <<"owner">> := SpaceOwnerId,
-            <<"provider_id">> := ProviderId,
-            <<"shares">> := [],
-            <<"deleted">> := false,
-            <<"parent_uuid">> := <<"">>
-        }}],Worker, SpaceId, ViewName, [{stale, false}]).
+    ?assertQuery([
+        #{
+            <<"id">> := _,
+            <<"key">> := TrashObjectId,
+            <<"value">> := #{
+                <<"name">> := ?TRASH_DIR_NAME,
+                <<"type">> := <<"DIR">>,
+                <<"mode">> := ?DEFAULT_DIR_PERMS,
+                <<"owner">> := SpaceOwnerId,
+                <<"provider_id">> := ProviderId,
+                <<"shares">> := [],
+                <<"deleted">> := false,
+                <<"parent_uuid">> := SpaceUuid
+            }
+        },
+        #{
+            <<"id">> := _,
+            <<"key">> := CdmiId,
+            <<"value">> := #{
+                <<"name">> := ?SPACE_ID,
+                <<"type">> := <<"DIR">>,
+                <<"mode">> := ?DEFAULT_DIR_PERMS,
+                <<"owner">> := SpaceOwnerId,
+                <<"provider_id">> := ProviderId,
+                <<"shares">> := [],
+                <<"deleted">> := false,
+                <<"parent_uuid">> := <<"">>
+            }
+        }
+    ],Worker, SpaceId, ViewName, [{stale, false}]).
 
 query_view_using_times(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

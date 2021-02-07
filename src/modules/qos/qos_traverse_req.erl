@@ -27,7 +27,7 @@
     split_local_and_remote/1
 ]).
 
--type id() :: traverse:id().
+-type id() :: datastore:key().
 -type traverse_req() :: #qos_traverse_req{}.
 -opaque traverse_reqs() :: #{id() => #qos_traverse_req{}}.
 
@@ -151,8 +151,8 @@ split_local_and_remote(TraverseReqs) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
+%% @doc
 %% Returns file's file_meta document.
 %% Returns error if there is no such file doc (it is not synced yet).
 %% @end

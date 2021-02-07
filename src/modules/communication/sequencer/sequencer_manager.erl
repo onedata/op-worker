@@ -395,8 +395,8 @@ create_sequencer_in_stream(StmId, #state{sequencer_in_stream_sup = SeqStmSup,
     {ok, SeqStm}.
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
+%% @doc
 %% Returns increasing stream IDs based on the monotonic time.
 %% Should be used only for temporary subscriptions.
 %% @end

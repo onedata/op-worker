@@ -374,9 +374,10 @@ log_error(State, throw, {cannot_check_peer_op_version, HTTPErrorCode}) ->
         HTTPErrorCode
     ]));
 log_error(State, throw, {incompatible_peer_op_version, PeerOpVersion, PeerCompOpVersions}) ->
+    Resolver = compatibility:build_resolver(consistent_hashing:get_all_nodes(), oneprovider:trusted_ca_certs()),
     Version = op_worker:get_release_version(),
     {ok, CompatibleOpVersions} = compatibility:get_compatible_versions(
-        ?ONEPROVIDER, Version, ?ONEPROVIDER
+        Resolver, ?ONEPROVIDER, Version, ?ONEPROVIDER
     ),
     log_error(State, str_utils:format(
         "peer is of incompatible version.~n"

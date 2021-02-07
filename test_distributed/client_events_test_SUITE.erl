@@ -397,8 +397,8 @@ init_per_suite(Config) ->
 
 init_per_testcase(events_on_conflicts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, file_meta),
-    test_utils:mock_expect(Workers, file_meta, get_all_links, fun
+    test_utils:mock_new(Workers, file_meta_links),
+    test_utils:mock_expect(Workers, file_meta_links, get_all, fun
         (Uuid, Name) when Name =:= ?CONFLICTING_FILE_NAME orelse Name =:= ?CONFLICTING_FILE_AFTER_RENAME ->
             case meck:passthrough([Uuid, Name]) of
                 {ok, List} -> {ok, [#link{name = Name, target = Uuid, tree_id = ?TEST_TREE_ID} | List]};
@@ -416,7 +416,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(events_on_conflicts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, file_meta),
+    test_utils:mock_validate_and_unload(Workers, file_meta_links),
     end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
