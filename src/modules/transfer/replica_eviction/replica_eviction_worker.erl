@@ -117,11 +117,19 @@ view_querying_chunk_size() ->
 %%--------------------------------------------------------------------
 -spec enqueue_data_transfer(file_ctx:ctx(), transfer_params(),
     undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
-enqueue_data_transfer(FileCtx, TransferParams, RetriesLeft, NextRetry) ->
-    RetriesLeft2 = utils:ensure_defined(RetriesLeft, max_transfer_retries()),
-    worker_pool:cast(?REPLICA_EVICTION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
-        FileCtx, TransferParams, RetriesLeft2, NextRetry
-    )),
+enqueue_data_transfer(FileCtx, TransferParams = #transfer_params{transfer_id = TransferId},
+    RetriesLeft, NextRetry
+) ->
+    case file_ctx:is_trash_dir_const(FileCtx) andalso is_migration(TransferParams) of
+        true ->
+            % ignore trash directory in case of migration
+            transfer:increment_files_processed_counter(TransferId);
+        false ->
+            RetriesLeft2 = utils:ensure_defined(RetriesLeft, max_transfer_retries()),
+            worker_pool:cast(?REPLICA_EVICTION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
+                FileCtx, TransferParams, RetriesLeft2, NextRetry
+            ))
+    end,
     ok.
 
 %%--------------------------------------------------------------------
@@ -156,3 +164,10 @@ transfer_regular_file(FileCtx, #transfer_params{
     Blocks = [#file_block{offset = 0, size = Size}],
     DeletionRequest = replica_deletion_master:prepare_deletion_request(FileUuid, SupportingProvider, Blocks, VV),
     replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB).
+
+
+-spec is_migration(transfer_params()) -> boolean().
+is_migration(#transfer_params{supporting_provider = undefined}) ->
+    false;
+is_migration(#transfer_params{supporting_provider = SupportingProvider}) when is_binary(SupportingProvider) ->
+    true.

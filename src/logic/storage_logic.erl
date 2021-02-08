@@ -258,7 +258,7 @@ is_storage_readonly(StorageId, SpaceId) ->
 
 -spec is_local_storage_supporting_space(storage:id(), od_space:id()) -> boolean().
 is_local_storage_supporting_space(StorageId, SpaceId) ->
-    case space_logic:get_local_storage_ids(SpaceId) of
+    case space_logic:get_local_storages(SpaceId) of
         {ok, LocalStorageIds} -> lists:member(StorageId, LocalStorageIds);
         _ -> false
     end.

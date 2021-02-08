@@ -89,9 +89,10 @@ mock_gs_client(Config) ->
     end),
     % mock Onezone version and compatibility registry to be the same as provider's
     ok = test_utils:mock_expect(Nodes, provider_logic, fetch_service_configuration, fun(onezone) ->
+        Resolver = compatibility:build_resolver([node()], []),
         {ok, #{
             <<"version">> => op_worker:get_release_version(),
-            <<"compatibilityRegistryRevision">> => element(2, {ok, _} = compatibility:peek_current_registry_revision())
+            <<"compatibilityRegistryRevision">> => element(2, {ok, _} = compatibility:peek_current_registry_revision(Resolver))
         }}
     end),
     ok = test_utils:mock_expect(Nodes, provider_logic, has_eff_user, fun(UserId) ->

@@ -178,7 +178,9 @@ init_per_testcase(_Case, Config) ->
     terminate_session(KrakowNode, SessId),
     ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
 
-    set_conn_manager_backoff_parameters(KrakowNode),
+    opw_test_rpc:set_env(KrakowNode, conn_manager_min_backoff_interval, 2000),  % 2 seconds
+    opw_test_rpc:set_env(KrakowNode, conn_manager_max_backoff_interval, 10000),  % 10 seconds
+    opw_test_rpc:set_env(KrakowNode, conn_manager_backoff_interval_rate, 2),
 
     Config.
 
@@ -205,18 +207,6 @@ end_per_testcase(_Case, _Config) ->
 %%%===================================================================
 %%% Helper functions
 %%%===================================================================
-
-
-%% @private
--spec set_conn_manager_backoff_parameters(node()) -> ok.
-set_conn_manager_backoff_parameters(Node) ->
-    lists:foreach(fun({Env, Val}) ->
-        ok = rpc:call(Node, application, set_env, [op_worker, Env, Val])
-    end, [
-        {conn_manager_min_backoff_interval, 2000},
-        {conn_manager_max_backoff_interval, 10000},
-        {conn_manager_backoff_interval_rate, 2}
-    ]).
 
 
 %% @private

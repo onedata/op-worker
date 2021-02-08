@@ -9,6 +9,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
+-ifndef(FILE_POPULARITY_CONFIG_HRL).
+-define(FILE_POPULARITY_CONFIG_HRL, 1).
+
 -include("global_definitions.hrl").
 
 -define(DEFAULT_LAST_OPEN_HOUR_WEIGHT,
@@ -19,3 +22,5 @@
 
 -define(DEFAULT_MAX_AVG_OPEN_COUNT_PER_DAY,
     application:get_env(?APP_NAME, default_max_avg_open_count_per_day, 100.0)).
+
+-endif.

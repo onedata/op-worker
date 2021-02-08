@@ -112,7 +112,7 @@ get_space_mount_point(Worker, SpaceId) ->
     end.
 
 get_supporting_storage_id(Worker, SpaceId) ->
-    rpc:call(Worker, space_logic, get_local_storage_id, [SpaceId]).
+    rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId]).
 
 get_helper(Worker, StorageId) ->
     rpc:call(Worker, storage, get_helper, [StorageId]).

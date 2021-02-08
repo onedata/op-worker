@@ -37,39 +37,52 @@ translate_resource(#gri{aspect = instance, scope = Scope}, #{
     Scope =:= private;
     Scope =:= public
 ->
-    ShareInfo = case Scope of
-        public ->
-            #{};
-        private ->
-            RootFileGuid = file_id:share_guid_to_guid(RootFileShareGuid),
-            #{<<"privateRootFile">> => gri:serialize(#gri{
-                type = op_file,
-                id = RootFileGuid,
-                aspect = instance,
-                scope = private
-            })}
-    end,
+    fun(Auth) ->
+        ShareInfo = case Scope of
+            public ->
+                #{};
+            private ->
+                RootFileGuid = file_id:share_guid_to_guid(RootFileShareGuid),
+                #{<<"privateRootFile">> => gri:serialize(#gri{
+                    type = op_file,
+                    id = RootFileGuid,
+                    aspect = instance,
+                    scope = private
+                })}
+        end,
 
-    ShareInfo#{
-        <<"name">> => ShareName,
-        <<"description">> => Description,
-        <<"publicUrl">> => SharePublicUrl,
-        <<"fileType">> => FileType,
-        <<"rootFile">> => gri:serialize(#gri{
-            type = op_file,
-            id = RootFileShareGuid,
-            aspect = instance,
-            scope = public
-        }),
-        <<"handle">> => case HandleId of
+        HandleGri = case HandleId of
             null ->
                 null;
             _ ->
+                HandleScope = case {Scope, Auth} of
+                    {private, ?USER(UserId, SessionId)} ->
+                        case handle_logic:has_eff_user(SessionId, HandleId, UserId) of
+                            true -> private;
+                            false -> public
+                        end;
+                    {_, _} ->
+                        public
+                end,
                 gri:serialize(#gri{
                     type = op_handle,
                     id = HandleId,
                     aspect = instance,
-                    scope = Scope
+                    scope = HandleScope
                 })
-        end
-    }.
+        end,
+
+        ShareInfo#{
+            <<"name">> => ShareName,
+            <<"description">> => Description,
+            <<"publicUrl">> => SharePublicUrl,
+            <<"fileType">> => FileType,
+            <<"rootFile">> => gri:serialize(#gri{
+                type = op_file,
+                id = RootFileShareGuid,
+                aspect = instance,
+                scope = public
+            }),
+            <<"handle">> => HandleGri
+        }
+    end.

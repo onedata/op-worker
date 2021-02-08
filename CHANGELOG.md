@@ -1,8 +1,15 @@
-Release notes for project op-worker
-===================================
+# Release notes for project op-worker
 
-CHANGELOG
----------
+## CHANGELOG
+
+### 20.02.6
+
+-   **VFS-7182** Storage name no longer needs to be unique.
+-   **VFS-6928** Fixed possible deadlock in massive parallel truncate
+    operations on Ceph pools, which could\'ve affected replica eviction
+    and delete operations.
+-   **VFS-6802** Added visual QoS expression editor with live matching
+    storages evaluation.
 
 ### 20.02.5
 

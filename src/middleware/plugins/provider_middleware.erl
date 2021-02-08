@@ -58,10 +58,11 @@ gather_configuration() ->
         _ -> oneprovider:get_oz_domain()
     end,
     Version = op_worker:get_release_version(),
-    CompatibilityRegistryRevision = query_compatibility_registry(peek_current_registry_revision, []),
-    CompOzVersions = query_compatibility_registry(get_compatible_versions, [?ONEPROVIDER, Version, ?ONEZONE]),
-    CompOpVersions = query_compatibility_registry(get_compatible_versions, [?ONEPROVIDER, Version, ?ONEPROVIDER]),
-    CompOcVersions = query_compatibility_registry(get_compatible_versions, [?ONEPROVIDER, Version, ?ONECLIENT]),
+    Resolver = compatibility:build_resolver(consistent_hashing:get_all_nodes(), oneprovider:trusted_ca_certs()),
+    CompatibilityRegistryRevision = query_compatibility_registry(peek_current_registry_revision, [Resolver]),
+    CompOzVersions = query_compatibility_registry(get_compatible_versions, [Resolver, ?ONEPROVIDER, Version, ?ONEZONE]),
+    CompOpVersions = query_compatibility_registry(get_compatible_versions, [Resolver, ?ONEPROVIDER, Version, ?ONEPROVIDER]),
+    CompOcVersions = query_compatibility_registry(get_compatible_versions, [Resolver, ?ONEPROVIDER, Version, ?ONECLIENT]),
 
     #{
         <<"providerId">> => utils:undefined_to_null(ProviderId),
@@ -216,10 +217,11 @@ delete(_) ->
 %% @private
 -spec query_compatibility_registry(Fun :: atom(), Args :: [term()]) -> term().
 query_compatibility_registry(Fun, Args) ->
-    case apply(compatibility, Fun, Args) of
+    Module = compatibility,
+    case apply(Module, Fun, Args) of
         {ok, SuccessfulResult} ->
             SuccessfulResult;
-        {error, _} = Error->
-            ?debug("Error querying registry - ~w:~w(~p) -> ~p", [compatibility, Fun, Args, Error]),
+        {error, _} = Error ->
+            ?debug("Error querying registry - ~w:~w(~w)~nError was: ~p", [Module, Fun, Args, Error]),
             <<"unknown">>
     end.

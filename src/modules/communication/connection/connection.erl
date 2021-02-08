@@ -376,6 +376,9 @@ handle_info({Ok, Socket, Data}, #state{
 
 handle_info({Ok, Socket, Data}, #state{
     status = performing_handshake,
+    % outgoing session id is set when starting connection while incoming only
+    % after successful handshake
+    session_id = OutgoingSessIdOrUndefined,
     socket = Socket,
     ok = Ok
 } = State) ->
@@ -390,10 +393,11 @@ handle_info({Ok, Socket, Data}, #state{
             % terminate gracefully as to not spam more error logs
             {stop, normal, State}
     catch Type:Reason ->
-        % no session id if handshake failed
-        ?THROTTLE_ERROR_STACKTRACE(undefined, "Unexpected error while performing handshake: ~p:~p", [
-            Type, Reason
-        ]),
+        ?THROTTLE_ERROR_STACKTRACE(
+            OutgoingSessIdOrUndefined,
+            "Unexpected error while performing handshake: ~p:~p",
+            [Type, Reason]
+        ),
         {stop, normal, State}
     end;
 

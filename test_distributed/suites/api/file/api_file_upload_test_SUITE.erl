@@ -52,8 +52,8 @@ all() -> [
 ].
 
 
--define(SPACE_ID, <<"space_krk_par">>).
--define(FILE_PATH, <<"/", ?SPACE_ID/binary, "/", (str_utils:rand_hex(12))/binary>>).
+-define(SPACE_NAME, <<"space_krk_par">>).
+-define(FILE_PATH, <<"/", ?SPACE_NAME/binary, "/", (str_utils:rand_hex(12))/binary>>).
 
 -define(ATTEMPTS, 30).
 
