@@ -174,6 +174,11 @@ mock_traverse_finished(Worker, TestProcess) ->
         Result = meck:passthrough([TaskId, Pool]),
         TestProcess ! {traverse_finished, TaskId},
         Result
+    end),
+    ok = test_utils:mock_expect(Worker, tree_deletion_traverse, task_canceled, fun(TaskId, Pool) ->
+        Result = meck:passthrough([TaskId, Pool]),
+        TestProcess ! {traverse_finished, TaskId},
+        Result
     end).
 
 await_traverse_finished(TaskId) ->

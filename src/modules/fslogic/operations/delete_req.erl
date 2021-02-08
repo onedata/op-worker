@@ -15,6 +15,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([delete/3, delete_using_trash/3]).
@@ -52,7 +53,7 @@ delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
     {FileParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
     FileCtx3 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx2,
-        [traverse_ancestors, ?delete, ?list_container]
+        [traverse_ancestors, ?delete, ?list_container, ?delete_subcontainer, ?delete_object]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, FileParentCtx,

@@ -12,6 +12,7 @@
 -module(trash_test_SUITE).
 -author("Jakub Kudzia").
 
+-include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("distribution_assert.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -51,6 +52,8 @@
     schedule_eviction_transfer_on_space_evicts_trash/1,
     schedule_migration_transfer_on_space_does_not_replicate_trash/1,
     move_to_trash_test/1,
+    move_to_trash_should_fail_if_user_does_not_have_sufficient_perms_test/1,
+    move_to_trash_should_fail_if_required_acl_perm_is_missing_test/1,
     move_to_trash_and_delete_test/1,
     qos_set_on_file_does_not_affect_file_in_trash/1,
     qos_set_on_parent_directory_does_not_affect_files_in_trash/1,
@@ -84,6 +87,8 @@ all() -> ?ALL([
     schedule_eviction_transfer_on_space_evicts_trash,
     schedule_migration_transfer_on_space_does_not_replicate_trash,
     move_to_trash_test,
+    move_to_trash_should_fail_if_user_does_not_have_sufficient_perms_test,
+    move_to_trash_should_fail_if_required_acl_perm_is_missing_test,
     move_to_trash_and_delete_test,
     qos_set_on_file_does_not_affect_file_in_trash,
     qos_set_on_parent_directory_does_not_affect_files_in_trash,
@@ -93,15 +98,15 @@ all() -> ?ALL([
 ]).
 
 -define(SPACE1_PLACEHOLDER, space1).
--define(SPACE_ID, oct_background:get_space_id(?SPACE1_PLACEHOLDER)).
+-define(SPACE_ID1, oct_background:get_space_id(?SPACE1_PLACEHOLDER)).
 -define(SPACE_NAME, oct_background:get_space_name(?SPACE1_PLACEHOLDER)).
 -define(SPACE2_PLACEHOLDER, space2).
 -define(SPACE_ID2, oct_background:get_space_id(?SPACE2_PLACEHOLDER)).
 -define(SPACE_NAME2, oct_background:get_space_name(?SPACE2_PLACEHOLDER)).
 
--define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID)).
+-define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID1)).
 -define(SPACE_UUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
--define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID)).
+-define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID1)).
 -define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
 -define(TRASH_DIR_GUID(SpaceId), fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)).
 
@@ -128,11 +133,11 @@ trash_dir_should_exist(_Config) ->
 
     % trash dir should be empty
     ?assertMatch({ok, #file_attr{name = ?TRASH_DIR_NAME}},
-        lfm_proxy:stat(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})),
+        lfm_proxy:stat(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})),
     ?assertMatch({ok, #file_attr{name = ?TRASH_DIR_NAME}},
-        lfm_proxy:stat(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10)),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10)).
+        lfm_proxy:stat(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10)),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10)).
 
 create_dir_with_trash_dir_name_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -153,18 +158,18 @@ remove_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})),
+        lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:unlink(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})),
+        lfm_proxy:unlink(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:unlink(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})).
+        lfm_proxy:unlink(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})).
 
 rename_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     TargetPath = filename:join([?DIRECTORY_SEPARATOR, ?SPACE_NAME, <<"other_trash_name">>]),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:mv(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, TargetPath)).
+        lfm_proxy:mv(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, TargetPath)).
 
 rename_other_dir_to_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -178,80 +183,80 @@ chmod_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_perms(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 8#777)).
+        lfm_proxy:set_perms(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 8#777)).
 
 set_xattr_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_xattr(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, #{<<"key">> => <<"value">>})).
+        lfm_proxy:set_xattr(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, #{<<"key">> => <<"value">>})).
 
 remove_xattr_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:remove_xattr(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"key">>)).
+        lfm_proxy:remove_xattr(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"key">>)).
 
 set_acl_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_acl(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, [])).
+        lfm_proxy:set_acl(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, [])).
 
 remove_acl_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:remove_acl(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})).
+        lfm_proxy:remove_acl(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})).
 
 set_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     JSON = #{<<"key">> => <<"value">>},
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, json, JSON, [])).
+        lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, json, JSON, [])).
 
 set_cdmi_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_mimetype(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"mimetype">>)),
+        lfm_proxy:set_mimetype(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"mimetype">>)),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_cdmi_completion_status(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"COMPLETED">>)),
+        lfm_proxy:set_cdmi_completion_status(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"COMPLETED">>)),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_transfer_encoding(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"base64">>)).
+        lfm_proxy:set_transfer_encoding(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"base64">>)).
 
 create_share_from_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:create_share(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"MY SHARE">>)).
+        lfm_proxy:create_share(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"MY SHARE">>)).
 
 add_qos_entry_for_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:add_qos_entry(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"key=value">>, 1)).
+        lfm_proxy:add_qos_entry(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"key=value">>, 1)).
 
 remove_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:remove_metadata(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, json)).
+        lfm_proxy:remove_metadata(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, json)).
 
 schedule_replication_transfer_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P2Id = oct_background:get_provider_id(paris),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:schedule_file_replication(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, P2Id)).
+        lfm_proxy:schedule_file_replication(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, P2Id)).
 
 schedule_eviction_transfer_on_trash_dir_is_allowed(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P1Id = oct_background:get_provider_id(krakow),
     {ok, TransferId} = ?assertMatch({ok, _},
-        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, P1Id, undefined)),
+        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, P1Id, undefined)),
     ?assertMatch({ok, #document{value = #transfer{eviction_status = completed}}},
         rpc:call(P1Node, transfer, get, [TransferId]), ?ATTEMPTS).
 
@@ -261,7 +266,7 @@ schedule_migration_transfer_on_trash_dir_is_forbidden(_Config) ->
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, P1Id, P2Id)).
+        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, P1Id, P2Id)).
 
 schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -277,7 +282,7 @@ schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
 
     % wait till moving directory to trash is synchronized
     ?assertMatch({ok, [{DirGuid, _}]},
-        lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
 
     P2Id = oct_background:get_provider_id(paris),
     {ok, TransferId} = ?assertMatch({ok, _},
@@ -352,7 +357,7 @@ schedule_migration_transfer_on_space_does_not_replicate_trash(_Config) ->
 
     % wait till moving directory to trash is synchronized
     ?assertMatch({ok, [{DirGuid, _}]},
-        lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
 
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
@@ -378,19 +383,19 @@ move_to_trash_test(_Config) ->
 
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
 
-    lfm_test_utils:assert_space_dir_empty(P1Node, ?SPACE_ID, ?ATTEMPTS),
-    lfm_test_utils:assert_space_dir_empty(P2Node, ?SPACE_ID, ?ATTEMPTS),
-    ?assertMatch({ok, [{DirGuid, _}]}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10)),
-    ?assertMatch({ok, [{DirGuid, _}]}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+    lfm_test_utils:assert_space_dir_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
+    lfm_test_utils:assert_space_dir_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, _}]}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10)),
+    ?assertMatch({ok, [{DirGuid, _}]}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
 
 
     StorageFileId = filename:join(["/", DirName]),
-    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID),
+    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID1),
 
     % file registration should fail because there is a deletion marker added for the file
     % which prevents file to be imported
     ?assertMatch({ok, ?HTTP_400_BAD_REQUEST, _, _}, register_file(P1Node, user1, #{
-        <<"spaceId">> => ?SPACE_ID,
+        <<"spaceId">> => ?SPACE_ID1,
         <<"destinationPath">> => DirName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
@@ -413,10 +418,10 @@ move_to_trash_and_delete_test(_Config) ->
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
     delete_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
 
-    lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID, ?ATTEMPTS),
-    lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID, ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+    lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
+    lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
 
     lists:foreach(fun(G) ->
         ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1Node, UserSessIdP1, {guid, G}), ?ATTEMPTS),
@@ -424,13 +429,13 @@ move_to_trash_and_delete_test(_Config) ->
     end, DirGuids ++ FileGuids ++ [DirGuid]),
 
     StorageFileId = filename:join([?DIRECTORY_SEPARATOR, DirName]),
-    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID),
+    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID1),
 
     Size = 10,
     % file registration should succeed because the file has already been deleted
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(P1Node, user1, #{
-        <<"spaceId">> => ?SPACE_ID,
+        <<"spaceId">> => ?SPACE_ID1,
         <<"destinationPath">> => DirName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
@@ -439,6 +444,37 @@ move_to_trash_and_delete_test(_Config) ->
         <<"mode">> => <<"664">>,
         <<"autoDetectAttributes">> => false
     })).
+
+move_to_trash_should_fail_if_user_does_not_have_sufficient_perms_test(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    % perform test as user2 as he's not a space owner
+    UserSessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    InsufficientPerms = [8#600, 8#500, 8#400],
+    lists:foreach(fun(Perms) ->
+        DirName = ?RAND_DIR_NAME,
+        {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, Perms),
+        catch ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, DirGuid}))
+
+    end, InsufficientPerms).
+
+
+move_to_trash_should_fail_if_required_acl_perm_is_missing_test(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    % perform test as user2 as he's not a space owner
+    UserSessIdP1 = oct_background:get_user_session_id(user2, krakow),
+
+    % ?delete_subcontainer and ?delete_object are mapped to the same bitmask so we have to remove both of them
+    % to test whether operatio will fail without these perms
+    RequiredPerms = [?delete, ?list_container, [?delete_subcontainer, ?delete_object]],
+
+    lists:foreach(fun(RequiredPerm) ->
+        DirName = ?RAND_DIR_NAME,
+        {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+        Perms = ?ALL_DIR_PERMS -- utils:ensure_list(RequiredPerm),
+        ok = lfm_proxy:set_acl(P1Node, UserSessIdP1, {guid, DirGuid}, [perms_to_allow_ace(Perms)]),
+        catch ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, DirGuid}))
+    end, RequiredPerms).
+
 
 qos_set_on_file_does_not_affect_file_in_trash(Config) ->
     qos_does_not_affect_files_in_trash_test_base(Config, file).
@@ -487,10 +523,10 @@ move_to_trash_and_delete_forward_time_warp_test(Config) ->
     time_test_utils:simulate_seconds_passing(4 * 3600 * 24), % 4 days
 
     % use ?ROOT_SESS_ID in below assert ase normal sessions may have expired
-    lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID, ?ATTEMPTS),
-    lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID, ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+    lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
+    lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
 
     lists:foreach(fun(G) ->
         ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, G}), ?ATTEMPTS),
@@ -512,7 +548,7 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
     %  - file
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID),
+    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID1),
     ok = rpc:call(P1Node, storage_logic, set_qos_parameters, [StorageId, #{<<"key">> => <<"value">>}]),
 
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
@@ -580,7 +616,7 @@ end_per_testcase(_Case, Config) ->
     [P2Node] = oct_background:get_provider_nodes(paris),
     AllNodes = [P1Node, P2Node],
     time_test_utils:unfreeze_time(Config),
-    lfm_test_utils:clean_space(P1Node, AllNodes, ?SPACE_ID, ?ATTEMPTS),
+    lfm_test_utils:clean_space(P1Node, AllNodes, ?SPACE_ID1, ?ATTEMPTS),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -601,3 +637,6 @@ register_file(Worker, User, Body) ->
         ?HDR_CONTENT_TYPE => <<"application/json">>
     },
     rest_test_utils:request(Worker, <<"data/register">>, post, Headers, json_utils:encode(Body)).
+
+perms_to_allow_ace(Perms) ->
+    ?ALLOW_ACE(?owner, ?no_flags_mask, permissions_test_utils:perms_to_bitmask(Perms)).

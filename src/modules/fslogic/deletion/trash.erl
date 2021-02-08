@@ -31,6 +31,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
@@ -86,10 +87,17 @@ move_to_trash(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) ->
-    {ok, tree_deletion_traverse:id()}.
+    {ok, tree_deletion_traverse:id()} | {error, term()}.
 delete_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     file_ctx:assert_not_special_const(FileCtx),
-    tree_deletion_traverse:start(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid).
+    case tree_deletion_traverse:start(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) of
+        {ok, TaskId} ->
+            {ok, TaskId};
+        {error, _} = Error ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            ?error("Unable to start deletion from trash in space ~s due to ~p.", [SpaceId, Error]),
+            Error
+    end.
 
 
 %%%===================================================================

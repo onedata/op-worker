@@ -19,6 +19,7 @@
 -include("global_definitions.hrl").
 -include("tree_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% API
@@ -27,6 +28,7 @@
 %% Traverse behaviour callbacks
 -export([
     task_started/2,
+    task_canceled/2,
     task_finished/2,
     get_job/1,
     update_job_progress/5,
@@ -65,7 +67,7 @@ stop_pool() ->
     tree_traverse:stop(?POOL_NAME).
 
 
--spec start(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) -> {ok, id()}.
+-spec start(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) -> {ok, id()} | {error, term()}.
 start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     {StorageFileId, RootDirCtx2} = file_ctx:get_storage_file_id(RootDirCtx),
     TaskId = datastore_key:new(),
@@ -83,13 +85,12 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
             root_storage_file_basename => filename:basename(StorageFileId)
         }
     },
-    case user_ctx:is_normal_user(UserCtx) of
-        true ->
-            {ok, _} = offline_access_manager:init_session(TaskId, user_ctx:get_credentials(UserCtx));
-        false ->
-            ok
-    end,
-    tree_traverse:run(?POOL_NAME, RootDirCtx2, user_ctx:get_user_id(UserCtx), Options).
+    case init_offline_session_if_applicable(UserCtx, TaskId) of
+        ok ->
+            tree_traverse:run(?POOL_NAME, RootDirCtx2, user_ctx:get_user_id(UserCtx), Options);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%%===================================================================
@@ -99,6 +100,11 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
 -spec task_started(id(), tree_traverse:pool()) -> ok.
 task_started(TaskId, _Pool) ->
     ?debug("dir deletion job ~p started", [TaskId]).
+
+-spec task_canceled(traverse:id(), traverse:pool()) -> ok.
+task_canceled(TaskId, _PoolName) ->
+    offline_access_manager:close_session(TaskId),
+    ?debug("dir deletion job ~p cancelled", [TaskId]).
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
 task_finished(TaskId, _Pool) ->
@@ -133,44 +139,66 @@ do_master_job(Job = #tree_traverse{
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(Job = #tree_traverse_slave{
+do_slave_job(#tree_traverse_slave{
     file_ctx = FileCtx,
     user_id = UserId,
     traverse_info = TraverseInfo = #{
         emit_events := EmitEvents
 }}, TaskId) ->
-    SessionId = tree_traverse:get_session_id_for_scheduling_user(Job, TaskId),
-    UserCtx = user_ctx:new(SessionId),
-    delete_req:delete(UserCtx, FileCtx, not EmitEvents),
-    file_processed(FileCtx, UserId, TaskId, TraverseInfo).
+    tree_traverse:acquire_offline_session_and_execute(fun(SessionId) ->
+        UserCtx = user_ctx:new(SessionId),
+        try
+            delete_req:delete(UserCtx, FileCtx, not EmitEvents),
+            file_processed(FileCtx, UserId, TaskId, TraverseInfo)
+        catch
+            throw:?EACCES ->
+                ok
+        end
+    end, UserId, TraverseInfo, TaskId).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %% @private
--spec file_processed(file_ctx:ctx(), od_user:id(), id(), info()) -> ok.
-file_processed(FileCtx, UserId, TaskId, TraverseInfo = #{root_original_parent_uuid := RootOriginalParentUuid}) ->
-    SessionId = tree_traverse:get_session_id_for_scheduling_user(UserId, TaskId),
-    UserCtx = user_ctx:new(SessionId),
-    {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
-    case file_qos:get_effective(RootOriginalParentUuid) of
-        {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx1),
-            OriginalRootParentCtx = file_ctx:new_by_guid(file_id:pack_guid(RootOriginalParentUuid, SpaceId)),
-            lists:foreach(fun(EffectiveQosEntryId) ->
-                qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId, OriginalRootParentCtx)
-            end, EffectiveQosEntries);
-        _ ->
+-spec init_offline_session_if_applicable(user_ctx:ctx(), tree_traverse:id()) -> ok | {error, term()}.
+init_offline_session_if_applicable(UserCtx, TaskId) ->
+    case user_ctx:is_normal_user(UserCtx) of
+        true ->
+            case offline_access_manager:init_session(TaskId, user_ctx:get_credentials(UserCtx)) of
+                {ok, _} -> ok;
+                {error, _} = Error -> Error
+            end;
+        false ->
             ok
-    end,
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
-    ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
-    delete_dir_if_subtree_processed(ParentStatus, ParentFileCtx, UserId, TaskId, TraverseInfo).
+    end.
 
 
 %% @private
--spec delete_dir_if_subtree_processed(tree_traverse_progress:status(), file_ctx:ctx(), od_user:id(), id(), info()) -> ok.
+-spec file_processed(file_ctx:ctx(), od_user:id(), id(), info()) -> ok.
+file_processed(FileCtx, UserId, TaskId, TraverseInfo = #{root_original_parent_uuid := RootOriginalParentUuid}) ->
+    tree_traverse:acquire_offline_session_and_execute(fun(SessionId) ->
+        UserCtx = user_ctx:new(SessionId),
+        {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
+        case file_qos:get_effective(RootOriginalParentUuid) of
+            {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
+                SpaceId = file_ctx:get_space_id_const(FileCtx1),
+                OriginalRootParentCtx = file_ctx:new_by_guid(file_id:pack_guid(RootOriginalParentUuid, SpaceId)),
+                lists:foreach(fun(EffectiveQosEntryId) ->
+                    qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId, OriginalRootParentCtx)
+                end, EffectiveQosEntries);
+            _ ->
+                ok
+        end,
+        ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+        ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
+        delete_dir_if_subtree_processed(ParentStatus, ParentFileCtx, UserId, TaskId, TraverseInfo)
+    end, UserId, TraverseInfo, TaskId).
+
+
+%% @private
+-spec delete_dir_if_subtree_processed(tree_traverse_progress:status(), file_ctx:ctx(), od_user:id(),
+    id(), info()) -> ok.
 delete_dir_if_subtree_processed(?SUBTREE_PROCESSED, FileCtx, UserId, TaskId, TraverseInfo) ->
     delete_dir(FileCtx, UserId, TaskId, TraverseInfo);
 delete_dir_if_subtree_processed(?SUBTREE_NOT_PROCESSED, _FileCtx, _UserId, _TaskId, _TraverseInfo) ->
@@ -185,15 +213,21 @@ delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
     root_original_parent_uuid := RootOriginalParentUuid,
     root_storage_file_basename := RootStorageFileBasename
 }) ->
-    SessionId = tree_traverse:get_session_id_for_scheduling_user(UserId, TaskId),
-    UserCtx = user_ctx:new(SessionId),
-    delete_req:delete(UserCtx, FileCtx, not EmitEvents),
-    tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
-    case file_ctx:get_guid_const(FileCtx) =:= RootGuid of
-        true ->
-            % TODO VFS-7133 after extending file_meta with field for storing source parent
-            % there will be no need to delete deletion_marker here, it may be deleted in fslogic_delete
-            deletion_marker:remove_by_name(RootOriginalParentUuid, RootStorageFileBasename);
-        false ->
-            file_processed(FileCtx, UserId, TaskId, TraverseInfo)
-    end.
+    tree_traverse:acquire_offline_session_and_execute(fun(SessionId) ->
+        UserCtx = user_ctx:new(SessionId),
+        try
+            delete_req:delete(UserCtx, FileCtx, not EmitEvents),
+            tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
+            case file_ctx:get_guid_const(FileCtx) =:= RootGuid of
+                true ->
+                    % TODO VFS-7133 after extending file_meta with field for storing source parent
+                    % there will be no need to delete deletion_marker here, it may be deleted in fslogic_delete
+                    deletion_marker:remove_by_name(RootOriginalParentUuid, RootStorageFileBasename);
+                false ->
+                    file_processed(FileCtx, UserId, TaskId, TraverseInfo)
+            end
+        catch
+            throw:?EACCES ->
+                ok
+        end
+    end, UserId, TraverseInfo, TaskId).
