@@ -17,6 +17,10 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([
+    get_env/1,
+    get_env/2,
+    set_env/2,
+
     create_fuse_session/3,
     build_token_credentials/5,
 
@@ -48,6 +52,21 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec get_env(atom()) -> term() | no_return().
+get_env(Key) ->
+    op_worker:get_env(Key).
+
+
+-spec get_env(atom(), term()) -> term().
+get_env(Key, Default) ->
+    op_worker:get_env(Key, Default).
+
+
+-spec set_env(atom(), term()) -> ok.
+set_env(Key, Value) ->
+    op_worker:set_env(Key, Value).
 
 
 -spec create_fuse_session(binary(), aai:subject(),
