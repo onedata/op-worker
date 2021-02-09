@@ -977,7 +977,7 @@ qos_traverse_cancellation_test(Config) ->
     DirGuid = qos_tests_utils:get_guid(QosRootFilePath, GuidsAndPaths),
     
     % create file and write to it on remote provider to trigger reconcile transfer
-    {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker2, SessId(Worker2), DirGuid, generator:gen_name(), 8#664),
+    {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker2, SessId(Worker2), DirGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, _} = lfm_proxy:write(Worker2, FileHandle, 0, <<"new_data">>),
     ok = lfm_proxy:close(Worker2, FileHandle),
     

@@ -11,6 +11,7 @@
 -module(lfm_files_s3_test_SUITE).
 -author("Michal Cwiertnia").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -178,13 +179,13 @@ all() ->
 %%%====================================================================
 
 lfm_recreate_handle_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, 8#755, dont_delete_file).
+    lfm_files_test_base:lfm_recreate_handle(Config, ?DEFAULT_FILE_PERMS, dont_delete_file).
 
 lfm_write_after_create_no_perms_test(Config) ->
     lfm_files_test_base:lfm_recreate_handle(Config, 8#444, dont_delete_file).
 
 lfm_recreate_handle_after_delete_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, 8#755, delete_after_open).
+    lfm_files_test_base:lfm_recreate_handle(Config, ?DEFAULT_FILE_PERMS, delete_after_open).
 
 lfm_open_failure_test(Config) ->
     lfm_files_test_base:lfm_open_failure(Config).

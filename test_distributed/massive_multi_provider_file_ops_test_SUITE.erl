@@ -16,6 +16,7 @@
 
 -include("global_definitions.hrl").
 -include("tree_traverse.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -154,7 +155,7 @@ rtransfer_multisource_test(Config0) ->
 
     File = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
 
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File, ?DEFAULT_FILE_PERMS)),
     OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
     ?assertMatch({ok, _}, OpenAns),
     {ok, Handle} = OpenAns,

@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -158,7 +159,7 @@ blocks_suiting_test(Config0) ->
     [Worker1, Worker2, Worker3, Worker4, Worker5, Worker6] = ?config(op_worker_nodes, Config0),
 
     File = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), File, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), File, ?DEFAULT_FILE_PERMS)),
 
     multi_provider_file_ops_test_base:verify(Config, fun(W) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},

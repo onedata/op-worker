@@ -67,7 +67,7 @@ get_helper_params_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#644)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, ?DEFAULT_FILE_PERMS)),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 

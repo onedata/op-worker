@@ -98,7 +98,7 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
     FileName =  generator:gen_name(),
     FilePath = <<"/space_name1/", FileName/binary>>,
     {ok, FileGuid} = ?assertMatch({ok, _},
-        lfm_proxy:create(Worker, SessId1, FilePath, 8#664)),
+        lfm_proxy:create(Worker, SessId1, FilePath, ?DEFAULT_FILE_PERMS)),
     Space1Guid = client_simulation_test_base:get_guid(Worker, SessId1, <<"/space_name1">>),
     {{FileUid, _}, _} = rpc:call(Worker, file_ctx, get_display_credentials, [file_ctx:new_by_guid(FileGuid)]),
 
@@ -136,11 +136,11 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
     end, [
         {SessId1, UserId1, 8#1755, 0, <<"/">>, undefined, ?DIRECTORY_TYPE},
         {SessId2, UserId2, 8#1755, 0, <<"/">>, undefined, ?DIRECTORY_TYPE},
-        {SessId1, <<"space_name1">>, 8#775, 0, <<"/space_name1">>, UserRootGuid1, ?DIRECTORY_TYPE},
-        {SessId2, <<"space_name2">>, 8#775, 0, <<"/space_name2">>, UserRootGuid2, ?DIRECTORY_TYPE},
-        {SessId1, <<"space_name3">>, 8#775, 0, <<"/space_name3">>, UserRootGuid1, ?DIRECTORY_TYPE},
-        {SessId2, <<"space_name4">>, 8#775, 0, <<"/space_name4">>, UserRootGuid2, ?DIRECTORY_TYPE},
-        {SessId1, FileName, 8#664, FileUid, FilePath, Space1Guid, ?REGULAR_FILE_TYPE}
+        {SessId1, <<"space_name1">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name1">>, UserRootGuid1, ?DIRECTORY_TYPE},
+        {SessId2, <<"space_name2">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name2">>, UserRootGuid2, ?DIRECTORY_TYPE},
+        {SessId1, <<"space_name3">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name3">>, UserRootGuid1, ?DIRECTORY_TYPE},
+        {SessId2, <<"space_name4">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name4">>, UserRootGuid2, ?DIRECTORY_TYPE},
+        {SessId1, FileName, ?DEFAULT_FILE_PERMS, FileUid, FilePath, Space1Guid, ?REGULAR_FILE_TYPE}
     ]),
     ?assertMatch(
         #fuse_response{status = #status{code = ?ENOENT}},
@@ -156,7 +156,7 @@ fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
 
     FileName =  generator:gen_name(),
     FilePath = <<"/space_name4/", FileName/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#664)),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, ?DEFAULT_FILE_PERMS)),
     SpaceGuid = client_simulation_test_base:get_guid(Worker, SessId, <<"/space_name4">>),
 
     #fuse_response{fuse_response = #file_children_attrs{child_attrs = ChildrenAttrs}} =
@@ -245,7 +245,7 @@ fslogic_get_file_children_attrs_test(Config) ->
 
     TestFun = fun({SessionId, Path, NameList, OwnersList, UserRootGuid}) ->
         Files = lists:map(fun({Name, Owner}) ->
-            {SessionId, Name, 8#775, ?ROOT_UID, <<"/", Name/binary>>, Owner, UserRootGuid}
+            {SessionId, Name, ?DEFAULT_DIR_PERMS, ?ROOT_UID, <<"/", Name/binary>>, Owner, UserRootGuid}
         end, lists:zip(NameList, OwnersList)),
 
         FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, P, Owner, ParentGuid}) ->
@@ -307,10 +307,10 @@ fslogic_get_child_attr_test(Config) ->
             }
         }, ?file_req(Worker, SessId, ParentGuid, #get_child_attr{name = ChildName}))
     end, [
-        {SessId1, <<"space_name1">>, 8#775, 0, UserRootGuid1, <<"space_name1">>},
-        {SessId2, <<"space_name2">>, 8#775, 0, UserRootGuid2, <<"space_name2">>},
-        {SessId1, <<"space_name3">>, 8#775, 0, UserRootGuid1, <<"space_name3">>},
-        {SessId2, <<"space_name4">>, 8#775, 0, UserRootGuid2, <<"space_name4">>}
+        {SessId1, <<"space_name1">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid1, <<"space_name1">>},
+        {SessId2, <<"space_name2">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid2, <<"space_name2">>},
+        {SessId1, <<"space_name3">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid1, <<"space_name3">>},
+        {SessId2, <<"space_name4">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid2, <<"space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}},
         ?file_req(Worker, SessId1, UserRootGuid1, #get_child_attr{name = <<"no such child">>})).
@@ -335,7 +335,7 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     MakeTree = fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUuid, FileGuids}) ->
         NewPath = <<Path/binary, "/", Leaf/binary>>,
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId,
-            ParentUuid, #create_dir{name = Leaf, mode = 8#755}
+            ParentUuid, #create_dir{name = Leaf, mode = ?DEFAULT_DIR_PERMS}
         )),
 
         #fuse_response{fuse_response = #guid{guid = FileGuid}} =
@@ -348,10 +348,10 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     end,
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId1,
-        RootGuid1, #create_dir{name = <<"t2_double">>, mode = 8#755}
+        RootGuid1, #create_dir{name = <<"t2_double">>, mode = ?DEFAULT_DIR_PERMS}
     )),
     ?assertMatch(#fuse_response{status = #status{code = ?EEXIST}}, ?file_req(Worker, SessId1,
-        RootGuid1, #create_dir{name = <<"t2_double">>, mode = 8#755}
+        RootGuid1, #create_dir{name = <<"t2_double">>, mode = ?DEFAULT_DIR_PERMS}
     )),
 
 
@@ -432,7 +432,7 @@ fslogic_read_dir_test(Config) ->
     lists:foreach(fun({SessId, RootGuid, Dirs}) ->
         lists:foreach(fun(Name) ->
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(
-                Worker, SessId, RootGuid, #create_dir{name = Name, mode = 8#755}
+                Worker, SessId, RootGuid, #create_dir{name = Name, mode = ?DEFAULT_DIR_PERMS}
             ))
         end, Dirs)
     end, [
@@ -646,7 +646,7 @@ simple_rename_test(Config) ->
         fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUuid, FileUuids}) ->
             NewPath = <<Path/binary, "/", Leaf/binary>>,
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId,
-                ParentUuid, #create_dir{name = Leaf, mode = 8#755}
+                ParentUuid, #create_dir{name = Leaf, mode = ?DEFAULT_DIR_PERMS}
             )),
 
             #fuse_response{fuse_response = #guid{guid = FileUuid}} =

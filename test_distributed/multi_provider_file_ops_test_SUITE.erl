@@ -129,8 +129,8 @@ remote_driver_internal_call_test(Config0) ->
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
-    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, 8#755)),
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, ?DEFAULT_DIR_PERMS)),
     DirUniqueKey = datastore_model:get_unique_key(#{model => file_meta}, file_id:guid_to_uuid(DirGuid)),
 
     % Verify init and get link doc key
@@ -238,7 +238,7 @@ concurrent_create_test(Config) ->
 %%    ct:print("WMap: ~p", [{W(1), W(2), ProvMap}]),
 
     Dir0Name = <<"/", SpaceName/binary, "/concurrent_create_test_dir0">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir0Name, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir0Name, ?DEFAULT_DIR_PERMS)),
     lists:foreach(fun(W) ->
         ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}}, lfm_proxy:stat(W, SessId(W), {path, Dir0Name}), 15)
     end, Workers),
@@ -269,7 +269,7 @@ concurrent_create_test(Config) ->
                     lists:foreach(
                         fun(WId) ->
                             spawn(fun() ->
-                                TestMaster ! {WId, lfm_proxy:mkdir(Worker(WId), SessId(Worker(WId)), DirName(N), 8#755)}
+                                TestMaster ! {WId, lfm_proxy:mkdir(Worker(WId), SessId(Worker(WId)), DirName(N), ?DEFAULT_DIR_PERMS)}
                             end)
                         end, lists:seq(1, ProvIdCount)),
 
@@ -618,7 +618,7 @@ remove_file_during_transfers_test(Config0) ->
     FileSize = BlocksCount * BlockSize,
 
     ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User, Worker2),
-        FilePath, 8#755)
+        FilePath, ?DEFAULT_FILE_PERMS)
     ),
     ?assertMatch(ok, lfm_proxy:truncate(Worker2, SessId(User, Worker2),
         {path, FilePath}, FileSize)
@@ -659,7 +659,7 @@ remove_file_on_remote_provider_ceph(Config0) ->
     [{_, Ceph} | _] = proplists:get_value(cephrados, ?config(storages, Config)),
     ContainerId = proplists:get_value(container_id, Ceph),
     
-    {ok, Guid} = lfm_proxy:create(Worker1, SessionId(Worker1), FilePath, 8#755),
+    {ok, Guid} = lfm_proxy:create(Worker1, SessionId(Worker1), FilePath, ?DEFAULT_FILE_PERMS),
     {ok, Handle} = lfm_proxy:open(Worker1, SessionId(Worker1), {guid, Guid}, write),
     {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker1, Handle),
@@ -741,7 +741,7 @@ read_dir_collisions_test(Config0) ->
 
     SpaceName = <<"space7">>,
     RootDirPath = <<"/", SpaceName/binary, "/read_dir_collisions_test">>,
-    {ok, RootDirGuid} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), RootDirPath, 8#755)),
+    {ok, RootDirGuid} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), RootDirPath, ?DEFAULT_DIR_PERMS)),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, RootDirGuid}), ?ATTEMPTS),
     ?assertMatch({ok, RootDirGuid}, lfm_proxy:resolve_guid(Worker2, SessionId(Worker2), RootDirPath), ?ATTEMPTS),
 
@@ -772,8 +772,8 @@ read_dir_collisions_test(Config0) ->
     FileNames = lists:map(fun(Num) ->
         FileName = <<"file_", (integer_to_binary(Num))/binary>>,
         FilePath = <<RootDirPath/binary, "/", FileName/binary>>,
-        {ok, Guid1} = ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessionId(Worker1), FilePath, 8#755)),
-        {ok, Guid2} = ?assertMatch({ok, _} , lfm_proxy:create(Worker2, SessionId(Worker2), FilePath, 8#755)),
+        {ok, Guid1} = ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessionId(Worker1), FilePath, ?DEFAULT_FILE_PERMS)),
+        {ok, Guid2} = ?assertMatch({ok, _} , lfm_proxy:create(Worker2, SessionId(Worker2), FilePath, ?DEFAULT_FILE_PERMS)),
 
         % Wait for providers to synchronize state
         ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker1, SessionId(Worker1), {guid, Guid2}), ?ATTEMPTS),
@@ -865,7 +865,7 @@ check_fs_stats_on_different_providers(Config) ->
         SessId = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(Node)}}, Config),
         FileName = generator:gen_name(),
         FilePath = <<SpaceRootDir/binary, FileName/binary>>,
-        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath, 8#755)),
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath, ?DEFAULT_FILE_PERMS)),
         FileGuid
     end, [P1, P2]),
 
@@ -1024,7 +1024,7 @@ create_file(Path, Size, User, CreationNode, AssertionNode, SessionGetter) ->
 
     % File creation
     ?assertMatch({ok, _}, lfm_proxy:create(
-        CreationNode, SessionGetter(CreationNode, User), Path, 8#755)
+        CreationNode, SessionGetter(CreationNode, User), Path, ?DEFAULT_FILE_PERMS)
     ),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(
         CreationNode, SessionGetter(CreationNode, User), {path, Path}, rdwr

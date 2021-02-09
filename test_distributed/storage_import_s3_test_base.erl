@@ -67,10 +67,10 @@ create_file_in_dir_import_test(Config) ->
 
     %% Create dir on storage
     SFMDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SFMDirHandle, 8#775),
+    ok = sd_test_utils:mkdir(W1, SFMDirHandle, ?DEFAULT_DIR_PERMS),
     %% Create file on storage
     SFMFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SFMFileHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SFMFileHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SFMFileHandle, 0, ?TEST_DATA),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
 
@@ -126,9 +126,9 @@ create_subfiles_import_many_test(Config) ->
         DirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, NBin),
         FilePath = filename:join([DirPath, integer_to_binary(N)]),
         SFMDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, DirPath, RDWRStorage),
-        ok = sd_test_utils:mkdir(W1, SFMDirHandle, 8#775),
+        ok = sd_test_utils:mkdir(W1, SFMDirHandle, ?DEFAULT_DIR_PERMS),
         SFMFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, FilePath, RDWRStorage),
-        ok = sd_test_utils:create_file(W1, SFMFileHandle, 8#664),
+        ok = sd_test_utils:create_file(W1, SFMFileHandle, ?DEFAULT_FILE_PERMS),
         {ok, _} = sd_test_utils:write_file(W1, SFMFileHandle, 0, ?TEST_DATA)
     end, lists:seq(1, DirsNumber)),
     Stopwatch = stopwatch:start(),
@@ -235,7 +235,7 @@ create_file_in_dir_update_test(Config) ->
     }, ?SPACE_ID),
 
     FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle, 0, ?TEST_DATA),
     storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
     storage_import_test_base:assertSecondScanFinished(W1, ?SPACE_ID),
@@ -301,17 +301,17 @@ changing_max_depth_test(Config) ->
 
     %% Create directories and files on storage
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDHandle, 8#775),
+    ok = sd_test_utils:mkdir(W1, SDHandle, ?DEFAULT_DIR_PERMS),
     SDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath2, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDHandle2, 8#775),
+    ok = sd_test_utils:mkdir(W1, SDHandle2, ?DEFAULT_DIR_PERMS),
     FileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, FileSDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, FileSDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileSDHandle, 0, ?TEST_DATA),
     FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle, 0, ?TEST_DATA),
     FileInDirSDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath2, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle2, 8#664),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle2, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle2, 0, ?TEST_DATA),
 
     % in init_per_testcase, max_depth for import is set to 1
@@ -458,10 +458,10 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
     ok = sd_test_utils:mkdir(W1, DirSDHandle2, 8#777),
 
     %% Create files on storage
-    ok = sd_test_utils:create_file(W1, FileSDHandle, 8#664),
-    ok = sd_test_utils:create_file(W1, FileSDHandle2, 8#664),
-    ok = sd_test_utils:create_file(W1, FileSDHandle3, 8#664),
-    ok = sd_test_utils:create_file(W1, FileSDHandle4, 8#664),
+    ok = sd_test_utils:create_file(W1, FileSDHandle, ?DEFAULT_FILE_PERMS),
+    ok = sd_test_utils:create_file(W1, FileSDHandle2, ?DEFAULT_FILE_PERMS),
+    ok = sd_test_utils:create_file(W1, FileSDHandle3, ?DEFAULT_FILE_PERMS),
+    ok = sd_test_utils:create_file(W1, FileSDHandle4, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileSDHandle, 0, ?TEST_DATA),
     {ok, _} = sd_test_utils:write_file(W1, FileSDHandle2, 0, ?TEST_DATA),
     {ok, _} = sd_test_utils:write_file(W1, FileSDHandle3, 0, ?TEST_DATA),
@@ -501,7 +501,7 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle, 0, ?TEST_DATA),
     storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
     storage_import_test_base:assertSecondScanFinished(W1, ?SPACE_ID),
@@ -556,7 +556,7 @@ update_syncs_files_after_import_failed_test(Config) ->
     %% Create file on storage
     timer:sleep(timer:seconds(1)),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
     storage_import_test_base:mock_import_file_error(W1, ?TEST_FILE1),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
 
@@ -647,7 +647,7 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     %% Create dir on storage
     timer:sleep(timer:seconds(1)),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
     timer:sleep(timer:seconds(1)),
 
     storage_import_test_base:mock_import_file_error(W1, ?TEST_FILE1),
@@ -718,7 +718,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
 
     % create first file
-    {ok, G1} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, 8#644),
+    {ok, G1} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, ?DEFAULT_FILE_PERMS),
     {ok, H1} = lfm_proxy:open(W1, SessId, {guid, G1}, write),
     {ok, _} = lfm_proxy:write(W1, H1, 0, ?TEST_DATA),
     ok = lfm_proxy:close(W1, H1),
@@ -768,7 +768,7 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
     %% Create file on storage
     timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID),
@@ -826,7 +826,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dir on storage
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDHandle, 8#775),
+    ok = sd_test_utils:mkdir(W1, SDHandle, ?DEFAULT_DIR_PERMS),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID),
 
@@ -914,7 +914,7 @@ delete_non_empty_directory_update_test(Config) ->
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
     ok = sd_test_utils:mkdir(W1, SDHandle, 8#777),
     FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle, 0, ?TEST_DATA),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     %% Check if dir was imported
@@ -974,7 +974,7 @@ sync_works_properly_after_delete_test(Config) ->
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
     ok = sd_test_utils:mkdir(W1, SDHandle, 8#777),
     FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle, 0, ?TEST_DATA),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID, ?ATTEMPTS),
@@ -1051,7 +1051,7 @@ sync_works_properly_after_delete_test(Config) ->
     SDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath2, RDWRStorage),
     ok = sd_test_utils:mkdir(W1, SDHandle2, 8#777),
     FileInDirSDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath2, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle2, 8#664),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle2, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle2, 0, ?TEST_DATA),
 
     SpaceTestFileInDirPath = ?SPACE_TEST_FILE_IN_DIR_PATH(?TEST_DIR2, ?TEST_FILE2),
@@ -1103,10 +1103,10 @@ delete_and_update_files_simultaneously_update_test(Config) ->
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
     ok = sd_test_utils:mkdir(W1, SDHandle, 8#777),
     FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle, 0, ?TEST_DATA),
     FileInDirSDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath2, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle2, 8#664),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle2, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle2, 0, ?TEST_DATA),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID),
@@ -1193,11 +1193,11 @@ delete_file_in_dir_update_test(Config) ->
 
     %% Create dir on storage
     SDDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDDirHandle, 8#775),
+    ok = sd_test_utils:mkdir(W1, SDDirHandle, ?DEFAULT_DIR_PERMS),
 
     %% Create file on storage
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
 
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
@@ -1237,7 +1237,7 @@ delete_file_in_dir_update_test(Config) ->
 
     %% Create 2nd file on storage
     SDFileHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath2, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDFileHandle2, 8#664),
+    ok = sd_test_utils:create_file(W1, SDFileHandle2, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle2, 0, ?TEST_DATA2),
 
     storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
@@ -1376,7 +1376,7 @@ create_list_race_test(Config) ->
     FilesNum = 3,
     FilePaths = [?SPACE_TEST_FILE_PATH(?TEST_FILE(N)) || N <- lists:seq(1, FilesNum)],
     lists:foreach(fun(F) ->
-        {ok, FileGuid} = lfm_proxy:create(W1, SessId, F, 8#664),
+        {ok, FileGuid} = lfm_proxy:create(W1, SessId, F, ?DEFAULT_FILE_PERMS),
         {ok, Handle} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, write),
         {ok, _} = lfm_proxy:write(W1, Handle, 0, ?TEST_DATA),
         lfm_proxy:close(W1, Handle),
@@ -1503,7 +1503,7 @@ change_file_type_test(Config) ->
     %% Create file on storage
     timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID),
@@ -1539,12 +1539,12 @@ change_file_type_test(Config) ->
     }, ?SPACE_ID),
 
     ok = sd_test_utils:unlink(W1, SDHandle, ?TEST_DATA_SIZE),
-    ok = sd_test_utils:mkdir(W1, SDHandle, 8#755),
+    ok = sd_test_utils:mkdir(W1, SDHandle, ?DEFAULT_DIR_PERMS),
     % create file in the directory on storage
     StorageTestFileinDirPath = filename:join([StorageTestFilePath, ?TEST_FILE2]),
     SpaceTestFileinDirPath = filename:join([?SPACE_TEST_FILE_PATH1, ?TEST_FILE2]),
     SDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle2, 8#664),
+    ok = sd_test_utils:create_file(W1, SDHandle2, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDHandle2, 0, ?TEST_DATA2),
 
     storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
@@ -1590,7 +1590,7 @@ change_file_type_test(Config) ->
     ?assertMatch({ok, ?TEST_DATA2}, lfm_proxy:read(W2, Handle2, 0, ?TEST_DATA_SIZE2), ?ATTEMPTS),
 
     % check whether we can create directory in the imported directory
-    {ok, DirGuid2} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, ?ROOT_SESS_ID, DirGuid, ?TEST_DIR, 8#664)),
+    {ok, DirGuid2} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, ?ROOT_SESS_ID, DirGuid, ?TEST_DIR, ?DEFAULT_FILE_PERMS)),
 
     ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {guid, DirGuid2}), ?ATTEMPTS).
 
@@ -1609,8 +1609,8 @@ change_file_type3_test(Config) ->
     timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
     DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
     FileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileInDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, DirSDHandle, 8#755),
-    ok = sd_test_utils:create_file(W1, FileSDHandle, 8#664),
+    ok = sd_test_utils:mkdir(W1, DirSDHandle, ?DEFAULT_DIR_PERMS),
+    ok = sd_test_utils:create_file(W1, FileSDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, FileSDHandle, 0, ?TEST_DATA),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID),
@@ -1645,7 +1645,7 @@ change_file_type3_test(Config) ->
 
     ok = sd_test_utils:unlink(W1, FileSDHandle, ?TEST_DATA_SIZE),
     sd_test_utils:rmdir(W1, DirSDHandle),
-    ok = sd_test_utils:create_file(W1, DirSDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, DirSDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, DirSDHandle, 0, ?TEST_DATA),
 
     storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),

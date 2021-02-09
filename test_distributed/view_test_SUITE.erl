@@ -55,8 +55,6 @@
     filename:join(["/", SpaceName, FileName])
 end).
 
--define(SPEC, 8#664).
-
 -define(USER_ID, <<"user1">>).
 -define(SESS_ID(Worker),
     ?config({session_id, {?USER_ID, ?GET_DOMAIN(Worker)}}, Config)).
@@ -262,7 +260,7 @@ query_view_using_file_popularity(Config) ->
 
     ok = rpc:call(Worker, file_popularity_api, enable, [?SPACE_ID]),
     FilePath = ?TEST_FILE(?SPACE_NAME),
-    {ok, Guid} = lfm_proxy:create(Worker, SessionId, FilePath, 8#664),
+    {ok, Guid} = lfm_proxy:create(Worker, SessionId, FilePath, ?DEFAULT_FILE_PERMS),
     Uuid = file_id:guid_to_uuid(Guid),
     {ok, H} = lfm_proxy:open(Worker, SessionId, {guid, Guid}, write),
     lfm_proxy:write(Worker, H, 0, TestData),

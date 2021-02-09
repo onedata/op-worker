@@ -322,7 +322,7 @@ remove_file_on_ceph_using_client(Config0) ->
     [{_, Ceph} | _] = proplists:get_value(cephrados, ?config(storages, Config)),
     ContainerId = proplists:get_value(container_id, Ceph),
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, 8#755),
+    {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, ?DEFAULT_DIR_PERMS),
     {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
     {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker, Handle),
@@ -400,9 +400,9 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
     FileName = generator:gen_name(),
     FilePath = filepath_utils:join([<<"/">>, SpaceId, FileName]),
     
-    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, FileName, 8#665),
+    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, FileName, ?DEFAULT_FILE_PERMS),
     ok = lfm_proxy:unlink(Worker, SessId, {guid, G1}),
-    {ok, G2} = lfm_proxy:create(Worker, SessId, FilePath, 8#665),
+    {ok, G2} = lfm_proxy:create(Worker, SessId, FilePath, ?DEFAULT_FILE_PERMS),
     {ok, H2} = lfm_proxy:open(Worker, SessId, {guid, G2}, rdwr),
 
     FileCtx1 = rpc:call(Worker, file_ctx, new_by_guid, [G1]),
