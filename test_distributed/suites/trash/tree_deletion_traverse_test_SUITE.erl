@@ -32,9 +32,9 @@
     delete_empty_dirs_test/1,
     delete_empty_dirs2_test/1,
     delete_tree_test/1,
-    negative_time_warp_test/1,
-    positive_time_warp_smaller_than_7_days_test/1,
-    positive_time_warp_greater_than_7_days_test/1
+    backward_time_warp_test/1,
+    forward_time_warp_smaller_than_7_days_test/1,
+    forward_time_warp_greater_than_7_days_test/1
 ]).
 
 
@@ -44,9 +44,9 @@ all() -> ?ALL([
     delete_empty_dirs_test,
     delete_empty_dirs2_test,
     delete_tree_test,
-    negative_time_warp_test,
-    positive_time_warp_smaller_than_7_days_test,
-    positive_time_warp_greater_than_7_days_test
+    backward_time_warp_test,
+    forward_time_warp_smaller_than_7_days_test,
+    forward_time_warp_greater_than_7_days_test
 ]).
 
 -define(SPACE_PLACEHOLDER, space1).
@@ -78,15 +78,15 @@ delete_empty_dirs2_test(Config) ->
 delete_tree_test(Config) ->
     delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}]).
 
-negative_time_warp_test(Config) ->
+backward_time_warp_test(Config) ->
     TimeWarp = - 3600 * 24 * 10, % -10 days
     delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, true).
 
-positive_time_warp_smaller_than_7_days_test(Config) ->
+forward_time_warp_smaller_than_7_days_test(Config) ->
     TimeWarp = 3600 * 24 * 6, % 6 days
     delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, true).
 
-positive_time_warp_greater_than_7_days_test(Config) ->
+forward_time_warp_greater_than_7_days_test(Config) ->
     TimeWarp = 3600 * 24 * 8, % 8 days
     delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, false).
 
@@ -98,7 +98,7 @@ delete_files_structure_test_base(Config, FilesStructure) ->
     delete_files_structure_test_base(Config, FilesStructure, undefined, true).
 
 delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedSuccess) ->
-    % TimeWarpSecs arg allows to set period (and direction future/past as +/-) of
+    % TimeWarpSecs arg allows to set period (and direction future/past as +/-)
     % of TimeWarp that occurs during traverse
     % if TimeWarpSecs is undefined, TimeWarp won't occur
     [P1Node] = oct_background:get_provider_nodes(krakow),

@@ -453,8 +453,7 @@ move_to_trash_should_fail_if_user_does_not_have_sufficient_perms_test(_Config) -
     lists:foreach(fun(Perms) ->
         DirName = ?RAND_DIR_NAME,
         {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, Perms),
-        catch ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, DirGuid}))
-
+        ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, DirGuid}))
     end, InsufficientPerms).
 
 
@@ -472,7 +471,7 @@ move_to_trash_should_fail_if_required_acl_perm_is_missing_test(_Config) ->
         {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
         Perms = ?ALL_DIR_PERMS -- utils:ensure_list(RequiredPerm),
         ok = lfm_proxy:set_acl(P1Node, UserSessIdP1, {guid, DirGuid}, [perms_to_allow_ace(Perms)]),
-        catch ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, DirGuid}))
+        ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, DirGuid}))
     end, RequiredPerms).
 
 
@@ -522,7 +521,7 @@ move_to_trash_and_delete_forward_time_warp_test(Config) ->
     time_test_utils:freeze_time(Config),
     time_test_utils:simulate_seconds_passing(4 * 3600 * 24), % 4 days
 
-    % use ?ROOT_SESS_ID in below assert ase normal sessions may have expired
+    % use ?ROOT_SESS_ID in below assert as normal sessions may have expired
     lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
     lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),

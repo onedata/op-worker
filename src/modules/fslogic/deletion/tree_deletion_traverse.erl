@@ -85,7 +85,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
             root_storage_file_basename => filename:basename(StorageFileId)
         }
     },
-    case init_offline_session_if_applicable(UserCtx, TaskId) of
+    case init_offline_session_if_normal_user(UserCtx, TaskId) of
         ok ->
             tree_traverse:run(?POOL_NAME, RootDirCtx2, user_ctx:get_user_id(UserCtx), Options);
         {error, _} = Error ->
@@ -161,8 +161,8 @@ do_slave_job(#tree_traverse_slave{
 %%%===================================================================
 
 %% @private
--spec init_offline_session_if_applicable(user_ctx:ctx(), tree_traverse:id()) -> ok | {error, term()}.
-init_offline_session_if_applicable(UserCtx, TaskId) ->
+-spec init_offline_session_if_normal_user(user_ctx:ctx(), tree_traverse:id()) -> ok | {error, term()}.
+init_offline_session_if_normal_user(UserCtx, TaskId) ->
     case user_ctx:is_normal_user(UserCtx) of
         true ->
             case offline_access_manager:init_session(TaskId, user_ctx:get_credentials(UserCtx)) of

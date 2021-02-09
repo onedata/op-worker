@@ -368,7 +368,7 @@ delete_subtree_status_doc(TaskId, Uuid) ->
     on_erroneous_offline_session_acquisition_callback(),
     od_user:id(), traverse_info(), id()) -> term().
 acquire_offline_session_and_execute(OkFun, _ErrorFun, ?ROOT_USER_ID, _TraverseInfo, _TaskId) ->
-    OkFun({ok, ?ROOT_SESS_ID});
+    OkFun(?ROOT_SESS_ID);
 acquire_offline_session_and_execute(OkFun, ErrorFun, _UserId, TraverseInfo, TaskId) ->
     Pool = maps:get(pool, TraverseInfo),
     case offline_access_manager:get_session_id(TaskId) of
