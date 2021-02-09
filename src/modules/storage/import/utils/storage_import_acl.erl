@@ -11,8 +11,8 @@
 -module(storage_import_acl).
 -author("Jakub Kudzia").
 
+-include("modules/auth/acl.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 

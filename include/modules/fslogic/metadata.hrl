@@ -13,7 +13,7 @@
 -ifndef(METADATA_HRL).
 -define(METADATA_HRL, 1).
 
--include_lib("ctool/include/posix/acl.hrl").
+-include("modules/auth/acl.hrl").
 
 -define(ONEDATA_PREFIX, <<"onedata_">>).
 -define(ONEDATA_PREFIX_STR, "onedata_").

@@ -15,8 +15,8 @@
 -module(ace).
 -author("Bartosz Walkowicz").
 
+-include("modules/auth/acl.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -type ace() :: #access_control_entity{}.
