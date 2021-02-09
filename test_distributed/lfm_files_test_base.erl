@@ -959,8 +959,8 @@ lfm_create_failure(Config) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)
     },
-
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test_create_fail_dir">>, ?DEFAULT_FILE_PERMS)),
+    % intentionally set mode of file to mode typical for directory so that it has execute right
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test_create_fail_dir">>, ?DEFAULT_DIR_PERMS)),
     ?assertEqual({error, ?ENOTDIR}, lfm_proxy:create(W, SessId1, <<"/space_name1/test_create_fail_dir/file">>, ?DEFAULT_FILE_PERMS)).
 
 lfm_basic_rename(Config) ->
