@@ -108,17 +108,19 @@
 
 -define(LIST_LINKS_BATCH_SIZE, 20).
 
+-compile(export_all).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 -spec check(file_ctx:ctx(), qos_entry:id()) -> summary().
 check(FileCtx, QosEntryId) ->
-    {ok, QosDoc} = qos_entry:get(QosEntryId),
+    {ok, QosEntryDoc} = qos_entry:get(QosEntryId),
     
-    case qos_entry:is_possible(QosDoc) of
+    case qos_entry:is_possible(QosEntryDoc) of
         false -> ?IMPOSSIBLE;
-        true -> case check_possible_entry_status(FileCtx, QosDoc, QosEntryId) of
+        true -> case check_possible_entry_status(FileCtx, QosEntryDoc, QosEntryId) of
             true -> ?FULFILLED;
             false -> ?PENDING
         end
@@ -153,7 +155,7 @@ report_traverse_start(TraverseId, FileCtx) ->
     ok | {error, term()}.
 report_traverse_finished(SpaceId, TraverseId, Uuid) ->
     {Path, _} = file_ctx:get_uuid_based_path(file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId))),
-    delete_synced_link(SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), oneprovider:get_id(), Path).
+    delete_synced_link(SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), Path).
 
 
 -spec report_next_traverse_batch(od_space:id(), traverse:id(), file_meta:uuid(),
@@ -208,11 +210,9 @@ report_reconciliation_started(TraverseId, FileCtx, QosEntries) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
     Link = {?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId), TraverseId},
-    ProviderId = oneprovider:get_id(),
     lists:foreach(fun(QosEntryId) ->
-        {ok, _} = add_synced_link(
-            SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId, Link),
-        ok = delete_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId,
+        {ok, _} = add_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link),
+        ok = delete_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId),
             ?FAILED_TRANSFER_LINK_NAME(UuidBasedPath))
     end, QosEntries).
 
@@ -231,9 +231,8 @@ report_reconciliation_finished(SpaceId, TraverseId, FileUuid) ->
             file_qos:get_qos_entries(EffectiveFileQos)
     end,
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(file_ctx:new_by_guid(FileGuid)),
-    ProviderId = oneprovider:get_id(),
     lists:foreach(fun(QosEntryId) ->
-        ok = delete_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId,
+        ok = delete_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId),
             ?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId))
     end, QosEntries).
 
@@ -244,10 +243,9 @@ report_file_transfer_failure(FileCtx, QosEntries) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
     Link = {?FAILED_TRANSFER_LINK_NAME(UuidBasedPath), <<"failed_transfer">>},
-    ProviderId = oneprovider:get_id(),
     lists:foreach(fun(QosEntryId) ->
         ok = ?extract_ok(?ok_if_exists(
-            add_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId, Link)))
+            add_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link)))
     end, QosEntries),
     ok = ?extract_ok(?ok_if_exists(
         qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_uuid_const(FileCtx)))).
@@ -260,15 +258,15 @@ report_file_deleted(FileCtx, QosEntryId) ->
 -spec report_file_deleted(file_ctx:ctx(), qos_entry:id(), file_ctx:ctx() | undefined) -> ok.
 report_file_deleted(FileCtx, QosEntryId, OriginalRootParentCtx) ->
     case qos_entry:get(QosEntryId) of
-        {ok, QosDoc} ->
-            {ok, TraverseReqs} = qos_entry:get_traverse_reqs(QosDoc),
+        {ok, QosEntryDoc} ->
+            {ok, TraverseReqs} = qos_entry:get_traverse_reqs(QosEntryDoc),
             {LocalTraverseIds, _} = qos_traverse_req:split_local_and_remote(TraverseReqs),
             {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx),
 
             lists:foreach(fun(TraverseId) ->
                 case IsDir of
                     true ->
-                        {ParentFileCtx, _} = file_ctx:get_parent(FileCtx1, undefined),
+                        {ParentFileCtx, _} = file_ctx:get_original_parent(FileCtx1, OriginalRootParentCtx),
                         ok = report_child_dir_traversed(TraverseId, ParentFileCtx, OriginalRootParentCtx),
                         ok = handle_traverse_finished_for_dir(TraverseId, FileCtx1, no_link);
                     false ->
@@ -276,7 +274,7 @@ report_file_deleted(FileCtx, QosEntryId, OriginalRootParentCtx) ->
                 end
             end, LocalTraverseIds),
 
-            {ok, SpaceId} = qos_entry:get_space_id(QosDoc),
+            {ok, SpaceId} = qos_entry:get_space_id(QosEntryDoc),
             {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx1),
             % delete all reconcile links for given file
 
@@ -294,8 +292,7 @@ report_file_deleted(FileCtx, QosEntryId, OriginalRootParentCtx) ->
                     filename:join(TokensOutsideTrash)
             end,
 
-            delete_all_links_with_prefix(
-                SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ?RECONCILE_LINK_NAME(UuidBasedPath2, <<"">>));
+            delete_all_local_links_with_prefix(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), UuidBasedPath2);
         {error, not_found} ->
             ok
     end.
@@ -304,7 +301,7 @@ report_file_deleted(FileCtx, QosEntryId, OriginalRootParentCtx) ->
 -spec report_entry_deleted(od_space:id(), qos_entry:id()) -> ok.
 report_entry_deleted(SpaceId, QosEntryId) ->
     % delete all reconcile links for given entry
-    delete_all_links_with_prefix(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), <<"">>).
+    delete_all_local_links_with_prefix(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), <<"">>).
     
 
 %%%===================================================================
@@ -313,19 +310,19 @@ report_entry_deleted(SpaceId, QosEntryId) ->
 
 %% @private
 -spec check_possible_entry_status(file_ctx:ctx(), qos_entry:doc(), qos_entry:id()) -> boolean().
-check_possible_entry_status(FileCtx, QosDoc, QosEntryId) ->
+check_possible_entry_status(FileCtx, QosEntryDoc, QosEntryId) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
     (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse
-        is_file_reconciled(FileCtx1, QosDoc) andalso
-            are_traverses_finished_for_file(FileCtx1, QosDoc).
+        is_file_reconciled(FileCtx1, QosEntryDoc) andalso
+            are_traverses_finished_for_file(FileCtx1, QosEntryDoc).
 
 
 %% @private
 -spec are_traverses_finished_for_file(file_ctx:ctx(), qos_entry:doc()) -> boolean().
-are_traverses_finished_for_file(FileCtx, #document{key = QosEntryId} = QosDoc) ->
-    {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosDoc),
+are_traverses_finished_for_file(FileCtx, #document{key = QosEntryId} = QosEntryDoc) ->
+    {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntryDoc),
     AllTraverseIds = qos_traverse_req:get_traverse_ids(AllTraverseReqs),
-    {ok, QosRootFileUuid} = qos_entry:get_file_uuid(QosDoc),
+    {ok, QosRootFileUuid} = qos_entry:get_file_uuid(QosEntryDoc),
     
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx),
     NotFinishedTraverseIds = lists:filter(fun(TraverseId) ->
@@ -334,8 +331,8 @@ are_traverses_finished_for_file(FileCtx, #document{key = QosEntryId} = QosDoc) -
 
     % fetch traverse list again to secure against possible race
     % between start of status check and traverse finish
-    {ok, QosDoc1} = qos_entry:get(QosEntryId),
-    {ok, TraverseReqsAfter} = qos_entry:get_traverse_reqs(QosDoc1),
+    {ok, QosEntryDoc1} = qos_entry:get(QosEntryId),
+    {ok, TraverseReqsAfter} = qos_entry:get_traverse_reqs(QosEntryDoc1),
     TraverseIdsAfter = qos_traverse_req:get_traverse_ids(TraverseReqsAfter),
     [] == lists_utils:intersect(TraverseIdsAfter, NotFinishedTraverseIds).
 
@@ -394,9 +391,9 @@ is_parent_fulfilled(TraverseId, FileCtx, _Uuid, QosRootFileUuid) ->
 -spec is_file_reconciled(file_ctx:ctx(), qos_entry:doc()) -> boolean().
 is_file_reconciled(FileCtx, #document{key = QosEntryId}) ->
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
-    case get_next_status_links(?RECONCILE_LINKS_KEY(QosEntryId), UuidBasedPath, 1) of
+    case get_next_status_links(?RECONCILE_LINKS_KEY(QosEntryId), UuidBasedPath, 1, all) of
         {ok, []} -> true;
-        {ok, [{Path, _}]} -> not str_utils:binary_starts_with(Path, UuidBasedPath)
+        {ok, [Path]} -> not str_utils:binary_starts_with(Path, UuidBasedPath)
     end.
 
 
@@ -445,12 +442,10 @@ handle_traverse_finished_for_dir(TraverseId, FileCtx, LinkStrategy) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx1),
     case LinkStrategy of
         add_link ->
-            {ok, _} = add_synced_link(
-                SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), 
-                oneprovider:get_id(), {Path, Uuid});
+            {ok, _} = add_synced_link( SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), {Path, Uuid});
         no_link -> ok
     end,
-    ok = delete_all_links_with_prefix(
+    ok = delete_all_local_links_with_prefix(
         SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), <<Path/binary, "/">>),
     ok = delete(TraverseId, Uuid).
 
@@ -491,18 +486,17 @@ delete(TraverseId, Uuid)->
 
 
 %% @private
--spec add_synced_link(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    {datastore:link_name(), datastore:link_target()}) -> {ok, datastore:link()} | {error, term()}.
-add_synced_link(SpaceId, Key, TreeId, Link) ->
-    datastore_model:add_links(?CTX#{scope => SpaceId}, Key, TreeId, Link).
+-spec add_synced_link(datastore_doc:scope(), datastore:key(), {datastore:link_name(), 
+    datastore:link_target()}) -> {ok, datastore:link()} | {error, term()}.
+add_synced_link(SpaceId, Key, Link) ->
+    datastore_model:add_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), Link).
 
 
 %% @private
--spec delete_synced_link(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    datastore:link_name() | {datastore:link_name(), datastore:link_rev()}) ->
-    ok | {error, term()}.
-delete_synced_link(SpaceId, Key, TreeId, Link) ->
-    ok = datastore_model:delete_links(?CTX#{scope => SpaceId}, Key, TreeId, Link).
+-spec delete_synced_link(datastore_doc:scope(), datastore:key(), datastore:link_name() 
+    | {datastore:link_name(), datastore:link_rev()}) -> ok | {error, term()}.
+delete_synced_link(SpaceId, Key, Link) ->
+    ok = datastore_model:delete_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), Link).
 
 
 %% @private
@@ -552,8 +546,8 @@ generate_status_doc_id(TraverseId, DirUuid) ->
 -spec has_traverse_link(traverse:id(), file_ctx:ctx()) -> boolean().
 has_traverse_link(TraverseId, FileCtx) ->
     {Path, _} = file_ctx:get_uuid_based_path(FileCtx),
-    case get_next_status_links(?TRAVERSE_LINKS_KEY(TraverseId), Path, 1) of
-        {ok, [{Path, _}]} -> true;
+    case get_next_status_links(?TRAVERSE_LINKS_KEY(TraverseId), Path, 1, all) of
+        {ok, [Path]} -> true;
         _ -> false
     end.
 
@@ -568,28 +562,28 @@ has_qos_status_doc(TraverseId, Uuid) ->
 
 
 %% @private
--spec delete_all_links_with_prefix(od_space:id(), datastore:key(), path()) -> ok.
-delete_all_links_with_prefix(SpaceId, Key, Prefix) ->
-    case get_next_status_links(Key, Prefix, ?LIST_LINKS_BATCH_SIZE) of
+-spec delete_all_local_links_with_prefix(od_space:id(), datastore:key(), path()) -> ok.
+delete_all_local_links_with_prefix(SpaceId, Key, Prefix) ->
+    case get_next_status_links(Key, Prefix, ?LIST_LINKS_BATCH_SIZE, oneprovider:get_id()) of
         {ok, []} -> ok;
         {ok, Links} ->
             case delete_links_with_prefix_in_batch(SpaceId, Key, Prefix, Links) of
                 finished -> ok;
-                false -> delete_all_links_with_prefix(SpaceId, Key, Prefix)
+                false -> delete_all_local_links_with_prefix(SpaceId, Key, Prefix)
             end
     end.
 
 
 %% @private
 -spec delete_links_with_prefix_in_batch(od_space:id(), datastore:key(), path(), 
-    [{datastore:link_name(), oneprovider:id()}]) -> finished | false.
+    [datastore:link_name()]) -> finished | false.
 delete_links_with_prefix_in_batch(SpaceId, Key, Prefix, Links) ->
     lists:foldl(fun 
         (_, finished) -> finished;
-        ({LinkName, TreeId}, _) ->
+        (LinkName, _) ->
             case str_utils:binary_starts_with(LinkName, Prefix) of
                 true ->
-                    ok = delete_synced_link(SpaceId, Key, TreeId, LinkName),
+                    ok = delete_synced_link(SpaceId, Key, LinkName),
                     false;
                 false -> 
                     finished
@@ -598,11 +592,11 @@ delete_links_with_prefix_in_batch(SpaceId, Key, Prefix, Links) ->
 
 
 %% @private
--spec get_next_status_links(datastore:key(), path(), non_neg_integer()) -> 
-    {ok, [{path(), datastore_links:tree_id()}]}.
-get_next_status_links(Key, Path, BatchSize) ->
-    fold_links(Key, all,
-        fun(#link{name = Name, tree_id = TreeId}, Acc) -> {ok, [{Name, TreeId} | Acc]} end,
+-spec get_next_status_links(datastore:key(), path(), non_neg_integer(), datastore_links:tree_ids()) -> 
+    {ok, [path()]}.
+get_next_status_links(Key, Path, BatchSize, TreeId) ->
+    fold_links(Key, TreeId,
+        fun(#link{name = Name}, Acc) -> {ok, [Name | Acc]} end,
         [],
         #{prev_link_name => Path, size => BatchSize}
     ).

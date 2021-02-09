@@ -1268,6 +1268,7 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(Config, SpaceId) ->
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?FULFILLED), ?ATTEMPTS),
     
     lists:foreach(fun(Worker) ->
+        ct:print("Deleting worker: ~p", [Worker]),
         {ok, DirGuid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir1, generator:gen_name(), 8#775),
         {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), 8#664),
         {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),

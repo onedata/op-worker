@@ -112,7 +112,11 @@ get_effective(FileUuid) when is_binary(FileUuid) ->
         {ok, FileDoc} -> get_effective(FileDoc);
         ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}}
     end;
-get_effective(#document{scope = SpaceId} = FileDoc) ->
+get_effective(FileDoc) ->
+    get_effective(FileDoc, undefined).
+
+
+get_effective(FileDoc, OriginalParentCtx) ->
     Callback = fun([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
         case fslogic_uuid:is_trash_dir_uuid(Uuid) of
             true ->
@@ -128,13 +132,31 @@ get_effective(#document{scope = SpaceId} = FileDoc) ->
                 end
         end
     end,
-    
+    get_effective(FileDoc, Callback, OriginalParentCtx).
+
+get_effective(#document{scope = SpaceId} = FileDoc, Callback, undefined) ->
     CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
     case effective_value:get_or_calculate(CacheTableName, FileDoc, Callback, [], []) of
         {ok, undefined, _} ->
             undefined;
         {ok, FinalEffQos, _} ->
             {ok, FinalEffQos};
+        {error, {file_meta_missing, _MissingUuid}} = Error ->
+            % documents are not synchronized yet
+            Error
+    end;
+get_effective(#document{scope = SpaceId} = FileDoc, Callback, OriginalParentCtx) ->
+    %% TODO VFS-7133 take original parent uuid from file_meta doc
+    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
+    {ParentDoc, _} = file_ctx:get_file_doc(OriginalParentCtx),
+    case effective_value:get_or_calculate(CacheTableName, FileDoc, Callback, [], []) of
+        {ok, undefined, _} ->
+            get_effective(ParentDoc);
+        {ok, FinalEffQos, _} ->
+            case get_effective(ParentDoc) of
+                undefined -> {ok, FinalEffQos};
+                {ok, OriginalParentEffQos} -> {ok, merge_file_qos(OriginalParentEffQos, FinalEffQos)}
+            end;
         {error, {file_meta_missing, _MissingUuid}} = Error ->
             % documents are not synchronized yet
             Error
@@ -289,7 +311,7 @@ clean_up(FileCtx) ->
 -spec clean_up(file_ctx:ctx(), file_ctx:ctx() | undefined) -> ok.
 clean_up(FileCtx, OriginalParentCtx) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    case get_effective(FileDoc) of
+    case get_effective(FileDoc, OriginalParentCtx) of
         undefined -> ok;
         % clean up all potential documents related to status calculation
         {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
@@ -301,7 +323,10 @@ clean_up(FileCtx, OriginalParentCtx) ->
             ok
     end,
     Uuid = file_ctx:get_uuid_const(FileCtx1),
-    ok = delete(Uuid).
+    case OriginalParentCtx of
+        undefined -> ok = delete(Uuid);
+        _ -> ok
+    end.
 
 
 %%--------------------------------------------------------------------
