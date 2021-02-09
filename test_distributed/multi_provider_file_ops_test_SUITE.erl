@@ -50,7 +50,8 @@
     registered_user_opens_remotely_created_file_test/1,
     registered_user_opens_remotely_created_share_test/1,
     guest_user_opens_remotely_created_file_test/1,
-    guest_user_opens_remotely_created_share_test/1
+    guest_user_opens_remotely_created_share_test/1,
+    truncate_on_storage_does_not_block_synchronizer/1
 ]).
 
 -define(TEST_CASES, [
@@ -76,7 +77,8 @@
     registered_user_opens_remotely_created_file_test,
     registered_user_opens_remotely_created_share_test,
     guest_user_opens_remotely_created_file_test,
-    guest_user_opens_remotely_created_share_test
+    guest_user_opens_remotely_created_share_test,
+    truncate_on_storage_does_not_block_synchronizer
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -1012,6 +1014,56 @@ user_opens_file_test_base(Config0, IsRegisteredUser, UseShareGuid, TestCase) ->
             ?assertMatch({ok, _}, lfm_proxy:open(Worker2, ?GUEST_SESS_ID, {guid, ShareFileGuid}, read), ?ATTEMPTS)
     end.
 
+truncate_on_storage_does_not_block_synchronizer(Config0) ->
+    User = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+    Worker1 = ?config(worker1, Config),
+    [Worker2 | _] = ?config(workers2, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    SessId = ?config(session, Config),
+    SpaceId = <<"space1">>,
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    FileContent = <<"xxx">>,
+    FileSize = byte_size(FileContent),
+
+    % Create file on worker1
+    {ok, Guid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"file_name">>, undefined),
+    {ok, Handle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, Guid}, write),
+    {ok, _} = lfm_proxy:write(Worker1, Handle, 0, FileContent),
+    ok = lfm_proxy:close(Worker1, Handle),
+
+    % Wait for file sync and read
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker2, SessId(Worker2), {guid, Guid}), 60),
+    {ok, Handle2} = lfm_proxy:open(Worker2, SessId(Worker2), {guid, Guid}, read),
+    ?assertEqual({ok, FileContent}, lfm_proxy:read(Worker2, Handle2, 0, FileSize)),
+    ok = lfm_proxy:close(Worker2, Handle2),
+
+    % Mock hanging of storage truncate operation
+    test_utils:mock_new(Workers, storage_driver),
+    test_utils:mock_expect(Workers, storage_driver, truncate,
+        fun(Handle, Size, CurrentSize) ->
+            timer:sleep(timer:hours(1)),
+            meck:passthrough([Handle, Size, CurrentSize])
+        end
+    ),
+
+    % Test if file operations are not blocked by hanging storage truncate operation triggered by replica deletion
+    Uuid = file_id:guid_to_uuid(Guid),
+    {ok, FileLocation} = ?assertMatch({ok, _}, rpc:call(Worker1, file_location, get_local, [Uuid])),
+    VersionVector = file_location:get_version_vector(FileLocation),
+    spawn(fun() ->
+        rpc:call(Worker1, replica_synchronizer, delete_whole_file_replica,
+            [file_ctx:new_by_guid(Guid), VersionVector], timer:seconds(60))
+    end),
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker1, SessId(Worker1), {guid, Guid}), 60),
+
+    % Test if size change (triggered by event) is not blocked by hanging storage truncate operation
+    ?assertEqual(ok, rpc:call(Worker1, lfm_event_emitter, emit_file_truncated, [Guid, 0, SessId(Worker1)])),
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker1, SessId(Worker1), {guid, Guid}), 60),
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker2, SessId(Worker2), {guid, Guid}), 60),
+
+    ok.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1160,6 +1212,10 @@ init_per_testcase(Case, Config) when
 ->
     initializer:mock_share_logic(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, storage_driver),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1190,6 +1246,10 @@ end_per_testcase(Case, Config) when
     Case =:= guest_user_opens_remotely_created_share_test
 ->
     initializer:unmock_share_logic(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, storage_driver),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

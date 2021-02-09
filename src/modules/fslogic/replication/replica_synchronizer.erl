@@ -619,7 +619,7 @@ handle_call(?FLUSH_EVENTS, _From, State) ->
 handle_call({delete_whole_file_replica, AllowedVV}, From, State) ->
     case delete_whole_file_replica_internal(AllowedVV, From, State) of
         {helper_process_spawned, _Pid} -> {noreply, State, ?DIE_AFTER};
-        Ans -> {reply, Ans, State, ?DIE_AFTER}
+        {error, _} = Error -> {reply, Error, State, ?DIE_AFTER}
     end;
 
 handle_call({apply, Fun}, _From, State) ->
@@ -1674,9 +1674,11 @@ delete_whole_file_replica_internal(AllowedVV, RequestedBy, #state{file_ctx = Fil
         CurrentLocalV = version_vector:get_version(LocalFileLocId, ProviderId, CurrentVV),
         case AllowedLocalV =:= CurrentLocalV of
             true ->
+                % Emmit events only when list of blocks is not empty
+                % (nothing changes from clients perspective if blocks list is empty)
                 EmitEvents = fslogic_location_cache:get_blocks(LocationDoc) =/= [],
                 fslogic_location_cache:clear_blocks(FileCtx, LocalFileLocId),
-                order_blocks_clearing(FileCtx, EmitEvents, RequestedBy);
+                spawn_block_clearing(FileCtx, EmitEvents, RequestedBy);
             _ ->
                 {error, file_modified_locally}
         end
@@ -1687,9 +1689,13 @@ delete_whole_file_replica_internal(AllowedVV, RequestedBy, #state{file_ctx = Fil
             {error, Reason}
     end.
 
--spec order_blocks_clearing(file_ctx:ctx(), boolean(), from()) -> {helper_process_spawned, pid()}.
-order_blocks_clearing(FileCtx, EmitEvents, RequestedBy) ->
+-spec spawn_block_clearing(file_ctx:ctx(), boolean(), from()) -> {helper_process_spawned, pid()}.
+spawn_block_clearing(FileCtx, EmitEvents, RequestedBy) ->
     Master = self(),
+    % Spawn file truncate on storage to prevent replica_synchronizer blocking.
+    % Although spawning file truncate on storage can result in races,
+    % similar races are possible truncating file via oneclient. Thus,
+    % method of truncating file that does not block synchronizer is preferred.
     Pid = spawn_link(fun() ->
         Ans = try
             UserCtx = user_ctx:new(?ROOT_SESS_ID),

@@ -312,7 +312,7 @@ maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize =/= NewSi
                 {true, FileCtx3} ->
                     {ok, FileCtx3};
                 {false, FileCtx3} ->
-                    % Spawn file truncated on storage to prevent replica_synchronizer blocking.
+                    % Spawn file truncate on storage to prevent replica_synchronizer blocking.
                     % Although spawning file truncate on storage can result in races,
                     % similar races are possible truncating file via oneclient. Thus,
                     % method of truncating file that does not block synchronizer is preferred.
