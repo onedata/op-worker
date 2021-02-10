@@ -1027,7 +1027,7 @@ truncate_on_storage_does_not_block_synchronizer(Config0) ->
     FileSize = byte_size(FileContent),
 
     % Create file on worker1
-    {ok, Guid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"file_name">>, undefined),
+    {ok, Guid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"synch_blocking_test_file">>, undefined),
     {ok, Handle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, Guid}, write),
     {ok, _} = lfm_proxy:write(Worker1, Handle, 0, FileContent),
     ok = lfm_proxy:close(Worker1, Handle),
