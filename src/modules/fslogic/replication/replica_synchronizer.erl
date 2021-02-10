@@ -771,9 +771,30 @@ handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = Retrie
             handle_info({FailedRef, complete, {error, restart_failed}}, State)
     end;
 
-handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, State) ->
+handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
+    ref_to_froms = RTFs
+} = State) ->
     ?debug("Transfer ~p cancelled", [Ref]),
-    {noreply, State, ?DIE_AFTER};
+
+    State2 = case maps:get(Ref, RTFs, undefined) of
+        undefined ->
+            % If there is no association then replication must have been cancelled
+            % by transfer job (all associations were already cleared)
+            State;
+        AffectedFroms ->
+            % If there is association then replication must have been cancelled
+            % by rtransfer due to exceeded quota. In that case associated
+            % replications should be also cancelled and registry/state cleared.
+            try
+                cancel_froms(AffectedFroms, State)
+            catch _:Reason ->
+                ?error_stacktrace("Unable to cancel transfers associated with ~p due to ~p", [
+                    Ref, Reason
+                ]),
+                State
+            end
+    end,
+    {noreply, State2, ?DIE_AFTER};
 
 handle_info({Ref, complete, ErrorStatus}, State) ->
     {noreply, handle_error(Ref, ErrorStatus, State), ?DIE_AFTER};
