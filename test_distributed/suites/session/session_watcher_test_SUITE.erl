@@ -171,9 +171,7 @@ session_create_or_reuse_session_should_update_session_access_time(Config) ->
     time_test_utils:simulate_seconds_passing(100),
     ?assertMatch(
         {ok, SessId},
-        fuse_test_utils:reuse_or_create_fuse_session(
-            Worker, Nonce, ?SUB(user, ?USER_ID), undefined, self()
-        )
+        fuse_test_utils:setup_fuse_session(Worker, ?USER_ID, Nonce)
     ),
     Accessed2 = get_session_access_time(Config),
     ?assertEqual(100, Accessed2 - Accessed1).
