@@ -61,7 +61,7 @@
 -type execute_slave_on_dir() :: boolean().
 -type children_master_jobs_mode() :: sync | async.
 -type batch_size() :: non_neg_integer().
--type traverse_info() :: term().
+-type traverse_info() :: map().
 -type run_options() :: #{
     % Options of traverse framework
     task_id => id(),
@@ -96,7 +96,7 @@
         SubtreeProcessingStatus :: tree_traverse_progress:status() | {error, term()}
     ) -> ok).
 
--type on_successful_offline_session_acquisition_callback() :: fun((session:id()) -> term()).
+-type on_successful_offline_session_acquisition_callback() :: fun((user_ctx:ctx()) -> term()).
 -type on_erroneous_offline_session_acquisition_callback() :: fun((errors:error()) -> term()).
 
 %formatter:on
@@ -368,12 +368,12 @@ delete_subtree_status_doc(TaskId, Uuid) ->
     on_erroneous_offline_session_acquisition_callback(),
     od_user:id(), traverse_info(), id()) -> term().
 acquire_offline_session_and_execute(OkFun, _ErrorFun, ?ROOT_USER_ID, _TraverseInfo, _TaskId) ->
-    OkFun(?ROOT_SESS_ID);
+    OkFun(user_ctx:new(?ROOT_SESS_ID));
 acquire_offline_session_and_execute(OkFun, ErrorFun, _UserId, TraverseInfo, TaskId) ->
     Pool = maps:get(pool, TraverseInfo),
     case offline_access_manager:get_session_id(TaskId) of
         {ok, SessionId} ->
-            OkFun(SessionId);
+            OkFun(user_ctx:new(SessionId));
         {error, _} = Error ->
             utils:throttle(600, fun() ->    % throttle log every each 10 minutes
                 ?error(
@@ -406,8 +406,7 @@ list_children(#tree_traverse{
     traverse_info = TraverseInfo
 }, #{task_id := TaskId}) ->
     acquire_offline_session_and_execute(
-        fun(SessionId) ->   % function performed on successful acquisition of offline session
-            UserCtx = user_ctx:new(SessionId),
+        fun(UserCtx) ->   % function performed on successful acquisition of offline session
             try
                 {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, 0, BatchSize, Token, LastName, LastTree)}
             catch
@@ -418,7 +417,8 @@ list_children(#tree_traverse{
         fun({error, _}) -> % function performed on erroneous acquisition of offline session
             {error, ?EACCES}
         end,
-        UserId, TraverseInfo, TaskId).
+        UserId, TraverseInfo, TaskId
+    ).
 
 
 -spec generate_children_jobs(master_job(), id(), [file_ctx:ctx()]) -> {[slave_job()], [master_job()]}.

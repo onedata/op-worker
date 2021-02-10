@@ -98,7 +98,7 @@ traverse_test(Config) ->
 
     RunOptions = #{
         batch_size => 1,
-        traverse_info => self()
+        traverse_info => #{pid => self()}
     },
     {ok, ID} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run, [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
 
@@ -136,7 +136,7 @@ file_traverse_job_test(Config) ->
     {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File, 8#600)),
 
     RunOptions = #{
-        traverse_info => self()
+        traverse_info => #{pid => self()}
     },
     {ok, ID} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run, [?MODULE, file_ctx:new_by_guid(Guid), RunOptions])),
 
@@ -730,10 +730,10 @@ do_master_job(Job, TaskID) ->
 
 do_slave_job(#tree_traverse_slave{
     file_ctx = FileCtx,
-    traverse_info = TraverseInfo
+    traverse_info = #{pid := Pid}
 }, _TaskID) ->
     {#document{value = #file_meta{name = Name}}, _} = file_ctx:get_file_doc(FileCtx),
-    TraverseInfo ! {slave, binary_to_integer(Name)},
+    Pid ! {slave, binary_to_integer(Name)},
     ok.
 
 update_job_progress(ID, Job, Pool, TaskID, Status) ->
