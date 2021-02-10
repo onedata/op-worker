@@ -173,6 +173,10 @@ normalize_ace(ACE = #access_control_entity{identifier = ?group}, _StorageId) ->
     ACE;
 normalize_ace(ACE = #access_control_entity{identifier = ?everyone}, _StorageId) ->
     ACE;
+normalize_ace(ACE = #access_control_entity{identifier = ?anonymous}, _StorageId) ->
+    ACE;
+normalize_ace(ACE = #access_control_entity{identifier = ?authenticated}, _StorageId) ->
+    ACE;
 normalize_ace(ACE = #access_control_entity{
     aceflags = Flags,
     identifier = Who

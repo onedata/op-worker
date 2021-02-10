@@ -17,6 +17,7 @@
 
 -include("modules/auth/acl.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -type ace() :: #access_control_entity{}.
@@ -65,6 +66,16 @@ is_applicable(_UserDoc, FileCtx, #access_control_entity{
     identifier = ?everyone
 }) ->
     {true, FileCtx};
+
+is_applicable(#document{key = ?GUEST_USER_ID}, FileCtx, #access_control_entity{
+    identifier = ?anonymous
+}) ->
+    {true, FileCtx};
+
+is_applicable(#document{key = UserId}, FileCtx, #access_control_entity{
+    identifier = ?authenticated
+}) ->
+    {UserId /= ?GUEST_USER_ID, FileCtx};
 
 is_applicable(#document{value = User}, FileCtx, #access_control_entity{
     identifier = GroupId,
