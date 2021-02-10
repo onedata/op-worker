@@ -948,8 +948,7 @@ list_children_recreated_remotely(Config0) ->
     % Delete file on worker2
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), {guid, G}), 30),
     ok = lfm_proxy:rm_recursive(Worker2, SessId(Worker2), {guid, G}),
-    % TODO VFS-7252 uncomment below assert
-%%    ?assertMatch({error, ?EINVAL}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, -24, 24, undefined)),
+    ?assertMatch({error, ?EINVAL}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, -24, 24, undefined)),
     ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, -24, 24, undefined)),
     ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, -24, 24, <<"file_name">>)),
     ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid}, 0, 24, undefined)),

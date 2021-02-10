@@ -257,7 +257,7 @@ get_children_count(SessId, FileKey) ->
     Acc :: non_neg_integer()) ->
     non_neg_integer() | lfm:error_reply().
 count_children(SessId, FileGuid, Acc) ->
-    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
+    {ok, Chunk} = application:get_env(?APP_NAME, ls_batch_size),
     case get_children(SessId, {guid, FileGuid}, Acc, Chunk) of
         {ok, List} ->
             case length(List) of

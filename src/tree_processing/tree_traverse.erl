@@ -48,7 +48,7 @@
 -type slave_jobs() :: [slave_job()].
 -type execute_slave_on_dir() :: boolean().
 -type children_master_jobs_mode() :: sync | async.
--type batch_size() :: non_neg_integer().
+-type batch_size() :: file_meta:list_size().
 -type traverse_info() :: term().
 -type run_options() :: #{
     % Options of traverse framework
@@ -142,7 +142,7 @@ run(Pool, FileCtx, UserCtx, Opts) ->
     TrackSubtreeStatus = maps:get(track_subtree_status, Opts, ?DEFAULT_TRACK_SUBTREE_STATUS),
     TraverseInfo = maps:get(traverse_info, Opts, undefined),
     Token = case maps:get(use_listing_token, Opts, true) of
-        true -> #link_token{};
+        true -> ?INITIAL_LS_TOKEN;
         false -> undefined
     end,
 
@@ -264,12 +264,13 @@ do_master_job(Job = #tree_traverse{
         ?REGULAR_FILE_TYPE ->
             {ok, #{slave_jobs => [get_child_slave_job(Job2, FileCtx2)]}};
         ?DIRECTORY_TYPE ->
-            {ChildrenCtxs, ListExtendedInfo, FileCtx3, IsLast} = list_children(Job2),
+            {ChildrenCtxs, ListExtendedInfo, FileCtx3} = list_children(Job2),
             LastName2 = maps:get(last_name, ListExtendedInfo),
             LastTree2 = maps:get(last_tree, ListExtendedInfo),
             Token2 = maps:get(token, ListExtendedInfo, undefined),
             {SlaveJobs, MasterJobs} = generate_children_jobs(Job2, TaskId, ChildrenCtxs),
             ChildrenCount = length(SlaveJobs) + length(MasterJobs),
+            IsLast = maps:get(is_last, ListExtendedInfo),
             SubtreeProcessingStatus = maybe_report_children_jobs_to_process(Job2, TaskId, ChildrenCount, IsLast),
             NewJobsPreprocessor(SlaveJobs, MasterJobs, ListExtendedInfo, SubtreeProcessingStatus),
             FinalMasterJobs = case IsLast of
@@ -351,13 +352,7 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 %% Tracking subtree progress status API
 %%%===================================================================
 
--spec list_children(master_job()) ->
-    {
-        Children :: [file_ctx:ctx()],
-        ListExtendedInfo :: file_meta:list_extended_info(),
-        NewFileCtx :: file_ctx:ctx(),
-        IsLast :: boolean()
-    }.
+-spec list_children(master_job()) -> {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
     user_ctx = UserCtx,
@@ -366,7 +361,13 @@ list_children(#tree_traverse{
     last_tree = LastTree,
     batch_size = BatchSize
 }) ->
-    dir_req:get_children_ctxs(UserCtx, FileCtx, 0, BatchSize, Token, LastName, LastTree).
+    % todo a moze trzymac te wszystkie opcje w mapie w rekordzie?
+    dir_req:get_children_ctxs(UserCtx, FileCtx, #{
+        size => BatchSize,
+        token => Token,
+        last_name => LastName,
+        last_tree => LastTree
+    }).
 
 
 -spec generate_children_jobs(master_job(), id(), [file_ctx:ctx()]) -> {[slave_job()], [master_job()]}.
@@ -440,7 +441,7 @@ maybe_report_children_jobs_to_process(_, _, _, _) ->
 -spec reset_list_options(master_job()) -> master_job().
 reset_list_options(Job) ->
     Job#tree_traverse{
-        token = #link_token{},
+        token = ?INITIAL_LS_TOKEN,
         last_name = <<>>,
         last_tree = <<>>
     }.

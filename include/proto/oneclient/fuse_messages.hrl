@@ -41,21 +41,21 @@
 }).
 
 -record(get_file_children, {
-    offset :: file_meta:offset(),
+    offset :: file_meta:list_offset(),
     size :: file_meta:size(),
     index_token = undefined :: undefined | binary(),
     index_startid = undefined :: undefined | binary()
 }).
 
 -record(get_file_children_attrs, {
-    offset :: file_meta:offset(),
+    offset :: file_meta:list_offset(),
     size :: file_meta:size(),
     index_token :: undefined | binary(),
     include_replication_status :: undefined | boolean()
 }).
 
 -record(get_file_children_details, {
-    offset :: file_meta:offset(),
+    offset :: file_meta:list_offset(),
     size :: file_meta:size(),
     index_startid = undefined :: undefined | binary()
 }).

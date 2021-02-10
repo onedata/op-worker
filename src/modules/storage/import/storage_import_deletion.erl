@@ -43,7 +43,7 @@ get_master_job(Job = #storage_traverse_master{info = Info}) ->
             deletion_job => true,
             sync_links_token => #link_token{},
             sync_links_children => [],
-            file_meta_token => #link_token{},
+            file_meta_token => ?INITIAL_LS_TOKEN,
             file_meta_children => []
         }
     }.
@@ -90,14 +90,14 @@ do_master_job(Job = #storage_traverse_master{
         case refill_file_meta_children(FMChildren, FileCtx, FMToken) of
             {error, not_found} ->
                 {ok, #{}};
-            {[], _NewFMToken} ->
+            {[], #{is_last := true}} ->
                 {ok, #{finish_callback => finish_callback(Job)}};
-            {FMChildren2, FMToken2} ->
+            {FMChildren2, ListExtendedInfo} ->
                 case refill_sync_links_children(SLChildren, StorageFileCtx, SLToken) of
                     {error, not_found} ->
                         {ok, #{}};
                     {SLChildren2, SLToken2} ->
-                        {MasterJobs, SlaveJobs} = generate_deletion_jobs(Job, SLChildren2, SLToken2, FMChildren2, FMToken2),
+                        {MasterJobs, SlaveJobs} = generate_deletion_jobs(Job, SLChildren2, SLToken2, FMChildren2, ListExtendedInfo),
                         storage_import_monitoring:increment_queue_length_histograms(SpaceId, length(SlaveJobs) + length(MasterJobs)),
                         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId, length(MasterJobs)),
@@ -159,16 +159,20 @@ refill_sync_links_children(CurrentChildren, StorageFileCtx, Token) ->
             {CurrentChildren, Token}
     end.
 
--spec refill_file_meta_children(file_meta_children(), file_ctx:ctx(), datastore_links_iter:token()) ->
-    {file_meta_children(), datastore_links_iter:token()} | {error, term()}.
+-spec refill_file_meta_children(file_meta_children(), file_ctx:ctx(), file_meta:list_token()) ->
+    {file_meta_children(), file_meta:list_extended_info()} | {error, term()}.
 refill_file_meta_children(CurrentChildren, FileCtx, Token) ->
     case length(CurrentChildren) < ?BATCH_SIZE of
         true ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             ToFetch = ?BATCH_SIZE - length(CurrentChildren),
-            case file_meta:list_children({uuid, FileUuid}, 0, ToFetch, Token) of
-                {ok, NewChildren, #{token := NewToken}} ->
-                    {CurrentChildren ++ NewChildren, NewToken};
+            case file_meta:list_children({uuid, FileUuid}, #{
+                offset => 0,
+                size => ToFetch,
+                token => Token
+            }) of
+                {ok, NewChildren, ListExtendedInfo} ->
+                    {CurrentChildren ++ NewChildren, ListExtendedInfo};
                 Error = {error, _} ->
                     Error
             end;
@@ -177,9 +181,9 @@ refill_file_meta_children(CurrentChildren, FileCtx, Token) ->
     end.
 
 -spec generate_deletion_jobs(master_job(), sync_links_children(), datastore_links_iter:token(),
-    file_meta_children(), datastore_links_iter:token()) -> {[master_job()], [slave_job()]}.
-generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMToken) ->
-    generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMToken, [], []).
+    file_meta_children(), file_meta:list_extended_info()) -> {[master_job()], [slave_job()]}.
+generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMListExtendedInfo) ->
+    generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMListExtendedInfo, [], []).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -208,15 +212,15 @@ generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMToken) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec generate_deletion_jobs(master_job(), sync_links_children(), datastore_links_iter:token(),
-    file_meta_children(), datastore_links_iter:token(), [master_job()], [slave_job()]) -> {[master_job()], [slave_job()]}.
-generate_deletion_jobs(_Job, _SLChildren, _SLFinished, [], #link_token{is_last = true}, MasterJobs, SlaveJobs) ->
+    file_meta_children(), file_meta:list_extended_info(), [master_job()], [slave_job()]) -> {[master_job()], [slave_job()]}.
+generate_deletion_jobs(_Job, _SLChildren, _SLFinished, [], #{is_last := true}, MasterJobs, SlaveJobs) ->
     % there are no more children in file_meta links, we can finish the job;
     {MasterJobs, SlaveJobs};
-generate_deletion_jobs(Job, SLChildren, SLToken, [], FMToken = #link_token{is_last = false}, MasterJobs, SlaveJobs) ->
+generate_deletion_jobs(Job, SLChildren, SLToken, [], FMToken = #{is_last := false}, MasterJobs, SlaveJobs) ->
     % sync_links must be processed after refilling file_meta children list
     NextBatchJob = next_batch_master_job(Job, SLChildren, SLToken, [], FMToken),
     {[NextBatchJob | MasterJobs], SlaveJobs};
-generate_deletion_jobs(Job, [], #link_token{is_last = true}, FMChildren, #link_token{is_last = true}, MasterJobs, SlaveJobs) ->
+generate_deletion_jobs(Job, [], #link_token{is_last = true}, FMChildren, #{is_last := true}, MasterJobs, SlaveJobs) ->
     % there are no more children in sync links and in file_meta (except those in FMChildren)
     % all left file_meta children (those in FMChildren) must be deleted
     SlaveJobs2 = lists:foldl(fun({_ChildName, ChildUuid}, AccIn) ->
@@ -224,7 +228,7 @@ generate_deletion_jobs(Job, [], #link_token{is_last = true}, FMChildren, #link_t
         [new_slave_job(Job, ChildUuid) | AccIn]
     end, SlaveJobs, FMChildren),
     {MasterJobs, SlaveJobs2};
-generate_deletion_jobs(Job, [], SLToken = #link_token{is_last = true}, FMChildren, FMToken, MasterJobs, SlaveJobs) ->
+generate_deletion_jobs(Job, [], SLToken = #link_token{is_last = true}, FMChildren, #{token := FMToken}, MasterJobs, SlaveJobs) ->
     % there are no more children in sync links
     % all left file_meta children must be deleted
     SlaveJobs2 = lists:foldl(fun({_ChildName, ChildUuid}, AccIn) ->
@@ -234,28 +238,28 @@ generate_deletion_jobs(Job, [], SLToken = #link_token{is_last = true}, FMChildre
     % we must schedule next batch to refill file_meta children
     NextBatchJob = next_batch_master_job(Job, [], SLToken, [], FMToken),
     {[NextBatchJob | MasterJobs], SlaveJobs2};
-generate_deletion_jobs(Job, [], SLToken, FMChildren, FMToken, MasterJobs, SlaveJobs) ->
+generate_deletion_jobs(Job, [], SLToken, FMChildren, #{token := FMToken}, MasterJobs, SlaveJobs) ->
     % all left file_meta children must be processed after refilling sl children
     NextBatchJob = next_batch_master_job(Job, [], SLToken, FMChildren, FMToken),
     {[NextBatchJob | MasterJobs], SlaveJobs};
 generate_deletion_jobs(Job = #storage_traverse_master{info = #{iterator_type := ?TREE_ITERATOR}},
-    [{Name, _} | RestSLChildren], SLToken, [{Name, _ChildUuid} | RestFMChildren], FMToken,
+    [{Name, _} | RestSLChildren], SLToken, [{Name, _ChildUuid} | RestFMChildren], FMListExtendedInfo,
     MasterJobs, SlaveJobs
 ) ->
     % file with name Name is on both lists therefore we cannot delete it
     % on storage iterated using ?TREE_ITERATOR (block storage) we process only direct children of a directory,
     % we do not go deeper in the files' structure as separate deletion_jobs will be scheduled for subdirectories
-    generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMToken, MasterJobs, SlaveJobs);
+    generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMListExtendedInfo, MasterJobs, SlaveJobs);
 generate_deletion_jobs(Job = #storage_traverse_master{info = #{iterator_type := ?FLAT_ITERATOR}},
-    [{Name, undefined} | RestSLChildren], SLToken, [{Name, _ChildUuid} | RestFMChildren], FMToken,
+    [{Name, undefined} | RestSLChildren], SLToken, [{Name, _ChildUuid} | RestFMChildren], FMListExtendedInfo,
     MasterJobs, SlaveJobs
 ) ->
     % file with name Name is on both lists therefore we cannot delete it
     % on storage iterated using ?FLAT_ITERATOR (object storage) if child link's target is undefined it
     % means that it's a regular file's link
-    generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMToken, MasterJobs, SlaveJobs);
+    generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMListExtendedInfo, MasterJobs, SlaveJobs);
 generate_deletion_jobs(Job = #storage_traverse_master{info = #{iterator_type := ?FLAT_ITERATOR}},
-    [{Name, _} | RestSLChildren], SLToken, [{Name, Uuid} | RestFMChildren], FMToken,
+    [{Name, _} | RestSLChildren], SLToken, [{Name, Uuid} | RestFMChildren], FMListExtendedInfo,
     MasterJobs, SlaveJobs
 ) ->
     % file with name Name is on both lists therefore we cannot delete it
@@ -264,18 +268,18 @@ generate_deletion_jobs(Job = #storage_traverse_master{info = #{iterator_type := 
     % as with ?FLAT_ITERATOR deletion_jobs for root traverses whole file system
     % for more info read the function's doc
     ChildMasterJob = new_flat_iterator_child_master_job(Job, Name, Uuid),
-    generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMToken, [ChildMasterJob | MasterJobs], SlaveJobs);
+    generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMListExtendedInfo, [ChildMasterJob | MasterJobs], SlaveJobs);
 generate_deletion_jobs(Job, AllSLChildren = [{SLName, _} | _], SLToken,
-    [{FMName, ChildUuid} | RestFMChildren], FMToken, MasterJobs, SlaveJobs)
+    [{FMName, ChildUuid} | RestFMChildren], FMListExtendedInfo, MasterJobs, SlaveJobs)
     when SLName > FMName ->
     % FMName is missing on the sync links list so it probably was deleted on storage
     SlaveJob = new_slave_job(Job, ChildUuid),
-    generate_deletion_jobs(Job, AllSLChildren, SLToken, RestFMChildren, FMToken, MasterJobs, [SlaveJob | SlaveJobs]);
+    generate_deletion_jobs(Job, AllSLChildren, SLToken, RestFMChildren, FMListExtendedInfo, MasterJobs, [SlaveJob | SlaveJobs]);
 generate_deletion_jobs(Job, [{SLName, _} | RestSLChildren], SLToken,
-    AllFMChildren = [{FMName, _} | _], FMToken, MasterJobs, SlaveJobs)
+    AllFMChildren = [{FMName, _} | _], FMListExtendedInfo, MasterJobs, SlaveJobs)
     when SLName < FMName ->
     % SLName is missing on the file_meta list, we can ignore it, storage import will synchronise this file
-    generate_deletion_jobs(Job, RestSLChildren, SLToken, AllFMChildren, FMToken, MasterJobs, SlaveJobs).
+    generate_deletion_jobs(Job, RestSLChildren, SLToken, AllFMChildren, FMListExtendedInfo, MasterJobs, SlaveJobs).
 
 
 -spec new_slave_job(master_job(), file_meta:uuid()) -> slave_job().
@@ -396,8 +400,9 @@ delete_regular_file_and_update_counters(FileCtx, SpaceId) ->
 -spec delete_dir_recursive(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
 delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
-    {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, 0, ChunkSize, #link_token{}, SpaceId, StorageId),
+    {ok, BatchSize} = application:get_env(?APP_NAME, ls_batch_size),
+    ListOpts = #{token => ?INITIAL_LS_TOKEN, size => BatchSize},
+    {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, ListOpts, SpaceId, StorageId),
     delete_file(FileCtx2).
 
 %%-------------------------------------------------------------------
@@ -406,22 +411,21 @@ delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
 %% Recursively deletes children of directory.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_children(file_ctx:ctx(), user_ctx:ctx(), non_neg_integer(), non_neg_integer(),
-    file_meta_links:token() | undefined,
+-spec delete_children(file_ctx:ctx(), user_ctx:ctx(), file_meta:list_opts(),
     od_space:id(), storage:id()) -> {ok, file_ctx:ctx()}.
-delete_children(FileCtx, UserCtx, Offset, ChunkSize, Token, SpaceId, StorageId) ->
+delete_children(FileCtx, UserCtx, ListOpts, SpaceId, StorageId) ->
     try
-        {ChildrenCtxs, #{token := Token2}, FileCtx2} =
-            file_ctx:get_file_children(FileCtx, UserCtx, Offset, ChunkSize, Token),
+        {ChildrenCtxs, #{is_last := IsLast, token := Token2}, FileCtx2} =
+            file_ctx:get_file_children(FileCtx, UserCtx, ListOpts),
         storage_import_monitoring:increment_queue_length_histograms(SpaceId, length(ChildrenCtxs)),
         lists:foreach(fun(ChildCtx) ->
             delete_file_and_update_counters(ChildCtx, SpaceId, StorageId)
         end, ChildrenCtxs),
-        case Token2#link_token.is_last of
+        case IsLast of
             true ->
                 {ok, FileCtx2};
             false ->
-                delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize, Token2, SpaceId, StorageId)
+                delete_children(FileCtx2, UserCtx, ListOpts#{token => Token2}, SpaceId, StorageId)
         end
     catch
         throw:?ENOENT ->

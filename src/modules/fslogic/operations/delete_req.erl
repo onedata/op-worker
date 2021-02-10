@@ -113,8 +113,8 @@ delete_file(UserCtx, FileCtx0, Silent) ->
 %%--------------------------------------------------------------------
 -spec check_if_empty_and_delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) -> fslogic_worker:fuse_response().
 check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
-    case file_ctx:get_file_children(FileCtx, UserCtx, 0, 1) of
-        {[], FileCtx2} ->
+    case file_ctx:get_file_children(FileCtx, UserCtx, #{offset => 0, size => 1}) of
+        {[], _ListExtendedInfo, FileCtx2} ->
             delete_insecure(UserCtx, FileCtx2, Silent);
         {_, _FileCtx2} ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}

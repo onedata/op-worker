@@ -265,16 +265,22 @@ basic_operations_test_core(Config, LastLevel) ->
 %%%===================================================================
 
 list_children(Worker, ParentPath, Offset, Size) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, Offset, Size, undefined]).
+    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{offset => Offset, size => Size}]).
 
 list_children(Worker, ParentPath, Offset, Size, Token, LastName, LastTree) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, Offset, Size, Token, LastName, LastTree]).
+    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{
+        offset => Offset,
+        size => Size,
+        token => Token,
+        last_name => LastName,
+        last_tree => LastTree
+    }]).
 
 list_children_using_token(Worker, ParentPath, Size) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, undefined, Size, #link_token{}]).
+    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{token => ?INITIAL_LS_TOKEN, size => Size}]).
 
 list_children_using_token(Worker, ParentPath, Size, Token) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, undefined, Size, Token]).
+    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{token => Token, size => Size}]).
 
 %%%===================================================================
 %%% Internal functions
