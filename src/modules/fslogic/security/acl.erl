@@ -127,8 +127,6 @@ user_id_to_ace_name(?everyone) ->
     undefined;
 user_id_to_ace_name(?anonymous) ->
     undefined;
-user_id_to_ace_name(?authenticated) ->
-    undefined;
 user_id_to_ace_name(UserId) ->
     case user_logic:get_full_name(UserId) of
         {ok, FullName} -> FullName;

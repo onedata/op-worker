@@ -29,7 +29,6 @@
 -define(group, <<"GROUP@">>).
 -define(everyone, <<"EVERYONE@">>).
 -define(anonymous, <<"ANONYMOUS@">>).
--define(authenticated, <<"AUTHENTICATED@">>).
 
 % ace flags
 -define(no_flags, <<"NO_FLAGS">>).

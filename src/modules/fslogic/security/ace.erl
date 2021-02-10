@@ -72,11 +72,6 @@ is_applicable(#document{key = ?GUEST_USER_ID}, FileCtx, #access_control_entity{
 }) ->
     {true, FileCtx};
 
-is_applicable(#document{key = UserId}, FileCtx, #access_control_entity{
-    identifier = ?authenticated
-}) ->
-    {UserId /= ?GUEST_USER_ID, FileCtx};
-
 is_applicable(#document{value = User}, FileCtx, #access_control_entity{
     identifier = GroupId,
     aceflags = AceFlagsBitmask

@@ -320,36 +320,4 @@ check_anonymous_principal_permission_test_() ->
     ].
 
 
-check_authenticated_principal_permission_test_() ->
-    FileGuid = <<"file_guid">>,
-    FileCtx = file_ctx:new_by_guid(FileGuid),
-
-    UserId = <<"id2">>,
-    User = #document{key = UserId, value = #od_user{}},
-    Guest = #document{key = ?GUEST_USER_ID, value = #od_user{}},
-
-    Ace1 = #access_control_entity{
-        acetype = ?allow_mask,
-        aceflags = ?no_flags_mask,
-        identifier = ?authenticated,
-        acemask = ?read_mask
-    },
-    Ace2 = #access_control_entity{
-        acetype = ?deny_mask,
-        aceflags = ?no_flags_mask,
-        identifier = ?authenticated,
-        acemask = ?write_mask
-    },
-
-    F = fun acl:assert_permitted/4,
-
-    [
-        ?_assertMatch({ok, _}, F([Ace1, Ace2], User, ?read_mask, FileCtx)),
-        ?_assertMatch(?EACCES, catch F([Ace1, Ace2], Guest, ?read_mask, FileCtx)),
-        ?_assertEqual(?EACCES, catch F([Ace1, Ace2], User, ?read_mask bor ?write_mask, FileCtx)),
-        ?_assertEqual(?EACCES, catch F([Ace1, Ace2], User, ?read_mask bor ?write_mask bor ?traverse_container_mask, FileCtx)),
-        ?_assertEqual(?EACCES, catch F([Ace1, Ace2], User, ?traverse_container_mask, FileCtx))
-    ].
-
-
 -endif.
