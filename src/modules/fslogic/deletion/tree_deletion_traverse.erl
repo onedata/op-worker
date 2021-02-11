@@ -85,7 +85,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
             root_storage_file_basename => filename:basename(StorageFileId)
         }
     },
-    case tree_traverse_session:setup_session_for_task(UserCtx, TaskId) of
+    case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
         ok ->
             tree_traverse:run(?POOL_NAME, RootDirCtx2, user_ctx:get_user_id(UserCtx), Options);
         {error, _} = Error ->
@@ -103,12 +103,12 @@ task_started(TaskId, _Pool) ->
 
 -spec task_canceled(traverse:id(), traverse:pool()) -> ok.
 task_canceled(TaskId, _PoolName) ->
-    offline_access_manager:close_session(TaskId),
+    tree_traverse_session:close_for_task(TaskId),
     ?debug("dir deletion job ~p cancelled", [TaskId]).
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
 task_finished(TaskId, _Pool) ->
-    offline_access_manager:close_session(TaskId),
+    tree_traverse_session:close_for_task(TaskId),
     ?debug("dir deletion job ~p finished", [TaskId]).
 
 -spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
@@ -167,7 +167,7 @@ delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
     root_original_parent_uuid := RootOriginalParentUuid,
     root_storage_file_basename := RootStorageFileBasename
 }) ->
-    case tree_traverse_session:acquire_session_for_task(UserId, TraverseInfo, TaskId) of
+    case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
         {ok, UserCtx} ->
             try
                 delete_req:delete(UserCtx, FileCtx, not EmitEvents),
@@ -191,7 +191,7 @@ delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
 
 -spec delete_file(file_ctx:ctx(), od_user:id(), id(), info()) -> ok.
 delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}) ->
-    case tree_traverse_session:acquire_session_for_task(UserId, TraverseInfo, TaskId) of
+    case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
         {ok, UserCtx} ->
             try
                 delete_req:delete(UserCtx, FileCtx, not EmitEvents),

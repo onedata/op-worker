@@ -373,7 +373,7 @@ list_children(#tree_traverse{
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }, #{task_id := TaskId}) ->
-    case tree_traverse_session:acquire_session_for_task(UserId, TraverseInfo, TaskId) of
+    case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
         {ok, UserCtx} ->
             try
                 {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, 0, BatchSize, Token, LastName, LastTree)}

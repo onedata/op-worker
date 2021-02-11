@@ -513,7 +513,7 @@ files_from_trash_are_not_reimported(_Config) ->
 
 deletion_lasting_for_4_days_should_succeed(Config) ->
     TimeWarp = 4 * 24 * 3600, % 4 days
-    move_to_trash_and_schedule_deletion_should_tolerate_forward_time_warps_test_base(Config, 1, TimeWarp, 0, success).
+    long_lasting_deletion_test_base(Config, 1, TimeWarp, 0, success).
 
 deletion_lasting_for_40_days_should_succeed(Config) ->
     % This test simulates 10 time warps, each of them warps 4 day forward
@@ -521,12 +521,12 @@ deletion_lasting_for_40_days_should_succeed(Config) ->
     TimeWarpsCount = 10,
     TimeWarp = 4 * 24 * 3600, % 4 days
     % deletion from trash will last for (simulated) 40 days
-    move_to_trash_and_schedule_deletion_should_tolerate_forward_time_warps_test_base(Config, TimeWarpsCount, TimeWarp, 10, success).
+    long_lasting_deletion_test_base(Config, TimeWarpsCount, TimeWarp, 10, success).
 
 deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time(Config) ->
     % This test simulates a 10 day time warp which will result in failed refresh of offline session
     TimeWarp = 10 * 24 * 3600, % 10 days
-    move_to_trash_and_schedule_deletion_should_tolerate_forward_time_warps_test_base(Config, 1, TimeWarp, 1, failure).
+    long_lasting_deletion_test_base(Config, 1, TimeWarp, 1, failure).
 
 %===================================================================
 % Test base functions
@@ -588,7 +588,7 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
     % file shouldn't have been synchronized because it's in trash
     ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size1, Size2]), FileGuid, ?ATTEMPTS).
 
-move_to_trash_and_schedule_deletion_should_tolerate_forward_time_warps_test_base(Config, TimeWarpsCount,
+long_lasting_deletion_test_base(Config, TimeWarpsCount,
     TimeWarpPeriod, TimeWarpInterval, ExpectedResult
 ) ->
     % this test moves directory to trash, schedules its deletion and simulates that
