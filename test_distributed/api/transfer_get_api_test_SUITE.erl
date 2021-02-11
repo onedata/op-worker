@@ -517,7 +517,7 @@ init_per_suite(Config) ->
             % TODO VFS-6251
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
             test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
