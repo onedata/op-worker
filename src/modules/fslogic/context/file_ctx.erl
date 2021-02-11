@@ -724,7 +724,8 @@ get_file_children(FileCtx, UserCtx, Opts) ->
         true ->
             Offset = max(maps:get(offset, Opts, 0), 0), % offset can be negative if last_name is passed too
             Limit = maps:get(size, Opts, ?DEFAULT_LS_BATCH_SIZE),
-            {list_user_spaces(UserCtx, Offset, Limit, undefined), FileCtx};
+            UserSpaces = list_user_spaces(UserCtx, Offset, Limit, undefined),
+            {UserSpaces, #{is_last => length(UserSpaces) < Limit}, FileCtx};
         false ->
             {FileDoc = #document{value = #file_meta{
                 type = FileType
@@ -757,7 +758,8 @@ get_file_children_whitelisted(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
         true ->
             Offset = max(maps:get(offset, ListOpts, 0), 0), % offset can be negative if last_name is passed too
             Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_SIZE),
-            {list_user_spaces(UserCtx, Offset, Limit, ChildrenWhiteList), FileCtx};
+            UserSpaces = list_user_spaces(UserCtx, Offset, Limit, ChildrenWhiteList),
+            {UserSpaces, #{is_last => length(UserSpaces) < Limit}, FileCtx};
         false ->
             {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
             SpaceId = get_space_id_const(FileCtx2),

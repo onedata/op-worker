@@ -206,9 +206,9 @@ list_whitelisted(ParentUuid, Opts, ChildrenWhiteList0) ->
         case NonNegOffset < length(ValidLinks) of
             true ->
                 RequestedLinks = lists:sublist(ValidLinks, NonNegOffset + 1, Size),
-                {ok, tag_ambiguous(RequestedLinks)};
+                {ok, tag_ambiguous(RequestedLinks), #{is_last => length(RequestedLinks) < Size}};
             false ->
-                {ok, []}
+                {ok, [], #{is_last => true}}
         end
     catch
         throw:{error, _} = Error2 ->

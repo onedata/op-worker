@@ -265,8 +265,8 @@ do_master_job(Job = #tree_traverse{
             {ok, #{slave_jobs => [get_child_slave_job(Job2, FileCtx2)]}};
         ?DIRECTORY_TYPE ->
             {ChildrenCtxs, ListExtendedInfo, FileCtx3} = list_children(Job2),
-            LastName2 = maps:get(last_name, ListExtendedInfo),
-            LastTree2 = maps:get(last_tree, ListExtendedInfo),
+            LastName2 = maps:get(last_name, ListExtendedInfo, <<>>),
+            LastTree2 = maps:get(last_tree, ListExtendedInfo, <<>>),
             Token2 = maps:get(token, ListExtendedInfo, undefined),
             {SlaveJobs, MasterJobs} = generate_children_jobs(Job2, TaskId, ChildrenCtxs),
             ChildrenCount = length(SlaveJobs) + length(MasterJobs),
