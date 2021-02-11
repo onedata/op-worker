@@ -14,6 +14,7 @@
 
 -behaviour(traverse_behaviour).
 
+-include("tree_traverse.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -48,7 +49,9 @@
     create_and_query_view_mapping_one_file_to_many_rows/1,
     effective_value_test/1,
     traverse_test/1,
-    file_traverse_job_test/1]).
+    file_traverse_job_test/1,
+    do_not_overwrite_space_dir_attrs_on_make_space_exist_test/1
+]).
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, get_sync_info/1]).
@@ -73,7 +76,8 @@ all() ->
         custom_metadata_doc_should_contain_file_objectid,
         effective_value_test,
         traverse_test,
-        file_traverse_job_test
+        file_traverse_job_test,
+        do_not_overwrite_space_dir_attrs_on_make_space_exist_test
     ]).
 
 -define(CACHE, test_cache).
@@ -589,6 +593,24 @@ create_and_query_view_mapping_one_file_to_many_rows(Config) ->
     end,
     ?assertEqual(ok, FinalCheck(), 10, timer:seconds(3)).
 
+do_not_overwrite_space_dir_attrs_on_make_space_exist_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+
+    {ok, ShareId} = lfm_proxy:create_share(Worker, SessId, {guid, SpaceGuid}, <<"szer">>),
+    {ok, SpaceAttrs} = ?assertMatch(
+        {ok, #file_attr{shares = [ShareId]}},
+        lfm_proxy:stat(Worker, SessId, {guid, SpaceGuid})
+    ),
+
+    lists:foreach(fun(_) ->
+        ?assertEqual(ok, rpc:call(Worker, file_meta, make_space_exist, [SpaceId])),
+        ?assertMatch({ok, SpaceAttrs}, lfm_proxy:stat(Worker, SessId, {guid, SpaceGuid}))
+    end, lists:seq(1, 10)).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -609,6 +631,9 @@ init_per_testcase(effective_value_test = Case, Config) ->
     CachePid = spawn(Worker, fun() -> cache_proc(
         #{check_frequency => timer:minutes(5), size => 100}) end),
     init_per_testcase(?DEFAULT_CASE(Case), [{cache_pid, CachePid} | Config]);
+init_per_testcase(do_not_overwrite_space_dir_attrs_on_make_space_exist_test = Case, Config) ->
+    initializer:mock_share_logic(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
@@ -627,6 +652,9 @@ end_per_testcase(effective_value_test = Case, Config) ->
          after
              1000 -> timeout
          end,
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(do_not_overwrite_space_dir_attrs_on_make_space_exist_test = Case, Config) ->
+    initializer:unmock_share_logic(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -700,7 +728,11 @@ build_traverse_tree(Worker, SessId, Dir, Num) ->
 do_master_job(Job, TaskID) ->
     tree_traverse:do_master_job(Job, TaskID).
 
-do_slave_job({#document{value = #file_meta{name = Name}}, TraverseInfo}, _TaskID) ->
+do_slave_job(#tree_traverse_slave{
+    file_ctx = FileCtx,
+    traverse_info = TraverseInfo
+}, _TaskID) ->
+    {#document{value = #file_meta{name = Name}}, _} = file_ctx:get_file_doc(FileCtx),
     TraverseInfo ! {slave, binary_to_integer(Name)},
     ok.
 

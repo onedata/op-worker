@@ -18,6 +18,7 @@
 -export([
     freeze_time/1, unfreeze_time/1,
     get_frozen_time_seconds/0,
+    get_frozen_time_hours/0,
     simulate_seconds_passing/1,
     set_current_time_seconds/1
 ]).
@@ -35,17 +36,24 @@
 %%--------------------------------------------------------------------
 -spec freeze_time(Config :: term()) -> ok.
 freeze_time(Config) ->
-    clock_freezer_mock:setup_on_nodes(?config(op_worker_nodes, Config), [global_clock]).
+    Nodes = ?config(oz_worker_nodes, Config) ++ ?config(op_worker_nodes, Config),
+    clock_freezer_mock:setup_on_nodes(Nodes, [global_clock]).
 
 
 -spec unfreeze_time(Config :: term()) -> ok.
 unfreeze_time(Config) ->
-    clock_freezer_mock:teardown_on_nodes(?config(op_worker_nodes, Config)).
+    Nodes = ?config(oz_worker_nodes, Config) ++ ?config(op_worker_nodes, Config),
+    clock_freezer_mock:teardown_on_nodes(Nodes).
 
 
 -spec get_frozen_time_seconds() -> time:seconds().
 get_frozen_time_seconds() ->
     clock_freezer_mock:current_time_seconds().
+
+
+-spec get_frozen_time_hours() -> time:hours().
+get_frozen_time_hours() ->
+    clock_freezer_mock:current_time_hours().
 
 
 -spec simulate_seconds_passing(time:seconds()) -> time:seconds().

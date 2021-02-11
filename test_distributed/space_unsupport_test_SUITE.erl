@@ -104,7 +104,7 @@ replicate_step_persistence_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
     % Create new QoS entry representing entry created before provider restart.
-    % Running step again with existing entry should not create new one, 
+    % Running step again with existing entry should not create new one,
     % but wait for fulfillment of previous one.
     Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
     {ok, QosEntryId} = create_qos_entry(Worker1, SessId, SpaceGuid, Expression),
@@ -138,7 +138,7 @@ cleanup_traverse_step_test(Config) ->
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
     AllPathsWithoutSpace = [DirPath, F1Path, F2Path],
     check_files_on_storage(Worker, AllPaths, true, false),
-    
+
     StepJob = #space_unsupport_job{
         step = 'purge#cleanup_traverse',
         space_id = ?SPACE_ID,
@@ -201,7 +201,7 @@ cleanup_traverse_step_persistence_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     
     % Create new cleanup traverse representing traverse created before provider restart.
-    % Running step again with existing traverse should not create new one, 
+    % Running step again with existing traverse should not create new one,
     % but wait for previous one to finish.
     {ok, TaskId} = rpc:call(Worker, unsupport_cleanup_traverse, start, [?SPACE_ID, StorageId]),
     
@@ -315,7 +315,7 @@ overall_test(Config) ->
         )
     end, space_unsupport_engine:get_all_steps()),
     
-    % check that steps have been executed in correct order 
+    % check that steps have been executed in correct order
     % (sending message mocked in init_per_testcase)
     lists:foldl(fun(Step, CallNum) ->
         receive {Step, Num} ->

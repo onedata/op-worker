@@ -245,7 +245,7 @@ init_per_testcase(db_sync_create_after_deletion_links_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, fslogic_delete, [passthrough]),
     test_utils:mock_expect(Workers, fslogic_delete, get_open_file_handling_method,
-        fun(Ctx) -> {deletion_link, Ctx} end),
+        fun(Ctx) -> {?SET_DELETION_MARKER, Ctx} end),
     init_per_testcase(?DEFAULT_CASE(db_sync_create_after_deletion_links_test), Config);
 init_per_testcase(db_sync_with_delays_test, Config) ->
     ct:timetrap({hours, 3}),

@@ -136,8 +136,9 @@ provider_connection_test(Config) ->
 client_connection_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     OpVersion = rpc:call(Worker1, op_worker, get_release_version, []),
+    Resolver = compatibility:build_resolver([Worker1], []),
     {ok, [CompatibleVersion | _]} = rpc:call(
-        Worker1, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
+        Worker1, compatibility, get_compatible_versions, [Resolver, ?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
     UserId = <<"user">>,
@@ -181,8 +182,9 @@ python_client_test_base(Config) ->
     PacketRaw = messages:encode_msg(Packet),
 
     OpVersion = rpc:call(Worker1, op_worker, get_release_version, []),
+    Resolver = compatibility:build_resolver([Worker1], []),
     {ok, [Version | _]} = rpc:call(
-        Worker1, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
+        Worker1, compatibility, get_compatible_versions, [Resolver, ?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
     UserId = <<"user">>,
@@ -684,7 +686,7 @@ end_per_testcase(Case, Config) when
     Case =:= rtransfer_nodes_ips_test
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [token_logic]),
+    test_utils:mock_unload(Workers, [token_logic]),
     end_per_testcase(default, Config);
 
 end_per_testcase(python_client_test, Config) ->
@@ -692,7 +694,7 @@ end_per_testcase(python_client_test, Config) ->
     file:delete(?TEST_FILE(Config, "message.arg")),
 
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [router]),
+    test_utils:mock_unload(Workers, [router]),
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
@@ -700,7 +702,7 @@ end_per_testcase(Case, Config) when
     Case =:= bandwidth_test2
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [router]),
+    test_utils:mock_unload(Workers, [router]),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->

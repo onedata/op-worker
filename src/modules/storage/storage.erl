@@ -38,7 +38,7 @@
 ]).
 -export([fetch_name/1, fetch_name_of_remote_storage/2, fetch_provider_id_of_remote_storage/2,
     fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, 
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1,
     is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
@@ -52,7 +52,7 @@
 
 %%% Support related functions
 -export([init_space_support/3, update_space_support_size/3]).
--export([init_unsupport/2, complete_unsupport_resize/2, complete_unsupport_purge/2, 
+-export([init_unsupport/2, complete_unsupport_resize/2, complete_unsupport_purge/2,
     finalize_unsupport/2]).
 
 % exported for initializer and env_up escripts
@@ -93,14 +93,24 @@
 -spec create(name(), helpers:helper(), luma_config(),
     imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    lock_on_storage_by_name(Name, fun() ->
-        case is_name_occupied(Name) of
-            true ->
-                ?ERROR_ALREADY_EXISTS;
-            false ->
-                create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters)
-        end
-    end).
+    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
+        {ok, Id} ->
+            case storage_config:create(Id, Helper, LumaConfig) of
+                {ok, Id} ->
+                    on_storage_created(Id),
+                    {ok, Id};
+                StorageConfigError ->
+                    case storage_logic:delete_in_zone(Id) of
+                        ok -> ok;
+                        {error, _} = Error ->
+                            ?error("Could not revert creation of storage ~p in Onezone: ~p",
+                                [Id, Error])
+                    end,
+                    StorageConfigError
+            end;
+        StorageLogicError ->
+            StorageLogicError
+    end.
 
 
 -spec get(id() | data()) -> {ok, data()} | {error, term()}.
@@ -440,7 +450,7 @@ upgrade_supports_to_21_02() ->
     ?info("Upgrading all space supports to the new model (~s)...", [?LINE_21_02]),
     {ok, Spaces} = provider_logic:get_spaces(),
     lists:foreach(fun(SpaceId) ->
-        {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+        {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
         {ok, Name} = space_logic:get_name(SpaceId),
         ok = storage_logic:upgrade_support_to_21_02(StorageId, SpaceId),
         ?info("  * space '~ts' (~ts) OK", [Name, SpaceId])
@@ -467,49 +477,9 @@ on_helper_changed(StorageId) ->
 
 
 %% @private
--spec is_name_occupied(name()) -> boolean().
-is_name_occupied(Name) ->
-    {ok, StorageIds} = provider_logic:get_storage_ids(),
-    lists:member(Name, lists:map(fun(StorageId) ->
-        {ok, OccupiedName} = storage_logic:get_name_of_local_storage(StorageId),
-        OccupiedName
-    end, StorageIds)).
-
-
-%% @private
 -spec lock_on_storage_by_id(id(), fun(() -> Result)) -> Result.
 lock_on_storage_by_id(Identifier, Fun) ->
     critical_section:run({storage_id, Identifier}, Fun).
-
-
-%% @private
--spec lock_on_storage_by_name(name(), fun(() -> Result)) -> Result.
-lock_on_storage_by_name(Identifier, Fun) ->
-    critical_section:run({storage_name, Identifier}, Fun).
-
-
-%% @private
--spec create_insecure(name(), helpers:helper(), luma_config(),
-    imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
-create_insecure(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
-        {ok, Id} ->
-            case storage_config:create(Id, Helper, LumaConfig) of
-                {ok, Id} ->
-                    on_storage_created(Id),
-                    {ok, Id};
-                StorageConfigError ->
-                    case storage_logic:delete_in_zone(Id) of
-                        ok -> ok;
-                        {error, _} = Error ->
-                            ?error("Could not revert creation of storage ~p in Onezone: ~p",
-                                [Id, Error])
-                    end,
-                    StorageConfigError
-            end;
-        StorageLogicError ->
-            StorageLogicError
-    end.
 
 
 %% @private

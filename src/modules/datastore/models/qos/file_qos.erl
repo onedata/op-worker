@@ -45,12 +45,15 @@
     get_effective/1, 
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
-    has_any_qos_entry/2, clean_up/1, delete_associated_entries/1
+    has_any_qos_entry/2, clean_up/1, clean_up/2, delete_associated_entries/1
 ]).
 
 %% higher-level functions operating on effective_file_qos record.
 -export([
-    get_assigned_entries_for_storage/2, get_qos_entries/1, get_assigned_entries/1
+    get_assigned_entries_for_storage/2,
+    get_qos_entries/1,
+    get_assigned_entries/1,
+    is_in_trash/1
 ]).
 
 %% datastore_model callbacks
@@ -110,13 +113,19 @@ get_effective(FileUuid) when is_binary(FileUuid) ->
         ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}}
     end;
 get_effective(#document{scope = SpaceId} = FileDoc) ->
-    Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
-        case datastore_model:get(?CTX, Uuid) of
-            ?ERROR_NOT_FOUND ->
-                {ok, ParentEffQos, CalculationInfo};
-            {ok, #document{value = FileQos}} ->
-                EffQos = merge_file_qos(ParentEffQos, FileQos),
-                {ok, EffQos, CalculationInfo}
+    Callback = fun([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
+        case fslogic_uuid:is_trash_dir_uuid(Uuid) of
+            true ->
+                % qos cannot be set on trash directory
+                {ok, #effective_file_qos{in_trash = true}, CalculationInfo};
+            false ->
+                case datastore_model:get(?CTX, Uuid) of
+                    ?ERROR_NOT_FOUND ->
+                        {ok, ParentEffQos, CalculationInfo};
+                    {ok, #document{value = FileQos}} ->
+                        EffQos = merge_file_qos(ParentEffQos, FileQos),
+                        {ok, EffQos, CalculationInfo}
+                end
         end
     end,
     
@@ -124,11 +133,8 @@ get_effective(#document{scope = SpaceId} = FileDoc) ->
     case effective_value:get_or_calculate(CacheTableName, FileDoc, Callback, [], []) of
         {ok, undefined, _} ->
             undefined;
-        {ok, EffQosAsFileQos, _} ->
-            {ok, #effective_file_qos{
-                qos_entries = EffQosAsFileQos#file_qos.qos_entries,
-                assigned_entries = EffQosAsFileQos#file_qos.assigned_entries
-            }};
+        {ok, FinalEffQos, _} ->
+            {ok, FinalEffQos};
         {error, {file_meta_missing, _MissingUuid}} = Error ->
             % documents are not synchronized yet
             Error
@@ -228,11 +234,15 @@ remove_qos_entry_id(SpaceId, FileUuid, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec is_replica_required_on_storage(file_meta:uuid(), storage:id()) -> boolean().
 is_replica_required_on_storage(FileUuid, StorageId) ->
-    QosStorages = case get_effective(FileUuid) of
-        {ok, #effective_file_qos{assigned_entries = AssignedEntries}} -> AssignedEntries;
-        _ -> #{}
-    end,
-    maps:is_key(StorageId, QosStorages).
+    case get_effective(FileUuid) of
+        {ok, #effective_file_qos{
+            in_trash = InTrash,
+            assigned_entries = AssignedEntries
+        }} ->
+            not InTrash andalso maps:is_key(StorageId, AssignedEntries);
+        _ ->
+            false
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -245,7 +255,9 @@ is_replica_required_on_storage(FileUuid, StorageId) ->
 is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
     case get_effective(FileUuidOrDoc) of
         undefined -> false;
-        {ok, EffectiveFileQos} -> lists:member(QosEntryId, get_qos_entries(EffectiveFileQos));
+        {ok, EffectiveFileQos} ->
+            lists:member(QosEntryId, get_qos_entries(EffectiveFileQos))
+                andalso not is_in_trash(EffectiveFileQos);
         {error, _} = Error -> Error
     end.
 
@@ -261,7 +273,7 @@ has_any_qos_entry(#document{key = Uuid}, direct) ->
 has_any_qos_entry(Key, direct) ->
     has_any_qos_entry(get(Key));
 has_any_qos_entry(UuidOrDoc, effective) ->
-    has_any_qos_entry(file_qos:get_effective(UuidOrDoc)).
+    has_any_qos_entry(get_effective(UuidOrDoc)).
 
 
 %%--------------------------------------------------------------------
@@ -271,13 +283,18 @@ has_any_qos_entry(UuidOrDoc, effective) ->
 %%--------------------------------------------------------------------
 -spec clean_up(file_ctx:ctx()) -> ok.
 clean_up(FileCtx) ->
+  clean_up(FileCtx, undefined).
+
+
+-spec clean_up(file_ctx:ctx(), file_ctx:ctx() | undefined) -> ok.
+clean_up(FileCtx, OriginalParentCtx) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case get_effective(FileDoc) of
         undefined -> ok;
         % clean up all potential documents related to status calculation
         {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
             lists:foreach(fun(EffectiveQosEntryId) ->
-                qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId)
+                qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId, OriginalParentCtx)
             end, EffectiveQosEntries);
         {error, _} = Error ->
             ?warning("Error during QoS clean up procedure:~p", [Error]),
@@ -317,6 +334,11 @@ get_assigned_entries(EffectiveFileQos) ->
     EffectiveFileQos#effective_file_qos.assigned_entries.
 
 
+-spec is_in_trash(effective_file_qos()) -> boolean().
+is_in_trash(EffectiveFileQos) ->
+    EffectiveFileQos#effective_file_qos.in_trash.
+
+
 -spec get_assigned_entries_for_storage(effective_file_qos(), storage:id()) ->
     [qos_entry:id()].
 get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
@@ -327,25 +349,39 @@ get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
 %%% Internal functions
 %%%===================================================================
 
+-spec file_qos_to_eff_file_qos(record()) -> effective_file_qos().
+file_qos_to_eff_file_qos(#file_qos{
+    qos_entries = QosEntries,
+    assigned_entries = AssignedEntries
+}) ->
+    #effective_file_qos{
+        qos_entries = QosEntries,
+        assigned_entries = AssignedEntries
+    }.
+
+
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
+%% @doc
 %% Merge parent's file_qos with child's file_qos. Used when calculating
 %% effective_file_qos.
 %% @end
 %%--------------------------------------------------------------------
--spec merge_file_qos(undefined | record(), record()) -> record().
-merge_file_qos(undefined, ChildQos) ->
-    ChildQos;
-merge_file_qos(ParentQos, ChildQos) ->
-    #file_qos{
+-spec merge_file_qos(undefined | effective_file_qos(), effective_file_qos() | record()) -> effective_file_qos().
+merge_file_qos(ParentEffQos, ChildQos = #file_qos{}) ->
+    merge_file_qos(ParentEffQos, file_qos_to_eff_file_qos(ChildQos));
+merge_file_qos(undefined, ChildEffQos = #effective_file_qos{}) ->
+    ChildEffQos;
+merge_file_qos(ParentEffQos, ChildEffQos) ->
+    #effective_file_qos{
         qos_entries = lists:usort(
-            ParentQos#file_qos.qos_entries ++ ChildQos#file_qos.qos_entries
+            ParentEffQos#effective_file_qos.qos_entries ++ ChildEffQos#effective_file_qos.qos_entries
         ),
         assigned_entries = merge_assigned_entries(
-            ParentQos#file_qos.assigned_entries,
-            ChildQos#file_qos.assigned_entries
-        )
+            ParentEffQos#effective_file_qos.assigned_entries,
+            ChildEffQos#effective_file_qos.assigned_entries
+        ),
+        in_trash = ParentEffQos#effective_file_qos.in_trash
     }.
 
 
@@ -363,6 +399,7 @@ merge_assigned_entries(ParentAssignedEntries, ChildAssignedEntries) ->
 -spec has_any_qos_entry({ok, doc()} | {ok, effective_file_qos()} | undefined | {error, term()}) ->
     boolean().
 has_any_qos_entry({ok, #document{value = #file_qos{qos_entries = [_ | _]}}}) -> true;
+has_any_qos_entry({ok, #effective_file_qos{in_trash = true}}) -> false;
 has_any_qos_entry({ok, #effective_file_qos{qos_entries = [_|_]}}) -> true;
 has_any_qos_entry(_) -> false.
 

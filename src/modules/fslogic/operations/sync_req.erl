@@ -170,6 +170,7 @@ schedule_file_replication(
     UserCtx, FileCtx0, TargetProviderId, Callback,
     ViewName, QueryViewParams
 ) ->
+    file_ctx:assert_not_trash_dir_const(FileCtx0),
     data_constraints:assert_not_readonly_mode(UserCtx),
     file_ctx:assert_not_readonly_target_storage_const(FileCtx0, TargetProviderId),
 

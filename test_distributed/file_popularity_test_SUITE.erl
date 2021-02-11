@@ -15,7 +15,8 @@
 -behaviour(view_traverse).
 
 -include("global_definitions.hrl").
--include("modules/fslogic/file_popularity_view.hrl").
+-include("modules/file_popularity/file_popularity_view.hrl").
+-include("lfm_test_utils.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -76,9 +77,7 @@ all() -> [
 -define(FILE_PATH(FileName), filename:join(["/", ?SPACE_ID, FileName])).
 
 -define(USER, <<"user1">>).
--define(SESSION(Worker, Config), ?SESSION(?USER, Worker, Config)).
--define(SESSION(User, Worker, Config),
-    ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config)).
+-define(SESSION(Worker, Config), ?SESS_ID(?USER, Worker, Config)).
 
 -define(ATTEMPTS, 10).
 
@@ -285,17 +284,17 @@ query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
     {ok, H1} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read), % 3 hours before query
     ok = lfm_proxy:close(W, H1),
-    clock_freezer_mock:simulate_seconds_passing(3600),
+    time_test_utils:simulate_seconds_passing(3600),
 
     {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
     {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read), % 2 hours before query
     ok = lfm_proxy:close(W, H2),
-    clock_freezer_mock:simulate_seconds_passing(3600),
+    time_test_utils:simulate_seconds_passing(3600),
 
     {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3, 8#664),
     {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read), % 1 hour before query
     ok = lfm_proxy:close(W, H3),
-    clock_freezer_mock:simulate_seconds_passing(3600),
+    time_test_utils:simulate_seconds_passing(3600),
 
     {ok, FileId1} = file_id:guid_to_objectid(G1),
     {ok, FileId2} = file_id:guid_to_objectid(G2),
@@ -317,17 +316,17 @@ time_warp_test(Config) ->
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, 8#664),
     {ok, H1} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read), % 1 hour before query
     ok = lfm_proxy:close(W, H1),
-    clock_freezer_mock:simulate_seconds_passing(-3600),
+    time_test_utils:simulate_seconds_passing(-3600),
 
     {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, 8#664),
     {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read), % 2 hours before query
     ok = lfm_proxy:close(W, H2),
-    clock_freezer_mock:simulate_seconds_passing(-3600),
+    time_test_utils:simulate_seconds_passing(-3600),
 
     {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3, 8#664),
     {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read), % 3 hour before query
     ok = lfm_proxy:close(W, H3),
-    clock_freezer_mock:simulate_seconds_passing(-3600),
+    time_test_utils:simulate_seconds_passing(-3600),
 
     {ok, FileId1} = file_id:guid_to_objectid(G1),
     {ok, FileId2} = file_id:guid_to_objectid(G2),
@@ -347,7 +346,7 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenW, AvgOpenW),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
-    FrozenTimestamp = clock_freezer_mock:current_time_hours(),
+    FrozenTimestamp = time_test_utils:get_frozen_time_hours(),
     AvgOpen = 1 / 30,
     Popularity = popularity(FrozenTimestamp, LastOpenW, AvgOpen, AvgOpenW),
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
@@ -376,7 +375,7 @@ init_per_testcase(Case, Config) when
     Case == file_should_have_correct_popularity_value3;
     Case == time_warp_test
 ->
-    clock_freezer_mock:setup_on_nodes(?config(op_worker_nodes, Config), [file_popularity]),
+    time_test_utils:freeze_time(Config),
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
@@ -393,14 +392,15 @@ end_per_testcase(Case, Config) when
     Case == file_should_have_correct_popularity_value3;
     Case == time_warp_test
 ->
-    clock_freezer_mock:teardown_on_nodes(?config(op_worker_nodes, Config)),
+    time_test_utils:unfreeze_time(Config),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     disable_file_popularity(W, ?SPACE_ID),
     ensure_collector_stopped(W),
-    clean_space(?SPACE_ID, Config),
+    test_utils:mock_unload(W, file_popularity),
+    lfm_test_utils:clean_space(W, ?SPACE_ID, ?ATTEMPTS),
     lfm_proxy:teardown(Config).
 
 end_per_suite(Config) ->
@@ -505,29 +505,6 @@ configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCount
 
 disable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, disable, [SpaceId]).
-
-clean_space(SpaceId, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?SESSION(Worker, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    BatchSize = 1000,
-    clean_space(Worker, SessId, SpaceGuid, 0, BatchSize).
-
-clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
-    {ok, GuidsAndPaths} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
-    FilesNum = length(GuidsAndPaths),
-    delete_files(Worker, SessId, GuidsAndPaths),
-    case FilesNum < BatchSize of
-        true ->
-            ok;
-        false ->
-            clean_space(Worker, SessId, SpaceGuid, Offset + BatchSize, BatchSize)
-    end.
-
-delete_files(Worker, SessId, GuidsAndPaths) ->
-    lists:foreach(fun({G, _}) ->
-        ok = lfm_proxy:rm_recursive(Worker, SessId, {guid, G})
-    end, GuidsAndPaths).
 
 open_and_close_file(Worker, SessId, Guid, Times) ->
     lists:foreach(fun(_) ->

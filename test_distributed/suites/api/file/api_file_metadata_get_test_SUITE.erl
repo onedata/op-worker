@@ -746,7 +746,7 @@ build_get_metadata_validate_rest_call_fun(GetExpResultFun) ->
 build_get_metadata_validate_rest_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
     fun
         (#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) when TestNode == ProvNotSuppSpace ->
-            ProvId = op_test_rpc:get_provider_id(TestNode),
+            ProvId = opw_test_rpc:get_provider_id(TestNode),
             ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId)),
             ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody});
         (TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
@@ -769,7 +769,7 @@ build_get_metadata_validate_gs_call_fun(GetExpResultFun) ->
 build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
     fun
         (#api_test_ctx{node = TestNode}, Result) when TestNode == ProvNotSuppSpace ->
-            ProvId = op_test_rpc:get_provider_id(TestNode),
+            ProvId = opw_test_rpc:get_provider_id(TestNode),
             ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId), Result);
         (TestCtx, Result) ->
             case GetExpResultFun(TestCtx) of

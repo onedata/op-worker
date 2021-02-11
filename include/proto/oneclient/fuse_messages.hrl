@@ -23,11 +23,6 @@
 -define(FORCE_PROXY_HELPER_MODE, 'FORCE_PROXY').
 -define(FORCE_DIRECT_HELPER_MODE, 'FORCE_DIRECT').
 
--record(child_link_uuid, {
-    uuid :: file_meta:uuid(),
-    name :: binary()
-}).
-
 -record(child_link, {
     guid :: fslogic_worker:file_guid(),
     name :: binary()
@@ -72,6 +67,10 @@
 
 -record(delete_file, {
     silent = false :: boolean()
+}).
+
+-record(move_to_trash, {
+    emit_events = true :: boolean()
 }).
 
 -record(update_times, {
@@ -168,7 +167,7 @@
 -type file_request_type() ::
     #get_file_attr{} | #get_file_children{} | #get_file_children_attrs{} |
     #get_file_details{} | #get_file_children_details{} |
-    #create_dir{} | #delete_file{} |
+    #create_dir{} | #delete_file{} | #move_to_trash{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
@@ -320,8 +319,11 @@
     fuse_response :: fuse_response_type()
 }).
 
--define(FUSE_OK_RESP(__RESPONSE), #fuse_response{
-    status = #status{code = ?OK},
+-define(FUSE_OK_RESP, #fuse_response{
+    status = #status{code = ?OK}
+}).
+
+-define(FUSE_OK_RESP(__RESPONSE), (?FUSE_OK_RESP)#fuse_response{
     fuse_response = __RESPONSE
 }).
 

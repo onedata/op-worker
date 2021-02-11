@@ -404,9 +404,10 @@ expected_configuration(Node) ->
     CurrentRegistryPath = rpc:call(Node, ctool, get_env, [current_compatibility_registry_file]),
     {ok, FileBody} = rpc:call(Node, file, read_file, [CurrentRegistryPath]),
     #{<<"revision">> := Revision} = json_utils:decode(FileBody),
-    {ok, OzVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONEZONE]),
-    {ok, OpVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONEPROVIDER]),
-    {ok, OcVersions} = rpc:call(Node, compatibility, get_compatible_versions, [?ONEPROVIDER, Version, ?ONECLIENT]),
+    Resolver = compatibility:build_resolver([Node], []),
+    {ok, OzVersions} = rpc:call(Node, compatibility, get_compatible_versions, [Resolver, ?ONEPROVIDER, Version, ?ONEZONE]),
+    {ok, OpVersions} = rpc:call(Node, compatibility, get_compatible_versions, [Resolver, ?ONEPROVIDER, Version, ?ONEPROVIDER]),
+    {ok, OcVersions} = rpc:call(Node, compatibility, get_compatible_versions, [Resolver, ?ONEPROVIDER, Version, ?ONECLIENT]),
 
     #{
         <<"providerId">> => rpc:call(Node, oneprovider, get_id_or_undefined, []),
