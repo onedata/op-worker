@@ -127,7 +127,7 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
 delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     FileCtx3 = trash:move_to_trash(FileCtx2, UserCtx),
-    {ok, _} = trash:delete_from_trash(FileCtx3, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid)),
+    {ok, _} = trash:schedule_deletion_from_trash(FileCtx3, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid)),
     ?FUSE_OK_RESP.
 
 

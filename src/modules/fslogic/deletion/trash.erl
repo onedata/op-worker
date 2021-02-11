@@ -35,7 +35,7 @@
 
 
 %% API
--export([create/1, move_to_trash/2, delete_from_trash/4]).
+-export([create/1, move_to_trash/2, schedule_deletion_from_trash/4]).
 
 
 -define(NAME_UUID_SEPARATOR, "@@").
@@ -86,16 +86,17 @@ move_to_trash(FileCtx, UserCtx) ->
 %% asynchronously remove the subtree from the trash.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) ->
+-spec schedule_deletion_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) ->
     {ok, tree_deletion_traverse:id()} | {error, term()}.
-delete_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
+schedule_deletion_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     file_ctx:assert_not_special_const(FileCtx),
     case tree_deletion_traverse:start(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) of
         {ok, TaskId} ->
             {ok, TaskId};
         {error, _} = Error ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
-            ?error("Unable to start deletion from trash in space ~s due to ~p.", [SpaceId, Error]),
+            Guid = file_ctx:get_guid_const(FileCtx),
+            ?error("Unable to start deletion of ~s from trash in space ~s due to ~p.", [Guid, SpaceId, Error]),
             Error
     end.
 

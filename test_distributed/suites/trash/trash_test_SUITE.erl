@@ -51,15 +51,17 @@
     schedule_replication_transfer_on_space_does_not_replicate_trash/1,
     schedule_eviction_transfer_on_space_evicts_trash/1,
     schedule_migration_transfer_on_space_does_not_replicate_trash/1,
-    move_to_trash_test/1,
-    move_to_trash_should_fail_if_user_does_not_have_sufficient_perms_test/1,
-    move_to_trash_should_fail_if_required_acl_perm_is_missing_test/1,
-    move_to_trash_and_delete_test/1,
+    move_to_trash_should_work/1,
+    move_to_trash_should_fail_if_user_does_not_have_sufficient_perms/1,
+    move_to_trash_should_fail_if_required_acl_perm_is_missing/1,
+    move_to_trash_and_schedule_deletion_should_work/1,
     qos_set_on_file_does_not_affect_file_in_trash/1,
     qos_set_on_parent_directory_does_not_affect_files_in_trash/1,
     qos_set_on_space_directory_does_not_affect_files_in_trash/1,
     files_from_trash_are_not_reimported/1,
-    move_to_trash_and_delete_forward_time_warp_test/1
+    deletion_lasting_for_4_days_should_succeed/1,
+    deletion_lasting_for_40_days_should_succeed/1,
+    deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time/1
 ]).
 
 
@@ -86,15 +88,17 @@ all() -> ?ALL([
     schedule_replication_transfer_on_space_does_not_replicate_trash,
     schedule_eviction_transfer_on_space_evicts_trash,
     schedule_migration_transfer_on_space_does_not_replicate_trash,
-    move_to_trash_test,
-    move_to_trash_should_fail_if_user_does_not_have_sufficient_perms_test,
-    move_to_trash_should_fail_if_required_acl_perm_is_missing_test,
-    move_to_trash_and_delete_test,
+    move_to_trash_should_work,
+    move_to_trash_should_fail_if_user_does_not_have_sufficient_perms,
+    move_to_trash_should_fail_if_required_acl_perm_is_missing,
+    move_to_trash_and_schedule_deletion_should_work,
     qos_set_on_file_does_not_affect_file_in_trash,
     qos_set_on_parent_directory_does_not_affect_files_in_trash,
     qos_set_on_space_directory_does_not_affect_files_in_trash,
     files_from_trash_are_not_reimported,
-    move_to_trash_and_delete_forward_time_warp_test
+    deletion_lasting_for_4_days_should_succeed,
+    deletion_lasting_for_40_days_should_succeed,
+    deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time
 ]).
 
 -define(SPACE1_PLACEHOLDER, space1).
@@ -371,7 +375,7 @@ schedule_migration_transfer_on_space_does_not_replicate_trash(_Config) ->
         files_evicted = 0
     }}}, rpc:call(P1Node, transfer, get, [TransferId]), ?ATTEMPTS).
 
-move_to_trash_test(_Config) ->
+move_to_trash_should_work(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
@@ -405,7 +409,7 @@ move_to_trash_test(_Config) ->
         <<"autoDetectAttributes">> => false
     })).
 
-move_to_trash_and_delete_test(_Config) ->
+move_to_trash_and_schedule_deletion_should_work(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     DirName = ?RAND_DIR_NAME,
@@ -416,7 +420,7 @@ move_to_trash_and_delete_test(_Config) ->
     DirCtx = file_ctx:new_by_guid(DirGuid),
 
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
-    delete_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
+    schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
 
     lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
     lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
@@ -445,7 +449,7 @@ move_to_trash_and_delete_test(_Config) ->
         <<"autoDetectAttributes">> => false
     })).
 
-move_to_trash_should_fail_if_user_does_not_have_sufficient_perms_test(_Config) ->
+move_to_trash_should_fail_if_user_does_not_have_sufficient_perms(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     % perform test as user2 as he's not a space owner
     UserSessIdP1 = oct_background:get_user_session_id(user2, krakow),
@@ -457,7 +461,7 @@ move_to_trash_should_fail_if_user_does_not_have_sufficient_perms_test(_Config) -
     end, InsufficientPerms).
 
 
-move_to_trash_should_fail_if_required_acl_perm_is_missing_test(_Config) ->
+move_to_trash_should_fail_if_required_acl_perm_is_missing(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     % perform test as user2 as he's not a space owner
     UserSessIdP1 = oct_background:get_user_session_id(user2, krakow),
@@ -507,30 +511,22 @@ files_from_trash_are_not_reimported(_Config) ->
     % files which are currently in trash shouldn't have been reimported
     ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?SPACE_GUID(?SPACE_ID2)}, 0, 1000)).
 
-move_to_trash_and_delete_forward_time_warp_test(Config) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
-    [P2Node] = oct_background:get_provider_nodes(paris),
-    DirName = ?RAND_DIR_NAME,
-    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
-    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
-    DirCtx = file_ctx:new_by_guid(DirGuid),
+deletion_lasting_for_4_days_should_succeed(Config) ->
+    TimeWarp = 4 * 24 * 3600, % 4 days
+    move_to_trash_and_schedule_deletion_should_tolerate_forward_time_warps_test_base(Config, 1, TimeWarp, 0, success).
 
-    move_to_trash(P1Node, DirCtx, UserSessIdP1),
-    delete_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
-    time_test_utils:freeze_time(Config),
-    time_test_utils:simulate_seconds_passing(4 * 3600 * 24), % 4 days
+deletion_lasting_for_40_days_should_succeed(Config) ->
+    % This test simulates 10 time warps, each of them warps 4 day forward
+    % Interval between simulating time warps is 10 seconds.
+    TimeWarpsCount = 10,
+    TimeWarp = 4 * 24 * 3600, % 4 days
+    % deletion from trash will last for (simulated) 40 days
+    move_to_trash_and_schedule_deletion_should_tolerate_forward_time_warps_test_base(Config, TimeWarpsCount, TimeWarp, 10, success).
 
-    % use ?ROOT_SESS_ID in below assert as normal sessions may have expired
-    lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
-    lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
-
-    lists:foreach(fun(G) ->
-        ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, G}), ?ATTEMPTS),
-        ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P2Node, ?ROOT_SESS_ID, {guid, G}), ?ATTEMPTS)
-    end, DirGuids ++ FileGuids ++ [DirGuid]).
+deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time(Config) ->
+    % This test simulates a 10 day time warp which will result in failed refresh of offline session
+    TimeWarp = 10 * 24 * 3600, % 10 days
+    move_to_trash_and_schedule_deletion_should_tolerate_forward_time_warps_test_base(Config, 1, TimeWarp, 1, failure).
 
 %===================================================================
 % Test base functions
@@ -592,6 +588,59 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
     % file shouldn't have been synchronized because it's in trash
     ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size1, Size2]), FileGuid, ?ATTEMPTS).
 
+move_to_trash_and_schedule_deletion_should_tolerate_forward_time_warps_test_base(Config, TimeWarpsCount,
+    TimeWarpPeriod, TimeWarpInterval, ExpectedResult
+) ->
+    % this test moves directory to trash, schedules its deletion and simulates that
+    % as many as TimeWarpsCount time warps occurred
+    % each of them warps TimeWarpPeriod in time
+    % interval (in real life) between simulating time warps is equal to TimeWarpInterval
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    DirName = ?RAND_DIR_NAME,
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
+    DirCtx = file_ctx:new_by_guid(DirGuid),
+
+    mock_traverse_finished(P1Node, self()),
+
+    move_to_trash(P1Node, DirCtx, UserSessIdP1),
+    {ok, TaskId} = schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
+
+    time_test_utils:freeze_time(Config),
+    lists:foreach(fun(_) ->
+    % simulate that a TimeWarpPeriod time warp occurred during deletion from trash
+        time_test_utils:simulate_seconds_passing(TimeWarpPeriod),
+        timer:sleep(timer:seconds(TimeWarpInterval))
+    end, lists:seq(1, TimeWarpsCount)),
+
+    await_traverse_finished(TaskId, 600),
+
+    case ExpectedResult of
+        success ->
+            % use ?ROOT_SESS_ID in below assert as normal sessions may have expired
+            lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
+            lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
+            ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
+            ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
+
+            lists:foreach(fun(G) ->
+                ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, G}), ?ATTEMPTS),
+                ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P2Node, ?ROOT_SESS_ID, {guid, G}), ?ATTEMPTS)
+            end, DirGuids ++ FileGuids ++ [DirGuid]);
+        failure ->
+            % failure was expected so there should be files which weren't deleted
+            AllFilesNum = length([DirGuid | DirGuids] ++ FileGuids),
+            DeletedFilesNum = lists:foldl(fun(Guid, Acc) ->
+                case lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, Guid}) of
+                    {ok, _} -> Acc;
+                    {error, ?ENOENT} -> Acc + 1
+                end
+            end, 0, [DirGuid | DirGuids] ++ FileGuids),
+            ?assertNotEqual(AllFilesNum, DeletedFilesNum)
+    end.
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -626,9 +675,9 @@ move_to_trash(Worker, FileCtx, SessId) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
     rpc:call(Worker, trash, move_to_trash, [FileCtx, UserCtx]).
 
-delete_from_trash(Worker, FileCtx, SessId, RootOriginalParentUuid) ->
+schedule_deletion_from_trash(Worker, FileCtx, SessId, RootOriginalParentUuid) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
-    rpc:call(Worker, trash, delete_from_trash, [FileCtx, UserCtx, false, RootOriginalParentUuid]).
+    rpc:call(Worker, trash, schedule_deletion_from_trash, [FileCtx, UserCtx, false, RootOriginalParentUuid]).
 
 register_file(Worker, User, Body) ->
     Headers = #{
@@ -639,3 +688,23 @@ register_file(Worker, User, Body) ->
 
 perms_to_allow_ace(Perms) ->
     ?ALLOW_ACE(?owner, ?no_flags_mask, permissions_test_utils:perms_to_bitmask(Perms)).
+
+mock_traverse_finished(Worker, TestProcess) ->
+    ok = test_utils:mock_new(Worker, tree_deletion_traverse),
+    ok = test_utils:mock_expect(Worker, tree_deletion_traverse, task_finished, fun(TaskId, Pool) ->
+        Result = meck:passthrough([TaskId, Pool]),
+        TestProcess ! {traverse_finished, TaskId},
+        Result
+    end),
+    ok = test_utils:mock_expect(Worker, tree_deletion_traverse, task_canceled, fun(TaskId, Pool) ->
+        Result = meck:passthrough([TaskId, Pool]),
+        TestProcess ! {traverse_finished, TaskId},
+        Result
+    end).
+
+await_traverse_finished(TaskId, Attempts) ->
+    receive {traverse_finished, TaskId} -> ok
+    after
+        timer:seconds(Attempts) ->
+            ct:fail("Traverse ~s not finished in expected time", [TaskId])
+    end.

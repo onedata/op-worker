@@ -18,7 +18,7 @@
 %%%
 %%% It is possible to perform traverse in context of a ?ROOT_USER or a normal user.
 %%% ?ROOT_USER is used by default.
-%%% If traverse is schedule in context of a normal user, its offline session
+%%% If traverse is scheduled in context of a normal user, its offline session
 %%% will be used to ensure that traverse may progress even when client disconnects
 %%% from provider.
 %%%
@@ -41,7 +41,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% Main API
--export([init/4, init/5, stop/1, run/3, run/4, cancel/2, acquire_offline_session_and_execute/4]).
+-export([init/4, init/5, stop/1, run/3, run/4, cancel/2]).
 % Getters API
 -export([get_traverse_info/1, set_traverse_info/2, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
@@ -96,11 +96,7 @@
         SubtreeProcessingStatus :: tree_traverse_progress:status() | {error, term()}
     ) -> ok).
 
--type on_successful_offline_session_acquisition_callback() :: fun((user_ctx:ctx()) -> term()).
--type on_erroneous_offline_session_acquisition_callback() :: fun((errors:error()) -> term()).
-
 %formatter:on
-
 
 -export_type([id/0, pool/0, master_job/0, slave_job/0, execute_slave_on_dir/0,
     children_master_jobs_mode/0, batch_size/0, traverse_info/0]).
@@ -234,12 +230,6 @@ get_sync_info() ->
     }.
 
 
--spec acquire_offline_session_and_execute(
-    on_successful_offline_session_acquisition_callback(),
-    od_user:id(), traverse_info(), id()) -> term().
-acquire_offline_session_and_execute(Fun, UserId, TraverseInfo, TaskId) ->
-    acquire_offline_session_and_execute(Fun, fun(_) -> ok end, UserId, TraverseInfo, TaskId).
-
 %%%===================================================================
 %%% Behaviour callbacks
 %%%===================================================================
@@ -363,28 +353,6 @@ delete_subtree_status_doc(TaskId, Uuid) ->
     tree_traverse_progress:delete(TaskId, Uuid).
 
 
--spec acquire_offline_session_and_execute(
-    on_successful_offline_session_acquisition_callback(),
-    on_erroneous_offline_session_acquisition_callback(),
-    od_user:id(), traverse_info(), id()) -> term().
-acquire_offline_session_and_execute(OkFun, _ErrorFun, ?ROOT_USER_ID, _TraverseInfo, _TaskId) ->
-    OkFun(user_ctx:new(?ROOT_SESS_ID));
-acquire_offline_session_and_execute(OkFun, ErrorFun, _UserId, TraverseInfo, TaskId) ->
-    Pool = maps:get(pool, TraverseInfo),
-    case offline_access_manager:get_session_id(TaskId) of
-        {ok, SessionId} ->
-            OkFun(user_ctx:new(SessionId));
-        {error, _} = Error ->
-            utils:throttle(600, fun() ->    % throttle log every each 10 minutes
-                ?error(
-                    "Traverse ~s performed by pool ~s failed to acquire offline session due to ~p. "
-                    "Traverse will be cancelled.", [TaskId, Pool, Error])
-            end),
-            cancel(Pool, TaskId),
-            ErrorFun({error, ?EACCES})
-    end.
-
-
 %%%===================================================================
 %% Tracking subtree progress status API
 %%%===================================================================
@@ -405,20 +373,17 @@ list_children(#tree_traverse{
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }, #{task_id := TaskId}) ->
-    acquire_offline_session_and_execute(
-        fun(UserCtx) ->   % function performed on successful acquisition of offline session
+    case tree_traverse_session:acquire_session_for_task(UserId, TraverseInfo, TaskId) of
+        {ok, UserCtx} ->
             try
                 {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, 0, BatchSize, Token, LastName, LastTree)}
             catch
                 throw:?EACCES ->
                     {error, ?EACCES}
-            end
-        end,
-        fun({error, _}) -> % function performed on erroneous acquisition of offline session
+            end;
+        {error, ?EACCES} ->
             {error, ?EACCES}
-        end,
-        UserId, TraverseInfo, TaskId
-    ).
+    end.
 
 
 -spec generate_children_jobs(master_job(), id(), [file_ctx:ctx()]) -> {[slave_job()], [master_job()]}.

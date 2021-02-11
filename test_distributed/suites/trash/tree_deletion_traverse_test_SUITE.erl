@@ -80,29 +80,28 @@ delete_tree_test(Config) ->
 
 backward_time_warp_test(Config) ->
     TimeWarp = - 3600 * 24 * 10, % -10 days
-    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, true).
+    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, success).
 
 forward_time_warp_smaller_than_7_days_test(Config) ->
     TimeWarp = 3600 * 24 * 6, % 6 days
-    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, true).
+    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, success).
 
 forward_time_warp_greater_than_7_days_test(Config) ->
     TimeWarp = 3600 * 24 * 8, % 8 days
-    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, false).
+    delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, failure).
 
 %%%===================================================================
 %%% Test bases
 %%%===================================================================
 
 delete_files_structure_test_base(Config, FilesStructure) ->
-    delete_files_structure_test_base(Config, FilesStructure, undefined, true).
+    delete_files_structure_test_base(Config, FilesStructure, undefined, success).
 
-delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedSuccess) ->
+delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedResult) ->
     % TimeWarpSecs arg allows to set period (and direction future/past as +/-)
     % of TimeWarp that occurs during traverse
     % if TimeWarpSecs is undefined, TimeWarp won't occur
     [P1Node] = oct_background:get_provider_nodes(krakow),
-    ShouldFreezeTime = TimeWarpSecs =/= undefined,
 
     mock_traverse_finished(P1Node, self()),
     DirName = ?RAND_DIR_NAME,
@@ -113,20 +112,19 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedS
     UserCtx = rpc:call(P1Node, user_ctx, new, [UserSessIdP1]),
 
     {ok, TaskId} = rpc:call(P1Node, tree_deletion_traverse, start, [RootDirCtx, UserCtx, false, ?SPACE_UUID]),
-    freeze_time_if_applicable(Config, ShouldFreezeTime),
-    simulate_passing_time_if_applicable(TimeWarpSecs),
+    simulate_time_warp(Config, TimeWarpSecs),
 
     await_traverse_finished(TaskId),
 
     % below assertions are performed with ?ROOT_SESS_ID because user sessions may have expired
-    case ExpectedSuccess of
-        true ->
+    case ExpectedResult of
+        success ->
             % all files should have been deleted
             ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, {guid, ?SPACE_GUID}, 0, 10000)),
             lists:foreach(fun(Guid) ->
                 ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, Guid}))
             end, [RootGuid | DirGuids] ++ FileGuids);
-        false ->
+        failure ->
             % failure was expected so there should be files which weren't deleted
             AllFilesNum = length([RootGuid | DirGuids] ++ FileGuids),
             DeletedFilesNum = lists:foldl(fun(Guid, Acc) ->
@@ -184,12 +182,9 @@ mock_traverse_finished(Worker, TestProcess) ->
 await_traverse_finished(TaskId) ->
     receive {traverse_finished, TaskId} -> ok end.
 
-freeze_time_if_applicable(_Config, false) ->
-    ok;
-freeze_time_if_applicable(Config, true) ->
-    time_test_utils:freeze_time(Config).
 
-simulate_passing_time_if_applicable(undefined) ->
+simulate_time_warp(_Config, undefined) ->
     ok;
-simulate_passing_time_if_applicable(TimeWarpSecs) ->
-    time_test_utils:simulate_seconds_passing(TimeWarpSecs).
+simulate_time_warp(Config, Seconds) ->
+    time_test_utils:freeze_time(Config),
+    time_test_utils:simulate_seconds_passing(Seconds).
