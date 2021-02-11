@@ -15,6 +15,7 @@
 -module(dbsync_state).
 -author("Krzysztof Trzepla").
 
+-include("modules/dbsync/dbsync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
@@ -30,8 +31,6 @@
 -export_type([record/0, sync_progress/0]).
 
 -define(CTX, #{model => ?MODULE}).
--define(DEFAULT_SEQ, 1).
--define(DEFAULT_TIMESTAMP, 0).
 
 %%%===================================================================
 %%% API

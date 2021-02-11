@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/dbsync/dbsync.hrl").
+-include("proto/oneprovider/dbsync_messages2.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
@@ -21,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([apply_batch/5, apply/2]).
+-export([apply_batch/1, apply/2]).
 
 -type ctx() :: datastore_cache:ctx().
 -type key() :: datastore:key().
@@ -45,9 +46,11 @@
 %% Applies remote changes.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_batch(dbsync_worker:batch_docs(), {couchbase_changes:since(), couchbase_changes:until()}, timestamp(),
-    oneprovider:id(), dbsync_worker:custom_request_extension() | undefined) -> ok.
-apply_batch(Docs, BatchRange, Timestamp, ProviderId, CustomRequestExtension) ->
+-spec apply_batch(dbsync_worker:internal_changes_batch()) -> ok.
+apply_batch(#internal_changes_batch{
+    docs = Docs,
+    distributor_id = ProviderId
+} = Batch) ->
     % TODO VFS-7247 - test race between application of custom and main flow changes
     Master = self(),
     spawn_link(fun() ->
@@ -73,7 +76,9 @@ apply_batch(Docs, BatchRange, Timestamp, ProviderId, CustomRequestExtension) ->
         Ref = make_ref(),
         Pids = parallel_apply(DocsList3, Ref, ProviderId),
         Ans = gather_answers(Pids, Ref),
-        Master ! {batch_application_result, BatchRange, Timestamp, CustomRequestExtension, Ans}
+        % Use batch without docs to prevent coping large amounts of memory
+        BatchWithoutDocs = Batch#internal_changes_batch{docs = []},
+        Master ! {?BATCH_APPLICATION_RESULT, BatchWithoutDocs, Ans}
     end),
     ok.
 

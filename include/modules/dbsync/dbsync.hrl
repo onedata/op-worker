@@ -21,6 +21,21 @@
 -define(IN_STREAM_ID(Id), {dbsync_in_stream, Id}).
 -define(OUT_STREAM_ID(Id), {dbsync_out_stream, Id}).
 
+-define(DEFAULT_SEQ, 1).
+-define(DEFAULT_TIMESTAMP, 0).
+
+% Macros used by dbsync_in_stream_worker and connected modules
+-define(EMPTY_STASH, empty_stash).
+-define(REQUEST_CHANGES, request_changes).
+-define(APPLY, apply).
+-define(CHANGES_STASHED, changes_stashed).
+-define(CHANGES_IGNORED, changes_ignored).
+-define(BATCH_APPLICATION_RESULT, batch_application_result).
+-define(REQUEST_IF_MISSING, request_if_missing).
+-define(SCHEDULE_REQUEST_IF_MISSING, schedule_request_if_missing).
+
+-define(CUSTOM_CHANGES_STREAM_INIT_MSG_PREFIX, "CUSTOM_STREAM_INIT#").
+
 %%%===================================================================
 %%% Records
 %%%===================================================================

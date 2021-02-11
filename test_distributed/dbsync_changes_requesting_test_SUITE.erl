@@ -57,64 +57,8 @@ test_with_simulated_apply_delays(Config) ->
     dbsync_changes_requesting_test_base:add_delay_to_in_stream_handler(Config),
     dbsync_changes_requesting_test_base:generic_test_skeleton(Config, medium).
 
-requesting_from_custom_provider(Config0) ->
-    % Prepare variables used during test
-    User = <<"user1">>,
-    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {6, 0, 0, 1}, 180),
-    SpaceName = ?SPACE_NAME,
-    SpaceId = ?SPACE_ID,
-    [Worker1, Worker2 | _] = Workers = ?config(op_worker_nodes, Config),
-    WorkerToProviderId = maps:from_list(lists:map(fun(Worker) ->
-        {Worker, rpc:call(Worker, oneprovider, get_id_or_undefined, [])}
-    end, Workers)),
-    W2Id = maps:get(Worker2, WorkerToProviderId),
-
-    test_utils:mock_expect(Worker1, dbsync_in_stream, handle_cast, fun
-        ({changes_batch, MsgId, MutatorId, #internal_changes_batch{distributor_id = DistributorId} = Batch}, State)
-            when DistributorId =:= W2Id ->
-            case get(requesting_test) of
-                true ->
-                    {noreply, State};
-                _ ->
-                    put(requesting_test, true),
-                    MockedBatch = Batch#internal_changes_batch{since = 0, until = 0, timestamp = 0, docs = []},
-                    meck:passthrough([{changes_batch, MsgId, MutatorId, MockedBatch}, State])
-            end;
-        (Msg, State) ->
-            meck:passthrough([Msg, State])
-    end),
-
-    ok = rpc:call(Worker1, internal_services_manager, stop_service,
-        [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
-    ok = rpc:call(Worker1, internal_services_manager, start_service,
-        [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, start_in_stream, stop_in_stream, [SpaceId], SpaceId]),
-
-    DirSizes = [10, 20, 1, 5, 2, 1],
-    % Create dirs with sleeps to better mix outgoing changes from different providers
-    DirsList1 = dbsync_changes_requesting_test_base:create_dirs_batch(Config, SpaceName, Workers, DirSizes),
-    timer:sleep(10000),
-    DirsList2 = dbsync_changes_requesting_test_base:create_dirs_batch(Config, SpaceName, lists:reverse(Workers), DirSizes),
-    timer:sleep(5000),
-    DirsList3 = dbsync_changes_requesting_test_base:create_dirs_batch(Config, SpaceName, Workers, DirSizes),
-
-    dbsync_changes_requesting_test_base:verify_dirs_batch(Config, DirsList1),
-    dbsync_changes_requesting_test_base:verify_dirs_batch(Config, DirsList2),
-    dbsync_changes_requesting_test_base:verify_dirs_batch(Config, DirsList3),
-
-    % TODO VFS-7205 - why dbsync_changes_requesting_test_base:verify_sequences_correlation
-    % can be called here when it is expected to fail?
-    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_equal(Workers, SpaceId), 60),
-
-    test_utils:mock_expect(Worker1, dbsync_in_stream, handle_cast, fun(Msg, State) ->
-        meck:passthrough([Msg, State])
-    end),
-    Timestamp0 = rpc:call(Worker1, global_clock, timestamp_seconds, []),
-
-    DirsList4 = dbsync_changes_requesting_test_base:create_dirs_batch(Config, SpaceName, Workers, DirSizes),
-    dbsync_changes_requesting_test_base:verify_dirs_batch(Config, DirsList4),
-
-    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_and_timestamps_equal(Workers, SpaceId, Timestamp0), 60),
-    dbsync_changes_requesting_test_base:verify_sequences_correlation(WorkerToProviderId, SpaceId).
+requesting_from_custom_provider(Config) ->
+    dbsync_changes_requesting_test_base:requesting_from_custom_provider_test(Config).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -126,11 +70,7 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
         dbsync_changes_requesting_test_base:create_tester_session(NewConfig2),
-        Workers =  ?config(op_worker_nodes, NewConfig2),
-        % space_logic is already mocked by initializer
-        test_utils:mock_expect(Workers, space_logic, get_latest_emitted_seq, fun(_, _) ->
-            {ok, 1000000000}
-        end),
+        dbsync_changes_requesting_test_base:mock_zone_sequence_check(NewConfig2),
         NewConfig2
     end,
     [{?LOAD_MODULES, [initializer, dbsync_test_utils, dbsync_changes_requesting_test_base]},
@@ -162,7 +102,7 @@ init_per_testcase(requesting_from_custom_provider = Case, Config) ->
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     Workers =  ?config(op_worker_nodes, Config),
-    test_utils:set_env(Workers, ?APP_NAME, seq_history_interval, 1),
+    test_utils:set_env(Workers, ?APP_NAME, seq_persisting_interval, 1),
     test_utils:set_env(Workers, ?APP_NAME, dbsync_handler_spawn_size, 100000),
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).

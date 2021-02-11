@@ -231,7 +231,7 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 %% @private
 %% @doc
 -spec handle_custom_changes_request(od_provider:id(), dbsync_communicator:custom_changes_request()) -> ok.
-handle_custom_changes_request(CallerProviderId, #custom_changes_request{
+handle_custom_changes_request(CallerProviderId, Request = #custom_changes_request{
     space_id = SpaceId,
     mutator_id = MutatorId,
     since = RequestedSince,
@@ -250,6 +250,7 @@ handle_custom_changes_request(CallerProviderId, #custom_changes_request{
         dbsync_seqs_correlations_history:map_remote_seq_to_local_stop_params(SpaceId, MutatorId, RequestedUntil),
     case LocalSince < LocalUntil of
         true ->
+            send_custom_request_stream_initial_message(CallerProviderId, LocalSince, Request),
             % TODO VFS-7204 - filter documents not mutated by MutatorId (with remote seq outside range)
             Handler = fun
                 (BatchSince, end_of_stream, Timestamp, Docs) ->
@@ -275,3 +276,16 @@ handle_custom_changes_request(CallerProviderId, #custom_changes_request{
             % TODO VFS-7247 - maybe send empty batch
             ok
     end.
+
+-spec send_custom_request_stream_initial_message(od_provider:id(), couchbase_changes:since(),
+    dbsync_communicator:custom_changes_request()) -> ok.
+send_custom_request_stream_initial_message(CallerProviderId, LocalSince, #custom_changes_request{
+    space_id = SpaceId,
+    mutator_id = MutatorId,
+    since = RequestedSince
+}) when is_integer(RequestedSince) ->
+    dbsync_communicator:send_changes_and_correlations(CallerProviderId, MutatorId, SpaceId, LocalSince, LocalSince,
+        undefined, [], <<?CUSTOM_CHANGES_STREAM_INIT_MSG_PREFIX, (integer_to_binary(RequestedSince))/binary>>);
+send_custom_request_stream_initial_message(_, _, _) ->
+    % TODO VFS-7262 - handle requesting with sequences map
+    ok.
