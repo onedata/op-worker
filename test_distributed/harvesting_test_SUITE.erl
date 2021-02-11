@@ -301,7 +301,7 @@ create_file(Config) ->
     SessId = ?SESS_ID(Worker),
     FileName = ?FILE_NAME,
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -331,7 +331,7 @@ rename_file(Config) ->
     FileName = ?FILE_NAME,
     FileName2 = ?FILE_NAME,
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -361,7 +361,7 @@ delete_file(Config) ->
     SessId = ?SESS_ID(Worker),
     FileName = ?FILE_NAME,
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -394,7 +394,7 @@ set_json_metadata(Config) ->
     FileName = ?FILE_NAME,
     JSON = #{<<"color">> => <<"blue">>},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -430,7 +430,7 @@ modify_json_metadata(Config) ->
     FileName = ?FILE_NAME,
     JSON = #{<<"color">> => <<"blue">>},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -467,7 +467,7 @@ delete_json_metadata(Config) ->
     FileName = ?FILE_NAME,
     JSON = #{<<"color">> => <<"blue">>},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -501,7 +501,7 @@ delete_file_with_json_metadata(Config) ->
     FileName = ?FILE_NAME,
     JSON = #{<<"color">> => <<"blue">>},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -529,7 +529,7 @@ modify_json_many_times(Config) ->
     SessId = ?SESS_ID(Worker),
     Modifications = 10000,
     FileName = ?FILE_NAME,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     ExpectedFinalJSON = lists:foldl(fun(I, _) ->
@@ -559,7 +559,7 @@ set_rdf_metadata(Config) ->
     FileName = ?FILE_NAME,
     RDF = ?DUMMY_RDF,
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -594,7 +594,7 @@ modify_rdf_metadata(Config) ->
     FileName = ?FILE_NAME,
     RDF = ?DUMMY_RDF,
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -631,7 +631,7 @@ delete_rdf_metadata(Config) ->
     FileName = ?FILE_NAME,
     RDF = ?DUMMY_RDF,
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -665,7 +665,7 @@ delete_file_with_rdf_metadata(Config) ->
     FileName = ?FILE_NAME,
     RDF = ?DUMMY_RDF,
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -693,7 +693,7 @@ modify_rdf_many_times(Config) ->
     SessId = ?SESS_ID(Worker),
     Modifications = 10000,
     FileName = ?FILE_NAME,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     ExpectedFinalRDF = lists:foldl(fun(I, _) ->
@@ -723,7 +723,7 @@ set_xattr_metadata(Config) ->
     XattrValue = <<"value">>,
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -803,7 +803,7 @@ modify_xattr_metadata(Config) ->
     XattrValue = <<"value">>,
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -849,7 +849,7 @@ delete_xattr_metadata(Config) ->
     XattrValue = <<"value">>,
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -886,7 +886,7 @@ delete_file_with_xattr_metadata(Config) ->
     XattrValue = <<"value">>,
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -916,7 +916,7 @@ modify_xattr_many_times(Config) ->
     SessId = ?SESS_ID(Worker),
     Modifications = 10000,
     FileName = ?FILE_NAME,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     ExpectedFinalXattrs = lists:foldl(fun(I, XattrsIn) ->
@@ -948,7 +948,7 @@ modify_metadata_and_rename_file(Config) ->
     FileName2 = ?FILE_NAME,
     JSON = #{<<"color">> => <<"blue">>},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -989,7 +989,7 @@ changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_spa
 
     JSON1 = #{<<"color">> => <<"blue">>},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID2), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID2)),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
@@ -1020,11 +1020,11 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
     FileName2 = ?FILE_NAME,
     JSON2 = #{<<"color">> => <<"red">>},
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID3), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID3)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
 
-    {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID4), 8#600),
+    {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID4)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, JSON2, []),
 
@@ -1065,11 +1065,11 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
     FileName2 = ?FILE_NAME,
     JSON2 = #{<<"color">> => <<"red">>},
 
-    {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5), 8#600),
+    {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(WorkerP1, SessId, {guid, Guid}, json, JSON1, []),
 
-    {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5), 8#600),
+    {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_metadata(WorkerP2, SessId2, {guid, Guid2}, json, JSON2, []),
 
@@ -1132,11 +1132,11 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
     FileName2 = ?FILE_NAME,
     JSON2 = #{<<"color">> => <<"red">>},
 
-    {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5), 8#600),
+    {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(WorkerP1, SessId, {guid, Guid}, json, JSON1, []),
 
-    {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5), 8#600),
+    {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     ok = lfm_proxy:set_metadata(WorkerP2, SessId2, {guid, Guid2}, json, JSON2, []),
 
@@ -1218,7 +1218,7 @@ submit_entry_failure(Config) ->
 
     HSPid1 = get_main_harvesting_stream_pid(Worker, ?SPACE_ID1),
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
 
@@ -1240,7 +1240,7 @@ submit_entry_failure(Config) ->
     JSON2 = #{<<"color">> => <<"red">>},
     JSON3 = #{<<"color">> => <<"green">>},
 
-    {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID1), 8#600),
+    {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID1)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
 
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
@@ -1309,7 +1309,7 @@ delete_entry_failure(Config) ->
 
     HSPid1 = get_main_harvesting_stream_pid(Worker, ?SPACE_ID1),
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
 

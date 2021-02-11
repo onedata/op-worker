@@ -67,7 +67,7 @@ get_helper_params_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, ?DEFAULT_FILE_PERMS)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath)),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
@@ -110,7 +110,7 @@ create_storage_test_file_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#600)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath)),
 
     Response1 = ?req(Worker, SessId, #create_storage_test_file{
         storage_id = StorageId,
@@ -148,7 +148,7 @@ verify_storage_test_file_test(Config) ->
     test_utils:set_env(Worker, ?APP_NAME, remove_storage_test_file_attempts, 1),
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#600)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath)),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, 0, <<"test">>)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),

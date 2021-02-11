@@ -2077,7 +2077,7 @@ object_exists(Config, Path) ->
 create_file(Config, Path) ->
     [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    lfm_proxy:create(WorkerP1, SessionId, absolute_binary_path(Path), ?DEFAULT_FILE_PERMS).
+    lfm_proxy:create(WorkerP1, SessionId, absolute_binary_path(Path)).
 
 open_file(Worker, Config, Path, OpenMode) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),

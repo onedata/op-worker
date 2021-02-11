@@ -489,7 +489,7 @@ rename_removed_opened_file_test(Config) ->
         Other2 -> Other2
     end,
 
-    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath, 8#777),
+    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
     Guid1String = binary_to_list(Guid1),
     {ok, ListAns} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
@@ -540,7 +540,7 @@ mkdir_removed_opened_file_test(Config) ->
         Other2 -> Other2
     end,
 
-    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath, 8#777),
+    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
     Guid1String = binary_to_list(Guid1),
     {ok, ListAns} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
@@ -557,8 +557,8 @@ mkdir_removed_opened_file_test(Config) ->
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])])),
     ?assertEqual([Guid1String], ListAns3 -- InitialDeletedDir),
 
-    {ok, _} = lfm_proxy:mkdir(Worker, SessId(User), FilePath, 8#777),
-    {ok, _} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath2, 8#777),
+    {ok, _} = lfm_proxy:mkdir(Worker, SessId(User), FilePath),
+    {ok, _} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath2),
     {ok, ListAns4} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
     ?assertEqual([FileNameString], ListAns4 -- InitialSpaceFiles),
@@ -636,7 +636,7 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
                 end)
     end,
 
-    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath, 8#777),
+    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, ListAns} = ?assertMatch({ok, _},
@@ -681,11 +681,11 @@ lfm_monitored_open(Config) ->
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
 
     File1Path = <<"/space_name1/lfm_monitored_open1">>,
-    {ok, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File1Path, ?DEFAULT_FILE_PERMS)),
+    {ok, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File1Path)),
     File1Uuid = file_id:guid_to_uuid(File1Guid),
 
     File2Path = <<"/space_name1/lfm_monitored_open2">>,
-    {ok, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File2Path, ?DEFAULT_FILE_PERMS)),
+    {ok, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File2Path)),
     File2Uuid = file_id:guid_to_uuid(File2Guid),
 
     Self = self(),
@@ -752,7 +752,7 @@ lfm_monitored_open(Config) ->
     ExpFileIds = lists:sort(lists:map(fun(Num) ->
         FileIdx = integer_to_binary(Num),
         FilePath = <<"/space_name1/file_", FileIdx/binary>>,
-        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath, ?DEFAULT_FILE_PERMS)),
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath)),
 
         spawn(W, fun() ->
             Self !  lfm:monitored_open(SessId1, {guid, FileGuid}, read),

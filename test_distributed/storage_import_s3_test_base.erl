@@ -718,7 +718,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
 
     % create first file
-    {ok, G1} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, ?DEFAULT_FILE_PERMS),
+    {ok, G1} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1),
     {ok, H1} = lfm_proxy:open(W1, SessId, {guid, G1}, write),
     {ok, _} = lfm_proxy:write(W1, H1, 0, ?TEST_DATA),
     ok = lfm_proxy:close(W1, H1),
@@ -1376,7 +1376,7 @@ create_list_race_test(Config) ->
     FilesNum = 3,
     FilePaths = [?SPACE_TEST_FILE_PATH(?TEST_FILE(N)) || N <- lists:seq(1, FilesNum)],
     lists:foreach(fun(F) ->
-        {ok, FileGuid} = lfm_proxy:create(W1, SessId, F, ?DEFAULT_FILE_PERMS),
+        {ok, FileGuid} = lfm_proxy:create(W1, SessId, F),
         {ok, Handle} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, write),
         {ok, _} = lfm_proxy:write(W1, Handle, 0, ?TEST_DATA),
         lfm_proxy:close(W1, Handle),

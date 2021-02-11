@@ -155,7 +155,7 @@ lfm_open_failure(Config) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
 
     % simulate open error
     open_failure_mock(W),
@@ -212,7 +212,7 @@ lfm_open_and_create_open_failure(Config) ->
     ),
     ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
 
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
     ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
     ?assertEqual(false, rpc:call(
         W, file_handles, is_file_opened, [file_id:guid_to_uuid(FileGuid)])
@@ -228,7 +228,7 @@ lfm_open_multiple_times_failure(Config) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
 
     % here all operations should succeed
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
@@ -271,7 +271,7 @@ lfm_open_failure_multiple_users(Config) ->
         ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user2">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/test_read">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/test_read">>),
 
     % here all operations should succeed
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
@@ -310,7 +310,7 @@ lfm_open_in_direct_mode(Config) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
 
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
 
@@ -332,7 +332,7 @@ lfm_copy_failure(Config) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
 
     % simulate open error so that mv function will fail
     open_failure_mock(W),
@@ -357,7 +357,7 @@ lfm_copy_failure_multiple_users(Config) ->
         ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user2">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/test_read">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/test_read">>),
 
     % user1 succeeds to write to file using handle
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
@@ -530,7 +530,7 @@ echo_loop_base(Config) ->
 
     File = generator:gen_name(),
     FilePath = <<"/space_name1/", File/binary, "/">>,
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath)),
 
     {WriteTime, _} = measure_execution_time(fun() ->
         lists:foldl(fun(N, Offset) ->
@@ -643,7 +643,7 @@ ls_with_stats_base(Config) ->
     % Create dirs tree
     {CreateTreeTime, _} = measure_execution_time(fun() ->
         lists:foreach(fun(D) ->
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, D, ?DEFAULT_DIR_PERMS))
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, D))
         end, TreeDirs)
     end),
 
@@ -652,7 +652,7 @@ ls_with_stats_base(Config) ->
         Fun = fun() ->
             lists:foreach(fun(_) ->
                 D = <<LastTreeDir/binary, "/", (generator:gen_name())/binary>>,
-                ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, D, ?DEFAULT_DIR_PERMS))
+                ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, D))
             end, lists:seq(1, DirsNumPerProc))
         end,
         case ProcNum of
@@ -754,7 +754,7 @@ ls_base(Config) ->
 
     MainDir = generator:gen_name(),
     MainDirPath = <<"/space_name1/", MainDir/binary, "/">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, MainDirPath, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, MainDirPath)),
 
     VerifyLS = fun(Offset0, Limit0, ElementsList) ->
         Offset = Offset0 * DSM,
@@ -777,7 +777,7 @@ ls_base(Config) ->
     Files = lists:sort(lists:map(fun(_) ->
         generator:gen_name() end, lists:seq(1, 30 * DSM))),
     lists:foreach(fun(F) ->
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<MainDirPath/binary, F/binary>>, ?DEFAULT_FILE_PERMS))
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<MainDirPath/binary, F/binary>>))
     end, Files),
 
     VerifyLS(0, 30, Files),
@@ -794,7 +794,7 @@ ls_base(Config) ->
     Dirs = lists:map(fun(_) ->
         generator:gen_name() end, lists:seq(1, 30 * DSM)),
     lists:foreach(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, <<MainDirPath/binary, D/binary>>, ?DEFAULT_DIR_PERMS))
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, <<MainDirPath/binary, D/binary>>))
     end, Dirs),
     FandD = lists:sort(Files ++ Dirs),
 
@@ -936,13 +936,13 @@ lfm_create_and_unlink(Config) ->
     FilePath21 = <<"/space_name2/", (generator:gen_name())/binary>>,
     FilePath22 = <<"/space_name2/", (generator:gen_name())/binary>>,
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath11, ?DEFAULT_FILE_PERMS)),
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath12, ?DEFAULT_FILE_PERMS)),
-    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W, SessId1, FilePath11, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath11)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath12)),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W, SessId1, FilePath11)),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath21, ?DEFAULT_FILE_PERMS)),
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath22, ?DEFAULT_FILE_PERMS)),
-    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W, SessId2, FilePath21, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath21)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath22)),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W, SessId2, FilePath21)),
 
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, FilePath11})),
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId2, {path, FilePath21})),
@@ -950,8 +950,8 @@ lfm_create_and_unlink(Config) ->
     ?assertMatch({error, ?ENOENT}, lfm_proxy:unlink(W, SessId1, {path, FilePath11})),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:unlink(W, SessId2, {path, FilePath21})),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath11, ?DEFAULT_FILE_PERMS)),
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath21, ?DEFAULT_FILE_PERMS)).
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath11)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath21)).
 
 lfm_create_failure(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -961,13 +961,13 @@ lfm_create_failure(Config) ->
     },
     % intentionally set mode of file to mode typical for directory so that it has execute right
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test_create_fail_dir">>, ?DEFAULT_DIR_PERMS)),
-    ?assertEqual({error, ?ENOTDIR}, lfm_proxy:create(W, SessId1, <<"/space_name1/test_create_fail_dir/file">>, ?DEFAULT_FILE_PERMS)).
+    ?assertEqual({error, ?ENOTDIR}, lfm_proxy:create(W, SessId1, <<"/space_name1/test_create_fail_dir/file">>)).
 
 lfm_basic_rename(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_rename">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_rename">>),
 
     lfm_proxy:mv(W, SessId1, {guid, FileGuid}, <<"/space_name1/test_rename2">>),
 
@@ -986,7 +986,7 @@ lfm_basic_rdwr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
 
     ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
@@ -998,7 +998,7 @@ lfm_basic_rdwr_opens_file_once(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
     test_utils:mock_new(W, storage_driver, [passthrough]),
     test_utils:mock_assert_num_calls(W, storage_driver, open, 2, 0),
 
@@ -1019,7 +1019,7 @@ lfm_basic_rdwr_after_file_delete(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
     FileContent = <<"test_data">>,
 
@@ -1041,11 +1041,11 @@ lfm_write(Config) ->
     {SessId2, _UserId2} =
         {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test3">>, ?DEFAULT_FILE_PERMS)),
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test4">>, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test3">>)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test4">>)),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/test3">>, ?DEFAULT_FILE_PERMS)),
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/test4">>, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/test3">>)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/test4">>)),
 
     O11 = lfm_proxy:open(W, SessId1, {path, <<"/space_name1/test3">>}, rdwr),
     O12 = lfm_proxy:open(W, SessId1, {path, <<"/space_name1/test4">>}, rdwr),
@@ -1094,7 +1094,7 @@ lfm_stat(Config) ->
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test5">>, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test5">>)),
 
     O11 = lfm_proxy:open(W, SessId1, {path, <<"/space_name2/test5">>}, rdwr),
 
@@ -1120,7 +1120,7 @@ lfm_get_details(Config) ->
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test5">>, ?DEFAULT_FILE_PERMS)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test5">>)),
 
     O11 = lfm_proxy:open(W, SessId1, {path, <<"/space_name2/test5">>}, rdwr),
 
@@ -1162,7 +1162,7 @@ lfm_synch_stat(Config) ->
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test6">>, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test6">>)),
 
     O11 = lfm_proxy:open(W, SessId1, {path, <<"/space_name2/test6">>}, rdwr),
 
@@ -1185,7 +1185,7 @@ lfm_truncate(Config) ->
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test7">>, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test7">>)),
 
     O11 = lfm_proxy:open(W, SessId1, {path, <<"/space_name2/test7">>}, rdwr),
 
@@ -1222,7 +1222,7 @@ lfm_truncate_and_write(Config) ->
     FileKey = {path, FilePath},
 
     % Prepare file
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, FilePath, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, FilePath)),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, FileKey, rdwr)),
     ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId, FileKey)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle, 0, <<"abc">>)),
@@ -1293,7 +1293,7 @@ lfm_acl(Config) ->
     FileName = <<"/space_name2/test_file_acl">>,
     DirName = <<"/space_name2/test_dir_acl">>,
 
-    {ok, FileGUID} = lfm_proxy:create(W, SessId1, FileName, ?DEFAULT_FILE_PERMS),
+    {ok, FileGUID} = lfm_proxy:create(W, SessId1, FileName),
     {ok, _} = lfm_proxy:mkdir(W, SessId1, DirName),
 
     % test setting and getting acl
@@ -1310,7 +1310,7 @@ lfm_rmdir(Config) ->
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     DirPath = <<"/space_name1/dir1">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, DirPath, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, DirPath)),
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, DirPath})).
 
 lfm_rmdir_fails_with_eperm_on_space_directory(Config) ->
@@ -1376,7 +1376,7 @@ rm_recursive_fails_with_eperm_on_space_directory(Config) ->
 file_gap(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {ok, Guid} = lfm_proxy:create(W, SessId, <<"/space_name2/f">>, 8#777),
+    {ok, Guid} = lfm_proxy:create(W, SessId, <<"/space_name2/f">>),
     {ok, Handle} = lfm_proxy:open(W, SessId, {guid, Guid}, rdwr),
 
     % when
@@ -1678,7 +1678,7 @@ storage_file_creation_should_be_deferred_until_open(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read1">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read1">>),
     FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
     {SDHandle, _} = rpc:call(W, storage_driver, new_handle, [SessId1, FileCtx]),
 
@@ -1698,7 +1698,7 @@ deferred_creation_should_not_prevent_mv(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_move">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_move">>),
 
     % move empty file
     lfm_proxy:mv(W, SessId1, {guid, FileGuid}, <<"/space_name1/test_move2">>),
@@ -1714,7 +1714,7 @@ deferred_creation_should_not_prevent_truncate(Config) ->
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     ProviderId = rpc:call(W, oneprovider, get_id, []),
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_truncate">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_truncate">>),
 
     % move empty file
     ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid}, 10)),
@@ -1732,7 +1732,7 @@ new_file_should_not_have_popularity_doc(Config) ->
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
 
     % when
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_no_popularity">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_no_popularity">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
 
     % then
@@ -1746,7 +1746,7 @@ new_file_should_have_zero_popularity(Config) ->
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
 
     % when
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_zero_popularity">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_zero_popularity">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     SpaceId = file_id:guid_to_space_id(FileGuid),
 
@@ -1770,7 +1770,7 @@ new_file_should_have_zero_popularity(Config) ->
 opening_file_should_increase_file_popularity(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_increased_popularity">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_increased_popularity">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     SpaceId = file_id:guid_to_space_id(FileGuid),
     ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
@@ -1827,7 +1827,7 @@ opening_file_should_increase_file_popularity(Config) ->
 file_popularity_should_have_correct_file_size(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/file_to_check_size">>, ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/file_to_check_size">>),
     SpaceId = file_id:guid_to_space_id(FileGuid),
     ok = rpc:call(W, file_popularity_api, enable, [SpaceId]),
 
@@ -1866,40 +1866,40 @@ sparse_files_should_be_created(Config, ReadFun) ->
 
     % Hole between not empty blocks
     {ok, FileGuid1} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>, ?DEFAULT_FILE_PERMS)),
+        <<"/space_name1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid1, 0),
     file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid1, 10),
     verify_sparse_file(ReadFun, W, SessId1, FileGuid1, 11, [[0, 1], [10, 1]]),
 
     % Hole before single block
     {ok, FileGuid2} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>, ?DEFAULT_FILE_PERMS)),
+        <<"/space_name1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid2, 10),
     verify_sparse_file(ReadFun, W, SessId1, FileGuid2, 11, [[10, 1]]),
 
     % Empty block write to not empty file
     {ok, FileGuid3} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>, ?DEFAULT_FILE_PERMS)),
+        <<"/space_name1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid3, 0),
     file_ops_test_utils:empty_write_to_file(W, SessId1, FileGuid3, 10),
     verify_sparse_file(ReadFun, W, SessId1, FileGuid3, 10, [[0, 1]]),
 
     % Empty block write to empty file
     {ok, FileGuid4} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>, ?DEFAULT_FILE_PERMS)),
+        <<"/space_name1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:empty_write_to_file(W, SessId1, FileGuid4, 10),
     verify_sparse_file(ReadFun, W, SessId1, FileGuid4, 10, []),
 
     % Empty block write in the middle of not empty file
     {ok, FileGuid5} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>, ?DEFAULT_FILE_PERMS)),
+        <<"/space_name1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid5, 10),
     file_ops_test_utils:empty_write_to_file(W, SessId1, FileGuid5, 5),
     verify_sparse_file(ReadFun, W, SessId1, FileGuid5, 11, [[10, 1]]),
 
     % Creation of hole using truncate on not empty file
     {ok, FileGuid6} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>, ?DEFAULT_FILE_PERMS)),
+        <<"/space_name1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(W, SessId1, FileGuid6, 0),
     ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid6}, 10)),
     ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid6}, ProviderId)),
@@ -1907,7 +1907,7 @@ sparse_files_should_be_created(Config, ReadFun) ->
 
     % Creation of hole using truncate on empty file
     {ok, FileGuid7} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1,
-        <<"/space_name1/", (generator:gen_name())/binary>>, ?DEFAULT_FILE_PERMS)),
+        <<"/space_name1/", (generator:gen_name())/binary>>)),
     ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid7}, 10)),
     ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid7}, ProviderId)),
     verify_sparse_file(ReadFun, W, SessId1, FileGuid7, 10, []).
@@ -2015,7 +2015,7 @@ generate_dir(Config, Size) ->
 
     MainDir = generator:gen_name(),
     MainDirPath = <<"/space_name1/", MainDir/binary, "/">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, MainDirPath, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, MainDirPath)),
 
     case Size of
         0 ->
@@ -2024,7 +2024,7 @@ generate_dir(Config, Size) ->
             Files = lists:sort(lists:map(fun(_) ->
                 generator:gen_name() end, lists:seq(1, Size))),
             lists:foreach(fun(F) ->
-                ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<MainDirPath/binary, F/binary>>, ?DEFAULT_FILE_PERMS))
+                ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<MainDirPath/binary, F/binary>>))
             end, Files),
 
             {MainDirPath, Files}

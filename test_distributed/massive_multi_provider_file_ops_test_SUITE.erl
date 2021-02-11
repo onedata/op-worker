@@ -155,7 +155,7 @@ rtransfer_multisource_test(Config0) ->
 
     File = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
 
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File)),
     OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
     ?assertMatch({ok, _}, OpenAns),
     {ok, Handle} = OpenAns,
@@ -658,7 +658,7 @@ build_traverse_tree(Worker, SessId, Dir, Num) ->
     lists:foreach(fun(FileNum) ->
         FileNumBin = integer_to_binary(FileNum),
         NewFile = <<Dir/binary, "/", FileNumBin/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, NewFile, 8#600))
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, NewFile))
     end, Files),
 
     NumBin = integer_to_binary(Num),

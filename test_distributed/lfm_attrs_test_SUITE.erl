@@ -133,7 +133,7 @@ file_traverse_job_test(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
     File = <<"/", SpaceName/binary, "/1000000">>,
-    {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File, 8#600)),
+    {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File)),
 
     RunOptions = #{
         traverse_info => #{pid => self()}
@@ -208,7 +208,7 @@ empty_xattr_test(Config) ->
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Path = <<"/space_name1/t1_file">>,
     Name1 = <<"t1_name1">>,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
     ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)).
@@ -222,7 +222,7 @@ crud_xattr_test(Config) ->
     Value2 = <<"t2_value2">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
     UpdatedXattr1 = #xattr{name = Name1, value = Value2},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
     WholeCRUD = fun() ->
         ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
         ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
@@ -245,7 +245,7 @@ list_xattr_test(Config) ->
     Name2 = <<"t3_name2">>,
     Value2 = <<"t3_value2">>,
     Xattr2 = #xattr{name = Name2, value = Value2},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2)),
@@ -266,7 +266,7 @@ xattr_create_flag(Config) ->
     OtherName = <<"other_name">>,
     OtherValue = <<"other_value">>,
     OtherXattr = #xattr{name = OtherName, value = OtherValue},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     % create first xattr
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, true, false)),
@@ -292,7 +292,7 @@ xattr_replace_flag(Config) ->
     OtherName = <<"other_name">>,
     OtherValue = <<"other_value">>,
     OtherXattr = #xattr{name = OtherName, value = OtherValue},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     % fail to create first xattr with replace flag
     ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, false, true)),
@@ -321,7 +321,7 @@ xattr_replace_and_create_flag_in_conflict(Config) ->
     OtherName = <<"other_name">>,
     OtherValue = <<"other_value">>,
     OtherXattr = #xattr{name = OtherName, value = OtherValue},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     % fail to create first xattr due to replace flag
     ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, true, true)),
@@ -343,7 +343,7 @@ remove_file_test(Config) ->
     Name1 = <<"t4_name1">>,
     Value1 = <<"t4_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
     Uuid = file_id:guid_to_uuid(Guid),
 
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
@@ -351,7 +351,7 @@ remove_file_test(Config) ->
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, Guid})),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-    {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path),
     ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid2}, false, true)),
     ?assertEqual({error, not_found}, rpc:call(Worker, custom_metadata, get, [Uuid])),
     ?assertEqual({error, not_found}, rpc:call(Worker, times, get, [Uuid])).
@@ -363,7 +363,7 @@ modify_cdmi_attrs(Config) ->
     Name1 = <<"cdmi_attr">>,
     Value1 = <<"t5_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     ?assertEqual({error, ?EPERM}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
     ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)).
@@ -390,9 +390,9 @@ create_and_query_view(Config) ->
              }
              return null;
        }">>,
-    {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),
-    {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
-    {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
+    {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1),
+    {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2),
+    {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3),
     {ok, FileId1} = file_id:guid_to_objectid(Guid1),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     {ok, FileId3} = file_id:guid_to_objectid(Guid3),
@@ -427,7 +427,7 @@ get_empty_json(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Path = <<"/space_name1/t6_file">>,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, {guid, Guid}, json, [], false)).
 
@@ -435,7 +435,7 @@ get_empty_rdf(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Path = <<"/space_name1/t6_file">>,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, {guid, Guid}, rdf, [], false)).
 
@@ -443,7 +443,7 @@ has_custom_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Path = <<"/space_name1/t6_file">>,
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     % json
     ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
@@ -495,7 +495,7 @@ custom_metadata_doc_should_contain_file_objectid(Config) ->
 
     Path = <<"/", SpaceName/binary, "/custom_meta_file">>,
     Xattr1 = #xattr{name = <<"name">>, value = <<"value">>},
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
     FileUuid = file_id:guid_to_uuid(Guid),
 
@@ -536,9 +536,9 @@ create_and_query_view_mapping_one_file_to_many_rows(Config) ->
             }
        }">>,
 
-    {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),
-    {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
-    {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
+    {ok, Guid1} = lfm_proxy:create(Worker, SessId, Path1),
+    {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path2),
+    {ok, Guid3} = lfm_proxy:create(Worker, SessId, Path3),
 
     {ok, FileId1} = file_id:guid_to_objectid(Guid1),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
@@ -714,7 +714,7 @@ build_traverse_tree(Worker, SessId, Dir, Num) ->
     lists:foreach(fun(FileNum) ->
         FileNumBin = integer_to_binary(FileNum),
         NewFile = <<Dir/binary, "/", FileNumBin/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, NewFile, 8#600))
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, NewFile))
     end, Files),
 
     NumBin = integer_to_binary(Num),

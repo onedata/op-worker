@@ -91,31 +91,31 @@ create_on_different_providers_test_base(Config) ->
     % create file on provider1
     FileName = generator:gen_name(),
     FilePath = <<SpaceRootDir/binary, FileName/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:create(W1, UserW1SessId, FilePath, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W1, UserW1SessId, FilePath)),
 
     % file creation on provider2 after synchronizing documents should fail
     ?assertMatch({ok, [{_, FileName}]}, lfm_proxy:get_children(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
-    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W2, UserW2SessId, FilePath, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W2, UserW2SessId, FilePath)),
 
     % file creation on provider2 after synchronizing documents should succeed
     % after deleting it on provider1
     ?assertMatch(ok, lfm_proxy:unlink(W1, UserW1SessId, {path, FilePath})),
-    ?assertMatch({ok, _}, lfm_proxy:create(W2, UserW2SessId, FilePath, ?DEFAULT_FILE_PERMS), 60),
+    ?assertMatch({ok, _}, lfm_proxy:create(W2, UserW2SessId, FilePath), 60),
     ?assertMatch(ok, lfm_proxy:unlink(W2, UserW2SessId, {path, FilePath})),
 
     % create dir on provider1
     DirName = generator:gen_name(),
     DirPath = <<SpaceRootDir/binary, DirName/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, UserW1SessId, DirPath, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, UserW1SessId, DirPath)),
 
     % dir creation on provider2 after synchronizing documents should fail
     ?assertMatch({ok, [{_, DirName}]}, lfm_proxy:get_children(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
-    ?assertMatch({error, ?EEXIST}, lfm_proxy:mkdir(W2, UserW2SessId, DirPath, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:mkdir(W2, UserW2SessId, DirPath)),
 
     % file creation on provider2 after synchronizing documents should succeed
     % after deleting it on provider1
     ?assertMatch(ok, lfm_proxy:unlink(W1, UserW1SessId, {path, DirPath})),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, UserW2SessId, DirPath, ?DEFAULT_DIR_PERMS), 60),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, UserW2SessId, DirPath), 60),
     ?assertMatch(ok, lfm_proxy:unlink(W2, UserW2SessId, {path, DirPath})).
 
 synchronizer_test_base(Config0) ->
@@ -148,7 +148,7 @@ synchronizer_test_base(Config0) ->
     PartSize = ChunksNum * ChunkSize,
 
     lists:foreach(fun(FilePath) ->
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), FilePath, ?DEFAULT_FILE_PERMS)),
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), FilePath)),
         OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, FilePath}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
@@ -215,7 +215,7 @@ synchronize_stress_test_base(Config0, RandomRead) ->
     FileCtxs = case RepNum of
         1 ->
             File = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-            ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File, ?DEFAULT_FILE_PERMS)),
+            ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File)),
             OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
@@ -301,7 +301,7 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
                     FN
             end,
 
-            ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File, ?DEFAULT_FILE_PERMS)),
+            ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File)),
             OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
@@ -382,7 +382,7 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
     Workers3 = (Workers -- Workers1) -- Workers2,
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
 
     verify_stats(Config, Dir, true),
     ct:print("Dir created"),
@@ -473,7 +473,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Workers2 = ?config(workers2, Config),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
     verify_stats(Config, Dir, true),
     ct:pal("Dir created"),
 
@@ -542,7 +542,7 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
         end),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
 
     verify_stats(Config, Dir, true),
     ct:print("Dir created"),
@@ -655,8 +655,8 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, ?DEFAULT_DIR_PERMS)),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir)),
 
     verify_stats(Config, Dir, true),
     verify_stats(Config, Level2Dir, true),
@@ -670,13 +670,13 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 %%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, ?DEFAULT_DIR_PERMS)),
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir)),
         verify_stats(Config, Level2TmpDir, true),
 
         lists:foreach(fun(W2) ->
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
 %%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, ?DEFAULT_DIR_PERMS)),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir)),
             verify_stats(Config, Level3TmpDir, true)
         end, Workers),
         ct:print("Tree verification from node ~p done", [W])
@@ -855,14 +855,14 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
         {Num, <<Level3Dir/binary, "/", (generator:gen_name())/binary>>}
     end, lists:seq(1,FilesNum)),
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, ?DEFAULT_DIR_PERMS)),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir)),
 
     verify_stats(Config, Dir, true),
     verify_stats(Config, Level2Dir, true),
 
     lists:map(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, ?DEFAULT_DIR_PERMS))
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D))
     end, Level3Dirs),
     ct:print("Dirs created"),
 
@@ -872,11 +872,11 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     end, Level3Dirs),
 
     lists:map(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, ?DEFAULT_DIR_PERMS))
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D))
     end, Level3Dirs2),
     ct:print("Dirs created - second batch"),
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level3Dir, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level3Dir)),
     lists:map(fun(F) ->
         create_file(Config, FileBeg, F)
     end, Level4Files),
@@ -937,7 +937,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
     verify_stats(Config, Dir, true),
     ct:print("Dir verified"),
 
@@ -978,7 +978,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
     lists:foreach(fun(W) ->
         spawn_link(fun() ->
             Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-            MkAns = lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, ?DEFAULT_DIR_PERMS),
+            MkAns = lfm_proxy:mkdir(W, SessId(W), Level2TmpDir),
             Master ! {mkdir_ans, Level2TmpDir, MkAns}
         end)
     end, Workers),
@@ -1004,7 +1004,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         lists:foreach(fun(W2) ->
             spawn_link(fun() ->
                 Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-                MkAns = lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, ?DEFAULT_DIR_PERMS),
+                MkAns = lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir),
                 Master ! {mkdir_ans, Level3TmpDir, MkAns}
             end)
         end, Workers)
@@ -1048,7 +1048,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
 
     MainDirs = lists:foldl(fun(_, Acc) ->
         Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, ?DEFAULT_DIR_PERMS)),
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
         verify_stats(Config, Dir, true),
         [Dir | Acc]
     end, [], lists:seq(1,6)),
@@ -1075,7 +1075,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     ChildrenList = lists:foldl(fun({Dir, Nodes}, FinalAcc) ->
         TmpChildren = lists:foldl(fun(W, Acc) ->
             Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, ?DEFAULT_DIR_PERMS)),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir)),
             [Level2TmpDir | Acc]
         end, [], Nodes),
         [{Dir, TmpChildren} | FinalAcc]
@@ -1432,8 +1432,8 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
             Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
             Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Dir, ?DEFAULT_DIR_PERMS)),
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2Dir, ?DEFAULT_DIR_PERMS)),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Dir)),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2Dir)),
 
             [{Dir, Level2Dir, Level2File, W, SN} | Acc2]
         end, Acc, Spaces)
@@ -1499,7 +1499,7 @@ create_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     FilePath = <<"/", SpaceName/binary, "/",  File/binary>>,
 
     lists:foreach(fun(_N) ->
-        ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessId(Worker1), FilePath, ?DEFAULT_FILE_PERMS)),
+        ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessId(Worker1), FilePath)),
         ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, FilePath}))
     end, lists:seq(1, IterationsNum)),
     ok.
@@ -1517,7 +1517,7 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     BufSize = size(Text),
 
     lists:foreach(fun(_N) ->
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), FilePath, ?DEFAULT_FILE_PERMS)),
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), FilePath)),
         OpenAns = lfm_proxy:open(Worker1, SessId(Worker1), {path, FilePath}, write),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
@@ -1547,9 +1547,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     FileSize = BlocksCount * BlockSizeBytes,
 
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User1, Worker2),
-        FilePath, ?DEFAULT_FILE_PERMS)
-    ),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User1, Worker2), FilePath)),
     ?assertMatch(ok, lfm_proxy:truncate(Worker2, SessId(User1, Worker2),
         {path, FilePath}, FileSize)
     ),
@@ -1614,9 +1612,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     FileSize = BlocksCount * BlockSizeBytes,
 
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User1, Worker2),
-        FilePath, ?DEFAULT_FILE_PERMS)
-    ),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(User1, Worker2), FilePath)),
     ?assertMatch(ok, lfm_proxy:truncate(Worker2, SessId(User1, Worker2),
         {path, FilePath}, FileSize)
     ),
@@ -1683,7 +1679,7 @@ transfer_files_to_source_provider(Config0) ->
 
     Guids = lists_utils:pmap(fun(Num) ->
         FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
-        {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, ?DEFAULT_FILE_PERMS),
+        {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath),
         {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
         {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(Size)),
         ok = lfm_proxy:close(Worker, Handle),
@@ -1762,7 +1758,7 @@ proxy_session_token_update_test_base(Config0, {SyncNodes, ProxyNodes, ProxyNodes
     % After making request resulting in proxy request session with the same SessionId should
     % exist on P1 (proxy one) and P2
     DirPath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(P2, SessionId, DirPath, ?DEFAULT_DIR_PERMS)),
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(P2, SessionId, DirPath)),
 
     ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
     ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
@@ -2138,12 +2134,12 @@ create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, Attempts) ->
     {ok, Handle} = case Attempts of
         0 ->
             ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker,
-                SessId(WriteWorker), File, ?DEFAULT_FILE_PERMS)),
+                SessId(WriteWorker), File)),
             ?assertMatch({ok, _}, lfm_proxy:open(WriteWorker,
                 SessId(WriteWorker), {path, File}, rdwr));
         _ ->
             ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker,
-                SessId(WriteWorker), File, ?DEFAULT_FILE_PERMS), Attempts),
+                SessId(WriteWorker), File), Attempts),
             ?assertMatch({ok, _}, lfm_proxy:open(WriteWorker,
                 SessId(WriteWorker), {path, File}, rdwr), Attempts)
     end,
@@ -2159,7 +2155,7 @@ create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker, Attempts) ->
 create_big_file(Config, ChunkSize, ChunksNum, PartNum, File, Worker) ->
     SessId = ?config(session, Config),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId(Worker), File, ?DEFAULT_FILE_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId(Worker), File)),
     OpenAns = lfm_proxy:open(Worker, SessId(Worker), {path, File}, rdwr),
     ?assertMatch({ok, _}, OpenAns),
     {ok, Handle} = OpenAns,

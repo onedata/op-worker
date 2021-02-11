@@ -164,7 +164,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     ),
 
     {ok, FileToCompareGUID} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>),
     {ok, Handle} =
         lfm_proxy:open(W1, SessionId, {guid, FileToCompareGUID}, read), % open in order to create storage file
     lfm_proxy:close(W1, Handle),
@@ -229,7 +229,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     ),
 
     {ok, FileToCompareGUID} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>),
     {ok, Handle} =
         lfm_proxy:open(W1, SessionId, {guid, FileToCompareGUID}, read), % open in order to create storage file
     lfm_proxy:close(W1, Handle),
@@ -269,7 +269,7 @@ write_should_add_blocks_to_file_location(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
 
@@ -322,7 +322,7 @@ truncate_should_change_size_and_blocks(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
@@ -353,7 +353,7 @@ write_and_truncate_should_not_update_remote_file_location(Config) ->
     ExternalFileId = <<"external_file_id">>,
     ExternalBlocks = [#file_block{offset = 0, size = 10}],
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
@@ -389,7 +389,7 @@ update_should_bump_replica_version(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
 
@@ -446,7 +446,7 @@ read_should_synchronize_file(Config) ->
 
     % create test file
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
 
     % attach external location
@@ -523,7 +523,7 @@ external_change_should_invalidate_blocks(Config) ->
 
     % create test file
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
@@ -580,7 +580,7 @@ update_should_save_recent_changes(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
 
@@ -645,7 +645,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
 
     % create test file
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
@@ -728,7 +728,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
 
     % create test file
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
@@ -799,7 +799,7 @@ remote_change_of_size_should_notify_clients(Config) ->
 
     % create test file
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
@@ -858,7 +858,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
 
     % create test file
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
@@ -913,7 +913,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
 
     % create test file
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
@@ -984,7 +984,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
 
     % create test file
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
@@ -1071,7 +1071,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
 
     % create test file
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
     {ok, 10} = lfm_proxy:write(W1, Handle, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle),
@@ -1131,7 +1131,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
 
     % create test file
     {ok, FileGuid} =
-        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+        lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
     {ok, 10} = lfm_proxy:write(W1, Handle, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle),
@@ -1186,14 +1186,14 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     % create test files
     {ok, DirGuid} = lfm_proxy:mkdir(W1, SessionId, <<SpaceName/binary, "/dir">>),
 
-    {ok, FileGuid1} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/dir/file1">>, 8#777),
+    {ok, FileGuid1} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/dir/file1">>),
     {ok, Handle1} = lfm_proxy:open(W1, SessionId, {guid, FileGuid1}, write),
     {ok, 10} = lfm_proxy:write(W1, Handle1, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle1),
 
     {ok, _Dir2Guid} = lfm_proxy:mkdir(W1, SessionId, <<SpaceName/binary, "/dir/dir2">>),
 
-    {ok, FileGuid2} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/dir/dir2/file2">>, 8#777),
+    {ok, FileGuid2} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/dir/dir2/file2">>),
     {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid2}, write),
     {ok, 10} = lfm_proxy:write(W1, Handle2, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle2),

@@ -49,12 +49,12 @@ single_dir_creation_test_base(Config, Clear) ->
         {true, _} ->
             MainDir = generator:gen_name(),
             D = <<"/", SpaceName/binary, "/", MainDir/binary>>,
-            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D, ?DEFAULT_DIR_PERMS),
+            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D),
             {D, MkdirAns, 0};
         {_, 1} ->
             MainDir = <<"test_dir">>,
             D = <<"/", SpaceName/binary, "/", MainDir/binary>>,
-            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D, ?DEFAULT_DIR_PERMS),
+            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D),
             {D, MkdirAns, 0};
         _ ->
             D = <<"/", SpaceName/binary, "/test_dir">>,
@@ -191,7 +191,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
 
     {BaseCreationAns, CreatedBaseDirsNum} = lists:foldl(fun
         ({D, true}, {ok, CreatedBaseDirsAcc}) ->
-            case lfm_proxy:mkdir(Worker, SessId, D, ?DEFAULT_DIR_PERMS) of
+            case lfm_proxy:mkdir(Worker, SessId, D) of
                 {ok, _} -> {ok, CreatedBaseDirsAcc + 1};
                 {error, eexist} -> {ok, CreatedBaseDirsAcc};
                 Other -> {Other, CreatedBaseDirsAcc}
@@ -211,7 +211,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
                     {T, {A, GUID}} = measure_execution_time(fun() ->
                         MkdirAns = case CacheGUIDS of
                             false ->
-                                lfm_proxy:mkdir(W, S, D, ?DEFAULT_DIR_PERMS);
+                                lfm_proxy:mkdir(W, S, D);
                             _ ->
                                 lfm_proxy:mkdir(W, S, DParent, DName, ?DEFAULT_DIR_PERMS)
                         end,
@@ -227,7 +227,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
                 ({D, _}) ->
                     {W, S} = get_worker_and_session(Workers, SessIds),
                     {T, {A, GUID}} = measure_execution_time(fun() ->
-                        case lfm_proxy:mkdir(W, S, D, ?DEFAULT_DIR_PERMS) of
+                        case lfm_proxy:mkdir(W, S, D) of
                             {ok, DirGuid} ->
                                 {dir_ok, DirGuid};
                             Other ->
@@ -248,7 +248,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
                         try
                             {ok, FileGUID} = case CacheGUIDS of
                                 false ->
-                                    lfm_proxy:create(W, S, F, ?DEFAULT_FILE_PERMS);
+                                    lfm_proxy:create(W, S, F);
                                 _ ->
                                     lfm_proxy:create(W, S, GUID, N2, ?DEFAULT_FILE_PERMS)
                             end,

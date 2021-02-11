@@ -74,7 +74,7 @@ single_dir_creation_test_base(Config) ->
     CheckAns = case RepeatNum of
         1 ->
             Dir = <<"/", SpaceName/binary, "/test_dir">>,
-            case lfm_proxy:mkdir(FirstWorker, FirstSessId, Dir, ?DEFAULT_DIR_PERMS) of
+            case lfm_proxy:mkdir(FirstWorker, FirstSessId, Dir) of
                 {ok, Uuid} = Ans ->
                     put(test_dir_uuid, Uuid),
                     Ans;

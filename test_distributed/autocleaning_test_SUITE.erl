@@ -931,7 +931,7 @@ enable_periodical_spaces_autocleaning_check(Worker) ->
     test_utils:set_env(Worker, ?APP_NAME, autocleaning_periodical_spaces_check_enabled, true).
 
 write_file(Worker, SessId, FilePath, Size) ->
-    {ok, Guid} = lfm_proxy:create(Worker, SessId, FilePath, ?DEFAULT_FILE_PERMS),
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, FilePath),
     {ok, H} = lfm_proxy:open(Worker, SessId, {guid, Guid}, write),
     {ok, _} = lfm_proxy:write(Worker, H, 0, crypto:strong_rand_bytes(Size)),
     ok = lfm_proxy:close(Worker, H),

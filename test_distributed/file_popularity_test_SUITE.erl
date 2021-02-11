@@ -108,7 +108,7 @@ query_should_return_empty_list_when_file_has_not_been_opened(Config) ->
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
-    {ok, _} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, ?DEFAULT_FILE_PERMS),
+    {ok, _} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath),
     ?assertMatch([], query(W, ?SPACE_ID, #{})).
 
 query_should_return_file_when_file_has_been_opened(Config) ->
@@ -116,7 +116,7 @@ query_should_return_file_when_file_has_been_opened(Config) ->
     ok = enable_file_popularity(W, ?SPACE_ID),
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
-    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, ?DEFAULT_FILE_PERMS),
+    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
     ok = lfm_proxy:close(W, H),
     {ok, FileId} = file_id:guid_to_objectid(G),
@@ -144,8 +144,8 @@ avg_open_count_per_day_parameter_should_be_bounded_by_100_by_default(Config) ->
     OpenCountPerMonth2 = (DefaultMaxOpenCount + 1) * 30, % avg_open_count = 101
 
     % all files will have the same timestamp as the time is frozen
-    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, ?DEFAULT_FILE_PERMS),
-    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, ?DEFAULT_FILE_PERMS),
+    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1),
+    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2),
 
     open_and_close_file(W, ?SESSION(W, Config), G1, OpenCountPerMonth1),
     open_and_close_file(W, ?SESSION(W, Config), G2, OpenCountPerMonth2),
@@ -168,8 +168,8 @@ avg_open_count_per_day_parameter_should_be_bounded_by_custom_value(Config) ->
 
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
 
-    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, ?DEFAULT_FILE_PERMS),
-    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, ?DEFAULT_FILE_PERMS),
+    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1),
+    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2),
 
     open_and_close_file(W, ?SESSION(W, Config), G1, OpenCountPerMonth1),
     open_and_close_file(W, ?SESSION(W, Config), G2, OpenCountPerMonth2),
@@ -186,7 +186,7 @@ changing_max_avg_open_count_per_day_limit_should_reindex_the_file(Config) ->
     MaxOpenCount2 = 20,
     OpenCountPerMonth = 15 * 30, % avg_open_count = 15
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
-    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, ?DEFAULT_FILE_PERMS),
+    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath),
     {ok, FileId} = file_id:guid_to_objectid(G),
     open_and_close_file(W, ?SESSION(W, Config), G, OpenCountPerMonth),
 
@@ -206,7 +206,7 @@ changing_last_open_weight_should_reindex_the_file(Config) ->
     MaxOpenCount = 10,
 
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
-    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, ?DEFAULT_FILE_PERMS),
+    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath),
     {ok, FileId} = file_id:guid_to_objectid(G),
     open_and_close_file(W, ?SESSION(W, Config), G, 1),
 
@@ -226,7 +226,7 @@ changing_avg_open_count_weight_should_reindex_the_file(Config) ->
     MaxOpenCount = 10,
 
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
-    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, ?DEFAULT_FILE_PERMS),
+    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath),
     {ok, FileId} = file_id:guid_to_objectid(G),
     open_and_close_file(W, ?SESSION(W, Config), G, 1),
 
@@ -247,17 +247,17 @@ query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     FilePath3 = ?FILE_PATH(FileName3),
 
     % all files will have the same timestamp as the time is frozen
-    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, ?DEFAULT_FILE_PERMS),
+    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1),
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read),
     ok = lfm_proxy:close(W, H),
 
-    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, ?DEFAULT_FILE_PERMS),
+    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2),
     {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read),
     ok = lfm_proxy:close(W, H2),
     {ok, H22} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read),
     ok = lfm_proxy:close(W, H22),
 
-    {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3, ?DEFAULT_FILE_PERMS),
+    {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3),
     {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
     ok = lfm_proxy:close(W, H3),
     {ok, H32} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
@@ -282,17 +282,17 @@ query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
     FilePath3 = ?FILE_PATH(FileName3),
 
     % simulate each next file being opened one hour after the previous one
-    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, ?DEFAULT_FILE_PERMS),
+    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1),
     {ok, H1} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read), % 3 hours before query
     ok = lfm_proxy:close(W, H1),
     time_test_utils:simulate_seconds_passing(3600),
 
-    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, ?DEFAULT_FILE_PERMS),
+    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2),
     {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read), % 2 hours before query
     ok = lfm_proxy:close(W, H2),
     time_test_utils:simulate_seconds_passing(3600),
 
-    {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3, ?DEFAULT_FILE_PERMS),
+    {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3),
     {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read), % 1 hour before query
     ok = lfm_proxy:close(W, H3),
     time_test_utils:simulate_seconds_passing(3600),
@@ -314,17 +314,17 @@ time_warp_test(Config) ->
     FilePath3 = ?FILE_PATH(FileName3),
 
     % simulate each next file being opened one hour BEFORE the previous one (due to a time warp)
-    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1, ?DEFAULT_FILE_PERMS),
+    {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1),
     {ok, H1} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read), % 1 hour before query
     ok = lfm_proxy:close(W, H1),
     time_test_utils:simulate_seconds_passing(-3600),
 
-    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2, ?DEFAULT_FILE_PERMS),
+    {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2),
     {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read), % 2 hours before query
     ok = lfm_proxy:close(W, H2),
     time_test_utils:simulate_seconds_passing(-3600),
 
-    {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3, ?DEFAULT_FILE_PERMS),
+    {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3),
     {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read), % 3 hour before query
     ok = lfm_proxy:close(W, H3),
     time_test_utils:simulate_seconds_passing(-3600),
@@ -350,7 +350,7 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
     FrozenTimestamp = time_test_utils:get_frozen_time_hours(),
     AvgOpen = 1 / 30,
     Popularity = popularity(FrozenTimestamp, LastOpenW, AvgOpen, AvgOpenW),
-    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, ?DEFAULT_FILE_PERMS),
+    {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath),
     open_and_close_file(W, ?SESSION(W, Config), G),
     {ok, FileId} = file_id:guid_to_objectid(G),
     ?assertMatch([{FileId, Popularity}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).

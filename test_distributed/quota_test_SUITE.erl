@@ -640,7 +640,7 @@ end_per_testcase(_Case, Config) ->
 create_file(Worker, SessionId, {path, Path}) ->
     create_file(Worker, SessionId, Path);
 create_file(Worker, SessionId, Path) ->
-    lfm_proxy:create(Worker, SessionId, Path, ?DEFAULT_FILE_MODE).
+    lfm_proxy:create(Worker, SessionId, Path).
 
 open_file(Worker, SessionId, FileKey, OpenMode)->
     lfm_proxy:open(Worker, SessionId, FileKey, OpenMode).
