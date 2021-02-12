@@ -34,6 +34,7 @@ get_models() -> [
     od_token,
     temporary_token_secret,
     provider_auth,
+    offline_access_credentials,
     file_download_code,
     subscription,
     file_subscription,
