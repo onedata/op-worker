@@ -599,7 +599,7 @@ default_permissions_test(Config) ->
             {delete, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {delete, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {delete, <<"/space_name1">>, [SessId2, SessId3, SessId4], ?EPERM},
-            % TODO-7064 uncomment after adding link to trash directory
+            % TODO VFS-7064 uncomment after adding link to trash directory
             % {delete, filename:join([<<"/space_name1">>, ?TRASH_DIR_NAME]), [SessId1, SessId2, SessId3, SessId4], ?EPERM},
             {mkdir, <<"/space_name4">>, <<"test">>, 8#740, [SessId4], ?OK},
             {mkdir, <<"/space_name4/test">>, <<"test">>, 8#1770, [SessId4], ?OK},
@@ -617,7 +617,7 @@ default_permissions_test(Config) ->
             {chmod, <<"/space_name2">>, 8#123, [SessId1, SessId2], ?EPERM},
             {chmod, <<"/space_name3">>, 8#123, [SessId1, SessId2, SessId3], ?EPERM},
             {chmod, <<"/space_name4">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EPERM},
-            % TODO-7064 uncomment after adding link to trash directory
+            % TODO VFS-7064 uncomment after adding link to trash directory
             % {chmod, filename:join([<<"/space_name1">>, ?TRASH_DIR_NAME]), 8#777, [SessId1], ?EPERM},
             {mkdir, <<"/space_name4">>, <<"test">>, 8#740, [SessId3], ?OK},
             {chmod, <<"/space_name4/test">>, 8#123, [SessId1, SessId2], ?EACCES},

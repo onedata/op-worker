@@ -265,7 +265,7 @@ get_record_struct(1) ->
             {url, string},
             {api_key, string}
         ]}},
-        {imported_storage, boolean} % @TODO 5856 deprecated remove in next major version
+        {imported_storage, boolean} % @TODO VFS-5856 deprecated remove in next major version
     ]};
 get_record_struct(2) ->
     {record, [
@@ -284,7 +284,7 @@ get_record_struct(2) ->
             {url, string},
             {api_key, string}
         ]}},
-        {imported_storage, boolean} % @TODO 5856 deprecated remove in next major version
+        {imported_storage, boolean} % @TODO VFS-5856 deprecated remove in next major version
     ]}.
 
 %%--------------------------------------------------------------------

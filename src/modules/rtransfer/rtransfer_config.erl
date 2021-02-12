@@ -111,7 +111,7 @@ get_nodes(ProviderId) ->
 -spec open(FileUUID :: binary(), read | write) ->
     {ok, Handle :: term()} | {error, Reason :: any()}.
 open(FileGuid, _OpenFlag) ->
-    % TODO vfs-4412 - delete second arg and change name
+    % TODO VFS-4412 - delete second arg and change name
     sd_utils:create_deferred(file_ctx:new_by_guid(FileGuid)),
     {ok, undefined}.
 
@@ -122,7 +122,7 @@ open(FileGuid, _OpenFlag) ->
 %%--------------------------------------------------------------------
 -spec fsync(Handle :: term()) -> any().
 fsync(_Handle) ->
-    % TODO vfs-4412 - delete callback
+    % TODO VFS-4412 - delete callback
     ok.
 
 %%--------------------------------------------------------------------
@@ -132,7 +132,7 @@ fsync(_Handle) ->
 %%--------------------------------------------------------------------
 -spec close(Handle :: term()) -> any().
 close(_Handle) ->
-    % TODO vfs-4412 - delete callback
+    % TODO VFS-4412 - delete callback
     ok.
 
 %%--------------------------------------------------------------------
