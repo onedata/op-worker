@@ -76,4 +76,12 @@ spaces:
       - provider: "oneprovider-2"
         storage_name: "IdealNullStorage"
         size: '1000000000'
-
+  - name: space_krk_par_p
+    user: *user1
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "posix"
+        size: '1000000000'
+      - provider: "oneprovider-2"
+        storage_name: "posix"
+        size: '1000000000'
