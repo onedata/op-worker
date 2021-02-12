@@ -468,7 +468,7 @@ move_to_trash_should_fail_if_required_acl_perm_is_missing(_Config) ->
 
     % ?delete_subcontainer and ?delete_object are mapped to the same bitmask so we have to remove both of them
     % to test whether operatio will fail without these perms
-    RequiredPerms = [?delete, ?list_container, [?delete_subcontainer, ?delete_object]],
+    RequiredPerms = [?delete, ?list_container, ?traverse_container, [?delete_subcontainer, ?delete_object]],
 
     lists:foreach(fun(RequiredPerm) ->
         DirName = ?RAND_DIR_NAME,
