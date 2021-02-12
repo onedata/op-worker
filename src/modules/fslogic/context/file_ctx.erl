@@ -1448,7 +1448,7 @@ get_file_size_from_remote_locations(FileCtx) ->
     end.
 
 %% @private
--spec list_user_spaces(user_ctx:ctx(), file_meta:list_non_neg_offset(), file_meta:list_size(),
+-spec list_user_spaces(user_ctx:ctx(), file_meta:list_offset(), file_meta:list_size(),
     SpaceWhiteList :: undefined | [od_space:id()]) -> Children :: [ctx()].
 list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
     SessionId = user_ctx:get_session_id(UserCtx),

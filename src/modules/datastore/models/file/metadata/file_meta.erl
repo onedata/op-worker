@@ -69,8 +69,7 @@
 
 
 -type list_offset() :: file_meta_links:offset().
--type list_token() :: file_meta_links:token().
--type list_non_neg_offset() :: file_meta_links:non_neg_offset().
+-type list_token() :: file_meta_links:tokgen().
 -type list_size() :: file_meta_links:size().
 -type list_opts() :: file_meta_links:list_opts().
 -type list_last_name() :: file_meta_links:last_name().
@@ -85,7 +84,7 @@
 ]).
 
 -export_type([
-    list_offset/0, list_non_neg_offset/0, list_size/0, list_token/0,
+    list_offset/0, list_size/0, list_token/0,
     list_last_name/0, list_last_tree/0, list_opts/0, list_extended_info/0, link/0
 ]).
 

@@ -216,7 +216,7 @@ generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMListExtendedInfo)
 generate_deletion_jobs(_Job, _SLChildren, _SLFinished, [], #{is_last := true}, MasterJobs, SlaveJobs) ->
     % there are no more children in file_meta links, we can finish the job;
     {MasterJobs, SlaveJobs};
-generate_deletion_jobs(Job, SLChildren, SLToken, [], FMToken = #{is_last := false}, MasterJobs, SlaveJobs) ->
+generate_deletion_jobs(Job, SLChildren, SLToken, [], #{is_last := false, token := FMToken}, MasterJobs, SlaveJobs) ->
     % sync_links must be processed after refilling file_meta children list
     NextBatchJob = next_batch_master_job(Job, SLChildren, SLToken, [], FMToken),
     {[NextBatchJob | MasterJobs], SlaveJobs};

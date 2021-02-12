@@ -64,9 +64,7 @@
 %% @formatter:on
 
 % Exported types
-
 -type offset() :: integer().
--type non_neg_offset() :: non_neg_integer().     % todo czy to jkest potrzebne?
 -type size() :: non_neg_integer().
 -type token() :: binary().
 -type last_name() :: link_name().
@@ -81,7 +79,6 @@
     % one of: token, offset, last_name is required so that we know were to start listing
     token => token(),
     offset => offset(),
-    % todo moze to sie raczej powinno nazywac start_name, start_id, start_tree?
     last_name => last_name(),
     last_tree => last_tree()
 }.
@@ -98,7 +95,9 @@
 }.
 %% @formatter:on
 
--export_type([link/0, offset/0, non_neg_offset/0, size/0, token/0, last_name/0, last_tree/0, list_extended_info/0]).
+-export_type([link/0, offset/0, size/0, token/0, last_name/0, last_tree/0,
+    list_opts/0, list_extended_info/0
+]).
 
 -define(CTX, (file_meta:get_ctx())).
 -define(CTX(Scope), ?CTX#{scope => Scope}).
