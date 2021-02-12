@@ -280,7 +280,7 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode) ->
     api_test_utils:set_and_sync_metadata(Nodes, TopDirGuid, MetadataType, ?JSON_METADATA_1),
 
     DirLayer2Path = filename:join([TopDirPath, <<"dir_layer_2">>]),
-    {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer2Path),
+    {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer2Path, 8#717),
     api_test_utils:set_and_sync_metadata(Nodes, DirLayer2Guid, MetadataType, ?JSON_METADATA_2),
 
     DirLayer3Path = filename:join([DirLayer2Path, <<"dir_layer_3">>]),
@@ -531,7 +531,7 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode) ->
     api_test_utils:set_and_sync_metadata(Nodes, TopDirGuid, MetadataType, ?ALL_METADATA_SET_1),
 
     DirLayer2Path = filename:join([TopDirPath, <<"dir_layer_2">>]),
-    {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer2Path),
+    {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer2Path, 8#717),
     ShareId = case TestMode of
         share_mode ->
             api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessIdP1, Nodes, DirLayer2Guid);
