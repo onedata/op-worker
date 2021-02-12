@@ -17,9 +17,10 @@
 %% API
 -export([
     mkdir/2, mkdir/3, mkdir/4,
-    get_children/4, get_children/5, get_children/6,
-    get_children_attrs/4, get_children_attrs/5, get_child_attr/3,
-    get_children_details/5,
+    get_children/3,
+    get_children_attrs/3,
+    get_child_attr/3,
+    get_children_details/3,
     get_children_count/2
 ]).
 
@@ -69,64 +70,26 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 -spec get_children(
     session:id(),
     FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(),
-    Limit :: integer()
+    ListOpts :: file_meta:list_opts()
 ) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
-get_children(SessId, FileKey, Offset, Limit) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | lfm:error_reply().
+get_children(SessId, FileKey, ListOpts) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #get_file_children{offset = Offset, size = Limit},
-        fun(#file_children{child_links = List}) ->
-            {ok, [{Guid_, FileName} || #child_link{guid = Guid_, name = FileName} <- List]}
-        end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv get_children(SessId, FileKey, Offset, Limit, Token, undefined).
-%% @end
-%%--------------------------------------------------------------------
--spec get_children(
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    Token :: undefined | binary()
-) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], Token :: binary(),
-        IsLast :: boolean()} | lfm:error_reply().
-get_children(SessId, FileKey, Offset, Limit, Token) ->
-    get_children(SessId, FileKey, Offset, Limit, Token, undefined).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets {Guid, Name} for each directory children starting with Offset-th
-%% from specified StartId or Token entry and up to Limit of entries.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children(session:id(), fslogic_worker:file_guid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    Token :: undefined | binary(),
-    StartId :: undefined | file_meta:name()
-) ->
-    {ok, [{file_id:file_guid(), file_meta:name()}], Token :: binary(), IsLast :: boolean()} |
-    lfm:error_reply().
-get_children(SessId, FileKey, Offset, Limit, Token, StartId) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    GetChildrenReq = #get_file_children{
-        offset = Offset,
-        size = Limit,
-        index_token = Token,
-        index_startid = StartId
-    },
-    remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        GetChildrenReq,
-        fun(#file_children{child_links = List, index_token = Token2, is_last = IL}) ->
-            {ok, [{Guid_, FileName}
-                || #child_link{guid = Guid_, name = FileName} <- List], Token2, IL}
+        #get_file_children{
+            offset = maps:get(offset, ListOpts, undefined),
+            size = maps:get(size, ListOpts, undefined),
+            index_startid = maps:get(last_name, ListOpts, undefined),
+            index_token = maps:get(token, ListOpts, undefined)
+        },
+        fun(#file_children{
+            child_links = List,
+            is_last = IsLast,
+            index_token = ReturnedToken
+        }) ->
+            Children = [{Guid, FileName} || #child_link{guid = Guid, name = FileName} <- List],
+            ListExtendedInfo = #{is_last => IsLast},
+            {ok, Children, maps_utils:put_if_defined(ListExtendedInfo, token, ReturnedToken)}
         end).
 
 
@@ -136,43 +99,23 @@ get_children(SessId, FileKey, Offset, Limit, Token, StartId) ->
 %% starting with Offset-th entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(),
-    Limit :: integer()
-) ->
-    {ok, [#file_attr{}]} | lfm:error_reply().
-get_children_attrs(SessId, FileKey, Offset, Limit) ->
+-spec get_children_attrs(session:id(), fslogic_worker:file_guid_or_path(), file_meta:list_opts()) ->
+    {ok, [#file_attr{}], file_meta:list_extended_info()} | lfm:error_reply().
+get_children_attrs(SessId, FileKey, ListOpts) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #get_file_children_attrs{offset = Offset, size = Limit},
-        fun(#file_children_attrs{child_attrs = Attrs}) ->
-            {ok, Attrs}
-        end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets file basic attributes (see file_attr.hrl) for each directory children
-%% starting with Offset-th from specified Token entry and up to Limit of entries.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_attrs(
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    Token :: undefined | binary()
-) ->
-    {ok, [#file_attr{}], Token :: binary(), IsLast :: boolean()} |
-    lfm:error_reply().
-get_children_attrs(SessId, FileKey, Offset, Limit, Token) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #get_file_children_attrs{offset = Offset, size = Limit, index_token = Token},
-        fun(#file_children_attrs{child_attrs = Attrs, index_token = Token2, is_last = IL}) ->
-            {ok, Attrs, Token2, IL}
+        #get_file_children_attrs{
+            offset = maps:get(offset, ListOpts, undefined),
+            size = maps:get(size, ListOpts, undefined),
+            index_token = maps:get(token, ListOpts, undefined)
+        },
+        fun(#file_children_attrs{
+            child_attrs = Attrs,
+            is_last = IsLast,
+            index_token = ReturnedToken
+        }) ->
+            ListExtendedInfo = #{is_last => IsLast},
+            {ok, Attrs, maps_utils:put_if_defined(ListExtendedInfo, token, ReturnedToken)}
         end).
 
 
@@ -202,24 +145,21 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 %% of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details(
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    StartId :: undefined | file_meta:name()
-) ->
-    {ok, [lfm_attrs:file_details()], IsLast :: boolean()} | lfm:error_reply().
-get_children_details(SessId, FileKey, Offset, Limit, StartId) ->
+-spec get_children_details(session:id(), fslogic_worker:file_guid_or_path(), file_meta:list_opts()) ->
+    {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | lfm:error_reply().
+get_children_details(SessId, FileKey, ListOpts) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children_details{
-            offset = Offset,
-            size = Limit,
-            index_startid = StartId
+            offset = maps:get(offset, ListOpts, undefined),
+            size = maps:get(size, ListOpts, undefined),
+            index_startid = maps:get(last_name, ListOpts, undefined)
         },
-        fun(#file_children_details{child_details = ChildrenInfo, is_last = IL}) ->
-            {ok, ChildrenInfo, IL}
+        fun(#file_children_details{
+            child_details = ChildrenInfo,
+            is_last = IsLast
+        }) ->
+            {ok, ChildrenInfo, #{is_last => IsLast}}
         end).
 
 
@@ -235,9 +175,9 @@ get_children_details(SessId, FileKey, Offset, Limit, StartId) ->
     {ok, ChildrenCount :: integer()} | lfm:error_reply().
 get_children_count(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    case count_children(SessId, FileGuid, 0) of
-        {error, Err} -> {error, Err};
-        ChildrenNum -> {ok, ChildrenNum}
+    case count_children(SessId, FileGuid) of
+        {ok, ChildrenNum} -> {ok, ChildrenNum};
+        {error, Err} -> {error, Err}
     end.
 
 
@@ -245,24 +185,25 @@ get_children_count(SessId, FileKey) ->
 %%% Internal functions
 %%%===================================================================
 
+-spec count_children(session:id(), fslogic_worker:file_guid()) ->
+    {ok, non_neg_integer()} | lfm:error_reply().
+count_children(SessId, FileGuid) ->
+    {ok, BatchSize} = application:get_env(?APP_NAME, ls_batch_size),
+    count_children(SessId, FileGuid, #{token => ?INITIAL_LS_TOKEN, size => BatchSize}, 0).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Counts all children of a directory, by listing them in chunks as long
-%% as possible
-%% @end
-%%--------------------------------------------------------------------
--spec count_children(SessId :: session:id(), FileGuid :: fslogic_worker:file_guid(),
-    Acc :: non_neg_integer()) ->
-    non_neg_integer() | lfm:error_reply().
-count_children(SessId, FileGuid, Acc) ->
-    {ok, Chunk} = application:get_env(?APP_NAME, ls_batch_size),
-    case get_children(SessId, {guid, FileGuid}, Acc, Chunk) of
-        {ok, List} ->
-            case length(List) of
-                Chunk -> count_children(SessId, FileGuid, Acc + Chunk);
-                N -> Acc + N
+
+-spec count_children( session:id(), fslogic_worker:file_guid(),
+    file_meta:list_opts(), Acc :: non_neg_integer()) ->
+    {ok, non_neg_integer()} | lfm:error_reply().
+count_children(SessId, FileGuid, ListOpts, Acc) ->
+    case get_children(SessId, {guid, FileGuid}, ListOpts) of
+        {ok, List, ListExtendedInfo} ->
+            case maps:get(is_last, ListExtendedInfo) of
+                true ->
+                    {ok, Acc + length(List)};
+                false ->
+                    ListOpts2 = ListOpts#{token => maps:get(token, ListExtendedInfo)},
+                    count_children(SessId, FileGuid, ListOpts2, Acc + length(List))
             end;
         {error, _} = Error ->
             Error

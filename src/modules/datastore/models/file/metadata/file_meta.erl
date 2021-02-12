@@ -69,7 +69,7 @@
 
 
 -type list_offset() :: file_meta_links:offset().
--type list_token() :: file_meta_links:tokgen().
+-type list_token() :: file_meta_links:token().
 -type list_size() :: file_meta_links:size().
 -type list_opts() :: file_meta_links:list_opts().
 -type list_last_name() :: file_meta_links:last_name().

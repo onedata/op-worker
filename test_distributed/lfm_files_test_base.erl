@@ -38,6 +38,9 @@
     lfm_stat/1,
     lfm_get_details/1,
     lfm_synch_stat/1,
+    lfm_cp_file/1,
+    lfm_cp_empty_dir/1,
+    lfm_cp_dir/1,
     lfm_truncate/1,
     lfm_truncate_and_write/1,
     lfm_acl/1,
@@ -88,11 +91,11 @@
     lfm_open_failure/1,
     lfm_create_and_open_failure/1,
     lfm_open_in_direct_mode/1,
-    lfm_copy_failure/1,
+    lfm_mv_failure/1,
     lfm_open_multiple_times_failure/1,
     lfm_open_failure_multiple_users/1,
     lfm_open_and_create_open_failure/1,
-    lfm_copy_failure_multiple_users/1,
+    lfm_mv_failure_multiple_users/1,
     sparse_files_should_be_created/2
 ]).
 
@@ -325,7 +328,7 @@ lfm_open_in_direct_mode(Config) ->
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
         CacheEntriesBefore, CacheEntriesAfter).
 
-lfm_copy_failure(Config) ->
+lfm_mv_failure(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {
@@ -346,7 +349,7 @@ lfm_copy_failure(Config) ->
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
         CacheEntriesBefore, CacheEntriesAfter).
 
-lfm_copy_failure_multiple_users(Config) ->
+lfm_mv_failure_multiple_users(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
     {SessId1, _UserId1} = {
@@ -1178,6 +1181,171 @@ lfm_synch_stat(Config) ->
     ?assertMatch({ok, 3, {ok, #file_attr{size = 6}}}, lfm_proxy:write_and_check(W, Handle11, 2, <<"abc">>)),
 
     ?assertMatch({ok, 9, {ok, #file_attr{size = 10}}}, lfm_proxy:write_and_check(W, Handle11, 1, <<"123456789">>)).
+
+lfm_cp_file(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    SpaceName = <<"space_name2">>,
+    TestCaseDir = ?FUNCTION_NAME,
+    SourceFile = <<"test_cp_source_file">>,
+    TargetParent1 = <<"test_cp_target_parent1">>,
+    TargetParent2 = <<"test_cp_target_parent2">>,
+    TargetFile1 = <<"test_cp_target_file1">>,
+    TargetFile2 = <<"test_cp_target_file2">>,
+    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
+    SourceFilePath = filename:join([TestCaseDirPath, SourceFile]),
+    TargetParentPath1 = filename:join([TestCaseDirPath, TargetParent1]),
+    TargetParentPath2 = filename:join([TestCaseDirPath, TargetParent2]),
+    TargetFilePath1 = filename:join([TargetParentPath1, TargetFile1]),
+    TargetFilePath2 = filename:join([TargetParentPath2, TargetFile2]),
+
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
+
+    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(W, SessId1, SourceFilePath, ?DEFAULT_FILE_PERMS),
+    TestData = <<"test data">>,
+    {ok, _} = lfm_proxy:write(W, Handle, 0, TestData),
+    lfm_proxy:close(W, Handle),
+
+    % create target dirs
+    {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
+    {ok, TargetParentGuid2} = lfm_proxy:mkdir(W, SessId1, TargetParentPath2),
+
+    % copy to first target
+    {ok, TargetGuid1} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, {guid, Guid}, {path, TargetParentPath1}, TargetFile1)),
+
+    % verify copied file
+    ?assertMatch({ok, [{TargetGuid1, TargetFile1}], _},
+        lfm_proxy:get_children(W, SessId1, {guid, TargetParentGuid1}, #{offset => 0, size => 10})),
+    ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
+        lfm_proxy:stat(W, SessId1, {path, TargetFilePath1})),
+    {ok, Handle2} = lfm_proxy:open(W, SessId1, {path, TargetFilePath1}, read),
+    ?assertMatch({ok, TestData}, lfm_proxy:read(W, Handle2, 0, byte_size(TestData))),
+    ok = lfm_proxy:close(W, Handle2),
+
+    % copy to second target
+    {ok, TargetGuid2} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, {guid, Guid}, TargetFilePath2)),
+
+    % verify copied file
+    ?assertMatch({ok, [{TargetGuid2, TargetFile2}], _},
+        lfm_proxy:get_children(W, SessId1, {guid, TargetParentGuid2}, #{offset => 0, size => 10})),
+    ?assertMatch({ok, #file_attr{guid = TargetGuid2}},
+        lfm_proxy:stat(W, SessId1, {path, TargetFilePath2})),
+    {ok, Handle3} = lfm_proxy:open(W, SessId1, {path, TargetFilePath2}, read),
+    ?assertMatch({ok, TestData}, lfm_proxy:read(W, Handle3, 0, byte_size(TestData))),
+    ok = lfm_proxy:close(W, Handle3).
+
+
+lfm_cp_empty_dir(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    SpaceName = <<"space_name2">>,
+    TestCaseDir = ?FUNCTION_NAME,
+    SourceDir = <<"test_cp_source_dir">>,
+    TargetParent1 = <<"test_cp_target_parent1">>,
+    TargetParent2 = <<"test_cp_target_parent2">>,
+    TargetDir1 = <<"test_cp_target_dir1">>,
+    TargetDir2 = <<"test_cp_target_dir2">>,
+    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
+    SourceDirPath = filename:join([TestCaseDirPath, SourceDir]),
+    TargetParentPath1 = filename:join([TestCaseDirPath, TargetParent1]),
+    TargetParentPath2 = filename:join([TestCaseDirPath, TargetParent2]),
+    TargetDirPath1 = filename:join([TargetParentPath1, TargetDir1]),
+    TargetDirPath2 = filename:join([TargetParentPath2, TargetDir2]),
+
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
+
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId1, SourceDirPath),
+
+    % create target dirs
+    {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
+    {ok, TargetParentGuid2} = lfm_proxy:mkdir(W, SessId1, TargetParentPath2),
+
+    % copy to first target
+    {ok, TargetGuid1} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, {guid, Guid}, {path, TargetParentPath1}, TargetDir1)),
+
+    % verify copied dir
+    ?assertMatch({ok, [{TargetGuid1, TargetDir1}], _},
+        lfm_proxy:get_children(W, SessId1, {guid, TargetParentGuid1}, #{offset => 0, size => 10})),
+    ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
+        lfm_proxy:stat(W, SessId1, {path, TargetDirPath1})),
+
+    % copy to second target
+    {ok, TargetGuid2} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, {guid, Guid}, TargetDirPath2)),
+
+    % verify copied dir
+    ?assertMatch({ok, [{TargetGuid2, TargetDir2}], _},
+        lfm_proxy:get_children(W, SessId1, {guid, TargetParentGuid2}, #{offset => 0, size => 10})),
+    ?assertMatch({ok, #file_attr{guid = TargetGuid2}},
+        lfm_proxy:stat(W, SessId1, {path, TargetDirPath2})).
+
+lfm_cp_dir(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    SpaceName = <<"space_name2">>,
+    TestCaseDir = ?FUNCTION_NAME,
+    SourceDir = <<"test_cp_source_dir">>,
+    Child1 = <<"test_cp_child1">>,
+    Child2 = <<"test_cp_child2">>,
+    TargetParent1 = <<"test_cp_target_parent1">>,
+    TargetDir1 = <<"test_cp_target_dir1">>,
+    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
+    SourceDirPath = filename:join([TestCaseDirPath, SourceDir]),
+    TargetParentPath1 = filename:join([TestCaseDirPath, TargetParent1]),
+    TargetDirPath1 = filename:join([TargetParentPath1, TargetDir1]),
+    TargetChildPath1 = filename:join([TargetDirPath1, Child1]),
+    TargetChildPath2 = filename:join([TargetDirPath1, Child2]),
+    TestData = <<"test data">>,
+
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
+
+    % create source dir and its children
+    {ok, DirGuid} = lfm_proxy:mkdir(W, SessId1, SourceDirPath),
+    {ok, {_, Handle1}} = lfm_proxy:create_and_open(W, SessId1, DirGuid, Child1, ?DEFAULT_FILE_PERMS),
+    {ok, {_, Handle2}} = lfm_proxy:create_and_open(W, SessId1, DirGuid, Child2, ?DEFAULT_FILE_PERMS),
+    {ok, _} = lfm_proxy:write(W, Handle1, 0, TestData),
+    {ok, _} = lfm_proxy:write(W, Handle2, 0, TestData),
+    lfm_proxy:close(W, Handle1),
+    lfm_proxy:close(W, Handle2),
+
+    % create target dir
+    {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
+
+    % decrease batch_size to ensure that all files will be correctly copied
+    ok = test_utils:set_env(W, op_worker, ls_batch_size, 1),
+
+    % copy to target
+    {ok, TargetGuid1} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, {guid, DirGuid}, {path, TargetParentPath1}, TargetDir1)),
+
+    % verify copied dir
+    ?assertMatch({ok, [{TargetGuid1, TargetDir1}], _},
+        lfm_proxy:get_children(W, SessId1, {guid, TargetParentGuid1}, #{offset => 0, size => 10})),
+    ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
+        lfm_proxy:stat(W, SessId1, {path, TargetDirPath1})),
+
+    % verify children of copied dir
+    ?assertMatch({ok, [{_, Child1}, {_, Child2}], _},
+        lfm_proxy:get_children(W, SessId1, {guid, TargetGuid1}, #{offset => 0, size => 10})),
+
+    ?assertMatch({ok, #file_attr{name = Child1}}, lfm_proxy:stat(W, SessId1, {path, TargetChildPath1})),
+    ?assertMatch({ok, #file_attr{name = Child2}}, lfm_proxy:stat(W, SessId1, {path, TargetChildPath2})),
+
+    {ok, Handle3} = lfm_proxy:open(W, SessId1, {path, TargetChildPath1}, read),
+    ?assertMatch({ok, TestData}, lfm_proxy:read(W, Handle3, 0, byte_size(TestData))),
+    ok = lfm_proxy:close(W, Handle3),
+
+    {ok, Handle4} = lfm_proxy:open(W, SessId1, {path, TargetChildPath2}, read),
+    ?assertMatch({ok, TestData}, lfm_proxy:read(W, Handle4, 0, byte_size(TestData))),
+    ok = lfm_proxy:close(W, Handle4).
+
 
 lfm_truncate(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -2039,9 +2207,8 @@ verify_attrs(Config, MainDirPath, Files, Limit, ExpectedSize, Offset) ->
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, Offset, Limit),
-    ?assertMatch({ok, _}, Ans),
-    {ok, List} = Ans,
+    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, #{offset => Offset, size => Limit}),
+    {ok, List, _} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
     lists:foreach(fun({F1, F2}) ->
@@ -2054,9 +2221,8 @@ verify_attrs_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset,
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, 0, Limit, Token),
-    ?assertMatch({ok, _, _, _}, Ans),
-    {ok, List, Token2, IL} = Ans,
+    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, #{size => Limit, token => Token}),
+    {ok, List, #{token := Token2, is_last := IL}} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
     lists:foreach(fun({F1, F2}) ->
@@ -2071,9 +2237,8 @@ verify_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLas
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath}, 0, Limit, Token),
-    ?assertMatch({ok, _, _, _}, Ans),
-    {ok, List, Token2, IL} = Ans,
+    Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath}, #{size => Limit, token => Token}),
+    {ok, List, #{token := Token2, is_last := IL}} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
     lists:foreach(fun({{_, F1}, F2}) ->
@@ -2088,8 +2253,12 @@ verify_with_startid(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offse
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath}, Offset, Limit, undefined, StartId),
-    {ok, List, _, _} = ?assertMatch({ok, _, _, _}, Ans),
+    Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath}, #{
+        offset => Offset,
+        size => Limit,
+        last_name => StartId
+    }),
+    {ok, List, _} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
     lists:foreach(fun({{_, F1}, F2}) ->
@@ -2115,7 +2284,7 @@ verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Li
 
     {ok, List, _} = ?assertMatch(
         {ok, _, _},
-        lfm_proxy:get_children_details(Worker, SessId1, {path, MainDirPath}, Offset, Limit, StartId)
+        lfm_proxy:get_children_details(Worker, SessId1, {path, MainDirPath}, #{offset => Offset, size => Limit, last_name => StartId})
     ),
     ?assertEqual(ExpectedSize, length(List)),
 

@@ -41,7 +41,7 @@
 }).
 
 -record(get_file_children, {
-    offset :: file_meta:list_offset(),
+    offset :: undefined | file_meta:list_offset(),
     size :: file_meta:size(),
     index_token = undefined :: undefined | binary(),
     index_startid = undefined :: undefined | binary()

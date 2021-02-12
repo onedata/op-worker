@@ -557,7 +557,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}},
 
     case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
-            {ok, Children} = ?check(lfm:get_children(SessionId, {guid, Guid}, Offset, Limit)),
+            {ok, Children, _} = ?check(lfm:get_children(SessionId, {guid, Guid}, #{offset => Offset, size => Limit})),
             {ok, lists:map(fun({ChildGuid, ChildPath}) ->
                 {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
                 #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
@@ -573,9 +573,12 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
-    {ok, Children, _, _} = ?check(lfm:get_children(
-        SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId)
-    ),
+    {ok, Children, _} = ?check(lfm:get_children(
+        SessionId, {guid, FileGuid}, #{
+            offset => Offset,
+            size => Limit,
+            last_name => StartId
+    })),
     {ok, value, Children};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
@@ -585,7 +588,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
     {ok, ChildrenDetails, _} = ?check(lfm:get_children_details(
-        SessionId, {guid, FileGuid}, Offset, Limit, StartId
+        SessionId, {guid, FileGuid}, #{offset => Offset, size => Limit, last_name => StartId}
     )),
     {ok, value, ChildrenDetails};
 
