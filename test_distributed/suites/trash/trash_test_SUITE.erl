@@ -516,12 +516,13 @@ deletion_lasting_for_4_days_should_succeed(Config) ->
     long_lasting_deletion_test_base(Config, 1, TimeWarp, 0, success).
 
 deletion_lasting_for_40_days_should_succeed(Config) ->
-    % This test simulates 10 time warps, each of them warps 4 day forward
-    % Interval between simulating time warps is 10 seconds.
-    TimeWarpsCount = 10,
-    TimeWarp = 4 * 24 * 3600, % 4 days
+    % This test simulates 20 time warps, each of them warps 2 day forward
+    % Interval between simulating time warps is 30 seconds.
+    TimeWarpsCount = 20,
+    TimeWarp = 2 * 24 * 3600, % 2 days
+    Interval = 30,
     % deletion from trash will last for (simulated) 40 days
-    long_lasting_deletion_test_base(Config, TimeWarpsCount, TimeWarp, 10, success).
+    long_lasting_deletion_test_base(Config, TimeWarpsCount, TimeWarp, Interval, success).
 
 deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time(Config) ->
     % This test simulates a 10 day time warp which will result in failed refresh of offline session
@@ -605,10 +606,11 @@ long_lasting_deletion_test_base(Config, TimeWarpsCount,
 
     mock_traverse_finished(P1Node, self()),
 
+    time_test_utils:freeze_time(Config),
+
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
     {ok, TaskId} = schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
 
-    time_test_utils:freeze_time(Config),
     lists:foreach(fun(_) ->
     % simulate that a TimeWarpPeriod time warp occurred during deletion from trash
         time_test_utils:simulate_seconds_passing(TimeWarpPeriod),
@@ -654,7 +656,12 @@ end_per_suite(_Config) ->
     hackney:stop(),
     ssl:stop().
 
-init_per_testcase(_Case, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= deletion_lasting_for_40_days_should_succeed
+->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(default, Config);
+init_per_testcase(Case, Config) ->
     % update background config to update sessions
     Config2 = oct_background:update_background_config(Config),
     lfm_proxy:init(Config2).
