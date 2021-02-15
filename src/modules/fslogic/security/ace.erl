@@ -27,7 +27,7 @@
 %% API
 -export([
     is_applicable/3,
-    check_against/2,
+    check_against/4,
 
     from_json/2, to_json/2,
     validate/2
@@ -93,23 +93,32 @@ is_applicable(_, FileCtx, _) ->
 %% be authoritatively denied.
 %% @end
 %%--------------------------------------------------------------------
--spec check_against(bitmask(), ace()) ->
-    allowed | {inconclusive, bitmask()} | denied.
-check_against(Operations, #access_control_entity{
+-spec check_against(bitmask(), bitmask(), bitmask(), ace()) ->
+    {allowed | denied, bitmask(), bitmask()} | {inconclusive, bitmask(), bitmask(), bitmask()}.
+check_against(RequiredPerms, PrevAllowedPerms, DeniedPerms, #access_control_entity{
     acetype = ?allow_mask,
     acemask = AceMask
 }) ->
-    case (Operations band AceMask) of
-        Operations -> allowed;
-        AllowedOperations -> {inconclusive, Operations bxor AllowedOperations}
+    AllAllowedPerms = PrevAllowedPerms bor (AceMask band (bnot DeniedPerms)),
+
+    case (RequiredPerms band AceMask) of
+        RequiredPerms ->
+            {allowed, AllAllowedPerms, DeniedPerms};
+        GrantedPerms ->
+            {inconclusive, RequiredPerms bxor GrantedPerms, AllAllowedPerms, DeniedPerms}
     end;
-check_against(Operations, #access_control_entity{
+
+check_against(RequiredPerms, AllowedPerms, PrevDeniedPerms, #access_control_entity{
     acetype = ?deny_mask,
     acemask = AceMask
 }) ->
-    case (Operations band AceMask) of
-        ?no_flags_mask -> {inconclusive, Operations};
-        _ -> denied
+    AllDeniedPerms = PrevDeniedPerms bor (AceMask band (bnot AllowedPerms)),
+
+    case (RequiredPerms band AceMask) of
+        ?no_flags_mask ->
+            {inconclusive, RequiredPerms, AllowedPerms, AllDeniedPerms};
+        _ ->
+            {denied, AllowedPerms, AllDeniedPerms}
     end.
 
 

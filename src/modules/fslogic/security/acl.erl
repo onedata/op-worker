@@ -24,7 +24,8 @@
 
 %% API
 -export([
-    assert_permitted/4,
+    check_acl/5,
+%%    assert_permitted/4,
     add_names/1, strip_names/1,
 
     from_json/2, to_json/2,
@@ -37,26 +38,55 @@
 %%%===================================================================
 
 
--spec assert_permitted(acl(), od_user:doc(), ace:bitmask(), file_ctx:ctx()) ->
-    {ok, file_ctx:ctx()} | no_return().
-assert_permitted(_Acl, _User, ?no_flags_mask, FileCtx) ->
-    {ok, FileCtx};
-assert_permitted([], _User, _Operations, _FileCtx) ->
-    throw(?EACCES);
-assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
+-spec check_acl(
+    acl(), od_user:doc(), ace:bitmask(), file_ctx:ctx(), data_access_rights:user_perms_matrix()
+) ->
+    {allowed | denied, file_ctx:ctx(), data_access_rights:user_perms_matrix()}.
+check_acl(_Acl, _User, ?no_flags_mask, FileCtx, UserPermsMatrix) ->
+    {allowed, FileCtx, UserPermsMatrix};
+check_acl([], _User, _Operations, FileCtx, {No, AllowedPerms, _DeniedPerms}) ->
+    % After reaching then end of ACL all not explicitly granted perms are denied
+    {denied, FileCtx, {No, AllowedPerms, bnot AllowedPerms}};
+check_acl([Ace | Rest], User, Operations, FileCtx, {No, PrevAllowedPerms, PrevDeniedPerms}) ->
     case ace:is_applicable(User, FileCtx, Ace) of
         {true, FileCtx2} ->
-            case ace:check_against(Operations, Ace) of
-                allowed ->
-                    {ok, FileCtx2};
-                {inconclusive, LeftoverOperations} ->
-                    assert_permitted(Rest, User, LeftoverOperations, FileCtx2);
-                denied ->
-                    throw(?EACCES)
+            case ace:check_against(Operations, PrevAllowedPerms, PrevDeniedPerms, Ace) of
+                {inconclusive, LeftoverOperations, AllAllowedPerms, AllDeniedPerms} ->
+                    check_acl(
+                        Rest, User, LeftoverOperations, FileCtx2,
+                        {No + 1, AllAllowedPerms, AllDeniedPerms}
+                    );
+                {AllowedOrDenied, AllAllowedPerms, AllDeniedPerms} ->
+                    {AllowedOrDenied, FileCtx, {No + 1, AllAllowedPerms, AllDeniedPerms}}
             end;
         {false, FileCtx2} ->
-            assert_permitted(Rest, User, Operations, FileCtx2)
+            check_acl(
+                Rest, User, Operations, FileCtx2,
+                {No + 1, PrevAllowedPerms, PrevDeniedPerms}
+            )
     end.
+
+%%
+%%-spec assert_permitted(acl(), od_user:doc(), ace:bitmask(), file_ctx:ctx()) ->
+%%    {ok, file_ctx:ctx()} | no_return().
+%%assert_permitted(_Acl, _User, ?no_flags_mask, FileCtx) ->
+%%    {ok, FileCtx};
+%%assert_permitted([], _User, _Operations, _FileCtx) ->
+%%    throw(?EACCES);
+%%assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
+%%    case ace:is_applicable(User, FileCtx, Ace) of
+%%        {true, FileCtx2} ->
+%%            case ace:check_against(Operations, Ace) of
+%%                allowed ->
+%%                    {ok, FileCtx2};
+%%                {inconclusive, LeftoverOperations} ->
+%%                    assert_permitted(Rest, User, LeftoverOperations, FileCtx2);
+%%                denied ->
+%%                    throw(?EACCES)
+%%            end;
+%%        {false, FileCtx2} ->
+%%            assert_permitted(Rest, User, Operations, FileCtx2)
+%%    end.
 
 
 %%--------------------------------------------------------------------

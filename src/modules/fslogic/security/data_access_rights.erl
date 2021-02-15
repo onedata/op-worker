@@ -37,19 +37,26 @@
     | type()
     | {type(), 'or', type()}.
 
--export_type([type/0, requirement/0]).
+% User permission matrix holds information about user overall granted and denied
+% permissions. It is build incrementally (e.g. in case of acl not entire acl is
+% checked but only up to fragment where permission is granted or denied) and
+% that is why it contains pointer to where it stopped calculating previously.
+-type user_perms_matrix() :: {non_neg_integer(), ace:bitmask(), ace:bitmask()}.
 
+-export_type([type/0, requirement/0, user_perms_matrix/0]).
 
+% Permissions respected in readonly mode (operation requiring any other
+% permission, even if granted by posix mode or acl, will be denied)
 -define(READONLY_MODE_ALLOWED_PERMS, (
+    ?read_attributes_mask bor
     ?read_object_mask bor
     ?list_container_mask bor
     ?read_metadata_mask bor
-    ?read_attributes_mask bor
     ?read_acl_mask bor
     ?traverse_container_mask
 )).
 
-
+% Permissions denied by lack of ?SPACE_WRITE_DATA/?SPACE_READ_DATA space privilege
 -define(SPACE_WRITE_PERMS, (
     ?write_attributes_mask bor
     ?write_metadata_mask bor
@@ -66,7 +73,7 @@
     ?read_metadata_mask
 )).
 
-
+% Permissions granted by 'rwx' posix mode bits
 -define(POSIX_ALWAYS_GRANTED_PERMS, (
     ?read_attributes_mask bor
     ?read_acl_mask
@@ -85,12 +92,12 @@
 -define(POSIX_EXEC_ONLY_PERMS, (
     ?traverse_container_mask
 )).
-
 -define(POSIX_WRITE_EXEC_PERMS, (
     ?POSIX_WRITE_ONLY_PERMS bor
     ?POSIX_EXEC_ONLY_PERMS bor
 
-    % some permissions are granted only when both 'write' and 'exec' bits are set
+    % Special permissions that are granted only when both 'write' and 'exec'
+    % mode bits are set
     ?add_object_mask bor
     ?delete_child_mask
 )).
@@ -122,7 +129,7 @@ assert_granted(UserCtx, FileCtx0, AccessRequirements0) ->
                     end
             end,
             lists:foldl(fun(AccessRequirement, FileCtx1) ->
-                check_and_cache_result(UserCtx, FileCtx1, AccessRequirement)
+                assert_access_requirement(UserCtx, FileCtx1, AccessRequirement)
             end, FileCtx0, AccessRequirements1)
     end.
 
@@ -149,13 +156,12 @@ assert_operation_available_in_readonly_mode(AccessRequirements) ->
 
 %% @private
 -spec is_available_in_readonly_mode(requirement()) -> boolean().
-is_available_in_readonly_mode(root) ->
-    true;
-is_available_in_readonly_mode(share) ->
-    true;
-is_available_in_readonly_mode(owner) ->
-    true;
-is_available_in_readonly_mode(traverse_ancestors) ->
+is_available_in_readonly_mode(Requirement) when
+    Requirement == root;
+    Requirement == owner;
+    Requirement == share;
+    Requirement == traverse_ancestors
+->
     true;
 is_available_in_readonly_mode(?PERMISSIONS(Perms)) ->
     case Perms band (bnot ?READONLY_MODE_ALLOWED_PERMS) of
@@ -167,12 +173,19 @@ is_available_in_readonly_mode({AccessType1, 'or', AccessType2}) ->
 
 
 %% @private
--spec check_and_cache_result(user_ctx:ctx(), file_ctx:ctx(), requirement()) ->
+-spec assert_access_requirement(user_ctx:ctx(), file_ctx:ctx(), requirement()) ->
     file_ctx:ctx() | no_return().
-check_and_cache_result(UserCtx, FileCtx0, ?PERMISSIONS(RequiredPerms)) ->
-    check_permissions(UserCtx, FileCtx0, RequiredPerms);
+assert_access_requirement(UserCtx, FileCtx0, ?PERMISSIONS(RequiredPerms)) ->
+    check_user_perms_matrix(UserCtx, FileCtx0, RequiredPerms);
 
-check_and_cache_result(UserCtx, FileCtx0, Requirement) ->
+assert_access_requirement(UserCtx, FileCtx, {AccessType1, 'or', AccessType2}) ->
+    try
+        assert_access_requirement(UserCtx, FileCtx, AccessType1)
+    catch _:?EACCES ->
+        assert_access_requirement(UserCtx, FileCtx, AccessType2)
+    end;
+
+assert_access_requirement(UserCtx, FileCtx0, Requirement) ->
     UserId = user_ctx:get_user_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx0),
     CacheKey = {Requirement, UserId, Guid},
@@ -184,7 +197,7 @@ check_and_cache_result(UserCtx, FileCtx0, Requirement) ->
             throw(?EACCES);
         _ ->
             try
-                {ok, FileCtx1} = check_access(UserCtx, FileCtx0, Requirement),
+                {ok, FileCtx1} = check_access_requirement(UserCtx, FileCtx0, Requirement),
                 permissions_cache:cache_permission(CacheKey, granted),
                 FileCtx1
             catch _:?EACCES ->
@@ -195,35 +208,23 @@ check_and_cache_result(UserCtx, FileCtx0, Requirement) ->
 
 
 %% @private
--spec check_access(user_ctx:ctx(), file_ctx:ctx(), requirement()) ->
+-spec check_access_requirement(user_ctx:ctx(), file_ctx:ctx(), requirement()) ->
     {ok, file_ctx:ctx()} | no_return().
-check_access(UserCtx, FileCtx, {AccessType1, 'or', AccessType2}) ->
-    case catch check_access(UserCtx, FileCtx, AccessType1) of
-        {ok, _} = Res ->
-            Res;
-        _ ->
-            check_access(UserCtx, FileCtx, AccessType2)
-    end;
-
-check_access(UserCtx, FileCtx, root) ->
+check_access_requirement(UserCtx, FileCtx, root) ->
     case user_ctx:is_root(UserCtx) of
-        true ->
-            {ok, FileCtx};
-        false ->
-            throw(?EACCES)
+        true -> {ok, FileCtx};
+        false -> throw(?EACCES)
     end;
 
-check_access(UserCtx, FileCtx0, owner) ->
+check_access_requirement(UserCtx, FileCtx0, owner) ->
     {OwnerId, FileCtx1} = file_ctx:get_owner(FileCtx0),
 
     case user_ctx:get_user_id(UserCtx) =:= OwnerId of
-        true ->
-            {ok, FileCtx1};
-        false ->
-            throw(?EACCES)
+        true -> {ok, FileCtx1};
+        false -> throw(?EACCES)
     end;
 
-check_access(UserCtx, FileCtx0, share) ->
+check_access_requirement(UserCtx, FileCtx0, share) ->
     case file_ctx:is_root_dir_const(FileCtx0) of
         true ->
             throw(?ENOENT);
@@ -238,34 +239,29 @@ check_access(UserCtx, FileCtx0, share) ->
                 true ->
                     {ok, FileCtx1};
                 false ->
-                    {ParentCtx, FileCtx2} = file_ctx:get_parent(
-                        FileCtx1, UserCtx
-                    ),
-                    check_and_cache_result(UserCtx, ParentCtx, share),
+                    {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
+                    assert_access_requirement(UserCtx, ParentCtx, share),
                     {ok, FileCtx2}
             end
     end;
 
-check_access(UserCtx, FileCtx0, traverse_ancestors) ->
+check_access_requirement(UserCtx, FileCtx0, traverse_ancestors) ->
     case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
         {undefined, FileCtx1} ->
             {ok, FileCtx1};
         {ParentCtx0, FileCtx1} ->
-            ParentCtx1 = check_permissions(
+            ParentCtx1 = check_user_perms_matrix(
                 UserCtx, ParentCtx0, ?traverse_container_mask
             ),
-            check_and_cache_result(UserCtx, ParentCtx1, traverse_ancestors),
+            assert_access_requirement(UserCtx, ParentCtx1, traverse_ancestors),
             {ok, FileCtx1}
     end.
 
 
-
-
-
-
-
 %% @private
-check_permissions(UserCtx, FileCtx0, RequiredPerms) ->
+-spec check_user_perms_matrix(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask()) ->
+    file_ctx:ctx() | no_return().
+check_user_perms_matrix(UserCtx, FileCtx0, RequiredPerms) ->
     UserId = user_ctx:get_user_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx0),
     CacheKey = {user_perms_matrix, UserId, Guid},
@@ -278,7 +274,7 @@ check_permissions(UserCtx, FileCtx0, RequiredPerms) ->
                 LeftoverRequiredPerms ->
                     case LeftoverRequiredPerms band DeniedPerms of
                         0 ->
-                            propagate_user_perms_matrix(
+                            calc_and_check_user_perms_matrix(
                                 CacheKey, UserCtx, FileCtx0,
                                 LeftoverRequiredPerms, UserPermsMatrix
                             );
@@ -287,20 +283,24 @@ check_permissions(UserCtx, FileCtx0, RequiredPerms) ->
                     end
             end;
         calculate ->
-            calculate_user_perms_matrix(CacheKey, UserCtx, FileCtx0, RequiredPerms)
+            calc_and_check_user_perms_matrix(CacheKey, UserCtx, FileCtx0, RequiredPerms)
     end.
 
 
 %% @private
-calculate_user_perms_matrix(CacheKey, UserCtx, FileCtx0, Permission) ->
+-spec calc_and_check_user_perms_matrix(term(), user_ctx:ctx(), file_ctx:ctx(), ace:bitmask()) ->
+    file_ctx:ctx() | no_return().
+calc_and_check_user_perms_matrix(CacheKey, UserCtx, FileCtx0, RequiredPermissions) ->
     ShareId = file_ctx:get_share_id_const(FileCtx0),
     DeniedPerms = get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx0, ShareId),
 
     UserPermsMatrix = {0, 0, DeniedPerms},
 
-    case Permission band DeniedPerms of
+    case RequiredPermissions band DeniedPerms of
         0 ->
-            propagate_user_perms_matrix(CacheKey, UserCtx, FileCtx0, Permission, UserPermsMatrix);
+            calc_and_check_user_perms_matrix(
+                CacheKey, UserCtx, FileCtx0, RequiredPermissions, UserPermsMatrix
+            );
         _ ->
             permissions_cache:cache_permission(CacheKey, UserPermsMatrix),
             throw(?EACCES)
@@ -308,16 +308,28 @@ calculate_user_perms_matrix(CacheKey, UserCtx, FileCtx0, Permission) ->
 
 
 %% @private
-propagate_user_perms_matrix(CacheKey, UserCtx, FileCtx0, RequiredPerms, UserPermsMatrix) ->
+-spec calc_and_check_user_perms_matrix(
+    term(), user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()
+) ->
+    file_ctx:ctx() | no_return().
+calc_and_check_user_perms_matrix(CacheKey, UserCtx, FileCtx0, RequiredPerms, UserPermsMatrix) ->
     case file_ctx:get_active_perms_type(FileCtx0, include_deleted) of
         {acl, FileCtx1} ->
-            calculate_acl_perms(CacheKey, UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix);
+            calc_and_check_user_perms_matrix_from_acl(
+                CacheKey, UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix
+            );
         {posix, FileCtx1} ->
-            calculate_posix_perms(CacheKey, UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix)
+            calc_and_check_user_perms_matrix_from_posix_mode(
+                CacheKey, UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix
+            )
     end.
 
 
 %% @private
+-spec get_perms_denied_by_lack_of_space_privs(
+    user_ctx:ctx(), file_ctx:ctx(), undefined | od_share:id()
+) ->
+    ace:bitmask().
 get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx, undefined) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -336,11 +348,18 @@ get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx, undefined) ->
     end;
 
 get_perms_denied_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
+    % All write permissions are denied in share mode
     ?SPACE_WRITE_PERMS.
 
 
 %% @private
-calculate_posix_perms(CacheKey, UserCtx, FileCtx0, RequiredPerms, {0, 0, DeniedPerms}) ->
+-spec calc_and_check_user_perms_matrix_from_posix_mode(
+    term(), user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()
+) ->
+    file_ctx:ctx() | no_return().
+calc_and_check_user_perms_matrix_from_posix_mode(
+    CacheKey, UserCtx, FileCtx0, RequiredPerms, {0, 0, DeniedPerms}
+) ->
     {#document{value = #file_meta{
         owner = OwnerId,
         mode = Mode
@@ -375,12 +394,18 @@ calculate_posix_perms(CacheKey, UserCtx, FileCtx0, RequiredPerms, {0, 0, DeniedP
         _ -> throw(?EACCES)
     end;
 
-calculate_posix_perms(CacheKey, UserCtx, FileCtx, RequiredPerms, {_, _, _}) ->
-    % Race between reading and clearing cache must have happened - TODO WRITEME
-    calculate_user_perms_matrix(CacheKey, UserCtx, FileCtx, RequiredPerms).
+calc_and_check_user_perms_matrix_from_posix_mode(
+    CacheKey, UserCtx, FileCtx, RequiredPerms, {_, _, _}
+) ->
+    % Race between reading and clearing cache must have happened (user perms matrix
+    % is calculated entirely at once from posix mode so it is not possible for it
+    % to has No > 0 and not be full)
+    calc_and_check_user_perms_matrix(CacheKey, UserCtx, FileCtx, RequiredPerms).
 
 
 %% @private
+-spec has_parent_sticky_bit_set(user_ctx:ctx(), file_ctx:ctx()) ->
+    {boolean(), file_ctx:ctx()}.
 has_parent_sticky_bit_set(UserCtx, FileCtx0) ->
     {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
 
@@ -392,6 +417,7 @@ has_parent_sticky_bit_set(UserCtx, FileCtx0) ->
 
 
 %% @private
+-spec get_posix_allowed_perms(0..7) -> ace:bitmask().
 get_posix_allowed_perms(2#000) ->
     ?POSIX_ALWAYS_GRANTED_PERMS;
 get_posix_allowed_perms(2#001) ->
@@ -411,75 +437,29 @@ get_posix_allowed_perms(2#111) ->
 
 
 %% @private
-calculate_acl_perms(CacheKey, UserCtx, FileCtx0, RequiredPerms, {No, _, _} = UserPermsMatrix) ->
+-spec calc_and_check_user_perms_matrix_from_acl(
+    term(), user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()
+) ->
+    file_ctx:ctx() | no_return().
+calc_and_check_user_perms_matrix_from_acl(
+    CacheKey, UserCtx, FileCtx0, RequiredPerms, {No, _, _} = UserPermsMatrix
+) ->
+    UserDoc = user_ctx:get_user(UserCtx),
     {Acl0, FileCtx1} = file_ctx:get_acl(FileCtx0),
 
-    % TODO handle No > length(Acl) - error
-    Acl1 = lists:nthtail(No, Acl0),
+    try
+        {Result, FileCtx2, NewUserPermsMatrix} = acl:check_acl(
+            lists:nthtail(No, Acl0), UserDoc,
+            RequiredPerms, FileCtx1, UserPermsMatrix
+        ),
+        permissions_cache:cache_permission(CacheKey, NewUserPermsMatrix),
 
-    check_acl(
-        Acl1, user_ctx:get_user(UserCtx), RequiredPerms, FileCtx1,
-        CacheKey, UserPermsMatrix
-    ).
-
-
-%% @private
-check_acl(_Acl, _User, ?no_flags_mask, FileCtx, _CacheKey, _UserPermsMatrix) ->
-    FileCtx;
-check_acl([], _User, _Operations, _FileCtx, CacheKey, {No, AllowedPerms, _DeniedPerms}) ->
-    % After reaching then end of ACL all not explicitly granted perms are denied
-    permissions_cache:cache_permission(CacheKey, {No, AllowedPerms, bnot AllowedPerms}),
-    throw(?EACCES);
-check_acl([Ace | Rest], User, Operations, FileCtx, CacheKey, {No, PrevAllowedPerms, PrevDeniedPerms}) ->
-    case ace:is_applicable(User, FileCtx, Ace) of
-        {true, FileCtx2} ->
-            case check_against(Operations, PrevAllowedPerms, PrevDeniedPerms, Ace) of
-                {allowed, AllAllowedPerms, AllDeniedPerms} ->
-                    permissions_cache:cache_permission(
-                        CacheKey, {No+1, AllAllowedPerms, AllDeniedPerms}
-                    ),
-                    FileCtx2;
-                {inconclusive, LeftoverOperations, AllAllowedPerms, AllDeniedPerms} ->
-                    check_acl(Rest, User, LeftoverOperations, FileCtx2,
-                        CacheKey, {No+1, AllAllowedPerms, AllDeniedPerms}
-                    );
-                {denied, AllAllowedPerms, AllDeniedPerms} ->
-                    permissions_cache:cache_permission(
-                        CacheKey, {No+1, AllAllowedPerms, AllDeniedPerms}
-                    ),
-                    throw(?EACCES)
-            end;
-        {false, FileCtx2} ->
-            check_acl(
-                Rest, User, Operations, FileCtx2,
-                CacheKey, {No+1, PrevAllowedPerms, PrevDeniedPerms}
-            )
-    end.
-
-
-%% @private
-check_against(Operations, PrevAllowedPerms, DeniedPerms, #access_control_entity{
-    acetype = ?allow_mask,
-    acemask = AceMask
-}) ->
-    AllAllowedPerms = PrevAllowedPerms bor (AceMask band (bnot DeniedPerms)),
-
-    case (Operations band AceMask) of
-        Operations ->
-            {allowed, AllAllowedPerms, DeniedPerms};
-        AllowedOperations ->
-            {inconclusive, Operations bxor AllowedOperations, AllAllowedPerms, DeniedPerms}
-    end;
-
-check_against(Operations, AllowedPerms, PrevDeniedPerms, #access_control_entity{
-    acetype = ?deny_mask,
-    acemask = AceMask
-}) ->
-    AllDeniedPerms = PrevDeniedPerms bor (AceMask band (bnot AllowedPerms)),
-
-    case (Operations band AceMask) of
-        ?no_flags_mask ->
-            {inconclusive, Operations, AllowedPerms, AllDeniedPerms};
-        _ ->
-            {denied, AllowedPerms, AllDeniedPerms}
+        case Result of
+            allowed -> FileCtx2;
+            denied -> throw(?EACCES)
+        end
+    catch error:function_clause ->
+        % Race between reading and clearing cache must have happened
+        % (acl must have been replaced if it is shorter then should be)
+        calc_and_check_user_perms_matrix(CacheKey, UserCtx, FileCtx0, RequiredPerms)
     end.
