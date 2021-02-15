@@ -65,7 +65,7 @@ report_started(TraverseId, FileCtx) ->
     {ok, case file_ctx:is_dir(FileCtx) of
         {true, FileCtx1} ->
             {ok, _} = qos_status_model:create(file_ctx:get_space_id_const(FileCtx), TraverseId, 
-                file_ctx:get_uuid_const(FileCtx), start_dir),
+                file_ctx:get_uuid_const(FileCtx), ?QOS_STATUS_TRAVERSE_START_DIR),
             FileCtx1;
         {false, FileCtx1} -> 
             % No need to create qos_status doc for traverse of single file. Because there is no 
@@ -77,7 +77,7 @@ report_started(TraverseId, FileCtx) ->
 -spec report_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
 report_finished(TraverseId, FileCtx) ->
     {Path, _} = file_ctx:get_uuid_based_path(FileCtx),
-    qos_status_links:delete_synced_link(file_ctx:get_space_id_const(FileCtx), 
+    qos_status_links:delete_link(file_ctx:get_space_id_const(FileCtx), 
         ?TRAVERSE_LINKS_KEY(TraverseId), Path).
 
 
@@ -98,7 +98,8 @@ report_next_batch(TraverseId, FileCtx, ChildrenDirs, ChildrenFiles, BatchLastFil
             }
         end),
     lists:foreach(fun(ChildDirUuid) ->
-        qos_status_model:create(file_ctx:get_space_id_const(FileCtx), TraverseId, ChildDirUuid, child_dir)
+        qos_status_model:create(file_ctx:get_space_id_const(FileCtx), TraverseId, ChildDirUuid, 
+            ?QOS_STATUS_TRAVERSE_CHILD_DIR)
     end, ChildrenDirs).
 
 
@@ -198,7 +199,7 @@ is_parent_fulfilled(TraverseId, FileCtx, _Uuid, QosRootFileUuid) ->
 -spec has_traverse_link(traverse:id(), file_ctx:ctx()) -> boolean().
 has_traverse_link(TraverseId, FileCtx) ->
     {Path, _} = file_ctx:get_uuid_based_path(FileCtx),
-    case qos_status_links:get_next_status_links(?TRAVERSE_LINKS_KEY(TraverseId), Path, 1, all) of
+    case qos_status_links:get_next_links(?TRAVERSE_LINKS_KEY(TraverseId), Path, 1, all) of
         {ok, [Path]} -> true;
         _ -> false
     end.
@@ -257,7 +258,7 @@ handle_traverse_finished_for_dir(TraverseId, FileCtx, LinkStrategy) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx1),
     case LinkStrategy of
         add_link ->
-            {ok, _} = qos_status_links:add_synced_link( SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), {Path, Uuid});
+            {ok, _} = qos_status_links:add_link( SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), {Path, Uuid});
         no_link -> ok
     end,
     ok = qos_status_links:delete_all_local_links_with_prefix(

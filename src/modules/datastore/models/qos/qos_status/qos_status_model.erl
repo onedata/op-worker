@@ -29,6 +29,7 @@
 -type diff() :: datastore_doc:diff(record()).
 -type id() :: datastore_doc:key().
 -type record() :: #qos_status{}.
+-type dir_type() :: ?QOS_STATUS_TRAVERSE_CHILD_DIR | ?QOS_STATUS_TRAVERSE_START_DIR.
 
 -export_type([diff/0]).
 
@@ -38,12 +39,12 @@
 %%% API
 %%%===================================================================
 
--spec create(od_space:id(), traverse:id(), file_meta:uuid(), DirType :: start_dir | child_dir) -> 
+-spec create(od_space:id(), traverse:id(), file_meta:uuid(), dir_type()) -> 
     {ok, doc()}.
 create(SpaceId, TraverseId, DirUuid, DirType) ->
     Id = generate_status_doc_id(TraverseId, DirUuid),
     datastore_model:create(?CTX, #document{key = Id, scope = SpaceId,
-        value = #qos_status{is_start_dir = DirType == start_dir}
+        value = #qos_status{is_start_dir = DirType == ?QOS_STATUS_TRAVERSE_START_DIR}
     }).
 
 

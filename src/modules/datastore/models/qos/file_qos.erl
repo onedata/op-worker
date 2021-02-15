@@ -116,53 +116,6 @@ get_effective(FileDoc) ->
     get_effective(FileDoc, undefined).
 
 
-get_effective(FileDoc, OriginalParentCtx) ->
-    Callback = fun([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
-        case fslogic_uuid:is_trash_dir_uuid(Uuid) of
-            true ->
-                % qos cannot be set on trash directory
-                {ok, #effective_file_qos{in_trash = true}, CalculationInfo};
-            false ->
-                case datastore_model:get(?CTX, Uuid) of
-                    ?ERROR_NOT_FOUND ->
-                        {ok, ParentEffQos, CalculationInfo};
-                    {ok, #document{value = FileQos}} ->
-                        EffQos = merge_file_qos(ParentEffQos, FileQos),
-                        {ok, EffQos, CalculationInfo}
-                end
-        end
-    end,
-    get_effective(FileDoc, Callback, OriginalParentCtx).
-
-get_effective(#document{scope = SpaceId} = FileDoc, Callback, undefined) ->
-    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheTableName, FileDoc, Callback, [], []) of
-        {ok, undefined, _} ->
-            undefined;
-        {ok, FinalEffQos, _} ->
-            {ok, FinalEffQos};
-        {error, {file_meta_missing, _MissingUuid}} = Error ->
-            % documents are not synchronized yet
-            Error
-    end;
-get_effective(#document{scope = SpaceId} = FileDoc, Callback, OriginalParentCtx) ->
-    %% TODO VFS-7133 take original parent uuid from file_meta doc
-    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
-    {ParentDoc, _} = file_ctx:get_file_doc(OriginalParentCtx),
-    case effective_value:get_or_calculate(CacheTableName, FileDoc, Callback, [], []) of
-        {ok, undefined, _} ->
-            get_effective(ParentDoc);
-        {ok, FinalEffQos, _} ->
-            case get_effective(ParentDoc) of
-                undefined -> {ok, FinalEffQos};
-                {ok, OriginalParentEffQos} -> {ok, merge_file_qos(OriginalParentEffQos, FinalEffQos)}
-            end;
-        {error, {file_meta_missing, _MissingUuid}} = Error ->
-            % documents are not synchronized yet
-            Error
-    end.
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv
@@ -373,6 +326,59 @@ get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec get_effective(file_meta:doc(), undefined | file_ctx:ctx()) ->
+    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
+get_effective(FileDoc, OriginalParentCtx) ->
+    Callback = fun([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
+        case fslogic_uuid:is_trash_dir_uuid(Uuid) of
+            true ->
+                % qos cannot be set on trash directory
+                {ok, #effective_file_qos{in_trash = true}, CalculationInfo};
+            false ->
+                case datastore_model:get(?CTX, Uuid) of
+                    ?ERROR_NOT_FOUND ->
+                        {ok, ParentEffQos, CalculationInfo};
+                    {ok, #document{value = FileQos}} ->
+                        EffQos = merge_file_qos(ParentEffQos, FileQos),
+                        {ok, EffQos, CalculationInfo}
+                end
+        end
+    end,
+    get_effective(FileDoc, Callback, OriginalParentCtx).
+
+%% @private
+-spec get_effective(file_meta:doc(), bounded_cache:callback(), undefined | file_ctx:ctx()) ->
+    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
+get_effective(#document{scope = SpaceId} = FileDoc, Callback, undefined) ->
+    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
+    case effective_value:get_or_calculate(CacheTableName, FileDoc, Callback, [], []) of
+        {ok, undefined, _} ->
+            undefined;
+        {ok, FinalEffQos, _} ->
+            {ok, FinalEffQos};
+        {error, {file_meta_missing, _MissingUuid}} = Error ->
+            % documents are not synchronized yet
+            Error
+    end;
+get_effective(#document{scope = SpaceId} = FileDoc, Callback, OriginalParentCtx) ->
+    %% TODO VFS-7133 take original parent uuid from file_meta doc
+    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
+    {ParentDoc, _} = file_ctx:get_file_doc(OriginalParentCtx),
+    case effective_value:get_or_calculate(CacheTableName, FileDoc, Callback, [], []) of
+        {ok, undefined, _} ->
+            get_effective(ParentDoc);
+        {ok, FinalEffQos, _} ->
+            case get_effective(ParentDoc) of
+                undefined -> {ok, FinalEffQos};
+                {ok, OriginalParentEffQos} -> {ok, merge_file_qos(OriginalParentEffQos, FinalEffQos)}
+            end;
+        {error, {file_meta_missing, _MissingUuid}} = Error ->
+            % documents are not synchronized yet
+            Error
+    end.
+
 
 -spec file_qos_to_eff_file_qos(record()) -> effective_file_qos().
 file_qos_to_eff_file_qos(#file_qos{

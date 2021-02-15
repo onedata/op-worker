@@ -40,7 +40,7 @@
 -spec check(file_ctx:ctx(), qos_entry:doc()) -> boolean().
 check(FileCtx, #document{key = QosEntryId}) ->
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
-    case qos_status_links:get_next_status_links(?RECONCILE_LINKS_KEY(QosEntryId), UuidBasedPath, 1, all) of
+    case qos_status_links:get_next_links(?RECONCILE_LINKS_KEY(QosEntryId), UuidBasedPath, 1, all) of
         {ok, []} -> true;
         {ok, [Path]} -> not str_utils:binary_starts_with(Path, UuidBasedPath)
     end.
@@ -53,8 +53,8 @@ report_started(TraverseId, FileCtx, QosEntries) ->
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
     Link = {?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId), TraverseId},
     lists:foreach(fun(QosEntryId) ->
-        {ok, _} = qos_status_links:add_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link),
-        ok = qos_status_links:delete_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId),
+        {ok, _} = qos_status_links:add_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link),
+        ok = qos_status_links:delete_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId),
             ?FAILED_TRANSFER_LINK_NAME(UuidBasedPath))
     end, QosEntries).
 
@@ -73,7 +73,7 @@ report_finished(TraverseId, FileCtx) ->
     end,
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
     lists:foreach(fun(QosEntryId) ->
-        ok = qos_status_links:delete_synced_link(
+        ok = qos_status_links:delete_link(
             file_ctx:get_space_id_const(FileCtx), 
             ?RECONCILE_LINKS_KEY(QosEntryId),
             ?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId))
@@ -88,7 +88,7 @@ report_file_transfer_failure(FileCtx, QosEntries) ->
     Link = {?FAILED_TRANSFER_LINK_NAME(UuidBasedPath), <<"failed_transfer">>},
     lists:foreach(fun(QosEntryId) ->
         ok = ?extract_ok(?ok_if_exists(
-            qos_status_links:add_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link)))
+            qos_status_links:add_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link)))
     end, QosEntries),
     ok = ?extract_ok(?ok_if_exists(
         qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_uuid_const(FileCtx)))).
