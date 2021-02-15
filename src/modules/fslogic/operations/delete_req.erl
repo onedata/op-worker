@@ -52,11 +52,11 @@ delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
     {FileParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
     FileCtx3 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx2,
-        [traverse_ancestors, ?delete, ?list_container]
+        [traverse_ancestors, ?PERMISSIONS(?delete_mask bor ?list_container_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, FileParentCtx,
-        [traverse_ancestors, ?delete_subcontainer]
+        [traverse_ancestors, ?PERMISSIONS(?delete_child_mask)]
     ),
     delete_using_trash_insecure(UserCtx, FileCtx3, EmitEvents).
 
@@ -76,11 +76,11 @@ delete_dir(UserCtx, FileCtx0, Silent) ->
     {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors, ?delete, ?list_container]
+        [traverse_ancestors, ?PERMISSIONS(?delete_mask bor ?list_container_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, FileParentCtx,
-        [traverse_ancestors, ?delete_subcontainer]
+        [traverse_ancestors, ?PERMISSIONS(?delete_child_mask)]
     ),
     check_if_empty_and_delete(UserCtx, FileCtx2, Silent).
 
@@ -96,11 +96,11 @@ delete_file(UserCtx, FileCtx0, Silent) ->
     {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors, ?delete]
+        [traverse_ancestors, ?PERMISSIONS(?delete_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, FileParentCtx,
-        [traverse_ancestors, ?delete_object]
+        [traverse_ancestors, ?PERMISSIONS(?delete_child_mask)]
     ),
     delete_insecure(UserCtx, FileCtx2, Silent).
 

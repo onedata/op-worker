@@ -29,7 +29,7 @@
 -export([get/2, get_protected_data/2]).
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
--export([has_eff_privilege/3, has_eff_privileges/3]).
+-export([has_eff_privilege/3, has_eff_privileges/3, get_eff_privileges/2]).
 -export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
     get_local_supporting_storage/1, get_storages_by_provider/2, get_all_storage_ids/1]).
@@ -137,6 +137,22 @@ has_eff_privileges(SpaceId, UserId, Privileges) ->
             has_eff_privileges(SpaceDoc, UserId, Privileges);
         _ ->
             false
+    end.
+
+
+-spec get_eff_privileges(od_space:doc() | od_space:id(), od_user:id()) ->
+    {ok, [privileges:space_privilege()]} | errors:error().
+get_eff_privileges(#document{value = #od_space{eff_users = EffUsers}} = SpaceDoc, UserId) ->
+    case is_owner(SpaceDoc, UserId) of
+        true -> {ok, privileges:space_privileges()};
+        false -> {ok, maps:get(UserId, EffUsers, [])}
+    end;
+get_eff_privileges(SpaceId, UserId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{} = SpaceDoc} ->
+            get_eff_privileges(SpaceDoc, UserId);
+        {error, _} = Error ->
+            Error
     end.
 
 

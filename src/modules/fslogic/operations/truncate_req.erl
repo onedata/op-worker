@@ -34,7 +34,7 @@
 truncate(UserCtx, FileCtx0, Size) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_object]
+        [traverse_ancestors, ?PERMISSIONS(?write_object_mask)]
     ),
     FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx1),
     truncate_insecure(UserCtx, FileCtx2, Size, true).

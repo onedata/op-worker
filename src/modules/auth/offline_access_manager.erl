@@ -111,11 +111,13 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
         } = OfflineCredentials} when Now =< ValidUntil ->
             case Now > NextRenewalThreshold of
                 true ->
+                    ?error("~p:~p  JOB: ~p, ~nNOW: ~p, ~nVALID UNTIL: ~p refreshing token", [?MODULE, ?LINE, OfflineJobId, Now, ValidUntil]),
                     case acquire_offline_credentials(
                         OfflineJobId, ?SUB(user, UserId),
                         to_token_credentials(OfflineCredentials)
                     ) of
                         {ok, NewOfflineCredentials} ->
+                            ?error("~p:~p  JOB: ~p, ~nNOW: ~p, ~nVALID UNTIL: ~p token refreshed", [?MODULE, ?LINE, OfflineJobId, Now, ValidUntil]),
                             {ok, NewOfflineCredentials};
                         {error, _} = OzConnError when
                             OzConnError == ?ERROR_TIMEOUT;
@@ -123,15 +125,19 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
                             OzConnError == ?ERROR_TEMPORARY_FAILURE;
                             OzConnError == ?ERROR_INTERNAL_SERVER_ERROR
                         ->
+                            ?error("~p:~p  JOB: ~p, ~nNOW: ~p, ~nVALID UNTIL: ~p token refresh error - backoff", [?MODULE, ?LINE, OfflineJobId, Now, ValidUntil]),
                             update_next_renewal_backoff(OfflineJobId, Now),
                             {ok, OfflineCredentials};
                         {error, _} = TokenError ->
+                            ?error("~p:~p  JOB: ~p, ~nNOW: ~p, ~nVALID UNTIL: ~p token refresh error - throw", [?MODULE, ?LINE, OfflineJobId, Now, ValidUntil]),
                             TokenError
                     end;
                 false ->
+                    ?error("~p:~p  JOB: ~p, ~nNOW: ~p, ~nVALID UNTIL: ~p no token refresh - next refresh: ~p", [?MODULE, ?LINE, OfflineJobId, Now, ValidUntil, NextRenewalThreshold]),
                     {ok, OfflineCredentials}
             end;
         {ok, #offline_access_credentials{valid_until = ValidUntil}} ->
+            ?error("~p:~p  JOB: ~p, ~nNOW: ~p, ~nVALID UNTIL: ~p token expired", [?MODULE, ?LINE, OfflineJobId, Now, ValidUntil]),
             ?ERROR_TOKEN_CAVEAT_UNVERIFIED(#cv_time{valid_until = ValidUntil});
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND

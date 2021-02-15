@@ -60,7 +60,7 @@ enqueue_data_transfer(FileCtx, TransferParams) ->
 %%--------------------------------------------------------------------
 -spec required_permissions() -> [data_access_rights:requirement()].
 required_permissions() ->
-    [traverse_ancestors, ?write_object].
+    [traverse_ancestors, ?PERMISSIONS(?write_object_mask)].
 
 %%--------------------------------------------------------------------
 %% @doc

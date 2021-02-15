@@ -150,7 +150,7 @@ get_file_distribution(UserCtx, FileCtx0) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors, ?read_metadata]
+        [traverse_ancestors, ?PERMISSIONS(?read_metadata_mask)]
     ),
     get_file_distribution_insecure(UserCtx, FileCtx2).
 

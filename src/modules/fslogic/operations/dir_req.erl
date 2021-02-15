@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
@@ -47,7 +48,7 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
     file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [traverse_ancestors, ?traverse_container, ?add_subcontainer]
+        [traverse_ancestors, ?PERMISSIONS(?traverse_container_mask bor ?add_subcontainer_mask)]
     ),
     mkdir_insecure(UserCtx, ParentFileCtx1, Name, Mode).
 
@@ -156,7 +157,7 @@ get_children(UserCtx, FileCtx0, Offset, Limit, EncodedToken, StartId, StartTree)
 get_children_ctxs(UserCtx, FileCtx0, Offset, Limit, Token, StartId, StartTree) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     PermsToCheck = case IsDir of
-        true -> [traverse_ancestors, ?list_container];
+        true -> [traverse_ancestors, ?PERMISSIONS(?list_container_mask)];
         false -> [traverse_ancestors]
     end,
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
@@ -183,7 +184,7 @@ get_children_ctxs(UserCtx, FileCtx0, Offset, Limit, Token, StartId, StartTree) -
 get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token, IncludeReplicationStatus) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     PermsToCheck = case IsDir of
-        true -> [traverse_ancestors, ?traverse_container, ?list_container];
+        true -> [traverse_ancestors, ?PERMISSIONS(?traverse_container_mask bor ?list_container_mask)];
         false -> [traverse_ancestors]
     end,
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
@@ -209,7 +210,7 @@ get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token, IncludeReplicationSt
 get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     PermsToCheck = case IsDir of
-        true -> [traverse_ancestors, ?traverse_container, ?list_container];
+        true -> [traverse_ancestors, ?PERMISSIONS(?traverse_container_mask bor ?list_container_mask)];
         false -> [traverse_ancestors]
     end,
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(

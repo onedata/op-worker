@@ -174,7 +174,7 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
 get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus) ->
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [traverse_ancestors, ?traverse_container]
+        [traverse_ancestors, ?PERMISSIONS(?traverse_container_mask)]
     ),
     get_child_attr_insecure(UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus).
 
@@ -205,7 +205,7 @@ chmod(UserCtx, FileCtx0, Mode) ->
 update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, {owner, 'or', ?write_attributes}]
+        [traverse_ancestors, {owner, 'or', ?PERMISSIONS(?write_attributes_mask)}]
     ),
     update_times_insecure(UserCtx, FileCtx1, ATime, MTime, CTime).
 

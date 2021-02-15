@@ -20,6 +20,7 @@
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -74,7 +75,7 @@ get(UserCtx, FileCtx, Query, Inherited) ->
 set(UserCtx, FileCtx0, Json, Query, Create, Replace) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_metadata]
+        [traverse_ancestors, ?PERMISSIONS(?write_metadata_mask)]
     ),
     set_insecure(FileCtx1, Json, Query, Create, Replace).
 
@@ -83,7 +84,7 @@ set(UserCtx, FileCtx0, Json, Query, Create, Replace) ->
 remove(UserCtx, FileCtx) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx,
-        [traverse_ancestors, ?write_metadata]
+        [traverse_ancestors, ?PERMISSIONS(?write_metadata_mask)]
     ),
     FileUuid = file_ctx:get_uuid_const(FileCtx1),
     custom_metadata:remove_xattr(FileUuid, ?JSON_METADATA_KEY).
@@ -123,7 +124,7 @@ gather_ancestors_json_metadata(UserCtx, FileCtx0, GatheredMetadata) ->
 get_direct_json_metadata(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_metadata]
+        [traverse_ancestors, ?PERMISSIONS(?read_metadata_mask)]
     ),
     FileUuid = file_ctx:get_uuid_const(FileCtx1),
     custom_metadata:get_xattr(FileUuid, ?JSON_METADATA_KEY).

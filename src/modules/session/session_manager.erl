@@ -263,24 +263,30 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials) ->
 ) ->
     {ok, SessId} | error() when SessId :: session:id().
 reuse_or_create_session(SessId, SessType, Identity, Credentials, ProxyVia) ->
-    Caveats = case Credentials of
-        % Providers sessions are not constrained by any caveats
-        undefined ->
-            [];
-        _ ->
-            {ok, SessionCaveats} = auth_manager:get_caveats(Credentials),
-            SessionCaveats
-    end,
-
-    case data_constraints:get(Caveats) of
-        {ok, DataConstraints} ->
-            reuse_or_create_session(
-                SessId, SessType, Identity, Credentials,
-                DataConstraints, ProxyVia
-            );
-        {error, invalid_constraints} ->
-            {error, invalid_token}
+    case get_caveats(Credentials) of
+        {ok, Caveats} ->
+            case data_constraints:get(Caveats) of
+                {ok, DataConstraints} ->
+                    reuse_or_create_session(
+                        SessId, SessType, Identity, Credentials,
+                        DataConstraints, ProxyVia
+                    );
+                {error, invalid_constraints} ->
+                    {error, invalid_token}
+            end;
+        {error, _} = Error ->
+            Error
     end.
+
+
+%% @private
+-spec get_caveats(undefined | auth_manager:credentials()) ->
+    {ok, [caveats:caveat()]} | errors:error().
+get_caveats(undefined) ->
+    % Providers sessions are not constrained by any caveats
+    {ok, []};
+get_caveats(Credentials) ->
+    auth_manager:get_caveats(Credentials).
 
 
 %%--------------------------------------------------------------------

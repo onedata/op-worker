@@ -80,4 +80,6 @@
 % Trash associated macros
 -define(TRASH_DIR_NAME, <<".trash">>).
 
+-define(PERMISSIONS(__BITMASK), {permissions, __BITMASK}).
+
 -endif.
