@@ -89,9 +89,9 @@
     % guaranteed keys
     is_last := boolean(),
     % optional keys
-    token => datastore_links_iter:token(),
+    token => token(),
     last_name => link_name(),
-    last_tree => od_provider:id()
+    last_tree => last_name()
 }.
 %% @formatter:on
 

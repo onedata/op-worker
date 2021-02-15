@@ -573,13 +573,13 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
-    {ok, Children, _} = ?check(lfm:get_children(
+    {ok, Children, #{is_last := IsLast}} = ?check(lfm:get_children(
         SessionId, {guid, FileGuid}, #{
             offset => Offset,
             size => Limit,
             last_name => StartId
     })),
-    {ok, value, Children};
+    {ok, value, {Children, IsLast}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -587,10 +587,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
-    {ok, ChildrenDetails, _} = ?check(lfm:get_children_details(
+    {ok, ChildrenDetails, #{is_last := IsLast}} = ?check(lfm:get_children_details(
         SessionId, {guid, FileGuid}, #{offset => Offset, size => Limit, last_name => StartId}
     )),
-    {ok, value, ChildrenDetails};
+    {ok, value, {ChildrenDetails, IsLast}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, scope = Sc}}, _) ->
     RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
