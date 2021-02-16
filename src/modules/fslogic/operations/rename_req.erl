@@ -16,10 +16,10 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/fuse_messages.hrl").
 -include("modules/storage/helpers/helpers.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 
 %% API
 -export([rename/4]).

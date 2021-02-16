@@ -12,8 +12,8 @@
 -module(truncate_req).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/acl.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

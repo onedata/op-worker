@@ -13,8 +13,8 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -define(ERROR(Error), throw({error, Error})).

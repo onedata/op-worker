@@ -14,10 +14,10 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 %% API

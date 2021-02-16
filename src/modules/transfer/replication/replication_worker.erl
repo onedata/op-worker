@@ -16,9 +16,9 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([enqueue_data_transfer/2]).

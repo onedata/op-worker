@@ -12,9 +12,9 @@
 -module(permission_req).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([check_perms/3]).

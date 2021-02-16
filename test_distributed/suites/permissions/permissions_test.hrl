@@ -12,7 +12,7 @@
 -ifndef(LFM_PERMISSIONS_TEST_HRL).
 -define(LFM_PERMISSIONS_TEST_HRL, 1).
 
--include_lib("ctool/include/posix/acl.hrl").
+-include("modules/fslogic/acl.hrl").
 
 -define(ALL_PERMS, [
     ?read_object,

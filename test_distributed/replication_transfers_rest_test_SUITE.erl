@@ -12,11 +12,11 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API

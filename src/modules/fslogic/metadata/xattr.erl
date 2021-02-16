@@ -12,10 +12,10 @@
 -module(xattr).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([list/4, get/4, set/6, remove/3]).

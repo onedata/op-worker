@@ -12,9 +12,9 @@
 -module(delete_req).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([delete/3, delete_using_trash/3]).

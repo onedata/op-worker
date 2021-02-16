@@ -14,8 +14,8 @@
 
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

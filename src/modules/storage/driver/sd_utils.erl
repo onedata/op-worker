@@ -19,12 +19,12 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

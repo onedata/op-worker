@@ -13,10 +13,10 @@
 -module(acl_req).
 -author("Tomasz Lichon").
 
--include("proto/oneprovider/provider_messages.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 %% API
 -export([get_acl/2, set_acl/3, remove_acl/2]).

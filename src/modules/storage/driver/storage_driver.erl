@@ -13,11 +13,11 @@
 -module(storage_driver).
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([new_handle/2, new_handle/3, new_handle/5, new_handle/6,

@@ -20,9 +20,9 @@
 -behaviour(middleware_plugin).
 
 -include("middleware/middleware.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/logging.hrl").
 
