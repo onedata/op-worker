@@ -75,11 +75,11 @@
 -type list_opts() :: #{
     % required keys
     size := size(),
-    % optional keys
     % one of: token, offset, last_name is required so that we know were to start listing
     token => token(),
     offset => offset(),
     last_name => last_name(),
+    % optional keys
     last_tree => last_tree()
 }.
 
@@ -205,7 +205,7 @@ list_whitelisted(ParentUuid, Opts, ChildrenWhiteList0) ->
         case NonNegOffset < length(ValidLinks) of
             true ->
                 RequestedLinks = lists:sublist(ValidLinks, NonNegOffset + 1, Size),
-                {ok, tag_ambiguous(RequestedLinks), #{is_last => length(RequestedLinks) < Size}};
+                {ok, tag_ambiguous(RequestedLinks), #{is_last => NonNegOffset + Size >= length(ValidLinks)}};
             false ->
                 {ok, [], #{is_last => true}}
         end
@@ -292,7 +292,7 @@ prepare_list_result(ReversedLinks, TokenOrUndefined, ListedLessThanRequested) ->
     ExtendedInfo = case TokenOrUndefined of
         #link_token{} = Token -> #{
             token => encode_token(Token),
-            is_last => ListedLessThanRequested orelse Token#link_token.is_last
+            is_last => Token#link_token.is_last
         };
         undefined -> #{
             is_last => ListedLessThanRequested

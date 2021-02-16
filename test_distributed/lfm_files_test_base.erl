@@ -1285,6 +1285,10 @@ lfm_cp_empty_dir(Config) ->
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath2})).
 
 lfm_cp_dir(Config) ->
+    % In this test, environment variable `ls_batch_size`,
+    % which is responsible for size of children batches used when listing a directory,
+    % is decreased to ensure that copying directory, which has more children
+    % than size of a single batch, is performed correctly.
     [W | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} =
