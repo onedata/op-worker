@@ -97,7 +97,8 @@ all() -> ?ALL([
     qos_set_on_space_directory_does_not_affect_files_in_trash,
     files_from_trash_are_not_reimported,
     deletion_lasting_for_4_days_should_succeed,
-    deletion_lasting_for_40_days_should_succeed,
+    % TODO VFS-7338 fix clock synchronization mechanism
+    % deletion_lasting_for_40_days_should_succeed,
     deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time
 ]).
 
