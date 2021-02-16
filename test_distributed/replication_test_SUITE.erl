@@ -444,6 +444,8 @@ read_should_synchronize_file(Config) ->
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
 
+    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
+
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
@@ -490,8 +492,6 @@ read_should_synchronize_file(Config) ->
             {ok, ref}
         end
     ),
-
-    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     % when
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
@@ -1317,6 +1317,9 @@ get_storage_file_id_by_uuid(Worker, FileUuid) ->
 % Given that this just overrides the mock from initializer, no need to unmock
 % (this will be done in test cleanup).
 override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
+    UserSpaces = ?config({spaces, <<"user1">>}, Config),
+    SpaceName = ?config(SpaceId, UserSpaces),
+
     test_utils:mock_unload(Workers, [space_logic]),
     test_utils:mock_new(Workers, space_logic, []),
     test_utils:mock_expect(Workers, space_logic, is_owner, fun(_, _) -> false end),
@@ -1327,6 +1330,14 @@ override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
     test_utils:mock_expect(Workers, space_logic, has_eff_privilege,
         fun(SpId, UsId, Privilege) ->
             SpId =:= SpaceId andalso UsId =:= <<"user1">> andalso lists:member(Privilege, privileges:space_privileges())
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_eff_privileges,
+        fun(_SpId, _UsId) ->
+            {ok, privileges:space_privileges()}
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_name,
+        fun(_, SpId) when SpId =:= SpaceId ->
+            {ok, SpaceName}
         end),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids,
         fun(_Client, SpId) when SpId =:= SpaceId ->

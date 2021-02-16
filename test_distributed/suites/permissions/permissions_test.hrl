@@ -127,12 +127,14 @@
     requires_traverse_ancestors = true :: boolean(),
 
     % Tells which space privileges are needed to perform `operation`
-    % in case of posix access mode
-    posix_requires_space_privs = [] :: owner | [privileges:space_privilege()],
+    % in case of posix access mode.
+    posix_requires_space_privs = [] ::
+        {owner, [privileges:space_privilege()]} |  % only owner with specified privs can perform operation
+        [privileges:space_privilege()],            % any user with specified privs can perform
 
     % Tells which space privileges are needed to perform `operation`
     % in case of acl access mode
-    acl_requires_space_privs = [] :: owner | [privileges:space_privilege()],
+    acl_requires_space_privs = [] :: [privileges:space_privilege()],
 
     % Description of environment (files and permissions on them) needed to
     % perform `operation`.
