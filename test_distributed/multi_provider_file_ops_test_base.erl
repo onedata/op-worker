@@ -21,7 +21,7 @@
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("modules/auth/acl.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API

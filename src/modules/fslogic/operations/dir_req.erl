@@ -12,9 +12,9 @@
 -module(dir_req).
 -author("Tomasz Lichon").
 
+-include("modules/auth/acl.hrl").
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API

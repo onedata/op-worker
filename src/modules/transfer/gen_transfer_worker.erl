@@ -22,8 +22,8 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/auth/acl.hrl").
 -include("modules/datastore/transfer.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% gen_server callbacks
@@ -153,7 +153,7 @@ handle_cast(?TRANSFER_DATA_REQ(FileCtx, Params, Retries, NextRetryTimestamp), St
                     % todo VFS-4218 currently we ignore this case
                     {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, cancelled} ->
-                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
+                    {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId);
                 {error, already_ended} ->
                     {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, _Reason} ->

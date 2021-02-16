@@ -22,7 +22,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("modules/auth/acl.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
