@@ -15,11 +15,11 @@
 -include("distribution_assert.hrl").
 -include("lfm_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/auth/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).

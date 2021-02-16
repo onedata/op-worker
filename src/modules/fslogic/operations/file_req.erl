@@ -12,9 +12,9 @@
 -module(file_req).
 -author("Tomasz Lichon").
 
--include("proto/oneclient/fuse_messages.hrl").
+-include("modules/auth/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

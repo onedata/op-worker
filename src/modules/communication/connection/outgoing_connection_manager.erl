@@ -1,27 +1,20 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible for
-%%% management of connections for outgoing provider session. It starts
-%%% such connections, monitors them and restarts if they fail due to
-%%% reasons other than timeout.
-%%% Connection is always randomly selected for sending msg it is unlikely
-%%% that for active session any of the connections will be idle for more
-%%% than 24h (connection timeout). That is why when any connection dies out
-%%% due to timeout entire session is terminated (session is inactive).
-%%% Failed connection attempts are repeated after a backoff period that grows
-%%% with every failure. Mentioned period is reset every time that any
-%%% connection reports successful handshake.
-%%% If backoff reaches ?MAX_RENEWAL_INTERVAL and manager still fails to
-%%% connect to at least one peer host, then it is assumed that the peer is
-%%% down/offline and the session is terminated.
-%%% Next time any process tries to send a msg to the peer, it will first call
-%%% `session_connections:ensure_connected` to create the session again.
+%%% management of connections for outgoing provider session, which includes:
+%%% - (re)starting connections to peer hosts. In case of a connection attempt
+%%%   failure next retry will be performed after a backoff period that grows
+%%%   with every such failure. If backoff reaches ?MAX_RENEWAL_INTERVAL and
+%%%   manager still fails to connect to at least one peer host, then it is
+%%%   assumed that the peer is down/offline and the session is terminated.
+%%%   Otherwise, backoff period is reset on every successful handshake.
+%%% - session termination in case of any connection timeout (stale session).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(outgoing_connection_manager).
@@ -29,10 +22,8 @@
 
 -behaviour(gen_server).
 
--include("timeouts.hrl").
--include("modules/communication/connection.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
 %% API
@@ -49,29 +40,40 @@
 ]).
 
 % Definitions of renewal intervals for provider connections.
--define(INITIAL_RENEWAL_INTERVAL, 2000).  % 2 seconds
--define(RENEWAL_INTERVAL_BACKOFF_RATE, 1.2).
--define(MAX_RENEWAL_INTERVAL, 180000).  % 3 minutes
+-define(MIN_RENEWAL_INTERVAL, op_worker:get_env(
+    conn_manager_min_backoff_interval, 2000  % 2 seconds
+)).
+-define(MAX_RENEWAL_INTERVAL, op_worker:get_env(
+    conn_manager_max_backoff_interval, 180000  % 3 minutes
+)).
+-define(RENEWAL_INTERVAL_BACKOFF_RATE, op_worker:get_env(
+    conn_manager_backoff_interval_rate, 1.2
+)).
 
 % how often logs appear when waiting for peer provider connection
 -define(CONNECTION_AWAIT_LOG_INTERVAL_SEC, 21600).  % 6 hours
 
 -define(RENEW_CONNECTIONS_REQ, renew_connections).
--define(SUCCESSFUL_HANDSHAKE, handshake_succeeded).
+-define(HANDSHAKE_SUCCEEDED(__PID), {handshake_succeeded, __PID}).
 
+
+% provider's ip address or domain
+-type host() :: binary().
 
 -record(state, {
     session_id :: session:id(),
     peer_id :: od_provider:id(),
-    connections = #{} :: #{pid() => Hostname :: binary()},
+
+    connecting = #{} :: #{pid() => host()},
+    connected = #{} :: #{pid() => host()},
 
     renewal_timer = undefined :: undefined | reference(),
-    renewal_interval = ?INITIAL_RENEWAL_INTERVAL :: pos_integer(),
+    renewal_interval = 0 :: non_neg_integer(),
 
     is_stopping = false :: boolean()
 }).
-
 -type state() :: #state{}.
+
 -type error() :: {error, Reason :: term()}.
 
 
@@ -80,24 +82,14 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the outgoing connection_manager server for specified session.
-%% @end
-%%--------------------------------------------------------------------
 -spec start_link(session:id()) -> {ok, pid()} | ignore | error().
 start_link(SessId) ->
     gen_server:start_link(?MODULE, [SessId], []).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Informs connection manager about successful handshake.
-%% @end
-%%--------------------------------------------------------------------
 -spec report_successful_handshake(pid()) -> ok.
 report_successful_handshake(ConnManager) ->
-    gen_server:cast(ConnManager, ?SUCCESSFUL_HANDSHAKE).
+    gen_server:cast(ConnManager, ?HANDSHAKE_SUCCEEDED(self())).
 
 
 %%%===================================================================
@@ -111,9 +103,7 @@ report_successful_handshake(ConnManager) ->
 %% Initializes the server.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term()) ->
-    {ok, state()} | {ok, state(), timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore.
+-spec init(Args :: term()) -> {ok, state()}.
 init([SessionId]) ->
     process_flag(trap_exit, true),
     self() ! ?RENEW_CONNECTIONS_REQ,
@@ -135,12 +125,7 @@ init([SessionId]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
-    {reply, Reply :: term(), NewState :: state()} |
-    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
-    {stop, Reason :: term(), NewState :: state()}.
+    {reply, Reply :: term(), NewState :: state()}.
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
     {reply, {error, wrong_request}, State}.
@@ -153,11 +138,23 @@ handle_call(Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), state()) ->
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
-handle_cast(?SUCCESSFUL_HANDSHAKE, State) ->
-    {noreply, State#state{renewal_interval = ?INITIAL_RENEWAL_INTERVAL}};
+    {noreply, NewState :: state()}.
+handle_cast(?HANDSHAKE_SUCCEEDED(ConnPid), #state{
+    connecting = Connecting,
+    connected = Connected
+} = State) ->
+    NewState = case maps:take(ConnPid, Connecting) of
+        {Host, LeftoverConnecting} ->
+            State#state{
+                connecting = LeftoverConnecting,
+                connected = Connected#{ConnPid => Host},
+                renewal_interval = 0
+            };
+        error ->
+            State
+    end,
+    {noreply, NewState};
+
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -170,50 +167,44 @@ handle_cast(Request, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout() | term(), state()) ->
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
+    {noreply, NewState :: state()}.
 handle_info(_, #state{is_stopping = true} = State) ->
     {noreply, State};
-handle_info(?RENEW_CONNECTIONS_REQ, #state{session_id = SessionId} = State) ->
-    case renew_connections(State#state{renewal_timer = undefined}) of
-        {ok, NewState} ->
-            {noreply, NewState};
-        {error, peer_offline} ->
-            terminate_session(SessionId, State)
-    end;
 
-handle_info({'EXIT', _ConnPid, timeout}, #state{session_id = SessionId} = State) ->
-    terminate_session(SessionId, State);
+handle_info(?RENEW_CONNECTIONS_REQ, State0) ->
+    {noreply, renew_connections(State0#state{renewal_timer = undefined})};
 
-handle_info({'EXIT', ConnPid, connection_attempt_failed}, #state{
-    connections = AllConnections,
-    renewal_interval = Interval,
-    session_id = SessionId
+handle_info({'EXIT', _ConnPid, timeout}, State) ->
+    {noreply, terminate_session(State)};
+
+handle_info({'EXIT', ConnPid, _Reason}, #state{
+    connecting = Connecting,
+    connected = Connected
 } = State) ->
-    WorkingConnections = maps:remove(ConnPid, AllConnections),
-    AfterLastConnectionRetry = Interval > ?MAX_RENEWAL_INTERVAL,
-
-    case {map_size(WorkingConnections), AfterLastConnectionRetry} of
-        {0, true} ->
-            terminate_session(SessionId, State);
-        _ ->
-            NewState = State#state{connections = WorkingConnections},
-            {noreply, schedule_next_renewal(NewState)}
-    end;
-
-handle_info({'EXIT', ConnPid, _Reason}, #state{connections = Cons, session_id = SessionId} = State0) ->
-    State1 = State0#state{connections = maps:remove(ConnPid, Cons)},
-    case renew_connections(State1) of
-        {ok, State2} ->
-            {noreply, State2};
-        {error, peer_offline} ->
-            terminate_session(SessionId, State1)
+    case maps:take(ConnPid, Connecting) of
+        {_Host, LeftoverConnecting} ->
+            handle_failed_connection_attempt(State#state{
+                connecting = LeftoverConnecting
+            });
+        error ->
+            {noreply, renew_connections(State#state{
+                connected = maps:remove(ConnPid, Connected)
+            })}
     end;
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
+
+
+%% @private
+-spec handle_failed_connection_attempt(state()) -> {noreply, state()}.
+handle_failed_connection_attempt(State) ->
+    NewState = case failed_connection_attempts_limit_exceeded(State) of
+        true -> terminate_session(State);
+        false -> schedule_next_renewal(State)
+    end,
+    {noreply, NewState}.
 
 
 %%--------------------------------------------------------------------
@@ -225,8 +216,8 @@ handle_info(Info, State) ->
 %% with Reason. The return value is ignored.
 %% @end
 %%--------------------------------------------------------------------
--spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    state()) -> term().
+-spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), state()) ->
+    term().
 terminate(Reason, #state{session_id = SessionId} = State) ->
     ?log_terminate(Reason, State),
     session_manager:clean_terminated_session(SessionId).
@@ -248,13 +239,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-%% @private
--spec terminate_session(session:id(), state()) -> {noreply, state()}.
-terminate_session(SessionId, State) ->
-    spawn(fun() ->
-        session_manager:terminate_session(SessionId)
-    end),
-    {noreply, State#state{is_stopping = true}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -267,39 +251,33 @@ terminate_session(SessionId, State) ->
 %% meaning that peer is probably down/offline, returns error.
 %% @end
 %%--------------------------------------------------------------------
--spec renew_connections(state()) -> {ok, state()} | {error, peer_offline}.
+-spec renew_connections(state()) -> state().
 renew_connections(#state{
     peer_id = PeerId,
     session_id = SessionId,
-    renewal_timer = undefined,
-    renewal_interval = Interval
-} = State) ->
-    NewState = try
-        renew_connections_insecure(State)
+    renewal_timer = undefined
+} = State0) ->
+    State2 = try
+        renew_connections_insecure(State0)
     catch Type:Reason ->
+        State1 = schedule_next_renewal(State0),
         ?debug("Failed to establish connection with provider ~ts due to ~p:~p.~n"
                "Next retry not sooner than ~B s.", [
             provider_logic:to_printable(PeerId), Type, Reason,
-            Interval div 1000
+            State1#state.renewal_interval div 1000
         ]),
         utils:throttle({?MODULE, SessionId}, ?CONNECTION_AWAIT_LOG_INTERVAL_SEC, fun() ->
-            log_error(State, Type, Reason)
+            log_error(State1, Type, Reason)
         end),
-        schedule_next_renewal(State)
+        State1
     end,
 
-    case NewState of
-        #state{renewal_timer = undefined} ->
-            {ok, NewState};
-        #state{connections = Cons} when map_size(Cons) > 0 ->
-            {ok, NewState};
-        _ when not (Interval > ?MAX_RENEWAL_INTERVAL) ->   % not last retry
-            {ok, NewState};
-        _ ->
-            {error, peer_offline}
+    case failed_connection_attempts_limit_exceeded(State2) of
+        true -> terminate_session(State2);
+        false -> State2
     end;
 renew_connections(State) ->
-    {ok, State}.
+    State.
 
 
 %%--------------------------------------------------------------------
@@ -314,7 +292,8 @@ renew_connections(State) ->
 renew_connections_insecure(#state{
     session_id = SessionId,
     peer_id = ProviderId,
-    connections = Cons
+    connecting = Connecting,
+    connected = Connected
 } = State) ->
     case provider_logic:verify_provider_identity(ProviderId) of
         ok -> ok;
@@ -326,40 +305,64 @@ renew_connections_insecure(#state{
     Port = https_listener:port(),
     {ok, [_ | _] = Hosts} = provider_logic:get_nodes(ProviderId),
 
-    lists:foldl(fun(Host, #state{connections = AccCons} = AccState) ->
+    lists:foldl(fun(Host, #state{connecting = ConnsAcc} = AccState) ->
         case connection:start_link(ProviderId, SessionId, Domain, Host, Port) of
             {ok, Pid} ->
-                AccState#state{connections = AccCons#{Pid => Host}};
+                AccState#state{connecting = ConnsAcc#{Pid => Host}};
             Error2 ->
-                ?warning("Failed to connect to host ~p of provider ~ts "
-                         "due to ~p. ", [
+                ?warning("Failed to connect to host ~p of provider ~ts due to ~p. ", [
                     Host, provider_logic:to_printable(ProviderId), Error2
                 ]),
                 schedule_next_renewal(AccState)
         end
-    end, State, Hosts -- maps:values(Cons)).
+    end, State, (Hosts -- maps:values(Connecting)) -- maps:values(Connected)).
 
 
 %% @private
 -spec schedule_next_renewal(state()) -> state().
 schedule_next_renewal(#state{
     renewal_timer = undefined,
-    renewal_interval = Interval
+    renewal_interval = PrevInterval
 } = State) ->
-    TimerRef = erlang:send_after(Interval, self(), ?RENEW_CONNECTIONS_REQ),
-    NextRenewalInterval = case Interval of
-        ?MAX_RENEWAL_INTERVAL ->
-            round(Interval * ?RENEWAL_INTERVAL_BACKOFF_RATE);
-        _ ->
-            min(round(Interval * ?RENEWAL_INTERVAL_BACKOFF_RATE),
-                ?MAX_RENEWAL_INTERVAL)
-    end,
-    State#state{
-        renewal_timer = TimerRef,
-        renewal_interval = NextRenewalInterval
-    };
+    MaxRenewalInterval = ?MAX_RENEWAL_INTERVAL,
+
+    case PrevInterval >= MaxRenewalInterval of
+        true ->
+            State;
+        false ->
+            CurrInterval = min(
+                max(ceil(PrevInterval * ?RENEWAL_INTERVAL_BACKOFF_RATE), ?MIN_RENEWAL_INTERVAL),
+                MaxRenewalInterval
+            ),
+            State#state{
+                renewal_timer = erlang:send_after(CurrInterval, self(), ?RENEW_CONNECTIONS_REQ),
+                renewal_interval = CurrInterval
+            }
+    end;
 schedule_next_renewal(State) ->
     State.
+
+
+%% @private
+-spec failed_connection_attempts_limit_exceeded(state()) -> boolean().
+failed_connection_attempts_limit_exceeded(#state{
+    connecting = Connecting,
+    connected = Connected,
+    renewal_timer = undefined,
+    renewal_interval = PrevInterval
+}) when map_size(Connecting) == 0, map_size(Connected) == 0 ->
+    PrevInterval >= ?MAX_RENEWAL_INTERVAL;
+failed_connection_attempts_limit_exceeded(_) ->
+    false.
+
+
+%% @private
+-spec terminate_session(state()) -> state().
+terminate_session(#state{session_id = SessionId} = State) ->
+    spawn(fun() ->
+        session_manager:terminate_session(SessionId)
+    end),
+    State#state{is_stopping = true}.
 
 
 %% @private

@@ -21,7 +21,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("modules/auth/acl.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
