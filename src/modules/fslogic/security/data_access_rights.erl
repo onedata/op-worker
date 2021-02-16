@@ -83,8 +83,12 @@
     ?list_container_mask bor
     ?read_metadata_mask
 )).
--define(POSIX_WRITE_ONLY_PERMS, (
+-define(POSIX_FILE_WRITE_ONLY_PERMS, (
     ?write_object_mask bor
+    ?write_attributes_mask bor
+    ?write_metadata_mask
+)).
+-define(POSIX_DIR_WRITE_ONLY_PERMS, (
     ?add_subcontainer_mask bor
     ?write_attributes_mask bor
     ?write_metadata_mask
@@ -92,8 +96,12 @@
 -define(POSIX_EXEC_ONLY_PERMS, (
     ?traverse_container_mask
 )).
--define(POSIX_WRITE_EXEC_PERMS, (
-    ?POSIX_WRITE_ONLY_PERMS bor
+-define(POSIX_FILE_WRITE_EXEC_PERMS, (
+    ?POSIX_FILE_WRITE_ONLY_PERMS bor
+    ?POSIX_EXEC_ONLY_PERMS
+)).
+-define(POSIX_DIR_WRITE_EXEC_PERMS, (
+    ?POSIX_DIR_WRITE_ONLY_PERMS bor
     ?POSIX_EXEC_ONLY_PERMS bor
 
     % Special permissions that are granted only when both 'write' and 'exec'
@@ -362,6 +370,7 @@ calc_and_check_user_perms_matrix_from_posix_mode(
 ) ->
     {#document{value = #file_meta{
         owner = OwnerId,
+        type = FileType,
         mode = Mode
     }}, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
 
@@ -381,7 +390,7 @@ calc_and_check_user_perms_matrix_from_posix_mode(
             {ShiftedMode, UserSpecialPerms, FileCtx2}
     end,
     RelevantModeBits1 = RelevantModeBits0 band 2#111,
-    AllowedPosixPerms = SpecialPosixPerms bor get_posix_allowed_perms(RelevantModeBits1),
+    AllowedPosixPerms = SpecialPosixPerms bor get_posix_allowed_perms(RelevantModeBits1, FileType),
 
     AllAllowedPerms = AllowedPosixPerms band (bnot DeniedPerms),
     AllDeniedPerms = bnot AllAllowedPerms,
@@ -417,23 +426,31 @@ has_parent_sticky_bit_set(UserCtx, FileCtx0) ->
 
 
 %% @private
--spec get_posix_allowed_perms(0..7) -> ace:bitmask().
-get_posix_allowed_perms(2#000) ->
+-spec get_posix_allowed_perms(0..7, file_meta:type()) -> ace:bitmask().
+get_posix_allowed_perms(2#000, _) ->
     ?POSIX_ALWAYS_GRANTED_PERMS;
-get_posix_allowed_perms(2#001) ->
+get_posix_allowed_perms(2#001, _) ->
     ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_EXEC_ONLY_PERMS;
-get_posix_allowed_perms(2#010) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_WRITE_ONLY_PERMS;
-get_posix_allowed_perms(2#011) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_WRITE_EXEC_PERMS;
-get_posix_allowed_perms(2#100) ->
+get_posix_allowed_perms(2#010, ?DIRECTORY_TYPE) ->
+    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_DIR_WRITE_ONLY_PERMS;
+get_posix_allowed_perms(2#010, _) ->
+    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_FILE_WRITE_ONLY_PERMS;
+get_posix_allowed_perms(2#011, ?DIRECTORY_TYPE) ->
+    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_DIR_WRITE_EXEC_PERMS;
+get_posix_allowed_perms(2#011, _) ->
+    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_FILE_WRITE_EXEC_PERMS;
+get_posix_allowed_perms(2#100, _) ->
     ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS;
-get_posix_allowed_perms(2#101) ->
+get_posix_allowed_perms(2#101, _) ->
     ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_EXEC_ONLY_PERMS;
-get_posix_allowed_perms(2#110) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_WRITE_ONLY_PERMS;
-get_posix_allowed_perms(2#111) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_WRITE_EXEC_PERMS.
+get_posix_allowed_perms(2#110, ?DIRECTORY_TYPE) ->
+    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_DIR_WRITE_ONLY_PERMS;
+get_posix_allowed_perms(2#110, _) ->
+    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_FILE_WRITE_ONLY_PERMS;
+get_posix_allowed_perms(2#111, ?DIRECTORY_TYPE) ->
+    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_DIR_WRITE_EXEC_PERMS;
+get_posix_allowed_perms(2#111, _) ->
+    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_FILE_WRITE_EXEC_PERMS.
 
 
 %% @private
