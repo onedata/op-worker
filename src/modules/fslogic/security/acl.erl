@@ -46,7 +46,7 @@ check_acl(_Acl, _User, ?no_flags_mask, FileCtx, UserPermsMatrix) ->
     {allowed, FileCtx, UserPermsMatrix};
 check_acl([], _User, _Operations, FileCtx, {No, AllowedPerms, _DeniedPerms}) ->
     % After reaching then end of ACL all not explicitly granted perms are denied
-    {denied, FileCtx, {No, AllowedPerms, bnot AllowedPerms}};
+    {denied, FileCtx, {No + 1, AllowedPerms, bnot AllowedPerms}};
 check_acl([Ace | Rest], User, Operations, FileCtx, {No, PrevAllowedPerms, PrevDeniedPerms}) ->
     case ace:is_applicable(User, FileCtx, Ace) of
         {true, FileCtx2} ->
