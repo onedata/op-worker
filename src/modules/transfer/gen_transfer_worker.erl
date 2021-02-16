@@ -21,8 +21,8 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("modules/auth/acl.hrl").
 -include("modules/datastore/transfer.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% gen_server callbacks

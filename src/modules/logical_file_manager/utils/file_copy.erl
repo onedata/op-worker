@@ -13,11 +13,11 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("modules/auth/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([copy/4]).

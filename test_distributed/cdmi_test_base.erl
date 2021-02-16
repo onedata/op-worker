@@ -16,11 +16,11 @@
 -include("http/rest.hrl").
 -include("http/cdmi.hrl").
 -include("proto/common/credentials.hrl").
+-include("modules/auth/acl.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/http/headers.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").

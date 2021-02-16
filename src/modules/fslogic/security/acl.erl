@@ -12,9 +12,9 @@
 -module(acl).
 -author("Bartosz Walkowicz").
 
+-include("modules/auth/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -type acl() :: [ace:ace()].
@@ -124,6 +124,8 @@ user_id_to_ace_name(?owner) ->
 user_id_to_ace_name(?group) ->
     undefined;
 user_id_to_ace_name(?everyone) ->
+    undefined;
+user_id_to_ace_name(?anonymous) ->
     undefined;
 user_id_to_ace_name(UserId) ->
     case user_logic:get_full_name(UserId) of
