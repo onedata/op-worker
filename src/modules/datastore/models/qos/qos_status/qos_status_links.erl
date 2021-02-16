@@ -28,9 +28,11 @@
 ]).
 
 -type key() :: binary().
--type link_name() :: qos_status:path().
 -type scope() :: od_space:id().
 -type tree_ids() :: all | oneprovider:id().
+-type link_name() :: qos_status:path().
+-type link_value() :: binary().
+-type link() :: {link_name(), link_value()}.
 
 -define(CTX, (qos_status:get_ctx())).
 -define(LIST_LINKS_BATCH_SIZE, 20).
@@ -39,7 +41,7 @@
 %%% API
 %%%===================================================================
 
--spec add_link(scope(), key(), {link_name(), binary()}) -> {ok, datastore:link()} | {error, term()}.
+-spec add_link(scope(), key(), link()) -> {ok, datastore:link()} | {error, term()}.
 add_link(SpaceId, Key, Link) ->
     datastore_model:add_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), Link).
 
