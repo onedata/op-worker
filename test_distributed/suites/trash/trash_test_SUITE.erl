@@ -606,8 +606,6 @@ long_lasting_deletion_test_base(Config, TimeWarpsCount,
 
     mock_traverse_finished(P1Node, self()),
 
-    time_test_utils:freeze_time(Config),
-
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
     {ok, TaskId} = schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
 
@@ -657,11 +655,13 @@ end_per_suite(_Config) ->
     ssl:stop().
 
 init_per_testcase(Case, Config) when
-    Case =:= deletion_lasting_for_40_days_should_succeed
+    Case =:= deletion_lasting_for_4_days_should_succeed orelse
+    Case =:= deletion_lasting_for_40_days_should_succeed orelse
+    Case =:= deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time
 ->
     time_test_utils:freeze_time(Config),
     init_per_testcase(default, Config);
-init_per_testcase(Case, Config) ->
+init_per_testcase(_Case, Config) ->
     % update background config to update sessions
     Config2 = oct_background:update_background_config(Config),
     lfm_proxy:init(Config2).
