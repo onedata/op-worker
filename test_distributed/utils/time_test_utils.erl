@@ -69,6 +69,6 @@ set_current_time_seconds(Seconds) ->
 
 -spec all_nodes(Config :: term()) -> ok.
 all_nodes(Config) ->
-    ?config(oz_worker_nodes, Config) ++ ?config(op_worker_nodes, Config) ++
-        ?config(oz_panel_nodes, Config) ++ ?config(op_panel_nodes, Config) ++
-            ?config(cm_nodes, Config).
+    ?config(oz_worker_nodes, Config, []) ++ ?config(op_worker_nodes, Config, []) ++
+        ?config(oz_panel_nodes, Config, []) ++ ?config(op_panel_nodes, Config, []) ++
+            ?config(cm_nodes, Config, []).
