@@ -181,16 +181,16 @@ list(ParentUuid, Opts) ->
     end.
 
 
--spec list_whitelisted(forest(),list_opts(), [link_name()]) -> {ok, [link()]} | {error, term()}.
-list_whitelisted(ParentUuid, Opts, ChildrenWhiteList0) ->
+-spec list_whitelisted(forest(),list_opts(), [link_name()]) -> {ok, [link()], list_extended_info()} | {error, term()}.
+list_whitelisted(ParentUuid, Opts, ChildrenWhiteList) ->
     Size = sanitize_size(Opts),
     NonNegOffset = sanitize_offset(Opts, false),
     LastName = sanitize_last_name(Opts),
-    ChildrenWhiteList1 = case LastName of
+    FilteredChildrenWhiteList = case LastName of
         undefined ->
-            ChildrenWhiteList0;
+            ChildrenWhiteList;
         LastName ->
-            lists:dropwhile(fun(Name) -> Name < LastName end, ChildrenWhiteList0)
+            lists:dropwhile(fun(Name) -> Name < LastName end, ChildrenWhiteList)
     end,
     try
         ValidLinks = lists:flatmap(fun
@@ -200,7 +200,7 @@ list_whitelisted(ParentUuid, Opts, ChildrenWhiteList0) ->
                 [];
             ({error, _} = Error) ->
                 throw(Error)
-        end, file_meta_links:get(ParentUuid, all, ChildrenWhiteList1)),
+        end, file_meta_links:get(ParentUuid, all, FilteredChildrenWhiteList)),
 
         case NonNegOffset < length(ValidLinks) of
             true ->
@@ -410,7 +410,8 @@ validate_starting_opts(InternalOpts) ->
         true ->
             InternalOpts;
         false ->
-            %%  TODO VFS-7208 throw(?ERROR_MISSING_AT_LEAST_ONE_VALUE([offset, token, last_name])),
+            %%  TODO VFS-7208 uncomment after introducing API errors to fslogic
+            %% throw(?ERROR_MISSING_AT_LEAST_ONE_VALUE([offset, token, last_name])),
             throw(?EINVAL)
     end.
 
@@ -422,11 +423,12 @@ sanitize_size(Opts) ->
             ?DEFAULT_LS_BATCH_SIZE;
         Size when is_integer(Size) andalso Size >= 0 ->
             Size;
-        %% TODO VFS-7208
+        %% TODO VFS-7208 uncomment after introducing API errors to fslogic
         %% Size when is_integer(Size) ->
         %%     throw(?ERROR_BAD_VALUE_TOO_LOW(size, 0));
         _ ->
-            %% TODO VFS-7208 throw(?ERROR_BAD_VALUE_INTEGER(size))
+            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+            %% throw(?ERROR_BAD_VALUE_INTEGER(size))
             throw(?EINVAL)
     end.
 
@@ -460,7 +462,8 @@ sanitize_offset(Opts, AllowNegative) ->
                     throw(?EINVAL)
             end;
         _ ->
-            %% TODO VFS-7208 throw(?ERROR_BAD_VALUE_INTEGER(size))
+            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+            %% throw(?ERROR_BAD_VALUE_INTEGER(size))
             throw(?EINVAL)
     end.
 
@@ -483,7 +486,8 @@ sanitize_binary(Key, Opts) ->
         Binary when is_binary(Binary) ->
             Binary;
         _ ->
-            %% TODO VFS-7208 throw(?ERROR_BAD_VALUE_BINARY(Key))
+            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+            %% throw(?ERROR_BAD_VALUE_BINARY(Key))
             throw(?EINVAL)
     end.
 
@@ -501,6 +505,7 @@ decode_token(TokenBin) ->
         binary_to_term(TokenBin)
     catch
         _:_ ->
-            %% TODO VFS-7208 throw(?ERROR_BAD_VALUE_BINARY(token))
+            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+            %% throw(?ERROR_BAD_VALUE_BINARY(token))
             throw(?EINVAL)
     end.
