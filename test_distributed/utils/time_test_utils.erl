@@ -36,14 +36,12 @@
 %%--------------------------------------------------------------------
 -spec freeze_time(Config :: term()) -> ok.
 freeze_time(Config) ->
-    Nodes = ?config(oz_worker_nodes, Config) ++ ?config(op_worker_nodes, Config),
-    clock_freezer_mock:setup_on_nodes(Nodes, [global_clock]).
+    clock_freezer_mock:setup_on_nodes(all_nodes(Config), [global_clock]).
 
 
 -spec unfreeze_time(Config :: term()) -> ok.
 unfreeze_time(Config) ->
-    Nodes = ?config(oz_worker_nodes, Config) ++ ?config(op_worker_nodes, Config),
-    clock_freezer_mock:teardown_on_nodes(Nodes).
+    clock_freezer_mock:teardown_on_nodes(all_nodes(Config)).
 
 
 -spec get_frozen_time_seconds() -> time:seconds().
@@ -64,3 +62,13 @@ simulate_seconds_passing(Seconds) ->
 -spec set_current_time_seconds(time:seconds()) -> ok.
 set_current_time_seconds(Seconds) ->
     clock_freezer_mock:set_current_time_millis(Seconds * 1000).
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+-spec all_nodes(Config :: term()) -> ok.
+all_nodes(Config) ->
+    ?config(oz_worker_nodes, Config, []) ++ ?config(op_worker_nodes, Config, []) ++
+        ?config(oz_panel_nodes, Config, []) ++ ?config(op_panel_nodes, Config, []) ++
+            ?config(cm_nodes, Config, []).

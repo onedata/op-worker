@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -73,7 +74,7 @@ single_dir_creation_test_base(Config) ->
     CheckAns = case RepeatNum of
         1 ->
             Dir = <<"/", SpaceName/binary, "/test_dir">>,
-            case lfm_proxy:mkdir(FirstWorker, FirstSessId, Dir, 8#755) of
+            case lfm_proxy:mkdir(FirstWorker, FirstSessId, Dir) of
                 {ok, Uuid} = Ans ->
                     put(test_dir_uuid, Uuid),
                     Ans;

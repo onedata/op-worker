@@ -31,8 +31,8 @@
     is_dir/3,
 
     get_file_location/3,
-    create/4, create/5,
-    create_and_open/4, create_and_open/5,
+    create/3, create/4, create/5,
+    create_and_open/3, create_and_open/4, create_and_open/5,
     open/4,
     close/2, close_all/1,
     read/4, silent_read/4, check_size_and_read/4,
@@ -253,6 +253,12 @@ get_file_location(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_location(SessId, uuid_to_guid(Worker, FileKey))).
 
 
+-spec create(node(), session:id(), file_meta:path()) ->
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+create(Worker, SessId, FilePath) ->
+    ?EXEC(Worker, lfm:create(SessId, FilePath)).
+
+
 -spec create(node(), session:id(), file_meta:path(), file_meta:posix_permissions()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(Worker, SessId, FilePath, Mode) ->
@@ -264,6 +270,20 @@ create(Worker, SessId, FilePath, Mode) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(Worker, SessId, ParentGuid, Name, Mode) ->
     ?EXEC(Worker, lfm:create(SessId, ParentGuid, Name, Mode)).
+
+
+-spec create_and_open(node(), session:id(), file_meta:path()) ->
+    {ok, {fslogic_worker:file_guid(), lfm:handle()}} |
+    lfm:error_reply().
+create_and_open(Worker, SessId, Path) ->
+    ?EXEC(Worker,
+        case lfm:create_and_open(SessId, Path, rdwr) of
+            {ok, {Guid, Handle}} ->
+                TestHandle = crypto:strong_rand_bytes(10),
+                ets:insert(lfm_handles, {TestHandle, Handle}),
+                {ok, {Guid, TestHandle}};
+            Other -> Other
+        end).
 
 
 -spec create_and_open(node(), session:id(), file_meta:path(), file_meta:posix_permissions()) ->

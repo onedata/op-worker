@@ -388,7 +388,7 @@ schedule_replica_eviction_without_permissions(Config, #scenario{
             FileKey = file_key(Guid, Path, FileKeyType),
             EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
             ?assertMatch({error, _},
-                ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, 8#644),
+                ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, ?DEFAULT_FILE_PERMS),
                 schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type))
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
@@ -578,7 +578,7 @@ schedule_replica_migration_without_permissions(Config, #scenario{
                 ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
                 EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
                 ?assertMatch({error, _},
-                    ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, 8#644),
+                    ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, ?DEFAULT_FILE_PERMS),
                     schedule_replica_migration(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type, ReplicatingProviderId))
             end, FilesGuidsAndPaths)
         end, ReplicatingNodes)

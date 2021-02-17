@@ -11,6 +11,7 @@
 -module(memory_pools_cleanup_test_SUITE).
 -author("Michal Stanisz").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("proto/common/credentials.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -142,8 +143,8 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
 
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
-    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
-        generator:gen_name(), 8#755)),
+    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, ?ROOT_SESS_ID, SpaceGuid,
+        generator:gen_name(), ?DEFAULT_FILE_PERMS)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
     {ok, {Sock, SessionId}} = fuse_test_utils:connect_as_user(Config, Worker1, User, [{active, true}]),

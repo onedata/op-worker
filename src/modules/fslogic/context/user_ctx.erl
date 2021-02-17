@@ -91,14 +91,15 @@ get_user(#user_ctx{session = #document{key = SessId, value = #session{
     (Type =:= nobody andalso UserId =:= ?GUEST_USER_ID);
     Type =:= user
 ->
-    case get(user_ctx_cache) of
-        undefined ->
+    % TODO VFS-7313 get rid of this hacked cache
+%%    case get(user_ctx_cache) of
+%%        undefined ->
             {ok, User} = user_logic:get(SessId, UserId),
-            put(user_ctx_cache, User),
-            User;
-        CachedUser ->
-            CachedUser
-    end.
+%%            put(user_ctx_cache, User),
+            User.
+%%        CachedUser ->
+%%            CachedUser
+%%    end.
 
 %%--------------------------------------------------------------------
 %% @doc

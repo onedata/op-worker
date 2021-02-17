@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -67,7 +68,7 @@ access_test(Config) ->
 
 mknod_test(Config) ->
     File = gen_filename(),
-    ?assertMatch(ok, call(Config, mknod, [File, 8#664, reg])),
+    ?assertMatch(ok, call(Config, mknod, [File, ?DEFAULT_FILE_PERMS, reg])),
     ?assertMatch({ok, #file_info{type = regular}},
         call(Config, file, read_file_info, [?path(Config, File)])),
     ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)])).
@@ -75,7 +76,7 @@ mknod_test(Config) ->
 mkdir_test(Config) ->
     File = gen_filename(),
 
-    ?assertMatch(ok, call(Config, mkdir, [File, 8#755])),
+    ?assertMatch(ok, call(Config, mkdir, [File, ?DEFAULT_DIR_PERMS])),
     ?assertMatch(ok, call(Config, file, del_dir, [?path(Config, File)])).
 
 unlink_test(Config) ->

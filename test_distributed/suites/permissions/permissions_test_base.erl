@@ -2337,7 +2337,7 @@ fill_file_with_dummy_data(Node, SessId, Guid) ->
 create_dummy_file(Node, SessId, DirGuid) ->
     RandomFileName = <<"DUMMY_FILE_", (integer_to_binary(rand:uniform(1024)))/binary>>,
     {ok, {_Guid, FileHandle}} =
-        lfm_proxy:create_and_open(Node, SessId, DirGuid, RandomFileName, 8#664),
+        lfm_proxy:create_and_open(Node, SessId, DirGuid, RandomFileName, ?DEFAULT_FILE_PERMS),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
 
 

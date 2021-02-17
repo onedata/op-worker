@@ -53,7 +53,7 @@
     traverse:callback_module()) -> {ok, key()} | {error, term()}.
 save_master_job(Key, Job = #tree_traverse{
     file_ctx = FileCtx,
-    user_ctx = UserCtx,
+    user_id = UserId,
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
@@ -70,7 +70,7 @@ save_master_job(Key, Job = #tree_traverse{
         callback_module = CallbackModule,
         task_id = TaskID,
         doc_id = Uuid,
-        session_id = user_ctx:get_session_id(UserCtx),
+        user_id = UserId,
         use_listing_token = Token =/= undefined,
         last_name = LastName,
         last_tree = LastTree,
@@ -100,7 +100,7 @@ delete_master_job(Key, _Job, _, _CallbackModule) ->
 get_master_job(#document{value = #tree_traverse_job{
     pool = Pool, task_id = TaskID,
     doc_id = DocID,
-    session_id = SessionId,
+    user_id = UserId,
     use_listing_token = UseListingToken,
     last_name = LastName,
     last_tree = LastTree,
@@ -114,7 +114,7 @@ get_master_job(#document{value = #tree_traverse_job{
     FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
     Job = #tree_traverse{
         file_ctx = FileCtx,
-        user_ctx = user_ctx:new(SessionId),
+        user_id = UserId,
         token = case UseListingToken of
             true -> ?INITIAL_LS_TOKEN;
             false -> undefined
@@ -180,8 +180,8 @@ get_record_struct(2) ->
         {callback_module, atom},
         {task_id, string},
         {doc_id, string},
-        % session_id has been added in this version
-        {session_id, string},
+        % user_id has been added in this version
+        {user_id, string},
         % use_listing_token field has been added in this version
         {use_listing_token, boolean},
         {last_name, string},
@@ -211,8 +211,8 @@ upgrade_record(1, {?MODULE, Pool, CallbackModule, TaskId, DocId, LastName, LastT
         CallbackModule,
         TaskId,
         DocId,
-        % session_id has been added in this version
-        ?ROOT_SESS_ID,
+        % user_id has been added in this version
+        ?ROOT_USER_ID,
         % use_listing_token field has been added in this version
         true,
         LastName,

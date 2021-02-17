@@ -13,6 +13,7 @@
 -author("Michal Stanisz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/import/storage_import.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -519,11 +520,11 @@ get_keys(mnesia_driver, MemoryDriverCtx) ->
 create_files_and_dirs(Worker, SessId) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     Name = generator:gen_name(),
-    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId(Worker), SpaceGuid, ?filename(Name, 0), 8#775),
-    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId(Worker), DirGuid, ?filename(Name, 1), 8#664),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId(Worker), SpaceGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
+    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId(Worker), DirGuid, ?filename(Name, 1), ?DEFAULT_FILE_PERMS),
     {ok, _} = lfm_proxy:write(Worker, H1, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, H1),
-    {ok, {G2, H2}} = lfm_proxy:create_and_open(Worker, SessId(Worker), SpaceGuid, ?filename(Name, 2), 8#664),
+    {ok, {G2, H2}} = lfm_proxy:create_and_open(Worker, SessId(Worker), SpaceGuid, ?filename(Name, 2), ?DEFAULT_FILE_PERMS),
     {ok, _} = lfm_proxy:write(Worker, H2, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, H2),
     {{DirGuid, ?filename(Name, 0)}, {G1, filename:join([?filename(Name, 0), ?filename(Name, 1)])}, {G2, ?filename(Name, 2)}}.
