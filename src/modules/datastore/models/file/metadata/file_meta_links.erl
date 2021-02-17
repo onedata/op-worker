@@ -49,20 +49,6 @@
 -type fold_fun() :: fun((internal_link(), fold_acc()) -> {ok | stop, fold_acc()} | {error, term()}).
 -type token_internal() :: datastore_links_iter:token().
 
-%% @formatter:off
-
-% Listing options (see datastore_links_iter.erl in cluster_worker for more information about link listing options)
--type list_opts_internal() :: #{
-% required keys
-    size := size(),
-    % optional keys
-    offset => offset(),
-    token => token_internal(),
-    prev_link_name => last_name(),
-    prev_tree_id => last_tree()
-}.
-%% @formatter:on
-
 % Exported types
 -type offset() :: integer().
 -type size() :: non_neg_integer().
@@ -182,15 +168,15 @@ list(ParentUuid, Opts) ->
 
 
 -spec list_whitelisted(forest(),list_opts(), [link_name()]) -> {ok, [link()], list_extended_info()} | {error, term()}.
-list_whitelisted(ParentUuid, Opts, ChildrenWhiteList) ->
+list_whitelisted(ParentUuid, Opts, SortedChildrenWhiteList) ->
     Size = sanitize_size(Opts),
     NonNegOffset = sanitize_offset(Opts, false),
     LastName = sanitize_last_name(Opts),
     FilteredChildrenWhiteList = case LastName of
         undefined ->
-            ChildrenWhiteList;
+            SortedChildrenWhiteList;
         LastName ->
-            lists:dropwhile(fun(Name) -> Name < LastName end, ChildrenWhiteList)
+            lists:dropwhile(fun(Name) -> Name < LastName end, SortedChildrenWhiteList)
     end,
     try
         ValidLinks = lists:flatmap(fun
@@ -392,7 +378,7 @@ tag_remote_files(#link{name = Name, target = FileUuid, tree_id = RemoteTreeId}, 
 %%% Internal functions for validating passed opts
 %%%===================================================================
 
--spec sanitize_opts(list_opts()) -> list_opts_internal().
+-spec sanitize_opts(list_opts()) -> datastore_model:fold_opts().
 sanitize_opts(Opts) ->
     InternalOpts1 = #{size => sanitize_size(Opts)},
     InternalOpts2 = maps_utils:put_if_defined(InternalOpts1, token, sanitize_token(Opts)),
@@ -402,7 +388,7 @@ sanitize_opts(Opts) ->
     validate_starting_opts(InternalOpts5).
 
 
--spec validate_starting_opts(list_opts_internal()) -> list_opts_internal().
+-spec validate_starting_opts(datastore_model:fold_opts()) -> datastore_model:fold_opts().
 validate_starting_opts(InternalOpts) ->
     % at least one of: offset, token, prev_link_name must be defined so that we know
     % were to start listing
