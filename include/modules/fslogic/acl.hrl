@@ -15,8 +15,9 @@
 
 -define(ACL_XATTR_NAME, <<"cdmi_acl">>).
 
-% Returns true if Bitmask contains all bits from Flag
--define(has_flag(Bitmask, Flag), ((Bitmask band Flag) =:= Flag)).
+-define(has_flags(Bitmask, Flags), ((Bitmask band Flags) =:= Flags)).
+-define(set_flags(Bitmask, Flags), (Bitmask bor Flags)).
+-define(reset_flags(Bitmask, Flags), (Bitmask band (bnot Flags))).
 
 % ace types
 -define(allow, <<"ALLOW">>).

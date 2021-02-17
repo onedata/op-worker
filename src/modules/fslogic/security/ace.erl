@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -15,7 +15,6 @@
 -module(ace).
 -author("Bartosz Walkowicz").
 
--include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -75,7 +74,7 @@ is_applicable(#document{key = ?GUEST_USER_ID}, FileCtx, #access_control_entity{
 is_applicable(#document{value = User}, FileCtx, #access_control_entity{
     identifier = GroupId,
     aceflags = AceFlagsBitmask
-}) when ?has_flag(AceFlagsBitmask, ?identifier_group_mask) ->
+}) when ?has_flags(AceFlagsBitmask, ?identifier_group_mask) ->
     {lists:member(GroupId, User#od_user.eff_groups), FileCtx};
 
 is_applicable(#document{key = UserId}, FileCtx, #access_control_entity{
@@ -90,41 +89,44 @@ is_applicable(_, FileCtx, _) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if given ace permits or denies (depending on ace type) specified
-%% operations.
-%% In case of 'allow' ace it returns `allowed` when all operations are
-%% explicitly permitted or `{inconclusive, OperationsToBeAllowed}` for
-%% operations which can't be authoritatively allowed by this ace.
-%% In case of 'deny' ace it returns `denied` if even one operation is
-%% forbidden or `{inconclusive, Operations}` if none of operations can
-%% be authoritatively denied.
+%% operations. The result can be either:
+%% - 'allowed' meaning that all permissions have been granted,
+%% - 'denied' meaning that at least one permission has been denied,
+%% - 'inconclusive' meaning that some permissions may have been granted
+%%    but not all of them (leftover permissions to be granted or denied are
+%%    returned).
+%% Additionally, this function takes as an arguments permission matrices
+%% (AllowedPerms and DeniedPerms constructed from preceding ACEs) made up
+%% to this point, updates them and returns (used for caching).
 %% @end
 %%--------------------------------------------------------------------
 -spec check_against(bitmask(), bitmask(), bitmask(), ace()) ->
-    {allowed | denied, bitmask(), bitmask()} | {inconclusive, bitmask(), bitmask(), bitmask()}.
-check_against(RequiredPerms, PrevAllowedPerms, DeniedPerms, #access_control_entity{
+    {allowed | denied, bitmask(), bitmask()} |
+    {inconclusive, LeftoverRequiredPerms :: bitmask(), bitmask(), bitmask()}.
+check_against(RequiredPerms, PrevAllowedPerms, PrevDeniedPerms, #access_control_entity{
     acetype = ?allow_mask,
     acemask = AceMask
 }) ->
-    AllAllowedPerms = PrevAllowedPerms bor (AceMask band (bnot DeniedPerms)),
+    AllAllowedPerms = PrevAllowedPerms bor ?reset_flags(AceMask, PrevDeniedPerms),
 
-    case (RequiredPerms band AceMask) of
-        RequiredPerms ->
-            {allowed, AllAllowedPerms, DeniedPerms};
-        GrantedPerms ->
-            {inconclusive, RequiredPerms bxor GrantedPerms, AllAllowedPerms, DeniedPerms}
+    case ?reset_flags(RequiredPerms, AceMask) of
+        0 ->
+            {allowed, AllAllowedPerms, PrevDeniedPerms};
+        LeftoverRequiredPerms ->
+            {inconclusive, LeftoverRequiredPerms, AllAllowedPerms, PrevDeniedPerms}
     end;
 
-check_against(RequiredPerms, AllowedPerms, PrevDeniedPerms, #access_control_entity{
+check_against(RequiredPerms, PrevAllowedPerms, PrevDeniedPerms, #access_control_entity{
     acetype = ?deny_mask,
     acemask = AceMask
 }) ->
-    AllDeniedPerms = PrevDeniedPerms bor (AceMask band (bnot AllowedPerms)),
+    AllDeniedPerms = PrevDeniedPerms bor ?reset_flags(AceMask, PrevAllowedPerms),
 
-    case (RequiredPerms band AceMask) of
-        ?no_flags_mask ->
-            {inconclusive, RequiredPerms, AllowedPerms, AllDeniedPerms};
+    case RequiredPerms band AceMask of
+        0 ->
+            {inconclusive, RequiredPerms, PrevAllowedPerms, AllDeniedPerms};
         _ ->
-            {denied, AllowedPerms, AllDeniedPerms}
+            {denied, PrevAllowedPerms, AllDeniedPerms}
     end.
 
 
@@ -201,10 +203,10 @@ validate(#access_control_entity{
     acemask = Mask
 }, FileType) ->
     ValidType = lists:member(Type, [?allow_mask, ?deny_mask]),
-    ValidFlags = ?has_flag(?ALL_FLAGS_BITMASK, Flags),
+    ValidFlags = ?has_flags(?ALL_FLAGS_BITMASK, Flags),
     ValidMask = case FileType of
-        file -> ?has_flag(?all_object_perms_mask, Mask);
-        dir -> ?has_flag(?all_container_perms_mask, Mask)
+        file -> ?has_flags(?all_object_perms_mask, Mask);
+        dir -> ?has_flags(?all_container_perms_mask, Mask)
     end,
 
     case ValidType andalso ValidFlags andalso ValidMask of
@@ -236,7 +238,7 @@ cdmi_aceflags_to_bitmask(AceFlagsList) ->
     lists:foldl(
         fun
             (?no_flags, Bitmask) -> Bitmask;
-            (?identifier_group, BitMask) -> BitMask bor ?identifier_group_mask
+            (?identifier_group, BitMask) -> ?set_flags(BitMask, ?identifier_group_mask)
         end,
         0,
         AceFlagsList
@@ -252,15 +254,15 @@ cdmi_acemask_to_bitmask(PermsList) ->
     % op doesn't differentiate between ?delete_object and ?delete_subcontainer
     % so they must be either specified both or none of them.
     HasDeleteObject = lists:member(?delete_object, PermsList),
-    HasDeleteSubcontainer = lists:member(?delete_subcontainer, PermsList),
-    case {HasDeleteObject, HasDeleteSubcontainer} of
+    HasDeleteSubContainer = lists:member(?delete_subcontainer, PermsList),
+    case {HasDeleteObject, HasDeleteSubContainer} of
         {false, false} -> ok;
         {true, true} -> ok;
         _ -> throw({error, ?EINVAL})
     end,
 
     lists:foldl(fun(Perm, Bitmask) ->
-        Bitmask bor permission_to_bitmask(Perm)
+        ?set_flags(Bitmask, permission_to_bitmask(Perm))
     end, 0, PermsList).
 
 

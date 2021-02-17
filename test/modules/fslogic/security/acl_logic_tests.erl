@@ -125,7 +125,7 @@ check_normal_user_permission_test_() ->
         acemask = ?read_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, Perms, FileCtx, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
 
     [
         ?_assertMatch(
@@ -193,7 +193,7 @@ check_normal_group_permission_test_() ->
         acemask = ?read_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, Perms, FileCtx, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
 
     [
         ?_assertMatch(
@@ -253,7 +253,7 @@ check_owner_principal_permission_test_() ->
         acemask = ?write_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, Perms, FileCtx, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
 
     [
         ?_assertMatch(
@@ -297,7 +297,7 @@ check_group_principal_permission_test_() ->
         acemask = ?write_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, Perms, FileCtx, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
 
     [
         ?_assertMatch(
@@ -342,7 +342,7 @@ check_everyone_principal_permission_test_() ->
         acemask = ?write_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, Perms, FileCtx, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
 
     [
         ?_assertMatch(
@@ -385,7 +385,7 @@ check_anonymous_principal_permission_test_() ->
         acemask = ?write_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, Perms, FileCtx, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
 
     [
         ?_assertMatch(

@@ -192,7 +192,7 @@ normalize_ace(ACE = #access_control_entity{
 %%-------------------------------------------------------------------
 -spec normalize_who(non_neg_integer(), luma:acl_who(), storage:id()) ->
     od_user:id() | od_group:id().
-normalize_who(Flags, Who, StorageId) when ?has_flag(Flags, ?identifier_group_mask) ->
+normalize_who(Flags, Who, StorageId) when ?has_flags(Flags, ?identifier_group_mask) ->
     {ok, GroupId} = luma:map_acl_group_to_onedata_group(Who, StorageId),
     GroupId;
 normalize_who(_, Who, StorageId) ->

@@ -39,54 +39,32 @@
 
 
 -spec check_acl(
-    acl(), od_user:doc(), ace:bitmask(), file_ctx:ctx(), data_access_rights:user_perms_matrix()
+    acl(), od_user:doc(), file_ctx:ctx(), ace:bitmask(), data_access_rights:user_perms_matrix()
 ) ->
     {allowed | denied, file_ctx:ctx(), data_access_rights:user_perms_matrix()}.
-check_acl(_Acl, _User, ?no_flags_mask, FileCtx, UserPermsMatrix) ->
+check_acl(_Acl, _User, FileCtx, 0, UserPermsMatrix) ->
     {allowed, FileCtx, UserPermsMatrix};
-check_acl([], _User, _Operations, FileCtx, {No, AllowedPerms, _DeniedPerms}) ->
+check_acl([], _User, FileCtx, _Operations, {No, AllowedPerms, _DeniedPerms}) ->
     % After reaching then end of ACL all not explicitly granted perms are denied
     {denied, FileCtx, {No + 1, AllowedPerms, bnot AllowedPerms}};
-check_acl([Ace | Rest], User, Operations, FileCtx, {No, PrevAllowedPerms, PrevDeniedPerms}) ->
+check_acl([Ace | Rest], User, FileCtx, Operations, {No, PrevAllowedPerms, PrevDeniedPerms}) ->
     case ace:is_applicable(User, FileCtx, Ace) of
         {true, FileCtx2} ->
             case ace:check_against(Operations, PrevAllowedPerms, PrevDeniedPerms, Ace) of
-                {inconclusive, LeftoverOperations, AllAllowedPerms, AllDeniedPerms} ->
+                {inconclusive, LeftoverOperations, NewAllowedPerms, NewDeniedPerms} ->
                     check_acl(
-                        Rest, User, LeftoverOperations, FileCtx2,
-                        {No + 1, AllAllowedPerms, AllDeniedPerms}
+                        Rest, User, FileCtx2, LeftoverOperations,
+                        {No + 1, NewAllowedPerms, NewDeniedPerms}
                     );
-                {AllowedOrDenied, AllAllowedPerms, AllDeniedPerms} ->
-                    {AllowedOrDenied, FileCtx, {No + 1, AllAllowedPerms, AllDeniedPerms}}
+                {AllowedOrDenied, NewAllowedPerms, NewDeniedPerms} ->
+                    {AllowedOrDenied, FileCtx2, {No + 1, NewAllowedPerms, NewDeniedPerms}}
             end;
         {false, FileCtx2} ->
             check_acl(
-                Rest, User, Operations, FileCtx2,
+                Rest, User, FileCtx2, Operations,
                 {No + 1, PrevAllowedPerms, PrevDeniedPerms}
             )
     end.
-
-%%
-%%-spec assert_permitted(acl(), od_user:doc(), ace:bitmask(), file_ctx:ctx()) ->
-%%    {ok, file_ctx:ctx()} | no_return().
-%%assert_permitted(_Acl, _User, ?no_flags_mask, FileCtx) ->
-%%    {ok, FileCtx};
-%%assert_permitted([], _User, _Operations, _FileCtx) ->
-%%    throw(?EACCES);
-%%assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
-%%    case ace:is_applicable(User, FileCtx, Ace) of
-%%        {true, FileCtx2} ->
-%%            case ace:check_against(Operations, Ace) of
-%%                allowed ->
-%%                    {ok, FileCtx2};
-%%                {inconclusive, LeftoverOperations} ->
-%%                    assert_permitted(Rest, User, LeftoverOperations, FileCtx2);
-%%                denied ->
-%%                    throw(?EACCES)
-%%            end;
-%%        {false, FileCtx2} ->
-%%            assert_permitted(Rest, User, Operations, FileCtx2)
-%%    end.
 
 
 %%--------------------------------------------------------------------
@@ -99,7 +77,7 @@ check_acl([Ace | Rest], User, Operations, FileCtx, {No, PrevAllowedPerms, PrevDe
 add_names(Acl) ->
     lists:map(
         fun(#access_control_entity{identifier = Id, aceflags = Flags} = Ace) ->
-            Name = case ?has_flag(Flags, ?identifier_group_mask) of
+            Name = case ?has_flags(Flags, ?identifier_group_mask) of
                 true -> group_id_to_ace_name(Id);
                 false -> user_id_to_ace_name(Id)
             end,
