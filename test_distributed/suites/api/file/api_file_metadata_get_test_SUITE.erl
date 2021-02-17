@@ -276,7 +276,7 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode) ->
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
     TopDirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath, 8#777),
+    {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath),
     api_test_utils:set_and_sync_metadata(Nodes, TopDirGuid, MetadataType, ?JSON_METADATA_1),
 
     DirLayer2Path = filename:join([TopDirPath, <<"dir_layer_2">>]),
@@ -284,11 +284,11 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode) ->
     api_test_utils:set_and_sync_metadata(Nodes, DirLayer2Guid, MetadataType, ?JSON_METADATA_2),
 
     DirLayer3Path = filename:join([DirLayer2Path, <<"dir_layer_3">>]),
-    {ok, DirLayer3Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer3Path, 8#777),
+    {ok, DirLayer3Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer3Path),
     api_test_utils:set_and_sync_metadata(Nodes, DirLayer3Guid, MetadataType, ?JSON_METADATA_3),
 
     DirLayer4Path = filename:join([DirLayer3Path, <<"dir_layer_4">>]),
-    {ok, DirLayer4Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer4Path, 8#777),
+    {ok, DirLayer4Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLayer4Path),
     api_test_utils:set_and_sync_metadata(Nodes, DirLayer4Guid, MetadataType, ?JSON_METADATA_4),
     ShareId = case TestMode of
         share_mode ->
@@ -527,7 +527,7 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode) ->
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
     TopDirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath, 8#777),
+    {ok, TopDirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, TopDirPath),
     api_test_utils:set_and_sync_metadata(Nodes, TopDirGuid, MetadataType, ?ALL_METADATA_SET_1),
 
     DirLayer2Path = filename:join([TopDirPath, <<"dir_layer_2">>]),

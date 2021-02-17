@@ -64,11 +64,16 @@ users:
   - &user1
     name: user1
     password: password
+  - &user2
+    name: user2
+    password: password
 
 
 spaces:
   - name: space1
     user: *user1
+    users:
+      - user: *user2
     supports:
       - provider: "oneprovider-1"
         storage_name: "ImportedNullStorage"
@@ -80,6 +85,8 @@ spaces:
         size: '1000000000'
   - name: space2
     user: *user1
+    users:
+      - user: *user2
     supports:
       - provider: "oneprovider-1"
         storage_name: "ImportedNullStorage2"

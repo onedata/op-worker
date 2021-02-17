@@ -552,7 +552,7 @@ gui_registering_upload_for_non_empty_file_should_fail(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
 
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
     {ok, FileHandle} = lfm_proxy:open(Worker, UserSessId, {guid, FileGuid}, write),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, FileHandle, 0, crypto:strong_rand_bytes(5))),
     lfm_proxy:fsync(Worker, FileHandle),
@@ -570,7 +570,7 @@ gui_registering_upload_for_not_owned_file_should_fail(_Config) ->
     [Worker] = oct_background:get_provider_nodes(krakow),
 
     User2SessId = oct_background:get_user_session_id(user4, krakow),
-    {ok, FileGuid} = lfm_proxy:create(Worker, User2SessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, User2SessId, ?FILE_PATH),
 
     ?assertMatch(
         ?ERROR_BAD_DATA(<<"guid">>, <<"file is not owned by user">>),
@@ -583,7 +583,7 @@ gui_not_registered_upload_should_fail(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
 
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
 
     ?assertMatch(
         upload_not_registered,
@@ -604,7 +604,7 @@ gui_upload_test(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
 
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
 
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
@@ -631,7 +631,7 @@ gui_stale_upload_file_should_be_deleted(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
 
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
 
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
@@ -653,7 +653,7 @@ gui_upload_with_time_warps_test(_Config) ->
     [Worker] = oct_background:get_provider_nodes(krakow),
 
     CurrTime = time_test_utils:get_frozen_time_seconds(),
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
 
     FileKey = {guid, FileGuid},
     ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),

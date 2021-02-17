@@ -15,6 +15,7 @@
 -include("modules/auth/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([delete/3, delete_using_trash/3]).
@@ -52,7 +53,7 @@ delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
     {FileParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
     FileCtx3 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx2,
-        [traverse_ancestors, ?delete, ?list_container]
+        [traverse_ancestors, ?delete, ?list_container, ?traverse_container, ?delete_subcontainer, ?delete_object]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, FileParentCtx,
@@ -126,7 +127,7 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
 delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     FileCtx3 = trash:move_to_trash(FileCtx2, UserCtx),
-    {ok, _} = trash:delete_from_trash(FileCtx3, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid)),
+    {ok, _} = trash:schedule_deletion_from_trash(FileCtx3, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid)),
     ?FUSE_OK_RESP.
 
 

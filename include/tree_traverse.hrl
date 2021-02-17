@@ -25,9 +25,8 @@
 -record(tree_traverse, {
     % File or directory processed by job
     file_ctx :: file_ctx:ctx(),
-    % TODO VFS-7101 use offline access token
-    % UserCtx of a user who has scheduled traverse
-    user_ctx :: user_ctx:ctx(),
+    % User who scheduled the traverse
+    user_id :: od_user:id(),
 
     % Fields used for directory listing
     token = #link_token{} :: undefined | datastore_links_iter:token(),
@@ -49,6 +48,8 @@
 % Record that defines slave job
 -record(tree_traverse_slave, {
     file_ctx :: file_ctx:ctx(),
+    % User who scheduled the traverse
+    user_id :: od_user:id(),
     traverse_info :: tree_traverse:traverse_info(),
     track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean()
 }).

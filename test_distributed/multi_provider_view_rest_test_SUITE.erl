@@ -755,10 +755,10 @@ query_spatial_view(Config) ->
     Path1 = filename:join(["/", SpaceName, "f1"]),
     Path2 = filename:join(["/", SpaceName, "f2"]),
     Path3 = filename:join(["/", SpaceName, "f3"]),
-    {ok, _Guid0} = lfm_proxy:create(WorkerP1, SessionId, Path0, 8#777),
-    {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1, 8#777),
-    {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2, 8#777),
-    {ok, Guid3} = lfm_proxy:create(WorkerP1, SessionId, Path3, 8#777),
+    {ok, _Guid0} = lfm_proxy:create(WorkerP1, SessionId, Path0),
+    {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1),
+    {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2),
+    {ok, Guid3} = lfm_proxy:create(WorkerP1, SessionId, Path3),
     ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
     ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid2}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0, 0]}, [<<"loc">>]),
     ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid3}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10, 5]}, [<<"loc">>]),
@@ -789,7 +789,7 @@ querying_spatial_view_with_wrong_function_should_fail(Config) ->
     ViewName = ?VIEW_NAME(?FUNCTION_NAME),
 
     Path1 = filename:join(["/", SpaceName, "file1"]),
-    {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1, 8#777),
+    {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1),
     ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
 
     ?assertMatch(ok, create_view_via_rest(
@@ -1330,7 +1330,7 @@ query_filter2(Config, SpaceId, ViewName) ->
 create_files_with_xattrs(Node, SessionId, SpaceName, Prefix, Num, XattrName) ->
     lists:map(fun(X) ->
         Path = filename:join(["/", SpaceName, Prefix ++ integer_to_list(X)]),
-        {ok, Guid} = lfm_proxy:create(Node, SessionId, Path, 8#777),
+        {ok, Guid} = lfm_proxy:create(Node, SessionId, Path),
         ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(XattrName, X)),
         Guid
     end, lists:seq(1, Num)).

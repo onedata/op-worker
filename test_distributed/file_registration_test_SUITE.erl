@@ -197,7 +197,7 @@ register_file_test(Config) ->
     StorageFileId = filename:join(["/", FileName]),
     StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
-    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
@@ -230,7 +230,7 @@ register_file_and_create_parents_test(Config) ->
     StorageFileId = FileName,
     StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
-    ok = sd_test_utils:create_file(W1, SDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
@@ -263,7 +263,7 @@ update_registered_file_test(Config) ->
     FilePath = ?PATH(FileName),
     StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
-    ok = sd_test_utils:create_file(W1, SDHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
@@ -333,7 +333,7 @@ stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_
     StorageFileId = filename:join(["/", FileName]),
     StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
-    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
     Timestamp = global_clock:timestamp_seconds(),
 
@@ -373,7 +373,7 @@ registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attrib
     StorageFileId = filename:join(["/", FileName]),
     StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
-    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
 
     ?assertMatch({ok, ?HTTP_400_BAD_REQUEST, _, _}, register_file(W1, Config, #{
@@ -417,7 +417,7 @@ registration_should_succeed_if_size_is_passed(Config) ->
     StorageFileId = filename:join(["/", FileName]),
     StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
-    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
@@ -446,7 +446,7 @@ interrupted_registration_test(Config) ->
     StorageFileId = filename:join(["/", FileName]),
     StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
-    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
 
     mock_file_meta_save(W1, FileName),
@@ -511,7 +511,7 @@ interrupted_registration_nested_file_test(Config) ->
     StorageFileId = filename:join(["/", FileName]),
     StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
-    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
 
     mock_file_meta_save(W1, DirName),
@@ -574,7 +574,7 @@ register_many_files_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
     % create only 1 file on storage
-    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
 
     % but register it as many logical files
@@ -623,7 +623,7 @@ register_many_nested_files_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
     % create only 1 file on storage
-    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
 
     % but register it as many logical files in the same directory

@@ -14,6 +14,7 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("cluster_worker/include/modules/datastore/ha_datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -48,12 +49,12 @@ single_dir_creation_test_base(Config, Clear) ->
         {true, _} ->
             MainDir = generator:gen_name(),
             D = <<"/", SpaceName/binary, "/", MainDir/binary>>,
-            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D, 8#755),
+            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D),
             {D, MkdirAns, 0};
         {_, 1} ->
             MainDir = <<"test_dir">>,
             D = <<"/", SpaceName/binary, "/", MainDir/binary>>,
-            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D, 8#755),
+            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D),
             {D, MkdirAns, 0};
         _ ->
             D = <<"/", SpaceName/binary, "/test_dir">>,
@@ -190,7 +191,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
 
     {BaseCreationAns, CreatedBaseDirsNum} = lists:foldl(fun
         ({D, true}, {ok, CreatedBaseDirsAcc}) ->
-            case lfm_proxy:mkdir(Worker, SessId, D, 8#755) of
+            case lfm_proxy:mkdir(Worker, SessId, D) of
                 {ok, _} -> {ok, CreatedBaseDirsAcc + 1};
                 {error, eexist} -> {ok, CreatedBaseDirsAcc};
                 Other -> {Other, CreatedBaseDirsAcc}
@@ -210,9 +211,9 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
                     {T, {A, GUID}} = measure_execution_time(fun() ->
                         MkdirAns = case CacheGUIDS of
                             false ->
-                                lfm_proxy:mkdir(W, S, D, 8#755);
+                                lfm_proxy:mkdir(W, S, D);
                             _ ->
-                                lfm_proxy:mkdir(W, S, DParent, DName, 8#755)
+                                lfm_proxy:mkdir(W, S, DParent, DName, ?DEFAULT_DIR_PERMS)
                         end,
                         case MkdirAns of
                             {ok, DirGuid} ->
@@ -226,7 +227,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
                 ({D, _}) ->
                     {W, S} = get_worker_and_session(Workers, SessIds),
                     {T, {A, GUID}} = measure_execution_time(fun() ->
-                        case lfm_proxy:mkdir(W, S, D, 8#755) of
+                        case lfm_proxy:mkdir(W, S, D) of
                             {ok, DirGuid} ->
                                 {dir_ok, DirGuid};
                             Other ->
@@ -247,9 +248,9 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
                         try
                             {ok, FileGUID} = case CacheGUIDS of
                                 false ->
-                                    lfm_proxy:create(W, S, F, 8#755);
+                                    lfm_proxy:create(W, S, F);
                                 _ ->
-                                    lfm_proxy:create(W, S, GUID, N2, 8#755)
+                                    lfm_proxy:create(W, S, GUID, N2, ?DEFAULT_FILE_PERMS)
                             end,
                             % Fill file if needed (depends on test config)
                             case WriteToFile of

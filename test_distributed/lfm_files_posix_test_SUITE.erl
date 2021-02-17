@@ -423,7 +423,7 @@ get_children_details_should_work_with_startid(Config) ->
 
 
 lfm_recreate_handle_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, 8#755, dont_delete_file).
+    lfm_files_test_base:lfm_recreate_handle(Config, ?DEFAULT_FILE_PERMS, dont_delete_file).
 
 
 lfm_write_after_create_no_perms_test(Config) ->
@@ -431,7 +431,7 @@ lfm_write_after_create_no_perms_test(Config) ->
 
 
 lfm_recreate_handle_after_delete_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, 8#755, delete_after_open).
+    lfm_files_test_base:lfm_recreate_handle(Config, ?DEFAULT_FILE_PERMS, delete_after_open).
 
 
 lfm_open_failure_test(Config) ->
@@ -489,7 +489,7 @@ rename_removed_opened_file_test(Config) ->
         Other2 -> Other2
     end,
 
-    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath, 8#777),
+    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
     Guid1String = binary_to_list(Guid1),
     {ok, ListAns} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
@@ -540,7 +540,7 @@ mkdir_removed_opened_file_test(Config) ->
         Other2 -> Other2
     end,
 
-    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath, 8#777),
+    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
     Guid1String = binary_to_list(Guid1),
     {ok, ListAns} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
@@ -557,8 +557,8 @@ mkdir_removed_opened_file_test(Config) ->
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])])),
     ?assertEqual([Guid1String], ListAns3 -- InitialDeletedDir),
 
-    {ok, _} = lfm_proxy:mkdir(Worker, SessId(User), FilePath, 8#777),
-    {ok, _} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath2, 8#777),
+    {ok, _} = lfm_proxy:mkdir(Worker, SessId(User), FilePath),
+    {ok, _} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath2),
     {ok, ListAns4} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
     ?assertEqual([FileNameString], ListAns4 -- InitialSpaceFiles),
@@ -636,7 +636,7 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
                 end)
     end,
 
-    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath, 8#777),
+    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, ListAns} = ?assertMatch({ok, _},
@@ -681,11 +681,11 @@ lfm_monitored_open(Config) ->
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
 
     File1Path = <<"/space_name1/lfm_monitored_open1">>,
-    {ok, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File1Path, 8#755)),
+    {ok, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File1Path)),
     File1Uuid = file_id:guid_to_uuid(File1Guid),
 
     File2Path = <<"/space_name1/lfm_monitored_open2">>,
-    {ok, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File2Path, 8#755)),
+    {ok, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File2Path)),
     File2Uuid = file_id:guid_to_uuid(File2Guid),
 
     Self = self(),
@@ -752,7 +752,7 @@ lfm_monitored_open(Config) ->
     ExpFileIds = lists:sort(lists:map(fun(Num) ->
         FileIdx = integer_to_binary(Num),
         FilePath = <<"/space_name1/file_", FileIdx/binary>>,
-        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath, 8#755)),
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath)),
 
         spawn(W, fun() ->
             Self !  lfm:monitored_open(SessId1, {guid, FileGuid}, read),
@@ -790,12 +790,16 @@ lfm_monitored_open(Config) ->
 
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    Posthook = fun(NewConfig) ->
+        initializer:mock_auth_manager(NewConfig),
+        initializer:setup_storage(NewConfig)
+    end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
 
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config).
+    initializer:teardown_storage(Config),
+    initializer:unmock_auth_manager(Config).
 
 
 init_per_testcase(Case, Config) when

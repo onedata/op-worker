@@ -234,7 +234,7 @@ setup_test_files_structure(W, RootHandle, [{Dirs, Files}], CreatedDirs, CreatedF
             true ->
                 ok;
             false ->
-                ok = sd_test_utils:mkdir(W, SubDirHandle, 8#755)
+                ok = sd_test_utils:mkdir(W, SubDirHandle, ?DEFAULT_DIR_PERMS)
         end,
         NewDirId = storage_driver:get_storage_file_id(SubDirHandle),
         [NewDirId | CreatedDirsIn]
@@ -247,7 +247,7 @@ setup_test_files_structure(W, RootHandle, [{Dirs, Files} | Rest], CreatedDirs, C
             true ->
                 ok;
             false ->
-                ok = sd_test_utils:mkdir(W, SubDirHandle, 8#755)
+                ok = sd_test_utils:mkdir(W, SubDirHandle, ?DEFAULT_DIR_PERMS)
         end,
         {CreatedDirsIn2, CreatedFilesIn2} =
             setup_test_files_structure(W, SubDirHandle, Rest, CreatedDirsIn, CreatedFilesIn, OnlyGenerateNames),
@@ -263,7 +263,7 @@ create_files(W, RootHandle, FilesNum, CreatedFiles, OnlyGenerateNames) ->
             true ->
                 ok;
             false ->
-                ok = sd_test_utils:create_file(W, SubDirHandle, 8#664)
+                ok = sd_test_utils:create_file(W, SubDirHandle, ?DEFAULT_FILE_PERMS)
         end,
         NewFileId = storage_driver:get_storage_file_id(SubDirHandle),
         [NewFileId | CreatedFilesIn]

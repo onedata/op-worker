@@ -135,7 +135,7 @@ lookup_file_objectid(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     FilePath = filename:join(["/", SpaceName, "get_file_objectid"]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
     {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
         WorkerP1, <<"lookup-file-id/", FilePath/binary>>, post,
         ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
@@ -340,11 +340,11 @@ create_share(Config) ->
 
     % create directory
     DirPath = filename:join(["/", SpaceName, "shared_dir"]),
-    {ok, DirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, DirPath, 8#700),
+    {ok, DirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, DirPath),
 
     % create regular file
     FilePath = filename:join(["/", SpaceName, "file1"]),
-    {ok, FileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, FilePath, 8#600),
+    {ok, FileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, FilePath),
 
     RestPath = <<"shares/">>,
     ShareName = <<"Share name">>,
@@ -412,7 +412,7 @@ get_share(Config) ->
 
     % create directory
     SharedDir = filename:join(["/", SpaceName, "shared_dir"]),
-    {ok, DirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
+    {ok, DirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir),
 
     % get invalid rest path
     InvalidRestPath = str_utils:format_bin("shares/~s", [<<"invalid_share_id">>]),
@@ -484,7 +484,7 @@ update_share_name(Config) ->
 
     % create directory
     SharedDir = filename:join(["/", SpaceName, "shared_dir"]),
-    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
+    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir),
 
     % get invalid rest paths
     InvalidRestPath = str_utils:format_bin("shares/~s", [<<"invalid_share_id">>]),
@@ -541,7 +541,7 @@ delete_share(Config) ->
 
     % create directory
     SharedDir = filename:join(["/", SpaceName, "shared_dir"]),
-    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
+    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir),
 
     % get invalid rest paths
     InvalidRestPath = str_utils:format_bin("shares/~s", [<<"invalid_share_id">>]),
@@ -996,7 +996,7 @@ schedule_file_replication_by_id(Worker, ProviderId, FileId, Config) ->
     Tid.
 
 create_test_file(Worker, SessionId, File, TestData) ->
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File),
     {ok, Handle} = lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write),
     lfm_proxy:write(Worker, Handle, 0, TestData),
     lfm_proxy:fsync(Worker, Handle),
@@ -1006,7 +1006,7 @@ create_test_file(Worker, SessionId, File, TestData) ->
 create_test_file_by_size(Worker, SessionId, File, Size) ->
     ChunkSize = 100 * 1024 * 1024,
     Chunks = Size div (ChunkSize + 1) + 1,
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File),
     {ok, Handle} = lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write),
     Data = crypto:strong_rand_bytes(ChunkSize),
     lists:foldl(fun(_ChunkNum, WrittenSum) ->
