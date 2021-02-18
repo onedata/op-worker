@@ -227,11 +227,12 @@ generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
         {ok, FileCtx4} ->
             {Storage, FileCtx5} = file_ctx:get_storage(FileCtx4),
             Helper = storage:get_helper(Storage),
-            HelperName = helper:get_name(Helper),
-            case HelperName =:= ?S3_HELPER_NAME andalso helper:is_auto_import_supported(Helper) of
+            case (helper:is_object(Helper) andalso helper:is_import_supported(Helper))
+                orelse helper:get_name(Helper) =:= ?NULL_DEVICE_HELPER_NAME
+            of
                 true ->
                     % pretend that parent directories has been created
-                    % this should only happen on synced S3 storage
+                    % this should only happen on imported object storage
                     {ParentCtx, FileCtx6} = file_ctx:get_parent(FileCtx5, UserCtx),
                     mark_parent_dirs_created_on_storage(ParentCtx, UserCtx),
                     {ok, FileCtx6};

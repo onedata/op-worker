@@ -76,9 +76,8 @@ move_to_trash(FileCtx, UserCtx) ->
     % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
     file_qos:clean_up(FileCtx5),
     ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    % TODO VFS-7133 invalidate paths cache when original parent is saved and can be used to determine storage file id
-    % ok = paths_cache:invalidate_caches_on_all_nodes(SpaceId),
     file_meta:rename(FileDoc, ParentUuid, TrashUuid, ?NAME_IN_TRASH(Name, Uuid)),
+    ok = paths_cache:invalidate_caches_on_all_nodes(SpaceId),
     FileCtx5.
 
 
@@ -110,6 +109,10 @@ schedule_deletion_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUui
 -spec add_deletion_marker_if_applicable(file_meta:uuid(), file_ctx:ctx()) -> file_ctx:ctx().
 add_deletion_marker_if_applicable(ParentUuid, FileCtx) ->
     case file_ctx:is_imported_storage(FileCtx) of
-        {true, FileCtx2} -> deletion_marker:add(ParentUuid, FileCtx2);
+        {true, FileCtx2} ->
+            case file_ctx:is_storage_file_created(FileCtx2) of
+                {true, FileCtx3} -> deletion_marker:add(ParentUuid, FileCtx2);
+                {false, FileCtx3} -> FileCtx3
+            end;
         {false, FileCtx2} -> FileCtx2
     end.
