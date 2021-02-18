@@ -440,6 +440,8 @@ get_support_stage_registry(SpaceId) ->
     {ok, {provider_sync_progress:seq(), provider_sync_progress:seq_timestamp()}} | errors:error().
 get_latest_emitted_seq(SpaceId, ProviderId) ->
     Request = #gs_req_graph{
+        % use 'create' as the GS channel between OP and OZ does not allow 'get'
+        % operations that return a value and are not cached as a document
         operation = create,
         gri = #gri{type = space_stats, id = SpaceId, aspect = {latest_emitted_seq, ProviderId}}
     },
