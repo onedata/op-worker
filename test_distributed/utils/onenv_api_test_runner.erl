@@ -42,7 +42,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
--export([run_tests/2]).
+-export([run_tests/1]).
 
 -type ct_config() :: proplists:proplist().
 
@@ -154,9 +154,9 @@
 %%%===================================================================
 
 
--spec run_tests(ct_config(), [scenario_spec() | suite_spec()]) ->
+-spec run_tests([scenario_spec() | suite_spec()]) ->
     HasAllTestsPassed :: boolean().
-run_tests(_Config, SpecTemplates) ->
+run_tests(SpecTemplates) ->
     lists:foldl(fun(SpecTemplate, AllPreviousTestsPassed) ->
         AllPreviousTestsPassed and try
             run_suite(prepare_suite_spec(SpecTemplate))

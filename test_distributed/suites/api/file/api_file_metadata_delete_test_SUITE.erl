@@ -144,7 +144,7 @@ delete_metadata_test_base(
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Nodes,
             setup_fun = build_setup_fun(TestSetupVariant, FileGuid, MetadataType, Metadata, Nodes),

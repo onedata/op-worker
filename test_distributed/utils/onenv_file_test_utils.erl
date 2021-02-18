@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -16,15 +16,16 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
--export([create_and_sync_files/3]).
+-export([create_and_sync_file_tree/3]).
+
+-type share_spec() :: #share_spec{}.
 
 -type file_selector() :: file_id:file_guid() | oct_background:entity_selector().
--type file_desc() :: #file{} | #dir{}.
+-type file_spec() :: #file_spec{} | #dir_spec{}.
 
--type share_desc() :: #{name := binary(), desc => binary()}.
--type shares_desc() :: non_neg_integer() | [share_desc()].
+-type object() :: #object{}.
 
--export_type([file_selector/0, file_desc/0, share_desc/0, shares_desc/0]).
+-export_type([share_spec/0, file_selector/0, file_spec/0, object/0]).
 
 -define(ATTEMPTS, 30).
 
@@ -34,15 +35,15 @@
 %%%===================================================================
 
 
--spec create_and_sync_files(oct_background:entity_selector(), file_selector(), file_desc()) ->
+-spec create_and_sync_file_tree(oct_background:entity_selector(), file_selector(), file_spec()) ->
     map().
-create_and_sync_files(UserSelector, ParentSelector, Files) ->
+create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
     UserId = oct_background:get_user_id(UserSelector),
     {ParentGuid, SpaceId} = resolve_file(ParentSelector),
     [CreationProvider | SyncProviders] = oct_background:get_space_supporting_providers(
         SpaceId
     ),
-    create_files(UserId, ParentGuid, CreationProvider, SyncProviders, Files).
+    create_file_tree(UserId, ParentGuid, CreationProvider, SyncProviders, FileDesc).
 
 
 %%%===================================================================
@@ -51,86 +52,115 @@ create_and_sync_files(UserSelector, ParentSelector, Files) ->
 
 
 %% @private
--spec create_files(
+-spec create_file_tree(
     od_user:id(),
     file_id:file_guid(),
     oct_background:entity_selector(),
     [oct_background:entity_selector()],
-    file_desc()
+    file_spec()
 ) ->
-    map().
-create_files(UserId, ParentGuid, CreationProvider, SyncProviders, #file{
+    object().
+create_file_tree(UserId, ParentGuid, CreationProvider, SyncProviders, #file_spec{
     name = NameOrUndefined,
     mode = FileMode,
-    shares = SharesDesc
+    shares = ShareSpecs
 }) ->
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
 
     {ok, FileGuid} = create_file(CreationNode, UserSessId, ParentGuid, FileName, FileMode),
-    Shares = create_shares(CreationNode, UserSessId, FileGuid, SharesDesc),
 
-    await_sync(SyncProviders, UserId, FileGuid, Shares),
-    #{name => FileName, guid => FileGuid, shares => Shares};
+    File = #object{
+        guid = FileGuid,
+        name = FileName,
+        type = ?REGULAR_FILE_TYPE,
+        mode = FileMode,
+        shares = create_shares(CreationNode, UserSessId, FileGuid, ShareSpecs),
+        children = undefined
+    },
 
-create_files(UserId, ParentGuid, CreationProvider, SyncProviders, #dir{
+    await_sync(SyncProviders, UserId, File),
+
+    File;
+
+create_file_tree(UserId, ParentGuid, CreationProvider, SyncProviders, #dir_spec{
     name = NameOrUndefined,
-    mode = FileMode,
-    shares = SharesDesc,
+    mode = DirMode,
+    shares = ShareSpecs,
     children = ChildrenDesc
 }) ->
-    FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
+    DirName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
 
-    {ok, DirGuid} = create_dir(CreationNode, UserSessId, ParentGuid, FileName, FileMode),
-    Shares = create_shares(CreationNode, UserSessId, DirGuid, SharesDesc),
+    {ok, DirGuid} = create_dir(CreationNode, UserSessId, ParentGuid, DirName, DirMode),
 
-    Children = lists_utils:pmap(fun(File) ->
-        create_files(UserId, DirGuid, CreationProvider, SyncProviders, File)
-    end, ChildrenDesc),
+    Dir = #object{
+        guid = DirGuid,
+        name = DirName,
+        type = ?DIRECTORY_TYPE,
+        mode = DirMode,
+        shares = create_shares(CreationNode, UserSessId, DirGuid, ShareSpecs),
+        children = lists_utils:pmap(fun(File) ->
+            create_file_tree(UserId, DirGuid, CreationProvider, SyncProviders, File)
+        end, ChildrenDesc)
+    },
 
-    await_sync(SyncProviders, UserId, DirGuid, Shares),
-    #{name => FileName, guid => DirGuid, shares => Shares, children => Children}.
+    await_sync(SyncProviders, UserId, Dir),
+
+    Dir.
 
 
 %% @private
--spec create_shares(node(), session:id(), file_id:file_guid(), shares_desc()) ->
+-spec create_shares(node(), session:id(), file_id:file_guid(), [shares_spec()]) ->
     [od_share:id()] | no_return().
-create_shares(Node, SessId, FileGuid, SharesDesc0) ->
-    SharesDesc1 = case is_integer(SharesDesc0) of
-        true -> [#{name => <<"share">>} || _ <- lists:seq(1, SharesDesc0)];
-        false -> SharesDesc0
-    end,
-
-    lists:reverse(lists:map(fun(ShareDesc) ->
+create_shares(Node, SessId, FileGuid, ShareSpecs) ->
+    lists:sort(lists:map(fun(#share_spec{name = Name, description = Description}) ->
         {ok, ShareId} = ?assertMatch(
             {ok, _},
-            lfm_proxy:create_share(
-                Node, SessId, {guid, FileGuid},
-                maps:get(name, ShareDesc), maps:get(desc, ShareDesc, <<>>)
-            ),
+            lfm_proxy:create_share(Node, SessId, {guid, FileGuid}, Name, Description),
             ?ATTEMPTS
         ),
         ShareId
-    end, SharesDesc1)).
+    end, ShareSpecs)).
 
 
 %% @private
--spec await_sync(oct_background:entity_selector(), od_user:id(), file_id:file_guid(), [od_share:id()]) ->
+-spec await_sync([oct_background:entity_selector()], od_user:id(), object()) ->
     ok | no_return().
-await_sync(SyncProviders, UserId, FileGuid, Shares) ->
+await_sync(SyncProviders, UserId, #object{type = ?REGULAR_FILE_TYPE} = Object) ->
+    await_file_attr_sync(SyncProviders, UserId, Object);
+
+await_sync(SyncProviders, UserId, #object{type = ?DIRECTORY_TYPE} = Object) ->
+    await_file_attr_sync(SyncProviders, UserId, Object#object{children = undefined}).
+
+
+%% @private
+-spec await_file_attr_sync([oct_background:entity_selector()], od_user:id(), object()) ->
+    ok | no_return().
+await_file_attr_sync(SyncProviders, UserId, #object{guid = Guid} = Object) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
-
-        ?assertMatch(
-            {ok, #file_attr{shares = Shares}},
-            file_test_utils:get_attrs(SyncNode, SessId, FileGuid),
-            ?ATTEMPTS
-        )
+        ?assertMatch({ok, Object}, get_object(SyncNode, SessId, Guid), ?ATTEMPTS)
     end, SyncProviders).
+
+
+%% @private
+-spec get_object(oct_background:entity_selector(), od_user:id(), object()) ->
+    ok | no_return().
+get_object(SyncNode, SessId, Guid) ->
+    case file_test_utils:get_attrs(SyncNode, SessId, Guid) of
+        {ok, #file_attr{guid = Guid, name = Name, type = Type, mode = Mode, shares = Shares}} ->
+            {ok, #object{
+                guid = Guid, name = Name,
+                type = Type, mode = Mode,
+                shares = lists:sort(Shares)
+            }};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %% @private
@@ -153,6 +183,6 @@ resolve_file(FileSelector) ->
     try
         SpaceId = oct_background:get_space_id(FileSelector),
         {fslogic_uuid:spaceid_to_space_dir_guid(SpaceId), SpaceId}
-    catch _:_ ->
+    catch error:{badkeys, _} ->
         {FileSelector, file_id:guid_to_space_id(FileSelector)}
     end.

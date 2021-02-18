@@ -70,7 +70,7 @@ get_file_attrs_test(Config) ->
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
     JsonAttrs = attrs_to_json(undefined, FileAttrs),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = [P1Node, P2Node],
             client_spec = #client_spec{
@@ -134,7 +134,7 @@ get_file_attrs_test(Config) ->
     ])).
 
 
-get_shared_file_attrs_test(Config) ->
+get_shared_file_attrs_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
@@ -159,7 +159,7 @@ get_shared_file_attrs_test(Config) ->
     ),
     JsonAttrs = attrs_to_json(ShareId1, FileAttrs),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -204,7 +204,7 @@ get_shared_file_attrs_test(Config) ->
     ])).
 
 
-get_attrs_on_provider_not_supporting_space_test(Config) ->
+get_attrs_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
     {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
@@ -218,7 +218,7 @@ get_attrs_on_provider_not_supporting_space_test(Config) ->
         ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = [P2Node],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
@@ -455,7 +455,7 @@ get_attrs_exp_result(#api_test_ctx{data = Data}, JsonAttrs, ShareId) ->
 %%%===================================================================
 
 
-get_file_shares_test(Config) ->
+get_file_shares_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
@@ -477,7 +477,7 @@ get_file_shares_test(Config) ->
         }) end, [ShareId2, ShareId1])
     },
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Get ", FileType/binary, " shares using gs private api">>,
             type = gs,
@@ -564,7 +564,7 @@ set_file_mode_test(Config) ->
         Mode
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
@@ -636,7 +636,7 @@ set_file_mode_test(Config) ->
     ])).
 
 
-set_mode_on_provider_not_supporting_space_test(Config) ->
+set_mode_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
@@ -663,7 +663,7 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
         true
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = [P2Node],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
@@ -909,7 +909,7 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
         end
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,

@@ -69,7 +69,7 @@ get_dir_children_test(Config) ->
         end
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
@@ -147,7 +147,7 @@ get_shared_dir_children_test(Config) ->
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
     {ok, ShareDirObjectId} = file_id:guid_to_objectid(ShareDirGuid),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -276,7 +276,7 @@ get_file_children_test(Config) ->
     end,
 
     % Listing file result in returning this file info only - index/limit parameters are ignored.
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = #client_spec{
@@ -396,7 +396,7 @@ get_shared_file_children_test(Config) ->
     },
 
     % Listing file result in returning this file info only - index/limit parameters are ignored.
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -468,7 +468,7 @@ get_shared_file_children_test(Config) ->
     ])).
 
 
-get_user_root_dir_children_test(Config) ->
+get_user_root_dir_children_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P2Node, P1Node],
@@ -497,7 +497,7 @@ get_user_root_dir_children_test(Config) ->
 
     DataSpec = get_children_data_spec(),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = #client_spec{
@@ -587,7 +587,7 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
     }.
 
 
-get_dir_children_on_provider_not_supporting_space_test(Config) ->
+get_dir_children_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
 
@@ -605,7 +605,7 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
         ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Response)
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = [P2Node],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,

@@ -18,17 +18,31 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 
--record(file, {
-    name = undefined :: undefined | binary(),
-    mode = ?DEFAULT_FILE_MODE :: file_meta:mode(),
-    shares = 0 :: onenv_file_test_utils:shares_desc()
+-record(share_spec, {
+    name = <<"share">> :: binary(),
+    description = <<>> :: binary()
 }).
 
--record(dir, {
+-record(file_spec, {
+    name = undefined :: undefined | binary(),
+    mode = ?DEFAULT_FILE_MODE :: file_meta:mode(),
+    shares = [] :: [onenv_file_test_utils:shares_spec()]
+}).
+
+-record(dir_spec, {
     name = undefined :: undefined | binary(),
     mode = ?DEFAULT_DIR_MODE :: file_meta:mode(),
-    shares = 0 :: onenv_file_test_utils:shares_desc(),
-    children = [] :: [#dir{} | #file{}]
+    shares = [] :: [onenv_file_test_utils:shares_spec()],
+    children = [] :: [#dir_spec{} | #file_spec{}]
+}).
+
+-record(object, {
+    guid :: file_id:file_guid(),
+    name :: binary(),
+    type :: file_meta:type(),
+    mode :: file_meta:mode(),
+    shares :: [od_share:id()],
+    children = undefined :: undefined | [onenv_file_test_utils:object()]
 }).
 
 

@@ -47,21 +47,21 @@ all() -> [
 %%%===================================================================
 
 
-create_share_test(Config) ->
+create_share_test(_Config) ->
     Providers = lists:flatten([
         oct_background:get_provider_nodes(krakow),
         oct_background:get_provider_nodes(paris)
     ]),
     SpaceId = oct_background:get_space_id(space_krk_par),
 
-    {FileType, FileDesc} = generate_random_file_desc(),
-    FileInfo = onenv_file_test_utils:create_and_sync_files(user3, SpaceId, FileDesc),
-    FileGuid = kv_utils:get(guid, FileInfo),
+    {FileType, FileSpec} = generate_random_file_spec(),
+    FileInfo = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec),
+    FileGuid = FileInfo#object.guid,
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     MemRef = api_test_memory:init(),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
@@ -192,7 +192,7 @@ build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, Spac
     end.
 
 
-get_share_test(Config) ->
+get_share_test(_Config) ->
     Providers = lists:flatten([
         oct_background:get_provider_nodes(krakow),
         oct_background:get_provider_nodes(paris)
@@ -202,12 +202,12 @@ get_share_test(Config) ->
     ShareName = <<"share">>,
     Description = <<"# Collection ABC\nThis collection contains elements.">>,
 
-    {FileType, FileDesc} = generate_random_file_desc(
-        [#{name => ShareName, desc => Description}]
+    {FileType, FileSpec} = generate_random_file_spec([
+        #share_spec{name = ShareName, description = Description}
+    ]),
+    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, SpaceId, FileSpec
     ),
-    FileInfo = onenv_file_test_utils:create_and_sync_files(user3, SpaceId, FileDesc),
-    FileGuid = kv_utils:get(guid, FileInfo),
-    [ShareId] = kv_utils:get(shares, FileInfo),
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
 
@@ -215,7 +215,7 @@ get_share_test(Config) ->
         bad_values = [{bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}]
     },
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = #client_spec{
@@ -299,7 +299,7 @@ build_get_share_prepare_gs_args_fun(ShareId, Scope) ->
     end.
 
 
-update_share_test(Config) ->
+update_share_test(_Config) ->
     Providers = lists:flatten([
         oct_background:get_provider_nodes(krakow),
         oct_background:get_provider_nodes(paris)
@@ -310,18 +310,18 @@ update_share_test(Config) ->
     OriginalShareName = <<"share">>,
     OriginalDescription = <<"### Nested heading at the beginning - total markdown anarchy.">>,
 
-    {FileType, FileDesc} = generate_random_file_desc(
-        [#{name => OriginalShareName, desc => OriginalDescription}]
+    {FileType, FileSpec} = generate_random_file_spec([
+        #share_spec{name = OriginalShareName, description = OriginalDescription}
+    ]),
+    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, SpaceKrkParId, FileSpec
     ),
-    FileInfo = onenv_file_test_utils:create_and_sync_files(user3, SpaceKrkParId, FileDesc),
-    FileGuid = kv_utils:get(guid, FileInfo),
-    [ShareId] = kv_utils:get(shares, FileInfo),
 
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, previous_name, OriginalShareName),
     api_test_memory:set(MemRef, previous_description, OriginalDescription),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = #client_spec{
@@ -421,22 +421,22 @@ build_update_share_prepare_gs_args_fun(ShareId) ->
     end.
 
 
-delete_share_test(Config) ->
+delete_share_test(_Config) ->
     Providers = lists:flatten([
         oct_background:get_provider_nodes(krakow),
         oct_background:get_provider_nodes(paris)
     ]),
     SpaceId = oct_background:get_space_id(space_krk_par),
 
-    {FileType, FileDesc} = generate_random_file_desc(4),
-    FileInfo = onenv_file_test_utils:create_and_sync_files(user3, SpaceId, FileDesc),
-    FileGuid = kv_utils:get(guid, FileInfo),
-    ShareIds = kv_utils:get(shares, FileInfo),
+    {FileType, FileSpec} = generate_random_file_spec([#share_spec{} || _ <- lists:seq(1, 4)]),
+    #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, SpaceId, FileSpec
+    ),
 
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, shares, ShareIds),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
@@ -544,20 +544,20 @@ validate_delete_share_result(MemRef, UserId, Providers) ->
 
 
 %% @private
--spec generate_random_file_desc() ->
-    {api_test_utils:file_type(), onenv_file_test_utils:file_desc()}.
-generate_random_file_desc() ->
-    generate_random_file_desc(0).
+-spec generate_random_file_spec() ->
+    {api_test_utils:file_type(), onenv_file_test_utils:file_spec()}.
+generate_random_file_spec() ->
+    generate_random_file_spec([]).
 
 
 %% @private
--spec generate_random_file_desc(onenv_file_test_utils:shares_desc()) ->
-    {api_test_utils:file_type(), onenv_file_test_utils:file_desc()}.
-generate_random_file_desc(ShareDesc) ->
+-spec generate_random_file_spec([onenv_file_test_utils:shares_spec()]) ->
+    {api_test_utils:file_type(), onenv_file_test_utils:file_spec()}.
+generate_random_file_spec(ShareSpecs) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FileDesc = case FileType of
-        <<"file">> -> #file{shares = ShareDesc};
-        <<"dir">> -> #dir{shares = ShareDesc}
+        <<"file">> -> #file_spec{shares = ShareSpecs};
+        <<"dir">> -> #dir_spec{shares = ShareSpecs}
     end,
     {FileType, FileDesc}.
 

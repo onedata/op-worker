@@ -63,7 +63,7 @@ all() -> [
 %%%===================================================================
 
 
-rest_create_file_test(Config) ->
+rest_create_file_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
@@ -89,7 +89,7 @@ rest_create_file_test(Config) ->
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, files, [FileGuid]),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Upload file using rest endpoint">>,
             type = rest,
@@ -285,7 +285,7 @@ rest_update_file_content_test(Config) ->
 
     MemRef = api_test_memory:init(),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Update file content using rest endpoint">>,
             type = rest,

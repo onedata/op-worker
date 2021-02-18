@@ -108,12 +108,11 @@ set_file_rdf_metadata_test(Config) ->
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, _QsParams = [],
-        _RandomlySelectScenario = true,
-        Config
+        _RandomlySelectScenario = true
     ).
 
 
-set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
+set_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
@@ -137,8 +136,7 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, DataSpec, _QsParams = [],
-        _RandomlySelectScenario = false,
-        Config
+        _RandomlySelectScenario = false
     ).
 
 
@@ -303,8 +301,7 @@ set_file_json_metadata_test(Config) ->
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, QsParams,
-        _RandomlySelectScenario = true,
-        Config
+        _RandomlySelectScenario = true
     ).
 
 
@@ -354,12 +351,11 @@ set_file_primitive_json_metadata_test(Config) ->
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, _QsParams = [],
-        _RandomlySelectScenario = true,
-        Config
+        _RandomlySelectScenario = true
     ).
 
 
-set_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
+set_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
@@ -383,8 +379,7 @@ set_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, DataSpec, _QsParams = [],
-        _RandomlySelectScenario = false,
-        Config
+        _RandomlySelectScenario = false
     ).
 
 
@@ -470,12 +465,11 @@ set_file_xattrs_test(Config) ->
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, _QsParams = [],
-        _RandomlySelectScenario = true,
-        Config
+        _RandomlySelectScenario = true
     ).
 
 
-set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
+set_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
@@ -499,8 +493,7 @@ set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, DataSpec, _QsParams = [],
-        _RandomlySelectScenario = false,
-        Config
+        _RandomlySelectScenario = false
     ).
 
 
@@ -593,19 +586,18 @@ build_set_metadata_validate_gs_call_fun(GetExpResultFun) ->
     onenv_api_test_runner:client_spec(),
     onenv_api_test_runner:data_spec(),
     QsParameters :: [binary()],
-    RandomlySelectScenario :: boolean(),
-    api_test_runner:config()
+    RandomlySelectScenario :: boolean()
 ) ->
     ok.
 set_metadata_test_base(
     MetadataType, FileType, FilePath, FileGuid, ShareId,
     ValidateRestCallResultFun, ValidateGsCallResultFun, VerifyEnvFun,
-    Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario, Config
+    Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario
 ) ->
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
