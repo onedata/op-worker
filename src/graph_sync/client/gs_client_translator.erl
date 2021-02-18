@@ -34,9 +34,6 @@
 %%--------------------------------------------------------------------
 -spec translate(gri:gri(), Result :: gs_protocol:data()) ->
     datastore:doc().
-translate(#gri{type = space_stats, aspect = {latest_emitted_seq, _}}, #{<<"seq">> := Seq}) ->
-    Seq;
-
 translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Result) ->
     #document{
         key = Id,

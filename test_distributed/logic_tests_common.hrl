@@ -158,6 +158,7 @@
     }
 }).
 -define(SPACE_MOCKED_LATEST_EMITTED_SEQ, 83246190).
+-define(SPACE_MOCKED_LATEST_EMITTED_SEQ_TIMESTAMP, 1612366936).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).

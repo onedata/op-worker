@@ -129,7 +129,7 @@ init_per_suite(Config) ->
         Workers =  ?config(op_worker_nodes, NewConfig2),
         % space_logic is already mocked by initializer
         test_utils:mock_expect(Workers, space_logic, get_latest_emitted_seq, fun(_, _) ->
-            {ok, 1000000000}
+            {ok, {1000000000, global_clock:timestamp_seconds()}}
         end),
         NewConfig2
     end,

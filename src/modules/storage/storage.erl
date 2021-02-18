@@ -59,7 +59,7 @@
 -export([on_storage_created/1]).
 
 %%% cluster upgrade procedures
--export([upgrade_supports_to_21_02/0]).
+-export([upgrade_supports_to_22_02/0]).
 
 
 -type id() :: od_storage:id().
@@ -436,23 +436,23 @@ finalize_unsupport(StorageId, SpaceId) ->
     storage_logic:apply_unsupport_step(StorageId, SpaceId, finalize_unsupport).
 
 %%%===================================================================
-%%% Upgrade from 20.02.* to 21.02.*
+%%% Upgrade from 21.02.* to 22.02.*
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Upgrades all space supports to the new model (21.02) by calling the upgrade
+%% Upgrades all space supports to the new model (22.02) by calling the upgrade
 %% procedure in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec upgrade_supports_to_21_02() -> ok.
-upgrade_supports_to_21_02() ->
-    ?info("Upgrading all space supports to the new model (~s)...", [?LINE_21_02]),
+-spec upgrade_supports_to_22_02() -> ok.
+upgrade_supports_to_22_02() ->
+    ?info("Upgrading all space supports to the new model (~s)...", [?LINE_22_02]),
     {ok, Spaces} = provider_logic:get_spaces(),
     lists:foreach(fun(SpaceId) ->
         {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
         {ok, Name} = space_logic:get_name(SpaceId),
-        ok = storage_logic:upgrade_support_to_21_02(StorageId, SpaceId),
+        ok = storage_logic:upgrade_support_to_22_02(StorageId, SpaceId),
         ?info("  * space '~ts' (~ts) OK", [Name, SpaceId])
     end, Spaces),
     ?notice("Successfully upgraded space supports for ~B space(s)", [length(Spaces)]).

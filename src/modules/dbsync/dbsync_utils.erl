@@ -114,17 +114,25 @@ is_supported(SpaceId, ProviderIds) ->
         _ -> {false, NotSupporting}
     end.
 
--spec should_terminate_stream(od_space:id(), od_provider:id()) -> boolean() | errors:error().
+-spec should_terminate_stream(od_space:id(), od_provider:id()) -> {ok, boolean()} | errors:error().
 should_terminate_stream(SpaceId, ProviderId) ->
     case space_logic:get_support_stage_registry(SpaceId) of
         {ok, SupportStageRegistry} ->
             case support_stage:lookup_details(SupportStageRegistry, ProviderId) of
-                error -> % provider has never supported this space
-                    true;
-                ?LEGACY_SUPPORT -> % provider cannot retire before 21.02 release
-                    {error, legacy_provider};
-                {ok, #support_stage_details{provider_stage = Stage}} ->
-                    Stage =:= retired
+                error ->
+                    ?warning("Unexpected lack of entry for support stage of provider ~s in space ~s", [
+                        ProviderId, SpaceId
+                    ]),
+                    {ok, true};
+                {ok, #support_stage_details{provider_stage = retired}} ->
+                    {ok, true};
+                {ok, #support_stage_details{provider_stage = legacy}} ->
+                    ?warning("Unexpected legacy entry was found for support stage of provider ~s in space ~s", [
+                        ProviderId, SpaceId
+                    ]),
+                    {ok, true};
+                {ok, _} ->
+                    {ok, false}
             end;
         {error, _} = Error ->
             Error

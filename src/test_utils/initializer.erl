@@ -1267,6 +1267,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         ok
     end),
 
+    test_utils:mock_expect(Workers, space_logic, report_provider_capacity_usage, fun(_SpaceId, _) ->
+        ok
+    end),
+
     test_utils:mock_expect(Workers, space_logic, has_eff_user, fun(SessionId, SpaceId, UserId) ->
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(SessionId, SpaceId),
         maps:is_key(UserId, EffUsers)

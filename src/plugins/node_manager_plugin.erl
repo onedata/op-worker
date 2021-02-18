@@ -156,7 +156,7 @@ upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
     {ok, 4};
 upgrade_cluster(4) ->
-    await_zone_connection_and_run(fun storage:upgrade_supports_to_21_02/0),
+    await_zone_connection_and_run(fun storage:upgrade_supports_to_22_02/0),
     {ok, 5}.
 
 %%--------------------------------------------------------------------

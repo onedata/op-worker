@@ -409,13 +409,13 @@ convenience_functions_test(Config) ->
     LatestEmittedSeqGriMatcher = #gri{type = space_stats, id = ?SPACE_1, aspect = {latest_emitted_seq, ?PROVIDER_1}, _ = '_'},
     LatestEmittedSeqCalls = logic_tests_common:count_reqs(Config, graph, LatestEmittedSeqGriMatcher),
     ?assertMatch(
-        {ok, ?SPACE_MOCKED_LATEST_EMITTED_SEQ},
+        {ok, {?SPACE_MOCKED_LATEST_EMITTED_SEQ, ?SPACE_MOCKED_LATEST_EMITTED_SEQ_TIMESTAMP}},
         rpc:call(Node, space_logic, get_latest_emitted_seq, [?SPACE_1, ?PROVIDER_1])
     ),
     ?assertEqual(LatestEmittedSeqCalls + 1, logic_tests_common:count_reqs(Config, graph, LatestEmittedSeqGriMatcher)),
     % the results of this query are not cached
     ?assertMatch(
-        {ok, ?SPACE_MOCKED_LATEST_EMITTED_SEQ},
+        {ok, {?SPACE_MOCKED_LATEST_EMITTED_SEQ, ?SPACE_MOCKED_LATEST_EMITTED_SEQ_TIMESTAMP}},
         rpc:call(Node, space_logic, get_latest_emitted_seq, [?SPACE_1, ?PROVIDER_1])
     ),
     ?assertEqual(LatestEmittedSeqCalls + 2, logic_tests_common:count_reqs(Config, graph, LatestEmittedSeqGriMatcher)).
