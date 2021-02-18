@@ -590,7 +590,7 @@ default_permissions_test(Config) ->
             {mkdir, <<"/space_name1">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/space_name1/test">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/space_name1/test/test">>, <<"test">>, 8#777, [SessId1], ?OK},
-            {mkdir, <<"/space_name1">>, ?TRASH_DIR_NAME, 8#777, [SessId1], ?EPERM}, % TODO-7064 change to EEXIST
+            {mkdir, <<"/space_name1">>, ?TRASH_DIR_NAME, 8#777, [SessId1], ?EPERM}, % TODO VFS-7064 change to EEXIST
             {get_attr, <<"/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {get_attr, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {get_attr, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},

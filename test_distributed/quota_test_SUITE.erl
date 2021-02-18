@@ -670,7 +670,6 @@ write_to_file(Worker, SessionId, FileKey, Offset, Data) ->
     {ok, FileHandle} = open_file(Worker, SessionId, FileKey, write),
     Result = lfm_proxy:write(Worker, FileHandle, Offset, Data),
     lfm_proxy:fsync(Worker, FileHandle),
-    timer:sleep(500), %% @todo: remove after fixing fsync
     lfm_proxy:close(Worker, FileHandle),
     Result.
 
@@ -689,7 +688,6 @@ truncate(Worker, SessionId, FileKey, Size) ->
     {ok, FileHandle} = open_file(Worker, SessionId, FileKey, write),
     Result = lfm_proxy:truncate(Worker, SessionId, FileKey, Size),
     lfm_proxy:fsync(Worker, FileHandle),
-    timer:sleep(500), %% @todo: remove after fixing fsync
     lfm_proxy:close(Worker, FileHandle),
     Result.
 
