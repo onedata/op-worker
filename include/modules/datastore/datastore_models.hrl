@@ -74,6 +74,8 @@
     emails = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
 
+    blocked = false :: boolean(),
+
     % List of user's aliases for spaces
     space_aliases = #{} :: #{od_space:id() => od_space:alias()},
 

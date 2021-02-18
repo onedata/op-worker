@@ -30,6 +30,7 @@
     auth_cache_expiration_test/1,
     auth_cache_expiration_with_time_warps_test/1,
     auth_cache_size_test/1,
+    auth_cache_user_access_blocked_event_test/1,
     auth_cache_named_token_events_test/1,
     auth_cache_temporary_token_events_test/1,
     auth_cache_oz_conn_status_test/1,
@@ -41,6 +42,7 @@ all() -> ?ALL([
     auth_cache_expiration_test,
     auth_cache_expiration_with_time_warps_test,
     auth_cache_size_test,
+    auth_cache_user_access_blocked_event_test,
     auth_cache_named_token_events_test,
     auth_cache_temporary_token_events_test,
     auth_cache_oz_conn_status_test,
@@ -245,6 +247,68 @@ auth_cache_size_test(Config) ->
     clear_auth_caches(Config).
 
 
+auth_cache_user_access_blocked_event_test(Config) ->
+    [Worker1, Worker2 | _] = Nodes = ?config(op_worker_nodes, Config),
+
+    clear_auth_caches(Config),
+    CacheItemTTL = 2,
+    set_auth_cache_default_ttl(Worker1, CacheItemTTL),
+
+    AccessToken1A = initializer:create_access_token(?USER_ID_1, [], named),
+    AccessToken1B = initializer:create_access_token(?USER_ID_1, [], temporary),
+    AccessToken2A = initializer:create_access_token(?USER_ID_2, [], named),
+    AccessToken2B = initializer:create_access_token(?USER_ID_2, [], temporary),
+
+    TokenCredentials1A = create_token_credentials(AccessToken1A),
+    TokenCredentials1B = create_token_credentials(AccessToken1B),
+    TokenCredentials2A = create_token_credentials(AccessToken2A),
+    TokenCredentials2B = create_token_credentials(AccessToken2B),
+
+    lists:foreach(fun({TokenCredentials, Worker, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_credentials(Worker, TokenCredentials))
+    end, [
+        {TokenCredentials1A, Worker1, ?USER_ID_1},
+        {TokenCredentials1B, Worker2, ?USER_ID_1},
+        {TokenCredentials2A, Worker2, ?USER_ID_2},
+        {TokenCredentials2B, Worker1, ?USER_ID_2}
+    ]),
+
+    ?assertEqual(2, get_auth_cache_size(Worker1)),
+    ?assertEqual(2, get_auth_cache_size(Worker2)),
+
+    simulate_user_access_block_changed(Nodes, ?USER_ID_1, true),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1A)),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1B)),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker1, TokenCredentials2A)),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker2, TokenCredentials2B)),
+
+    % while the user is blocked, verification of new tokens should be blocked too
+    % (this is checked in token_logic mock)
+    AccessToken1C = initializer:create_access_token(?USER_ID_1, [], named),
+    TokenCredentials1C = create_token_credentials(AccessToken1C),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1C)),
+
+    simulate_user_access_block_changed(Nodes, ?USER_ID_2, true),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1A)),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1B)),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials2A)),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials2B)),
+
+    % after unblocking, cached and new tokens should be verifiable immediately
+    simulate_user_access_block_changed(Nodes, ?USER_ID_1, false),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials2A)),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials2B)),
+    ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker1, TokenCredentials1A)),
+    ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker2, TokenCredentials1B)),
+    ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker2, TokenCredentials1C)),
+
+    AccessToken1D = initializer:create_access_token(?USER_ID_1, [], temporary),
+    TokenCredentials1D = create_token_credentials(AccessToken1D),
+    ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker1, TokenCredentials1D)),
+
+    clear_auth_caches(Config).
+
+
 auth_cache_named_token_events_test(Config) ->
     [Worker1, Worker2 | _] = Workers = ?config(op_worker_nodes, Config),
 
@@ -334,7 +398,7 @@ auth_cache_temporary_token_events_test(Config) ->
     % When temporary tokens of ?USER_ID_1 are revoked
     simulate_gs_temporary_tokens_revocation(Worker1, ?USER_ID_1),
 
-    % Then all TokenCredentialss based on temporary tokens should be revoked
+    % Then all TokenCredentials based on temporary tokens should be revoked
     lists:foreach(fun({TokenCredentials, Worker}) ->
         ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker, TokenCredentials))
     end, [{TokenCredentials1, Worker1}, {TokenCredentials2, Worker2}]),
@@ -527,8 +591,11 @@ init_per_testcase(_Case, Config) ->
     mock_space_logic(Config),
     mock_user_logic(Config),
     mock_token_logic(Config),
+    Nodes= ?config(op_worker_nodes, Config),
     % required to trigger auth cache events that are based on run_after procedures
-    rpc:multicall(?config(op_worker_nodes, Config), gs_client_worker, enable_cache, []),
+    rpc:multicall(Nodes, gs_client_worker, enable_cache, []),
+    simulate_user_access_block_changed(Nodes, ?USER_ID_1, false),
+    simulate_user_access_block_changed(Nodes, ?USER_ID_2, false),
     Config.
 
 
@@ -625,14 +692,20 @@ mock_token_logic(Config) ->
         (AccessToken, _, _, _, _) ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = ?SUB(user, UserId)} = Token} ->
-                    Caveats = tokens:get_caveats(Token),
-                    case caveats:infer_ttl(Caveats) of
-                        undefined ->
-                            {ok, ?SUB(user, UserId), undefined};
-                        TokenTTL when TokenTTL > 0 ->
-                            {ok, ?SUB(user, UserId), TokenTTL};
-                        _ ->
-                            ?ERROR_UNAUTHORIZED
+                    % this is set by simulate_user_access_(un)block/2
+                    case node_cache:get({user_blocked, UserId}, false) of
+                        true ->
+                            ?ERROR_USER_BLOCKED;
+                        false ->
+                            Caveats = tokens:get_caveats(Token),
+                            case caveats:infer_ttl(Caveats) of
+                                undefined ->
+                                    {ok, ?SUB(user, UserId), undefined};
+                                TokenTTL when TokenTTL > 0 ->
+                                    {ok, ?SUB(user, UserId), TokenTTL};
+                                _ ->
+                                    ?ERROR_UNAUTHORIZED
+                            end
                     end;
                 {error, _} = Error ->
                     Error
@@ -710,6 +783,15 @@ mock_token_logic_is_revoked(Nodes, RevokedTokens) ->
     test_utils:mock_expect(Nodes, token_logic, is_token_revoked, fun(TokenId) ->
         {ok, lists:member(TokenId, RevokedTokens)}
     end).
+
+
+-spec simulate_user_access_block_changed(node(), od_user:id(), boolean()) -> ok.
+simulate_user_access_block_changed(Nodes, UserId, Blocked) ->
+    rpc:call(lists_utils:random_element(Nodes), auth_cache, report_user_access_block_changed, [
+        UserId, Blocked
+    ]),
+    {_, []} = rpc:multicall(Nodes, node_cache, put, [{user_blocked, UserId}, Blocked]),
+    ok.
 
 
 -spec simulate_gs_token_status_update(node(), binary(), boolean()) -> ok.

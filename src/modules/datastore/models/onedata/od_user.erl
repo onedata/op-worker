@@ -90,10 +90,11 @@ run_after(_Function, _Args, Result) ->
     Result.
 
 -spec run_after(doc()) -> {ok, doc()}.
-run_after(Doc = #document{key = UserId, value = #od_user{eff_spaces = EffSpaces}}) ->
+run_after(Doc = #document{key = UserId, value = #od_user{blocked = Blocked, eff_spaces = EffSpaces}}) ->
     ok = file_meta:setup_onedata_user(UserId, EffSpaces),
     ok = permissions_cache:invalidate(),
     ok = files_to_chown:chown_deferred_files(UserId),
+    auth_cache:report_user_access_block_changed(UserId, Blocked),
     {ok, Doc}.
 
 %%%===================================================================
