@@ -2276,7 +2276,7 @@ create_delete_import2_test(Config) ->
     Size = byte_size(?TEST_DATA),
     enable_initial_scan(Config, ?SPACE_ID),
 
-    multi_provider_file_ops_test_base:verify_workers(Workers, fun(W) ->
+        multi_provider_file_ops_test_base:verify_workers(Workers, fun(W) ->
         ?assertMatch({ok, ?TEST_DATA},
             begin
                 SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W)}}, Config),
