@@ -76,6 +76,8 @@ move_to_trash(FileCtx, UserCtx) ->
     % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
     file_qos:clean_up(FileCtx5),
     ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+    % TODO VFS-7133 invalidate paths cache when original parent is saved and can be used to determine storage file id
+    % ok = paths_cache:invalidate_caches_on_all_nodes(SpaceId),
     file_meta:rename(FileDoc, ParentUuid, TrashUuid, ?NAME_IN_TRASH(Name, Uuid)),
     FileCtx5.
 

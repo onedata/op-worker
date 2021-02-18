@@ -109,6 +109,7 @@ delete_link(ParentUuid, StorageFileBasename) ->
 
 -spec storage_file_basename(file_ctx:ctx()) -> {storage_file_basename(), file_ctx:ctx()}.
 storage_file_basename(FileCtx) ->
+    % TODO VFS-7133 use original parent to determine storage file id before file was moved to trash
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     {filename:basename(StorageFileId), FileCtx2}.
 

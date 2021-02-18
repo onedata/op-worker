@@ -18,8 +18,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_group/0, init_caches/1, invalidate_paths_caches/1]).
+-export([init_group/0, init_caches/1, invalidate_caches_on_all_nodes/1]).
 -export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1]).
+%% RPC API
+-export([invalidate_caches/1]).
 
 -define(PATH_CACHE_GROUP, <<"paths_cache_group">>).
 -define(CANONICAL_PATHS_CACHE_NAME(SpaceId), binary_to_atom(<<"canonical_paths_cache_", SpaceId/binary>>, utf8)).
@@ -60,15 +62,26 @@ init_caches(Space) ->
     ok = init(Space, get_uuid_based_paths_cache_name(Space)).
 
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Invalidates cache for particular space.
-%% @end
-%%-------------------------------------------------------------------
--spec invalidate_paths_caches(od_space:id()) -> ok.
-invalidate_paths_caches(Space) ->
-    ok = bounded_cache:invalidate(get_canonical_paths_cache_name(Space)),
-    ok = bounded_cache:invalidate(get_uuid_based_paths_cache_name(Space)).
+-spec invalidate_caches_on_all_nodes(od_space:id()) -> ok.
+invalidate_caches_on_all_nodes(SpaceId) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, invalidate_caches, [SpaceId]),
+
+    case BadNodes of
+        [] ->
+            ok;
+        _ ->
+            ?error("Invalidation of paths caches for space ~p failed on nodes: ~p (RPC error)", [BadNodes])
+    end,
+
+    lists:foreach(fun
+        (ok) -> ok;
+        ({badrpc, _} = Error) ->
+            ?error(
+                "Invalidation of paths caches for space ~p failed.~n"
+                "Reason: ~p", [SpaceId, Error]
+            )
+    end, Res).
 
 
 %%-------------------------------------------------------------------
@@ -88,6 +101,15 @@ get_canonical_paths_cache_name(Space) ->
 -spec get_uuid_based_paths_cache_name(od_space:id()) -> atom().
 get_uuid_based_paths_cache_name(Space) ->
     ?UUID_BASED_PATHS_CACHE_NAME(Space).
+
+%%%===================================================================
+%%% RPC API functions
+%%%===================================================================
+
+-spec invalidate_caches(od_space:id()) -> ok.
+invalidate_caches(Space) ->
+    ok = bounded_cache:invalidate(get_canonical_paths_cache_name(Space)),
+    ok = bounded_cache:invalidate(get_uuid_based_paths_cache_name(Space)).
 
 %%%===================================================================
 %%% Internal functions
