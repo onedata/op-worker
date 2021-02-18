@@ -90,6 +90,7 @@ run_after(Doc = #document{key = SpaceId, value = #od_space{harvesters = Harveste
             ok = permissions_cache:invalidate(),
             ok = qos_bounded_cache:ensure_exists_on_all_nodes(SpaceId),
             ok = fslogic_worker:init_paths_caches(SpaceId),
+            ok = fslogic_worker:init_file_attr_caches(SpaceId),
             monitoring_event_emitter:emit_od_space_updated(SpaceId),
             % run asynchronously as this requires the space record, which will be cached
             % only after run_after finishes (running synchronously could cause an infinite loop)

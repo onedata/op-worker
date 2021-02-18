@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_models.hrl").
@@ -39,7 +40,7 @@
     list_children_whitelisted/4
 ]).
 -export([get_name/1, set_name/2]).
--export([get_active_perms_type/1, update_mode/2, update_acl/2]).
+-export([get_active_perms_type/1, update_mode/2, update_flags/3, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/6, new_doc/7, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1,
@@ -853,6 +854,18 @@ update_mode(FileUuid, NewMode) ->
     end)).
 
 
+-spec update_flags(uuid(), ace:bitmask(), ace:bitmask()) -> ok | {error, term()}.
+update_flags(FileUuid, FlagsToSet, FlagsToReset) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{flags = CurrFlags} = FileMeta) ->
+        NewFlags0 = ?set_flags(?reset_flags(CurrFlags, FlagsToReset), FlagsToSet),
+        NewFlags1 = case ?has_any_flags(NewFlags0, ?DATA_PROTECTION bor ?METADATA_PROTECTION) of
+            true -> ?set_flags(NewFlags0, ?IMPORT_LOCK);
+            false -> ?reset_flags(NewFlags0, ?IMPORT_LOCK)
+        end,
+        {ok, FileMeta#file_meta{flags = NewFlags1}}
+    end)).
+
+
 -spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
 update_acl(FileUuid, NewAcl) ->
     ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
@@ -1032,7 +1045,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    10.
+    file_meta_model:get_record_version().
 
 %%--------------------------------------------------------------------
 %% @doc

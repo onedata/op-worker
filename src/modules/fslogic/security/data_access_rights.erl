@@ -73,6 +73,20 @@
     ?read_metadata_mask
 )).
 
+% Permissions denied by file protection flags
+-define(DATA_PROTECTION_BLOCKED_PERMS, (
+    ?write_object_mask bor
+    ?add_object_mask bor
+    ?add_subcontainer_mask bor
+    ?delete_mask bor
+    ?delete_child_mask
+)).
+-define(METADATA_PROTECTION_BLOCKED_PERMS, (
+    ?write_attributes_mask bor
+    ?write_metadata_mask bor
+    ?write_acl_mask
+)).
+
 % Permissions granted by 'rwx' posix mode bits
 -define(POSIX_ALWAYS_GRANTED_PERMS, (
     ?read_attributes_mask bor
@@ -314,17 +328,19 @@ check_user_perms_matrix(UserCtx, FileCtx0, RequiredPerms) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
 calc_and_check_user_perms_matrix(UserCtx, FileCtx0, RequiredPermissions) ->
     ShareId = file_ctx:get_share_id_const(FileCtx0),
-    DeniedPerms = get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx0, ShareId),
+    SpaceDeniedPerms = get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx0, ShareId),
+    {FileProtectionDeniedPerms, FileCtx1} = get_perms_denied_by_file_flags(UserCtx, FileCtx0),
 
+    DeniedPerms = SpaceDeniedPerms bor FileProtectionDeniedPerms,
     UserPermsMatrix = {0, 0, DeniedPerms},
 
     case RequiredPermissions band DeniedPerms of
         0 ->
             calc_and_check_user_perms_matrix(
-                UserCtx, FileCtx0, RequiredPermissions, UserPermsMatrix
+                UserCtx, FileCtx1, RequiredPermissions, UserPermsMatrix
             );
         _ ->
-            {denied, FileCtx0, UserPermsMatrix}
+            {denied, FileCtx1, UserPermsMatrix}
     end.
 
 
@@ -354,6 +370,24 @@ get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx, undefined) ->
 get_perms_denied_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
     % All write permissions are denied in share mode
     ?SPACE_WRITE_PERMS.
+
+
+%% @private
+-spec get_perms_denied_by_file_flags(user_ctx:ctx(), file_ctx:ctx()) ->
+    {ace:bitmask(), file_ctx:ctx()}.
+get_perms_denied_by_file_flags(UserCtx, FileCtx0) ->
+    {Flags, FileCtx1} = file_ctx:get_effective_flags(UserCtx, FileCtx0),
+    DeniedPerms0 = 0,
+
+    DeniedPerms1 = case ?has_all_flags(Flags, ?DATA_PROTECTION) of
+        true -> ?set_flags(DeniedPerms0, ?DATA_PROTECTION_BLOCKED_PERMS);
+        false -> DeniedPerms0
+    end,
+    DeniedPerms2 = case ?has_all_flags(Flags, ?METADATA_PROTECTION) of
+        true -> ?set_flags(DeniedPerms0, ?METADATA_PROTECTION_BLOCKED_PERMS);
+        false -> DeniedPerms1
+    end,
+    {DeniedPerms2, FileCtx1}.
 
 
 %% @private

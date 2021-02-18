@@ -14,16 +14,24 @@
 
 -include("modules/datastore/datastore_models.hrl").
 
+%% datastore_model callbacks
+-export([
+    get_record_version/0, get_record_struct/1,
+    upgrade_record/2, resolve_conflict/3
+]).
 
 -define(FILE_META_MODEL, file_meta).
-
-%% datastore_model callbacks
--export([get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
 
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    11.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -214,7 +222,29 @@ get_record_struct(10) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string}
+    ]};
+get_record_struct(11) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        % field 'flags' has been added in this version
+        {flags, integer},
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        {is_scope, boolean},
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string}
     ]}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -278,6 +308,13 @@ upgrade_record(9, {
 }) ->
     {10, {?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid
+    }};
+upgrade_record(10, {
+    ?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, _GroupOwner, IsScope,
+    ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {11, {?FILE_META_MODEL, Name, Type, Mode, 0, ACL, Owner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid
     }}.
 
 
@@ -294,6 +331,7 @@ resolve_conflict(_Ctx,
     NewDoc = #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
     PrevDoc = #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}
 ) ->
+    invalidate_file_attr_cache_if_needed(NewDoc, PrevDoc),
     spawn(fun() ->
         invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc)
     end),
@@ -313,11 +351,29 @@ resolve_conflict(_Ctx,
     default.
 
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
+%% @private
+-spec invalidate_file_attr_cache_if_needed(file_meta:doc(), file_meta:doc()) -> ok.
+invalidate_file_attr_cache_if_needed(
+    #document{value = #file_meta{flags = NewFlags, parent_uuid = NewParentUuid}, scope = SpaceId},
+    #document{value = #file_meta{flags = OldFlags, parent_uuid = PrevParentUuid}}
+) ->
+    case OldFlags =/= NewFlags orelse PrevParentUuid =/= NewParentUuid of
+        true ->
+            spawn(fun() ->
+                fslogic_worker:schedule_invalidate_file_attr_caches(SpaceId)
+            end),
+            ok;
+        false ->
+            ok
+    end.
+
+
+%% @private
 -spec invalidate_qos_bounded_cache_if_moved_to_trash(file_meta:doc(), file_meta:doc()) -> ok.
 invalidate_qos_bounded_cache_if_moved_to_trash(
     #document{key = Uuid, value = #file_meta{parent_uuid = NewParentUuid}, scope = SpaceId}, #document{value = #file_meta{parent_uuid = PrevParentUuid}

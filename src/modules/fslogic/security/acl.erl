@@ -77,7 +77,7 @@ check_acl([Ace | Rest], User, FileCtx, Operations, {No, PrevAllowedPerms, PrevDe
 add_names(Acl) ->
     lists:map(
         fun(#access_control_entity{identifier = Id, aceflags = Flags} = Ace) ->
-            Name = case ?has_flags(Flags, ?identifier_group_mask) of
+            Name = case ?has_all_flags(Flags, ?identifier_group_mask) of
                 true -> group_id_to_ace_name(Id);
                 false -> user_id_to_ace_name(Id)
             end,

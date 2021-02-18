@@ -26,7 +26,7 @@
 
     get_file_details/2, get_file_details_insecure/3,
 
-    get_child_attr/4, chmod/3, update_times/5,
+    get_child_attr/4, chmod/3, update_flags/4, update_times/5,
     chmod_attrs_only_insecure/2,
 
     get_fs_stats/2
@@ -194,6 +194,16 @@ chmod(UserCtx, FileCtx0, Mode) ->
     chmod_insecure(UserCtx, FileCtx1, Mode).
 
 
+-spec update_flags(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), ace:bitmask()) ->
+    fslogic_worker:fuse_response().
+update_flags(UserCtx, FileCtx0, FlagsToSet, FlagsToReset) ->
+    file_ctx:assert_not_special_const(FileCtx0),
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [traverse_ancestors]
+    ),
+    update_flags_insecure(FileCtx1, FlagsToSet, FlagsToReset).
+
+
 %%--------------------------------------------------------------------
 %% @equiv update_times_insecure/5 with permission checks
 %% @end
@@ -290,6 +300,19 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
     ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
+
+
+%% @private
+-spec update_flags_insecure(file_ctx:ctx(), ace:bitmask(), ace:bitmask()) ->
+    fslogic_worker:fuse_response().
+update_flags_insecure(FileCtx, FlagsToSet, FlagsToReset) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    ok = file_meta:update_flags(FileUuid, FlagsToSet, FlagsToReset),
+
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ok = fslogic_worker:schedule_invalidate_file_attr_caches(SpaceId),
+
+    #fuse_response{status = #status{code = ?OK}}.
 
 
 %%--------------------------------------------------------------------

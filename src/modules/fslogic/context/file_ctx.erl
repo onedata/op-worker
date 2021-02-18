@@ -88,7 +88,8 @@
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
-    get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1]).
+    get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1,
+    get_effective_flags/2]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
 -export([assert_not_readonly_storage/1, assert_file_exists/1]).
 
@@ -1425,6 +1426,30 @@ resolve_and_cache_path(FileCtx, Type) ->
             case effective_value:get_or_calculate(CacheName, ParentDoc, Callback) of
                 {ok, Path, _} ->
                     {Path ++ [FilenameOrUuid], FileCtx2};
+                {error, {file_meta_missing, _}} ->
+                    throw(?ERROR_NOT_FOUND)
+            end
+    end.
+
+-spec get_effective_flags(user_ctx:ctx(), ctx()) -> {ace:bitmask(), ctx()}.
+get_effective_flags(UserCtx, FileCtx) ->
+    case is_user_root_dir_const(FileCtx, UserCtx) of
+        true ->
+            {?no_flags_mask, FileCtx};
+        false ->
+            SpaceId = get_space_id_const(FileCtx),
+            CacheName = file_attr_cache:name(SpaceId),
+            {Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
+            Callback = fun([#document{key = Uuid, value = #file_meta{flags = Flags}}, ParentValue, CalculationInfo]) ->
+                case fslogic_uuid:is_space_dir_uuid(Uuid) orelse fslogic_uuid:is_root_dir_uuid(Uuid) of
+                    true -> {ok, Flags, CalculationInfo};
+                    false -> {ok, ?set_flags(ParentValue, Flags), CalculationInfo}
+                end
+            end,
+
+            case effective_value:get_or_calculate(CacheName, Doc, Callback) of
+                {ok, Flags, _} ->
+                    {Flags, FileCtx2};
                 {error, {file_meta_missing, _}} ->
                     throw(?ERROR_NOT_FOUND)
             end

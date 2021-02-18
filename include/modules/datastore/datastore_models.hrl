@@ -371,6 +371,7 @@
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
+    flags = 0 :: ace:bitmask(),
     acl = [] :: acl:acl(),
     owner :: od_user:id(),
     is_scope = false :: boolean(),

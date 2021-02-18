@@ -515,8 +515,11 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx3),
     case InvalidateCache of
-        true -> paths_cache:invalidate_paths_caches(SpaceId);
-        _ -> ok
+        true ->
+            paths_cache:invalidate_paths_caches(SpaceId),
+            ok = fslogic_worker:schedule_invalidate_file_attr_caches(SpaceId);
+        _ ->
+            ok
     end,
 
     {Storage, SourceFileCtx5} = file_ctx:get_storage(SourceFileCtx3),

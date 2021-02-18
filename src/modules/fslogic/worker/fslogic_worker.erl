@@ -23,12 +23,18 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
--export([init_paths_caches/1]).
+-export([
+    init_paths_caches/1,
+    init_file_attr_caches/1, invalidate_file_attr_caches/1
+]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
 % exported for RPC
--export([schedule_init_paths_caches/1]).
+-export([
+    schedule_init_paths_caches/1,
+    schedule_init_file_attr_caches/1, schedule_invalidate_file_attr_caches/1
+]).
 
 %%%===================================================================
 %%% Types
@@ -60,6 +66,9 @@
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_PATHS_CACHES(Space), {init_paths_caches, Space}).
+
+-define(INIT_FILE_ATTR_CACHES(Space), {init_file_attr_caches, Space}).
+-define(INVALIDATE_FILE_ATTR_CACHES(Space), {invalidate_file_attr_caches, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
@@ -155,6 +164,18 @@ init_paths_caches(Space) ->
         rpc:call(Node, ?MODULE, schedule_init_paths_caches, [Space])
     end, consistent_hashing:get_all_nodes()).
 
+-spec init_file_attr_caches(od_space:id() | all) -> ok.
+init_file_attr_caches(Space) ->
+    lists:foreach(fun(Node) ->
+        rpc:call(Node, ?MODULE, schedule_init_file_attr_caches, [Space])
+    end, consistent_hashing:get_all_nodes()).
+
+-spec invalidate_file_attr_caches(od_space:id() | all) -> ok.
+invalidate_file_attr_caches(Space) ->
+    lists:foreach(fun(Node) ->
+        rpc:call(Node, ?MODULE, schedule_invalidate_file_attr_caches, [Space])
+    end, consistent_hashing:get_all_nodes()).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -169,6 +190,9 @@ init_paths_caches(Space) ->
 init(_Args) ->
     paths_cache:init_group(),
     schedule_init_paths_caches(all),
+
+    file_attr_cache:init_group(),
+    schedule_init_file_attr_caches(all),
 
     transfer:init(),
     replica_deletion_master:init_workers_pool(),
@@ -255,6 +279,10 @@ handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
 handle(?INIT_PATHS_CACHES(Space)) ->
     paths_cache:init_caches(Space);
+handle(?INIT_FILE_ATTR_CACHES(Space)) ->
+    file_attr_cache:init_caches(Space);
+handle(?INVALIDATE_FILE_ATTR_CACHES(Space)) ->
+    file_attr_cache:invalidate_caches(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -487,6 +515,8 @@ handle_file_request(UserCtx, #get_child_attr{name = Name,
     attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
+handle_file_request(UserCtx, #update_flags{set = FlagsToSet, reset = FlagsToReset}, FileCtx) ->
+    attr_req:update_flags(UserCtx, FileCtx, FlagsToSet, FlagsToReset);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
     attr_req:update_times(UserCtx, FileCtx, ATime, MTime, CTime);
 handle_file_request(UserCtx, #delete_file{silent = Silent}, FileCtx) ->
@@ -701,6 +731,12 @@ schedule_periodical_spaces_autocleaning_check() ->
 
 schedule_init_paths_caches(Space) ->
     schedule(?INIT_PATHS_CACHES(Space), 0).
+
+schedule_init_file_attr_caches(Space) ->
+    schedule(?INIT_FILE_ATTR_CACHES(Space), 0).
+
+schedule_invalidate_file_attr_caches(Space) ->
+    schedule(?INVALIDATE_FILE_ATTR_CACHES(Space), 0).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->

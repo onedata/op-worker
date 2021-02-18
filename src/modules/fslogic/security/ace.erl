@@ -74,7 +74,7 @@ is_applicable(#document{key = ?GUEST_USER_ID}, FileCtx, #access_control_entity{
 is_applicable(#document{value = User}, FileCtx, #access_control_entity{
     identifier = GroupId,
     aceflags = AceFlagsBitmask
-}) when ?has_flags(AceFlagsBitmask, ?identifier_group_mask) ->
+}) when ?has_all_flags(AceFlagsBitmask, ?identifier_group_mask) ->
     {lists:member(GroupId, User#od_user.eff_groups), FileCtx};
 
 is_applicable(#document{key = UserId}, FileCtx, #access_control_entity{
@@ -203,10 +203,10 @@ validate(#access_control_entity{
     acemask = Mask
 }, FileType) ->
     ValidType = lists:member(Type, [?allow_mask, ?deny_mask]),
-    ValidFlags = ?has_flags(?ALL_FLAGS_BITMASK, Flags),
+    ValidFlags = ?has_all_flags(?ALL_FLAGS_BITMASK, Flags),
     ValidMask = case FileType of
-        file -> ?has_flags(?all_object_perms_mask, Mask);
-        dir -> ?has_flags(?all_container_perms_mask, Mask)
+        file -> ?has_all_flags(?all_object_perms_mask, Mask);
+        dir -> ?has_all_flags(?all_container_perms_mask, Mask)
     end,
 
     case ValidType andalso ValidFlags andalso ValidMask of
