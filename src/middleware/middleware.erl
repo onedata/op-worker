@@ -351,7 +351,7 @@ process_request(#req_ctx{
 
     case {Result, RR} of
         {{ok, resource, {ResultGri, ResultData}}, true} ->
-            % TODO rm hack after implementing subscriptions
+            % TODO VFS-7344 rm hack after implementing subscriptions
             {ok, resource, {ResultGri, {ResultData, 1}}};
         _ ->
             Result

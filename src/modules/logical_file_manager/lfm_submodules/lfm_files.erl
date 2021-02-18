@@ -379,7 +379,7 @@ create(SessId, ParentGuid, Name, Mode) ->
     remote_utils:call_fslogic(SessId, file_request, ParentGuid,
         #make_file{name = Name, mode = Mode},
         fun(#file_attr{guid = Guid}) ->
-            {ok, Guid}  %todo consider returning file_attr
+            {ok, Guid}
         end
     ).
 
