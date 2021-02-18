@@ -24,7 +24,7 @@
 
 -define(COPY_BUFFER_SIZE,
     application:get_env(?APP_NAME, rename_file_chunk_size, 8388608)). % 8*1024*1024
--define(COPY_LS_SIZE, application:get_env(?APP_NAME, ls_chunk_size, 5000)).
+-define(COPY_LS_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
 
 -type child_entry() :: {
     OldGuid :: fslogic_worker:file_guid(),
@@ -37,11 +37,6 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks file type and executes type specific copy function.
-%% @end
-%%--------------------------------------------------------------------
 -spec copy(session:id(), SourceGuid :: fslogic_worker:file_guid(),
     TargetParentGuid :: fslogic_worker:file_guid(),
     TargetName :: file_meta:name()) ->
@@ -64,12 +59,6 @@ copy(SessId, SourceGuid, TargetParentGuid, TargetName) ->
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks permissions and copies directory.
-%% @end
-%%--------------------------------------------------------------------
 -spec copy_dir(session:id(), #file_attr{},
     TargetParentGuid :: fslogic_worker:file_guid(),
     TargetName :: file_meta:name()) ->
@@ -77,16 +66,11 @@ copy(SessId, SourceGuid, TargetParentGuid, TargetName) ->
 copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName) ->
     {ok, TargetGuid} = lfm:mkdir(
         SessId, TargetParentGuid, TargetName, undefined),
-    {ok, ChildEntries} = copy_children(SessId, SourceGuid, TargetGuid, 0),
+    {ok, ChildEntries} = copy_children(SessId, SourceGuid, TargetGuid),
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
     {ok, TargetGuid, ChildEntries}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks permissions and copies file.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec copy_file(session:id(), #file_attr{},
     TargetParentGuid :: fslogic_worker:file_guid(),
     TargetName :: file_meta:name()) ->
@@ -110,12 +94,7 @@ copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, 
     end,
     {ok, TargetGuid, []}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Copies file content from source to handle
-%% @end
-%%--------------------------------------------------------------------
+
 -spec copy_file_content(lfm:handle(), lfm:handle(), non_neg_integer()) ->
     {ok, lfm:handle(), lfm:handle()} | {error, term()}.
 copy_file_content(SourceHandle, TargetHandle, Offset) ->
@@ -133,19 +112,18 @@ copy_file_content(SourceHandle, TargetHandle, Offset) ->
             Error
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Copies children of file
-%% @end
-%%--------------------------------------------------------------------
--spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(),
-    non_neg_integer()) -> {ok, [child_entry()]} | {error, term()}.
-copy_children(SessId, ParentGuid, TargetParentGuid, Offset) ->
-    case lfm:get_children(SessId, {guid, ParentGuid}, Offset, ?COPY_LS_SIZE) of
-        {ok, []} ->
-            {ok, []};
-        {ok, Children} ->
+
+-spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid()) ->
+    {ok, [child_entry()]} | {error, term()}.
+copy_children(SessId, ParentGuid, TargetParentGuid) ->
+    copy_children(SessId, ParentGuid, TargetParentGuid, ?INITIAL_LS_TOKEN, []).
+
+
+-spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), file_meta:list_token(), [child_entry()]) ->
+    {ok, [child_entry()]} | {error, term()}.
+copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc) ->
+    case lfm:get_children(SessId, {guid, ParentGuid}, #{token => Token, size => ?COPY_LS_SIZE}) of
+        {ok, Children, ListExtendedInfo} ->
             % TODO VFS-6265 fix usage of file names from lfm:get_children as they contain
             % collision suffix which normally shouldn't be there
             ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
@@ -156,17 +134,19 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Offset) ->
                         NewChildrenEntries ++ ChildrenEntries
                 ]
             end, [], Children),
-            {ok, ChildEntries};
+            AllChildEntries = ChildEntriesAcc ++ ChildEntries,
+            case maps:get(is_last, ListExtendedInfo) of
+                true ->
+                    {ok, AllChildEntries};
+                false ->
+                    NewToken = maps:get(token, ListExtendedInfo),
+                    copy_children(SessId, ParentGuid, TargetParentGuid, NewToken, AllChildEntries)
+            end;
         Error ->
             Error
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Copies metadata of file
-%% @end
-%%--------------------------------------------------------------------
+
 -spec copy_metadata(session:id(), fslogic_worker:file_guid(),
     fslogic_worker:file_guid(), file_meta:posix_permissions()) -> ok.
 copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->

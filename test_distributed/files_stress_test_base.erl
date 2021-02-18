@@ -122,7 +122,7 @@ single_dir_creation_test_base(Config, Clear) ->
                         true ->
                             put(last_ls, NewSum),
                             LsTime = measure_execution_time(fun() ->
-                                ls(Worker, SessId, Dir, <<>>, false)
+                                ls(Worker, SessId, Dir, <<>>)
                             end),
 
                             ct:print("Save num ~p, sum ~p, ls time ~p",
@@ -570,11 +570,14 @@ process_answer(Answers, Ans, ToAddV) ->
     end,
     [ToAdd | proplists:delete(K, Answers)].
 
-ls(_Worker, _SessId, _Dir, _Token, true) ->
-    ok;
-ls(Worker, SessId, Dir, Token, _) ->
-    {ok, _, Token2, IsLast} = lfm_proxy:get_children(Worker, SessId, {path, Dir}, 0, 2000, Token),
-    ls(Worker, SessId, Dir, Token2, IsLast).
+ls(Worker, SessId, Dir, Token) ->
+    ListOpts = #{size => 2000, token => Token},
+    {ok, _, #{token := Token2, is_last := IsLast}} = lfm_proxy:get_children(Worker, SessId, {path, Dir}, ListOpts),
+    case IsLast of
+        true -> ok;
+        false ->
+            ls(Worker, SessId, Dir, Token2)
+    end.
 
 get_param_value(ParamName, ParamsList) ->
     #parameter{value = Value} = lists:keyfind(ParamName, 2, ParamsList),

@@ -60,7 +60,7 @@
 -type job() :: master_job() | slave_job().
 -type execute_slave_on_dir() :: boolean().
 -type children_master_jobs_mode() :: sync | async.
--type batch_size() :: non_neg_integer().
+-type batch_size() :: file_meta:list_size().
 -type traverse_info() :: map().
 -type run_options() :: #{
     % Options of traverse framework
@@ -150,7 +150,7 @@ run(Pool, FileCtx, UserId, Opts) ->
     TraverseInfo = maps:get(traverse_info, Opts, #{}),
     TraverseInfo2 = TraverseInfo#{pool => Pool},
     Token = case maps:get(use_listing_token, Opts, true) of
-        true -> #link_token{};
+        true -> ?INITIAL_LS_TOKEN;
         false -> undefined
     end,
 
@@ -268,12 +268,13 @@ do_master_job(Job = #tree_traverse{
             case list_children(Job2, MasterJobArgs) of
                 {error, ?EACCES} ->
                     {ok, #{}};
-                {ok, {ChildrenCtxs, ListExtendedInfo, FileCtx3, IsLast}} ->
-                    LastName2 = maps:get(last_name, ListExtendedInfo),
-                    LastTree2 = maps:get(last_tree, ListExtendedInfo),
+                {ok, {ChildrenCtxs, ListExtendedInfo, FileCtx3}} ->
+                    LastName2 = maps:get(last_name, ListExtendedInfo, <<>>),
+                    LastTree2 = maps:get(last_tree, ListExtendedInfo, <<>>),
                     Token2 = maps:get(token, ListExtendedInfo, undefined),
                     {SlaveJobs, MasterJobs} = generate_children_jobs(Job2, TaskId, ChildrenCtxs),
                     ChildrenCount = length(SlaveJobs) + length(MasterJobs),
+                    IsLast = maps:get(is_last, ListExtendedInfo),
                     SubtreeProcessingStatus = maybe_report_children_jobs_to_process(Job2, TaskId, ChildrenCount, IsLast),
                     NewJobsPreprocessor(SlaveJobs, MasterJobs, ListExtendedInfo, SubtreeProcessingStatus),
                     FinalMasterJobs = case IsLast of
@@ -358,12 +359,8 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 %%%===================================================================
 
 -spec list_children(master_job(), traverse:master_job_extended_args()) ->
-    {ok, {
-        Children :: [file_ctx:ctx()],
-        ListExtendedInfo :: file_meta:list_extended_info(),
-        NewFileCtx :: file_ctx:ctx(),
-        IsLast :: boolean()
-    }} | {error, term()}.
+    {ok, {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}} |
+    {error, term()}.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
     user_id = UserId,
@@ -376,7 +373,12 @@ list_children(#tree_traverse{
     case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
         {ok, UserCtx} ->
             try
-                {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, 0, BatchSize, Token, LastName, LastTree)}
+                {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, #{
+                    size => BatchSize,
+                    token => Token,
+                    last_name => LastName,
+                    last_tree => LastTree
+                })}
             catch
                 throw:?EACCES ->
                     {error, ?EACCES}
@@ -459,7 +461,7 @@ maybe_report_children_jobs_to_process(_, _, _, _) ->
 -spec reset_list_options(master_job()) -> master_job().
 reset_list_options(Job) ->
     Job#tree_traverse{
-        token = #link_token{},
+        token = ?INITIAL_LS_TOKEN,
         last_name = <<>>,
         last_tree = <<>>
     }.

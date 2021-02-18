@@ -170,13 +170,12 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_i
             file_ctx:get_uuid_const(ChildDirCtx)
         end, MasterJobs),
         BatchLastFilename = maps:get(last_name, ListExtendedInfo),
-        Token = maps:get(token, ListExtendedInfo),
         Uuid = file_ctx:get_uuid_const(FileCtx),
         SpaceId = file_ctx:get_space_id_const(FileCtx),
         ok = qos_status:report_next_traverse_batch(
             SpaceId, TaskId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastFilename),
 
-        case Token#link_token.is_last of
+        case maps:get(is_last, ListExtendedInfo) of
             true ->
                 ok = qos_status:report_traverse_finished_for_dir(FileCtx, TaskId);
             false ->

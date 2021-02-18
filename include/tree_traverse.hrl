@@ -13,6 +13,7 @@
 -define(TREE_TRAVERSE_HRL, 1).
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 
 -define(NEW_JOBS_DEFAULT_PREPROCESSOR, fun(_, _, _, _) -> ok end).
@@ -29,9 +30,9 @@
     user_id :: od_user:id(),
 
     % Fields used for directory listing
-    token = #link_token{} :: undefined | datastore_links_iter:token(),
-    last_name = <<>> :: file_meta:name(),
-    last_tree = <<>> :: od_provider:id(),
+    token = ?INITIAL_LS_TOKEN :: file_meta:list_token(),
+    last_name = <<>> :: file_meta:list_last_name(),
+    last_tree = <<>> :: file_meta:list_last_tree(),
     batch_size :: tree_traverse:batch_size(),
 
     % Traverse config
