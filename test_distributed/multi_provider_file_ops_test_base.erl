@@ -635,7 +635,6 @@ rtransfer_blocking_test_cleanup(Config) ->
 basic_opts_test_base(Config, User, NodesDescroption, Attempts) ->
     basic_opts_test_base(Config, User, NodesDescroption, Attempts, true).
 
-% TODO - add reading with chunks to test prefetching
 basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, CheckSequences) ->
     basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, CheckSequences);
 basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, CheckSequences) ->
@@ -1145,7 +1144,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     ok.
 
 file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
-    timer:sleep(10000), % TODO - connection must appear after mock setup
+    timer:sleep(10000), % NOTE - connection must appear after mock setup
     Attempts = 60,
     User = <<"user1">>,
 
@@ -1814,7 +1813,6 @@ teardown_env(Config) ->
     ssl:stop().
 
 mock_sync_and_rtransfer_errors(Config) ->
-    % TODO - consider creation of separate tests mocking sync and rtransfer errors
     % limit test with rtransfer errors to single file check
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
@@ -2300,7 +2298,6 @@ verify_del(Config, {F, FileUuid, _Locations}) ->
     verify(Config, fun(W) ->
 %%            ct:print("Del ~p", [{W, F,  FileUuid, Locations}]),
 %%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
-        % TODO - match to chosen error (check perms may also result in ENOENT)
         ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts),
 
         ?match({error, not_found}, rpc:call(W, file_meta, get, [FileUuid]), Attempts)
