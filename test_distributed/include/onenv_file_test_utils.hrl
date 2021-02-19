@@ -26,13 +26,13 @@
 -record(file_spec, {
     name = undefined :: undefined | binary(),
     mode = ?DEFAULT_FILE_MODE :: file_meta:mode(),
-    shares = [] :: [onenv_file_test_utils:shares_spec()]
+    shares = [] :: [onenv_file_test_utils:share_spec()]
 }).
 
 -record(dir_spec, {
     name = undefined :: undefined | binary(),
     mode = ?DEFAULT_DIR_MODE :: file_meta:mode(),
-    shares = [] :: [onenv_file_test_utils:shares_spec()],
+    shares = [] :: [onenv_file_test_utils:share_spec()],
     children = [] :: [#dir_spec{} | #file_spec{}]
 }).
 

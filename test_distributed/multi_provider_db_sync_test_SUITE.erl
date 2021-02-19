@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -121,7 +122,7 @@ sparse_files_should_be_created(Config0) ->
 
     % Hole between not empty blocks created by other provider
     {ok, FileGuid1} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+        <<"/space1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid1, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid1, 1, {Provider1Id, [[0, 1]]}, false),
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid1, 10),
@@ -129,13 +130,13 @@ sparse_files_should_be_created(Config0) ->
 
     % Hole before single empty created by other provider
     {ok, FileGuid2} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+        <<"/space1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid2, 10),
     verify_sparse_file(Worker2, SessId2, FileGuid2, 11, {Provider1Id, [[10, 1]]}),
 
     % Empty block write on other provider to not empty file
     {ok, FileGuid3} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+        <<"/space1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid3, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid3, 1, {Provider1Id, [[0, 1]]}, false),
     file_ops_test_utils:empty_write_to_file(Worker1, SessId1, FileGuid3, 10),
@@ -143,13 +144,13 @@ sparse_files_should_be_created(Config0) ->
 
     % Empty block write on other provider to empty file
     {ok, FileGuid4} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+        <<"/space1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:empty_write_to_file(Worker1, SessId1, FileGuid4, 10),
     verify_sparse_file(Worker2, SessId2, FileGuid4, 10, {Provider1Id, []}),
 
     % Creation of hole using truncate on other provider on not empty file
     {ok, FileGuid5} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+        <<"/space1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid5, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid5, 1, {Provider1Id, [[0, 1]]}, false),
     ?assertEqual(ok, lfm_proxy:truncate(Worker1, SessId1, {guid, FileGuid5}, 10)),
@@ -158,14 +159,14 @@ sparse_files_should_be_created(Config0) ->
 
     % Creation of hole using truncate on other provider on empty file
     {ok, FileGuid6} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+        <<"/space1/", (generator:gen_name())/binary>>)),
     ?assertEqual(ok, lfm_proxy:truncate(Worker1, SessId1, {guid, FileGuid6}, 10)),
     ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, {guid, FileGuid5}, Provider1Id)),
     verify_sparse_file(Worker2, SessId2, FileGuid6, 10, {Provider1Id, []}),
 
     % Truncate on empty file and read by other provider
     {ok, FileGuid7} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+        <<"/space1/", (generator:gen_name())/binary>>)),
     verify_sparse_file(Worker2, SessId2, FileGuid7, 0, {Provider1Id, []}, false),
     ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, {guid, FileGuid7}, 10)),
     ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, {guid, FileGuid7}, Provider2Id)),
@@ -173,7 +174,7 @@ sparse_files_should_be_created(Config0) ->
 
     % Truncate on not empty file and read by other provider
     {ok, FileGuid8} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+        <<"/space1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid8, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid8, 1, {Provider1Id, [[0, 1]]}, false),
     ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, {guid, FileGuid8}, 10)),
@@ -182,14 +183,14 @@ sparse_files_should_be_created(Config0) ->
 
     % Write to empty file and read by other provider
     {ok, FileGuid9} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+        <<"/space1/", (generator:gen_name())/binary>>)),
     verify_sparse_file(Worker2, SessId2, FileGuid9, 0, {Provider1Id, []}, false),
     file_ops_test_utils:write_byte_to_file(Worker2, SessId2, FileGuid9, 10),
     verify_sparse_file(Worker1, SessId1, FileGuid9, 11, {Provider2Id, [[10, 1]]}),
 
     % Write to not empty file and read by other provider
     {ok, FileGuid10} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
-        <<"/space1/", (generator:gen_name())/binary>>, 8#755)),
+        <<"/space1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid10, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid10, 1, {Provider1Id, [[0, 1]]}, false),
     file_ops_test_utils:write_byte_to_file(Worker2, SessId2, FileGuid10, 10),

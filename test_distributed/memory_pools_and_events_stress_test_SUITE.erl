@@ -12,6 +12,7 @@
 -module(memory_pools_and_events_stress_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -84,8 +85,8 @@ many_files_test_base(Config, TestScenario) ->
             SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
             SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
-            {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
-                generator:gen_name(), 8#755)),
+            {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, ?ROOT_SESS_ID, SpaceGuid,
+                generator:gen_name(), ?DEFAULT_FILE_PERMS)),
             ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
             ProcNum = ?config(proc_num, Config),

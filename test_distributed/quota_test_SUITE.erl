@@ -73,8 +73,7 @@ all() ->
         multiprovider_test,
         remove_file_on_remote_provider_should_unlock_space,
         replicate_file_smaller_than_quota_should_not_fail,
-        % TODO uncomment after fixing rtransfer not respecting quota
-%        replicate_file_bigger_than_quota_should_fail,
+        replicate_file_bigger_than_quota_should_fail,
 
         % gui upload tests
         quota_updated_on_gui_upload,
@@ -94,12 +93,27 @@ all() ->
 }).
 
 %% Spaces support:
-%%  p1 -> space_id0: 20 bytes
-%%  p1 -> space_id1: 30 bytes
-%%  p2 -> space_id2: 50 bytes
-%%  p1 -> space_id3: 20 bytes
-%%  p2 -> space_id3: 20 bytes
-%%  p1 -> space_id4: 1000000000 bytes = ~953 MB
+%% space_id0:
+%%     p1: 20 bytes
+%% space_id1:
+%%     p1: 30 bytes
+%% space_id2:
+%%     p2: 50 bytes
+%% space_id3:
+%%     p1: 20 bytes
+%%     p2: 20 bytes
+%% space_id4:
+%%     p1: 1000000000 bytes (~953 MB)
+%% space_id5:
+%%     p1: 10000000000 bytes (~9 GB)
+%%     p2: 10000000 bytes  (~9 MB)
+
+-define(SPACE_ID5_P2_SUPPORT_SIZE, 10000000).
+
+-define(KB, 1024).
+-define(MB, 1024 * ?KB).
+-define(GB, 1024 * ?MB).
+
 
 %%%===================================================================
 %%% Test functions
@@ -442,34 +456,44 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
 
 
 replicate_file_bigger_than_quota_should_fail(Config) ->
-    #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} =
-        gen_test_env(Config),
+    #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
     SessId = fun(Worker) ->
-        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config)
+    end,
 
-    % How many bytes can be written above quota
-    Tolerance = 100 * 1024 * 1024, % 100 MB
-    MaxSize = 1000000000,
+    FileSize = 8 * ?GB,
 
+    % Create large file on P1 and schedule replication to P2 with support size/quota
+    % smaller than file size
     {ok, Guid} = create_file(P1, SessId(P1), f(<<"space5">>, File1)),
-    {ok, _} = create_file(P2, SessId(P2), f(<<"space5">>, File2)),
-    ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space5">>, File1), 0, crypto:strong_rand_bytes(MaxSize))),
-    % Make sure that there is not enough space left in destination space
-    ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(<<"space5">>, File2), 0, crypto:strong_rand_bytes(Tolerance))),
-    ?assertMatch({ok, [#{<<"totalBlocksSize">> := MaxSize}]},
-        lfm_proxy:get_file_distribution(P2, SessId(P2), {guid, Guid}), ?ATTEMPTS),
-
+    lists:foreach(fun(Offset) ->
+        ?assertMatch(
+            {ok, _},
+            write_to_file(P1, SessId(P1), f(<<"space5">>, File1), Offset, crypto:strong_rand_bytes(?GB))
+        )
+    end, lists:seq(0, FileSize-1, ?GB)),
+    ?assertMatch(
+        {ok, [#{<<"totalBlocksSize">> := FileSize}]},
+        lfm_proxy:get_file_distribution(P2, SessId(P2), {guid, Guid}),
+        ?ATTEMPTS
+    ),
     {ok, Tid} = lfm_proxy:schedule_file_replication(P1, SessId(P1), {guid, Guid}, ?GET_DOMAIN_BIN(P2)),
 
-    % wait for replication to finish
+    % Wait for replication to finish with failure
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_waiting_transfers, [<<"space_id5">>]), ?ATTEMPTS),
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_ongoing_transfers, [<<"space_id5">>]), ?ATTEMPTS),
     ?assertEqual(true, lists:member(Tid, list_ended_transfers(P1, <<"space_id5">>)), ?ATTEMPTS),
+    ?assertMatch(
+        {ok, #document{value = #transfer{replication_status = failed}}},
+        rpc:call(P1, transfer, get, [Tid]),
+        ?ATTEMPTS
+    ),
 
+    % Assert that replication has been cancelled by rtransfer. It is not done immediately after
+    % reaching quota so `available_size` can be lower than 0 but shouldn't reach file size
     ok = fsync(P2, SessId(P2), f(<<"space5">>, File1)),
-    ?assertEqual(true, available_size(P2, <<"space_id5">>) > -Tolerance, ?ATTEMPTS),
-    T = rpc:call(P1, transfer, get, [Tid]),
-    ?assertMatch(#transfer{replication_status = failed}, T).
+    ?assertEqual(true, available_size(P2, <<"space_id5">>) < 0, ?ATTEMPTS),
+    ?assertEqual(true, available_size(P2, <<"space_id5">>) > -(FileSize - ?SPACE_ID5_P2_SUPPORT_SIZE), ?ATTEMPTS).
 
 
 quota_updated_on_gui_upload(Config) ->
@@ -566,11 +590,15 @@ events_sent_test_base(Config, SpaceId, SupportingProvider) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    Posthook = fun(NewConfig) ->
+        initializer:mock_auth_manager(NewConfig),
+        initializer:setup_storage(NewConfig)
+    end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config).
+    initializer:teardown_storage(Config),
+    initializer:unmock_auth_manager(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= events_sent_to_client_directio;
@@ -580,7 +608,6 @@ init_per_testcase(Case, Config) when
     initializer:remove_pending_messages(),
     ssl:start(),
 
-    initializer:mock_auth_manager(Config),
     init_per_testcase(default, Config);
 
 init_per_testcase(Case, Config) when
@@ -637,7 +664,7 @@ end_per_testcase(_Case, Config) ->
 create_file(Worker, SessionId, {path, Path}) ->
     create_file(Worker, SessionId, Path);
 create_file(Worker, SessionId, Path) ->
-    lfm_proxy:create(Worker, SessionId, Path, ?DEFAULT_FILE_MODE).
+    lfm_proxy:create(Worker, SessionId, Path).
 
 open_file(Worker, SessionId, FileKey, OpenMode)->
     lfm_proxy:open(Worker, SessionId, FileKey, OpenMode).

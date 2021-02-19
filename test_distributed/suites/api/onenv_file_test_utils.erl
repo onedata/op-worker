@@ -112,7 +112,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
 
 
 %% @private
--spec create_shares(node(), session:id(), file_id:file_guid(), [shares_spec()]) ->
+-spec create_shares(node(), session:id(), file_id:file_guid(), [share_spec()]) ->
     [od_share:id()] | no_return().
 create_shares(Node, SessId, FileGuid, ShareSpecs) ->
     lists:sort(lists:map(fun(#share_spec{name = Name, description = Description}) ->

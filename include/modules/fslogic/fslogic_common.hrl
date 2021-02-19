@@ -80,4 +80,7 @@
 % Trash associated macros
 -define(TRASH_DIR_NAME, <<".trash">>).
 
+% Token that should be passed as initial token to start listing using tokens.
+-define(INITIAL_LS_TOKEN, <<>>).
+
 -endif.

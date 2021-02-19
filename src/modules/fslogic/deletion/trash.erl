@@ -31,10 +31,11 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
--export([create/1, move_to_trash/2, delete_from_trash/4]).
+-export([create/1, move_to_trash/2, schedule_deletion_from_trash/4]).
 
 
 -define(NAME_UUID_SEPARATOR, "@@").
@@ -85,12 +86,19 @@ move_to_trash(FileCtx, UserCtx) ->
 %% asynchronously remove the subtree from the trash.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) ->
-    {ok, tree_deletion_traverse:id()}.
-delete_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
+-spec schedule_deletion_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) ->
+    {ok, tree_deletion_traverse:id()} | {error, term()}.
+schedule_deletion_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     file_ctx:assert_not_special_const(FileCtx),
-    % TODO VFS-7101 use offline access token in tree_traverse
-    tree_deletion_traverse:start(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid).
+    case tree_deletion_traverse:start(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) of
+        {ok, TaskId} ->
+            {ok, TaskId};
+        {error, _} = Error ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            Guid = file_ctx:get_guid_const(FileCtx),
+            ?error("Unable to start deletion of ~s from trash in space ~s due to ~p.", [Guid, SpaceId, Error]),
+            Error
+    end.
 
 
 %%%===================================================================

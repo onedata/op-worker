@@ -11,8 +11,8 @@
 -module(storage_import_acl).
 -author("Jakub Kudzia").
 
+-include("modules/auth/acl.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -172,6 +172,8 @@ normalize_ace(ACE = #access_control_entity{identifier = ?owner}, _StorageId) ->
 normalize_ace(ACE = #access_control_entity{identifier = ?group}, _StorageId) ->
     ACE;
 normalize_ace(ACE = #access_control_entity{identifier = ?everyone}, _StorageId) ->
+    ACE;
+normalize_ace(ACE = #access_control_entity{identifier = ?anonymous}, _StorageId) ->
     ACE;
 normalize_ace(ACE = #access_control_entity{
     aceflags = Flags,

@@ -62,7 +62,7 @@ subscribe_on_dir_test(Config) ->
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
     {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
-        generator:gen_name(), 8#755)),
+        generator:gen_name(), ?DEFAULT_DIR_PERMS)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
@@ -175,7 +175,7 @@ events_on_conflicts_test(Config) ->
     AccessToken = ?config({access_token, <<"user1">>}, Config),
 
     {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
-        generator:gen_name(), 8#755)),
+        generator:gen_name(), ?DEFAULT_DIR_PERMS)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),

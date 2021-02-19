@@ -695,7 +695,9 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             User3Id = oct_background:get_user_id(user3),
             SpaceId = oct_background:get_space_id(space_krk_par),
-            ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [?SPACE_MANAGE_SHARES], []),
+            ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+                ?SPACE_MANAGE_SHARES | privileges:space_member()
+            ]),
             NewConfig
         end
     }).

@@ -181,7 +181,7 @@ fulfill_promises_after_connection_close_test(Config) ->
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
-    {ok, _} = lfm_proxy:create(Worker1, SessId, Path, 8#770),
+    {ok, _} = lfm_proxy:create(Worker1, SessId, Path),
 
     % Send 2 requests via each of 5 connections, immediately close four of them
     ok = ssl:send(Sock1, create_resolve_guid_req(Path)),
@@ -228,7 +228,7 @@ fulfill_promises_after_connection_error_test(Config) ->
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Path = <<"/", SpaceName/binary, "/test_file">>,
-    {ok, _} = lfm_proxy:create(Worker1, SessId, Path, 8#770),
+    {ok, _} = lfm_proxy:create(Worker1, SessId, Path),
 
     mock_ranch_ssl_to_fail_once(Workers),
     ok = ssl:send(Sock2, create_resolve_guid_req(Path)),

@@ -934,8 +934,8 @@
     task_id :: traverse:id(),
     % Uuid of processed directory/file
     doc_id :: file_meta:uuid(),
-    % TODO VFS-7101 use offline access token
-    session_id :: session:id(),
+    % User who scheduled the traverse
+    user_id :: od_user:id(),
     % Information needed to restart directory listing
     use_listing_token = true :: boolean(),
     last_name :: file_meta:name(),
