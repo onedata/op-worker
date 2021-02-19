@@ -112,7 +112,7 @@ all() ->
 %%     p1: 1000000000 bytes (~953 MB)
 %% space_id5:
 %%     p1: 10000000000 bytes (~9 GB)
-%%     p2: 10000000 bytes  (~9 MB)
+%%     p2: 10000000000 bytes  (~9 GB)
 %% space_id6:
 %%     p1: 20 bytes
 %%     p2: 30 bytes
@@ -487,7 +487,7 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
 
 
 replicate_file_bigger_than_quota_should_fail(Config) ->
-    #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
+    #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} = gen_test_env(Config),
     SessId = fun(Worker) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config)
     end,
@@ -497,11 +497,12 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
     % Create large file on P1 and schedule replication to P2 with support size/quota
     % smaller than file size
     {ok, Guid} = create_file(P1, SessId(P1), f(<<"space5">>, File1)),
+    {ok, _} = create_file(P2, SessId(P2), f(<<"space5">>, File2)),
     lists:foreach(fun(Offset) ->
-        ?assertMatch(
-            {ok, _},
-            write_to_file(P1, SessId(P1), f(<<"space5">>, File1), Offset, crypto:strong_rand_bytes(?GB))
-        )
+        ?assertMatch({ok, _},
+            write_to_file(P1, SessId(P1), f(<<"space5">>, File1), Offset, crypto:strong_rand_bytes(?GB))),
+        ?assertMatch({ok, _},
+            write_to_file(P2, SessId(P2), f(<<"space5">>, File2), Offset, crypto:strong_rand_bytes(?GB)))
     end, lists:seq(0, FileSize-1, ?GB)),
     ?assertMatch(
         {ok, [#{<<"totalBlocksSize">> := FileSize}]},

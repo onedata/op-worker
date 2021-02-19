@@ -220,7 +220,7 @@
                     },
                     "p2": {
                         "storage": "nulldevice",
-                        "supported_size": 10000000
+                        "supported_size": 10000000000
                     }
                 }
             },
