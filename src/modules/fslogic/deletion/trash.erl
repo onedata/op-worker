@@ -89,9 +89,10 @@ move_to_trash(FileCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec schedule_deletion_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) ->
     {ok, tree_deletion_traverse:id()} | {error, term()}.
-schedule_deletion_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
+schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUuid) ->
     file_ctx:assert_not_special_const(FileCtx),
-    case tree_deletion_traverse:start(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) of
+    % TODO VFS-7348 schedule deletion as user not by root
+    case tree_deletion_traverse:start(FileCtx, user_ctx:new(?ROOT_USER_ID), EmitEvents, RootOriginalParentUuid) of
         {ok, TaskId} ->
             {ok, TaskId};
         {error, _} = Error ->
