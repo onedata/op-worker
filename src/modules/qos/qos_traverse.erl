@@ -60,7 +60,8 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
             <<"space_id">> => file_ctx:get_space_id_const(FileCtx),
             <<"uuid">> => file_ctx:get_uuid_const(FileCtx),
             <<"task_type">> => <<"traverse">>
-        }
+        },
+        use_listing_token => false
     },
     {ok, FileCtx2} = qos_status:report_traverse_start(TaskId, FileCtx),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx2, Options),
@@ -88,7 +89,8 @@ reconcile_file_for_qos_entries(FileCtx, QosEntries) ->
             <<"space_id">> => SpaceId,
             <<"uuid">> => FileUuid,
             <<"task_type">> => <<"reconcile">>
-        }
+        },
+        use_listing_token => false
     },
     ok = qos_status:report_reconciliation_started(TaskId, FileCtx, QosEntries),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),

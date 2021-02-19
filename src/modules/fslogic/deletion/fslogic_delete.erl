@@ -285,13 +285,13 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS), Stora
     FileCtx5 = delete_file_meta(FileCtx4),
     remove_associated_documents(FileCtx5, StorageFileDeleted, StorageFileId),
     FileCtx6 = remove_deletion_marker(FileCtx5, UserCtx, StorageFileId),
-    maybe_try_to_delete_parent(FileCtx6, UserCtx, ?ALL_DOCS);
+    maybe_try_to_delete_parent(FileCtx6, UserCtx, ?ALL_DOCS, StorageFileId);
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?LOCAL_DOCS), StorageFileDeleted) ->
     % get StorageFileId before location is deleted as it's stored in file_location doc
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     FileCtx3 = delete_location(FileCtx2),
     remove_local_associated_documents(FileCtx3, StorageFileDeleted, StorageFileId),
-    maybe_try_to_delete_parent(FileCtx3, UserCtx, ?LOCAL_DOCS);
+    maybe_try_to_delete_parent(FileCtx3, UserCtx, ?LOCAL_DOCS, StorageFileId);
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_INIT, _DocsDeletionScope), _StorageFileDeleted) ->
     % TODO VFS-6114 maybe delete file_meta and associated documents here?
     update_parent_timestamps(UserCtx, FileCtx),
@@ -308,25 +308,28 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScop
             % remove deletion marker even if open_file_handling method is rename
             % as deletion marker may have been created when error occurred on deleting file on storage
             FileCtx5 = remove_deletion_marker(FileCtx4, UserCtx, StorageFileId),
-            maybe_try_to_delete_parent(FileCtx5, UserCtx, DocsDeletionScope);
+            maybe_try_to_delete_parent(FileCtx5, UserCtx, DocsDeletionScope, StorageFileId);
         ?LOCAL_DOCS->
             remove_local_associated_documents(FileCtx4, StorageFileDeleted, StorageFileId),
             % remove deletion marker even if open_file_handling method is rename
             % as deletion marker may have been created when error occurred on deleting file on storage
             FileCtx5 = remove_deletion_marker(FileCtx4, UserCtx, StorageFileId),
-            maybe_try_to_delete_parent(FileCtx5, UserCtx, DocsDeletionScope)
+            maybe_try_to_delete_parent(FileCtx5, UserCtx, DocsDeletionScope, StorageFileId)
     end.
 
 
--spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope()) -> ok.
-maybe_try_to_delete_parent(FileCtx, UserCtx, DocsDeletionScope) ->
+-spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), helpers:file_id()) -> ok.
+maybe_try_to_delete_parent(FileCtx, UserCtx, DocsDeletionScope, StorageFileId) ->
     {ParentCtx, _FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
     try
         {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             case file_meta:is_deleted(ParentDoc) of
                 true ->
+                    % set directory storage_file_id basing on child's file_id as parent dir_location
+                    % may have already been deleted
+                    ParentCtx3 = file_ctx:set_file_id(ParentCtx2, filename:dirname(StorageFileId)),
                     % use ?TWO_STEP_DEL_FIN mode because it handles case when file_meta is already deleted
-                    remove_file(ParentCtx2, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope));
+                    remove_file(ParentCtx3, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope));
                 false ->
                     ok
             end
