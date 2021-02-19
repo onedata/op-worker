@@ -126,11 +126,11 @@
                 "providers": {
                     "p1": {
                         "storage": "nulldevice1",
-                        "supported_size": 10000000000
+                        "supported_size": 10000000000000
                     },
                     "p2": {
                         "storage": "nulldevice2",
-                        "supported_size": 10000000000
+                        "supported_size": 10000000000000
                     }
                 }
             }
