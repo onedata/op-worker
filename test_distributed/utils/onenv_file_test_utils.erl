@@ -7,6 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Utility functions operating on files used in ct tests.
+%%%
+%%% FUTURE IMPROVEMENTS:
+%%% 1) flag to ensure files are created on storage
+%%% 2) fill file with random content and await file location sync
 %%% @end
 %%%-------------------------------------------------------------------
 -module(onenv_file_test_utils).
@@ -43,7 +47,11 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
     [CreationProvider | SyncProviders] = oct_background:get_space_supporting_providers(
         SpaceId
     ),
-    create_file_tree(UserId, ParentGuid, CreationProvider, SyncProviders, FileDesc).
+
+    FileInfo = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc),
+    await_sync(SyncProviders, UserId, FileInfo),
+
+    FileInfo.
 
 
 %%%===================================================================
@@ -56,11 +64,10 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
     od_user:id(),
     file_id:file_guid(),
     oct_background:entity_selector(),
-    [oct_background:entity_selector()],
     file_spec()
 ) ->
     object().
-create_file_tree(UserId, ParentGuid, CreationProvider, SyncProviders, #file_spec{
+create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
     name = NameOrUndefined,
     mode = FileMode,
     shares = ShareSpecs
@@ -71,20 +78,16 @@ create_file_tree(UserId, ParentGuid, CreationProvider, SyncProviders, #file_spec
 
     {ok, FileGuid} = create_file(CreationNode, UserSessId, ParentGuid, FileName, FileMode),
 
-    File = #object{
+    #object{
         guid = FileGuid,
         name = FileName,
         type = ?REGULAR_FILE_TYPE,
         mode = FileMode,
         shares = create_shares(CreationNode, UserSessId, FileGuid, ShareSpecs),
         children = undefined
-    },
+    };
 
-    await_sync(SyncProviders, UserId, File),
-
-    File;
-
-create_file_tree(UserId, ParentGuid, CreationProvider, SyncProviders, #dir_spec{
+create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     name = NameOrUndefined,
     mode = DirMode,
     shares = ShareSpecs,
@@ -96,20 +99,16 @@ create_file_tree(UserId, ParentGuid, CreationProvider, SyncProviders, #dir_spec{
 
     {ok, DirGuid} = create_dir(CreationNode, UserSessId, ParentGuid, DirName, DirMode),
 
-    Dir = #object{
+    #object{
         guid = DirGuid,
         name = DirName,
         type = ?DIRECTORY_TYPE,
         mode = DirMode,
         shares = create_shares(CreationNode, UserSessId, DirGuid, ShareSpecs),
         children = lists_utils:pmap(fun(File) ->
-            create_file_tree(UserId, DirGuid, CreationProvider, SyncProviders, File)
+            create_file_tree(UserId, DirGuid, CreationProvider, File)
         end, ChildrenDesc)
-    },
-
-    await_sync(SyncProviders, UserId, Dir),
-
-    Dir.
+    }.
 
 
 %% @private
@@ -132,8 +131,19 @@ create_shares(Node, SessId, FileGuid, ShareSpecs) ->
 await_sync(SyncProviders, UserId, #object{type = ?REGULAR_FILE_TYPE} = Object) ->
     await_file_attr_sync(SyncProviders, UserId, Object);
 
-await_sync(SyncProviders, UserId, #object{type = ?DIRECTORY_TYPE} = Object) ->
-    await_file_attr_sync(SyncProviders, UserId, Object#object{children = undefined}).
+await_sync(SyncProviders, UserId, #object{
+    guid = DirGuid,
+    type = ?DIRECTORY_TYPE,
+    children = Children
+} = Object) ->
+    await_file_attr_sync(SyncProviders, UserId, Object#object{children = undefined}),
+
+    ChildGuids = lists:sort(lists_utils:pforeach(fun(#object{guid = ChildGuid} = Child) ->
+        await_sync(SyncProviders, UserId, Child),
+        ChildGuid
+    end, Children)),
+
+    await_file_links_sync(SyncProviders, UserId, DirGuid, ChildGuids).
 
 
 %% @private
@@ -148,16 +158,47 @@ await_file_attr_sync(SyncProviders, UserId, #object{guid = Guid} = Object) ->
 
 
 %% @private
--spec get_object(oct_background:entity_selector(), od_user:id(), object()) ->
-    ok | no_return().
-get_object(SyncNode, SessId, Guid) ->
-    case file_test_utils:get_attrs(SyncNode, SessId, Guid) of
+-spec get_object(oct_background:entity_selector(), session:id(), file_id:file_guid()) ->
+    {ok, object()} | {error, term()}.
+get_object(Node, SessId, Guid) ->
+    case file_test_utils:get_attrs(Node, SessId, Guid) of
         {ok, #file_attr{guid = Guid, name = Name, type = Type, mode = Mode, shares = Shares}} ->
             {ok, #object{
                 guid = Guid, name = Name,
                 type = Type, mode = Mode,
                 shares = lists:sort(Shares)
             }};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%% @private
+-spec await_file_links_sync(
+    [oct_background:entity_selector()], od_user:id(), file_id:file_guid(), [file_id:file_guid()]
+) ->
+    ok | no_return().
+await_file_links_sync(SyncProviders, UserId, DirGuid, ExpChildGuids) ->
+    lists:foreach(fun(SyncProvider) ->
+        SessId = oct_background:get_user_session_id(UserId, SyncProvider),
+        SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
+        ?assertMatch(
+            {ok, ExpChildGuids},
+            ls(SyncNode, SessId, DirGuid, 0, length(ExpChildGuids)),
+            ?ATTEMPTS
+        )
+    end, SyncProviders).
+
+
+%% @private
+-spec ls(
+    oct_background:entity_selector(), session:id(), file_id:file_guid(), non_neg_integer(), non_neg_integer()
+) ->
+    {ok, [file_id:file_guid()]} | {error, term()}.
+ls(Node, SessId, Guid, Offset, Size) ->
+    case lfm_proxy:get_children(Node, SessId, {guid, Guid}, Offset, Size) of
+        {ok, Files} ->
+            {ok, lists:sort(lists:map(fun({Guid, _}) -> Guid end, Files))};
         {error, _} = Error ->
             Error
     end.
