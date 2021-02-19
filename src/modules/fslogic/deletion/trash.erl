@@ -112,7 +112,7 @@ add_deletion_marker_if_applicable(ParentUuid, FileCtx) ->
     case file_ctx:is_imported_storage(FileCtx) of
         {true, FileCtx2} ->
             case file_ctx:is_storage_file_created(FileCtx2) of
-                {true, FileCtx3} -> deletion_marker:add(ParentUuid, FileCtx2);
+                {true, FileCtx3} -> deletion_marker:add(ParentUuid, FileCtx3);
                 {false, FileCtx3} -> FileCtx3
             end;
         {false, FileCtx2} -> FileCtx2
