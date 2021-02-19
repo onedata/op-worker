@@ -50,6 +50,7 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
 
     FileInfo = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc),
     await_sync(SyncProviders, UserId, FileInfo),
+    await_parent_links_sync(SyncProviders, UserId, ParentGuid, FileInfo),
 
     FileInfo.
 
@@ -138,12 +139,12 @@ await_sync(SyncProviders, UserId, #object{
 } = Object) ->
     await_file_attr_sync(SyncProviders, UserId, Object#object{children = undefined}),
 
-    ChildGuids = lists:sort(lists_utils:pforeach(fun(#object{guid = ChildGuid} = Child) ->
+    ChildGuids = lists:sort(lists_utils:pmap(fun(#object{guid = ChildGuid} = Child) ->
         await_sync(SyncProviders, UserId, Child),
         ChildGuid
     end, Children)),
 
-    await_file_links_sync(SyncProviders, UserId, DirGuid, ChildGuids).
+    await_dir_links_sync(SyncProviders, UserId, DirGuid, ChildGuids).
 
 
 %% @private
@@ -174,11 +175,11 @@ get_object(Node, SessId, Guid) ->
 
 
 %% @private
--spec await_file_links_sync(
+-spec await_dir_links_sync(
     [oct_background:entity_selector()], od_user:id(), file_id:file_guid(), [file_id:file_guid()]
 ) ->
     ok | no_return().
-await_file_links_sync(SyncProviders, UserId, DirGuid, ExpChildGuids) ->
+await_dir_links_sync(SyncProviders, UserId, DirGuid, ExpChildGuids) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
@@ -202,6 +203,26 @@ ls(Node, SessId, Guid, Offset, Size) ->
         {error, _} = Error ->
             Error
     end.
+
+
+%% @private
+-spec await_parent_links_sync(
+    [oct_background:entity_selector()], od_user:id(), file_id:file_guid(), object()
+) ->
+    ok | no_return().
+await_parent_links_sync(SyncProviders, UserId, ParentGuid, #object{
+    guid = ChildGuid,
+    name = ChildName
+}) ->
+    lists:foreach(fun(SyncProvider) ->
+        SessId = oct_background:get_user_session_id(UserId, SyncProvider),
+        SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
+        ?assertMatch(
+            {ok, #file_attr{guid = ChildGuid}},
+            lfm_proxy:get_child_attr(SyncNode, SessId, ParentGuid, ChildName),
+            ?ATTEMPTS
+        )
+    end, SyncProviders).
 
 
 %% @private
