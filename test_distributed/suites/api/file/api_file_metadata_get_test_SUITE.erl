@@ -455,8 +455,8 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
                 correct = [
                     user2, % space owner - doesn't need any perms
                     user3, % files owner
-                    user4  % space member, (depending on params combination may
-                    % be forbidden but in general is permitted)
+                    user4  % space member (depending on params combination may
+                           % be forbidden but in general is permitted)
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1]
@@ -986,8 +986,6 @@ build_get_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
 
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
@@ -995,8 +993,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 
 init_per_testcase(_Case, Config) ->
