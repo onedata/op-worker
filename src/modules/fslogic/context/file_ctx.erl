@@ -73,7 +73,7 @@
 -export([get_local_file_location_doc/1, get_local_file_location_doc/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
+-export([get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2, get_and_check_parent/2, get_original_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
@@ -262,25 +262,6 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
     end;
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
     {Path, FileCtx}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's canonical path tokens (starting with "/", "SpaceId/", ...).
-%% @end
-%%--------------------------------------------------------------------
--spec get_canonical_path_tokens(ctx()) -> {[file_meta:name()], ctx()}.
-get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
-    case is_root_dir_const(FileCtx) of
-        true ->
-            {[<<"/">>], FileCtx#file_ctx{canonical_path = <<"/">>}};
-        false ->
-            {CanonicalPathTokens, FileCtx2} = resolve_canonical_path_tokens(FileCtx),
-            CanonicalPath = filename:join(CanonicalPathTokens),
-            {CanonicalPathTokens,
-                FileCtx2#file_ctx{canonical_path = CanonicalPath}}
-    end;
-get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
-    {filepath_utils:split(Path), FileCtx}.
 
 
 -spec get_uuid_based_path(ctx()) -> {file_meta:uuid_based_path(), ctx()}.
