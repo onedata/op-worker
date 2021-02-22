@@ -375,7 +375,7 @@ end).
     <<"gri">> => gri:serialize(#gri{type = od_user, id = __UserId, aspect = instance, scope = shared}),
     <<"fullName">> => ?USER_FULL_NAME(__UserId),
     <<"username">> => ?USER_USERNAME(__UserId),
-    % @TODO deprecated, included for backward compatibility
+    % TODO VFS-4506 deprecated fields, included for backward compatibility
     <<"name">> => ?USER_FULL_NAME(__UserId),
     <<"login">> => ?USER_USERNAME(__UserId),
     <<"alias">> => ?USER_USERNAME(__UserId)

@@ -1952,7 +1952,7 @@ file_removed_during_replication(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    % TODO Below lines commented so that test does not fail here. Uncomment after fixing.
+                    % TODO VFS-6619 Below lines commented so that test does not fail here. Uncomment after fixing.
                     % replication_status => failed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,
