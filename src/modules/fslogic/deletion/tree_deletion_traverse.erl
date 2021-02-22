@@ -43,8 +43,7 @@
 -type info() :: #{
     root_guid := file_id:file_guid(),
     emit_events := boolean(),
-    root_original_parent_uuid := file_meta:uuid(),
-    root_storage_file_basename := file_meta:name()
+    root_original_parent_uuid := file_meta:uuid()
 }.
 %@formatter:on
 
@@ -69,7 +68,6 @@ stop_pool() ->
 
 -spec start(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) -> {ok, id()} | {error, term()}.
 start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
-    {StorageFileId, RootDirCtx2} = file_ctx:get_storage_file_id(RootDirCtx),
     TaskId = datastore_key:new(),
     Options = #{
         task_id => TaskId,
@@ -81,13 +79,12 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
             emit_events => EmitEvents,
             % TODO VFS-7133 after extending file_meta with field for storing source parent
             % there will be no need to store below 2 values
-            root_original_parent_uuid => RootOriginalParentUuid,
-            root_storage_file_basename => filename:basename(StorageFileId)
+            root_original_parent_uuid => RootOriginalParentUuid
         }
     },
     case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
         ok ->
-            tree_traverse:run(?POOL_NAME, RootDirCtx2, user_ctx:get_user_id(UserCtx), Options);
+            tree_traverse:run(?POOL_NAME, RootDirCtx, user_ctx:get_user_id(UserCtx), Options);
         {error, _} = Error ->
             Error
     end.
@@ -164,19 +161,24 @@ delete_dir_if_subtree_processed(?SUBTREE_NOT_PROCESSED, _FileCtx, _UserId, _Task
 delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
     root_guid := RootGuid,
     emit_events := EmitEvents,
-    root_original_parent_uuid := RootOriginalParentUuid,
-    root_storage_file_basename := RootStorageFileBasename
+    root_original_parent_uuid := RootOriginalParentUuid
 }) ->
     case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
         {ok, UserCtx} ->
             try
-                delete_req:delete(UserCtx, FileCtx, not EmitEvents),
-                tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
-                case file_ctx:get_guid_const(FileCtx) =:= RootGuid of
+                % TODO VFS-7133 after extending file_meta with field for storing source parent
+                % there will be no need to delete deletion_marker here, it may be deleted in fslogic_delete
+                {IsStorageFileCreated, FileCtx2} = file_ctx:is_storage_file_created(FileCtx),
+                % get StorageFileId before location is deleted as it's stored in dir_location doc
+                {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+                delete_req:delete(UserCtx, FileCtx3, not EmitEvents),
+                tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx3)),
+                case file_ctx:get_guid_const(FileCtx3) =:= RootGuid of
                     true ->
-                        % TODO VFS-7133 after extending file_meta with field for storing source parent
-                        % there will be no need to delete deletion_marker here, it may be deleted in fslogic_delete
-                        deletion_marker:remove_by_name(RootOriginalParentUuid, RootStorageFileBasename);
+                        case IsStorageFileCreated of
+                            true -> deletion_marker:remove_by_name(RootOriginalParentUuid, filename:basename(StorageFileId));
+                            false -> ok
+                        end;
                     false ->
                         file_processed(FileCtx, UserCtx, TaskId, TraverseInfo)
                 end

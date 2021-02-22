@@ -42,7 +42,7 @@
 -type scope () :: od_space:id().
 -type tree_id() :: od_provider:id().
 -type tree_ids() :: datastore_model:tree_ids().
--type internal_link() :: #link{}.
+-type internal_link() :: datastore_links:link().
 % list of links with the same name
 -type group() :: [internal_link()].
 -type fold_acc() :: term().
@@ -98,7 +98,7 @@
 %%%===================================================================
 
 -spec get(forest(), tree_ids(), link_name() | [link_name()]) ->
-    {ok, [internal_link()]} | [{ok, [link()]} | {error, term()}] | {error, term()}.
+    {ok, [internal_link()]} | [{ok, [internal_link()]} | {error, term()}] | {error, term()}.
 get(ParentUuid, TreeIds, FileNames) ->
     % Scope is not passed to this function as it's irrelevant for get operations
     datastore_model:get_links(?CTX, ParentUuid, TreeIds, FileNames).
@@ -186,7 +186,7 @@ list_whitelisted(ParentUuid, Opts, SortedChildrenWhiteList) ->
                 [];
             ({error, _} = Error) ->
                 throw(Error)
-        end, file_meta_links:get(ParentUuid, all, FilteredChildrenWhiteList)),
+        end, get(ParentUuid, all, FilteredChildrenWhiteList)),
 
         case NonNegOffset < length(ValidLinks) of
             true ->

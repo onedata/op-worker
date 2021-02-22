@@ -590,7 +590,7 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
     % file shouldn't have been synchronized because it's in trash
     ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size1, Size2]), FileGuid, ?ATTEMPTS).
 
-long_lasting_deletion_test_base(Config, TimeWarpsCount,
+long_lasting_deletion_test_base(_Config, TimeWarpsCount,
     TimeWarpPeriod, TimeWarpInterval, ExpectedResult
 ) ->
     % this test moves directory to trash, schedules its deletion and simulates that
