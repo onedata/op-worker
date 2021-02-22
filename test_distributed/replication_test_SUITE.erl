@@ -80,6 +80,8 @@ all() ->
     W1, model, execute_with_default_context, [Model, F, A, O])).
 -define(extract_key(Result), datastore_runner:extract_key(Result)).
 
+-define(SUPPORT_SIZE, 1000000000).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -1335,6 +1337,10 @@ override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
     test_utils:mock_expect(Workers, space_logic, is_supported,
         fun(_Client, SpId, ProvId) when SpId =:= SpaceId ->
             lists:member(ProvId, Providers)
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_support_size,
+        fun(SpId, _ProvId) when SpId =:= SpaceId ->
+            {ok, ?SUPPORT_SIZE}
         end),
     test_utils:mock_expect(Workers, space_logic, get_local_storages,
         fun(SpId) when SpId =:= SpaceId ->
