@@ -173,7 +173,7 @@ schedule_file_replication(
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     data_constraints:assert_not_readonly_mode(UserCtx),
     file_ctx:assert_not_readonly_target_storage_const(FileCtx0, TargetProviderId),
-    FileCtx1 = file_ctx:assert_smaller_than_target_support_size(FileCtx0, TargetProviderId),
+    FileCtx1 = file_ctx:assert_smaller_than_provider_support_size(FileCtx0, TargetProviderId),
 
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,

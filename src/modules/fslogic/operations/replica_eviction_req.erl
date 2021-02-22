@@ -49,7 +49,7 @@ schedule_replica_eviction(
         false ->
             file_ctx:assert_not_trash_dir_const(FileCtx0),
             file_ctx:assert_not_readonly_target_storage_const(FileCtx0, MigrationProviderId),
-            file_ctx:assert_smaller_than_target_support_size(FileCtx0, MigrationProviderId)
+            file_ctx:assert_smaller_than_provider_support_size(FileCtx0, MigrationProviderId)
     end,
 
     FileCtx2 = fslogic_authz:ensure_authorized(
