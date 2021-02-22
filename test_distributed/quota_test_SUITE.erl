@@ -48,9 +48,9 @@
     remove_file_on_remote_provider_should_unlock_space/1,
     replicate_file_smaller_than_quota_should_not_fail/1,
     replicate_file_bigger_than_quota_should_fail/1,
-    replication_of_file_smaller_than_support_should_fail/1,
-    migration_of_file_smaller_than_support_should_fail/1,
-    onf_replication_of_file_smaller_than_support_should_fail/1,
+    replication_of_file_bigger_than_support_should_fail/1,
+    migration_of_file_bigger_than_support_should_fail/1,
+    onf_replication_of_file_bigger_than_support_should_fail/1,
 
     % gui upload tests
     quota_updated_on_gui_upload/1,
@@ -77,9 +77,9 @@ all() ->
         remove_file_on_remote_provider_should_unlock_space,
         replicate_file_smaller_than_quota_should_not_fail,
         replicate_file_bigger_than_quota_should_fail,
-        replication_of_file_smaller_than_support_should_fail,
-        migration_of_file_smaller_than_support_should_fail,
-        onf_replication_of_file_smaller_than_support_should_fail,
+        replication_of_file_bigger_than_support_should_fail,
+        migration_of_file_bigger_than_support_should_fail,
+        onf_replication_of_file_bigger_than_support_should_fail,
 
         % gui upload tests
         quota_updated_on_gui_upload,
@@ -487,7 +487,7 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
 
 
 replicate_file_bigger_than_quota_should_fail(Config) ->
-    #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} = gen_test_env(Config),
+    #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
     SessId = fun(Worker) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config)
     end,
@@ -529,7 +529,7 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
     ?assertEqual(true, available_size(P2, <<"space_id5">>) > -(FileSize - ?SPACE_ID5_P2_SUPPORT_SIZE), ?ATTEMPTS).
 
 
-replication_of_file_smaller_than_support_should_fail(Config) ->
+replication_of_file_bigger_than_support_should_fail(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     FileSize = 30,
@@ -543,7 +543,7 @@ replication_of_file_smaller_than_support_should_fail(Config) ->
     ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replication(P1, SessId(P1), {guid, Guid}, ?GET_DOMAIN_BIN(P1))),
     ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replication(P2, SessId(P2), {guid, Guid}, ?GET_DOMAIN_BIN(P1))).
 
-migration_of_file_smaller_than_support_should_fail(Config) ->
+migration_of_file_bigger_than_support_should_fail(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     FileSize = 30,
@@ -561,7 +561,7 @@ migration_of_file_smaller_than_support_should_fail(Config) ->
         ?GET_DOMAIN_BIN(P1)
     )).
 
-onf_replication_of_file_smaller_than_support_should_fail(Config) ->
+onf_replication_of_file_bigger_than_support_should_fail(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     FileSize = 30,

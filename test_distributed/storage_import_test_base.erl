@@ -2277,20 +2277,21 @@ create_delete_import2_test(Config) ->
     enable_initial_scan(Config, ?SPACE_ID),
 
     multi_provider_file_ops_test_base:verify_workers(Workers, fun(W) ->
-    ?assertMatch({ok, ?TEST_DATA},
-        begin
-            SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W)}}, Config),
-            case lfm_proxy:open(W, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read) of
-                {ok, Handle} ->
-                    try
-                        lfm_proxy:read(W, Handle, 0, Size)
-                    after
-                        lfm_proxy:close(W, Handle)
-                    end;
-                OpenError ->
-                    OpenError
-            end
-        end, Attempts)
+        ?assertMatch({ok, ?TEST_DATA},
+            begin
+                SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W)}}, Config),
+                case lfm_proxy:open(W, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read) of
+                    {ok, Handle} ->
+                        try
+                            lfm_proxy:read(W, Handle, 0, Size)
+                        after
+                            lfm_proxy:close(W, Handle)
+                        end;
+                    OpenError ->
+                        OpenError
+                end
+            end, Attempts
+        )
     end),
 
     %% Create file on storage
