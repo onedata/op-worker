@@ -24,12 +24,14 @@
 
 -type share_spec() :: #share_spec{}.
 
--type file_selector() :: file_id:file_guid() | oct_background:entity_selector().
--type file_spec() :: #file_spec{} | #dir_spec{}.
+-type object_selector() :: file_id:file_guid() | oct_background:entity_selector().
+-type object_spec() :: #file_spec{} | #dir_spec{}.
 
 -type object() :: #object{}.
 
--export_type([share_spec/0, file_selector/0, file_spec/0, object/0]).
+-export_type([share_spec/0, object_selector/0, object_spec/0, object/0]).
+
+-define(LS_SIZE, 1000).
 
 -define(ATTEMPTS, 30).
 
@@ -39,7 +41,7 @@
 %%%===================================================================
 
 
--spec create_and_sync_file_tree(oct_background:entity_selector(), file_selector(), file_spec()) ->
+-spec create_and_sync_file_tree(oct_background:entity_selector(), object_selector(), object_spec()) ->
     map().
 create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
     UserId = oct_background:get_user_id(UserSelector),
@@ -65,7 +67,7 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
     od_user:id(),
     file_id:file_guid(),
     oct_background:entity_selector(),
-    file_spec()
+    object_spec()
 ) ->
     object().
 create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
@@ -139,12 +141,12 @@ await_sync(SyncProviders, UserId, #object{
 } = Object) ->
     await_file_attr_sync(SyncProviders, UserId, Object#object{children = undefined}),
 
-    ChildGuids = lists:sort(lists_utils:pmap(fun(#object{guid = ChildGuid} = Child) ->
+    ExpChildrenList = lists:sort(lists_utils:pmap(fun(#object{guid = ChildGuid, name = ChildName} = Child) ->
         await_sync(SyncProviders, UserId, Child),
-        ChildGuid
+        {ChildGuid, ChildName}
     end, Children)),
 
-    await_dir_links_sync(SyncProviders, UserId, DirGuid, ChildGuids).
+    await_dir_links_sync(SyncProviders, UserId, DirGuid, ExpChildrenList).
 
 
 %% @private
@@ -176,33 +178,47 @@ get_object(Node, SessId, Guid) ->
 
 %% @private
 -spec await_dir_links_sync(
-    [oct_background:entity_selector()], od_user:id(), file_id:file_guid(), [file_id:file_guid()]
+    [oct_background:entity_selector()], od_user:id(), file_id:file_guid(),
+    [{file_meta:name(), file_id:file_guid()}]
 ) ->
     ok | no_return().
-await_dir_links_sync(SyncProviders, UserId, DirGuid, ExpChildGuids) ->
+await_dir_links_sync(SyncProviders, UserId, DirGuid, ExpChildrenList) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
-        ?assertMatch(
-            {ok, ExpChildGuids},
-            ls(SyncNode, SessId, DirGuid, 0, length(ExpChildGuids)),
-            ?ATTEMPTS
-        )
+        ?assertMatch({ok, ExpChildrenList}, ls(SyncNode, SessId, DirGuid), ?ATTEMPTS)
     end, SyncProviders).
 
 
 %% @private
+-spec ls(oct_background:entity_selector(), session:id(), file_id:file_guid()) ->
+    {ok, [{file_id:file_guid(), file_meta:name()}]} | {error, term()}.
+ls(Node, SessId, Guid) ->
+    ls(Node, SessId, Guid, <<>>, []).
+
+
+%% @private
 -spec ls(
-    oct_background:entity_selector(), session:id(), file_id:file_guid(), non_neg_integer(), non_neg_integer()
+    oct_background:entity_selector(),
+    session:id(),
+    file_id:file_guid(),
+    file_meta:list_token(),
+    [{file_id:file_guid(), file_meta:name()}]
 ) ->
-    {ok, [file_id:file_guid()]} | {error, term()}.
-ls(Node, SessId, Guid, Offset, Size) ->
-    case lfm_proxy:get_children(Node, SessId, {guid, Guid}, Offset, Size) of
-        {ok, Files} ->
-            {ok, lists:sort(lists:map(fun({Guid, _}) -> Guid end, Files))};
-        {error, _} = Error ->
+    {ok, [{file_meta:name(), file_id:file_guid()}]} | {error, term()}.
+ls(Node, SessId, Guid, Token, ChildEntriesAcc) ->
+    case lfm_proxy:get_children(Node, SessId, {guid, Guid}, #{token => Token, size => ?LS_SIZE}) of
+        {ok, Children, ListExtendedInfo} ->
+            AllChildEntries = ChildEntriesAcc ++ Children,
+
+            case maps:get(is_last, ListExtendedInfo) of
+                true -> {ok, AllChildEntries};
+                false -> ls(Node, SessId, Guid, maps:get(token, ListExtendedInfo), AllChildEntries)
+            end;
+        Error ->
             Error
     end.
+
 
 
 %% @private
@@ -240,7 +256,7 @@ create_dir(Node, SessId, ParentGuid, FileName, FileMode) ->
 
 
 %% @private
--spec resolve_file(file_selector()) -> {file_id:file_guid(), od_space:id()}.
+-spec resolve_file(object_selector()) -> {file_id:file_guid(), od_space:id()}.
 resolve_file(FileSelector) ->
     try
         SpaceId = oct_background:get_space_id(FileSelector),
