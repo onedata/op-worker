@@ -273,7 +273,7 @@ create_token(TokenType, UserId, Caveats, Persistence) ->
         tokens:serialize(tokens:construct(#token{
             onezone_domain = <<"zone">>,
             subject = ?SUB(user, UserId),
-            id = UserId,
+            id = str_utils:rand_hex(16),
             type = TokenType,
             persistence = case Persistence of
                 named -> named;

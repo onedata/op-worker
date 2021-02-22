@@ -220,7 +220,7 @@ end).
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     space_aliases = ?USER_SPACE_ALIASES(__User),
-    blocked = false,
+    blocked = {false, 1},
     eff_groups = ?USER_EFF_GROUPS(__User),
     eff_spaces = ?USER_EFF_SPACES(__User),
     eff_handle_services = ?USER_EFF_HANDLE_SERVICES(__User),
@@ -231,7 +231,7 @@ end).
     username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
-    blocked = false,
+    blocked = {false, 1},
     space_aliases = #{},
     eff_groups = [],
     eff_spaces = [],
@@ -243,7 +243,7 @@ end).
     username = ?USER_USERNAME(__User),
     emails = [],
     linked_accounts = [],
-    blocked = undefined,
+    blocked = {undefined, 0},
     space_aliases = #{},
     eff_groups = [],
     eff_spaces = [],
@@ -389,7 +389,7 @@ end).
         <<"gri">> => gri:serialize(#gri{type = od_user, id = __UserId, aspect = instance, scope = protected}),
         <<"emailList">> => ?USER_EMAIL_LIST(__UserId),
         <<"linkedAccounts">> => ?USER_LINKED_ACCOUNTS_VALUE(__UserId),
-        <<"blocked">> => false
+        <<"blocked">> => {false, 1}
     }
 end).
 -define(USER_PRIVATE_DATA_VALUE(__UserId), begin

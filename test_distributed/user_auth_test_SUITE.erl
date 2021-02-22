@@ -276,35 +276,75 @@ auth_cache_user_access_blocked_event_test(Config) ->
     ?assertEqual(2, get_auth_cache_size(Worker1)),
     ?assertEqual(2, get_auth_cache_size(Worker2)),
 
-    simulate_user_access_block_changed(Nodes, ?USER_ID_1, true),
+    InitialBlockChangeEvents = total_block_change_events(Nodes),
+
+    simulate_user_access_block_changed(Nodes, ?USER_ID_1, true, 1),
+    ?assertEqual(InitialBlockChangeEvents + 1, total_block_change_events(Nodes)),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1A)),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1B)),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker2, TokenCredentials2A)),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker1, TokenCredentials2B)),
+    % no new entries should be added (verification was done on the same nodes as previously)
+    ?assertEqual(2, get_auth_cache_size(Worker1)),
+    ?assertEqual(2, get_auth_cache_size(Worker2)),
+    % verify on different nodes, which should cause new entries to be added to the cache
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1A)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1B)),
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker1, TokenCredentials2A)),
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker2, TokenCredentials2B)),
+    ?assertEqual(4, get_auth_cache_size(Worker1)),
+    ?assertEqual(4, get_auth_cache_size(Worker2)),
+
+    % another update of the user document when the blocked value does not change
+    % should not cause another est update
+    simulate_user_access_block_changed(Nodes, ?USER_ID_1, true, 2),
+    ?assertEqual(InitialBlockChangeEvents + 1, total_block_change_events(Nodes)),
 
     % while the user is blocked, verification of new tokens should be blocked too
     % (this is checked in token_logic mock)
     AccessToken1C = initializer:create_access_token(?USER_ID_1, [], named),
     TokenCredentials1C = create_token_credentials(AccessToken1C),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1C)),
+    ?assertEqual(5, get_auth_cache_size(Worker1)),
 
-    simulate_user_access_block_changed(Nodes, ?USER_ID_2, true),
+    simulate_user_access_block_changed(Nodes, ?USER_ID_2, true, 1),
+    ?assertEqual(InitialBlockChangeEvents + 2, total_block_change_events(Nodes)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1A)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1B)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials2A)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials2B)),
+    ?assertEqual(5, get_auth_cache_size(Worker1)),
+    ?assertEqual(4, get_auth_cache_size(Worker2)),
 
-    % after unblocking, cached and new tokens should be verifiable immediately
-    simulate_user_access_block_changed(Nodes, ?USER_ID_1, false),
+    % user doc revision must be higher than the previous known one, otherwise
+    % the change should not be taken into account (the user should be still blocked)
+    simulate_user_access_block_changed(Nodes, ?USER_ID_1, false, 1),
+    ?assertEqual(InitialBlockChangeEvents + 2, total_block_change_events(Nodes)),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1A)),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1B)),
+    ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1C)),
+
+    % newer revision should cause unblocking, cached and new tokens should be verifiable immediately
+    simulate_user_access_block_changed(Nodes, ?USER_ID_1, false, 3),
+    ?assertEqual(InitialBlockChangeEvents + 3, total_block_change_events(Nodes)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials2A)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials2B)),
     ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker1, TokenCredentials1A)),
     ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker2, TokenCredentials1B)),
     ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker2, TokenCredentials1C)),
+    ?assertEqual(5, get_auth_cache_size(Worker1)),
+    % TokenCredentials1C were verified on the second worker, which should cause new entry to be added
+    ?assertEqual(5, get_auth_cache_size(Worker2)),
 
     AccessToken1D = initializer:create_access_token(?USER_ID_1, [], temporary),
     TokenCredentials1D = create_token_credentials(AccessToken1D),
     ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker1, TokenCredentials1D)),
+    ?assertEqual(6, get_auth_cache_size(Worker1)),
+
+    % another update of the user document when the blocked value does not change
+    % should not cause another est update
+    simulate_user_access_block_changed(Nodes, ?USER_ID_1, false, 4),
+    ?assertEqual(InitialBlockChangeEvents + 3, total_block_change_events(Nodes)),
 
     clear_auth_caches(Config).
 
@@ -579,10 +619,14 @@ token_expiration(Config) ->
 %%%===================================================================
 
 
-init_per_testcase(Case, Config) when
-    Case == auth_cache_expiration_with_time_warps_test
-->
+init_per_testcase(auth_cache_expiration_with_time_warps_test = Case, Config) ->
     time_test_utils:freeze_time(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+
+init_per_testcase(auth_cache_user_access_blocked_event_test = Case, Config) ->
+    mock_file_meta(Config),
+    mock_auth_cache_for_num_call_counting(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
@@ -591,18 +635,21 @@ init_per_testcase(_Case, Config) ->
     mock_space_logic(Config),
     mock_user_logic(Config),
     mock_token_logic(Config),
-    Nodes= ?config(op_worker_nodes, Config),
+    Nodes = ?config(op_worker_nodes, Config),
     % required to trigger auth cache events that are based on run_after procedures
     rpc:multicall(Nodes, gs_client_worker, enable_cache, []),
-    simulate_user_access_block_changed(Nodes, ?USER_ID_1, false),
-    simulate_user_access_block_changed(Nodes, ?USER_ID_2, false),
+    rpc:multicall(Nodes, od_user, invalidate_cache, [?USER_ID_1]),
+    rpc:multicall(Nodes, od_user, invalidate_cache, [?USER_ID_2]),
     Config.
 
 
-end_per_testcase(Case, Config) when
-    Case == auth_cache_expiration_with_time_warps_test
-->
+end_per_testcase(auth_cache_expiration_with_time_warps_test = Case, Config) ->
     time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(auth_cache_user_access_blocked_event_test = Case, Config) ->
+    unmock_file_meta(Config),
+    unmock_auth_cache(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
@@ -692,11 +739,11 @@ mock_token_logic(Config) ->
         (AccessToken, _, _, _, _) ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = ?SUB(user, UserId)} = Token} ->
-                    % this is set by simulate_user_access_(un)block/2
-                    case node_cache:get({user_blocked, UserId}, false) of
-                        true ->
+                    % this is set by access_block_changed/3
+                    case od_user:get_from_cache(UserId) of
+                        {ok, #document{value = #od_user{blocked = {true, _}}}} ->
                             ?ERROR_USER_BLOCKED;
-                        false ->
+                        _ ->
                             Caveats = tokens:get_caveats(Token),
                             case caveats:infer_ttl(Caveats) of
                                 undefined ->
@@ -722,6 +769,31 @@ mock_token_logic(Config) ->
 unmock_token_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, token_logic).
+
+
+% mocks the irrelevant logic called in od_user posthook
+% (it is triggered by simulating od_user record changes)
+mock_file_meta(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, file_meta),
+    test_utils:mock_expect(Workers, file_meta, setup_onedata_user, fun(_, _) ->
+        ok
+    end).
+
+
+unmock_file_meta(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, file_meta).
+
+
+mock_auth_cache_for_num_call_counting(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, auth_cache, [passthrough]).
+
+
+unmock_auth_cache(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, auth_cache).
 
 
 verify_credentials(Worker, TokenCredentials) ->
@@ -785,13 +857,32 @@ mock_token_logic_is_revoked(Nodes, RevokedTokens) ->
     end).
 
 
--spec simulate_user_access_block_changed(node(), od_user:id(), boolean()) -> ok.
-simulate_user_access_block_changed(Nodes, UserId, Blocked) ->
-    rpc:call(lists_utils:random_element(Nodes), auth_cache, report_user_access_block_changed, [
-        UserId, Blocked
+-spec simulate_user_access_block_changed([node()], od_user:id(), boolean(), gs_protocol:revision()) -> ok.
+simulate_user_access_block_changed(Nodes, UserId, Blocked, Revision) ->
+    GRI = #gri{type = od_user, id = UserId, aspect = instance, scope = private},
+    AsyncPid = rpc:call(lists_utils:random_element(Nodes), gs_client_worker, process_push_message, [
+        #gs_push_graph{gri = GRI, change_type = updated, data = #{
+            <<"gri">> => gri:serialize(GRI),
+            <<"revision">> => Revision,
+            <<"fullName">> => <<"whatever">>,
+            <<"username">> => <<"whatever">>,
+            <<"emails">> => [<<"whatever@example.com">>],
+            <<"linkedAccounts">> => [],
+
+            <<"blocked">> => Blocked,
+            <<"spaceAliases">> => #{},
+            <<"effectiveGroups">> => [],
+            <<"effectiveSpaces">> => [],
+            <<"effectiveHandleServices">> => [],
+            <<"effectiveHandles">> => []
+        }}
     ]),
-    {_, []} = rpc:multicall(Nodes, node_cache, put, [{user_blocked, UserId}, Blocked]),
-    ok.
+    % the push message processing is async - wait for the process to finish
+    Ref = erlang:monitor(process, AsyncPid),
+    receive
+        {'DOWN', Ref, process, _, _} ->
+            ok
+    end.
 
 
 -spec simulate_gs_token_status_update(node(), binary(), boolean()) -> ok.
@@ -865,3 +956,11 @@ simulate_oz_connection_start(Node) ->
 simulate_oz_connection_termination(Node) ->
     rpc:call(Node, auth_cache, report_oz_connection_termination, []),
     ok.
+
+
+% returns the count of all report_user_access_block_changed events generated on all nodes
+-spec total_block_change_events([node()]) -> non_neg_integer().
+total_block_change_events(Nodes) ->
+    lists:sum(lists:map(fun(Node) ->
+        rpc:call(Node, meck, num_calls, [auth_cache, report_user_access_block_changed, '_'])
+    end, Nodes)).

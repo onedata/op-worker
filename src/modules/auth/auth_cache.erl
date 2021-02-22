@@ -71,8 +71,8 @@
     {timestamp, time:seconds()}.
 
 -type token_ref() ::
-{named, od_user:id(), tokens:id()} |
-{temporary, od_user:id(), temporary_token_secret:generation()}.
+    {named, od_user:id(), tokens:id()} |
+    {temporary, od_user:id(), temporary_token_secret:generation()}.
 
 -record(cache_entry, {
     token_credentials :: auth_manager:token_credentials(),

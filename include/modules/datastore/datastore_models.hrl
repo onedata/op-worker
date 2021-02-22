@@ -74,7 +74,10 @@
     emails = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
 
-    blocked = false :: boolean(),
+    % The revision indicates on which revision the current value of "blocked"
+    % was observed, it is used to detect when the value changes.
+    % The '{undefined, 0}' value is set for shared user scope.
+    blocked = {undefined, 0} :: {undefined | boolean(), gs_protocol:revision()},
 
     % List of user's aliases for spaces
     space_aliases = #{} :: #{od_space:id() => od_space:alias()},
