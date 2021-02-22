@@ -494,15 +494,16 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
 
     FileSize = 8 * ?GB,
 
+    % pretend that quota size in space5 on P2 is equal 8GB
+    {ok, _} =
+        rpc:call(P2, space_quota, update, [<<"space_id5">>, fun(SQ) -> {ok, SQ#space_quota{current_size = 8 * ?GB}} end]),
+
     % Create large file on P1 and schedule replication to P2 with support size/quota
     % smaller than file size
     {ok, Guid} = create_file(P1, SessId(P1), f(<<"space5">>, File1)),
-    {ok, _} = create_file(P2, SessId(P2), f(<<"space5">>, File2)),
     lists:foreach(fun(Offset) ->
         ?assertMatch({ok, _},
-            write_to_file(P1, SessId(P1), f(<<"space5">>, File1), Offset, crypto:strong_rand_bytes(?GB))),
-        ?assertMatch({ok, _},
-            write_to_file(P2, SessId(P2), f(<<"space5">>, File2), Offset, crypto:strong_rand_bytes(?GB)))
+            write_to_file(P1, SessId(P1), f(<<"space5">>, File1), Offset, crypto:strong_rand_bytes(?GB)))
     end, lists:seq(0, FileSize-1, ?GB)),
     ?assertMatch(
         {ok, [#{<<"totalBlocksSize">> := FileSize}]},
