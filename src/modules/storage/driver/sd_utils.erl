@@ -232,8 +232,9 @@ generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
         {ok, FileCtx4} ->
             {Storage, FileCtx5} = file_ctx:get_storage(FileCtx4),
             Helper = storage:get_helper(Storage),
-            case (helper:is_object(Helper) andalso helper:is_import_supported(Helper))
-                orelse helper:get_name(Helper) =:= ?NULL_DEVICE_HELPER_NAME
+            case
+                (helper:is_object(Helper) andalso helper:is_import_supported(Helper))
+                orelse (helper:get_name(Helper) =:= ?NULL_DEVICE_HELPER_NAME)
             of
                 true ->
                     % pretend that parent directories has been created

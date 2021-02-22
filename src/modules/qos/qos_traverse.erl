@@ -60,8 +60,7 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
             <<"space_id">> => file_ctx:get_space_id_const(FileCtx),
             <<"uuid">> => file_ctx:get_uuid_const(FileCtx),
             <<"task_type">> => <<"traverse">>
-        },
-        use_listing_token => false
+        }
     },
     {ok, FileCtx2} = qos_status:report_traverse_start(TaskId, FileCtx),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx2, Options),
@@ -89,8 +88,7 @@ reconcile_file_for_qos_entries(FileCtx, QosEntries) ->
             <<"space_id">> => SpaceId,
             <<"uuid">> => FileUuid,
             <<"task_type">> => <<"reconcile">>
-        },
-        use_listing_token => false
+        }
     },
     ok = qos_status:report_reconciliation_started(TaskId, FileCtx, QosEntries),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
@@ -171,7 +169,7 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_i
         ChildrenDirs = lists:map(fun(#tree_traverse{file_ctx = ChildDirCtx}) ->
             file_ctx:get_uuid_const(ChildDirCtx)
         end, MasterJobs),
-        BatchLastFilename = maps:get(last_name, ListExtendedInfo),
+        BatchLastFilename = maps:get(last_name, ListExtendedInfo, undefined),
         Uuid = file_ctx:get_uuid_const(FileCtx),
         SpaceId = file_ctx:get_space_id_const(FileCtx),
         ok = qos_status:report_next_traverse_batch(

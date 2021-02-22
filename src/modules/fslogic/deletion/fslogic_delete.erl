@@ -265,7 +265,7 @@ delete_storage_file(FileCtx, UserCtx) ->
                 % child that is still opened or in case of race on remote deletion
                 Error;
             {error, _} = OtherError ->
-                 log_storage_file_deletion_error(FileCtx, OtherError, false),
+                log_storage_file_deletion_error(FileCtx, OtherError, false),
                 OtherError
         end
     catch
@@ -369,6 +369,7 @@ maybe_add_deletion_marker(FileCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec remove_deletion_marker(file_ctx:ctx(), user_ctx:ctx(), helpers:file_id()) -> file_ctx:ctx().
 remove_deletion_marker(FileCtx, UserCtx, StorageFileId) ->
+    % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     case file_ctx:is_imported_storage(FileCtx) of
         {true, FileCtx2} ->
             {ParentGuid, FileCtx3} = file_ctx:get_parent_guid(FileCtx2, UserCtx),
@@ -539,6 +540,7 @@ finalize_file_location_rename(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec remove_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id()) -> ok.
 remove_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
+    % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     remove_synced_associated_documents(FileCtx),
     remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId).
 
@@ -555,6 +557,7 @@ remove_synced_associated_documents(FileCtx) ->
 
 -spec remove_local_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id()) -> ok.
 remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
+    % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
     ok = file_qos:clean_up(FileCtx),

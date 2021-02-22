@@ -71,7 +71,7 @@ invalidate_caches_on_all_nodes(SpaceId) ->
         [] ->
             ok;
         _ ->
-            ?error("Invalidation of paths caches for space ~p failed on nodes: ~p (RPC error)", [BadNodes])
+            ?error("Invalidation of paths caches for space ~p failed on nodes: ~p (RPC error)", [SpaceId, BadNodes])
     end,
 
     lists:foreach(fun
