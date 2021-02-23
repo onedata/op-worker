@@ -40,7 +40,7 @@
     list_children_whitelisted/4
 ]).
 -export([get_name/1, set_name/2]).
--export([get_active_perms_type/1, update_mode/2, update_flags/3, update_acl/2]).
+-export([get_active_perms_type/1, update_mode/2, update_flags/3, flags_to_json/1, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/6, new_doc/7, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1,
@@ -859,11 +859,24 @@ update_flags(FileUuid, FlagsToSet, FlagsToReset) ->
     ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{flags = CurrFlags} = FileMeta) ->
         NewFlags0 = ?set_flags(?reset_flags(CurrFlags, FlagsToReset), FlagsToSet),
         NewFlags1 = case ?has_any_flags(NewFlags0, ?DATA_PROTECTION bor ?METADATA_PROTECTION) of
-            true -> ?set_flags(NewFlags0, ?IMPORT_LOCK);
-            false -> ?reset_flags(NewFlags0, ?IMPORT_LOCK)
+            true -> ?set_flags(NewFlags0, ?IMPORT_PROTECTION);
+            false -> ?reset_flags(NewFlags0, ?IMPORT_PROTECTION)
         end,
         {ok, FileMeta#file_meta{flags = NewFlags1}}
     end)).
+
+
+-spec flags_to_json(ace:bitmask()) -> [binary()].
+flags_to_json(FileFlags) ->
+    lists:filtermap(fun({FlagName, FlagMask}) ->
+        case ?has_all_flags(FileFlags, FlagMask) of
+            true -> {true, FlagName};
+            false -> false
+        end
+    end, [
+        {?DATA_PROTECTION_BIN, ?DATA_PROTECTION},
+        {?METADATA_PROTECTION_BIN, ?METADATA_PROTECTION}
+    ]).
 
 
 -spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.

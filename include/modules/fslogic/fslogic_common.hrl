@@ -61,12 +61,14 @@
 -define(DELETED_OPENED_FILES_DIR_MODE, 8#700).
 
 % Supported file flags
+-define(DATA_PROTECTION_BIN, <<"data_protection">>).
 -define(DATA_PROTECTION, 16#00000001).
+-define(METADATA_PROTECTION_BIN, <<"metadata_protection">>).
 -define(METADATA_PROTECTION, 16#00000002).
 % Disables import for file or dir subtree - this flag is implicitly set when
 % either ?DATA_PROTECTION or ?METADATA_PROTECTION flag is set and removed when
 % both of them are reset.
--define(IMPORT_LOCK, 16#00000004).
+-define(IMPORT_PROTECTION, 16#00000004).
 
 %% Allowed parameter keys
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).

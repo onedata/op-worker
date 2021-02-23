@@ -150,15 +150,17 @@ get_file_details(UserCtx, FileCtx0) ->
     fslogic_worker:fuse_response().
 get_file_details_insecure(UserCtx, FileCtx, Opts) ->
     {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
+    {FileFlags, FileCtx3} = file_ctx:get_effective_flags(UserCtx, FileCtx2),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
 
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
+            file_flags = FileFlags,
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
-            has_metadata = has_metadata(FileCtx2),
+            has_metadata = has_metadata(FileCtx3),
             has_direct_qos = file_qos:has_any_qos_entry(FileDoc, direct),
             has_eff_qos = file_qos:has_any_qos_entry(FileDoc, effective)
         }

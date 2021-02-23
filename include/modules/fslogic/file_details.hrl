@@ -19,6 +19,7 @@
 
 -record(file_details, {
     file_attr :: #file_attr{},
+    file_flags :: ace:bitmask(),
     % StartId can be used to list dir children starting from this file
     index_startid :: binary(),
     active_permissions_type :: file_meta:permissions_type(),
