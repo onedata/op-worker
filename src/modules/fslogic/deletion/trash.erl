@@ -31,10 +31,11 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
--export([create/1, move_to_trash/2, delete_from_trash/4]).
+-export([create/1, move_to_trash/2, schedule_deletion_from_trash/4]).
 
 
 -define(NAME_UUID_SEPARATOR, "@@").
@@ -76,6 +77,7 @@ move_to_trash(FileCtx, UserCtx) ->
     file_qos:clean_up(FileCtx5),
     ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     file_meta:rename(FileDoc, ParentUuid, TrashUuid, ?NAME_IN_TRASH(Name, Uuid)),
+    ok = paths_cache:invalidate_caches_on_all_nodes(SpaceId),
     FileCtx5.
 
 
@@ -85,12 +87,20 @@ move_to_trash(FileCtx, UserCtx) ->
 %% asynchronously remove the subtree from the trash.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) ->
-    {ok, tree_deletion_traverse:id()}.
-delete_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
+-spec schedule_deletion_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) ->
+    {ok, tree_deletion_traverse:id()} | {error, term()}.
+schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUuid) ->
     file_ctx:assert_not_special_const(FileCtx),
-    % TODO VFS-7101 use offline access token in tree_traverse
-    tree_deletion_traverse:start(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid).
+    % TODO VFS-7348 schedule deletion as user not by root
+    case tree_deletion_traverse:start(FileCtx, user_ctx:new(?ROOT_USER_ID), EmitEvents, RootOriginalParentUuid) of
+        {ok, TaskId} ->
+            {ok, TaskId};
+        {error, _} = Error ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            Guid = file_ctx:get_guid_const(FileCtx),
+            ?error("Unable to start deletion of ~s from trash in space ~s due to ~p.", [Guid, SpaceId, Error]),
+            Error
+    end.
 
 
 %%%===================================================================
@@ -100,6 +110,10 @@ delete_from_trash(FileCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
 -spec add_deletion_marker_if_applicable(file_meta:uuid(), file_ctx:ctx()) -> file_ctx:ctx().
 add_deletion_marker_if_applicable(ParentUuid, FileCtx) ->
     case file_ctx:is_imported_storage(FileCtx) of
-        {true, FileCtx2} -> deletion_marker:add(ParentUuid, FileCtx2);
+        {true, FileCtx2} ->
+            case file_ctx:is_storage_file_created(FileCtx2) of
+                {true, FileCtx3} -> deletion_marker:add(ParentUuid, FileCtx3);
+                {false, FileCtx3} -> FileCtx3
+            end;
         {false, FileCtx2} -> FileCtx2
     end.

@@ -1261,7 +1261,7 @@ mapping_not_found_test_base(TestName, Config, SpaceId, TestArgs) ->
     FileName = ?FILE_NAME(TestName),
 
     % when
-    ?assertMatch({error, ?EACCES}, lfm_proxy:create_and_open(Worker, SessId, ?SPACE_GUID(SpaceId), FileName, 8#664)).
+    ?assertMatch({error, ?EACCES}, lfm_proxy:create_and_open(Worker, SessId, ?SPACE_GUID(SpaceId), FileName, ?DEFAULT_FILE_PERMS)).
 
 
 remotely_updated_perms_should_be_updated_on_storage_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1270,7 +1270,7 @@ remotely_updated_perms_should_be_updated_on_storage_test_base(TestName, Config, 
     SessId = ?SESS_ID(Worker1, Config, User),
     SessId2 = ?SESS_ID(Worker2, Config, User),
     FileName = ?FILE_NAME(TestName),
-    InitialPerms = 8#664,
+    InitialPerms = ?DEFAULT_FILE_PERMS,
     UpdatedPerms = 8#777,
 
     % when

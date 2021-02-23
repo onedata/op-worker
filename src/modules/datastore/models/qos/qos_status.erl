@@ -158,7 +158,7 @@ report_traverse_finished(SpaceId, TraverseId, Uuid) ->
 
 -spec report_next_traverse_batch(od_space:id(), traverse:id(), file_meta:uuid(),
     ChildrenDirs :: [file_meta:uuid()], ChildrenFiles :: [file_meta:uuid()], 
-    BatchLastFilename :: file_meta:name()) -> ok.
+    BatchLastFilename :: file_meta:name() | undefined) -> ok.
 report_next_traverse_batch(SpaceId, TraverseId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastFilename) ->
     {ok, _} = update(TraverseId, Uuid,
         fun(#qos_status{
@@ -168,7 +168,7 @@ report_next_traverse_batch(SpaceId, TraverseId, Uuid, ChildrenDirs, ChildrenFile
             {ok, Value#qos_status{
                 files_list = ChildrenFiles,
                 previous_batch_last_filename = LN,
-                current_batch_last_filename = BatchLastFilename,
+                current_batch_last_filename = utils:ensure_defined(BatchLastFilename, LN),
                 child_dirs_count = ChildDirsCount + length(ChildrenDirs)}
             }
         end),

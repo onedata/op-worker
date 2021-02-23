@@ -238,7 +238,7 @@ changes_stream_xattr_test(Config) ->
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
     File = filename:join(["/", SpaceName, "file3_csxt"]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     % when
@@ -281,7 +281,7 @@ changes_stream_json_metadata_test(Config) ->
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
     File = filename:join(["/", SpaceName, "file4_csjmt"]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     OnedataJson = #{
@@ -323,7 +323,7 @@ changes_stream_times_test(Config) ->
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
     File = filename:join(["/", SpaceName, "file5_cstt"]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     Time = 1000,
@@ -368,7 +368,7 @@ changes_stream_file_location_test(Config) ->
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
     File = filename:join(["/", SpaceName, "file6_csflt"]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     % when
@@ -463,7 +463,7 @@ changes_stream_request_several_records_test(Config) ->
 
     Name = <<"file7_csflt">>,
     File = filename:join(["/", SpaceName, Name]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     Time = 1000,
@@ -538,7 +538,7 @@ changes_stream_on_multi_provider_test(Config) ->
     [_, {SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
     File = filename:join(["/", SpaceName, "file8_csompt"]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionIdP2, File, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionIdP2, File),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     % when

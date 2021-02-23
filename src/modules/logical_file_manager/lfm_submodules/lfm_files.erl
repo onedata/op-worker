@@ -28,11 +28,14 @@
     is_dir/2
 ]).
 %% Functions operating on files
--export([create/2, create/3, create/4, open/3, get_file_location/2, fsync/1, fsync/3, write/3,
+-export([
+    create/2, create/3, create/4, open/3,
+    create_and_open/3, create_and_open/4, create_and_open/5,
+    get_file_location/2, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read/4, check_size_and_read/3, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
-    truncate/3, release/1, get_file_distribution/2, create_and_open/5,
-    create_and_open/4]).
+    truncate/3, release/1, get_file_distribution/2
+]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -383,11 +386,18 @@ create(SessId, ParentGuid, Name, Mode) ->
         end
     ).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new file and opens it
 %% @end
 %%--------------------------------------------------------------------
+-spec create_and_open(session:id(), Path :: file_meta:path(), fslogic_worker:open_flag()) ->
+    {ok, {fslogic_worker:file_guid(), lfm:handle()}}
+    | lfm:error_reply().
+create_and_open(SessId, Path, OpenFlag) ->
+    create_and_open(SessId, Path, undefined, OpenFlag).
+
 -spec create_and_open(session:id(), Path :: file_meta:path(),
     Mode :: undefined | file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
     {ok, {fslogic_worker:file_guid(), lfm:handle()}}

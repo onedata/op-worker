@@ -127,6 +127,7 @@
 -define(TOKENS_SECRET, <<"secret">>).
 -define(TEMPORARY_TOKENS_GENERATION, 1).
 -define(DEFAULT_ONEZONE_DOMAIN, <<"onezone.test">>).
+-define(OFFLINE_ACCESS_TOKEN_EXPIRATION, 3600 * 24 * 7). % 1 week
 
 %%%===================================================================
 %%% API
@@ -1065,6 +1066,14 @@ user_logic_mock_setup(Workers, Users, NoHistory) ->
     test_utils:mock_expect(Workers, token_logic, get_temporary_tokens_generation, fun(_UserId) ->
         {ok, ?TEMPORARY_TOKENS_GENERATION}
     end),
+    test_utils:mock_expect(Workers, token_logic, acquire_offline_user_access_token,
+        fun(_UserId, AccessToken, _ConsumerToken, _PeerIp, _Interface, _DataAccessCaveatsPolicy) ->
+            {ok, T} = tokens:deserialize(AccessToken),
+            ValidUntil = global_clock:timestamp_seconds() + ?OFFLINE_ACCESS_TOKEN_EXPIRATION,
+            OfflineAccessToken = tokens:construct(T, ?TOKENS_SECRET, [#cv_time{valid_until = ValidUntil}]),
+            tokens:serialize(OfflineAccessToken)
+        end
+    ),
 
     test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenCredentials) ->
         AccessToken = auth_manager:get_access_token(TokenCredentials),

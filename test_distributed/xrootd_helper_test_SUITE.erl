@@ -12,6 +12,7 @@
 -author("Bartek Kryza").
 
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -363,10 +364,10 @@ random_file_id() ->
         "\\W", "", [global, {return, binary}]).
 
 create(Helper, FileId) ->
-    call(Helper, mknod, [FileId, 8#644, reg]).
+    call(Helper, mknod, [FileId, ?DEFAULT_FILE_PERMS, reg]).
 
 mkdir(Helper, FileId) ->
-    call(Helper, mkdir, [FileId, 8#755]).
+    call(Helper, mkdir, [FileId, ?DEFAULT_DIR_PERMS]).
 
 open(Helper, FileId, Flag) ->
     call(Helper, open, [FileId, Flag]).

@@ -16,14 +16,14 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/fuse_messages.hrl").
+-include("modules/auth/acl.hrl").
 -include("modules/storage/helpers/helpers.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 
 %% API
 -export([rename/4]).
 
--define(LS_CHUNK_SIZE, 1000).
+-define(DEFAULT_LS_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
 
 %%%===================================================================
 %%% API functions
@@ -481,7 +481,7 @@ rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourceFileCtx3, TargetFileId} =
         rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, true),
-    ChildEntries = rename_child_locations(UserCtx, SourceFileCtx3, TargetFileId, 0),
+    ChildEntries = rename_child_locations(UserCtx, SourceFileCtx3, TargetFileId),
     FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
     #fuse_response{
         status = #status{code = ?OK},
@@ -514,7 +514,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx3),
     case InvalidateCache of
-        true -> paths_cache:invalidate_paths_caches(SpaceId);
+        true -> paths_cache:invalidate_caches_on_all_nodes(SpaceId);
         _ -> ok
     end,
 
@@ -544,34 +544,42 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
-    ParentStorageFileId :: helpers:file_id(), Offset :: non_neg_integer()) ->
+    ParentStorageFileId :: helpers:file_id()) -> [#file_renamed_entry{}].
+rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
+    ListOpts = #{token => ?INITIAL_LS_TOKEN, size => ?DEFAULT_LS_BATCH_SIZE},
+    rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, []).
+
+
+-spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
+    ParentStorageFileId :: helpers:file_id(), file_meta:list_opts(), [#file_renamed_entry{}]) ->
     [#file_renamed_entry{}].
-rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, Offset) ->
+rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, ChildEntries) ->
     ParentGuid = file_ctx:get_guid_const(ParentFileCtx),
-    case file_ctx:get_file_children(ParentFileCtx, UserCtx, Offset, ?LS_CHUNK_SIZE) of
-        {[], _FileCtx2} ->
-            [];
-        {Children, FileCtx2} ->
-            ChildEntries =
-                lists:flatten(lists:map(fun(ChildCtx) ->
-                    {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
-                    ChildStorageFileId = filename:join(ParentStorageFileId, ChildName),
-                    case file_ctx:is_dir(ChildCtx2) of
-                        {true, ChildCtx3} ->
-                            rename_child_locations(UserCtx, ChildCtx3, ChildStorageFileId, 0);
-                        {false, ChildCtx3} ->
-                            ok = replica_updater:rename(ChildCtx3, ChildStorageFileId),
-                            ChildGuid = file_ctx:get_guid_const(ChildCtx3),
-                            #file_renamed_entry{
-                                new_name = ChildName,
-                                new_parent_guid = ParentGuid,
-                                new_guid = ChildGuid,
-                                old_guid = ChildGuid
-                            }
-                    end
-                end, Children)),
-            ChildEntries ++ rename_child_locations(UserCtx, FileCtx2,
-                ParentStorageFileId, Offset + length(Children))
+    {Children, ListExtendedInfo, ParentFileCtx2} = file_ctx:get_file_children(ParentFileCtx, UserCtx, ListOpts),
+    NewChildEntries = lists:flatten(lists:map(fun(ChildCtx) ->
+        {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
+        ChildStorageFileId = filename:join(ParentStorageFileId, ChildName),
+        case file_ctx:is_dir(ChildCtx2) of
+            {true, ChildCtx3} ->
+                rename_child_locations(UserCtx, ChildCtx3, ChildStorageFileId);
+            {false, ChildCtx3} ->
+                ok = replica_updater:rename(ChildCtx3, ChildStorageFileId),
+                ChildGuid = file_ctx:get_guid_const(ChildCtx3),
+                #file_renamed_entry{
+                    new_name = ChildName,
+                    new_parent_guid = ParentGuid,
+                    new_guid = ChildGuid,
+                    old_guid = ChildGuid
+                }
+        end
+    end, Children)),
+    AllChildEntries = ChildEntries ++ NewChildEntries,
+    case maps:get(is_last, ListExtendedInfo) of
+        true ->
+            AllChildEntries;
+        false ->
+            NewToken = maps:get(token, ListExtendedInfo),
+            rename_child_locations(UserCtx, ParentFileCtx2, ParentStorageFileId, ListOpts#{token => NewToken}, AllChildEntries)
     end.
 
 %%--------------------------------------------------------------------

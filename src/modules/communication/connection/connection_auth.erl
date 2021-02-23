@@ -53,6 +53,12 @@ get_handshake_error_msg(invalid_token) ->
             status = 'INVALID_MACAROON'
         }
     };
+get_handshake_error_msg(expired_token) ->
+    #server_message{
+        message_body = #handshake_response{
+            status = 'MACAROON_EXPIRED'
+        }
+    };
 get_handshake_error_msg(invalid_provider) ->
     #server_message{
         message_body = #handshake_response{
@@ -104,6 +110,14 @@ handle_client_handshake(#client_handshake_request{
             ),
             {UserId, SessionId};
         ?ERROR_FORBIDDEN ->
+            throw(invalid_provider);
+        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(#cv_time{}) ->
+            throw(expired_token);
+        ?ERROR_TOKEN_REVOKED ->
+            throw(expired_token);
+        ?ERROR_USER_NOT_SUPPORTED ->
+            throw(invalid_provider);
+        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(#cv_service{}) ->
             throw(invalid_provider);
         {error, _} = Error ->
             case tokens:deserialize(AccessToken) of

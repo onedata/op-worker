@@ -191,7 +191,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
     FilePath = filename:join(["/", SpaceName, generator:gen_name()]),
-    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath),
 
     % Mock function calls to check
     mock_event_handler(AssertionWorker),
@@ -235,7 +235,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
 %%    [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 %%
 %%    FilePath = filename:join(["/", SpaceName, generator:gen_name()]),
-%%    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
+%%    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath),
 %%
 %%    {ok, {Sock, TestSessionID}} = fuse_test_utils:connect_via_token(
 %%        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), AccessToken
@@ -257,7 +257,7 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker, MockError, Flu
     [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
     FilePath = filename:join(["/", SpaceName, generator:gen_name()]),
-    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
+    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath),
 
     % Mock function calls to check
     mock_event_handler(AssertionWorker),
