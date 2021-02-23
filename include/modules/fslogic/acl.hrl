@@ -22,8 +22,6 @@
 -define(common_flags(Bitmask1, Bitmask2), ((Bitmask1) band (Bitmask2))).
 -define(complement_flags(Bitmask), (bnot (Bitmask))).
 
--define(STICKY_BIT, 2#1000000000).
-
 % ace types
 -define(allow, <<"ALLOW">>).
 -define(allow_mask, 16#00000000).
@@ -141,18 +139,6 @@
     identifier :: od_user:id() | od_group:id(),
     name :: undefined | binary(),
     acemask :: non_neg_integer()
-}).
-
-% Record holding information about the permissions to the file granted and
-% denied for the given user. It is build incrementally rather than at once as
-% permissions check consists of number of steps and not all must be completed
-% to tell whether requested permissions are granted or denied. That is why it
-% contains pointer to where it stopped (e.g. space privileges check or concrete
-% ACE in ACL) so that build can be resumed if needed.
--record(user_perms_matrix, {
-    pointer :: non_neg_integer(),
-    granted :: ace:bitmask(),
-    denied :: ace:bitmask()
 }).
 
 -endif.

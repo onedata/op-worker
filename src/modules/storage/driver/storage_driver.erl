@@ -15,6 +15,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/security.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -602,7 +603,7 @@ open_for_write(SDHandle) ->
 open_for_rdwr(SDHandle) ->
     open_with_permissions_check(
         SDHandle#sd_handle{session_id = ?ROOT_SESS_ID},
-        [?PERMISSIONS(?read_object_mask bor ?write_object_mask)], rdwr
+        [?PERMISSIONS(?read_object_mask, ?write_object_mask)], rdwr
     ).
 
 

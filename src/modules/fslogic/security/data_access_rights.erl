@@ -16,6 +16,7 @@
 
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/security.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -27,8 +28,8 @@
 ]).
 
 -type type() ::
-    owner
-    | share
+    ownership
+    | public_access
     | traverse_ancestors            % Means ancestors' exec permission
     | {permissions, ace:bitmask()}.
 
@@ -40,71 +41,6 @@
 -type user_perms_matrix() :: #user_perms_matrix{}.
 
 -export_type([type/0, requirement/0, user_perms_matrix/0]).
-
-% Permissions respected in readonly mode (operation requiring any other
-% permission, even if granted by posix mode or ACL, will be denied)
--define(READONLY_MODE_RESPECTED_PERMS, (
-    ?read_attributes_mask bor
-    ?read_object_mask bor
-    ?list_container_mask bor
-    ?read_metadata_mask bor
-    ?read_acl_mask bor
-    ?traverse_container_mask
-)).
-
-% Permissions denied by lack of ?SPACE_WRITE_DATA/?SPACE_READ_DATA space privilege
--define(SPACE_DENIED_WRITE_PERMS, (
-    ?write_attributes_mask bor
-    ?write_object_mask bor
-    ?add_object_mask bor
-    ?add_subcontainer_mask bor
-    ?delete_mask bor
-    ?delete_child_mask bor
-    ?write_metadata_mask bor
-    ?write_acl_mask
-)).
--define(SPACE_DENIED_READ_PERMS, (
-    ?read_object_mask bor
-    ?list_container_mask bor
-    ?read_metadata_mask
-)).
-
-% Permissions granted by posix mode
--define(POSIX_ALWAYS_GRANTED_PERMS, (
-    ?read_attributes_mask bor
-    ?read_acl_mask
-)).
--define(POSIX_READ_ONLY_PERMS, (
-    ?read_object_mask bor
-    ?list_container_mask bor
-    ?read_metadata_mask
-)).
--define(POSIX_FILE_WRITE_ONLY_PERMS, (
-    ?write_object_mask bor
-    ?write_attributes_mask bor
-    ?write_metadata_mask
-)).
--define(POSIX_DIR_WRITE_ONLY_PERMS, (
-    ?add_subcontainer_mask bor
-    ?write_attributes_mask bor
-    ?write_metadata_mask
-)).
--define(POSIX_EXEC_ONLY_PERMS, (
-    ?traverse_container_mask
-)).
--define(POSIX_FILE_WRITE_EXEC_PERMS, (
-    ?POSIX_FILE_WRITE_ONLY_PERMS bor
-    ?POSIX_EXEC_ONLY_PERMS
-)).
--define(POSIX_DIR_WRITE_EXEC_PERMS, (
-    ?POSIX_DIR_WRITE_ONLY_PERMS bor
-    ?POSIX_EXEC_ONLY_PERMS bor
-
-    % Special permissions that are granted only when both 'write' and 'exec'
-    % mode bits are set
-    ?add_object_mask bor
-    ?delete_child_mask
-)).
 
 
 %%%===================================================================
@@ -125,7 +61,7 @@ assert_granted(UserCtx, FileCtx0, AccessRequirements0) ->
         false ->
             AccessRequirements1 = case user_ctx:is_guest(UserCtx) of
                 true ->
-                    [share | AccessRequirements0];
+                    [?PUBLIC_ACCESS | AccessRequirements0];
                 false ->
                     case file_ctx:is_in_user_space_const(FileCtx0, UserCtx) of
                         true -> AccessRequirements0;
@@ -166,13 +102,13 @@ is_available_in_readonly_mode(?PERMISSIONS(Perms)) ->
         _ -> false
     end;
 is_available_in_readonly_mode(Requirement) when
-    Requirement == owner;
-    Requirement == share;
-    Requirement == traverse_ancestors;
+    Requirement == ?OWNERSHIP;
+    Requirement == ?PUBLIC_ACCESS;
+    Requirement == ?TRAVERSE_ANCESTORS;
     Requirement == root
 ->
     true;
-is_available_in_readonly_mode({AccessType1, 'or', AccessType2}) ->
+is_available_in_readonly_mode(?OR(AccessType1, AccessType2)) ->
     % Both access types must be available in readonly mode for entire operation
     % to be also available
     is_available_in_readonly_mode(AccessType1) andalso is_available_in_readonly_mode(AccessType2).
@@ -185,9 +121,9 @@ assert_access_requirement(UserCtx, FileCtx, ?PERMISSIONS(RequiredPerms)) ->
     assert_permissions(UserCtx, FileCtx, RequiredPerms);
 
 assert_access_requirement(UserCtx, FileCtx0, Requirement) when
-    Requirement == owner;
-    Requirement == share;
-    Requirement == traverse_ancestors
+    Requirement == ?OWNERSHIP;
+    Requirement == ?PUBLIC_ACCESS;
+    Requirement == ?TRAVERSE_ANCESTORS
 ->
     UserId = user_ctx:get_user_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx0),
@@ -215,7 +151,7 @@ assert_access_requirement(UserCtx, FileCtx, root) ->
         false -> throw(?EACCES)
     end;
 
-assert_access_requirement(UserCtx, FileCtx, {AccessType1, 'or', AccessType2}) ->
+assert_access_requirement(UserCtx, FileCtx, ?OR(AccessType1, AccessType2)) ->
     try
         assert_access_requirement(UserCtx, FileCtx, AccessType1)
     catch _:?EACCES ->
@@ -226,7 +162,7 @@ assert_access_requirement(UserCtx, FileCtx, {AccessType1, 'or', AccessType2}) ->
 %% @private
 -spec check_access_requirement(user_ctx:ctx(), file_ctx:ctx(), requirement()) ->
     {ok, file_ctx:ctx()} | no_return().
-check_access_requirement(UserCtx, FileCtx0, owner) ->
+check_access_requirement(UserCtx, FileCtx0, ?OWNERSHIP) ->
     {OwnerId, FileCtx1} = file_ctx:get_owner(FileCtx0),
 
     case user_ctx:get_user_id(UserCtx) =:= OwnerId of
@@ -234,7 +170,7 @@ check_access_requirement(UserCtx, FileCtx0, owner) ->
         false -> throw(?EACCES)
     end;
 
-check_access_requirement(UserCtx, FileCtx0, share) ->
+check_access_requirement(UserCtx, FileCtx0, ?PUBLIC_ACCESS) ->
     case file_ctx:is_root_dir_const(FileCtx0) of
         true ->
             throw(?ENOENT);
@@ -250,12 +186,12 @@ check_access_requirement(UserCtx, FileCtx0, share) ->
                     {ok, FileCtx1};
                 false ->
                     {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
-                    assert_access_requirement(UserCtx, ParentCtx, share),
+                    assert_access_requirement(UserCtx, ParentCtx, ?PUBLIC_ACCESS),
                     {ok, FileCtx2}
             end
     end;
 
-check_access_requirement(UserCtx, FileCtx0, traverse_ancestors) ->
+check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
     case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
         {undefined, FileCtx1} ->
             {ok, FileCtx1};
@@ -263,7 +199,7 @@ check_access_requirement(UserCtx, FileCtx0, traverse_ancestors) ->
             ParentCtx1 = assert_permissions(
                 UserCtx, ParentCtx0, ?traverse_container_mask
             ),
-            assert_access_requirement(UserCtx, ParentCtx1, traverse_ancestors),
+            assert_access_requirement(UserCtx, ParentCtx1, ?TRAVERSE_ANCESTORS),
             {ok, FileCtx1}
     end.
 
@@ -365,18 +301,18 @@ get_perms_denied_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
 check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsMatrix) ->
     case file_ctx:get_active_perms_type(FileCtx0, include_deleted) of
         {posix, FileCtx1} ->
-            check_permissions_with_posix_mode(UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix);
+            check_posix_permissions(UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix);
         {acl, FileCtx1} ->
-            check_permissions_with_acl(UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix)
+            check_acl_permissions(UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix)
     end.
 
 
 %% @private
--spec check_permissions_with_posix_mode(
+-spec check_posix_permissions(
     user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()
 ) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
-check_permissions_with_posix_mode(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
+check_posix_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
     pointer = 0,
     granted = ?no_flags_mask,
     denied = DeniedPerms
@@ -416,7 +352,7 @@ check_permissions_with_posix_mode(UserCtx, FileCtx0, RequiredPerms, #user_perms_
         pointer = 1, granted = AllAllowedPerms, denied = AllDeniedPerms
     }};
 
-check_permissions_with_posix_mode(UserCtx, FileCtx, RequiredPerms, _) ->
+check_posix_permissions(UserCtx, FileCtx, RequiredPerms, _) ->
     % Race between reading and clearing cache must have happened (user perms matrix
     % is calculated entirely at once from posix mode so it is not possible for it
     % to has pointer > 0 and not be fully constructed)
@@ -472,11 +408,11 @@ get_posix_allowed_perms(2#111, _) ->
 
 
 %% @private
--spec check_permissions_with_acl(
+-spec check_acl_permissions(
     user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()
 ) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
-check_permissions_with_acl(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
+check_acl_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
     pointer = Pointer
 } = UserPermsMatrix) ->
     {Acl, FileCtx1} = file_ctx:get_acl(FileCtx0),

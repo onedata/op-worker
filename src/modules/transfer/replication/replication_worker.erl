@@ -17,6 +17,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/security.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -60,7 +61,7 @@ enqueue_data_transfer(FileCtx, TransferParams) ->
 %%--------------------------------------------------------------------
 -spec required_permissions() -> [data_access_rights:requirement()].
 required_permissions() ->
-    [traverse_ancestors, ?PERMISSIONS(?write_object_mask)].
+    [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_object_mask)].
 
 %%--------------------------------------------------------------------
 %% @doc

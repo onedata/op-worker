@@ -17,6 +17,7 @@
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/security.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -150,7 +151,7 @@ get_file_distribution(UserCtx, FileCtx0) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors, ?PERMISSIONS(?read_metadata_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_metadata_mask)]
     ),
     get_file_distribution_insecure(UserCtx, FileCtx2).
 
@@ -177,7 +178,7 @@ schedule_file_replication(
 
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
 
     {FilePath, FileCtx3} = file_ctx:get_logical_path(FileCtx2, UserCtx),

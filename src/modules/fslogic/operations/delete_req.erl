@@ -14,6 +14,7 @@
 
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/security.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -52,12 +53,12 @@ delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
 
     {FileParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
     FileCtx3 = fslogic_authz:ensure_authorized(UserCtx, FileCtx2, [
-        traverse_ancestors,
-        ?PERMISSIONS(?delete_mask bor ?list_container_mask bor ?traverse_container_mask bor ?delete_child_mask)
+        ?TRAVERSE_ANCESTORS,
+        ?PERMISSIONS(?delete_mask, ?list_container_mask, ?traverse_container_mask, ?delete_child_mask)
     ]),
     fslogic_authz:ensure_authorized(
         UserCtx, FileParentCtx,
-        [traverse_ancestors, ?PERMISSIONS(?delete_child_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_child_mask)]
     ),
     delete_using_trash_insecure(UserCtx, FileCtx3, EmitEvents).
 
@@ -77,11 +78,11 @@ delete_dir(UserCtx, FileCtx0, Silent) ->
     {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors, ?PERMISSIONS(?delete_mask bor ?list_container_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_mask, ?list_container_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, FileParentCtx,
-        [traverse_ancestors, ?PERMISSIONS(?delete_child_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_child_mask)]
     ),
     check_if_empty_and_delete(UserCtx, FileCtx2, Silent).
 
@@ -97,11 +98,11 @@ delete_file(UserCtx, FileCtx0, Silent) ->
     {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors, ?PERMISSIONS(?delete_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, FileParentCtx,
-        [traverse_ancestors, ?PERMISSIONS(?delete_child_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_child_mask)]
     ),
     delete_insecure(UserCtx, FileCtx2, Silent).
 

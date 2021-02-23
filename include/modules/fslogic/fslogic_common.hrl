@@ -83,6 +83,6 @@
 % Token that should be passed as initial token to start listing using tokens.
 -define(INITIAL_LS_TOKEN, <<>>).
 
--define(PERMISSIONS(__BITMASK), {permissions, __BITMASK}).
+-define(STICKY_BIT, 2#1000000000).
 
 -endif.

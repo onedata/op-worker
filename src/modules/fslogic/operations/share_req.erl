@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/security.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
@@ -47,7 +48,7 @@ create_share(UserCtx, FileCtx0, Name, Description) ->
 
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
     create_share_internal(UserCtx, FileCtx1, Name, Description).
 
@@ -62,7 +63,7 @@ remove_share(UserCtx, FileCtx0, ShareId) ->
     data_constraints:assert_not_readonly_mode(UserCtx),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
     remove_share_internal(UserCtx, FileCtx1, ShareId).
 
