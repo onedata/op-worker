@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -type ace() :: #access_control_entity{}.
--type bitmask() :: non_neg_integer().
+-type bitmask() :: integer().
 
 -export_type([ace/0, bitmask/0]).
 
@@ -101,8 +101,11 @@ is_applicable(_, FileCtx, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_against(bitmask(), bitmask(), bitmask(), ace()) ->
-    {allowed | denied, bitmask(), bitmask()} |
-    {inconclusive, LeftoverRequiredPerms :: bitmask(), bitmask(), bitmask()}.
+    {
+        allowed | denied | {inconclusive, LeftoverRequiredPerms :: bitmask()},
+        NewAllowedPerms :: bitmask(),
+        NewDeniedPerms :: bitmask()
+    }.
 check_against(RequiredPerms, PrevAllowedPerms, PrevDeniedPerms, #access_control_entity{
     acetype = ?allow_mask,
     acemask = AceMask
@@ -110,10 +113,10 @@ check_against(RequiredPerms, PrevAllowedPerms, PrevDeniedPerms, #access_control_
     AllAllowedPerms = PrevAllowedPerms bor ?reset_flags(AceMask, PrevDeniedPerms),
 
     case ?reset_flags(RequiredPerms, AceMask) of
-        0 ->
+        ?no_flags_mask ->
             {allowed, AllAllowedPerms, PrevDeniedPerms};
         LeftoverRequiredPerms ->
-            {inconclusive, LeftoverRequiredPerms, AllAllowedPerms, PrevDeniedPerms}
+            {{inconclusive, LeftoverRequiredPerms}, AllAllowedPerms, PrevDeniedPerms}
     end;
 
 check_against(RequiredPerms, PrevAllowedPerms, PrevDeniedPerms, #access_control_entity{
@@ -122,9 +125,9 @@ check_against(RequiredPerms, PrevAllowedPerms, PrevDeniedPerms, #access_control_
 }) ->
     AllDeniedPerms = PrevDeniedPerms bor ?reset_flags(AceMask, PrevAllowedPerms),
 
-    case RequiredPerms band AceMask of
-        0 ->
-            {inconclusive, RequiredPerms, PrevAllowedPerms, AllDeniedPerms};
+    case ?common_flags(RequiredPerms, AceMask) of
+        ?no_flags_mask ->
+            {{inconclusive, RequiredPerms}, PrevAllowedPerms, AllDeniedPerms};
         _ ->
             {denied, PrevAllowedPerms, AllDeniedPerms}
     end.

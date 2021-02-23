@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module provides fslogic access control list definitions, such as
+%%% @doc
+%%% This module provides fslogic access control list definitions, such as
 %%% bitmasks and names for common flags
 %%% @end
 %%%-------------------------------------------------------------------
@@ -15,9 +16,13 @@
 
 -define(ACL_XATTR_NAME, <<"cdmi_acl">>).
 
--define(has_flags(Bitmask, Flags), ((Bitmask band Flags) =:= Flags)).
--define(set_flags(Bitmask, Flags), (Bitmask bor Flags)).
--define(reset_flags(Bitmask, Flags), (Bitmask band (bnot Flags))).
+-define(has_flags(Bitmask, Flags), (((Bitmask) band (Flags)) =:= (Flags))).
+-define(set_flags(Bitmask, Flags), ((Bitmask) bor (Flags))).
+-define(reset_flags(Bitmask, Flags), ((Bitmask) band (bnot (Flags)))).
+-define(common_flags(Bitmask1, Bitmask2), ((Bitmask1) band (Bitmask2))).
+-define(complement_flags(Bitmask), (bnot (Bitmask))).
+
+-define(STICKY_BIT, 2#1000000000).
 
 % ace types
 -define(allow, <<"ALLOW">>).
@@ -130,15 +135,24 @@
 -define(all_perms, <<"ALL_PERMS">>).
 -define(all_perms_mask, (?all_object_perms_mask bor ?all_container_perms_mask)).
 
--type user_id() :: binary().
--type group_id() :: binary().
-
 -record(access_control_entity, {
     acetype :: ?allow_mask | ?deny_mask,
     aceflags = ?no_flags_mask :: ?no_flags_mask | ?identifier_group_mask,
-    identifier :: user_id() | group_id(),
+    identifier :: od_user:id() | od_group:id(),
     name :: undefined | binary(),
     acemask :: non_neg_integer()
+}).
+
+% Record holding information about the permissions to the file granted and
+% denied for the given user. It is build incrementally rather than at once as
+% permissions check consists of number of steps and not all must be completed
+% to tell whether requested permissions are granted or denied. That is why it
+% contains pointer to where it stopped (e.g. space privileges check or concrete
+% ACE in ACL) so that build can be resumed if needed.
+-record(user_perms_matrix, {
+    pointer :: non_neg_integer(),
+    granted :: ace:bitmask(),
+    denied :: ace:bitmask()
 }).
 
 -endif.

@@ -37,16 +37,12 @@
     | type()
     | {type(), 'or', type()}.
 
-% User permission matrix holds information about user overall granted and denied
-% permissions. It is build incrementally (e.g. in case of acl not entire acl is
-% checked but only up to fragment where permission is granted or denied) and
-% that is why it contains pointer to where it stopped calculating previously.
--type user_perms_matrix() :: {non_neg_integer(), ace:bitmask(), ace:bitmask()}.
+-type user_perms_matrix() :: #user_perms_matrix{}.
 
 -export_type([type/0, requirement/0, user_perms_matrix/0]).
 
 % Permissions respected in readonly mode (operation requiring any other
-% permission, even if granted by posix mode or acl, will be denied)
+% permission, even if granted by posix mode or ACL, will be denied)
 -define(READONLY_MODE_RESPECTED_PERMS, (
     ?read_attributes_mask bor
     ?read_object_mask bor
@@ -57,7 +53,7 @@
 )).
 
 % Permissions denied by lack of ?SPACE_WRITE_DATA/?SPACE_READ_DATA space privilege
--define(SPACE_WRITE_PERMS, (
+-define(SPACE_DENIED_WRITE_PERMS, (
     ?write_attributes_mask bor
     ?write_object_mask bor
     ?add_object_mask bor
@@ -67,13 +63,13 @@
     ?write_metadata_mask bor
     ?write_acl_mask
 )).
--define(SPACE_READ_PERMS, (
+-define(SPACE_DENIED_READ_PERMS, (
     ?read_object_mask bor
     ?list_container_mask bor
     ?read_metadata_mask
 )).
 
-% Permissions granted by 'rwx' posix mode bits
+% Permissions granted by posix mode
 -define(POSIX_ALWAYS_GRANTED_PERMS, (
     ?read_attributes_mask bor
     ?read_acl_mask
@@ -166,7 +162,7 @@ assert_operation_available_in_readonly_mode(AccessRequirements) ->
 -spec is_available_in_readonly_mode(requirement()) -> boolean().
 is_available_in_readonly_mode(?PERMISSIONS(Perms)) ->
     case ?reset_flags(Perms, ?READONLY_MODE_RESPECTED_PERMS) of
-        0 -> true;
+        ?no_flags_mask -> true;
         _ -> false
     end;
 is_available_in_readonly_mode(Requirement) when
@@ -177,6 +173,8 @@ is_available_in_readonly_mode(Requirement) when
 ->
     true;
 is_available_in_readonly_mode({AccessType1, 'or', AccessType2}) ->
+    % Both access types must be available in readonly mode for entire operation
+    % to be also available
     is_available_in_readonly_mode(AccessType1) andalso is_available_in_readonly_mode(AccessType2).
 
 
@@ -184,7 +182,7 @@ is_available_in_readonly_mode({AccessType1, 'or', AccessType2}) ->
 -spec assert_access_requirement(user_ctx:ctx(), file_ctx:ctx(), requirement()) ->
     file_ctx:ctx() | no_return().
 assert_access_requirement(UserCtx, FileCtx, ?PERMISSIONS(RequiredPerms)) ->
-    check_user_perms_matrix(UserCtx, FileCtx, RequiredPerms);
+    assert_permissions(UserCtx, FileCtx, RequiredPerms);
 
 assert_access_requirement(UserCtx, FileCtx0, Requirement) when
     Requirement == owner;
@@ -262,7 +260,7 @@ check_access_requirement(UserCtx, FileCtx0, traverse_ancestors) ->
         {undefined, FileCtx1} ->
             {ok, FileCtx1};
         {ParentCtx0, FileCtx1} ->
-            ParentCtx1 = check_user_perms_matrix(
+            ParentCtx1 = assert_permissions(
                 UserCtx, ParentCtx0, ?traverse_container_mask
             ),
             assert_access_requirement(UserCtx, ParentCtx1, traverse_ancestors),
@@ -271,22 +269,26 @@ check_access_requirement(UserCtx, FileCtx0, traverse_ancestors) ->
 
 
 %% @private
--spec check_user_perms_matrix(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask()) ->
+-spec assert_permissions(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask()) ->
     file_ctx:ctx() | no_return().
-check_user_perms_matrix(UserCtx, FileCtx0, RequiredPerms) ->
+assert_permissions(UserCtx, FileCtx0, RequiredPerms) ->
     UserId = user_ctx:get_user_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx0),
+    % TODO VFS-6224 do not construct cache key outside of permissions_cache module
     CacheKey = {user_perms_matrix, UserId, Guid},
 
     Result = case permissions_cache:check_permission(CacheKey) of
-        {ok, {_No, AllowedPerms, DeniedPerms} = UserPermsMatrix} ->
-            case ?reset_flags(RequiredPerms, AllowedPerms) of
-                0 ->
+        {ok, #user_perms_matrix{
+            granted = GrantedPerms,
+            denied = DeniedPerms
+        } = UserPermsMatrix} ->
+            case ?reset_flags(RequiredPerms, GrantedPerms) of
+                ?no_flags_mask ->
                     {allowed, FileCtx0};
                 LeftoverRequiredPerms ->
-                    case LeftoverRequiredPerms band DeniedPerms of
-                        0 ->
-                            calc_and_check_user_perms_matrix(
+                    case ?common_flags(LeftoverRequiredPerms, DeniedPerms) of
+                        ?no_flags_mask ->
+                            check_permissions(
                                 UserCtx, FileCtx0, LeftoverRequiredPerms, UserPermsMatrix
                             );
                         _ ->
@@ -294,7 +296,7 @@ check_user_perms_matrix(UserCtx, FileCtx0, RequiredPerms) ->
                     end
             end;
         calculate ->
-            calc_and_check_user_perms_matrix(UserCtx, FileCtx0, RequiredPerms)
+            check_permissions(UserCtx, FileCtx0, RequiredPerms)
     end,
 
     case Result of
@@ -310,19 +312,20 @@ check_user_perms_matrix(UserCtx, FileCtx0, RequiredPerms) ->
 
 
 %% @private
--spec calc_and_check_user_perms_matrix(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask()) ->
+-spec check_permissions(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask()) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
-calc_and_check_user_perms_matrix(UserCtx, FileCtx0, RequiredPermissions) ->
+check_permissions(UserCtx, FileCtx0, RequiredPerms) ->
     ShareId = file_ctx:get_share_id_const(FileCtx0),
     DeniedPerms = get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx0, ShareId),
 
-    UserPermsMatrix = {0, 0, DeniedPerms},
-
-    case RequiredPermissions band DeniedPerms of
-        0 ->
-            calc_and_check_user_perms_matrix(
-                UserCtx, FileCtx0, RequiredPermissions, UserPermsMatrix
-            );
+    UserPermsMatrix = #user_perms_matrix{
+        pointer = 0,
+        granted = ?no_flags_mask,
+        denied = DeniedPerms
+    },
+    case ?common_flags(RequiredPerms, DeniedPerms) of
+        ?no_flags_mask ->
+            check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsMatrix);
         _ ->
             {denied, FileCtx0, UserPermsMatrix}
     end.
@@ -340,86 +343,91 @@ get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx, undefined) ->
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             % All write permissions are denied for user root dir
-            ?SPACE_WRITE_PERMS;
+            ?SPACE_DENIED_WRITE_PERMS;
         false ->
             {ok, EffUserSpacePrivs} = space_logic:get_eff_privileges(SpaceId, UserId),
 
             lists:foldl(fun
-                (?SPACE_READ_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_READ_PERMS);
-                (?SPACE_WRITE_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_WRITE_PERMS);
+                (?SPACE_READ_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_DENIED_READ_PERMS);
+                (?SPACE_WRITE_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_DENIED_WRITE_PERMS);
                 (_, Bitmask) -> Bitmask
-            end, ?SPACE_READ_PERMS bor ?SPACE_WRITE_PERMS, EffUserSpacePrivs)
+            end, ?SPACE_DENIED_READ_PERMS bor ?SPACE_DENIED_WRITE_PERMS, EffUserSpacePrivs)
     end;
 
 get_perms_denied_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
     % All write permissions are denied in share mode
-    ?SPACE_WRITE_PERMS.
+    ?SPACE_DENIED_WRITE_PERMS.
 
 
 %% @private
--spec calc_and_check_user_perms_matrix(
-    user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()
-) ->
+-spec check_permissions(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
-calc_and_check_user_perms_matrix(UserCtx, FileCtx0, RequiredPerms, UserPermsMatrix) ->
+check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsMatrix) ->
     case file_ctx:get_active_perms_type(FileCtx0, include_deleted) of
         {posix, FileCtx1} ->
-            calc_and_check_user_perms_matrix_from_posix_mode(
-                UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix
-            );
+            check_permissions_with_posix_mode(UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix);
         {acl, FileCtx1} ->
-            calc_and_check_user_perms_matrix_from_acl(
-                UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix
-            )
+            check_permissions_with_acl(UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix)
     end.
 
 
 %% @private
--spec calc_and_check_user_perms_matrix_from_posix_mode(
+-spec check_permissions_with_posix_mode(
     user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()
 ) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
-calc_and_check_user_perms_matrix_from_posix_mode(
-    UserCtx, FileCtx0, RequiredPerms, {0, 0, DeniedPerms}
-) ->
+check_permissions_with_posix_mode(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
+    pointer = 0,
+    granted = ?no_flags_mask,
+    denied = DeniedPerms
+}) ->
     {#document{value = #file_meta{
         owner = OwnerId,
         type = FileType,
         mode = Mode
     }}, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
 
-    {RelevantModeBits0, SpecialPosixPerms, FileCtx3} = case user_ctx:get_user_id(UserCtx) of
+    {UserAffiliation, UserSpecialPerms, FileCtx3} = case user_ctx:get_user_id(UserCtx) of
         OwnerId ->
-            {Mode bsr 6, ?write_acl_mask bor ?delete_mask, FileCtx1};
+            {owner, ?write_acl_mask bor ?delete_mask, FileCtx1};
         _ ->
-            ShiftedMode = case file_ctx:is_in_user_space_const(FileCtx1, UserCtx) of
-                true -> Mode bsr 3;
-                false -> Mode
+            Affiliation = case file_ctx:is_in_user_space_const(FileCtx1, UserCtx) of
+                true -> group;
+                false -> other
             end,
-            {HasParentStickyBitSet, FileCtx2} = has_parent_sticky_bit_set(UserCtx, FileCtx1),
-            UserSpecialPerms = case HasParentStickyBitSet of
-                true -> 0;
-                false -> ?delete_mask
-            end,
-            {ShiftedMode, UserSpecialPerms, FileCtx2}
+            case has_parent_sticky_bit_set(UserCtx, FileCtx1) of
+                {true, FileCtx2} -> {Affiliation, ?no_flags_mask, FileCtx2};
+                {false, FileCtx2} -> {Affiliation, ?delete_mask, FileCtx2}
+            end
     end,
-    RelevantModeBits1 = RelevantModeBits0 band 2#111,
-    AllowedPosixPerms = SpecialPosixPerms bor get_posix_allowed_perms(RelevantModeBits1, FileType),
+    RelevantModeBits = get_mode_bits_triplet(Mode, UserAffiliation),
 
-    AllAllowedPerms = ?reset_flags(AllowedPosixPerms, DeniedPerms),
-    AllDeniedPerms = bnot AllAllowedPerms,
+    GrantedPosixPerms = ?set_flags(UserSpecialPerms, get_posix_allowed_perms(
+        RelevantModeBits, FileType
+    )),
+    AllAllowedPerms = ?reset_flags(GrantedPosixPerms, DeniedPerms),
+    AllDeniedPerms = ?complement_flags(AllAllowedPerms),
 
-    Result = case RequiredPerms band AllDeniedPerms of
-        0 -> allowed;
+    PermissionsCheckResult = case ?common_flags(RequiredPerms, AllDeniedPerms) of
+        ?no_flags_mask -> allowed;
         _ -> denied
     end,
-    {Result, FileCtx3, {1, AllAllowedPerms, AllDeniedPerms}};
+    {PermissionsCheckResult, FileCtx3, #user_perms_matrix{
+        pointer = 1, granted = AllAllowedPerms, denied = AllDeniedPerms
+    }};
 
-calc_and_check_user_perms_matrix_from_posix_mode(UserCtx, FileCtx, RequiredPerms, _) ->
+check_permissions_with_posix_mode(UserCtx, FileCtx, RequiredPerms, _) ->
     % Race between reading and clearing cache must have happened (user perms matrix
     % is calculated entirely at once from posix mode so it is not possible for it
-    % to has No > 0 and not be full)
-    calc_and_check_user_perms_matrix(UserCtx, FileCtx, RequiredPerms).
+    % to has pointer > 0 and not be fully constructed)
+    check_permissions(UserCtx, FileCtx, RequiredPerms).
+
+
+%% @private
+-spec get_mode_bits_triplet(file_meta:mode(), owner | group | other) -> 0..7.
+get_mode_bits_triplet(Mode, owner) -> ?common_flags(Mode bsr 6, 2#111);
+get_mode_bits_triplet(Mode, group) -> ?common_flags(Mode bsr 3, 2#111);
+get_mode_bits_triplet(Mode, other) -> ?common_flags(Mode, 2#111).
 
 
 %% @private
@@ -432,7 +440,7 @@ has_parent_sticky_bit_set(UserCtx, FileCtx0) ->
         mode = Mode
     }}, _} = file_ctx:get_file_doc_including_deleted(ParentCtx),
 
-    {Mode band 2#1000000000 == 1, FileCtx1}.
+    {?has_flags(Mode, ?STICKY_BIT), FileCtx1}.
 
 
 %% @private
@@ -464,23 +472,24 @@ get_posix_allowed_perms(2#111, _) ->
 
 
 %% @private
--spec calc_and_check_user_perms_matrix_from_acl(
+-spec check_permissions_with_acl(
     user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()
 ) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
-calc_and_check_user_perms_matrix_from_acl(
-    UserCtx, FileCtx0, RequiredPerms, {No, _, _} = UserPermsMatrix
-) ->
-    UserDoc = user_ctx:get_user(UserCtx),
+check_permissions_with_acl(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
+    pointer = Pointer
+} = UserPermsMatrix) ->
     {Acl, FileCtx1} = file_ctx:get_acl(FileCtx0),
 
-    try
-        acl:check_acl(
-            lists:nthtail(No, Acl), UserDoc, FileCtx1,
-            RequiredPerms, UserPermsMatrix
-        )
-    catch error:function_clause ->
-        % Race between reading and clearing cache must have happened
-        % (acl must have been replaced if it is shorter then should be)
-        calc_and_check_user_perms_matrix(UserCtx, FileCtx0, RequiredPerms)
+    case Pointer >= length(Acl) of
+        true ->
+            % Race between reading and clearing cache must have happened
+            % (acl must have been replaced if it is shorter then should be)
+            check_permissions(UserCtx, FileCtx0, RequiredPerms);
+        false ->
+            acl:check_acl(
+                lists:nthtail(Pointer, Acl),
+                user_ctx:get_user(UserCtx),
+                FileCtx1, RequiredPerms, UserPermsMatrix
+            )
     end.
