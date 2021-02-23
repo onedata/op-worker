@@ -146,14 +146,20 @@ cleanup_opened_files() ->
 % TODO VFS-5268 - prevent reimport connected with remote delete
 check_if_opened_and_remove(UserCtx, FileCtx, Silent, DocsDeletionScope) ->
     try
-        FileUuid = file_ctx:get_uuid_const(FileCtx),
-        case file_handles:is_file_opened(FileUuid) of
-            true ->
-                handle_opened_file(FileCtx, UserCtx, DocsDeletionScope);
-            _ ->
-                ok = remove_file(FileCtx, UserCtx, true, ?SPEC(?SINGLE_STEP_DEL, DocsDeletionScope))
-        end,
-        maybe_emit_event(FileCtx, UserCtx, Silent)
+        case file_ctx:is_dir(FileCtx) of
+            {true, FileCtx2} ->
+                ok = remove_file(FileCtx2, UserCtx, true, ?SPEC(?SINGLE_STEP_DEL, DocsDeletionScope)),
+                maybe_emit_event(FileCtx2, UserCtx, Silent);
+            {false, FileCtx2} ->
+                FileUuid = file_ctx:get_uuid_const(FileCtx2),
+                case file_handles:is_file_opened(FileUuid) of
+                    true ->
+                        handle_opened_file(FileCtx2, UserCtx, DocsDeletionScope);
+                    _ ->
+                        ok = remove_file(FileCtx2, UserCtx, true, ?SPEC(?SINGLE_STEP_DEL, DocsDeletionScope))
+                end,
+                maybe_emit_event(FileCtx2, UserCtx, Silent)
+        end
     catch
         _:{badmatch, {error, not_found}} ->
             ok
@@ -273,48 +279,57 @@ delete_storage_file(FileCtx, UserCtx) ->
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS), StorageFileDeleted) ->
     FileCtx2 = update_parent_timestamps(UserCtx, FileCtx),
     % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
-    FileCtx3 = delete_location(FileCtx2),
-    FileCtx4 = delete_file_meta(FileCtx3),
-    remove_associated_documents(FileCtx4, StorageFileDeleted),
-    FileCtx8 = remove_deletion_marker(FileCtx4, UserCtx),
-    maybe_try_to_delete_parent(FileCtx8, UserCtx, ?ALL_DOCS);
+    % get StorageFileId before location is deleted as it's stored in file_location doc
+    {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    FileCtx4 = delete_location(FileCtx3),
+    FileCtx5 = delete_file_meta(FileCtx4),
+    remove_associated_documents(FileCtx5, StorageFileDeleted, StorageFileId),
+    FileCtx6 = remove_deletion_marker(FileCtx5, UserCtx, StorageFileId),
+    maybe_try_to_delete_parent(FileCtx6, UserCtx, ?ALL_DOCS, StorageFileId);
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?LOCAL_DOCS), StorageFileDeleted) ->
-    FileCtx2 = delete_location(FileCtx),
-    remove_local_associated_documents(FileCtx2, StorageFileDeleted),
-    maybe_try_to_delete_parent(FileCtx2, UserCtx, ?LOCAL_DOCS);
+    % get StorageFileId before location is deleted as it's stored in file_location doc
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    FileCtx3 = delete_location(FileCtx2),
+    remove_local_associated_documents(FileCtx3, StorageFileDeleted, StorageFileId),
+    maybe_try_to_delete_parent(FileCtx3, UserCtx, ?LOCAL_DOCS, StorageFileId);
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_INIT, _DocsDeletionScope), _StorageFileDeleted) ->
     % TODO VFS-6114 maybe delete file_meta and associated documents here?
     update_parent_timestamps(UserCtx, FileCtx),
     ok;
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope), StorageFileDeleted) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    FileCtx3 = delete_location(FileCtx2),
+    % get StorageFileId before location is deleted as it's stored in file_location doc
+    {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    FileCtx4 = delete_location(FileCtx3),
     file_meta:delete_without_link(FileDoc), % do not match, document may not exist
     case DocsDeletionScope of
         ?ALL_DOCS ->
-            remove_associated_documents(FileCtx3, StorageFileDeleted),
+            remove_associated_documents(FileCtx4, StorageFileDeleted, StorageFileId),
             % remove deletion marker even if open_file_handling method is rename
             % as deletion marker may have been created when error occurred on deleting file on storage
-            FileCtx4 = remove_deletion_marker(FileCtx3, UserCtx),
-            maybe_try_to_delete_parent(FileCtx4, UserCtx, DocsDeletionScope);
+            FileCtx5 = remove_deletion_marker(FileCtx4, UserCtx, StorageFileId),
+            maybe_try_to_delete_parent(FileCtx5, UserCtx, DocsDeletionScope, StorageFileId);
         ?LOCAL_DOCS->
-            remove_local_associated_documents(FileCtx3, StorageFileDeleted),
+            remove_local_associated_documents(FileCtx4, StorageFileDeleted, StorageFileId),
             % remove deletion marker even if open_file_handling method is rename
             % as deletion marker may have been created when error occurred on deleting file on storage
-            FileCtx4 = remove_deletion_marker(FileCtx3, UserCtx),
-            maybe_try_to_delete_parent(FileCtx4, UserCtx, DocsDeletionScope)
+            FileCtx5 = remove_deletion_marker(FileCtx4, UserCtx, StorageFileId),
+            maybe_try_to_delete_parent(FileCtx5, UserCtx, DocsDeletionScope, StorageFileId)
     end.
 
 
--spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope()) -> ok.
-maybe_try_to_delete_parent(FileCtx, UserCtx, DocsDeletionScope) ->
+-spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), helpers:file_id()) -> ok.
+maybe_try_to_delete_parent(FileCtx, UserCtx, DocsDeletionScope, StorageFileId) ->
     {ParentCtx, _FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
     try
         {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             case file_meta:is_deleted(ParentDoc) of
                 true ->
+                    % set directory storage_file_id basing on child's file_id as parent dir_location
+                    % may have already been deleted
+                    ParentCtx3 = file_ctx:set_file_id(ParentCtx2, filename:dirname(StorageFileId)),
                     % use ?TWO_STEP_DEL_FIN mode because it handles case when file_meta is already deleted
-                    remove_file(ParentCtx2, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope));
+                    remove_file(ParentCtx3, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope));
                 false ->
                     ok
             end
@@ -343,13 +358,24 @@ maybe_add_deletion_marker(FileCtx, UserCtx) ->
     end.
 
 
--spec remove_deletion_marker(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
-remove_deletion_marker(FileCtx, UserCtx) ->
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes deletion marker on imported storages.
+%% StorageFileId must be passed as argument, cannot be calculated using
+%% FileCtx, as file_location may have already been deleted and we don't
+%% want file_ctx to calculate StorageFileId basing on current CanonicalPath.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_deletion_marker(file_ctx:ctx(), user_ctx:ctx(), helpers:file_id()) -> file_ctx:ctx().
+remove_deletion_marker(FileCtx, UserCtx, StorageFileId) ->
+    % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     case file_ctx:is_imported_storage(FileCtx) of
         {true, FileCtx2} ->
             {ParentGuid, FileCtx3} = file_ctx:get_parent_guid(FileCtx2, UserCtx),
             ParentUuid = file_id:guid_to_uuid(ParentGuid),
-            deletion_marker:remove(ParentUuid, FileCtx3);
+            deletion_marker:remove_by_name(ParentUuid, filename:basename(StorageFileId)),
+            FileCtx3;
         {false, FileCtx2} ->
             FileCtx2
     end.
@@ -392,17 +418,14 @@ update_parent_timestamps(UserCtx, FileCtx) ->
     end.
 
 
--spec maybe_delete_storage_sync_info(file_ctx:ctx(), StorageFileDeleted :: boolean()) -> file_ctx:ctx().
-maybe_delete_storage_sync_info(FileCtx, false) ->
-    FileCtx;
-maybe_delete_storage_sync_info(FileCtx, true) ->
+-spec maybe_delete_storage_sync_info(file_ctx:ctx(), helpers:file_id()) -> file_ctx:ctx().
+maybe_delete_storage_sync_info(FileCtx, StorageFileId) ->
     try
         case file_ctx:is_imported_storage(FileCtx) of
             {true, FileCtx2} ->
-                {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
-                SpaceId = file_ctx:get_space_id_const(FileCtx3),
+                SpaceId = file_ctx:get_space_id_const(FileCtx2),
                 storage_sync_info:delete(StorageFileId, SpaceId),
-                FileCtx3;
+                FileCtx2;
             {false, FileCtx2} ->
                 FileCtx2
         end
@@ -515,10 +538,11 @@ finalize_file_location_rename(FileUuid) ->
 %% Removes associated documents connected with file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_associated_documents(file_ctx:ctx(), boolean()) -> ok.
-remove_associated_documents(FileCtx, StorageFileDeleted) ->
+-spec remove_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id()) -> ok.
+remove_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
+    % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     remove_synced_associated_documents(FileCtx),
-    remove_local_associated_documents(FileCtx, StorageFileDeleted).
+    remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId).
 
 
 -spec remove_synced_associated_documents(file_ctx:ctx()) -> ok.
@@ -531,10 +555,11 @@ remove_synced_associated_documents(FileCtx) ->
     ok = file_qos:delete_associated_entries(FileUuid).
 
 
--spec remove_local_associated_documents(file_ctx:ctx(), boolean()) -> ok.
-remove_local_associated_documents(FileCtx, StorageFileDeleted) ->
+-spec remove_local_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id()) -> ok.
+remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
+    % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    maybe_delete_storage_sync_info(FileCtx, StorageFileDeleted),
+    StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
     ok = file_qos:clean_up(FileCtx),
     ok = file_meta_posthooks:delete(FileUuid),
     ok = file_popularity:delete(FileUuid).

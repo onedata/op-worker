@@ -176,7 +176,10 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
                 {equal_or_descendant, FileCtx1} ->
                     {undefined, FileCtx1};
                 {{ancestor, ChildrenWhiteList}, FileCtx1} ->
-                    {ChildrenWhiteList, FileCtx1}
+                    ChildrenWhiteList2 = lists:filter(fun(ChildName) ->
+                        not file_meta:is_hidden(ChildName)
+                    end, ChildrenWhiteList),
+                    {ChildrenWhiteList2, FileCtx1}
             end
     end.
 

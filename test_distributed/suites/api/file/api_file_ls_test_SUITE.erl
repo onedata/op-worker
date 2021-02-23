@@ -295,10 +295,13 @@ get_file_children_test(Config) ->
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(FileObjectId),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
-                        ?assertEqual(#{<<"children">> => [#{
-                            <<"id">> => FileObjectId,
-                            <<"name">> => FileName
-                        }]}, Response)
+                        ?assertEqual(#{
+                            <<"children">> => [#{
+                                <<"id">> => FileObjectId,
+                                <<"name">> => FileName
+                            }],
+                            <<"isLast">> => true
+                        }, Response)
                     end
                 },
                 #scenario_template{
@@ -328,7 +331,10 @@ get_file_children_test(Config) ->
                     type = gs,
                     prepare_args_fun = build_get_children_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
-                        ?assertEqual(#{<<"children">> => [FileGuid]}, Result)
+                        ?assertEqual(#{
+                            <<"children">> => [FileGuid],
+                            <<"isLast">> => true
+                        }, Result)
                     end
                 },
                 #scenario_template{
@@ -337,7 +343,8 @@ get_file_children_test(Config) ->
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = _Data}, {ok, Result}) ->
                         ?assertEqual(#{
-                            <<"children">> => [api_test_utils:file_details_to_gs_json(undefined, FileDetails)]
+                            <<"children">> => [api_test_utils:file_details_to_gs_json(undefined, FileDetails)],
+                            <<"isLast">> => true
                         }, Result)
                     end
                 }
@@ -406,10 +413,13 @@ get_shared_file_children_test(Config) ->
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(ShareFileObjectId),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
-                        ?assertEqual(#{<<"children">> => [#{
-                            <<"id">> => ShareFileObjectId,
-                            <<"name">> => FileName
-                        }]}, Response)
+                        ?assertEqual(#{
+                            <<"children">> => [#{
+                                <<"id">> => ShareFileObjectId,
+                                <<"name">> => FileName
+                            }],
+                            <<"isLast">> => true
+                        }, Response)
                     end
                 },
                 % Old endpoint returns "id" and "path" - for now get_path is forbidden
@@ -428,7 +438,10 @@ get_shared_file_children_test(Config) ->
                     type = gs,
                     prepare_args_fun = build_get_children_prepare_gs_args_fun(ShareFileGuid, public),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
-                        ?assertEqual(#{<<"children">> => [ShareFileGuid]}, Result)
+                        ?assertEqual(#{
+                            <<"children">> => [ShareFileGuid],
+                            <<"isLast">> => true
+                        }, Result)
                     end
                 },
                 #scenario_template{
@@ -437,7 +450,8 @@ get_shared_file_children_test(Config) ->
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(ShareFileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
                         ?assertEqual(#{
-                            <<"children">> => [api_test_utils:file_details_to_gs_json(ShareId, FileDetails1)]
+                            <<"children">> => [api_test_utils:file_details_to_gs_json(ShareId, FileDetails1)],
+                            <<"isLast">> => true
                         }, Result)
                     end
                 }
@@ -764,20 +778,26 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
         {file_id:guid_to_share_guid(Guid, ShareId), Name, Path, Details}
     end, ExpFiles1),
 
+    IsLast = length(ExpFiles1) < Limit,
+
     ExpFiles3 = case Format of
         gs ->
-            #{<<"children">> => lists:map(fun({Guid, _Name, _Path, _Details}) ->
-                Guid
-            end, ExpFiles2)};
+            #{
+                <<"children">> => lists:map(fun({Guid, _Name, _Path, _Details}) -> Guid end, ExpFiles2),
+                <<"isLast">> => IsLast
+            };
 
         rest ->
-            #{<<"children">> => lists:map(fun({Guid, Name, _Path, _Details}) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                #{
-                    <<"id">> => ObjectId,
-                    <<"name">> => Name
-                }
-            end, ExpFiles2)};
+            #{
+                <<"children">> => lists:map(fun({Guid, Name, _Path, _Details}) ->
+                    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                    #{
+                        <<"id">> => ObjectId,
+                        <<"name">> => Name
+                    }
+                end, ExpFiles2),
+                <<"isLast">> => IsLast
+            };
 
         deprecated_rest ->
             lists:map(fun({Guid, _Name, Path, _Details}) ->
@@ -789,9 +809,12 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
             end, ExpFiles2);
 
         gs_with_details ->
-            #{<<"children">> => lists:map(fun({Guid, _Name, _Path, Details}) ->
-                api_test_utils:file_details_to_gs_json(ShareId, Details)
-            end, ExpFiles2)}
+            #{
+                <<"children">> => lists:map(fun({Guid, _Name, _Path, Details}) ->
+                    api_test_utils:file_details_to_gs_json(ShareId, Details)
+                end, ExpFiles2),
+                <<"isLast">> => IsLast
+            }
     end,
 
     ?assertEqual(ExpFiles3, ListedChildren).

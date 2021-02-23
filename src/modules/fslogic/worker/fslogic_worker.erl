@@ -501,16 +501,32 @@ handle_file_request(UserCtx, #get_file_children{
     index_token = Token,
     index_startid = StartId
 }, FileCtx) ->
-    dir_req:get_children(UserCtx, FileCtx, Offset, Size, Token, StartId);
+    ListOpts = #{
+        offset => Offset,
+        size => Size,
+        token => Token,
+        last_name => StartId
+    },
+    dir_req:get_children(UserCtx, FileCtx, ListOpts);
 handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
     size = Size, index_token = Token, include_replication_status = IncludeReplicationStatus}, FileCtx) ->
-    dir_req:get_children_attrs(UserCtx, FileCtx, Offset, Size, Token, IncludeReplicationStatus);
+    ListOpts = #{
+        offset => Offset,
+        size => Size,
+        token => Token
+    },
+    dir_req:get_children_attrs(UserCtx, FileCtx, ListOpts, IncludeReplicationStatus);
 handle_file_request(UserCtx, #get_file_children_details{
     offset = Offset,
     size = Size,
     index_startid = StartId
 }, FileCtx) ->
-    dir_req:get_children_details(UserCtx, FileCtx, Offset, Size, StartId);
+    ListOpts = #{
+        offset => Offset,
+        size => Size,
+        last_name => StartId
+    },
+    dir_req:get_children_details(UserCtx, FileCtx, ListOpts);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName

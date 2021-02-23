@@ -1220,8 +1220,14 @@ is_sequential(_, _State) ->
 start_transfers(InitialBlocks, TransferId, State, Priority) ->
     LocationDocs = fslogic_cache:get_all_locations(),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, InitialBlocks),
-    FileGuid = State#state.file_guid,
+    TotalSize = lists:foldl(fun({_P, Blocks, _SD}, Acc) ->
+        fslogic_blocks:size(Blocks) + Acc
+    end, 0, ProvidersAndBlocks),
+
     SpaceId = State#state.space_id,
+    assert_smaller_than_local_support_size(TotalSize, SpaceId),
+
+    FileGuid = State#state.file_guid,
     DestStorageId = State#state.dest_storage_id,
     DestFileId = State#state.dest_file_id,
     lists:flatmap(
@@ -1740,3 +1746,12 @@ finish_blocks_clearing(ok = _Ans, true = _EmitEvents, #state{file_ctx = FileCtx}
 finish_blocks_clearing(Ans, _EmitEvents, State) ->
     State2 = flush_events(State),
     {Ans, State2}.
+
+
+-spec assert_smaller_than_local_support_size(non_neg_integer(), od_space:id()) -> ok.
+assert_smaller_than_local_support_size(TotalSize, SpaceId) ->
+    {ok, LocalSupportSize} = space_logic:get_support_size(SpaceId, oneprovider:get_id()),
+    case TotalSize > LocalSupportSize of
+        true -> throw(?ENOSPC);
+        false -> ok
+    end.

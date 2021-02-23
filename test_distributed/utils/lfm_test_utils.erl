@@ -71,12 +71,12 @@ assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
 %%% Internal functions
 %%%===================================================================
 
-rm_recursive(Worker, SessId, DirGuid, Token, BatchSize) ->
-    rm_recursive(Worker, SessId, DirGuid, Token, BatchSize, true).
+rm_recursive(Worker, SessId, DirGuid, BatchSize) ->
+    rm_recursive(Worker, SessId, DirGuid, <<>>, BatchSize, true).
 
 rm_recursive(Worker, SessId, DirGuid, Token, BatchSize, DeleteDir) ->
-    case lfm_proxy:get_children(Worker, SessId, {guid, DirGuid}, 0, BatchSize, Token) of
-        {ok, GuidsAndNames, Token2, IsLast} ->
+    case lfm_proxy:get_children(Worker, SessId, {guid, DirGuid}, #{size => BatchSize, token => Token}) of
+        {ok, GuidsAndNames, #{token := Token2, is_last := IsLast}} ->
             case rm_files(Worker, SessId, GuidsAndNames, BatchSize) of
                 ok ->
                     case IsLast of
@@ -100,7 +100,7 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
             false ->
                 case lfm_proxy:is_dir(Worker, SessId, {guid, G}) of
                     true ->
-                        rm_recursive(Worker, SessId, G, <<>>, BatchSize);
+                        rm_recursive(Worker, SessId, G, BatchSize);
                     false ->
                         lfm_proxy:unlink(Worker, SessId, {guid, G});
                     {error, not_found} -> ok;

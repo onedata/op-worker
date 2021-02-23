@@ -26,7 +26,7 @@
 %% Export for RPC
 -export([open_on_storage/4]).
 
-%% Test API
+%% Exported for mocking in test
 -export([create_file_doc/4]).
 
 -type handle_id() :: storage_driver:handle_id() | undefined.
@@ -210,7 +210,8 @@ release(UserCtx, FileCtx, HandleId) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
-    {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
+    % call via module to mock in tests
+    {FileCtx, ParentFileCtx3} = file_req:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true, false),
@@ -301,7 +302,8 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
-    {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
+    % call via module to mock in tests
+    {FileCtx, ParentFileCtx3} = file_req:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         {_, FileCtx2} = fslogic_location:create_doc(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx3),

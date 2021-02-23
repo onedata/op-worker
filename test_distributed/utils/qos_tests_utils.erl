@@ -182,7 +182,7 @@ create_directory(Worker, SessionId, DirPath) ->
 
 
 create_file(Worker, SessionId, FilePath, FileContent) ->
-    {ok, FileGuid} = ?assertMatch({ok, _FileGuid}, lfm_proxy:create(Worker, SessionId, FilePath, 8#700)),
+    {ok, FileGuid} = ?assertMatch({ok, _FileGuid}, lfm_proxy:create(Worker, SessionId, FilePath)),
     {ok, Handle} = ?assertMatch({ok, _Handle}, lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write)),
     Size = size(FileContent),
     ?assertMatch({ok, Size}, lfm_proxy:write(Worker, Handle, 0, FileContent)),
