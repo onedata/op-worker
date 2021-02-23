@@ -135,6 +135,16 @@ custom_error_handling(State = #hs_state{
         ?ERROR_FORBIDDEN ->
             % harvester was deleted from space, stream should be stopped
             {stop, normal, State};
+        ?ERROR_EXTERNAL_SERVICE_OPERATION_FAILED(ServiceName) ->
+            [HarvesterId] = harvesting_destination:get_harvesters(Destination),
+            ErrorLog =  str_utils:format_bin(
+                "An error occured for harvester ~p due to a failed external service (~ts) operation.",
+                [HarvesterId, ServiceName]
+            ),
+            {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
+                error_log = ErrorLog,
+                log_level = warning
+            })};
         ?ERROR_TEMPORARY_FAILURE ->
             [HarvesterId] = harvesting_destination:get_harvesters(Destination),
             ErrorLog =  str_utils:format_bin("Harvester ~p is temporarily unavailable.", [HarvesterId]),
