@@ -105,7 +105,7 @@ file_should_be_deleted_from_storage_after_deletion(Config) ->
     StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, ?FILE_NAME),
     FilePath =  filename:join(["/", SpaceName, ?FILE_NAME]),
     % when
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath, 8#770),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath),
     {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, FileHandle),
@@ -130,7 +130,7 @@ file_should_be_truncated_on_storage_after_truncate(Config) ->
     StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, ?FILE_NAME),
     FilePath =  filename:join(["/", SpaceName, ?FILE_NAME]),
     % when
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath, 8#770),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath),
 
 
     {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
@@ -157,8 +157,8 @@ directory_should_be_deleted_from_storage_after_deletion(Config) ->
     StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, filename:join(?DIR_NAME, ?FILE_NAME)),
 
     % when
-    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath, 8#775),
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, 8#664),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
     {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, FileHandle),
@@ -187,8 +187,8 @@ empty_directory_should_be_deleted_from_storage_after_deletion(Config) ->
     StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, filename:join(?DIR_NAME, ?FILE_NAME)),
 
     % when
-    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath, 8#775),
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, 8#664),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
     {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, FileHandle),
@@ -217,7 +217,7 @@ file_should_be_deleted_from_storage_after_releasing_handle(Config) ->
     StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, ?FILE_NAME),
     FilePath =  filename:join(["/", SpaceName, ?FILE_NAME]),
     % when
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath, 8#770),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath),
     {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ?assertEqual({ok, ?TEST_DATA}, storage_test_utils:read_file(Worker, StorageFilePath)),
@@ -241,8 +241,8 @@ directory_should_be_deleted_from_storage_after_releasing_handle_to_its_child(Con
     StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, filename:join(?DIR_NAME, ?FILE_NAME)),
 
     % when
-    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath, 8#775),
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, 8#664),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
     {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:fsync(Worker, FileHandle),
@@ -284,7 +284,7 @@ remote_replica_should_be_deleted_from_storage_after_deletion(Config) ->
     StorageFilePath2 = storage_test_utils:file_path(WorkerP2, SpaceId, ?FILE_NAME),
 
     % when
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, 8#644),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
     {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
@@ -315,7 +315,7 @@ remote_replica_should_be_truncated_on_storage_after_truncate(Config) ->
     StorageFilePath2 = storage_test_utils:file_path(WorkerP2, SpaceId, ?FILE_NAME),
 
     % when
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, 8#644),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
     {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
@@ -345,8 +345,8 @@ remote_directory_replica_should_be_deleted_from_storage_after_deletion(Config) -
     StorageFilePath2 = storage_test_utils:file_path(WorkerP2, SpaceId, filename:join(?DIR_NAME, ?FILE_NAME)),
 
     % when
-    {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath, 8#775),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, DirGuid, ?FILE_NAME, 8#664),
+    {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
     {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
@@ -378,9 +378,9 @@ empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion(Con
     StorageFilePath2 = storage_test_utils:file_path(WorkerP2, SpaceId, filename:join(?DIR_NAME, ?FILE_NAME)),
 
     % when
-    {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath, 8#775),
+    {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath),
     % create file so that directory will be created on storage
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, DirGuid, ?FILE_NAME, 8#664),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
     {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
@@ -416,7 +416,7 @@ replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_delete
     StorageFilePath2 = storage_test_utils:file_path(WorkerP2, SpaceId, ?FILE_NAME),
 
     % when
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, 8#644),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
     {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
@@ -457,8 +457,8 @@ parent_dir_of_replica_should_be_deleted_from_storage_after_releasing_handle_to_r
     StorageFilePath2 = filename:join([StorageDirPath2, ?FILE_NAME]),
 
     % when
-    {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath, 8#775),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, 8#644),
+    {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
     {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
@@ -506,8 +506,8 @@ race_on_remote_deletion_of_parent_and_child(Config) ->
     StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, filename:join(?DIR_NAME, ?FILE_NAME)),
 
     % when
-    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath, 8#775),
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, 8#664),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
     {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, FileHandle),
@@ -568,8 +568,8 @@ suffix_in_metadata_and_storage_test(Config) ->
     end,
 
     % create files
-    {ok, Guid1} = lfm_proxy:create(Worker1, SessionId1, FilePath, 8#664),
-    {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath, 8#664),
+    {ok, Guid1} = lfm_proxy:create(Worker1, SessionId1, FilePath),
+    {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath),
 
     StorageFilePath1 = storage_test_utils:file_path(Worker1, SpaceId, FileName),
     Uuid = file_id:guid_to_uuid(Guid2),
@@ -633,10 +633,10 @@ suffix_in_dir_metadata_test(Config) ->
     end,
 
     % create files
-    {ok, _} = lfm_proxy:mkdir(Worker1, SessionId1, DirPath, 8#775),
-    {ok, _} = lfm_proxy:mkdir(Worker2, SessionId2, DirPath, 8#775),
-    {ok, {Guid1, H1}} = lfm_proxy:create_and_open(Worker1, SessionId1, FilePath, 8#664),
-    {ok, {Guid2, H2}} = lfm_proxy:create_and_open(Worker2, SessionId2, FilePath, 8#664),
+    {ok, _} = lfm_proxy:mkdir(Worker1, SessionId1, DirPath),
+    {ok, _} = lfm_proxy:mkdir(Worker2, SessionId2, DirPath),
+    {ok, {Guid1, H1}} = lfm_proxy:create_and_open(Worker1, SessionId1, FilePath),
+    {ok, {Guid2, H2}} = lfm_proxy:create_and_open(Worker2, SessionId2, FilePath),
     ok = lfm_proxy:close(Worker1, H1),
     ok = lfm_proxy:close(Worker2, H2),
 
@@ -687,7 +687,7 @@ suffix_in_dir_metadata_test(Config) ->
         {path, <<SpacePath/binary, "/", D1/binary, "/", FileName/binary>>},
         <<SpacePath/binary, "/", D2/binary, "/test">>)),
     ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, SessionId1,
-        <<SpacePath/binary, "/", D1/binary, "/", FileName/binary>>, 8#664)),
+        <<SpacePath/binary, "/", D1/binary, "/", FileName/binary>>)),
     ?assertEqual(3, length(ListStorageDir())),
 
     ?assertMatch(ok, lfm_proxy:rm_recursive(Worker1, SessionId1,
@@ -724,8 +724,8 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     end,
 
     % create files
-    {ok, Guid1} = lfm_proxy:create(Worker1, SessionId1, FilePath, 8#664),
-    {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath, 8#664),
+    {ok, Guid1} = lfm_proxy:create(Worker1, SessionId1, FilePath),
+    {ok, Guid2} = lfm_proxy:create(Worker2, SessionId2, FilePath),
 
     StorageFilePath1 = storage_test_utils:file_path(Worker1, SpaceId, FileName),
     Uuid = file_id:guid_to_uuid(Guid2),
@@ -786,6 +786,7 @@ init_per_suite(Config) ->
         NewConfig1 = [{space_storage_mock, false} | NewConfig],
         NewConfig2 = initializer:setup_storage(NewConfig1),
         initializer:mock_provider_ids(NewConfig2),
+        initializer:mock_auth_manager(NewConfig2),
         multi_provider_file_ops_test_base:init_env(NewConfig2)
     end,
     [
@@ -796,6 +797,8 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config),
+    initializer:unmock_auth_manager(Config),
+    initializer:unmock_provider_ids(Config),
     initializer:teardown_storage(Config).
 
 init_per_testcase(_Case, Config) ->

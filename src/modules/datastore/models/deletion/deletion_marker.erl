@@ -33,7 +33,7 @@
 -include("global_definitions.hrl").
 
 %% API
--export([add/2, remove/2, remove_by_name/2, check/2]).
+-export([add/2, remove_by_name/2, check/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -59,12 +59,6 @@ add(ParentUuid, FileCtx) ->
     {StorageFileBasename, FileCtx2} = storage_file_basename(FileCtx),
     ChildUuid = file_ctx:get_uuid_const(FileCtx2),
     add_link(ParentUuid, StorageFileBasename, ChildUuid),
-    FileCtx2.
-
--spec remove(file_meta:uuid(), file_ctx:ctx()) -> file_ctx:ctx().
-remove(ParentUuid, FileCtx) ->
-    {StorageFileBasename, FileCtx2} = storage_file_basename(FileCtx),
-    remove_by_name(ParentUuid, StorageFileBasename),
     FileCtx2.
 
 -spec remove_by_name(file_meta:uuid(), storage_file_basename()) -> ok.

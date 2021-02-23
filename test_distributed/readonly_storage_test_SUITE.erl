@@ -123,7 +123,7 @@ create_should_fail(Config) ->
     FileName = ?FILE_NAME,
 
     % it should be impossible to create file
-    ?assertEqual({error, ?EROFS}, lfm_proxy:create(W1, SessId, ?PATH(FileName), ?DEFAULT_FILE_PERMS)).
+    ?assertEqual({error, ?EROFS}, lfm_proxy:create(W1, SessId, ?PATH(FileName))).
 
 create_and_open_should_fail(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -131,7 +131,7 @@ create_and_open_should_fail(Config) ->
     FileName = ?FILE_NAME,
 
     % it should be impossible to create file
-    ?assertEqual({error, ?EROFS}, lfm_proxy:create_and_open(W1, SessId, ?PATH(FileName), ?DEFAULT_FILE_PERMS)).
+    ?assertEqual({error, ?EROFS}, lfm_proxy:create_and_open(W1, SessId, ?PATH(FileName))).
 
 mkdir_should_fail(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -139,7 +139,7 @@ mkdir_should_fail(Config) ->
     DirName = ?DIR_NAME,
 
     % it should be impossible to create file
-    ?assertEqual({error, ?EROFS}, lfm_proxy:mkdir(W1, SessId, ?PATH(DirName), ?DEFAULT_FILE_PERMS)).
+    ?assertEqual({error, ?EROFS}, lfm_proxy:mkdir(W1, SessId, ?PATH(DirName))).
 
 read_should_succeed(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -519,7 +519,7 @@ replication_on_the_fly_should_fail(Config) ->
     FileName = ?FILE_NAME,
     TestDataSize = byte_size(?TEST_DATA),
 
-    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(W2, SessId2, ?PATH(FileName), ?DEFAULT_FILE_MODE),
+    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(W2, SessId2, ?PATH(FileName)),
     {ok, _} = lfm_proxy:write(W2, Handle, 0, ?TEST_DATA),
     lfm_proxy:close(W2, Handle),
 
@@ -582,7 +582,7 @@ replication_job_should_fail(Config) ->
     FileName = ?FILE_NAME,
     TestDataSize = byte_size(?TEST_DATA),
 
-    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(W2, SessId2, ?PATH(FileName), ?DEFAULT_FILE_MODE),
+    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(W2, SessId2, ?PATH(FileName)),
     {ok, _} = lfm_proxy:write(W2, Handle, 0, ?TEST_DATA),
     lfm_proxy:close(W2, Handle),
 
@@ -627,7 +627,7 @@ migration_job_should_fail(Config) ->
     FileName = ?FILE_NAME,
     TestDataSize = byte_size(?TEST_DATA),
 
-    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(W2, SessId2, ?PATH(FileName), ?DEFAULT_FILE_MODE),
+    {ok, {Guid, Handle}} = lfm_proxy:create_and_open(W2, SessId2, ?PATH(FileName)),
     {ok, _} = lfm_proxy:write(W2, Handle, 0, ?TEST_DATA),
     lfm_proxy:close(W2, Handle),
 
@@ -646,6 +646,7 @@ migration_job_should_fail(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         initializer:mock_provider_ids(NewConfig),
+        initializer:mock_auth_manager(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
         sort_workers(NewConfig2)
     end,
@@ -656,7 +657,9 @@ init_per_suite(Config) ->
     ].
 
 end_per_suite(Config) ->
-    multi_provider_file_ops_test_base:teardown_env(Config).
+    multi_provider_file_ops_test_base:teardown_env(Config),
+    initializer:unmock_auth_manager(Config),
+    initializer:unmock_provider_ids(Config).
 
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).

@@ -222,7 +222,7 @@ download_empty_file(Config) ->
     % Create file
     FileName = <<"download_empty_file">>,
     FilePath = filename:join([SpaceName, FileName]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionId, FilePath, 8#777),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionId, FilePath),
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ?assertMatch(ok, lfm_proxy:truncate(WorkerP2, SessionId, {guid, FileGuid}, 0)),
@@ -260,7 +260,7 @@ download_file_in_blocks(Config) ->
     Data = crypto:strong_rand_bytes(200),
 
     % Create file
-    {ok, Guid} = lfm_proxy:create(WorkerP2, SessionId, FilePath, 8#777),
+    {ok, Guid} = lfm_proxy:create(WorkerP2, SessionId, FilePath),
     {ok, Handle} = lfm_proxy:open(WorkerP2, SessionId, {guid, Guid}, write),
     {ok, _} = lfm_proxy:write(WorkerP2, Handle, 0, Data),
     ok = lfm_proxy:close(WorkerP2, Handle),

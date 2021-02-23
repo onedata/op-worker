@@ -33,7 +33,8 @@
 -export([has_eff_privilege/3, has_eff_privileges/3]).
 -export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
-    get_local_supporting_storage/1, get_storages_by_provider/2, get_all_storage_ids/1]).
+    get_local_supporting_storage/1, get_storages_by_provider/2,
+    get_all_storage_ids/1, get_support_size/2]).
 -export([get_provider_ids/1, get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([is_supported_by_storage/2]).
@@ -241,6 +242,22 @@ get_all_storage_ids(SpaceId) ->
     case get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{value = #od_space{storages = AllStorages}}} ->
             {ok, maps:keys(AllStorages)};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_support_size(od_space:id(), od_provider:id()) -> {ok, non_neg_integer()} | errors:error().
+get_support_size(SpaceId, ProviderId) ->
+    % call via module to mock in tests
+    case space_logic:get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{providers = ProviderSupports}}} ->
+            case maps:get(ProviderId, ProviderSupports, undefined) of
+                undefined ->
+                    ?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId);
+                SupportSize ->
+                    {ok, SupportSize}
+            end;
         {error, _} = Error ->
             Error
     end.

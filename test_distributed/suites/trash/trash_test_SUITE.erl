@@ -12,6 +12,7 @@
 -module(trash_test_SUITE).
 -author("Jakub Kudzia").
 
+-include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("distribution_assert.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -50,12 +51,17 @@
     schedule_replication_transfer_on_space_does_not_replicate_trash/1,
     schedule_eviction_transfer_on_space_evicts_trash/1,
     schedule_migration_transfer_on_space_does_not_replicate_trash/1,
-    move_to_trash_test/1,
-    move_to_trash_and_delete_test/1,
+    move_to_trash_should_work/1,
+    move_to_trash_should_fail_if_user_does_not_have_sufficient_perms/1,
+    move_to_trash_should_fail_if_required_acl_perm_is_missing/1,
+    move_to_trash_and_schedule_deletion_should_work/1,
     qos_set_on_file_does_not_affect_file_in_trash/1,
     qos_set_on_parent_directory_does_not_affect_files_in_trash/1,
     qos_set_on_space_directory_does_not_affect_files_in_trash/1,
-    files_from_trash_are_not_reimported/1
+    files_from_trash_are_not_reimported/1,
+    deletion_lasting_for_4_days_should_succeed/1,
+    deletion_lasting_for_40_days_should_succeed/1,
+    deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time/1
 ]).
 
 
@@ -82,28 +88,34 @@ all() -> ?ALL([
     schedule_replication_transfer_on_space_does_not_replicate_trash,
     schedule_eviction_transfer_on_space_evicts_trash,
     schedule_migration_transfer_on_space_does_not_replicate_trash,
-    move_to_trash_test,
-    move_to_trash_and_delete_test,
+    move_to_trash_should_work,
+    move_to_trash_should_fail_if_user_does_not_have_sufficient_perms,
+    move_to_trash_should_fail_if_required_acl_perm_is_missing,
+    move_to_trash_and_schedule_deletion_should_work,
     qos_set_on_file_does_not_affect_file_in_trash,
     qos_set_on_parent_directory_does_not_affect_files_in_trash,
     qos_set_on_space_directory_does_not_affect_files_in_trash,
-    files_from_trash_are_not_reimported
+    files_from_trash_are_not_reimported,
+    deletion_lasting_for_4_days_should_succeed
+    % TODO VFS-7338 uncomment after fixing clock synchronization mechanism
+    % deletion_lasting_for_40_days_should_succeed,
+    % deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time
 ]).
 
 -define(SPACE1_PLACEHOLDER, space1).
--define(SPACE_ID, oct_background:get_space_id(?SPACE1_PLACEHOLDER)).
+-define(SPACE_ID1, oct_background:get_space_id(?SPACE1_PLACEHOLDER)).
 -define(SPACE_NAME, oct_background:get_space_name(?SPACE1_PLACEHOLDER)).
 -define(SPACE2_PLACEHOLDER, space2).
 -define(SPACE_ID2, oct_background:get_space_id(?SPACE2_PLACEHOLDER)).
 -define(SPACE_NAME2, oct_background:get_space_name(?SPACE2_PLACEHOLDER)).
 
--define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID)).
+-define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID1)).
 -define(SPACE_UUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
--define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID)).
+-define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID1)).
 -define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
 -define(TRASH_DIR_GUID(SpaceId), fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)).
 
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 300).
 -define(RAND_NAME(Prefix), <<Prefix/binary, (integer_to_binary(rand:uniform(1000)))/binary>>).
 -define(RAND_DIR_NAME, ?RAND_NAME(<<"dir_">>)).
 -define(RAND_FILE_NAME, ?RAND_NAME(<<"file_">>)).
@@ -126,11 +138,11 @@ trash_dir_should_exist(_Config) ->
 
     % trash dir should be empty
     ?assertMatch({ok, #file_attr{name = ?TRASH_DIR_NAME}},
-        lfm_proxy:stat(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})),
+        lfm_proxy:stat(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})),
     ?assertMatch({ok, #file_attr{name = ?TRASH_DIR_NAME}},
-        lfm_proxy:stat(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10)),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10)).
+        lfm_proxy:stat(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10)),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10)).
 
 create_dir_with_trash_dir_name_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -151,18 +163,18 @@ remove_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})),
+        lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:unlink(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})),
+        lfm_proxy:unlink(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:unlink(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})).
+        lfm_proxy:unlink(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})).
 
 rename_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     TargetPath = filename:join([?DIRECTORY_SEPARATOR, ?SPACE_NAME, <<"other_trash_name">>]),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:mv(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, TargetPath)).
+        lfm_proxy:mv(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, TargetPath)).
 
 rename_other_dir_to_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -176,80 +188,80 @@ chmod_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_perms(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 8#777)).
+        lfm_proxy:set_perms(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 8#777)).
 
 set_xattr_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_xattr(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, #{<<"key">> => <<"value">>})).
+        lfm_proxy:set_xattr(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, #{<<"key">> => <<"value">>})).
 
 remove_xattr_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:remove_xattr(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"key">>)).
+        lfm_proxy:remove_xattr(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"key">>)).
 
 set_acl_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_acl(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, [])).
+        lfm_proxy:set_acl(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, [])).
 
 remove_acl_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:remove_acl(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)})).
+        lfm_proxy:remove_acl(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)})).
 
 set_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     JSON = #{<<"key">> => <<"value">>},
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, json, JSON, [])).
+        lfm_proxy:set_metadata(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, json, JSON, [])).
 
 set_cdmi_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_mimetype(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"mimetype">>)),
+        lfm_proxy:set_mimetype(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"mimetype">>)),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_cdmi_completion_status(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"COMPLETED">>)),
+        lfm_proxy:set_cdmi_completion_status(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"COMPLETED">>)),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_transfer_encoding(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"base64">>)).
+        lfm_proxy:set_transfer_encoding(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"base64">>)).
 
 create_share_from_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:create_share(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"MY SHARE">>)).
+        lfm_proxy:create_share(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"MY SHARE">>)).
 
 add_qos_entry_for_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:add_qos_entry(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, <<"key=value">>, 1)).
+        lfm_proxy:add_qos_entry(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, <<"key=value">>, 1)).
 
 remove_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:remove_metadata(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, json)).
+        lfm_proxy:remove_metadata(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, json)).
 
 schedule_replication_transfer_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P2Id = oct_background:get_provider_id(paris),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:schedule_file_replication(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, P2Id)).
+        lfm_proxy:schedule_file_replication(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, P2Id)).
 
 schedule_eviction_transfer_on_trash_dir_is_allowed(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P1Id = oct_background:get_provider_id(krakow),
     {ok, TransferId} = ?assertMatch({ok, _},
-        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, P1Id, undefined)),
+        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, P1Id, undefined)),
     ?assertMatch({ok, #document{value = #transfer{eviction_status = completed}}},
         rpc:call(P1Node, transfer, get, [TransferId]), ?ATTEMPTS).
 
@@ -259,7 +271,7 @@ schedule_migration_transfer_on_trash_dir_is_forbidden(_Config) ->
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, P1Id, P2Id)).
+        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, P1Id, P2Id)).
 
 schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -275,7 +287,7 @@ schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
 
     % wait till moving directory to trash is synchronized
     ?assertMatch({ok, [{DirGuid, _}]},
-        lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
 
     P2Id = oct_background:get_provider_id(paris),
     {ok, TransferId} = ?assertMatch({ok, _},
@@ -350,7 +362,7 @@ schedule_migration_transfer_on_space_does_not_replicate_trash(_Config) ->
 
     % wait till moving directory to trash is synchronized
     ?assertMatch({ok, [{DirGuid, _}]},
-        lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
 
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
@@ -364,7 +376,7 @@ schedule_migration_transfer_on_space_does_not_replicate_trash(_Config) ->
         files_evicted = 0
     }}}, rpc:call(P1Node, transfer, get, [TransferId]), ?ATTEMPTS).
 
-move_to_trash_test(_Config) ->
+move_to_trash_should_work(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
@@ -372,24 +384,23 @@ move_to_trash_test(_Config) ->
     DirName = ?RAND_DIR_NAME,
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
     DirCtx = file_ctx:new_by_guid(DirGuid),
-    % TODO VFS-7101 add one more level in the tree after introducing offline access token
-    lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}], DirGuid),
+    lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
 
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
 
-    lfm_test_utils:assert_space_dir_empty(P1Node, ?SPACE_ID, ?ATTEMPTS),
-    lfm_test_utils:assert_space_dir_empty(P2Node, ?SPACE_ID, ?ATTEMPTS),
-    ?assertMatch({ok, [{DirGuid, _}]}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10)),
-    ?assertMatch({ok, [{DirGuid, _}]}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+    lfm_test_utils:assert_space_dir_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
+    lfm_test_utils:assert_space_dir_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
+    ?assertMatch({ok, [{DirGuid, _}]}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10)),
+    ?assertMatch({ok, [{DirGuid, _}]}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
 
 
     StorageFileId = filename:join(["/", DirName]),
-    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID),
+    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID1),
 
     % file registration should fail because there is a deletion marker added for the file
     % which prevents file to be imported
     ?assertMatch({ok, ?HTTP_400_BAD_REQUEST, _, _}, register_file(P1Node, user1, #{
-        <<"spaceId">> => ?SPACE_ID,
+        <<"spaceId">> => ?SPACE_ID1,
         <<"destinationPath">> => DirName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
@@ -399,24 +410,23 @@ move_to_trash_test(_Config) ->
         <<"autoDetectAttributes">> => false
     })).
 
-move_to_trash_and_delete_test(_Config) ->
+move_to_trash_and_schedule_deletion_should_work(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     DirName = ?RAND_DIR_NAME,
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
-    % TODO VFS-7101 add one more level in the tree after introducing offline access token
-    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}], DirGuid),
+    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
     DirCtx = file_ctx:new_by_guid(DirGuid),
 
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
-    delete_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
+    schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
 
-    lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID, ?ATTEMPTS),
-    lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID, ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID)}, 0, 10), ?ATTEMPTS),
+    lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
+    lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, UserSessIdP2, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
 
     lists:foreach(fun(G) ->
         ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1Node, UserSessIdP1, {guid, G}), ?ATTEMPTS),
@@ -424,13 +434,13 @@ move_to_trash_and_delete_test(_Config) ->
     end, DirGuids ++ FileGuids ++ [DirGuid]),
 
     StorageFileId = filename:join([?DIRECTORY_SEPARATOR, DirName]),
-    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID),
+    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID1),
 
     Size = 10,
     % file registration should succeed because the file has already been deleted
 
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(P1Node, user1, #{
-        <<"spaceId">> => ?SPACE_ID,
+        <<"spaceId">> => ?SPACE_ID1,
         <<"destinationPath">> => DirName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
@@ -439,6 +449,36 @@ move_to_trash_and_delete_test(_Config) ->
         <<"mode">> => <<"664">>,
         <<"autoDetectAttributes">> => false
     })).
+
+move_to_trash_should_fail_if_user_does_not_have_sufficient_perms(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    % perform test as user2 as he's not a space owner
+    UserSessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    InsufficientPerms = [8#600, 8#500, 8#400],
+    lists:foreach(fun(Perms) ->
+        DirName = ?RAND_DIR_NAME,
+        {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, Perms),
+        ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, DirGuid}))
+    end, InsufficientPerms).
+
+
+move_to_trash_should_fail_if_required_acl_perm_is_missing(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    % perform test as user2 as he's not a space owner
+    UserSessIdP1 = oct_background:get_user_session_id(user2, krakow),
+
+    % ?delete_subcontainer and ?delete_object are mapped to the same bitmask so we have to remove both of them
+    % to test whether operatio will fail without these perms
+    RequiredPerms = [?delete, ?list_container, ?traverse_container, [?delete_subcontainer, ?delete_object]],
+
+    lists:foreach(fun(RequiredPerm) ->
+        DirName = ?RAND_DIR_NAME,
+        {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+        Perms = ?ALL_DIR_PERMS -- utils:ensure_list(RequiredPerm),
+        ok = lfm_proxy:set_acl(P1Node, UserSessIdP1, {guid, DirGuid}, [perms_to_allow_ace(Perms)]),
+        ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, {guid, DirGuid}))
+    end, RequiredPerms).
+
 
 qos_set_on_file_does_not_affect_file_in_trash(Config) ->
     qos_does_not_affect_files_in_trash_test_base(Config, file).
@@ -472,6 +512,24 @@ files_from_trash_are_not_reimported(_Config) ->
     % files which are currently in trash shouldn't have been reimported
     ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, {guid, ?SPACE_GUID(?SPACE_ID2)}, 0, 1000)).
 
+deletion_lasting_for_4_days_should_succeed(Config) ->
+    TimeWarp = 4 * 24 * 3600, % 4 days
+    long_lasting_deletion_test_base(Config, 1, TimeWarp, 0, success).
+
+deletion_lasting_for_40_days_should_succeed(Config) ->
+    % This test simulates 20 time warps, each of them warps 2 day forward
+    % Interval between simulating time warps is 30 seconds.
+    TimeWarpsCount = 20,
+    TimeWarp = 2 * 24 * 3600, % 2 days
+    Interval = 30,
+    % deletion from trash will last for (simulated) 40 days
+    long_lasting_deletion_test_base(Config, TimeWarpsCount, TimeWarp, Interval, success).
+
+deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time(Config) ->
+    % This test simulates a 10 day time warp which will result in failed refresh of offline session
+    TimeWarp = 10 * 24 * 3600, % 10 days
+    long_lasting_deletion_test_base(Config, 1, TimeWarp, 1, failure).
+
 %===================================================================
 % Test base functions
 %===================================================================
@@ -487,7 +545,7 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
     %  - file
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID),
+    [StorageId] = opw_test_rpc:get_space_local_storages(P1Node, ?SPACE_ID1),
     ok = rpc:call(P1Node, storage_logic, set_qos_parameters, [StorageId, #{<<"key">> => <<"value">>}]),
 
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
@@ -532,6 +590,58 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
     % file shouldn't have been synchronized because it's in trash
     ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size1, Size2]), FileGuid, ?ATTEMPTS).
 
+long_lasting_deletion_test_base(_Config, TimeWarpsCount,
+    TimeWarpPeriod, TimeWarpInterval, ExpectedResult
+) ->
+    % this test moves directory to trash, schedules its deletion and simulates that
+    % as many as TimeWarpsCount time warps occurred
+    % each of them warps TimeWarpPeriod in time
+    % interval (in real life) between simulating time warps is equal to TimeWarpInterval
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    DirName = ?RAND_DIR_NAME,
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
+    DirCtx = file_ctx:new_by_guid(DirGuid),
+
+    mock_traverse_finished(P1Node, self()),
+
+    move_to_trash(P1Node, DirCtx, UserSessIdP1),
+    {ok, TaskId} = schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
+
+    lists:foreach(fun(_) ->
+    % simulate that a TimeWarpPeriod time warp occurred during deletion from trash
+        time_test_utils:simulate_seconds_passing(TimeWarpPeriod),
+        timer:sleep(timer:seconds(TimeWarpInterval))
+    end, lists:seq(1, TimeWarpsCount)),
+
+    await_traverse_finished(TaskId, 600),
+
+    case ExpectedResult of
+        success ->
+            % use ?ROOT_SESS_ID in below assert as normal sessions may have expired
+            lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
+            lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
+            ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
+            ?assertMatch({ok, []}, lfm_proxy:get_children(P2Node, ?ROOT_SESS_ID, {guid, ?TRASH_DIR_GUID(?SPACE_ID1)}, 0, 10), ?ATTEMPTS),
+
+            lists:foreach(fun(G) ->
+                ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, G}), ?ATTEMPTS),
+                ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P2Node, ?ROOT_SESS_ID, {guid, G}), ?ATTEMPTS)
+            end, DirGuids ++ FileGuids ++ [DirGuid]);
+        failure ->
+            % failure was expected so there should be files which weren't deleted
+            AllFilesNum = length([DirGuid | DirGuids] ++ FileGuids),
+            DeletedFilesNum = lists:foldl(fun(Guid, Acc) ->
+                case lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, Guid}) of
+                    {ok, _} -> Acc;
+                    {error, ?ENOENT} -> Acc + 1
+                end
+            end, 0, [DirGuid | DirGuids] ++ FileGuids),
+            ?assertNotEqual(AllFilesNum, DeletedFilesNum)
+    end.
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -539,20 +649,30 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
 init_per_suite(Config) ->
     ssl:start(),
     hackney:start(),
-    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "trash_tests"}).
+    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op-manual-import"}).
 
 end_per_suite(_Config) ->
     hackney:stop(),
     ssl:stop().
 
+init_per_testcase(Case, Config) when
+    Case =:= deletion_lasting_for_4_days_should_succeed orelse
+    Case =:= deletion_lasting_for_40_days_should_succeed orelse
+    Case =:= deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time
+->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
-    lfm_proxy:init(Config).
+    % update background config to update sessions
+    Config2 = oct_background:update_background_config(Config),
+    lfm_proxy:init(Config2).
 
 end_per_testcase(_Case, Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     AllNodes = [P1Node, P2Node],
-    lfm_test_utils:clean_space(P1Node, AllNodes, ?SPACE_ID, ?ATTEMPTS),
+    time_test_utils:unfreeze_time(Config),
+    lfm_test_utils:clean_space(P1Node, AllNodes, ?SPACE_ID1, ?ATTEMPTS),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
@@ -563,9 +683,9 @@ move_to_trash(Worker, FileCtx, SessId) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
     rpc:call(Worker, trash, move_to_trash, [FileCtx, UserCtx]).
 
-delete_from_trash(Worker, FileCtx, SessId, RootOriginalParentUuid) ->
+schedule_deletion_from_trash(Worker, FileCtx, SessId, RootOriginalParentUuid) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
-    rpc:call(Worker, trash, delete_from_trash, [FileCtx, UserCtx, false, RootOriginalParentUuid]).
+    rpc:call(Worker, trash, schedule_deletion_from_trash, [FileCtx, UserCtx, false, RootOriginalParentUuid]).
 
 register_file(Worker, User, Body) ->
     Headers = #{
@@ -573,3 +693,26 @@ register_file(Worker, User, Body) ->
         ?HDR_CONTENT_TYPE => <<"application/json">>
     },
     rest_test_utils:request(Worker, <<"data/register">>, post, Headers, json_utils:encode(Body)).
+
+perms_to_allow_ace(Perms) ->
+    ?ALLOW_ACE(?owner, ?no_flags_mask, permissions_test_utils:perms_to_bitmask(Perms)).
+
+mock_traverse_finished(Worker, TestProcess) ->
+    ok = test_utils:mock_new(Worker, tree_deletion_traverse),
+    ok = test_utils:mock_expect(Worker, tree_deletion_traverse, task_finished, fun(TaskId, Pool) ->
+        Result = meck:passthrough([TaskId, Pool]),
+        TestProcess ! {traverse_finished, TaskId},
+        Result
+    end),
+    ok = test_utils:mock_expect(Worker, tree_deletion_traverse, task_canceled, fun(TaskId, Pool) ->
+        Result = meck:passthrough([TaskId, Pool]),
+        TestProcess ! {traverse_finished, TaskId},
+        Result
+    end).
+
+await_traverse_finished(TaskId, Attempts) ->
+    receive {traverse_finished, TaskId} -> ok
+    after
+        timer:seconds(Attempts) ->
+            ct:fail("Traverse ~s not finished in expected time", [TaskId])
+    end.

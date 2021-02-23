@@ -32,7 +32,8 @@
 -export([
     is_posix_compatible/1, is_getting_size_supported/1, is_rename_supported/1,
     is_import_supported/1, is_auto_import_supported/1, is_file_registration_supported/1,
-    is_nfs4_acl_supported/1, should_skip_storage_detection/1, supports_storage_access_type/2
+    is_nfs4_acl_supported/1, should_skip_storage_detection/1, supports_storage_access_type/2,
+    is_object/1
 ]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
@@ -293,7 +294,6 @@ is_rename_supported(?XROOTD_HELPER_NAME) -> true;
 is_rename_supported(#helper{name = HelperName}) -> is_rename_supported(HelperName);
 is_rename_supported(_) -> false.
 
-%% @private
 -spec is_object(helpers:helper() | name()) -> boolean().
 is_object(#helper{name = Name}) ->
     is_object(Name);

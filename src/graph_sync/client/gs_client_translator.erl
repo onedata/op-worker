@@ -20,7 +20,9 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([translate/2, apply_scope_mask/2]).
+-export([translate/2]).
+-export([overwrite_cached_record/3]).
+-export([apply_scope_mask/2]).
 
 %%%===================================================================
 %%% API
@@ -43,6 +45,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result),
 
+            blocked = {maps:get(<<"blocked">>, Result), unchanged},
             space_aliases = maps:get(<<"spaceAliases">>, Result),
 
             eff_groups = maps:get(<<"effectiveGroups">>, Result),
@@ -59,7 +62,8 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = protected}, R
             full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
             username = utils:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
-            linked_accounts = maps:get(<<"linkedAccounts">>, Result)
+            linked_accounts = maps:get(<<"linkedAccounts">>, Result),
+            blocked = {maps:get(<<"blocked">>, Result), unchanged}
         }
     };
 
@@ -297,6 +301,32 @@ translate(GRI, Result) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Called when a cached record is overwritten by a newer one, so that any
+%% custom comparison logic can be applied.
+%% @end
+%%--------------------------------------------------------------------
+-spec overwrite_cached_record(gri:gri(), datastore:value(), datastore:value()) ->
+    datastore:value().
+overwrite_cached_record(#gri{type = od_user, aspect = instance}, Previous, New) ->
+    % compare the previous and current user doc to infer whether the blocked value has changed
+    {NewBlocked, _} = New#od_user.blocked,
+    {PreviousBlocked, _} = Previous#od_user.blocked,
+    case PreviousBlocked of
+        undefined ->
+            % undefined is set for shared user scope (the value is unknown)
+            New#od_user{blocked = {NewBlocked, unchanged}};
+        NewBlocked ->
+            % the blocked value is the same
+            New#od_user{blocked = {PreviousBlocked, unchanged}};
+        _ ->
+            % the blocked value has changed
+            New#od_user{blocked = {NewBlocked, changed}}
+    end;
+overwrite_cached_record(_, _, New) ->
+    New.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Masks (nullifies) the fields in given record that should not be available
 %% within given scope.
 %% @end
@@ -320,6 +350,8 @@ apply_scope_mask(Doc = #document{value = User = #od_user{}}, shared) ->
             emails = [],
             linked_accounts = [],
             space_aliases = #{},
+
+            blocked = {undefined, unchanged},
 
             eff_groups = [],
             eff_spaces = [],
