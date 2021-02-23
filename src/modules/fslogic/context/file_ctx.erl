@@ -91,7 +91,7 @@
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
--export([assert_not_readonly_storage/1, assert_file_exists/1]).
+-export([assert_not_readonly_storage/1, assert_file_exists/1, assert_smaller_than_provider_support_size/2]).
 
 -define(DEFAULT_LS_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
 
@@ -1283,6 +1283,22 @@ assert_not_readonly_target_storage_const(FileCtx, TargetProviderId) ->
         true -> throw(?EROFS);
         false -> ok
     end.
+
+
+-spec assert_smaller_than_provider_support_size(ctx(), od_provider:id()) -> ctx().
+assert_smaller_than_provider_support_size(FileCtx, ProviderId) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case space_logic:get_support_size(SpaceId, ProviderId) of
+        {ok, Size} ->
+            {FileSize, FileCtx2} = file_ctx:get_file_size(FileCtx),
+            case FileSize =< Size of
+                true -> FileCtx2;
+                false -> throw(?ENOSPC)
+            end;
+        {error, _} = Error ->
+            throw(Error)
+    end.
+
 
 -spec assert_file_exists(ctx()) -> ctx() | no_return().
 assert_file_exists(FileCtx0) ->

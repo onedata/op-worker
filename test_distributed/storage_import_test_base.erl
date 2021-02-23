@@ -2290,7 +2290,8 @@ create_delete_import2_test(Config) ->
                     OpenError ->
                         OpenError
                 end
-            end, Attempts)
+            end, Attempts
+        )
     end),
 
     %% Create file on storage

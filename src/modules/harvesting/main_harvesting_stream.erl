@@ -266,14 +266,28 @@ start_aux_streams_according_to_summary(State = #hs_state{
             % Harvesters in _ErrorDest were deleted
             % we can ignore this error
             AccIn;
+
         (?ERROR_FORBIDDEN, _ErrorDest, AccIn) ->
             % Harvesters in _ErrorDest were deleted from space
             % we can ignore this error
             AccIn;
 
+        (?ERROR_EXTERNAL_SERVICE_OPERATION_FAILED(ServiceName), ErrorDest, {DestIn, AuxDestIn}) ->
+            harvesting_destination:foreach(fun(HarvesterId, Indices) ->
+                ?warning(
+                    "An error occured for harvester ~p due to a failed external service (~ts) operation. "
+                    "Starting aux_harvesting_streams", [HarvesterId, ServiceName]
+                ),
+                lists:foreach(fun(IndexId) ->
+                    harvesting_stream_sup:start_aux_stream(SpaceId,
+                        HarvesterId, IndexId, MaxSuccessfulSeq)
+                end, Indices)
+            end, ErrorDest),
+            {DestIn, harvesting_destination:merge(AuxDestIn, ErrorDest)};
+
         (?ERROR_TEMPORARY_FAILURE, ErrorDest, {DestIn, AuxDestIn}) ->
             harvesting_destination:foreach(fun(HarvesterId, Indices) ->
-                ?warning("Harvester ~p is temporarily unavailable."
+                ?warning("Harvester ~p is temporarily unavailable. "
                 "Starting aux_harvesting_streams", [HarvesterId]),
                 lists:foreach(fun(IndexId) ->
                     harvesting_stream_sup:start_aux_stream(SpaceId,
