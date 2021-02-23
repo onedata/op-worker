@@ -91,6 +91,7 @@ run_scenarios(TestSpec, Config) ->
 
     run_space_owner_test_scenarios(ScenariosRootDirPath, TestSpec, Config),
     run_space_privs_scenarios(ScenariosRootDirPath, TestSpec, Config),
+    run_file_protection_scenarios(ScenariosRootDirPath, TestSpec, Config),
     run_data_access_caveats_scenarios(ScenariosRootDirPath, TestSpec, Config),
     run_share_test_scenarios(ScenariosRootDirPath, TestSpec, Config),
     run_posix_perms_scenarios(ScenariosRootDirPath, TestSpec, Config),
@@ -154,7 +155,7 @@ run_space_owner_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
                 }
             ),
 
-            % Operation should succeed for file owner even with all file permissions denied
+            % Operation should succeed for space owner even with all file permissions denied
             deny_full_perms(ScenarioType, Node, maps:keys(PermsPerFile)),
             ?assertMatch(ok, Operation(SpaceOwnerSessId, TestCaseRootDirPath, ExtraData)),
 
@@ -301,6 +302,91 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     ?assertMatch(ok, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
     run_final_ownership_check(ScenarioCtx).
+
+
+%%%===================================================================
+%%% FILE PROTECTION TESTS SCENARIOS MECHANISM
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tests file protection blocking #perms_test_spec.operation.
+%% It will setup environment, add full posix or acl permissions and
+%% assert that with file protection flags operation cannot be performed
+%% (even though full posix/acl perms are set).
+%% @end
+%%--------------------------------------------------------------------
+-spec run_file_protection_scenarios(file_meta:path(), perms_test_spec(), ct_config()) ->
+    ok | no_return().
+run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
+    test_node = Node,
+    owner_user = FileOwner,
+    requires_traverse_ancestors = RequiresTraverseAncestors,
+    operation = Operation,
+    files = Files
+} = TestSpec, Config) ->
+    FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
+
+    ScenarioName = <<"file_protection">>,
+    ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
+
+    % Create necessary file hierarchy
+    {PermsPerFile, ExtraData} = create_files(
+        Node, FileOwnerUserSessId, ScenariosRootDirPath, #dir{
+            name = ScenarioName,
+            perms = scenarios_root_dir_permissions(RequiresTraverseAncestors),
+            children = Files
+        }
+    ),
+    ScenarioRootDirKey = maps:get(ScenarioRootDirPath, ExtraData),
+
+    % Assert that even with all perms set operation cannot be performed
+    % without space privileges
+    set_full_perms(posix, Node, maps:keys(PermsPerFile)),
+
+    AllNeededPerms = lists:usort(lists:flatten(maps:values(PermsPerFile))),
+    AllNeededPermsBitmask = permissions_test_utils:perms_to_bitmask(AllNeededPerms),
+
+    ProtectionFlagsToSet = lists:foldl(fun({ProtectionFlag, BlockedPerms}, Acc) ->
+        case ?has_any_flags(AllNeededPermsBitmask, BlockedPerms) of
+            true -> ?set_flags(Acc, ProtectionFlag);
+            false -> Acc
+        end
+    end, ?no_flags_mask, [
+        {?DATA_PROTECTION, ?DATA_PROTECTION_BLOCKED_PERMS},
+        {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_PERMS}
+    ]),
+
+    case ProtectionFlagsToSet > 0 of
+        true ->
+            % With file protection set operation should fail
+            ok = lfm_proxy:update_flags(
+                Node, FileOwnerUserSessId, ScenarioRootDirKey, ProtectionFlagsToSet, ?no_flags_mask
+            ),
+            % Wait some time for caches to be cleared (cache purge is asynchronous)
+            timer:sleep(100),
+            ?assertMatch({error, ?EACCES}, Operation(FileOwnerUserSessId, ScenarioRootDirPath, ExtraData)),
+
+            % And should succeed without it
+            ok = lfm_proxy:update_flags(
+                Node, FileOwnerUserSessId, ScenarioRootDirKey, ?no_flags_mask, ProtectionFlagsToSet
+            ),
+            % Wait some time for caches to be cleared (cache purge is asynchronous)
+            timer:sleep(100),
+            ?assertMatch(ok, Operation(FileOwnerUserSessId, ScenarioRootDirPath, ExtraData)),
+
+            run_final_ownership_check(#scenario_ctx{
+                meta_spec = TestSpec,
+                scenario_name = ScenarioName,
+                scenario_root_dir_path = ScenarioRootDirPath,
+                files_owner_session_id = FileOwnerUserSessId,
+                executioner_session_id = FileOwnerUserSessId
+            });
+        false ->
+            ok
+    end.
 
 
 %%%===================================================================

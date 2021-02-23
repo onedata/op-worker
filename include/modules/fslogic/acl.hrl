@@ -131,6 +131,20 @@
 -define(all_perms, <<"ALL_PERMS">>).
 -define(all_perms_mask, (?all_object_perms_mask bor ?all_container_perms_mask)).
 
+% Permissions denied by file protection flags
+-define(DATA_PROTECTION_BLOCKED_PERMS, (
+    ?write_object_mask bor
+    ?add_object_mask bor
+    ?add_subcontainer_mask bor
+    ?delete_mask bor
+    ?delete_child_mask
+)).
+-define(METADATA_PROTECTION_BLOCKED_PERMS, (
+    ?write_attributes_mask bor
+    ?write_metadata_mask bor
+    ?write_acl_mask
+)).
+
 -type user_id() :: binary().
 -type group_id() :: binary().
 

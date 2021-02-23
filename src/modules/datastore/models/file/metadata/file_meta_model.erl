@@ -365,7 +365,7 @@ invalidate_file_attr_cache_if_needed(
     case OldFlags =/= NewFlags orelse PrevParentUuid =/= NewParentUuid of
         true ->
             spawn(fun() ->
-                fslogic_worker:schedule_invalidate_file_attr_caches(SpaceId)
+                fslogic_worker:invalidate_file_attr_caches(SpaceId)
             end),
             ok;
         false ->

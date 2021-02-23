@@ -312,7 +312,7 @@ update_flags_insecure(FileCtx, FlagsToSet, FlagsToReset) ->
     ok = file_meta:update_flags(FileUuid, FlagsToSet, FlagsToReset),
 
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    ok = fslogic_worker:schedule_invalidate_file_attr_caches(SpaceId),
+    ok = fslogic_worker:invalidate_file_attr_caches(SpaceId),
 
     #fuse_response{status = #status{code = ?OK}}.
 
