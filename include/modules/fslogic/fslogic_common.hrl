@@ -83,4 +83,8 @@
 % Token that should be passed as initial token to start listing using tokens.
 -define(INITIAL_LS_TOKEN, <<>>).
 
+% Path types
+-define(CANONICAL_PATH, canonical_path).
+-define(UUID_BASED_PATH, uuid_based_path).
+
 -endif.

@@ -66,6 +66,7 @@
 -type posix_permissions() :: non_neg_integer().
 -type permissions_type() :: posix | acl.
 -type conflicts() :: [link()].
+-type path_type() :: ?CANONICAL_PATH | ?UUID_BASED_PATH.
 
 
 -type list_offset() :: file_meta_links:offset().
@@ -80,7 +81,7 @@
 -export_type([
     doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
     type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
-    conflicts/0
+    conflicts/0, path_type/0
 ]).
 
 -export_type([

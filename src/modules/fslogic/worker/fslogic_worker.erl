@@ -254,7 +254,7 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
 handle(?INIT_PATHS_CACHES(Space)) ->
-    paths_cache:init_caches(Space);
+    paths_cache:init(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
