@@ -180,10 +180,11 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
     fslogic_worker:fuse_response().
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
+    ParentFileCtx3 = file_ctx:assert_is_dir(ParentFileCtx2),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
     CTime = global_clock:timestamp_seconds(),
     Owner = user_ctx:get_user_id(UserCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
+    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx3),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
     {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
@@ -194,7 +195,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             value = #times{mtime = CTime, atime = CTime, ctime = CTime},
             scope = SpaceId
         }),
-        fslogic_times:update_mtime_ctime(ParentFileCtx2),
+        fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
         #fuse_response{fuse_response = FileAttr} =
             attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{

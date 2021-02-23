@@ -144,7 +144,7 @@ delete_metadata_test_base(
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Nodes,
             setup_fun = build_setup_fun(TestSetupVariant, FileGuid, MetadataType, Metadata, Nodes),
@@ -320,8 +320,6 @@ build_delete_metadata_prepare_rest_args_fun(MetadataType, FileGuid) ->
 
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
@@ -329,8 +327,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 
 init_per_testcase(_Case, Config) ->
