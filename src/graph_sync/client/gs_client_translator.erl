@@ -49,7 +49,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result),
 
-            blocked = {maps:get(<<"blocked">>, Result), maps:get(<<"revision">>, Result)},
+            blocked = {maps:get(<<"blocked">>, Result), unchanged},
             space_aliases = maps:get(<<"spaceAliases">>, Result),
 
             eff_groups = maps:get(<<"effectiveGroups">>, Result),
@@ -67,7 +67,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = protected}, R
             username = utils:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result),
-            blocked = {maps:get(<<"blocked">>, Result), maps:get(<<"revision">>, Result)}
+            blocked = {maps:get(<<"blocked">>, Result), unchanged}
         }
     };
 
@@ -307,15 +307,19 @@ translate(GRI, Result) ->
 -spec overwrite_cached_record(gri:gri(), datastore:value(), datastore:value()) ->
     datastore:value().
 overwrite_cached_record(#gri{type = od_user, aspect = instance}, Previous, New) ->
-    % track the revision when a change in the blocked value was observed - if
-    % the value does not change, store the previous revision to indicate that
-    % the current value stems from old changes
-    {PreviousBlocked, PreviousRevision} = Previous#od_user.blocked,
-    case New#od_user.blocked of
-        {PreviousBlocked, _} ->
-            New#od_user{blocked = {PreviousBlocked, PreviousRevision}};
-        _Other ->
-            New
+    % compare the previous and current user doc to infer whether the blocked value has changed
+    {NewBlocked, _} = New#od_user.blocked,
+    {PreviousBlocked, _} = Previous#od_user.blocked,
+    case PreviousBlocked of
+        undefined ->
+            % undefined is set for shared user scope (the value is unknown)
+            New#od_user{blocked = {NewBlocked, unchanged}};
+        NewBlocked ->
+            % the blocked value is the same
+            New#od_user{blocked = {PreviousBlocked, unchanged}};
+        _ ->
+            % the blocked value has changed
+            New#od_user{blocked = {NewBlocked, changed}}
     end;
 overwrite_cached_record(_, _, New) ->
     New.
@@ -346,7 +350,7 @@ apply_scope_mask(Doc = #document{value = User = #od_user{}}, shared) ->
             linked_accounts = [],
             space_aliases = #{},
 
-            blocked = {undefined, 0},
+            blocked = {undefined, unchanged},
 
             eff_groups = [],
             eff_spaces = [],

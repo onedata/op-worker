@@ -112,6 +112,9 @@ get_test(Config) ->
     % - third to fetch user data
     OdTokenGriMatcher = #gri{type = od_token, aspect = verify_access_token, scope = public},
     TokenSecretGriMatcher = #gri{type = temporary_token_secret, id = ?USER_1, aspect = user, scope = shared},
+
+    % invalidate temporary_token_secret cache as it has been populated due to previous calls
+    logic_tests_common:invalidate_cache(Config, temporary_token_secret, ?USER_1),
     OdTokenGraphCalls = logic_tests_common:count_reqs(Config, graph, OdTokenGriMatcher),
     TokenSecretGraphCalls = logic_tests_common:count_reqs(Config, graph, TokenSecretGriMatcher),
     

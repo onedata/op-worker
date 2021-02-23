@@ -382,6 +382,7 @@ handle_cast(?USER_ACCESS_BLOCK_CHANGED_MSG(UserId, false), State) ->
     ?debug("Received user access unblocked event for user ~s", [UserId]),
 
     ets:select_delete(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
+        verification_result = ?ERROR_USER_BLOCKED,
         token_ref = {_, UId, _}
     }) when UId == UserId ->
         true

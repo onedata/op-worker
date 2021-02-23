@@ -95,9 +95,9 @@ run_after(Doc = #document{key = UserId, value = Record = #od_user{eff_spaces = E
     ok = permissions_cache:invalidate(),
     ok = files_to_chown:chown_deferred_files(UserId),
     case Record of
-        % report a change in the access block only when the current value was
-        % observed in the latest revision (which indicates that it has changed)
-        #od_user{blocked = {Blocked, Rev}, cache_state = #{revision := Rev}} ->
+        % report a change in the access block only when a change in the current
+        % value was observed
+        #od_user{blocked = {Blocked, changed}} ->
             auth_cache:report_user_access_block_changed(UserId, Blocked);
         _ ->
             ok

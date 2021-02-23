@@ -250,6 +250,10 @@ auth_cache_size_test(Config) ->
 auth_cache_user_access_blocked_event_test(Config) ->
     [Worker1, Worker2 | _] = Nodes = ?config(op_worker_nodes, Config),
 
+    % this will populate the cache with user docs that have 'blocked' set to false
+    simulate_user_update_with_blocked_value(Nodes, ?USER_ID_1, false, 1),
+    simulate_user_update_with_blocked_value(Nodes, ?USER_ID_2, false, 1),
+
     clear_auth_caches(Config),
     CacheItemTTL = 2,
     set_auth_cache_default_ttl(Worker1, CacheItemTTL),
@@ -278,7 +282,7 @@ auth_cache_user_access_blocked_event_test(Config) ->
 
     InitialBlockChangeEvents = total_block_change_events(Nodes),
 
-    simulate_user_access_block_changed(Nodes, ?USER_ID_1, true, 1),
+    simulate_user_update_with_blocked_value(Nodes, ?USER_ID_1, true, 2),
     ?assertEqual(InitialBlockChangeEvents + 1, total_block_change_events(Nodes)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1A)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1B)),
@@ -296,8 +300,8 @@ auth_cache_user_access_blocked_event_test(Config) ->
     ?assertEqual(4, get_auth_cache_size(Worker2)),
 
     % another update of the user document when the blocked value does not change
-    % should not cause another est update
-    simulate_user_access_block_changed(Nodes, ?USER_ID_1, true, 2),
+    % should not cause another block change event
+    simulate_user_update_with_blocked_value(Nodes, ?USER_ID_1, true, 3),
     ?assertEqual(InitialBlockChangeEvents + 1, total_block_change_events(Nodes)),
 
     % while the user is blocked, verification of new tokens should be blocked too
@@ -307,7 +311,7 @@ auth_cache_user_access_blocked_event_test(Config) ->
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1C)),
     ?assertEqual(5, get_auth_cache_size(Worker1)),
 
-    simulate_user_access_block_changed(Nodes, ?USER_ID_2, true, 1),
+    simulate_user_update_with_blocked_value(Nodes, ?USER_ID_2, true, 2),
     ?assertEqual(InitialBlockChangeEvents + 2, total_block_change_events(Nodes)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1A)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1B)),
@@ -318,14 +322,14 @@ auth_cache_user_access_blocked_event_test(Config) ->
 
     % user doc revision must be higher than the previous known one, otherwise
     % the change should not be taken into account (the user should be still blocked)
-    simulate_user_access_block_changed(Nodes, ?USER_ID_1, false, 1),
+    simulate_user_update_with_blocked_value(Nodes, ?USER_ID_1, false, 2),
     ?assertEqual(InitialBlockChangeEvents + 2, total_block_change_events(Nodes)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1A)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials1B)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials1C)),
 
     % newer revision should cause unblocking, cached and new tokens should be verifiable immediately
-    simulate_user_access_block_changed(Nodes, ?USER_ID_1, false, 3),
+    simulate_user_update_with_blocked_value(Nodes, ?USER_ID_1, false, 4),
     ?assertEqual(InitialBlockChangeEvents + 3, total_block_change_events(Nodes)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker1, TokenCredentials2A)),
     ?assertMatch(?ERROR_USER_BLOCKED, verify_credentials(Worker2, TokenCredentials2B)),
@@ -342,8 +346,8 @@ auth_cache_user_access_blocked_event_test(Config) ->
     ?assertEqual(6, get_auth_cache_size(Worker1)),
 
     % another update of the user document when the blocked value does not change
-    % should not cause another est update
-    simulate_user_access_block_changed(Nodes, ?USER_ID_1, false, 4),
+    % should not cause another block change event
+    simulate_user_update_with_blocked_value(Nodes, ?USER_ID_1, false, 5),
     ?assertEqual(InitialBlockChangeEvents + 3, total_block_change_events(Nodes)),
 
     clear_auth_caches(Config).
@@ -373,8 +377,8 @@ auth_cache_named_token_events_test(Config) ->
     %% TOKEN EVENTS SEND ON ANY NODE SHOULD AFFECT ALL NODES AUTH CACHE
 
     % When AccessToken1 is revoked
-    mock_token_logic_is_revoked(Workers, [?USER_ID_1]),
-    simulate_gs_token_status_update(Worker2, ?USER_ID_1, true),
+    mock_token_logic_is_revoked(Workers, [AccessToken1]),
+    simulate_gs_token_status_update(Worker2, AccessToken1, true),
 
     % Then only TokenCredentials based on that token should be revoked
     lists:foreach(fun({TokenCredentials, Worker}) ->
@@ -383,9 +387,9 @@ auth_cache_named_token_events_test(Config) ->
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker1, TokenCredentials3)),
 
     % Revoked tokens can be re-revoked and used again
-    mock_token_logic_is_revoked(Workers, [?USER_ID_2]),
-    simulate_gs_token_status_update(Worker1, ?USER_ID_1, false),
-    simulate_gs_token_status_update(Worker2, ?USER_ID_2, true),
+    mock_token_logic_is_revoked(Workers, [AccessToken2]),
+    simulate_gs_token_status_update(Worker1, AccessToken1, false),
+    simulate_gs_token_status_update(Worker2, AccessToken2, true),
 
     lists:foreach(fun({TokenCredentials, Worker}) ->
         ?assertMatch({ok, ?USER(?USER_ID_1), _}, verify_credentials(Worker, TokenCredentials))
@@ -393,7 +397,7 @@ auth_cache_named_token_events_test(Config) ->
     ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker1, TokenCredentials3)),
 
     % Deleting token should result in ?ERROR_TOKEN_INVALID
-    simulate_gs_token_deletion(Worker1, ?USER_ID_1),
+    simulate_gs_token_deletion(Worker1, AccessToken1),
 
     lists:foreach(fun({TokenCredentials, Worker}) ->
         ?assertMatch(?ERROR_TOKEN_INVALID, verify_credentials(Worker, TokenCredentials))
@@ -401,8 +405,8 @@ auth_cache_named_token_events_test(Config) ->
     ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker1, TokenCredentials3)),
 
     % Revoking already deleted token should not change error
-    mock_token_logic_is_revoked(Workers, [?USER_ID_2]),
-    simulate_gs_token_status_update(Worker1, ?USER_ID_1, true),
+    mock_token_logic_is_revoked(Workers, [AccessToken2]),
+    simulate_gs_token_status_update(Worker1, AccessToken1, true),
 
     lists:foreach(fun({TokenCredentials, Worker}) ->
         ?assertMatch(?ERROR_TOKEN_INVALID, verify_credentials(Worker, TokenCredentials))
@@ -622,7 +626,6 @@ token_expiration(Config) ->
 init_per_testcase(auth_cache_expiration_with_time_warps_test = Case, Config) ->
     time_test_utils:freeze_time(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
-
 
 init_per_testcase(auth_cache_user_access_blocked_event_test = Case, Config) ->
     mock_file_meta(Config),
@@ -851,14 +854,16 @@ create_token_credentials(AccessToken, Interface, DataAccessCaveatsPolicy, Consum
     ).
 
 
+-spec mock_token_logic_is_revoked([node()], [tokens:serialized()]) -> ok.
 mock_token_logic_is_revoked(Nodes, RevokedTokens) ->
+    RevokedTokenIds = lists:map(fun get_token_id/1, RevokedTokens),
     test_utils:mock_expect(Nodes, token_logic, is_token_revoked, fun(TokenId) ->
-        {ok, lists:member(TokenId, RevokedTokens)}
+        {ok, lists:member(TokenId, RevokedTokenIds)}
     end).
 
 
--spec simulate_user_access_block_changed([node()], od_user:id(), boolean(), gs_protocol:revision()) -> ok.
-simulate_user_access_block_changed(Nodes, UserId, Blocked, Revision) ->
+-spec simulate_user_update_with_blocked_value([node()], od_user:id(), boolean(), gs_protocol:revision()) -> ok.
+simulate_user_update_with_blocked_value(Nodes, UserId, Blocked, Revision) ->
     GRI = #gri{type = od_user, id = UserId, aspect = instance, scope = private},
     AsyncPid = rpc:call(lists_utils:random_element(Nodes), gs_client_worker, process_push_message, [
         #gs_push_graph{gri = GRI, change_type = updated, data = #{
@@ -885,8 +890,9 @@ simulate_user_access_block_changed(Nodes, UserId, Blocked, Revision) ->
     end.
 
 
--spec simulate_gs_token_status_update(node(), binary(), boolean()) -> ok.
-simulate_gs_token_status_update(Node, TokenId, Revoked) ->
+-spec simulate_gs_token_status_update(node(), tokens:serialized(), boolean()) -> ok.
+simulate_gs_token_status_update(Node, Serialized, Revoked) ->
+    TokenId = get_token_id(Serialized),
     logic_tests_common:simulate_push(Node, #gs_push_graph{
         gri = #gri{type = od_token, id = TokenId, aspect = instance, scope = shared},
         data = #{
@@ -897,8 +903,9 @@ simulate_gs_token_status_update(Node, TokenId, Revoked) ->
     }).
 
 
--spec simulate_gs_token_deletion(node(), binary()) -> ok.
-simulate_gs_token_deletion(Node, TokenId) ->
+-spec simulate_gs_token_deletion(node(), tokens:serialized()) -> ok.
+simulate_gs_token_deletion(Node, Serialized) ->
+    TokenId = get_token_id(Serialized),
     logic_tests_common:simulate_push(Node, #gs_push_graph{
         gri = #gri{type = od_token, id = TokenId, aspect = instance, scope = shared},
         change_type = deleted
@@ -964,3 +971,9 @@ total_block_change_events(Nodes) ->
     lists:sum(lists:map(fun(Node) ->
         rpc:call(Node, meck, num_calls, [auth_cache, report_user_access_block_changed, '_'])
     end, Nodes)).
+
+
+-spec get_token_id(tokens:serialized()) -> tokens:id().
+get_token_id(Serialized) ->
+    {ok, #token{id = Id}} = tokens:deserialize(Serialized),
+    Id.
