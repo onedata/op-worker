@@ -63,7 +63,7 @@ get(TraverseId, Uuid) ->
 -spec delete(traverse:id(), file_meta:uuid()) -> ok | {error, term()}.
 delete(TraverseId, Uuid)->
     Id = generate_status_doc_id(TraverseId, Uuid),
-    ?ok_if_not_found(datastore_model:delete(?CTX, Id)).
+    datastore_model:delete(?CTX, Id).
 
 %%%===================================================================
 %%% datastore_model callbacks

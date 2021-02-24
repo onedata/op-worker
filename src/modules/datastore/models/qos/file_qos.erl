@@ -363,6 +363,9 @@ get_effective(#document{scope = SpaceId} = FileDoc, Callback, undefined) ->
             Error
     end;
 get_effective(#document{scope = SpaceId} = FileDoc, Callback, OriginalParentCtx) ->
+    % This clause is used when directory is being moved to trash. In such case, to 
+    % calculate effective QoS before deletion, QoS for given directory needs to be 
+    % merged with effective QoS for parent before deletion (OriginaParent)
     %% TODO VFS-7133 take original parent uuid from file_meta doc
     CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
     {ParentDoc, _} = file_ctx:get_file_doc(OriginalParentCtx),
