@@ -74,10 +74,6 @@ all() ->
     {<<"dataSourceType">>, <<"data">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"dataSourceType">>, ?DATA_SOURCE_TYPES)}
 ]).
 
--define(PROVIDER_ID_REPLICA_ERRORS(__KEY), [
-    {__KEY, 100, {gs, ?ERROR_BAD_VALUE_BINARY(__KEY)}},
-    {__KEY, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
-]).
 -define(PROVIDER_ID_TRANSFER_ERRORS(__KEY), [
     {__KEY, 100, ?ERROR_BAD_VALUE_BINARY(__KEY)},
     {__KEY, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
@@ -138,12 +134,12 @@ create_file_transfer(Config, Type) ->
             setup_fun = SetupFun,
             verify_fun = VerifyFun,
             scenario_templates = [
-                #scenario_template{
-                    name = str_utils:format("Transfer (~p) view using /transfers rest endpoint", [Type]),
-                    type = rest,
-                    prepare_args_fun = build_create_transfer_prepare_rest_args_fun(MemRef),
-                    validate_result_fun = build_create_transfer_validate_rest_call_result_fun(MemRef)
-                },
+%%                #scenario_template{
+%%                    name = str_utils:format("Transfer (~p) view using /transfers rest endpoint", [Type]),
+%%                    type = rest,
+%%                    prepare_args_fun = build_create_transfer_prepare_rest_args_fun(MemRef),
+%%                    validate_result_fun = build_create_transfer_validate_rest_call_result_fun(MemRef)
+%%                },
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) file using gs transfer api", [Type]),
                     type = gs,
