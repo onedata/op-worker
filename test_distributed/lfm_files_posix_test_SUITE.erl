@@ -37,6 +37,9 @@
     lfm_stat_test/1,
     lfm_get_details_test/1,
     lfm_synch_stat_test/1,
+    lfm_cp_file/1,
+    lfm_cp_empty_dir/1,
+    lfm_cp_dir/1,
     lfm_truncate_test/1,
     lfm_truncate_and_write/1,
     lfm_acl_test/1,
@@ -88,11 +91,11 @@
     lfm_open_failure_test/1,
     lfm_create_and_open_failure_test/1,
     lfm_open_in_direct_mode_test/1,
-    lfm_copy_failure_test/1,
+    lfm_mv_failure_test/1,
     lfm_open_multiple_times_failure_test/1,
     lfm_open_failure_multiple_users_test/1,
     lfm_open_and_create_open_failure_test/1,
-    lfm_copy_failure_multiple_users_test/1,
+    lfm_mv_failure_multiple_users_test/1,
     sparse_files_should_be_created/1,
     rename_removed_opened_file_test/1,
     mkdir_removed_opened_file_test/1,
@@ -115,6 +118,9 @@
     lfm_stat_test,
     lfm_get_details_test,
     lfm_synch_stat_test,
+    lfm_cp_file,
+    lfm_cp_empty_dir,
+    lfm_cp_dir,
     lfm_truncate_test,
     lfm_truncate_and_write,
     lfm_acl_test,
@@ -166,11 +172,11 @@
     lfm_open_failure_test,
     lfm_create_and_open_failure_test,
     lfm_open_in_direct_mode_test,
-    lfm_copy_failure_test,
+    lfm_mv_failure_test,
     lfm_open_multiple_times_failure_test,
     lfm_open_failure_multiple_users_test,
     lfm_open_and_create_open_failure_test,
-    lfm_copy_failure_multiple_users_test,
+    lfm_mv_failure_multiple_users_test,
     sparse_files_should_be_created,
     rename_removed_opened_file_test,
     mkdir_removed_opened_file_test,
@@ -241,6 +247,14 @@ lfm_get_details_test(Config) ->
 lfm_synch_stat_test(Config) ->
     lfm_files_test_base:lfm_synch_stat(Config).
 
+lfm_cp_file(Config) ->
+    lfm_files_test_base:lfm_cp_file(Config).
+
+lfm_cp_empty_dir(Config) ->
+    lfm_files_test_base:lfm_cp_empty_dir(Config).
+
+lfm_cp_dir(Config) ->
+    lfm_files_test_base:lfm_cp_dir(Config).
 
 lfm_truncate_test(Config) ->
     lfm_files_test_base:lfm_truncate(Config).
@@ -423,7 +437,7 @@ get_children_details_should_work_with_startid(Config) ->
 
 
 lfm_recreate_handle_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, 8#755, dont_delete_file).
+    lfm_files_test_base:lfm_recreate_handle(Config, ?DEFAULT_FILE_PERMS, dont_delete_file).
 
 
 lfm_write_after_create_no_perms_test(Config) ->
@@ -431,7 +445,7 @@ lfm_write_after_create_no_perms_test(Config) ->
 
 
 lfm_recreate_handle_after_delete_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, 8#755, delete_after_open).
+    lfm_files_test_base:lfm_recreate_handle(Config, ?DEFAULT_FILE_PERMS, delete_after_open).
 
 
 lfm_open_failure_test(Config) ->
@@ -446,8 +460,8 @@ lfm_open_in_direct_mode_test(Config) ->
     lfm_files_test_base:lfm_open_in_direct_mode(Config).
 
 
-lfm_copy_failure_test(Config) ->
-    lfm_files_test_base:lfm_copy_failure(Config).
+lfm_mv_failure_test(Config) ->
+    lfm_files_test_base:lfm_mv_failure(Config).
 
 
 lfm_open_multiple_times_failure_test(Config) ->
@@ -462,8 +476,8 @@ lfm_open_and_create_open_failure_test(Config) ->
     lfm_files_test_base:lfm_open_and_create_open_failure(Config).
 
 
-lfm_copy_failure_multiple_users_test(Config) ->
-    lfm_files_test_base:lfm_copy_failure_multiple_users(Config).
+lfm_mv_failure_multiple_users_test(Config) ->
+    lfm_files_test_base:lfm_mv_failure_multiple_users(Config).
 
 sparse_files_should_be_created(Config) ->
     lfm_files_test_base:sparse_files_should_be_created(Config, read).
@@ -489,7 +503,7 @@ rename_removed_opened_file_test(Config) ->
         Other2 -> Other2
     end,
 
-    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath, 8#777),
+    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
     Guid1String = binary_to_list(Guid1),
     {ok, ListAns} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
@@ -540,7 +554,7 @@ mkdir_removed_opened_file_test(Config) ->
         Other2 -> Other2
     end,
 
-    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath, 8#777),
+    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
     Guid1String = binary_to_list(Guid1),
     {ok, ListAns} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
@@ -557,8 +571,8 @@ mkdir_removed_opened_file_test(Config) ->
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])])),
     ?assertEqual([Guid1String], ListAns3 -- InitialDeletedDir),
 
-    {ok, _} = lfm_proxy:mkdir(Worker, SessId(User), FilePath, 8#777),
-    {ok, _} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath2, 8#777),
+    {ok, _} = lfm_proxy:mkdir(Worker, SessId(User), FilePath),
+    {ok, _} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath2),
     {ok, ListAns4} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
     ?assertEqual([FileNameString], ListAns4 -- InitialSpaceFiles),
@@ -636,7 +650,7 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
                 end)
     end,
 
-    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath, 8#777),
+    {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, ListAns} = ?assertMatch({ok, _},
@@ -681,11 +695,11 @@ lfm_monitored_open(Config) ->
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
 
     File1Path = <<"/space_name1/lfm_monitored_open1">>,
-    {ok, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File1Path, 8#755)),
+    {ok, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File1Path)),
     File1Uuid = file_id:guid_to_uuid(File1Guid),
 
     File2Path = <<"/space_name1/lfm_monitored_open2">>,
-    {ok, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File2Path, 8#755)),
+    {ok, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, File2Path)),
     File2Uuid = file_id:guid_to_uuid(File2Guid),
 
     Self = self(),
@@ -752,7 +766,7 @@ lfm_monitored_open(Config) ->
     ExpFileIds = lists:sort(lists:map(fun(Num) ->
         FileIdx = integer_to_binary(Num),
         FilePath = <<"/space_name1/file_", FileIdx/binary>>,
-        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath, 8#755)),
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath)),
 
         spawn(W, fun() ->
             Self !  lfm:monitored_open(SessId1, {guid, FileGuid}, read),
@@ -790,12 +804,16 @@ lfm_monitored_open(Config) ->
 
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    Posthook = fun(NewConfig) ->
+        initializer:mock_auth_manager(NewConfig),
+        initializer:setup_storage(NewConfig)
+    end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
 
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config).
+    initializer:teardown_storage(Config),
+    initializer:unmock_auth_manager(Config).
 
 
 init_per_testcase(Case, Config) when
@@ -824,11 +842,11 @@ init_per_testcase(Case, Config) when
 init_per_testcase(Case, Config) when
     Case =:= lfm_open_failure_test;
     Case =:= lfm_create_and_open_failure_test;
-    Case =:= lfm_copy_failure_test;
+    Case =:= lfm_mv_failure_test;
     Case =:= lfm_open_multiple_times_failure_test;
     Case =:= lfm_open_failure_multiple_users_test;
     Case =:= lfm_open_and_create_open_failure_test;
-    Case =:= lfm_copy_failure_multiple_users_test
+    Case =:= lfm_mv_failure_multiple_users_test
 ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver, [passthrough]),
@@ -878,11 +896,11 @@ end_per_testcase(Case, Config) when
 end_per_testcase(Case, Config) when
     Case =:= lfm_open_failure_test;
     Case =:= lfm_create_and_open_failure_test;
-    Case =:= lfm_copy_failure_test;
+    Case =:= lfm_mv_failure_test;
     Case =:= lfm_open_multiple_times_failure_test;
     Case =:= lfm_open_failure_multiple_users_test;
     Case =:= lfm_open_and_create_open_failure_test;
-    Case =:= lfm_copy_failure_multiple_users_test
+    Case =:= lfm_mv_failure_multiple_users_test
 ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [storage_driver]),
@@ -911,6 +929,12 @@ end_per_testcase(Case, Config) when
 ->
     [W | _] = ?config(op_worker_nodes, Config),
     rpc:call(W, file_popularity_api, disable, [?SPACE_ID]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case = lfm_cp_dir, Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    % set default value of ls_batch_size env
+    test_utils:set_env(W, op_worker, ls_batch_size, 5000),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->

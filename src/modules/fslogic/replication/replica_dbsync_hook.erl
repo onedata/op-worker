@@ -312,14 +312,20 @@ maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize =/= NewSi
                 {true, FileCtx3} ->
                     {ok, FileCtx3};
                 {false, FileCtx3} ->
-                    {SDHandle, FileCtx4} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx3),
-                    case storage_driver:open(SDHandle, write) of
-                        {ok, Handle} ->
-                            ok = storage_driver:truncate(Handle, NewSize, OldSize);
-                        {error, ?ENOENT} ->
-                            ok
-                    end,
-                    {ok, FileCtx4}
+                    % Spawn file truncate on storage to prevent replica_synchronizer blocking.
+                    % Although spawning file truncate on storage can result in races,
+                    % similar races are possible truncating file via oneclient. Thus,
+                    % method of truncating file that does not block synchronizer is preferred.
+                    spawn(fun() ->
+                        {SDHandle, _FileCtx4} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx3),
+                        case storage_driver:open(SDHandle, write) of
+                            {ok, Handle} ->
+                                ok = storage_driver:truncate(Handle, NewSize, OldSize);
+                            {error, ?ENOENT} ->
+                                ok
+                        end
+                    end),
+                    {ok, FileCtx3}
             end
     end;
 maybe_truncate_file_on_storage(FileCtx, _OldSize, _NewSize) ->

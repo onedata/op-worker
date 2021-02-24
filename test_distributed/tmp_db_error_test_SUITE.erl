@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -100,13 +101,13 @@ db_error_test(Config) ->
 
 test_write_operations_on_db_error(Worker, SessId, ParentUuid) ->
     Name = generator:gen_name(),
-    ?assertEqual({error, ?EAGAIN}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, Name, 8#755)),
-    ?assertEqual({error, ?EAGAIN}, lfm_proxy:create(Worker, SessId, ParentUuid, Name, 8#755)),
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, Name, ?DEFAULT_DIR_PERMS)),
+    ?assertEqual({error, ?EAGAIN}, lfm_proxy:create(Worker, SessId, ParentUuid, Name, ?DEFAULT_FILE_PERMS)),
     Name.
 
 test_write_operations_after_db_error(Worker, SessId, ParentUuid, PreviouslyTestedName1, PreviouslyTestedName2) ->
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, PreviouslyTestedName1, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, ParentUuid, PreviouslyTestedName2, 8#755)).
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, ParentUuid, PreviouslyTestedName1, ?DEFAULT_DIR_PERMS)),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, ParentUuid, PreviouslyTestedName2, ?DEFAULT_FILE_PERMS)).
 
 test_read_operations_on_db_error(Worker, SessId, DirsAndFiles) ->
     file_ops_test_utils:test_read_operations_on_error(Worker, SessId, DirsAndFiles, ?EAGAIN).

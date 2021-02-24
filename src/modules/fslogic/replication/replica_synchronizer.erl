@@ -616,9 +616,11 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
 handle_call(?FLUSH_EVENTS, _From, State) ->
     {reply, ok, flush_events(State), ?DIE_AFTER};
 
-handle_call({delete_whole_file_replica, AllowedVV}, _From, State) ->
-    {Ans, State2} = delete_whole_file_replica_internal(AllowedVV, State),
-    {reply, Ans, State2, ?DIE_AFTER};
+handle_call({delete_whole_file_replica, AllowedVV}, From, State) ->
+    case delete_whole_file_replica_internal(AllowedVV, From, State) of
+        {helper_process_spawned, _Pid} -> {noreply, State, ?DIE_AFTER};
+        {error, _} = Error -> {reply, Error, State, ?DIE_AFTER}
+    end;
 
 handle_call({apply, Fun}, _From, State) ->
     Ans = Fun(),
@@ -769,9 +771,30 @@ handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = Retrie
             handle_info({FailedRef, complete, {error, restart_failed}}, State)
     end;
 
-handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, State) ->
+handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
+    ref_to_froms = RTFs
+} = State) ->
     ?debug("Transfer ~p cancelled", [Ref]),
-    {noreply, State, ?DIE_AFTER};
+
+    State2 = case maps:get(Ref, RTFs, undefined) of
+        undefined ->
+            % If there is no association then replication must have been cancelled
+            % by transfer job (all associations were already cleared)
+            State;
+        AffectedFroms ->
+            % If there is association then replication must have been cancelled
+            % by rtransfer due to exceeded quota. In that case associated
+            % replications should be also cancelled and registry/state cleared.
+            try
+                cancel_froms(AffectedFroms, State)
+            catch _:Reason ->
+                ?error_stacktrace("Unable to cancel transfers associated with ~p due to ~p", [
+                    Ref, Reason
+                ]),
+                State
+            end
+    end,
+    {noreply, State2, ?DIE_AFTER};
 
 handle_info({Ref, complete, ErrorStatus}, State) ->
     {noreply, handle_error(Ref, ErrorStatus, State), ?DIE_AFTER};
@@ -804,6 +827,11 @@ handle_info({check_and_terminate_slave, ReportTo}, #state{file_ctx = Ctx} = Stat
     end,
     ReportTo ! {slave_checked, self()},
     {stop, normal, State};
+
+handle_info({file_truncated, Ans, EmitEvents, RequestedBy}, State) ->
+    {FinalAns, State2} = finish_blocks_clearing(Ans, EmitEvents, State),
+    gen_server2:reply(RequestedBy, FinalAns),
+    {noreply, State2, ?DIE_AFTER};
 
 handle_info(Msg, State) ->
     ?log_bad_request(Msg),
@@ -1192,8 +1220,14 @@ is_sequential(_, _State) ->
 start_transfers(InitialBlocks, TransferId, State, Priority) ->
     LocationDocs = fslogic_cache:get_all_locations(),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, InitialBlocks),
-    FileGuid = State#state.file_guid,
+    TotalSize = lists:foldl(fun({_P, Blocks, _SD}, Acc) ->
+        fslogic_blocks:size(Blocks) + Acc
+    end, 0, ProvidersAndBlocks),
+
     SpaceId = State#state.space_id,
+    assert_smaller_than_local_support_size(TotalSize, SpaceId),
+
+    FileGuid = State#state.file_guid,
     DestStorageId = State#state.dest_storage_id,
     DestFileId = State#state.dest_file_id,
     lists:flatmap(
@@ -1654,9 +1688,9 @@ wait_for_slave_check(Pid) ->
 %% given replica is unique.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_whole_file_replica_internal(version_vector:version_vector(), #state{}) ->
-    {ok | {error, term()}, #state{}}.
-delete_whole_file_replica_internal(AllowedVV, #state{file_ctx = FileCtx} = State) ->
+-spec delete_whole_file_replica_internal(version_vector:version_vector(), from(), #state{}) ->
+    {helper_process_spawned, pid()} | {error, term()}.
+delete_whole_file_replica_internal(AllowedVV, RequestedBy, #state{file_ctx = FileCtx}) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     try
         LocalFileLocId = file_location:local_id(FileUuid),
@@ -1667,38 +1701,57 @@ delete_whole_file_replica_internal(AllowedVV, #state{file_ctx = FileCtx} = State
         CurrentLocalV = version_vector:get_version(LocalFileLocId, ProviderId, CurrentVV),
         case AllowedLocalV =:= CurrentLocalV of
             true ->
-                try_to_clear_blocks_and_truncate(LocalFileLocId, LocationDoc, State);
+                % Emmit events only when list of blocks is not empty
+                % (nothing changes from clients perspective if blocks list is empty)
+                EmitEvents = fslogic_location_cache:get_blocks(LocationDoc) =/= [],
+                fslogic_location_cache:clear_blocks(FileCtx, LocalFileLocId),
+                spawn_block_clearing(FileCtx, EmitEvents, RequestedBy);
             _ ->
-                {{error, file_modified_locally}, State}
+                {error, file_modified_locally}
         end
     catch
         Error:Reason ->
             ?error_stacktrace("Deletion of replica of file ~p failed due to ~p",
                 [FileUuid, {Error, Reason}]),
-            {{error, Reason}, State}
+            {error, Reason}
     end.
 
--spec try_to_clear_blocks_and_truncate(file_location:id(), file_location:doc(), #state{}) ->
-    {ok | {error, term()}, #state{}}.
-try_to_clear_blocks_and_truncate(LocalFileLocId, LocationDoc, #state{file_ctx = FileCtx} = State) ->
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    Blocks = fslogic_location_cache:get_blocks(LocationDoc),
-    fslogic_location_cache:clear_blocks(FileCtx, LocalFileLocId),
-    try
-        #fuse_response{status = #status{code = ?OK}} = truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
-        %todo VFS-4433 file_popularity should be updated after updates on file_location, not in truncate_req
-        State2 = flush_events(State),
-        case Blocks of
-            [] ->
-                {ok, State2};
-            _ ->
-                fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, false, []),
-                {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2}
-        end
-    catch
-        E:R ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            ?error_stacktrace("Unexpected error ~p:~p when truncating file ~p.", [E, R, FileUuid]),
-            fslogic_location_cache:set_blocks(LocationDoc, Blocks),
-            {{error, {E, R}}, State}
+-spec spawn_block_clearing(file_ctx:ctx(), boolean(), from()) -> {helper_process_spawned, pid()}.
+spawn_block_clearing(FileCtx, EmitEvents, RequestedBy) ->
+    Master = self(),
+    % Spawn file truncate on storage to prevent replica_synchronizer blocking.
+    % Although spawning file truncate on storage can result in races,
+    % similar races are possible truncating file via oneclient. Thus,
+    % method of truncating file that does not block synchronizer is preferred.
+    Pid = spawn_link(fun() ->
+        Ans = try
+            UserCtx = user_ctx:new(?ROOT_SESS_ID),
+            #fuse_response{status = #status{code = ?OK}} = truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
+            ok
+        catch
+            E:R ->
+                FileUuid = file_ctx:get_uuid_const(FileCtx),
+                ?error_stacktrace("Unexpected error ~p:~p when truncating file ~p.", [E, R, FileUuid]),
+                {error, {E, R}}
+        end,
+        Master ! {file_truncated, Ans, EmitEvents, RequestedBy}
+    end),
+    {helper_process_spawned, Pid}.
+
+-spec finish_blocks_clearing(ok | {error, term()}, boolean(), #state{}) -> {ok | {error, term()}, #state{}}.
+finish_blocks_clearing(ok = _Ans, true = _EmitEvents, #state{file_ctx = FileCtx} = State) ->
+    State2 = flush_events(State),
+    fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, false, []),
+    {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2};
+finish_blocks_clearing(Ans, _EmitEvents, State) ->
+    State2 = flush_events(State),
+    {Ans, State2}.
+
+
+-spec assert_smaller_than_local_support_size(non_neg_integer(), od_space:id()) -> ok.
+assert_smaller_than_local_support_size(TotalSize, SpaceId) ->
+    {ok, LocalSupportSize} = space_logic:get_support_size(SpaceId, oneprovider:get_id()),
+    case TotalSize > LocalSupportSize of
+        true -> throw(?ENOSPC);
+        false -> ok
     end.

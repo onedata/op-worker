@@ -93,7 +93,7 @@ report_next_batch(TraverseId, FileCtx, ChildrenDirs, ChildrenFiles, BatchLastFil
             {ok, Value#qos_status{
                 files_list = ChildrenFiles,
                 previous_batch_last_filename = LN,
-                current_batch_last_filename = BatchLastFilename,
+                current_batch_last_filename = utils:ensure_defined(BatchLastFilename, LN),
                 child_dirs_count = ChildDirsCount + length(ChildrenDirs)}
             }
         end),

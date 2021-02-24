@@ -170,10 +170,12 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -186,7 +188,8 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -199,7 +202,8 @@
                 ],
                 "providers": {
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -212,7 +216,8 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -225,7 +230,8 @@
                 ],
                 "providers": {
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -238,10 +244,12 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "nulldevice"
+                        "storage": "nulldevice",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "nulldevice"
+                        "storage": "nulldevice",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -254,10 +262,12 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "cephrados"
+                        "storage": "cephrados",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -270,10 +280,12 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "cephrados"
+                        "storage": "cephrados",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             },

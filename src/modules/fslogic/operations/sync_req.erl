@@ -14,11 +14,11 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("modules/auth/acl.hrl").
+-include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/transfer.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type block() :: undefined | fslogic_blocks:block().
@@ -173,15 +173,16 @@ schedule_file_replication(
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     data_constraints:assert_not_readonly_mode(UserCtx),
     file_ctx:assert_not_readonly_target_storage_const(FileCtx0, TargetProviderId),
+    FileCtx1 = file_ctx:assert_smaller_than_provider_support_size(FileCtx0, TargetProviderId),
 
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
+    FileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx1,
         [traverse_ancestors]
     ),
 
-    {FilePath, _} = file_ctx:get_logical_path(FileCtx1, UserCtx),
+    {FilePath, FileCtx3} = file_ctx:get_logical_path(FileCtx2, UserCtx),
     schedule_file_replication_insecure(
-        UserCtx, FileCtx1, FilePath, TargetProviderId,
+        UserCtx, FileCtx3, FilePath, TargetProviderId,
         Callback, ViewName, QueryViewParams
     ).
 

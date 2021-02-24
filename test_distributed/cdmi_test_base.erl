@@ -16,11 +16,12 @@
 -include("http/rest.hrl").
 -include("http/cdmi.hrl").
 -include("proto/common/credentials.hrl").
+-include("modules/auth/acl.hrl").
 -include("modules/fslogic/metadata.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/http/headers.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -65,7 +66,6 @@ user_1_token_header(Config) ->
 -define(CONTAINER_CONTENT_TYPE_HEADER, {?HDR_CONTENT_TYPE, <<"application/cdmi-container">>}).
 -define(OBJECT_CONTENT_TYPE_HEADER, {?HDR_CONTENT_TYPE, <<"application/cdmi-object">>}).
 
--define(DEFAULT_FILE_MODE, 8#664).
 -define(FILE_BEGINNING, 0).
 -define(INFINITY, 9999).
 
@@ -2077,7 +2077,7 @@ object_exists(Config, Path) ->
 create_file(Config, Path) ->
     [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    lfm_proxy:create(WorkerP1, SessionId, absolute_binary_path(Path), ?DEFAULT_FILE_MODE).
+    lfm_proxy:create(WorkerP1, SessionId, absolute_binary_path(Path)).
 
 open_file(Worker, Config, Path, OpenMode) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),

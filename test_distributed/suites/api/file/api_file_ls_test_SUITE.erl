@@ -69,7 +69,7 @@ get_dir_children_test(Config) ->
         end
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
@@ -147,7 +147,7 @@ get_shared_dir_children_test(Config) ->
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
     {ok, ShareDirObjectId} = file_id:guid_to_objectid(ShareDirGuid),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -276,7 +276,7 @@ get_file_children_test(Config) ->
     end,
 
     % Listing file result in returning this file info only - index/limit parameters are ignored.
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = #client_spec{
@@ -295,10 +295,13 @@ get_file_children_test(Config) ->
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(FileObjectId),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
-                        ?assertEqual(#{<<"children">> => [#{
-                            <<"id">> => FileObjectId,
-                            <<"name">> => FileName
-                        }]}, Response)
+                        ?assertEqual(#{
+                            <<"children">> => [#{
+                                <<"id">> => FileObjectId,
+                                <<"name">> => FileName
+                            }],
+                            <<"isLast">> => true
+                        }, Response)
                     end
                 },
                 #scenario_template{
@@ -328,7 +331,10 @@ get_file_children_test(Config) ->
                     type = gs,
                     prepare_args_fun = build_get_children_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
-                        ?assertEqual(#{<<"children">> => [FileGuid]}, Result)
+                        ?assertEqual(#{
+                            <<"children">> => [FileGuid],
+                            <<"isLast">> => true
+                        }, Result)
                     end
                 },
                 #scenario_template{
@@ -337,7 +343,8 @@ get_file_children_test(Config) ->
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = _Data}, {ok, Result}) ->
                         ?assertEqual(#{
-                            <<"children">> => [api_test_utils:file_details_to_gs_json(undefined, FileDetails)]
+                            <<"children">> => [api_test_utils:file_details_to_gs_json(undefined, FileDetails)],
+                            <<"isLast">> => true
                         }, Result)
                     end
                 }
@@ -396,7 +403,7 @@ get_shared_file_children_test(Config) ->
     },
 
     % Listing file result in returning this file info only - index/limit parameters are ignored.
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -406,10 +413,13 @@ get_shared_file_children_test(Config) ->
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(ShareFileObjectId),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
-                        ?assertEqual(#{<<"children">> => [#{
-                            <<"id">> => ShareFileObjectId,
-                            <<"name">> => FileName
-                        }]}, Response)
+                        ?assertEqual(#{
+                            <<"children">> => [#{
+                                <<"id">> => ShareFileObjectId,
+                                <<"name">> => FileName
+                            }],
+                            <<"isLast">> => true
+                        }, Response)
                     end
                 },
                 % Old endpoint returns "id" and "path" - for now get_path is forbidden
@@ -428,7 +438,10 @@ get_shared_file_children_test(Config) ->
                     type = gs,
                     prepare_args_fun = build_get_children_prepare_gs_args_fun(ShareFileGuid, public),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
-                        ?assertEqual(#{<<"children">> => [ShareFileGuid]}, Result)
+                        ?assertEqual(#{
+                            <<"children">> => [ShareFileGuid],
+                            <<"isLast">> => true
+                        }, Result)
                     end
                 },
                 #scenario_template{
@@ -437,7 +450,8 @@ get_shared_file_children_test(Config) ->
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(ShareFileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
                         ?assertEqual(#{
-                            <<"children">> => [api_test_utils:file_details_to_gs_json(ShareId, FileDetails1)]
+                            <<"children">> => [api_test_utils:file_details_to_gs_json(ShareId, FileDetails1)],
+                            <<"isLast">> => true
                         }, Result)
                     end
                 }
@@ -468,7 +482,7 @@ get_shared_file_children_test(Config) ->
     ])).
 
 
-get_user_root_dir_children_test(Config) ->
+get_user_root_dir_children_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P2Node, P1Node],
@@ -497,7 +511,7 @@ get_user_root_dir_children_test(Config) ->
 
     DataSpec = get_children_data_spec(),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = #client_spec{
@@ -587,7 +601,7 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
     }.
 
 
-get_dir_children_on_provider_not_supporting_space_test(Config) ->
+get_dir_children_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
 
@@ -605,7 +619,7 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
         ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Response)
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = [P2Node],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
@@ -764,20 +778,26 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
         {file_id:guid_to_share_guid(Guid, ShareId), Name, Path, Details}
     end, ExpFiles1),
 
+    IsLast = length(ExpFiles1) < Limit,
+
     ExpFiles3 = case Format of
         gs ->
-            #{<<"children">> => lists:map(fun({Guid, _Name, _Path, _Details}) ->
-                Guid
-            end, ExpFiles2)};
+            #{
+                <<"children">> => lists:map(fun({Guid, _Name, _Path, _Details}) -> Guid end, ExpFiles2),
+                <<"isLast">> => IsLast
+            };
 
         rest ->
-            #{<<"children">> => lists:map(fun({Guid, Name, _Path, _Details}) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                #{
-                    <<"id">> => ObjectId,
-                    <<"name">> => Name
-                }
-            end, ExpFiles2)};
+            #{
+                <<"children">> => lists:map(fun({Guid, Name, _Path, _Details}) ->
+                    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                    #{
+                        <<"id">> => ObjectId,
+                        <<"name">> => Name
+                    }
+                end, ExpFiles2),
+                <<"isLast">> => IsLast
+            };
 
         deprecated_rest ->
             lists:map(fun({Guid, _Name, Path, _Details}) ->
@@ -789,9 +809,12 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
             end, ExpFiles2);
 
         gs_with_details ->
-            #{<<"children">> => lists:map(fun({Guid, _Name, _Path, Details}) ->
-                api_test_utils:file_details_to_gs_json(ShareId, Details)
-            end, ExpFiles2)}
+            #{
+                <<"children">> => lists:map(fun({Guid, _Name, _Path, Details}) ->
+                    api_test_utils:file_details_to_gs_json(ShareId, Details)
+                end, ExpFiles2),
+                <<"isLast">> => IsLast
+            }
     end,
 
     ?assertEqual(ExpFiles3, ListedChildren).
@@ -803,8 +826,6 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
 
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
@@ -812,8 +833,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 
 init_per_testcase(_Case, Config) ->
