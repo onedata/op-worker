@@ -13,6 +13,7 @@
 -define(LFM_PERMISSIONS_TEST_HRL, 1).
 
 -include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/security.hrl").
 
 -define(ALL_PERMS, [
     ?read_object,

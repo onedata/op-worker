@@ -15,6 +15,7 @@
 
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/security.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -125,31 +126,61 @@ check_normal_user_permission_test_() ->
         acemask = ?read_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) ->
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+            pointer = 0,
+            granted = ?no_flags_mask,
+            denied = ?no_flags_mask
+        })
+    end,
 
     [
         ?_assertMatch(
-            {allowed, _, {1, ?read_mask, 0}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 1,
+                granted = ?read_mask,
+                denied = ?no_flags_mask
+            }},
             F([Ace1, Ace2], User1, ?read_mask)
         ),
         ?_assertMatch(
-            {allowed, _, {2, ?read_mask bor ?write_mask, 0}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?read_mask bor ?write_mask,
+                denied = ?no_flags_mask
+            }},
             F([Ace1, Ace2], User1, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, {3, ?read_mask bor ?write_mask, bnot (?read_mask bor ?write_mask)}},
+            {denied, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?read_mask bor ?write_mask,
+                denied = bnot (?read_mask bor ?write_mask)
+            }},
             F([Ace1, Ace2], User1, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, {3, ?read_mask bor ?write_mask, bnot (?read_mask bor ?write_mask)}},
+            {denied, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?read_mask bor ?write_mask,
+                denied = bnot (?read_mask bor ?write_mask)
+            }},
             F([Ace1, Ace2], User1, ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {allowed, _, {2, ?read_mask, 0}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?read_mask,
+                denied = 0
+            }},
             F([Ace3, Ace1, Ace2], User1, ?read_mask)
         ),
         ?_assertMatch(
-            {denied, _, {4, 0, bnot 0}},
+            {denied, _, #user_perms_matrix{
+                pointer = 4,
+                granted = ?no_flags_mask,
+                denied = bnot ?no_flags_mask
+            }},
             F([Ace2, Ace4, Ace1], User2, ?read_mask bor ?write_mask)
         )
     ].
@@ -193,39 +224,77 @@ check_normal_group_permission_test_() ->
         acemask = ?read_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) ->
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+            pointer = 0,
+            granted = ?no_flags_mask,
+            denied = ?no_flags_mask
+        })
+    end,
 
     [
         ?_assertMatch(
-            {allowed, _, {1, ?read_mask, 0}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 1,
+                granted = ?read_mask,
+                denied = ?no_flags_mask
+            }},
             F([Ace1, Ace3, Ace2], User1, ?read_mask)
         ),
         ?_assertMatch(
-            {allowed, _, {3, ?read_mask bor ?write_mask, 0}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?read_mask bor ?write_mask,
+                denied = ?no_flags_mask
+            }},
             F([Ace1, Ace3, Ace2], User1, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, {4, ?read_mask bor ?write_mask, bnot (?read_mask bor ?write_mask)}},
+            {denied, _, #user_perms_matrix{
+                pointer = 4,
+                granted = ?read_mask bor ?write_mask,
+                denied = bnot (?read_mask bor ?write_mask)
+            }},
             F([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, {4, ?read_mask bor ?write_mask, bnot (?read_mask bor ?write_mask)}},
+            {denied, _, #user_perms_matrix{
+                pointer = 4,
+                granted = ?read_mask bor ?write_mask,
+                denied = bnot (?read_mask bor ?write_mask)
+            }},
             F([Ace1, Ace2, Ace3], User1, ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, {2, ?read_mask, bnot ?read_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?read_mask,
+                denied = bnot ?read_mask
+            }},
             F([Ace1], User1, ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, {2, ?write_mask, ?read_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?write_mask,
+                denied = ?read_mask
+            }},
             F([Ace2, Ace4], User1, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {allowed, _, {3, ?write_mask, ?read_mask}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?write_mask,
+                denied = ?read_mask
+            }},
             F([Ace4, Ace1, Ace2], User1, ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, {3, 0, bnot 0}},
+            {denied, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?no_flags_mask,
+                denied = bnot ?no_flags_mask
+            }},
             F([Ace1, Ace2], User2, ?read_mask bor ?write_mask)
         )
     ].
@@ -253,23 +322,45 @@ check_owner_principal_permission_test_() ->
         acemask = ?write_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) ->
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+            pointer = 0,
+            granted = ?no_flags_mask,
+            denied = ?no_flags_mask
+        })
+    end,
 
     [
         ?_assertMatch(
-            {allowed, _, {1, ?read_mask, 0}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 1,
+                granted = ?read_mask,
+                denied = ?no_flags_mask
+            }},
             F([Ace1, Ace2], User, ?read_mask)
         ),
         ?_assertMatch(
-            {allowed, _, {2, ?read_mask bor ?write_mask, 0}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?read_mask bor ?write_mask,
+                denied = ?no_flags_mask
+            }},
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, {3, ?read_mask bor ?write_mask, bnot (?read_mask bor ?write_mask)}},
+            {denied, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?read_mask bor ?write_mask,
+                denied = bnot (?read_mask bor ?write_mask)
+            }},
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, {3, ?read_mask bor ?write_mask, bnot (?read_mask bor ?write_mask)}},
+            {denied, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?read_mask bor ?write_mask,
+                denied = bnot (?read_mask bor ?write_mask)
+            }},
             F([Ace1, Ace2], User, ?traverse_container_mask)
         )
     ].
@@ -297,23 +388,45 @@ check_group_principal_permission_test_() ->
         acemask = ?write_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) ->
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+            pointer = 0,
+            granted = ?no_flags_mask,
+            denied = ?no_flags_mask
+        })
+    end,
 
     [
         ?_assertMatch(
-            {allowed, _, {1, ?read_mask, 0}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 1,
+                granted = ?read_mask,
+                denied = ?no_flags_mask
+            }},
             F([Ace1, Ace2], User, ?read_mask)
         ),
         ?_assertMatch(
-            {denied, _, {2, ?read_mask, ?write_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?read_mask,
+                denied = ?write_mask
+            }},
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, {2, ?read_mask, ?write_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?read_mask,
+                denied = ?write_mask
+            }},
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, {3, ?read_mask, bnot ?read_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?read_mask,
+                denied = bnot ?read_mask
+            }},
             F([Ace1, Ace2], User, ?traverse_container_mask)
         )
     ].
@@ -342,23 +455,45 @@ check_everyone_principal_permission_test_() ->
         acemask = ?write_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) ->
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+            pointer = 0,
+            granted = ?no_flags_mask,
+            denied = ?no_flags_mask
+        })
+    end,
 
     [
         ?_assertMatch(
-            {allowed, _, {1, ?read_mask, 0}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 1,
+                granted = ?read_mask,
+                denied = ?no_flags_mask
+            }},
             F([Ace1, Ace2], User, ?read_mask)
         ),
         ?_assertMatch(
-            {denied, _, {2, ?read_mask, ?write_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?read_mask,
+                denied = ?write_mask
+            }},
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, {2, ?read_mask, ?write_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?read_mask,
+                denied = ?write_mask
+            }},
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, {3, ?read_mask, bnot ?read_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?read_mask,
+                denied = bnot ?read_mask
+            }},
             F([Ace1, Ace2], User, ?traverse_container_mask)
         )
     ].
@@ -385,27 +520,53 @@ check_anonymous_principal_permission_test_() ->
         acemask = ?write_mask
     },
 
-    F = fun(Acl, User, Perms) -> acl:check_acl(Acl, User, FileCtx, Perms, {0, 0, 0}) end,
+    F = fun(Acl, User, Perms) ->
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+            pointer = 0,
+            granted = ?no_flags_mask,
+            denied = ?no_flags_mask
+        })
+    end,
 
     [
         ?_assertMatch(
-            {allowed, _, {1, ?read_mask, 0}},
+            {allowed, _, #user_perms_matrix{
+                pointer = 1,
+                granted = ?read_mask,
+                denied = ?no_flags_mask
+            }},
             F([Ace1, Ace2], Guest, ?read_mask)
         ),
         ?_assertMatch(
-            {denied, _, {3, 0, bnot 0}},
+            {denied, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?no_flags_mask,
+                denied = bnot ?no_flags_mask
+            }},
             F([Ace1, Ace2], User, ?read_mask)
         ),
         ?_assertMatch(
-            {denied, _, {2, ?read_mask, ?write_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?read_mask,
+                denied = ?write_mask
+            }},
             F([Ace1, Ace2], Guest, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, {2, ?read_mask, ?write_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 2,
+                granted = ?read_mask,
+                denied = ?write_mask
+            }},
             F([Ace1, Ace2], Guest, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, {3, ?read_mask, bnot ?read_mask}},
+            {denied, _, #user_perms_matrix{
+                pointer = 3,
+                granted = ?read_mask,
+                denied = bnot ?read_mask
+            }},
             F([Ace1, Ace2], Guest, ?traverse_container_mask)
         )
     ].

@@ -109,8 +109,6 @@ is_available_in_readonly_mode(Requirement) when
 ->
     true;
 is_available_in_readonly_mode(?OR(AccessType1, AccessType2)) ->
-    % Both access types must be available in readonly mode for entire operation
-    % to be also available
     is_available_in_readonly_mode(AccessType1) andalso is_available_in_readonly_mode(AccessType2).
 
 
