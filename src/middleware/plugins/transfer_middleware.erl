@@ -284,7 +284,7 @@ validate(#op_req{operation = delete, gri = #gri{aspect = cancel}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
-create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
 
     ReplicatingProviderId = maps:get(<<"replicatingProviderId">>, Data, undefined),
@@ -308,7 +308,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance}}) ->
                 Callback
             ))
     end,
-    {ok, value, TransferId};
+    {ok, #document{value = Transfer}} = transfer:get(TransferId),
+    {ok, resource, {GRI#gri{id = TransferId}, Transfer}};
 
 create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}}) ->
     case transfer:rerun_ended(UserId, TransferId) of
