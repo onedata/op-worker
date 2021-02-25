@@ -5,7 +5,6 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @todo simplify rename logic
 %%% @doc
 %%% Functions responsible for adding and removing changes from file_location
 %%% documents.

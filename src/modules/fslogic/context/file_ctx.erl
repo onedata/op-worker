@@ -548,9 +548,7 @@ get_new_storage_file_id(FileCtx) ->
         ?FLAT_STORAGE_PATH ->
             FileUuid = file_ctx:get_uuid_const(FileCtx2),
             StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
-            % TODO - do not get_canonical_path (fix acceptance tests before)
-            {_, FileCtx3} = get_canonical_path(FileCtx2),
-            {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}};
+            {StorageFileId, FileCtx2};
         ?CANONICAL_STORAGE_PATH ->
             {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
             StorageId = storage:get_id(Storage),
