@@ -134,12 +134,12 @@ create_file_transfer(Config, Type) ->
             setup_fun = SetupFun,
             verify_fun = VerifyFun,
             scenario_templates = [
-%%                #scenario_template{
-%%                    name = str_utils:format("Transfer (~p) view using /transfers rest endpoint", [Type]),
-%%                    type = rest,
-%%                    prepare_args_fun = build_create_transfer_prepare_rest_args_fun(MemRef),
-%%                    validate_result_fun = build_create_transfer_validate_rest_call_result_fun(MemRef)
-%%                },
+                #scenario_template{
+                    name = str_utils:format("Transfer (~p) view using /transfers rest endpoint", [Type]),
+                    type = rest,
+                    prepare_args_fun = build_create_transfer_prepare_rest_args_fun(MemRef),
+                    validate_result_fun = build_create_transfer_validate_rest_call_result_fun(MemRef)
+                },
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) file using gs transfer api", [Type]),
                     type = gs,
@@ -437,7 +437,8 @@ build_create_transfer_validate_rest_call_result_fun(MemRef) ->
 %% @private
 build_create_transfer_validate_gs_call_result_fun(MemRef) ->
     fun(TestCtx, Result) ->
-        {ok, #{<<"transferId">> := TransferId}} = ?assertMatch({ok, _}, Result),
+        {ok, #{<<"gri">> := GRI}} = ?assertMatch({ok, _}, Result),
+        #gri{id = TransferId} = gri:deserialize(GRI),
         build_create_transfer_validate_call_result(MemRef, TransferId, TestCtx)
     end.
 

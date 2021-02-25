@@ -103,7 +103,11 @@ data_spec(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}
                     {true, view_utils:sanitize_query_options(
                         % TODO VFS-7388 - query view params sanitization was written for query
                         % string and not body so it expects all values to be binaries
-                        maps:map(fun(_Key, Value) -> json_utils:encode(Value) end, QueryViewParams)
+                        maps:map(fun
+                            (_Key, true) -> true;
+                            (_Key, false) -> false;
+                            (_Key, Value) -> json_utils:encode(Value)
+                        end, QueryViewParams)
                     )}
                 end}
             },

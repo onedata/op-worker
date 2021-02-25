@@ -174,20 +174,19 @@ build_get_transfer_status_validate_rest_call_result_fun(TransferType, DataSource
         <<"userId">>, <<"rerunId">>, <<"spaceId">>, <<"callback">>,
 
         <<"replicatingProviderId">>, <<"evictingProviderId">>,
-        <<"transferStatus">>, <<"replicationStatus">>, <<"replicaEvictionStatus">>, <<"evictionStatus">>,
+        <<"transferStatus">>, <<"replicationStatus">>, <<"evictionStatus">>,
 
         <<"effectiveJobStatus">>, <<"effectiveJobTransferId">>,
 
         <<"filesToProcess">>, <<"filesProcessed">>,
-        <<"filesReplicated">>, <<"bytesReplicated">>,
-        <<"fileReplicasEvicted">>, <<"filesEvicted">>,
-        <<"failedFiles">>, <<"filesFailed">>,
+        <<"filesReplicated">>, <<"bytesReplicated">>, <<"filesEvicted">>,
+        <<"filesFailed">>,
 
         <<"scheduleTime">>, <<"startTime">>, <<"finishTime">>,
         <<"lastUpdate">>, <<"minHist">>, <<"hrHist">>, <<"dyHist">>, <<"mthHist">>
     ],
     AllFields = case DataSourceType of
-        file -> [<<"fileId">>, <<"path">>, <<"filePath">> | AlwaysPresentFields];
+        file -> [<<"fileId">>, <<"filePath">> | AlwaysPresentFields];
         view -> [<<"viewName">>, <<"queryViewParams">> | AlwaysPresentFields]
     end,
     AllFieldsSorted = lists:sort(AllFields),
@@ -231,7 +230,6 @@ assert_proper_constant_fields_in_get_status_rest_response(TransferType, DataSour
         file ->
             #{
                 <<"fileId">> => maps:get(root_file_cdmi_id, Env),
-                <<"path">> => maps:get(root_file_path, Env),
                 <<"filePath">> => maps:get(root_file_path, Env)
             };
         view ->
@@ -249,7 +247,6 @@ assert_proper_status_in_get_status_rest_response(ExpState, Env, #{
     <<"transferStatus">> := TransferStatus,
     <<"effectiveJobStatus">> := EffJobStatus,
     <<"replicationStatus">> := ReplicationStatus,
-    <<"replicaEvictionStatus">> := EvictionStatus,
     <<"evictionStatus">> := EvictionStatus
 }) ->
     #{
@@ -284,9 +281,7 @@ assert_proper_file_stats_in_get_status_rest_response(ExpState, Env, #{
     <<"filesProcessed">> := FilesProcessed,
     <<"filesReplicated">> := FilesReplicated,
     <<"bytesReplicated">> := BytesReplicated,
-    <<"fileReplicasEvicted">> := FilesEvicted,
     <<"filesEvicted">> := FilesEvicted,
-    <<"failedFiles">> := FailedFiles,
     <<"filesFailed">> := FailedFiles
 }) ->
     #{
@@ -391,6 +386,11 @@ build_get_transfer_status_validate_gs_call_result_fun(DataSourceType, ExpState, 
         <<"revision">> => 1,
 
         <<"userId">> => UserId,
+        <<"type">> => case {ReplicatingProvider, EvictingProvider} of
+            {_, undefined} -> <<"replication">>;
+            {undefined, _} -> <<"eviction">>;
+            {_, _} -> <<"migration">>
+        end,
         <<"replicatingProvider">> => case ReplicatingProvider of
             undefined -> null;
             _ -> ?PROVIDER_GRI_ID(ReplicatingProvider)
