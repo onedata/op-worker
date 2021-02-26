@@ -42,7 +42,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
--export([run_tests/2]).
+-export([run_tests/1]).
 
 -type ct_config() :: proplists:proplist().
 
@@ -154,12 +154,12 @@
 %%%===================================================================
 
 
--spec run_tests(ct_config(), [scenario_spec() | suite_spec()]) ->
+-spec run_tests([scenario_spec() | suite_spec()]) ->
     HasAllTestsPassed :: boolean().
-run_tests(Config, SpecTemplates) ->
+run_tests(SpecTemplates) ->
     lists:foldl(fun(SpecTemplate, AllPreviousTestsPassed) ->
         AllPreviousTestsPassed and try
-            run_suite(Config, prepare_suite_spec(Config, SpecTemplate))
+            run_suite(prepare_suite_spec(SpecTemplate))
         catch
             throw:fail ->
                 false;
@@ -178,20 +178,20 @@ run_tests(Config, SpecTemplates) ->
 
 
 %% @private
--spec run_suite(ct_config(), suite_spec()) -> HasAllTestsPassed :: boolean().
-run_suite(Config, SuiteSpec) ->
-    run_invalid_clients_test_cases(Config, unauthorized, SuiteSpec)
-    and run_invalid_clients_test_cases(Config, forbidden_not_in_space, SuiteSpec)
-    and run_invalid_clients_test_cases(Config, forbidden_in_space, SuiteSpec)
-    and run_malformed_data_test_cases(Config, SuiteSpec)
-    and run_missing_required_data_test_cases(Config, SuiteSpec)
-    and run_expected_success_test_cases(Config, SuiteSpec).
+-spec run_suite(suite_spec()) -> HasAllTestsPassed :: boolean().
+run_suite(SuiteSpec) ->
+    run_invalid_clients_test_cases(unauthorized, SuiteSpec)
+    and run_invalid_clients_test_cases(forbidden_not_in_space, SuiteSpec)
+    and run_invalid_clients_test_cases(forbidden_in_space, SuiteSpec)
+    and run_malformed_data_test_cases(SuiteSpec)
+    and run_missing_required_data_test_cases(SuiteSpec)
+    and run_expected_success_test_cases(SuiteSpec).
 
 
 %% @private
--spec run_invalid_clients_test_cases(ct_config(), invalid_client_type(), suite_spec()) ->
+-spec run_invalid_clients_test_cases(invalid_client_type(), suite_spec()) ->
     HasAllTestsPassed :: boolean().
-run_invalid_clients_test_cases(Config, InvalidClientsType, #suite_spec{
+run_invalid_clients_test_cases(InvalidClientsType, #suite_spec{
     target_nodes = TargetNodes,
     client_spec = ClientSpec,
 
@@ -210,7 +210,7 @@ run_invalid_clients_test_cases(Config, InvalidClientsType, #suite_spec{
             ScenarioType, InvalidClientsType, ClientWithError
         ),
         run_exp_error_testcase(
-            TargetNode, Client, DataSet, Error, VerifyFun, ScenarioTemplate, Config
+            TargetNode, Client, DataSet, Error, VerifyFun, ScenarioTemplate
         )
     end,
 
@@ -277,8 +277,8 @@ extract_client(Client)               -> Client.
 
 
 %% @private
--spec run_malformed_data_test_cases(ct_config(), suite_spec()) -> HasAllTestsPassed :: boolean().
-run_malformed_data_test_cases(Config, #suite_spec{
+-spec run_malformed_data_test_cases(suite_spec()) -> HasAllTestsPassed :: boolean().
+run_malformed_data_test_cases(#suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{correct = CorrectClients},
 
@@ -309,7 +309,7 @@ run_malformed_data_test_cases(Config, #suite_spec{
                     run_exp_error_testcase(
                         TargetNode, Client, DataSet,
                         get_expected_malformed_data_error(Error, ScenarioType, TestCaseCtx),
-                        VerifyFun, ScenarioTemplate, Config
+                        VerifyFun, ScenarioTemplate
                     )
             end
     end,
@@ -371,16 +371,16 @@ get_expected_malformed_data_error({_ScenarioType, {error_fun, ErrorFun}}, _, Tes
 
 
 %% @private
--spec run_missing_required_data_test_cases(ct_config(), suite_spec()) ->
+-spec run_missing_required_data_test_cases(suite_spec()) ->
     HasAllTestsPassed :: boolean().
-run_missing_required_data_test_cases(_Config, #suite_spec{data_spec = undefined}) ->
+run_missing_required_data_test_cases(#suite_spec{data_spec = undefined}) ->
     true;
-run_missing_required_data_test_cases(_Config, #suite_spec{data_spec = #data_spec{
+run_missing_required_data_test_cases(#suite_spec{data_spec = #data_spec{
     required = [],
     at_least_one = []
 }}) ->
     true;
-run_missing_required_data_test_cases(Config, #suite_spec{
+run_missing_required_data_test_cases(#suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{correct = CorrectClients},
 
@@ -420,7 +420,7 @@ run_missing_required_data_test_cases(Config, #suite_spec{
         run_exp_error_testcase(
             TargetNode, Client, DataSet,
             get_scenario_specific_error_for_missing_data(ScenarioType, MissingParamError),
-            VerifyFun, ScenarioTemplate, Config
+            VerifyFun, ScenarioTemplate
         )
     end,
 
@@ -453,8 +453,8 @@ get_scenario_specific_error_for_missing_data(_ScenarioType, Error) ->
 
 
 %% @private
--spec run_expected_success_test_cases(ct_config(), suite_spec()) -> HasAllTestsPassed :: boolean().
-run_expected_success_test_cases(Config, #suite_spec{
+-spec run_expected_success_test_cases(suite_spec()) -> HasAllTestsPassed :: boolean().
+run_expected_success_test_cases(#suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{correct = CorrectClients},
 
@@ -490,14 +490,14 @@ run_expected_success_test_cases(Config, #suite_spec{
 
             SetupFun(),
             TestCasePassed = run_exp_success_testcase(
-                TargetNode, Client, DataSet, VerifyFun, Scenario, Config
+                TargetNode, Client, DataSet, VerifyFun, Scenario
             ),
             TeardownFun(),
 
             InnerAcc and TestCasePassed
         end, true, ScenarioPerDataSet)
     end, true, CorrectClients);
-run_expected_success_test_cases(Config, #suite_spec{
+run_expected_success_test_cases(#suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{correct = CorrectClients},
 
@@ -513,7 +513,7 @@ run_expected_success_test_cases(Config, #suite_spec{
     TestCaseFun = fun(TargetNode, Client, DataSet, ScenarioTemplate) ->
         SetupFun(),
         TestCasePassed = run_exp_success_testcase(
-            TargetNode, Client, DataSet, VerifyFun, ScenarioTemplate, Config
+            TargetNode, Client, DataSet, VerifyFun, ScenarioTemplate
         ),
         TeardownFun(),
 
@@ -555,12 +555,12 @@ run_testcases(ScenarioTemplates, TargetNodes, Clients, DataSets, TestCaseFun) ->
 
 %% @private
 -spec run_exp_error_testcase(node(), aai:auth(), undefined | map(), errors:error(), verify_fun(),
-    scenario_template(), ct_config()) -> TestCasePassed :: boolean().
+    scenario_template()) -> TestCasePassed :: boolean().
 run_exp_error_testcase(TargetNode, Client, DataSet, ScenarioError, VerifyFun, #scenario_template{
     name = ScenarioName,
     type = ScenarioType,
     prepare_args_fun = PrepareArgsFun
-}, Config) ->
+}) ->
     ExpError = case is_client_supported_by_node(Client, TargetNode) of
         true -> ScenarioError;
         false -> ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED)
@@ -571,33 +571,33 @@ run_exp_error_testcase(TargetNode, Client, DataSet, ScenarioError, VerifyFun, #s
         skip ->
             true;
         Args ->
-            RequestResult = make_request(Config, TargetNode, Client, Args),
+            RequestResult = make_request(TargetNode, Client, Args),
             try
                 validate_error_result(ScenarioType, ExpError, RequestResult),
                 VerifyFun(expected_failure, TestCaseCtx),
                 true
             catch T:R ->
-                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R, Config),
+                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R),
                 false
             end
     end.
 
 
 %% @private
--spec run_exp_success_testcase(node(), aai:auth(), undefined | map(), verify_fun(),
-    scenario_template(), ct_config()) -> TestCasePassed :: boolean().
+-spec run_exp_success_testcase(node(), aai:auth(), undefined | map(), verify_fun(), scenario_template()) ->
+    TestCasePassed :: boolean().
 run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_template{
     name = ScenarioName,
     type = ScenarioType,
     prepare_args_fun = PrepareArgsFun,
     validate_result_fun = ValidateResultFun
-}, Config) ->
+}) ->
     TestCaseCtx = build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet),
     case PrepareArgsFun(TestCaseCtx) of
         skip ->
             true;
         Args ->
-            Result = make_request(Config, TargetNode, Client, Args),
+            Result = make_request(TargetNode, Client, Args),
             try
                 case is_client_supported_by_node(Client, TargetNode) of
                     true ->
@@ -611,7 +611,7 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_templ
                 end,
                 true
             catch T:R ->
-                log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R, Config),
+                log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R),
                 false
             end
     end.
@@ -650,8 +650,7 @@ validate_error_result(Type, ExpError, Result) when
     Expected :: term(),
     Got :: term(),
     ErrType :: error | exit | throw,
-    ErrReason :: term(),
-    ct_config()
+    ErrReason :: term()
 ) ->
     ok.
 log_failure(
@@ -661,8 +660,7 @@ log_failure(
     Expected,
     Got,
     ErrType,
-    ErrReason,
-    Config
+    ErrReason
 ) ->
     ct:pal("~s test case failed:~n"
     "Node: ~p~n"
@@ -778,10 +776,15 @@ generate_optional_data_sets(#data_spec{optional = Optional} = DataSpec) ->
     (data_spec()) -> [{Data :: map(), InvalidParam :: binary(), ExpError :: errors:error()}].
 generate_bad_data_sets(undefined) ->
     [?NO_DATA];
-generate_bad_data_sets(#data_spec{required = Required, bad_values = BadValues} = DataSpec) ->
+generate_bad_data_sets(#data_spec{
+    required = Required,
+    at_least_one = AtLeastOne,
+    optional = Optional,
+    bad_values = BadValues
+} = DataSpec) ->
     CorrectDataSet = lists:foldl(fun(Param, Acc) ->
         Acc#{Param => lists_utils:random_element(get_correct_values(Param, DataSpec))}
-    end, #{}, Required),
+    end, #{}, Required ++ AtLeastOne ++ Optional),
 
     lists:map(fun({Param, InvalidValue, ExpError}) ->
         Data = CorrectDataSet#{Param => InvalidValue},
@@ -806,51 +809,50 @@ get_correct_values(Key, #data_spec{correct_values = CorrectValues}) ->
 
 
 %% @private
--spec prepare_suite_spec(ct_config(), scenario_spec() | suite_spec()) -> suite_spec().
-prepare_suite_spec(Config, #suite_spec{client_spec = ClientSpecTemplate} = SuiteSpec) ->
+-spec prepare_suite_spec(scenario_spec() | suite_spec()) -> suite_spec().
+prepare_suite_spec(#suite_spec{client_spec = ClientSpecTemplate} = SuiteSpec) ->
     SuiteSpec#suite_spec{
-        client_spec = prepare_client_spec(Config, ClientSpecTemplate)
+        client_spec = prepare_client_spec(ClientSpecTemplate)
     };
-prepare_suite_spec(Config, #scenario_spec{} = ScenarioSpec) ->
-    prepare_suite_spec(Config, scenario_spec_to_suite_spec(ScenarioSpec)).
+prepare_suite_spec(#scenario_spec{} = ScenarioSpec) ->
+    prepare_suite_spec(scenario_spec_to_suite_spec(ScenarioSpec)).
 
 
 %% @private
--spec prepare_client_spec(ct_config(), client_spec()) -> client_spec().
-prepare_client_spec(Config, #client_spec{
+-spec prepare_client_spec(client_spec()) -> client_spec().
+prepare_client_spec(#client_spec{
     correct = CorrectClients,
     unauthorized = UnauthorizedClient,
     forbidden_not_in_space = ForbiddenClientsNotInSpace,
     forbidden_in_space = ForbiddenClientsInSpace
 }) ->
     #client_spec{
-        correct = substitute_client_placeholders(CorrectClients, Config),
-        unauthorized = substitute_client_placeholders(UnauthorizedClient, Config),
-        forbidden_not_in_space = substitute_client_placeholders(ForbiddenClientsNotInSpace, Config),
-        forbidden_in_space = substitute_client_placeholders(ForbiddenClientsInSpace, Config)
+        correct = substitute_client_placeholders(CorrectClients),
+        unauthorized = substitute_client_placeholders(UnauthorizedClient),
+        forbidden_not_in_space = substitute_client_placeholders(ForbiddenClientsNotInSpace),
+        forbidden_in_space = substitute_client_placeholders(ForbiddenClientsInSpace)
     }.
 
 
 %% @private
 -spec substitute_client_placeholders(
-    [aai:auth() | client_placeholder() | {aai:auth() | client_placeholder(), errors:error()}],
-    ct_config()
+    [aai:auth() | client_placeholder() | {aai:auth() | client_placeholder(), errors:error()}]
 ) ->
     [aai:auth() | {aai:auth(), errors:error()}].
-substitute_client_placeholders(ClientsAndPlaceholders, Config) ->
+substitute_client_placeholders(ClientsAndPlaceholders) ->
     lists:map(fun
         ({ClientOrPlaceholder, {error, _} = Error}) ->
-            {substitute_client_placeholder(ClientOrPlaceholder, Config), Error};
+            {substitute_client_placeholder(ClientOrPlaceholder), Error};
         (ClientOrPlaceholder) ->
-            substitute_client_placeholder(ClientOrPlaceholder, Config)
+            substitute_client_placeholder(ClientOrPlaceholder)
     end, ClientsAndPlaceholders).
 
 
 %% @private
--spec substitute_client_placeholder(aai:auth() | client_placeholder(), ct_config()) -> aai:auth().
-substitute_client_placeholder(#auth{} = AaiClient, _Config) ->
+-spec substitute_client_placeholder(aai:auth() | client_placeholder()) -> aai:auth().
+substitute_client_placeholder(#auth{} = AaiClient) ->
     AaiClient;
-substitute_client_placeholder(Placeholder, Config) ->
+substitute_client_placeholder(Placeholder) ->
     placeholder_to_client(Placeholder).
 
 
@@ -931,20 +933,20 @@ is_client_supported_by_node(?USER(UserId), Node) ->
 
 
 %% @private
--spec make_request(ct_config(), node(), aai:auth(), rest_args() | gs_args()) ->
+-spec make_request(node(), aai:auth(), rest_args() | gs_args()) ->
     {ok, GsCallResult :: map()} |
     {ok, RespCode :: non_neg_integer(), RespHeaders :: map(), RespBody :: binary() | map()} |
     {error, term()}.
-make_request(Config, Node, Client, #rest_args{} = Args) ->
-    make_rest_request(Config, Node, Client, Args);
-make_request(Config, Node, Client, #gs_args{} = Args) ->
-    make_gs_request(Config, Node, Client, Args).
+make_request(Node, Client, #rest_args{} = Args) ->
+    make_rest_request(Node, Client, Args);
+make_request(Node, Client, #gs_args{} = Args) ->
+    make_gs_request(Node, Client, Args).
 
 
 %% @private
--spec make_gs_request(ct_config(), node(), aai:auth(), gs_args()) ->
+-spec make_gs_request(node(), aai:auth(), gs_args()) ->
     {ok, Result :: map()} | {error, term()}.
-make_gs_request(Config, Node, Client, #gs_args{
+make_gs_request(Node, Client, #gs_args{
     operation = Operation,
     gri = GRI,
     auth_hint = AuthHint,
@@ -1001,9 +1003,9 @@ gs_endpoint(Node) ->
 
 
 %% @private
--spec make_rest_request(ct_config(), node(), aai:auth(), rest_args()) ->
+-spec make_rest_request(node(), aai:auth(), rest_args()) ->
     rest_response() | {error, term()}.
-make_rest_request(Config, Node, Client, #rest_args{
+make_rest_request(Node, Client, #rest_args{
     method = Method,
     path = Path,
     headers = Headers,

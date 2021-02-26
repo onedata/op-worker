@@ -1746,7 +1746,7 @@ proxy_session_token_update_test_base(Config0, {SyncNodes, ProxyNodes, ProxyNodes
 
     SessionId = GetSessIdFun(P2),   % proxy session on P1 should have the same SessionId as session on P2
 
-    OriginalAccessToken = initializer:create_access_token(User),
+    OriginalAccessToken = ?config({access_token, User}, Config),
     OriginalClientTokens = #client_tokens{access_token = OriginalAccessToken, consumer_token = undefined},
 
     NewAccessToken = tokens:confine(OriginalAccessToken, #cv_data_readonly{}),

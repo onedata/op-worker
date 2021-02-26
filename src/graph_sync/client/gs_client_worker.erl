@@ -662,7 +662,8 @@ coalesce_cache(ConnRef, #gri{type = Type, id = Id, scope = Scope} = GRI, Doc = #
                     }, ?GS_REQUEST_TIMEOUT)
                 end),
                 ?debug("Cached ~s (rev. ~B)", [gri:serialize(GRI), Rev]),
-                {ok, put_cache_state(Record, #{
+                NewRecord = gs_client_translator:overwrite_cached_record(GRI, CachedRecord, Record),
+                {ok, put_cache_state(NewRecord, #{
                     scope => Scope, connection_ref => ConnRef, revision => Rev
                 })};
 
@@ -670,7 +671,8 @@ coalesce_cache(ConnRef, #gri{type = Type, id = Id, scope = Scope} = GRI, Doc = #
                 % A doc arrived that has a greater revision, overwrite the
                 % cache, no matter the scopes
                 ?debug("Cached ~s (rev. ~B)", [gri:serialize(GRI), Rev]),
-                {ok, put_cache_state(Record, #{
+                NewRecord = gs_client_translator:overwrite_cached_record(GRI, CachedRecord, Record),
+                {ok, put_cache_state(NewRecord, #{
                     scope => Scope, connection_ref => ConnRef, revision => Rev
                 })};
 

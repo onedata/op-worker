@@ -74,6 +74,11 @@
     emails = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
 
+    % Along with the value of 'blocked' user parameter, stores information
+    % whether the value has changed during the last received user doc update
+    % The '{undefined, unchanged}' value is set for shared user scope.
+    blocked = {undefined, unchanged} :: {undefined | boolean(), changed | unchanged},
+
     % List of user's aliases for spaces
     space_aliases = #{} :: #{od_space:id() => od_space:alias()},
 
