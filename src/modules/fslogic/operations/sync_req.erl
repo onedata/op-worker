@@ -124,7 +124,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Range,
         Prefetch, undefined, Priority),
 
-    %todo do not use lfm, operate on fslogic directly
+    %TODO VFS-7393 do not use lfm, operate on fslogic directly
     {ok, Handle} = lfm:open(SessId, {guid, FileGuid}, read),
     % does sync internally
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, off),

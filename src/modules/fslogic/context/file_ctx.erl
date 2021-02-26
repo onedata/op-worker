@@ -235,7 +235,6 @@ get_guid_const(#file_ctx{guid = Guid}) ->
     Guid.
 
 %%--------------------------------------------------------------------
-%% @todo remove this function and pass file_ctx wherever possible
 %% @doc
 %% Returns file UUID entry.
 %% @end

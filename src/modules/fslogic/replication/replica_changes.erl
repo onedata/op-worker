@@ -127,7 +127,7 @@ set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
 
 
 %%--------------------------------------------------------------------
-%% @doc %todo get file system logic out of here, keep only replica changes
+%% @doc %TODO VFS-7394 get file system logic out of here, keep only replica changes
 %% Renames file on storage and updates local location if target space
 %% is supported in current provider, otherwise deletes local location and file.
 %% Document is unchanged if there was no rename or given rename
