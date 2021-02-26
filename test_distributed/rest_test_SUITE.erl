@@ -57,7 +57,7 @@ token_auth(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     DummyUserId = <<"dummyUserId">>,
     ShabbyUserId = <<"shabbyUserId">>,
-    Endpoint = rest_endpoint(Worker),
+    Endpoint = rest_endpoint(Worker) ++ "spaces",
 
     SerializedAccessToken = initializer:create_access_token(?USER_ID),
     SerializedAccessTokenWithConsumerCaveats = tokens:confine(SerializedAccessToken, [
@@ -69,38 +69,38 @@ token_auth(Config) ->
     % when
     ?assertMatch(
         {ok, 401, _, _},
-        do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => <<"invalid">>})
+        do_request(Config, get, Endpoint, #{?HDR_X_AUTH_TOKEN => <<"invalid">>})
     ),
     ?assertMatch(
         {ok, 200, _, _},
-        do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => SerializedAccessToken})
+        do_request(Config, get, Endpoint, #{?HDR_X_AUTH_TOKEN => SerializedAccessToken})
     ),
     ?assertMatch(
         {ok, 401, _, _},
-        do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats})
+        do_request(Config, get, Endpoint, #{?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats})
     ),
     ?assertMatch(
         {ok, 401, _, _},
-        do_request(Config, get, Endpoint ++ "files", #{
+        do_request(Config, get, Endpoint, #{
             ?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats,
             ?HDR_X_ONEDATA_CONSUMER_TOKEN => SerializedShabbyUserIdentityToken
         })
     ),
     ?assertMatch(
         {ok, 200, _, _},
-        do_request(Config, get, Endpoint ++ "files", #{
+        do_request(Config, get, Endpoint, #{
             ?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats,
             ?HDR_X_ONEDATA_CONSUMER_TOKEN => SerializedDummyUserIdentityToken
         })
     ),
     ?assertMatch(
         {ok, 200, _, _},
-        do_request(Config, get, Endpoint ++ "files", #{?HDR_AUTHORIZATION => <<"Bearer ", SerializedAccessToken/binary>>})
+        do_request(Config, get, Endpoint, #{?HDR_AUTHORIZATION => <<"Bearer ", SerializedAccessToken/binary>>})
     ),
     %% @todo VFS-5554 Deprecated, included for backward compatibility
     ?assertMatch(
         {ok, 200, _, _},
-        do_request(Config, get, Endpoint ++ "files", #{?HDR_MACAROON => SerializedAccessToken})
+        do_request(Config, get, Endpoint, #{?HDR_MACAROON => SerializedAccessToken})
     ).
 
 internal_error_when_handler_crashes(Config) ->
@@ -293,6 +293,9 @@ mock_user_logic(Config) ->
     initializer:mock_auth_manager(Config),
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
+    test_utils:mock_expect(Workers, user_logic, get_eff_spaces, fun(_, _) ->
+        {ok, [?SPACE_ID]}
+    end),
     [rpc:call(W, file_meta, setup_onedata_user, [?USER_ID, []]) || W <- Workers].
 
 

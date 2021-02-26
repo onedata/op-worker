@@ -60,11 +60,12 @@ all() -> [
 %%% Get attrs test functions
 %%%===================================================================
 
+
 get_file_attrs_test(Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
 
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
@@ -87,19 +88,7 @@ get_file_attrs_test(Config) ->
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_get_attrs_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
                 },
                 #scenario_template{
@@ -167,13 +156,7 @@ get_shared_file_attrs_test(_Config) ->
                 #scenario_template{
                     name = <<"Get attrs from shared ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(ShareObjectId),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
-                },
-                #scenario_template{
-                    name = <<"Get attrs from shared ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(ShareObjectId),
+                    prepare_args_fun = build_get_attrs_prepare_rest_args_fun(ShareObjectId),
                     validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
                 },
                 #scenario_template{
@@ -207,7 +190,7 @@ get_shared_file_attrs_test(_Config) ->
 get_attrs_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
@@ -226,19 +209,7 @@ get_attrs_on_provider_not_supporting_space_test(_Config) ->
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_get_attrs_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
@@ -340,42 +311,15 @@ get_attrs_data_spec(share_mode) ->
 
 
 %% @private
--spec build_get_attrs_prepare_new_id_rest_args_fun(file_id:objectid()) ->
+-spec build_get_attrs_prepare_rest_args_fun(file_meta:path() | file_id:objectid()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId) ->
-    build_get_attrs_prepare_rest_args_fun(new_id, FileObjectId).
-
-
-%% @private
--spec build_get_attrs_prepare_deprecated_path_rest_args_fun(file_meta:path()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath) ->
-    build_get_attrs_prepare_rest_args_fun(deprecated_path, FilePath).
-
-
-%% @private
--spec build_get_attrs_prepare_deprecated_id_rest_args_fun(file_id:objectid()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
-    build_get_attrs_prepare_rest_args_fun(deprecated_id, FileObjectId).
-
-
-%% @private
--spec build_get_attrs_prepare_rest_args_fun(
-    Endpoint :: new_id | deprecated_path | deprecated_id,
-    ValidId :: file_meta:path() | file_id:objectid()
-) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_rest_args_fun(Endpoint, ValidId) ->
+build_get_attrs_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
-        RestPath = case Endpoint of
-            new_id -> <<"data/", Id/binary>>;
-            deprecated_path -> <<"metadata/attrs", Id/binary>>;
-            deprecated_id -> <<"metadata-id/attrs/", Id/binary>>
-        end,
+        RestPath = <<"data/", Id/binary>>,
+
         #rest_args{
             method = get,
             path = http_utils:append_url_parameters(
@@ -539,7 +483,7 @@ set_file_mode_test(Config) ->
     User2Id = oct_background:get_user_id(user2),
     User3Id = oct_background:get_user_id(user3),
 
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
@@ -587,19 +531,7 @@ set_file_mode_test(Config) ->
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_set_mode_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_set_mode_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestSuccessfulCallFun
                 },
                 #scenario_template{
@@ -640,7 +572,7 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     DataSpec = set_mode_data_spec(),
@@ -672,13 +604,7 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_set_mode_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_set_mode_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
@@ -690,16 +616,6 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
             ],
             randomly_select_scenarios = true,
             data_spec = DataSpecWithoutBadValues
-        },
-        #scenario_spec{
-            name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = [P2Node],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
-
-            prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
-            validate_result_fun = ValidateRestCallResultFun,
-            verify_fun = VerifyFun
         }
     ])).
 
@@ -721,42 +637,14 @@ set_mode_data_spec() ->
 
 
 %% @private
--spec build_set_mode_prepare_new_id_rest_args_fun(file_id:objectid()) ->
+-spec build_set_mode_prepare_rest_args_fun(file_meta:path() | file_id:objectid()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_new_id_rest_args_fun(FileObjectId) ->
-    build_set_mode_prepare_rest_args_fun(new_id, FileObjectId).
-
-
-%% @private
--spec build_set_mode_prepare_deprecated_path_rest_args_fun(file_meta:path()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath) ->
-    build_set_mode_prepare_rest_args_fun(deprecated_path, FilePath).
-
-
-%% @private
--spec build_set_mode_prepare_deprecated_id_rest_args_fun(file_id:objectid()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
-    build_set_mode_prepare_rest_args_fun(deprecated_id, FileObjectId).
-
-
-%% @private
--spec build_set_mode_prepare_rest_args_fun(
-    Endpoint :: new_id | deprecated_path | deprecated_id,
-    ValidId :: file_meta:path() | file_id:objectid()
-) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_rest_args_fun(Endpoint, ValidId) ->
+build_set_mode_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(
             ValidId, utils:ensure_defined(Data0, #{})
         ),
-        RestPath = case Endpoint of
-            new_id -> <<"data/", Id/binary>>;
-            deprecated_path -> <<"metadata/attrs", Id/binary>>;
-            deprecated_id -> <<"metadata-id/attrs/", Id/binary>>
-        end,
+        RestPath = <<"data/", Id/binary>>,
 
         #rest_args{
             method = put,
@@ -815,7 +703,7 @@ get_file_distribution_test(Config) ->
         <<"totalBlocksSize">> => 20
     }],
     wait_for_file_location_sync(P2Node, UserSessIdP2, FileGuid, ExpDist1),
-    get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDist1, Config),
+    get_distribution_test_base(FileType, FileGuid, ShareId, ExpDist1, Config),
 
     % Write another block to file on P2 and check returned distribution
 
@@ -833,7 +721,7 @@ get_file_distribution_test(Config) ->
         }
     ],
     wait_for_file_location_sync(P1Node, UserSessIdP1, FileGuid, ExpDist2),
-    get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDist2, Config).
+    get_distribution_test_base(FileType, FileGuid, ShareId, ExpDist2, Config).
 
 
 get_dir_distribution_test(Config) ->
@@ -852,7 +740,7 @@ get_dir_distribution_test(Config) ->
 
     ExpDist = [],
     wait_for_file_location_sync(P2Node, UserSessIdP2, DirGuid, ExpDist),
-    get_distribution_test_base(FileType, DirPath, DirGuid, ShareId, ExpDist, Config),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config),
 
     % Create file in dir and assert that dir distribution hasn't changed
 
@@ -864,7 +752,7 @@ get_dir_distribution_test(Config) ->
     api_test_utils:fill_file_with_dummy_data(P2Node, UserSessIdP2, FileGuid, 30, 20),
 
     wait_for_file_location_sync(P1Node, UserSessIdP1, DirGuid, ExpDist),
-    get_distribution_test_base(FileType, DirPath, DirGuid, ShareId, ExpDist, Config).
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config).
 
 
 %% @private
@@ -881,7 +769,7 @@ wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
 
 
 %% @private
-get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistribution, Config) ->
+get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config) ->
     Providers = ?config(op_worker_nodes, Config),
     SortedExpDistribution = lists:usort(ExpDistribution),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -925,27 +813,6 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
                     type = gs,
                     prepare_args_fun = build_get_distribution_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = CreateValidateGsSuccessfulCallFun(op_file)
-                },
-
-                %% TEST DEPRECATED REPLICA ENDPOINTS
-
-                #scenario_template{
-                    name = <<"Get distribution for ", FileType/binary, " using /replicas/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_replicas_prepare_rest_args_fun(path, FilePath),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Get distribution for ", FileType/binary, " using /replicas-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_replicas_prepare_rest_args_fun(id, FileObjectId),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Get distribution for ", FileType/binary, " using op_replica gs api">>,
-                    type = gs,
-                    prepare_args_fun = build_get_replicas_prepare_gs_args_fun(FileGuid, private),
-                    validate_result_fun = CreateValidateGsSuccessfulCallFun(op_replica)
                 }
             ],
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
@@ -979,40 +846,6 @@ build_get_distribution_prepare_gs_args_fun(FileGuid, Scope) ->
         #gs_args{
             operation = get,
             gri = #gri{type = op_file, id = GriId, aspect = distribution, scope = Scope}
-        }
-    end.
-
-
-%% @private
--spec build_get_replicas_prepare_rest_args_fun(
-    Endpoint :: id | path,
-    ValidId :: file_meta:path() | file_id:objectid()
-) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_replicas_prepare_rest_args_fun(Endpoint, ValidId) ->
-    fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ValidId, Data),
-
-        #rest_args{
-            method = get,
-            path = case Endpoint of
-                id -> <<"replicas-id/", Id/binary>>;
-                path -> <<"replicas", Id/binary>>
-            end
-        }
-    end.
-
-
-%% @private
--spec build_get_replicas_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_replicas_prepare_gs_args_fun(FileGuid, Scope) ->
-    fun(#api_test_ctx{data = Data}) ->
-        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
-
-        #gs_args{
-            operation = get,
-            gri = #gri{type = op_replica, id = GriId, aspect = distribution, scope = Scope}
         }
     end.
 
