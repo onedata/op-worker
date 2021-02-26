@@ -22,11 +22,10 @@
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
-    evict_empty_dir_by_guid/1, evict_empty_dir_by_path/1,
-    evict_tree_of_empty_dirs_by_guid/1, evict_tree_of_empty_dirs_by_path/1,
-    evict_regular_file_replica_by_guid/1, evict_regular_file_replica_by_path/1,
+    evict_empty_dir_by_guid/1,
+    evict_tree_of_empty_dirs_by_guid/1,
+    evict_regular_file_replica_by_guid/1,
     evict_regular_file_replica_in_directory_by_guid/1,
-    evict_regular_file_replica_in_directory_by_path/1,
     evict_big_file_replica/1,
     evict_100_files_in_one_request/1,
     evict_100_files_each_file_separately/1,
@@ -56,13 +55,9 @@
 
 all() -> [
     evict_empty_dir_by_guid,
-    evict_empty_dir_by_path,
     evict_tree_of_empty_dirs_by_guid,
-    evict_tree_of_empty_dirs_by_path,
     evict_regular_file_replica_by_guid,
-    evict_regular_file_replica_by_path,
     evict_regular_file_replica_in_directory_by_guid,
-    evict_regular_file_replica_in_directory_by_path,
     evict_big_file_replica,
     evict_100_files_in_one_request,
     evict_100_files_each_file_separately,
@@ -97,35 +92,23 @@ all() -> [
 evict_empty_dir_by_guid(Config) ->
     replica_eviction_transfers_test_base:evict_empty_dir(Config, rest, guid).
 
-evict_empty_dir_by_path(Config) ->
-    replica_eviction_transfers_test_base:evict_empty_dir(Config, rest, path).
-
 evict_tree_of_empty_dirs_by_guid(Config) ->
     replica_eviction_transfers_test_base:evict_tree_of_empty_dirs(Config, rest, guid).
-
-evict_tree_of_empty_dirs_by_path(Config) ->
-    replica_eviction_transfers_test_base:evict_tree_of_empty_dirs(Config, rest, path).
 
 evict_regular_file_replica_by_guid(Config) ->
     replica_eviction_transfers_test_base:evict_regular_file_replica(Config, rest, guid).
 
-evict_regular_file_replica_by_path(Config) ->
-    replica_eviction_transfers_test_base:evict_regular_file_replica(Config, rest, path).
-
 evict_regular_file_replica_in_directory_by_guid(Config) ->
     replica_eviction_transfers_test_base:evict_regular_file_replica_in_directory(Config, rest, guid).
-
-evict_regular_file_replica_in_directory_by_path(Config) ->
-    replica_eviction_transfers_test_base:evict_regular_file_replica_in_directory(Config, rest, path).
 
 evict_big_file_replica(Config) ->
     replica_eviction_transfers_test_base:evict_big_file_replica(Config, rest, guid).
 
 evict_100_files_in_one_request(Config) ->
-    replica_eviction_transfers_test_base:evict_100_files_in_one_request(Config, rest, path).
+    replica_eviction_transfers_test_base:evict_100_files_in_one_request(Config, rest, guid).
 
 evict_100_files_each_file_separately(Config) ->
-    replica_eviction_transfers_test_base:evict_100_files_each_file_separately(Config, rest, path).
+    replica_eviction_transfers_test_base:evict_100_files_each_file_separately(Config, rest, guid).
 
 many_simultaneous_failed_replica_evictions(Config) ->
     replica_eviction_transfers_test_base:many_simultaneous_failed_replica_evictions(Config, rest, guid).
@@ -149,16 +132,16 @@ cancel_replica_eviction_on_target_nodes_by_other_user(Config) ->
     replica_eviction_transfers_test_base:cancel_replica_eviction_on_target_nodes_by_other_user(Config, rest).
 
 fail_to_evict_file_replica_without_permissions(Config) ->
-    replica_eviction_transfers_test_base:fail_to_evict_file_replica_without_permissions(Config, rest, path).
+    replica_eviction_transfers_test_base:fail_to_evict_file_replica_without_permissions(Config, rest, guid).
 
 eviction_should_succeed_when_remote_provider_modified_file_replica(Config) ->
-    replica_eviction_transfers_test_base:eviction_should_succeed_when_remote_provider_modified_file_replica(Config, rest, path).
+    replica_eviction_transfers_test_base:eviction_should_succeed_when_remote_provider_modified_file_replica(Config, rest, guid).
 
 eviction_should_fail_when_evicting_provider_modified_file_replica(Config) ->
-    replica_eviction_transfers_test_base:eviction_should_fail_when_evicting_provider_modified_file_replica(Config, rest, path).
+    replica_eviction_transfers_test_base:eviction_should_fail_when_evicting_provider_modified_file_replica(Config, rest, guid).
 
 quota_decreased_after_eviction(Config) ->
-    replica_eviction_transfers_test_base:quota_decreased_after_eviction(Config, rest, path).
+    replica_eviction_transfers_test_base:quota_decreased_after_eviction(Config, rest, guid).
 
 schedule_replica_eviction_by_view(Config) ->
     replica_eviction_transfers_test_base:schedule_replica_eviction_by_view(Config, rest).

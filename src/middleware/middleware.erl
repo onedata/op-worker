@@ -178,7 +178,6 @@ get_plugin(op_handle_service) -> handle_service_middleware;
 get_plugin(op_metrics) -> metrics_middleware;
 get_plugin(op_provider) -> provider_middleware;
 get_plugin(op_qos) -> qos_middleware;
-get_plugin(op_replica) -> replica_middleware;
 get_plugin(op_share) -> share_middleware;
 get_plugin(op_space) -> space_middleware;
 get_plugin(op_transfer) -> transfer_middleware;

@@ -41,14 +41,14 @@ routes() -> [
             scope = private
         }
     }},
-    %% Create file
+    %% Create file or directory
     {<<"/data/:id/children">>, rest_handler, #rest_req{
         method = 'POST',
         consumes = [<<"application/octet-stream">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_file,
-            id = ?OBJECTID_BINDING(id),
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
             aspect = child, 
             scope = private
         }

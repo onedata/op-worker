@@ -45,8 +45,7 @@ create_response(#gri{aspect = register_file}, _, value, ObjectId) ->
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(#gri{aspect = As}, Result) when
-    As =:= object_id;
-    As =:= list
+    As =:= object_id
 ->
     ?OK_REPLY(Result);
 get_response(#gri{aspect = children}, {Children, IsLast}) ->
