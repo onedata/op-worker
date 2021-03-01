@@ -37,6 +37,7 @@
 ]).
 -export([is_space_owner/2]).
 -export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/2]).
+-export([in_open_handle_mode/1]).
 
 %%%===================================================================
 %%% API functions
@@ -190,4 +191,12 @@ is_direct_io(#user_ctx{session = #document{
 }}, SpaceId) ->
     maps:get(SpaceId, DirectIO, true);
 is_direct_io(_, _) ->
+    false.
+
+-spec in_open_handle_mode(ctx()) -> boolean().
+in_open_handle_mode(#user_ctx{session = #document{
+    value = #session{mode = open_handle}
+}}) ->
+    true;
+in_open_handle_mode(_) ->
     false.

@@ -157,7 +157,7 @@ assert_not_readonly_mode(UserCtx) ->
 inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
     DataConstraints = user_ctx:get_data_constraints(UserCtx),
 
-    case DataConstraints#constraints.readonly of
+    case DataConstraints#constraints.readonly orelse user_ctx:in_open_handle_mode(UserCtx) of
         true ->
             data_access_rights:assert_operation_available_in_readonly_mode(
                 AccessRequirements

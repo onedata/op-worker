@@ -258,6 +258,7 @@
     status :: undefined | session:status(),
     accessed :: undefined | time:seconds(),
     type :: undefined | session:type(),
+    mode = normal :: normal | open_handle,
     identity :: aai:subject(),
     credentials :: undefined | auth_manager:credentials(),
     data_constraints :: data_constraints:constraints(),

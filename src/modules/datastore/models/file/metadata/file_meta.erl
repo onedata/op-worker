@@ -13,20 +13,13 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
-
-%% How many processes shall be process single set_scope operation.
--define(SET_SCOPER_WORKERS, 25).
-
-%% How many entries shall be processed in one batch for set_scope operation.
--define(SET_SCOPE_BATCH_SIZE, 100).
 
 -export([save/1, create/2, save/2, get/1, exists/1, update/2]).
 -export([delete/1, delete_without_link/1]).
@@ -44,7 +37,6 @@
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
-% For tests
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -256,7 +248,29 @@ get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
         }
     }};
 get_including_deleted(FileUuid) ->
-    datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
+    case fslogic_uuid:is_share_dir_uuid(FileUuid) of
+        true -> get_share_dir_doc(FileUuid);
+        false -> datastore_model:get(?CTX#{include_deleted => true}, FileUuid)
+    end.
+
+
+%% @private
+-spec get_share_dir_doc(uuid()) -> {ok, doc()}.
+get_share_dir_doc(ShareDirUuid) ->
+    ShareId = fslogic_uuid:share_dir_uuid_to_shareid(ShareDirUuid),
+    {ok, #document{value = #od_share{space = SpaceId}}} = share_logic:get(
+        ?ROOT_SESS_ID, ShareId
+    ),
+    {ok, #document{
+        key = ShareDirUuid,
+        value = #file_meta{
+            name = ShareId,
+            is_scope = false,
+            mode = 8#755,
+            owner = ?ROOT_USER_ID,
+            parent_uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)
+        }
+    }}.
 
 
 %%--------------------------------------------------------------------
@@ -294,10 +308,15 @@ delete(#document{
         parent_uuid = ParentUuid
     }
 }) ->
-    ?run(begin
-        ok = file_meta_links:delete(ParentUuid, Scope, FileName, FileUuid),
-        delete_without_link(FileUuid)
-    end);
+    case fslogic_uuid:is_share_dir_uuid(FileUuid) of
+        true ->
+            throw(?EPERM);
+        false ->
+            ?run(begin
+                ok = file_meta_links:delete(ParentUuid, Scope, FileName, FileUuid),
+                delete_without_link(FileUuid)
+            end)
+    end;
 delete({path, Path}) ->
     ?run(begin
         {ok, #document{} = Doc} = canonical_path:resolve(Path),

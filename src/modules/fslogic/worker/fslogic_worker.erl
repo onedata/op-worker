@@ -362,15 +362,20 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             undefined ->
                 UserCtx0;
             _ ->
-                Operation = get_operation(Request),
-                case lists:member(Operation, ?AVAILABLE_SHARE_OPERATIONS) of
-                    true -> ok;
-                    false -> throw(?EACCES)
-                end,
-                % Operations concerning shares must be carried with GUEST auth
-                case user_ctx:is_guest(UserCtx0) of
-                    true -> UserCtx0;
-                    false -> user_ctx:new(?GUEST_SESS_ID)
+                case user_ctx:in_open_handle_mode(UserCtx0) of
+                    true ->
+                        UserCtx0;
+                    false ->
+                        Operation = get_operation(Request),
+                        case lists:member(Operation, ?AVAILABLE_SHARE_OPERATIONS) of
+                            true -> ok;
+                            false -> throw(?EACCES)
+                        end,
+                        % Operations concerning shares must be carried with GUEST auth
+                        case user_ctx:is_guest(UserCtx0) of
+                            true -> UserCtx0;
+                            false -> user_ctx:new(?GUEST_SESS_ID)
+                        end
                 end
         end,
         handle_request_locally(UserCtx1, Request, FileCtx1)
