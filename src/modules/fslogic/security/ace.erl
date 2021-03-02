@@ -105,41 +105,41 @@ is_applicable(_, FileCtx, _) ->
 check_against(
     RequiredPerms,
     #access_control_entity{acetype = ?allow_mask, acemask = AceMask},
-    #user_perms_matrix{
+    #user_perms_check_progress{
         finished_step = ?ACL_CHECK(AceNo),
         granted = PrevGrantedPerms,
         denied = PrevDeniedPerms
-    } = UserPermsMatrix
+    } = UserPermsCheckProgress
 ) ->
-    NewUserPermsMatrix = UserPermsMatrix#user_perms_matrix{
+    NewUserPermsCheckProgress = UserPermsCheckProgress#user_perms_check_progress{
         finished_step = ?ACL_CHECK(AceNo + 1),
         granted = ?set_flags(PrevGrantedPerms, ?reset_flags(AceMask, PrevDeniedPerms))
     },
     case ?reset_flags(RequiredPerms, AceMask) of
         ?no_flags_mask ->
-            {allowed, NewUserPermsMatrix};
+            {allowed, NewUserPermsCheckProgress};
         LeftoverRequiredPerms ->
-            {{inconclusive, LeftoverRequiredPerms}, NewUserPermsMatrix}
+            {{inconclusive, LeftoverRequiredPerms}, NewUserPermsCheckProgress}
     end;
 
 check_against(
     RequiredPerms,
     #access_control_entity{acetype = ?deny_mask, acemask = AceMask},
-    #user_perms_matrix{
+    #user_perms_check_progress{
         finished_step = ?ACL_CHECK(AceNo),
         granted = PrevGrantedPerms,
         denied = PrevDeniedPerms
-    } = UserPermsMatrix
+    } = UserPermsCheckProgress
 ) ->
-    NewUserPermsMatrix = UserPermsMatrix#user_perms_matrix{
+    NewUserPermsCheckProgress = UserPermsCheckProgress#user_perms_check_progress{
         finished_step = ?ACL_CHECK(AceNo + 1),
         denied = ?set_flags(PrevDeniedPerms, ?reset_flags(AceMask, PrevGrantedPerms))
     },
     case ?common_flags(RequiredPerms, AceMask) of
         ?no_flags_mask ->
-            {{inconclusive, RequiredPerms}, NewUserPermsMatrix};
+            {{inconclusive, RequiredPerms}, NewUserPermsCheckProgress};
         _ ->
-            {denied, NewUserPermsMatrix}
+            {denied, NewUserPermsCheckProgress}
     end.
 
 

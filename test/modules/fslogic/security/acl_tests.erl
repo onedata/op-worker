@@ -161,7 +161,7 @@ check_normal_user_permission_test_() ->
     },
 
     F = fun(Acl, User, Perms) ->
-        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_check_progress{
             finished_step = ?ACL_CHECK(0),
             granted = ?no_flags_mask,
             denied = ?no_flags_mask
@@ -170,7 +170,7 @@ check_normal_user_permission_test_() ->
 
     [
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(1),
                 granted = ?read_mask,
                 denied = ?no_flags_mask
@@ -178,7 +178,7 @@ check_normal_user_permission_test_() ->
             F([Ace1, Ace2], User1, ?read_mask)
         ),
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?read_mask bor ?write_mask,
                 denied = ?no_flags_mask
@@ -186,7 +186,7 @@ check_normal_user_permission_test_() ->
             F([Ace1, Ace2], User1, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?read_mask bor ?write_mask,
                 denied = bnot (?read_mask bor ?write_mask)
@@ -194,7 +194,7 @@ check_normal_user_permission_test_() ->
             F([Ace1, Ace2], User1, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?read_mask bor ?write_mask,
                 denied = bnot (?read_mask bor ?write_mask)
@@ -202,7 +202,7 @@ check_normal_user_permission_test_() ->
             F([Ace1, Ace2], User1, ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?read_mask,
                 denied = 0
@@ -210,7 +210,7 @@ check_normal_user_permission_test_() ->
             F([Ace3, Ace1, Ace2], User1, ?read_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(4),
                 granted = ?no_flags_mask,
                 denied = bnot ?no_flags_mask
@@ -259,7 +259,7 @@ check_normal_group_permission_test_() ->
     },
 
     F = fun(Acl, User, Perms) ->
-        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_check_progress{
             finished_step = ?ACL_CHECK(0),
             granted = ?no_flags_mask,
             denied = ?no_flags_mask
@@ -268,7 +268,7 @@ check_normal_group_permission_test_() ->
 
     [
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(1),
                 granted = ?read_mask,
                 denied = ?no_flags_mask
@@ -276,7 +276,7 @@ check_normal_group_permission_test_() ->
             F([Ace1, Ace3, Ace2], User1, ?read_mask)
         ),
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?read_mask bor ?write_mask,
                 denied = ?no_flags_mask
@@ -284,7 +284,7 @@ check_normal_group_permission_test_() ->
             F([Ace1, Ace3, Ace2], User1, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(4),
                 granted = ?read_mask bor ?write_mask,
                 denied = bnot (?read_mask bor ?write_mask)
@@ -292,7 +292,7 @@ check_normal_group_permission_test_() ->
             F([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(4),
                 granted = ?read_mask bor ?write_mask,
                 denied = bnot (?read_mask bor ?write_mask)
@@ -300,7 +300,7 @@ check_normal_group_permission_test_() ->
             F([Ace1, Ace2, Ace3], User1, ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?read_mask,
                 denied = bnot ?read_mask
@@ -308,7 +308,7 @@ check_normal_group_permission_test_() ->
             F([Ace1], User1, ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?write_mask,
                 denied = ?read_mask
@@ -316,7 +316,7 @@ check_normal_group_permission_test_() ->
             F([Ace2, Ace4], User1, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?write_mask,
                 denied = ?read_mask
@@ -324,7 +324,7 @@ check_normal_group_permission_test_() ->
             F([Ace4, Ace1, Ace2], User1, ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?no_flags_mask,
                 denied = bnot ?no_flags_mask
@@ -357,7 +357,7 @@ check_owner_principal_permission_test_() ->
     },
 
     F = fun(Acl, User, Perms) ->
-        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_check_progress{
             finished_step = ?ACL_CHECK(0),
             granted = ?no_flags_mask,
             denied = ?no_flags_mask
@@ -366,7 +366,7 @@ check_owner_principal_permission_test_() ->
 
     [
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(1),
                 granted = ?read_mask,
                 denied = ?no_flags_mask
@@ -374,7 +374,7 @@ check_owner_principal_permission_test_() ->
             F([Ace1, Ace2], User, ?read_mask)
         ),
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?read_mask bor ?write_mask,
                 denied = ?no_flags_mask
@@ -382,7 +382,7 @@ check_owner_principal_permission_test_() ->
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?read_mask bor ?write_mask,
                 denied = bnot (?read_mask bor ?write_mask)
@@ -390,7 +390,7 @@ check_owner_principal_permission_test_() ->
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?read_mask bor ?write_mask,
                 denied = bnot (?read_mask bor ?write_mask)
@@ -423,7 +423,7 @@ check_group_principal_permission_test_() ->
     },
 
     F = fun(Acl, User, Perms) ->
-        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_check_progress{
             finished_step = ?ACL_CHECK(0),
             granted = ?no_flags_mask,
             denied = ?no_flags_mask
@@ -432,7 +432,7 @@ check_group_principal_permission_test_() ->
 
     [
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(1),
                 granted = ?read_mask,
                 denied = ?no_flags_mask
@@ -440,7 +440,7 @@ check_group_principal_permission_test_() ->
             F([Ace1, Ace2], User, ?read_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?read_mask,
                 denied = ?write_mask
@@ -448,7 +448,7 @@ check_group_principal_permission_test_() ->
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?read_mask,
                 denied = ?write_mask
@@ -456,7 +456,7 @@ check_group_principal_permission_test_() ->
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?read_mask,
                 denied = bnot ?read_mask
@@ -490,7 +490,7 @@ check_everyone_principal_permission_test_() ->
     },
 
     F = fun(Acl, User, Perms) ->
-        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_check_progress{
             finished_step = ?ACL_CHECK(0),
             granted = ?no_flags_mask,
             denied = ?no_flags_mask
@@ -499,7 +499,7 @@ check_everyone_principal_permission_test_() ->
 
     [
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(1),
                 granted = ?read_mask,
                 denied = ?no_flags_mask
@@ -507,7 +507,7 @@ check_everyone_principal_permission_test_() ->
             F([Ace1, Ace2], User, ?read_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?read_mask,
                 denied = ?write_mask
@@ -515,7 +515,7 @@ check_everyone_principal_permission_test_() ->
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?read_mask,
                 denied = ?write_mask
@@ -523,7 +523,7 @@ check_everyone_principal_permission_test_() ->
             F([Ace1, Ace2], User, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?read_mask,
                 denied = bnot ?read_mask
@@ -555,7 +555,7 @@ check_anonymous_principal_permission_test_() ->
     },
 
     F = fun(Acl, User, Perms) ->
-        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_matrix{
+        acl:check_acl(Acl, User, FileCtx, Perms, #user_perms_check_progress{
             finished_step = ?ACL_CHECK(0),
             granted = ?no_flags_mask,
             denied = ?no_flags_mask
@@ -564,7 +564,7 @@ check_anonymous_principal_permission_test_() ->
 
     [
         ?_assertMatch(
-            {allowed, _, #user_perms_matrix{
+            {allowed, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(1),
                 granted = ?read_mask,
                 denied = ?no_flags_mask
@@ -572,7 +572,7 @@ check_anonymous_principal_permission_test_() ->
             F([Ace1, Ace2], Guest, ?read_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?no_flags_mask,
                 denied = bnot ?no_flags_mask
@@ -580,7 +580,7 @@ check_anonymous_principal_permission_test_() ->
             F([Ace1, Ace2], User, ?read_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?read_mask,
                 denied = ?write_mask
@@ -588,7 +588,7 @@ check_anonymous_principal_permission_test_() ->
             F([Ace1, Ace2], Guest, ?read_mask bor ?write_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(2),
                 granted = ?read_mask,
                 denied = ?write_mask
@@ -596,7 +596,7 @@ check_anonymous_principal_permission_test_() ->
             F([Ace1, Ace2], Guest, ?read_mask bor ?write_mask bor ?traverse_container_mask)
         ),
         ?_assertMatch(
-            {denied, _, #user_perms_matrix{
+            {denied, _, #user_perms_check_progress{
                 finished_step = ?ACL_CHECK(3),
                 granted = ?read_mask,
                 denied = bnot ?read_mask

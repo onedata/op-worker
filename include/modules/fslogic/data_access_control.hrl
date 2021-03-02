@@ -106,7 +106,7 @@
 % to tell whether requested permissions are granted or denied. That is why it
 % contains pointer to where it stopped (e.g. space privileges check or concrete
 % ACE in ACL) so that build can be resumed if needed.
--record(user_perms_matrix, {
+-record(user_perms_check_progress, {
     finished_step :: non_neg_integer(),
     granted :: ace:bitmask(),
     denied :: ace:bitmask()

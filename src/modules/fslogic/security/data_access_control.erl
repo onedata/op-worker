@@ -37,7 +37,7 @@
     | type()
     | {type(), 'or', type()}.
 
--type user_perms_matrix() :: #user_perms_matrix{}.
+-type user_perms_matrix() :: #user_perms_check_progress{}.
 
 -export_type([type/0, requirement/0, user_perms_matrix/0]).
 
@@ -211,10 +211,10 @@ assert_has_permissions(UserCtx, FileCtx0, RequiredPerms) ->
     CacheKey = {user_perms_matrix, UserId, Guid},
 
     Result = case permissions_cache:check_permission(CacheKey) of
-        {ok, #user_perms_matrix{
+        {ok, #user_perms_check_progress{
             granted = GrantedPerms,
             denied = DeniedPerms
-        } = UserPermsMatrix} ->
+        } = UserPermsCheckProgress} ->
             case ?reset_flags(RequiredPerms, GrantedPerms) of
                 ?no_flags_mask ->
                     {allowed, FileCtx0};
@@ -222,7 +222,7 @@ assert_has_permissions(UserCtx, FileCtx0, RequiredPerms) ->
                     case ?common_flags(LeftoverRequiredPerms, DeniedPerms) of
                         ?no_flags_mask ->
                             check_permissions(
-                                UserCtx, FileCtx0, LeftoverRequiredPerms, UserPermsMatrix
+                                UserCtx, FileCtx0, LeftoverRequiredPerms, UserPermsCheckProgress
                             );
                         _ ->
                             throw(?EACCES)
@@ -235,11 +235,11 @@ assert_has_permissions(UserCtx, FileCtx0, RequiredPerms) ->
     case Result of
         {allowed, FileCtx1} ->
             FileCtx1;
-        {allowed, FileCtx1, NewUserPermsMatrix} ->
-            permissions_cache:cache_permission(CacheKey, NewUserPermsMatrix),
+        {allowed, FileCtx1, NewUserPermsCheckProgress} ->
+            permissions_cache:cache_permission(CacheKey, NewUserPermsCheckProgress),
             FileCtx1;
-        {denied, FileCtx1, NewUserPermsMatrix} ->
-            permissions_cache:cache_permission(CacheKey, NewUserPermsMatrix),
+        {denied, FileCtx1, NewUserPermsCheckProgress} ->
+            permissions_cache:cache_permission(CacheKey, NewUserPermsCheckProgress),
             throw(?EACCES)
     end.
 
@@ -251,16 +251,16 @@ check_permissions(UserCtx, FileCtx0, RequiredPerms) ->
     ShareId = file_ctx:get_share_id_const(FileCtx0),
     DeniedPerms = get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx0, ShareId),
 
-    UserPermsMatrix = #user_perms_matrix{
+    UserPermsCheckProgress = #user_perms_check_progress{
         finished_step = ?SPACE_PRIVILEGES_CHECK,
         granted = ?no_flags_mask,
         denied = DeniedPerms
     },
     case ?common_flags(RequiredPerms, DeniedPerms) of
         ?no_flags_mask ->
-            check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsMatrix);
+            check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsCheckProgress);
         _ ->
-            {denied, FileCtx0, UserPermsMatrix}
+            {denied, FileCtx0, UserPermsCheckProgress}
     end.
 
 
@@ -295,12 +295,12 @@ get_perms_denied_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
 %% @private
 -spec check_permissions(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
-check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsMatrix) ->
+check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsCheckProgress) ->
     case file_ctx:get_active_perms_type(FileCtx0, include_deleted) of
         {posix, FileCtx1} ->
-            check_posix_permissions(UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix);
+            check_posix_permissions(UserCtx, FileCtx1, RequiredPerms, UserPermsCheckProgress);
         {acl, FileCtx1} ->
-            check_acl_permissions(UserCtx, FileCtx1, RequiredPerms, UserPermsMatrix)
+            check_acl_permissions(UserCtx, FileCtx1, RequiredPerms, UserPermsCheckProgress)
     end.
 
 
@@ -309,7 +309,7 @@ check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsMatrix) ->
     user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()
 ) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
-check_posix_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
+check_posix_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_check_progress{
     finished_step = ?SPACE_PRIVILEGES_CHECK,
     granted = ?no_flags_mask,
     denied = DeniedPerms
@@ -345,7 +345,7 @@ check_posix_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
         ?no_flags_mask -> allowed;
         _ -> denied
     end,
-    {PermissionsCheckResult, FileCtx3, #user_perms_matrix{
+    {PermissionsCheckResult, FileCtx3, #user_perms_check_progress{
         finished_step = ?POSIX_MODE_CHECK,
         granted = AllAllowedPerms,
         denied = AllDeniedPerms
@@ -411,9 +411,9 @@ get_posix_allowed_perms(2#111, _) ->
     user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_matrix()
 ) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
-check_acl_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
+check_acl_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_check_progress{
     finished_step = ?ACL_CHECK(AceNo)
-} = UserPermsMatrix) ->
+} = UserPermsCheckProgress) ->
     {Acl, FileCtx1} = file_ctx:get_acl(FileCtx0),
 
     case AceNo >= length(Acl) of
@@ -425,6 +425,6 @@ check_acl_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
             acl:check_acl(
                 lists:nthtail(AceNo, Acl),
                 user_ctx:get_user(UserCtx),
-                FileCtx1, RequiredPerms, UserPermsMatrix
+                FileCtx1, RequiredPerms, UserPermsCheckProgress
             )
     end.
