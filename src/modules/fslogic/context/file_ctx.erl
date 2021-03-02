@@ -62,7 +62,7 @@
     get_guid_const/1, get_uuid_const/1, get_dir_location_doc_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
-    is_share_dir_const/1, is_special_const/1,
+    is_share_root_dir_const/1, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
     is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1,
     assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
@@ -299,8 +299,8 @@ get_logical_path(FileCtx, UserCtx) ->
 -spec get_file_doc(ctx()) -> {file_meta:doc(), ctx()}.
 get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
     Uuid = file_id:guid_to_uuid(get_guid_const(FileCtx)),
-    {ok, FileDoc} = case fslogic_uuid:is_share_dir_uuid(Uuid) of
-        true -> get_share_dir_doc(FileCtx, false);
+    {ok, FileDoc} = case fslogic_uuid:is_share_root_dir_uuid(Uuid) of
+        true -> get_share_root_dir_doc(FileCtx, false);
         false -> file_meta:get({uuid, Uuid})
     end,
     {FileDoc, FileCtx#file_ctx{file_doc = FileDoc}};
@@ -328,8 +328,8 @@ is_imported_storage(FileCtx = #file_ctx{is_imported_storage = ImportedStorage}) 
 -spec get_file_doc_including_deleted(ctx()) -> {file_meta:doc(), ctx()}.
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
-    {ok, Doc} = case fslogic_uuid:is_share_dir_uuid(FileUuid) of
-        true -> get_share_dir_doc(FileCtx, true);
+    {ok, Doc} = case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
+        true -> get_share_root_dir_doc(FileCtx, true);
         false -> file_meta:get_including_deleted(FileUuid)
     end,
     case file_meta:is_deleted(Doc) of
@@ -351,8 +351,8 @@ get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {file_meta:doc(), ctx()} | {error, term()}.
 get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
-    Result = case fslogic_uuid:is_share_dir_uuid(FileUuid) of
-        true -> get_share_dir_doc(FileCtx, true);
+    Result = case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
+        true -> get_share_root_dir_doc(FileCtx, true);
         false -> file_meta:get_including_deleted(FileUuid)
     end,
     case Result of
@@ -366,12 +366,12 @@ get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}
 
 
 %% @private
--spec get_share_dir_doc(ctx(), IncludingDeleted :: boolean()) ->
+-spec get_share_root_dir_doc(ctx(), IncludingDeleted :: boolean()) ->
     {ok, file_meta:doc()} | {error, not_found}.
-get_share_dir_doc(FileCtx, IncludingDeleted) ->
+get_share_root_dir_doc(FileCtx, IncludingDeleted) ->
     ShareDirGuid = get_guid_const(FileCtx),
     ShareDirUuid = file_id:guid_to_uuid(ShareDirGuid),
-    ShareId = fslogic_uuid:share_dir_uuid_to_shareid(ShareDirUuid),
+    ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(ShareDirUuid),
     SpaceId = get_space_id_const(FileCtx),
 
     IsDeleted = case share_logic:get(?ROOT_SESS_ID, ShareId) of
@@ -379,21 +379,22 @@ get_share_dir_doc(FileCtx, IncludingDeleted) ->
         ?ERROR_NOT_FOUND -> true
     end,
 
-    case IncludingDeleted of
-        true ->
+    case {IsDeleted, IncludingDeleted} of
+        {true, false} ->
+            ?ERROR_NOT_FOUND;
+        _ ->
             {ok, #document{
                 key = ShareDirUuid,
                 value = #file_meta{
                     name = ShareId,
+                    type = ?DIRECTORY_TYPE,
                     is_scope = false,
                     mode = 8#755,
                     owner = ?ROOT_USER_ID,
                     parent_uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                     deleted = IsDeleted
                 }
-            }};
-        false ->
-            ?ERROR_NOT_FOUND
+            }}
     end.
 
 
@@ -429,8 +430,8 @@ get_parent(FileCtx = #file_ctx{guid = Guid, parent = undefined}, UserCtx) ->
     } of
         {_, true, true} ->
             % Share root file shall point to virtual share root dir in open handle mode
-            ShareDirUuid = fslogic_uuid:shareid_to_share_dir_uuid(ShareId),
-            new_by_guid(file_id:pack_share_guid(ShareDirUuid, SpaceId, ShareId));
+            ShareRootDirUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(ShareId),
+            new_by_guid(file_id:pack_share_guid(ShareRootDirUuid, SpaceId, ShareId));
         {true, false, _} ->
             case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
                 andalso UserCtx =/= undefined
@@ -456,7 +457,7 @@ get_parent(FileCtx = #file_ctx{guid = Guid, parent = undefined}, UserCtx) ->
                     throw(?EINVAL)
             end;
         {false, false, IsInOpenHandleMode} ->
-            case is_share_dir_const(FileCtx) of
+            case is_share_root_dir_const(FileCtx2) of
                 true ->
                     case IsInOpenHandleMode of
                         true ->
@@ -711,13 +712,21 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredent
 -spec get_times(ctx()) -> {times:times(), ctx()}.
 get_times(FileCtx = #file_ctx{times = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
-    {ok, Times} = case fslogic_uuid:is_share_dir_uuid(FileUuid) of
+    {ok, Times} = case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
         true ->
-            ShareId = fslogic_uuid:share_dir_uuid_to_shareid(FileUuid),
-            #od_share{root_file = RootFileShareGuid} = get_share_record(ShareId),
+            % Share root dir is virtual directory which does not have documents
+            % like `file_meta` or `times` - in such case get times of share root
+            % file
+            ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(FileUuid),
+            {ok, #document{
+                value = #od_share{
+                    root_file = RootFileShareGuid
+                }
+            }} = share_logic:get(?ROOT_SESS_ID, ShareId),
+
             RootFileGuid = file_id:share_guid_to_guid(RootFileShareGuid),
             {RootFileTimes, _} = get_times(new_by_guid(RootFileGuid)),
-            RootFileTimes;
+            {ok, RootFileTimes};
         false ->
             times:get_or_default(FileUuid)
     end,
@@ -752,31 +761,21 @@ get_child(FileCtx, Name, UserCtx) ->
                     end
             end;
         _ ->
-            case is_share_dir_const(FileCtx) of
+            case is_share_root_dir_const(FileCtx) of
                 true ->
                     get_share_root_dir_child(FileCtx, Name, UserCtx);
                 false ->
-                    SpaceId = get_space_id_const(FileCtx),
+                    ShareId = get_share_id_const(FileCtx),
                     IsInOpenHandleMode = user_ctx:in_open_handle_mode(UserCtx),
 
-                    case is_space_dir_const(FileCtx) andalso IsInOpenHandleMode of
+                    case is_space_dir_const(FileCtx) andalso IsInOpenHandleMode andalso ShareId == undefined of
                         true ->
-                            {ok, Shares} = space_logic:get_shares(
-                                user_ctx:get_session_id(UserCtx), SpaceId
-                            ),
-                            case lists:member(Name, Shares) of
-                                true ->
-                                    ChildUuid = fslogic_uuid:shareid_to_share_dir_uuid(Name),
-                                    ChildShareGuid = file_id:pack_share_guid(ChildUuid, SpaceId, Name),
-                                    {new_by_guid(ChildShareGuid), FileCtx};
-                                false ->
-                                    throw(?ENOENT)
-                            end;
+                            get_space_share_child(FileCtx, Name, UserCtx);
                         false ->
                             {FileDoc, FileCtx2} = get_file_doc(FileCtx),
                             case canonical_path:resolve(FileDoc, <<"/", Name/binary>>) of
                                 {ok, ChildDoc} ->
-                                    ShareId = get_share_id_const(FileCtx2),
+                                    SpaceId = get_space_id_const(FileCtx),
                                     Child = new_by_doc(ChildDoc, SpaceId, ShareId),
                                     {Child, FileCtx2};
                                 {error, not_found} ->
@@ -792,14 +791,34 @@ get_child(FileCtx, Name, UserCtx) ->
     {ChildFile :: ctx(), NewFile :: ctx()} | no_return().
 get_share_root_dir_child(FileCtx, Name, UserCtx) ->
     FileUuid = get_uuid_const(FileCtx),
-    ShareId = fslogic_uuid:share_dir_uuid_to_shareid(FileUuid),
+    ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(FileUuid),
 
-    #od_share{root_file = RootFileShareGuid} = get_share_record(ShareId),
+    {ok, #document{value = #od_share{root_file = RootFileShareGuid}}} = share_logic:get(
+        user_ctx:get_session_id(UserCtx), ShareId
+    ),
 
     case get_aliased_name(new_by_guid(RootFileShareGuid), UserCtx) of
         {Name, ChildCtx} ->
             {ChildCtx, FileCtx};
         _ ->
+            throw(?ENOENT)
+    end.
+
+
+%% @private
+-spec get_space_share_child(ctx(), file_meta:name(), user_ctx:ctx()) ->
+    {ChildFile :: ctx(), NewFile :: ctx()} | no_return().
+get_space_share_child(SpaceDirCtx, Name, UserCtx) ->
+    SpaceId = get_space_id_const(SpaceDirCtx),
+    SessionId = user_ctx:get_session_id(UserCtx),
+    {ok, Shares} = space_logic:get_shares(SessionId, SpaceId),
+
+    case lists:member(Name, Shares) of
+        true ->
+            ChildUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(Name),
+            ChildShareGuid = file_id:pack_share_guid(ChildUuid, SpaceId, Name),
+            {new_by_guid(ChildShareGuid), SpaceDirCtx};
+        false ->
             throw(?ENOENT)
     end.
 
@@ -811,51 +830,8 @@ get_share_root_dir_child(FileCtx, Name, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(), file_meta:list_opts()) ->
     {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()}.
-get_file_children(FileCtx, UserCtx, Opts) ->
-    case is_user_root_dir_const(FileCtx, UserCtx) of
-        true ->
-            Offset = max(maps:get(offset, Opts, 0), 0), % offset can be negative if last_name is passed too
-            Limit = maps:get(size, Opts, ?DEFAULT_LS_BATCH_SIZE),
-            UserSpaces = list_user_spaces(UserCtx, Offset, Limit, undefined),
-            {UserSpaces, #{is_last => length(UserSpaces) < Limit}, FileCtx};
-        false ->
-            case is_share_dir_const(FileCtx) of
-                true ->
-                    list_share_root_dir(FileCtx);
-                false ->
-                    SpaceId = get_space_id_const(FileCtx),
-                    IsInOpenHandleMode = user_ctx:in_open_handle_mode(UserCtx),
-
-                    case is_space_dir_const(FileCtx) andalso IsInOpenHandleMode of
-                        true ->
-                            Offset = max(maps:get(offset, Opts, 0), 0), % offset can be negative if last_name is passed too
-                            Limit = maps:get(size, Opts, ?DEFAULT_LS_BATCH_SIZE),
-                            ShareDirs = list_shares_with_handle(
-                                UserCtx, SpaceId, Offset, Limit, undefined
-                            ),
-                            {ShareDirs, #{is_last => length(ShareDirs) < Limit}, FileCtx};
-                        false ->
-                            {FileDoc = #document{value = #file_meta{
-                                type = FileType
-                            }}, FileCtx2} = get_file_doc(FileCtx),
-                            SpaceId = get_space_id_const(FileCtx2),
-                            ShareId = get_share_id_const(FileCtx2),
-                            case FileType of
-                                ?DIRECTORY_TYPE ->
-                                    MapFun = fun({Name, Uuid}) ->
-                                        new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
-                                    end,
-                                    {ok, ChildrenLinks, ListExtendedInfo} = file_meta:list_children(
-                                        FileDoc, Opts
-                                    ),
-                                    {lists:map(MapFun, ChildrenLinks), ListExtendedInfo, FileCtx2};
-                                _ ->
-                                    % In case of listing regular file - return it
-                                    {[FileCtx2], #{is_last => true}, FileCtx2}
-                            end
-                    end
-            end
-    end.
+get_file_children(FileCtx, UserCtx, ListOpts) ->
+    get_file_children_whitelisted(FileCtx, UserCtx, ListOpts, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -863,57 +839,33 @@ get_file_children(FileCtx, UserCtx, Opts) ->
 %% Returns list of directory children bounded by specified AllowedChildren.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_children_whitelisted(ctx(), user_ctx:ctx(), file_meta:list_opts(), [file_meta:name()]) ->
+-spec get_file_children_whitelisted(
+    ctx(),
+    user_ctx:ctx(),
+    file_meta:list_opts(),
+    ChildrenWhiteList :: undefined | [file_meta:name()]
+) ->
     {Children :: [ctx()], file_meta:list_extended_info(), NewFileCtx :: ctx()}.
 get_file_children_whitelisted(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            Offset = max(maps:get(offset, ListOpts, 0), 0), % offset can be negative if last_name is passed too
-            Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_SIZE),
-            UserSpaces = list_user_spaces(UserCtx, Offset, Limit, ChildrenWhiteList),
-            {UserSpaces, #{is_last => length(UserSpaces) < Limit}, FileCtx};
+            list_user_root_dir_children(UserCtx, FileCtx, ListOpts, ChildrenWhiteList);
         false ->
-            case is_share_dir_const(FileCtx) of
+            case is_share_root_dir_const(FileCtx) of
                 true ->
-                    list_share_root_dir(FileCtx);
+                    list_share_root_dir_children(UserCtx, FileCtx, ChildrenWhiteList);
                 false ->
-                    SpaceId = get_space_id_const(FileCtx),
+                    ShareId = get_share_id_const(FileCtx),
                     IsInOpenHandleMode = user_ctx:in_open_handle_mode(UserCtx),
 
-                    case is_space_dir_const(FileCtx) andalso IsInOpenHandleMode of
+                    case is_space_dir_const(FileCtx) andalso IsInOpenHandleMode andalso ShareId == undefined of
                         true ->
-                            Offset = max(maps:get(offset, ListOpts, 0), 0), % offset can be negative if last_name is passed too
-                            Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_SIZE),
-                            ShareDirs = list_shares_with_handle(
-                                UserCtx, SpaceId, Offset, Limit, ChildrenWhiteList
-                            ),
-                            {ShareDirs, #{is_last => length(ShareDirs) < Limit}, FileCtx};
+                            list_space_open_handle_shares(UserCtx, FileCtx, ListOpts, ChildrenWhiteList);
                         false ->
-                            {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
-                            SpaceId = get_space_id_const(FileCtx2),
-                            ShareId = get_share_id_const(FileCtx2),
-
-                            {ok, ChildrenLinks, ListExtendedInfo} = file_meta:list_children_whitelisted(
-                                FileDoc, ListOpts, ChildrenWhiteList
-                            ),
-                            ChildrenCtxs = lists:map(fun({Name, Uuid}) ->
-                                new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
-                            end, ChildrenLinks),
-                            {ChildrenCtxs, ListExtendedInfo, FileCtx2}
+                            list_normal_file(FileCtx, ListOpts, ChildrenWhiteList)
                     end
             end
     end.
-
-
-%% @private
--spec list_share_root_dir(ctx()) ->
-    {Children :: [ctx()], file_meta:list_extended_info(), NewFileCtx :: ctx()}.
-list_share_root_dir(FileCtx) ->
-    % In case of listing share dir return the only child
-    FileUuid = get_uuid_const(FileCtx),
-    ShareId = fslogic_uuid:share_dir_uuid_to_shareid(FileUuid),
-    #od_share{root_file = RootFileShareGuid} = get_share_record(ShareId),
-    {[new_by_guid(RootFileShareGuid)], #{is_last => true}, FileCtx}.
 
 
 %%--------------------------------------------------------------------
@@ -1288,9 +1240,9 @@ is_trash_dir_const(ParentCtx, Name) ->
         andalso (Name =:= ?TRASH_DIR_NAME).
 
 
--spec is_share_dir_const(ctx()) -> boolean().
-is_share_dir_const(#file_ctx{guid = Guid}) ->
-    fslogic_uuid:is_share_dir_guid(Guid).
+-spec is_share_root_dir_const(ctx()) -> boolean().
+is_share_root_dir_const(#file_ctx{guid = Guid}) ->
+    fslogic_uuid:is_share_root_dir_guid(Guid).
 
 
 -spec is_special_const(ctx()) -> boolean().
@@ -1357,9 +1309,10 @@ is_root_dir_const(#file_ctx{}) ->
 -spec file_exists_const(ctx()) -> boolean().
 file_exists_const(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
-    case is_share_dir_const(FileCtx) of
+
+    case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
         true ->
-            ShareId = fslogic_uuid:share_dir_uuid_to_shareid(get_uuid_const(FileCtx)),
+            ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(FileUuid),
 
             case share_logic:get(?ROOT_SESS_ID, ShareId) of
                 {ok, _} -> true;
@@ -1622,27 +1575,34 @@ get_file_size_from_remote_locations(FileCtx) ->
     end.
 
 %% @private
--spec list_user_spaces(user_ctx:ctx(), file_meta:list_offset(), file_meta:list_size(),
-    SpaceWhiteList :: undefined | [od_space:id()]) -> Children :: [ctx()].
-list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
+-spec list_user_root_dir_children(
+    user_ctx:ctx(),
+    ctx(),
+    file_meta:list_opts(),
+    SpaceWhiteList :: undefined | [od_space:id()]
+) ->
+    {Children :: [ctx()], file_meta:list_extended_info(), NewFileCtx :: ctx()}.
+list_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
+    Offset = max(maps:get(offset, ListOpts, 0), 0), % offset can be negative if last_name is passed too
+    Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_SIZE),
+
     SessionId = user_ctx:get_session_id(UserCtx),
     #document{value = #od_user{eff_spaces = UserEffSpaces}} = user_ctx:get_user(UserCtx),
 
-    FilteredSpaces = case SpaceWhiteList of
+    VisibleSpaces = case SpaceWhiteList of
         undefined ->
             UserEffSpaces;
         _ ->
-            lists:filter(fun(Space) ->
-                lists:member(Space, SpaceWhiteList)
-            end, UserEffSpaces)
+            lists:filter(fun(Space) -> lists:member(Space, SpaceWhiteList) end, UserEffSpaces)
     end,
-    case Offset < length(FilteredSpaces) of
+
+    Children = case Offset < length(VisibleSpaces) of
         true ->
             SpacesChunk = lists:sublist(
                 lists:sort(lists:map(fun(SpaceId) ->
                     {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
                     {SpaceName, SpaceId}
-                end, FilteredSpaces)),
+                end, VisibleSpaces)),
                 Offset + 1,
                 Limit
             ),
@@ -1652,45 +1612,105 @@ list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
             end, SpacesChunk);
         false ->
             []
-    end.
+    end,
+
+    {Children, #{is_last => length(Children) < Limit}, UserRootDirCtx}.
 
 
 %% @private
--spec list_shares_with_handle(
+-spec list_space_open_handle_shares(
     user_ctx:ctx(),
-    od_space:id(),
-    file_meta:list_offset(),
-    file_meta:list_size(),
+    ctx(),
+    file_meta:list_opts(),
     ShareWhiteList :: undefined | [od_share:id()]
 ) ->
-    Children :: [ctx()].
-list_shares_with_handle(UserCtx, SpaceId, Offset, Limit, ShareWhiteList) ->
+    {Children :: [ctx()], file_meta:list_extended_info(), NewFileCtx :: ctx()}.
+list_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts, ShareWhiteList) ->
+    Offset = max(maps:get(offset, ListOpts, 0), 0), % offset can be negative if last_name is passed too
+    Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_SIZE),
+
+    SpaceId = get_space_id_const(SpaceDirCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
-    {ok, Shares} = space_logic:get_shares(user_ctx:get_session_id(UserCtx), SpaceId),
+    {ok, AllSpaceShares} = space_logic:get_shares(SessionId, SpaceId),
 
-    FilteredShares = case ShareWhiteList of
+    VisibleShares = case ShareWhiteList of
         undefined ->
-            Shares;
+            AllSpaceShares;
         _ ->
-            lists:filter(fun(ShareId) -> lists:member(ShareId, ShareWhiteList) end, Shares)
+            lists:filter(fun(ShareId) -> lists:member(ShareId, ShareWhiteList) end, AllSpaceShares)
     end,
-    SharesWithHandles = lists:filter(fun(ShareId) ->
+    OpenHandleShares = lists:filter(fun(ShareId) ->
         case share_logic:get(SessionId, ShareId) of
-            {ok, #document{value = #od_share{handle = <<_/binary>>}}} ->
-                true;
-            _ ->
-                false
+            {ok, #document{value = #od_share{handle = <<_/binary>>}}} -> true;
+            _ -> false
         end
-    end, FilteredShares),
+    end, VisibleShares),
 
-    case Offset < length(SharesWithHandles) of
+    Children = case Offset < length(OpenHandleShares) of
         true ->
             lists:map(fun(ShareId) ->
-                ShareDirUuid = fslogic_uuid:shareid_to_share_dir_uuid(ShareId),
+                ShareDirUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(ShareId),
                 new_child_by_uuid(ShareDirUuid, ShareId, SpaceId, ShareId)
-            end, lists:sublist(lists:sort(SharesWithHandles), Offset + 1, Limit));
+            end, lists:sublist(lists:sort(OpenHandleShares), Offset + 1, Limit));
         false ->
             []
+    end,
+    {Children, #{is_last => true}, SpaceDirCtx}.
+
+
+%% @private
+-spec list_share_root_dir_children(
+    user_ctx:ctx(),
+    ctx(),
+    FileWhiteList :: undefined | [file_meta:name()]
+) ->
+    {Children :: [ctx()], file_meta:list_extended_info(), NewFileCtx :: ctx()}.
+list_share_root_dir_children(UserCtx, ShareRootDirCtx, FileWhiteList) ->
+    FileUuid = get_uuid_const(ShareRootDirCtx),
+    ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(FileUuid),
+
+    {ok, #document{value = #od_share{root_file = RootFileShareGuid}}} = share_logic:get(
+        user_ctx:get_session_id(UserCtx), ShareId
+    ),
+    ChildCtx = new_by_guid(RootFileShareGuid),
+
+    Children = case FileWhiteList of
+        undefined ->
+            [ChildCtx];
+        _ ->
+            {ChildName, ChildCtx2} = get_aliased_name(ChildCtx, UserCtx),
+            case lists:member(ChildName, FileWhiteList) of
+                true -> [ChildCtx2];
+                false -> []
+            end
+    end,
+    {Children, #{is_last => true}, ShareRootDirCtx}.
+
+
+%% @private
+-spec list_normal_file(
+    ctx(),
+    file_meta:list_opts(),
+    FileWhiteList :: undefined | [file_meta:name()]
+) ->
+    {Children :: [ctx()], file_meta:list_extended_info(), NewFileCtx :: ctx()}.
+list_normal_file(FileCtx, ListOpts, ChildrenWhiteList) ->
+    {#document{} = FileDoc, FileCtx2} = get_file_doc(FileCtx),
+    {_FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(get_guid_const(FileCtx)),
+
+    case file_meta:get_type(FileDoc) of
+        ?DIRECTORY_TYPE ->
+            MapFun = fun({Name, Uuid}) ->
+                new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
+            end,
+            {ok, ChildrenLinks, ListExtendedInfo} = case ChildrenWhiteList of
+                undefined -> file_meta:list_children(FileDoc, ListOpts);
+                _ -> file_meta:list_children_whitelisted(FileDoc, ListOpts, ChildrenWhiteList)
+            end,
+            {lists:map(MapFun, ChildrenLinks), ListExtendedInfo, FileCtx2};
+        _ ->
+            % In case of listing regular file - return it
+            {[FileCtx2], #{is_last => true}, FileCtx2}
     end.
 
 
@@ -1720,12 +1740,3 @@ get_dir_synced_gid_const(FileCtx) ->
         DirLocation ->
             dir_location:get_synced_gid(DirLocation)
     end.
-
-
-%% @private
--spec get_share_record(od_share:id()) -> od_share:record().
-get_share_record(ShareId) ->
-    {ok, #document{value = ShareRec}} = share_logic:get(
-        ?ROOT_SESS_ID, ShareId
-    ),
-    ShareRec.

@@ -248,29 +248,7 @@ get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
         }
     }};
 get_including_deleted(FileUuid) ->
-    case fslogic_uuid:is_share_dir_uuid(FileUuid) of
-        true -> get_share_dir_doc(FileUuid);
-        false -> datastore_model:get(?CTX#{include_deleted => true}, FileUuid)
-    end.
-
-
-%% @private
--spec get_share_dir_doc(uuid()) -> {ok, doc()}.
-get_share_dir_doc(ShareDirUuid) ->
-    ShareId = fslogic_uuid:share_dir_uuid_to_shareid(ShareDirUuid),
-    {ok, #document{value = #od_share{space = SpaceId}}} = share_logic:get(
-        ?ROOT_SESS_ID, ShareId
-    ),
-    {ok, #document{
-        key = ShareDirUuid,
-        value = #file_meta{
-            name = ShareId,
-            is_scope = false,
-            mode = 8#755,
-            owner = ?ROOT_USER_ID,
-            parent_uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)
-        }
-    }}.
+    datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
 
 
 %%--------------------------------------------------------------------
@@ -308,15 +286,10 @@ delete(#document{
         parent_uuid = ParentUuid
     }
 }) ->
-    case fslogic_uuid:is_share_dir_uuid(FileUuid) of
-        true ->
-            throw(?EPERM);
-        false ->
-            ?run(begin
-                ok = file_meta_links:delete(ParentUuid, Scope, FileName, FileUuid),
-                delete_without_link(FileUuid)
-            end)
-    end;
+    ?run(begin
+        ok = file_meta_links:delete(ParentUuid, Scope, FileName, FileUuid),
+        delete_without_link(FileUuid)
+    end);
 delete({path, Path}) ->
     ?run(begin
         {ok, #document{} = Doc} = canonical_path:resolve(Path),
