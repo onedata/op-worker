@@ -14,7 +14,7 @@
 
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/security.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").

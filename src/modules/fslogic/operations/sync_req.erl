@@ -15,9 +15,8 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/security.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").

@@ -12,9 +12,8 @@
 -module(acl).
 -author("Bartosz Walkowicz").
 
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/security.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -39,44 +38,40 @@
 
 
 -spec check_acl(
-    acl(), od_user:doc(), file_ctx:ctx(), ace:bitmask(), data_access_rights:user_perms_matrix()
+    acl(),
+    od_user:doc(),
+    file_ctx:ctx(),
+    ace:bitmask(),
+    data_access_control:user_perms_matrix()
 ) ->
-    {allowed | denied, file_ctx:ctx(), data_access_rights:user_perms_matrix()}.
-check_acl(_Acl, _User, FileCtx, 0, UserPermsMatrix) ->
+    {allowed | denied, file_ctx:ctx(), data_access_control:user_perms_matrix()}.
+check_acl(_Acl, _User, FileCtx, ?no_flags_mask, UserPermsMatrix) ->
     {allowed, FileCtx, UserPermsMatrix};
+
 check_acl([], _User, FileCtx, _Operations, #user_perms_matrix{
-    pointer = Pointer,
+    finished_step = ?ACL_CHECK(AceNo),
     granted = GrantedPerms
 } = UserPermsMatrix) ->
     {denied, FileCtx, UserPermsMatrix#user_perms_matrix{
-        pointer = Pointer + 1,
+        finished_step = ?ACL_CHECK(AceNo + 1),
         % After reaching then end of ACL all not explicitly granted perms are denied
         denied = ?complement_flags(GrantedPerms)
     }};
+
 check_acl([Ace | Rest], User, FileCtx, Operations, #user_perms_matrix{
-    pointer = Pointer,
-    granted = PrevGrantedPerms,
-    denied = PrevDeniedPerms
+    finished_step = ?ACL_CHECK(AceNo)
 } = UserPermsMatrix) ->
     case ace:is_applicable(User, FileCtx, Ace) of
         {true, FileCtx2} ->
-            {Result, NewGrantedPerms, NewDeniedPerms} = ace:check_against(
-                Operations, PrevGrantedPerms, PrevDeniedPerms, Ace
-            ),
-            NewUserPermsMatrix = #user_perms_matrix{
-                pointer = Pointer + 1,
-                granted = NewGrantedPerms,
-                denied = NewDeniedPerms
-            },
-            case Result of
-                {inconclusive, LeftoverOperations} ->
+            case ace:check_against(Operations, Ace, UserPermsMatrix) of
+                {{inconclusive, LeftoverOperations}, NewUserPermsMatrix} ->
                     check_acl(Rest, User, FileCtx2, LeftoverOperations, NewUserPermsMatrix);
-                AllowedOrDenied ->
+                {AllowedOrDenied, NewUserPermsMatrix} ->
                     {AllowedOrDenied, FileCtx2, NewUserPermsMatrix}
             end;
         {false, FileCtx2} ->
             check_acl(Rest, User, FileCtx2, Operations, UserPermsMatrix#user_perms_matrix{
-                pointer = Pointer + 1
+                finished_step = ?ACL_CHECK(AceNo + 1)
             })
     end.
 

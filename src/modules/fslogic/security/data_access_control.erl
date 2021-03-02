@@ -7,16 +7,15 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module handles access requirements checks for files.
+%%% This module checks user access rights for file.
 %%% @end
 %%%--------------------------------------------------------------------
--module(data_access_rights).
+-module(data_access_control).
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/security.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -69,7 +68,7 @@ assert_granted(UserCtx, FileCtx0, AccessRequirements0) ->
                     end
             end,
             lists:foldl(fun(AccessRequirement, FileCtx1) ->
-                assert_access_requirement(UserCtx, FileCtx1, AccessRequirement)
+                assert_meets_access_requirement(UserCtx, FileCtx1, AccessRequirement)
             end, FileCtx0, AccessRequirements1)
     end.
 
@@ -113,12 +112,12 @@ is_available_in_readonly_mode(?OR(AccessType1, AccessType2)) ->
 
 
 %% @private
--spec assert_access_requirement(user_ctx:ctx(), file_ctx:ctx(), requirement()) ->
+-spec assert_meets_access_requirement(user_ctx:ctx(), file_ctx:ctx(), requirement()) ->
     file_ctx:ctx() | no_return().
-assert_access_requirement(UserCtx, FileCtx, ?PERMISSIONS(RequiredPerms)) ->
-    assert_permissions(UserCtx, FileCtx, RequiredPerms);
+assert_meets_access_requirement(UserCtx, FileCtx, ?PERMISSIONS(RequiredPerms)) ->
+    assert_has_permissions(UserCtx, FileCtx, RequiredPerms);
 
-assert_access_requirement(UserCtx, FileCtx0, Requirement) when
+assert_meets_access_requirement(UserCtx, FileCtx0, Requirement) when
     Requirement == ?OWNERSHIP;
     Requirement == ?PUBLIC_ACCESS;
     Requirement == ?TRAVERSE_ANCESTORS
@@ -143,17 +142,17 @@ assert_access_requirement(UserCtx, FileCtx0, Requirement) when
             end
     end;
 
-assert_access_requirement(UserCtx, FileCtx, root) ->
+assert_meets_access_requirement(UserCtx, FileCtx, root) ->
     case user_ctx:is_root(UserCtx) of
         true -> FileCtx;
         false -> throw(?EACCES)
     end;
 
-assert_access_requirement(UserCtx, FileCtx, ?OR(AccessType1, AccessType2)) ->
+assert_meets_access_requirement(UserCtx, FileCtx, ?OR(AccessType1, AccessType2)) ->
     try
-        assert_access_requirement(UserCtx, FileCtx, AccessType1)
+        assert_meets_access_requirement(UserCtx, FileCtx, AccessType1)
     catch _:?EACCES ->
-        assert_access_requirement(UserCtx, FileCtx, AccessType2)
+        assert_meets_access_requirement(UserCtx, FileCtx, AccessType2)
     end.
 
 
@@ -184,7 +183,7 @@ check_access_requirement(UserCtx, FileCtx0, ?PUBLIC_ACCESS) ->
                     {ok, FileCtx1};
                 false ->
                     {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
-                    assert_access_requirement(UserCtx, ParentCtx, ?PUBLIC_ACCESS),
+                    assert_meets_access_requirement(UserCtx, ParentCtx, ?PUBLIC_ACCESS),
                     {ok, FileCtx2}
             end
     end;
@@ -194,18 +193,18 @@ check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
         {undefined, FileCtx1} ->
             {ok, FileCtx1};
         {ParentCtx0, FileCtx1} ->
-            ParentCtx1 = assert_permissions(
+            ParentCtx1 = assert_has_permissions(
                 UserCtx, ParentCtx0, ?traverse_container_mask
             ),
-            assert_access_requirement(UserCtx, ParentCtx1, ?TRAVERSE_ANCESTORS),
+            assert_meets_access_requirement(UserCtx, ParentCtx1, ?TRAVERSE_ANCESTORS),
             {ok, FileCtx1}
     end.
 
 
 %% @private
--spec assert_permissions(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask()) ->
+-spec assert_has_permissions(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask()) ->
     file_ctx:ctx() | no_return().
-assert_permissions(UserCtx, FileCtx0, RequiredPerms) ->
+assert_has_permissions(UserCtx, FileCtx0, RequiredPerms) ->
     UserId = user_ctx:get_user_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx0),
     % TODO VFS-6224 do not construct cache key outside of permissions_cache module
@@ -253,7 +252,7 @@ check_permissions(UserCtx, FileCtx0, RequiredPerms) ->
     DeniedPerms = get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx0, ShareId),
 
     UserPermsMatrix = #user_perms_matrix{
-        pointer = 0,
+        finished_step = ?SPACE_PRIVILEGES_CHECK,
         granted = ?no_flags_mask,
         denied = DeniedPerms
     },
@@ -311,7 +310,7 @@ check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsMatrix) ->
 ) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
 check_posix_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
-    pointer = 0,
+    finished_step = ?SPACE_PRIVILEGES_CHECK,
     granted = ?no_flags_mask,
     denied = DeniedPerms
 }) ->
@@ -347,7 +346,9 @@ check_posix_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
         _ -> denied
     end,
     {PermissionsCheckResult, FileCtx3, #user_perms_matrix{
-        pointer = 1, granted = AllAllowedPerms, denied = AllDeniedPerms
+        finished_step = ?POSIX_MODE_CHECK,
+        granted = AllAllowedPerms,
+        denied = AllDeniedPerms
     }};
 
 check_posix_permissions(UserCtx, FileCtx, RequiredPerms, _) ->
@@ -411,18 +412,18 @@ get_posix_allowed_perms(2#111, _) ->
 ) ->
     {allowed | denied, file_ctx:ctx(), user_perms_matrix()}.
 check_acl_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_matrix{
-    pointer = Pointer
+    finished_step = ?ACL_CHECK(AceNo)
 } = UserPermsMatrix) ->
     {Acl, FileCtx1} = file_ctx:get_acl(FileCtx0),
 
-    case Pointer >= length(Acl) of
+    case AceNo >= length(Acl) of
         true ->
             % Race between reading and clearing cache must have happened
             % (acl must have been replaced if it is shorter then should be)
             check_permissions(UserCtx, FileCtx0, RequiredPerms);
         false ->
             acl:check_acl(
-                lists:nthtail(Pointer, Acl),
+                lists:nthtail(AceNo, Acl),
                 user_ctx:get_user(UserCtx),
                 FileCtx1, RequiredPerms, UserPermsMatrix
             )

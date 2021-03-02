@@ -15,7 +15,7 @@
 -module(ace).
 -author("Bartosz Walkowicz").
 
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -27,7 +27,7 @@
 %% API
 -export([
     is_applicable/3,
-    check_against/4,
+    check_against/3,
 
     from_json/2, to_json/2,
     validate/2
@@ -95,41 +95,51 @@ is_applicable(_, FileCtx, _) ->
 %% - 'inconclusive' meaning that some permissions may have been granted
 %%    but not all of them (leftover permissions to be granted or denied are
 %%    returned).
-%% Additionally, this function takes as an arguments permission matrices
-%% (AllowedPerms and DeniedPerms constructed from preceding ACEs) made up
-%% to this point, updates them and returns (used for caching).
 %% @end
 %%--------------------------------------------------------------------
--spec check_against(bitmask(), bitmask(), bitmask(), ace()) ->
+-spec check_against(bitmask(), ace(), data_access_control:user_perms_matrix()) ->
     {
         allowed | denied | {inconclusive, LeftoverRequiredPerms :: bitmask()},
-        NewAllowedPerms :: bitmask(),
-        NewDeniedPerms :: bitmask()
+        data_access_control:user_perms_matrix()
     }.
-check_against(RequiredPerms, PrevAllowedPerms, PrevDeniedPerms, #access_control_entity{
-    acetype = ?allow_mask,
-    acemask = AceMask
-}) ->
-    AllAllowedPerms = PrevAllowedPerms bor ?reset_flags(AceMask, PrevDeniedPerms),
-
+check_against(
+    RequiredPerms,
+    #access_control_entity{acetype = ?allow_mask, acemask = AceMask},
+    #user_perms_matrix{
+        finished_step = ?ACL_CHECK(AceNo),
+        granted = PrevGrantedPerms,
+        denied = PrevDeniedPerms
+    } = UserPermsMatrix
+) ->
+    NewUserPermsMatrix = UserPermsMatrix#user_perms_matrix{
+        finished_step = ?ACL_CHECK(AceNo + 1),
+        granted = ?set_flags(PrevGrantedPerms, ?reset_flags(AceMask, PrevDeniedPerms))
+    },
     case ?reset_flags(RequiredPerms, AceMask) of
         ?no_flags_mask ->
-            {allowed, AllAllowedPerms, PrevDeniedPerms};
+            {allowed, NewUserPermsMatrix};
         LeftoverRequiredPerms ->
-            {{inconclusive, LeftoverRequiredPerms}, AllAllowedPerms, PrevDeniedPerms}
+            {{inconclusive, LeftoverRequiredPerms}, NewUserPermsMatrix}
     end;
 
-check_against(RequiredPerms, PrevAllowedPerms, PrevDeniedPerms, #access_control_entity{
-    acetype = ?deny_mask,
-    acemask = AceMask
-}) ->
-    AllDeniedPerms = PrevDeniedPerms bor ?reset_flags(AceMask, PrevAllowedPerms),
-
+check_against(
+    RequiredPerms,
+    #access_control_entity{acetype = ?deny_mask, acemask = AceMask},
+    #user_perms_matrix{
+        finished_step = ?ACL_CHECK(AceNo),
+        granted = PrevGrantedPerms,
+        denied = PrevDeniedPerms
+    } = UserPermsMatrix
+) ->
+    NewUserPermsMatrix = UserPermsMatrix#user_perms_matrix{
+        finished_step = ?ACL_CHECK(AceNo + 1),
+        denied = ?set_flags(PrevDeniedPerms, ?reset_flags(AceMask, PrevGrantedPerms))
+    },
     case ?common_flags(RequiredPerms, AceMask) of
         ?no_flags_mask ->
-            {{inconclusive, RequiredPerms}, PrevAllowedPerms, AllDeniedPerms};
+            {{inconclusive, RequiredPerms}, NewUserPermsMatrix};
         _ ->
-            {denied, PrevAllowedPerms, AllDeniedPerms}
+            {denied, NewUserPermsMatrix}
     end.
 
 

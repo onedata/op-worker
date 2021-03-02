@@ -6,13 +6,15 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% Definitions of macros and records used for:
+%%% - defining access requirements for file,
+%%% - checking if access to file is allowed for given user.
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Bartosz Walkowicz").
 
--ifndef(FSLOGIC_SECURITY_HRL).
--define(FSLOGIC_SECURITY_HRL, 1).
+-ifndef(FSLOGIC_DATA_ACCESS_CONTROL_HRL).
+-define(FSLOGIC_DATA_ACCESS_CONTROL_HRL, 1).
 
 -include("modules/fslogic/acl.hrl").
 
@@ -105,10 +107,15 @@
 % contains pointer to where it stopped (e.g. space privileges check or concrete
 % ACE in ACL) so that build can be resumed if needed.
 -record(user_perms_matrix, {
-    pointer :: non_neg_integer(),
+    finished_step :: non_neg_integer(),
     granted :: ace:bitmask(),
     denied :: ace:bitmask()
 }).
+
+% Steps performed during access control checks
+-define(SPACE_PRIVILEGES_CHECK, 0).
+-define(POSIX_MODE_CHECK, 1).
+-define(ACL_CHECK(AceNo), AceNo).
 
 
 -endif.

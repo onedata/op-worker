@@ -16,8 +16,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
--include("modules/fslogic/acl.hrl").
--include("modules/fslogic/security.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -59,7 +58,7 @@ enqueue_data_transfer(FileCtx, TransferParams) ->
 %% {@link transfer_worker_behaviour} callback required_permissions/0.
 %% @end
 %%--------------------------------------------------------------------
--spec required_permissions() -> [data_access_rights:requirement()].
+-spec required_permissions() -> [data_access_control:requirement()].
 required_permissions() ->
     [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_object_mask)].
 

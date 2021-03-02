@@ -1536,7 +1536,7 @@ set_acl_test(Config) ->
             name = <<"file1">>,
             perms = [?write_acl]
         }],
-        posix_requires_space_privs = {owner, [?SPACE_WRITE_DATA]},
+        posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
@@ -1567,7 +1567,7 @@ remove_acl_test(Config) ->
             name = <<"file1">>,
             perms = [?write_acl]
         }],
-        posix_requires_space_privs = {owner, [?SPACE_WRITE_DATA]},
+        posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,

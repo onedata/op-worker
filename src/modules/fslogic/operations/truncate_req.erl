@@ -12,8 +12,7 @@
 -module(truncate_req).
 -author("Tomasz Lichon").
 
--include("modules/fslogic/acl.hrl").
--include("modules/fslogic/security.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 

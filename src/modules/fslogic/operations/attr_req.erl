@@ -12,11 +12,10 @@
 -module(attr_req).
 -author("Tomasz Lichon").
 
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include("modules/fslogic/security.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/privileges.hrl").
 

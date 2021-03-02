@@ -11,7 +11,7 @@
 -module(transfer_req).
 -author("Bartosz Walkowicz").
 
--include("modules/fslogic/security.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API

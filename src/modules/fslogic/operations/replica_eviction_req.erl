@@ -13,7 +13,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("modules/fslogic/security.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 

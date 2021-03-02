@@ -13,10 +13,9 @@
 -module(acl_req).
 -author("Tomasz Lichon").
 
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include("modules/fslogic/security.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API

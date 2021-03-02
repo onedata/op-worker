@@ -13,9 +13,8 @@
 -module(storage_driver).
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/security.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -612,7 +611,7 @@ open_for_rdwr(SDHandle) ->
 %% @equiv open/2, but with permission control
 %% @end
 %%--------------------------------------------------------------------
--spec open_with_permissions_check(handle(), [data_access_rights:requirement()],
+-spec open_with_permissions_check(handle(), [data_access_control:requirement()],
     helpers:open_flag()) -> {ok, handle()} | error_reply().
 open_with_permissions_check(#sd_handle{
     session_id = SessionId,
