@@ -47,6 +47,8 @@
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
 -type type() :: fuse | rest | gui | offline | provider_outgoing | provider_incoming | root | guest.
+% TODO WRITEME
+-type mode() :: normal | open_handle.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
 % gets up (either incoming_session_watcher or outgoing_connection_manager),
@@ -57,7 +59,7 @@
 -export_type([
     id/0, record/0, doc/0,
     ttl/0, grace_period/0,
-    type/0, status/0
+    type/0, mode/0, status/0
 ]).
 
 -define(CTX, #{

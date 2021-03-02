@@ -106,7 +106,8 @@ handle_client_handshake(#client_handshake_request{
     case auth_manager:verify_credentials(TokenCredentials) of
         {ok, #auth{subject = ?SUB(user, UserId) = Subject}, _} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
-                Nonce, Subject, TokenCredentials
+                % TODO VFS-7361 get session mode from handshake message
+                Nonce, Subject, open_handle, TokenCredentials
             ),
             {UserId, SessionId};
         ?ERROR_FORBIDDEN ->

@@ -53,7 +53,8 @@ maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
         ProviderIp, oneclient, allow_data_access_caveats
     ),
     Res = session_manager:reuse_or_create_proxied_session(
-        EffSessionId, ProviderId, TokenCredentials, fuse
+        % TODO VFS-7361 get session mode from client message
+        EffSessionId, ProviderId, TokenCredentials, fuse, open_handle
     ),
     case Res of
         {ok, _} -> ok;
