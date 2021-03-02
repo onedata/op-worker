@@ -358,7 +358,7 @@ mock_acquire_offline_user_access_token_failure() ->
     Self = self(),
 
     test_utils:mock_new(?NODE, auth_manager, [passthrough]),
-    test_utils:mock_expect(?NODE, auth_manager, acquire_offline_user_access_token, fun(_, _) ->
+    test_utils:mock_expect(?NODE, auth_manager, acquire_offline_user_access_token, fun(_) ->
         Self ! acquire_offline_access_token,
         ?ERROR_NO_CONNECTION_TO_ONEZONE
     end).

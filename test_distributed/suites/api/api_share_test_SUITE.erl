@@ -29,14 +29,16 @@
     create_share_test/1,
     get_share_test/1,
     update_share_test/1,
-    delete_share_test/1
+    delete_share_test/1,
+    get_shared_file_or_directory_data_test/1
 ]).
 
 all() -> [
     create_share_test,
     get_share_test,
     update_share_test,
-    delete_share_test
+    delete_share_test,
+    get_shared_file_or_directory_data_test
 ].
 
 -define(ATTEMPTS, 30).
@@ -193,6 +195,10 @@ build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, Spac
 
 
 get_share_test(_Config) ->
+    get_share_test_base(<<"file">>),
+    get_share_test_base(<<"dir">>).
+
+get_share_test_base(FileType) ->
     Providers = lists:flatten([
         oct_background:get_provider_nodes(krakow),
         oct_background:get_provider_nodes(paris)
@@ -202,9 +208,12 @@ get_share_test(_Config) ->
     ShareName = <<"share">>,
     Description = <<"# Collection ABC\nThis collection contains elements.">>,
 
-    {FileType, FileSpec} = generate_random_file_spec([
-        #share_spec{name = ShareName, description = Description}
-    ]),
+    ShareSpec = #share_spec{name = ShareName, description = Description},
+    FileSpec = case FileType of
+        <<"file">> -> #file_spec{shares = [ShareSpec]};
+        <<"dir">> -> #dir_spec{shares = [ShareSpec]}
+    end,
+
     #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
         user3, SpaceId, FileSpec
     ),
@@ -238,6 +247,7 @@ get_share_test(_Config) ->
                             <<"description">> => Description,
                             <<"fileType">> => FileType,
                             <<"publicUrl">> => build_share_public_url(ShareId),
+                            <<"publicRestUrl">> => build_share_public_rest_url(ShareId),
                             <<"rootFileId">> => ShareObjectId,
                             <<"spaceId">> => SpaceId,
                             <<"handleId">> => null
@@ -538,6 +548,124 @@ validate_delete_share_result(MemRef, UserId, Providers) ->
     api_test_memory:set(MemRef, shares, lists:delete(ShareId, api_test_memory:get(MemRef, shares))).
 
 
+% it should be possible to fetch shared file information and content using a
+% centralized endpoint in Onezone that redirects to one of the supporting providers
+get_shared_file_or_directory_data_test(_Config) ->
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    FileContent = str_utils:rand_hex(rand:uniform(1000) + 1),
+
+    FileSpec = #file_spec{shares = [#share_spec{}], content = FileContent},
+    FileObject = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec),
+    get_shared_file_or_directory_data_test_base(FileObject),
+
+    DirSpec = #dir_spec{shares = [#share_spec{}], children = [
+        #dir_spec{}, #file_spec{}, #dir_spec{}, #file_spec{}, #dir_spec{}
+    ]},
+    DirObject = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, DirSpec),
+    get_shared_file_or_directory_data_test_base(DirObject).
+
+
+%% @private
+get_shared_file_or_directory_data_test_base(Object = #object{guid = FileGuid}) ->
+    AllNodes = oct_background:get_provider_nodes(krakow) ++ oct_background:get_provider_nodes(paris),
+    api_test_utils:set_and_sync_metadata(AllNodes, FileGuid, <<"xattrs">>, #{
+        <<"license">> => <<"CC-O">>,
+        <<"author">> => <<"john doe">>
+    }),
+    api_test_utils:set_and_sync_metadata(AllNodes, FileGuid, <<"rdf">>, ?RDF_METADATA_1),
+    api_test_utils:set_and_sync_metadata(AllNodes, FileGuid, <<"json">>, #{
+        <<"key">> => <<"value">>,
+        <<"topKey">> => #{
+            <<"nestedKey">> => 17
+        }
+    }),
+
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"downloadSharedFileContent">>, <<"/content">>, <<"">>, #{}
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"downloadSharedFileContent">>, <<"/content">>, <<"">>, #{<<"range">> => <<"bytes=3-86">>}
+    ),
+
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"listSharedDirectoryChildren">>, <<"/children">>, <<"">>, #{}
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"listSharedDirectoryChildren">>, <<"/children">>, <<"?offset=1&limit=1">>, #{}
+    ),
+
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileAttributes">>, <<"">>, <<"">>, #{}
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileAttributes">>, <<"/">>, <<"">>, #{}
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileAttributes">>, <<"">>, <<"?attribute=size">>, #{}
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileAttributes">>, <<"/">>, <<"?attribute=mtime">>, #{}
+    ),
+
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileJsonMetadata">>, <<"/metadata/json">>, <<"">>, #{}
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileJsonMetadata">>, <<"/metadata/json">>, <<"?filter_type=keypath&filter=topKey.nestedKey">>, #{}
+    ),
+
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileRdfMetadata">>, <<"/metadata/rdf">>, <<"">>, #{}
+    ),
+
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"">>, #{}
+    ),
+
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"?attribute=license">>, #{}
+    ).
+
+
+%% @private
+% use the actual templates that are sent to GUI to make sure they are ok
+get_shared_file_or_directory_data_test_base(Object, TemplateName, CounterpartOpApiPath, QueryString, Headers) ->
+    #object{guid = FileGuid, shares = [ShareId]} = Object,
+    ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+    {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
+
+    KrakowNode = hd(oct_background:get_provider_nodes(krakow)),
+    #{<<"restTemplates">> := RestTemplates} = rpc:call(
+        KrakowNode, gui_gs_translator, handshake_attributes, [anything]
+    ),
+    Template = maps:get(TemplateName, RestTemplates),
+    ZonePath = binary:replace(Template, <<"{{id}}">>, ShareObjectId),
+
+    ZoneRedirectorUrl = <<ZonePath/binary, QueryString/binary>>,
+    CounterpartOpUrl = api_test_utils:build_rest_url(KrakowNode, [
+        str_utils:format_bin("data/~s~s~s", [ShareObjectId, CounterpartOpApiPath, QueryString])
+    ]),
+    {ok, _, _, RedirectedResponse} = ?assertMatch(
+        {ok, _, _, _}, http_get_following_redirects(ZoneRedirectorUrl, Headers)
+    ),
+    ?assertMatch(
+        {ok, _, _, RedirectedResponse}, http_get_following_redirects(CounterpartOpUrl, Headers)
+    ).
+
+
+%% @private
+-spec http_get_following_redirects(http_client:url(), http_client:headers()) ->
+    {ok, RespCode :: non_neg_integer(), RespHeaders :: map(), RespBody :: binary() | map()} |
+    {error, term()}.
+http_get_following_redirects(Url, Headers) ->
+    http_client:get(Url, Headers, <<>>, [
+        {follow_redirect, true},
+        {max_redirect, 5},
+        {ssl_options, [{cacerts, opw_test_rpc:get_cert_chain_ders(krakow)}]},
+        {recv_timeout, 15000}
+    ]).
+
+
 %%%===================================================================
 %%% Common share test utils
 %%%===================================================================
@@ -555,11 +683,11 @@ generate_random_file_spec() ->
     {api_test_utils:file_type(), onenv_file_test_utils:file_spec()}.
 generate_random_file_spec(ShareSpecs) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FileDesc = case FileType of
+    FileSpec = case FileType of
         <<"file">> -> #file_spec{shares = ShareSpecs};
         <<"dir">> -> #dir_spec{shares = ShareSpecs}
     end,
-    {FileType, FileDesc}.
+    {FileType, FileSpec}.
 
 
 %% @private
@@ -570,6 +698,7 @@ generate_random_file_spec(ShareSpecs) ->
     ok.
 verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, FileType, UserId) ->
     ExpPublicUrl = build_share_public_url(ShareId),
+    ExpPublicRestUrl = build_share_public_rest_url(ShareId),
     ExpFileType = binary_to_atom(FileType, utf8),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
@@ -581,6 +710,7 @@ verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, 
                 space = SpaceId,
                 root_file = ShareFileGuid,
                 public_url = ExpPublicUrl,
+                public_rest_url = ExpPublicRestUrl,
                 file_type = ExpFileType,
                 handle = undefined
             }}},
@@ -620,6 +750,7 @@ assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileG
         <<"description">> => Description,
         <<"fileType">> => FileType,
         <<"publicUrl">> => build_share_public_url(ShareId),
+        <<"publicRestUrl">> => build_share_public_rest_url(ShareId),
         <<"rootFile">> => gri:serialize(#gri{
             type = op_file,
             id = ShareFileGuid,
@@ -679,6 +810,13 @@ get_file_shares(Node, UserSelector, FileGuid) ->
 build_share_public_url(ShareId) ->
     OzDomain = ozw_test_rpc:get_domain(),
     str_utils:format_bin("https://~s/share/~s", [OzDomain, ShareId]).
+
+
+%% @private
+-spec build_share_public_rest_url(od_share:id()) -> binary().
+build_share_public_rest_url(ShareId) ->
+    OzDomain = ozw_test_rpc:get_domain(),
+    str_utils:format_bin("https://~s/api/v3/onezone/shares/~s/public", [OzDomain, ShareId]).
 
 
 %%%===================================================================

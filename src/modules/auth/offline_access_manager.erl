@@ -62,12 +62,10 @@ init_session(_OfflineJobId, ?ROOT_CREDENTIALS) ->
 init_session(_OfflineJobId, ?GUEST_CREDENTIALS) ->
     ?ERROR_TOKEN_SUBJECT_INVALID;
 init_session(OfflineJobId, TokenCredentials) ->
-    Subject = auth_manager:get_subject(TokenCredentials),
-
-    case acquire_offline_credentials(OfflineJobId, Subject, TokenCredentials) of
-        {ok, OfflineCredentials} ->
+    case acquire_offline_credentials(OfflineJobId, TokenCredentials) of
+        {ok, OfflineCredentials = #offline_access_credentials{user_id = UserId}} ->
             session_manager:reuse_or_create_offline_session(
-                OfflineJobId, Subject, to_token_credentials(OfflineCredentials)
+                OfflineJobId, ?SUB(user, UserId), to_token_credentials(OfflineCredentials)
             );
         {error, _} = Error ->
             Error
@@ -105,16 +103,12 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
 
     case offline_access_credentials:get(OfflineJobId) of
         {ok, #offline_access_credentials{
-            user_id = UserId,
             next_renewal_threshold = NextRenewalThreshold,
             valid_until = ValidUntil
         } = OfflineCredentials} when Now =< ValidUntil ->
             case Now > NextRenewalThreshold of
                 true ->
-                    case acquire_offline_credentials(
-                        OfflineJobId, ?SUB(user, UserId),
-                        to_token_credentials(OfflineCredentials)
-                    ) of
+                    case acquire_offline_credentials(OfflineJobId, to_token_credentials(OfflineCredentials)) of
                         {ok, NewOfflineCredentials} ->
                             {ok, NewOfflineCredentials};
                         {error, _} = OzConnError when
@@ -160,11 +154,11 @@ update_next_renewal_backoff(OfflineJobId, Now) ->
 
 
 %% @private
--spec acquire_offline_credentials(offline_job_id(), aai:subject(), auth_manager:token_credentials()) ->
+-spec acquire_offline_credentials(offline_job_id(), auth_manager:token_credentials()) ->
     {ok, offline_access_credentials:record()} | errors:error().
-acquire_offline_credentials(OfflineJobId, ?SUB(user, UserId), TokenCredentials) ->
-    case auth_manager:acquire_offline_user_access_token(UserId, TokenCredentials) of
-        {ok, OfflineAccessToken} ->
+acquire_offline_credentials(OfflineJobId, TokenCredentials) ->
+    case auth_manager:acquire_offline_user_access_token(TokenCredentials) of
+        {ok, UserId, OfflineAccessToken} ->
             AcquiredAt = global_clock:timestamp_seconds(),
             ValidUntil = token_valid_until(OfflineAccessToken),
             TokenTTL = ValidUntil - AcquiredAt,
@@ -184,9 +178,7 @@ acquire_offline_credentials(OfflineJobId, ?SUB(user, UserId), TokenCredentials) 
             {ok, OfflineAccessCredentials};
         {error, _} = Error ->
             Error
-    end;
-acquire_offline_credentials(_, _, _) ->
-    ?ERROR_TOKEN_SUBJECT_INVALID.
+    end.
 
 
 %% @private

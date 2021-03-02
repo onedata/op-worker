@@ -73,13 +73,15 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
 create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
     name = NameOrUndefined,
     mode = FileMode,
-    shares = ShareSpecs
+    shares = ShareSpecs,
+    content = Content
 }) ->
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
 
     {ok, FileGuid} = create_file(CreationNode, UserSessId, ParentGuid, FileName, FileMode),
+    Content /= <<>> andalso write_file(CreationNode, UserSessId, FileGuid, Content),
 
     #object{
         guid = FileGuid,
@@ -87,6 +89,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
         type = ?REGULAR_FILE_TYPE,
         mode = FileMode,
         shares = create_shares(CreationNode, UserSessId, FileGuid, ShareSpecs),
+        content = Content,
         children = undefined
     };
 
@@ -156,14 +159,15 @@ await_file_attr_sync(SyncProviders, UserId, #object{guid = Guid} = Object) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
-        ?assertMatch({ok, Object}, get_object(SyncNode, SessId, Guid), ?ATTEMPTS)
+        ObjectAttributes = Object#object{content = undefined, children = undefined},
+        ?assertEqual({ok, ObjectAttributes}, get_object_attributes(SyncNode, SessId, Guid), ?ATTEMPTS)
     end, SyncProviders).
 
 
 %% @private
--spec get_object(oct_background:entity_selector(), session:id(), file_id:file_guid()) ->
+-spec get_object_attributes(oct_background:entity_selector(), session:id(), file_id:file_guid()) ->
     {ok, object()} | {error, term()}.
-get_object(Node, SessId, Guid) ->
+get_object_attributes(Node, SessId, Guid) ->
     case file_test_utils:get_attrs(Node, SessId, Guid) of
         {ok, #file_attr{guid = Guid, name = Name, type = Type, mode = Mode, shares = Shares}} ->
             {ok, #object{
@@ -186,7 +190,11 @@ await_dir_links_sync(SyncProviders, UserId, DirGuid, ExpChildrenList) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
-        ?assertMatch({ok, ExpChildrenList}, ls(SyncNode, SessId, DirGuid), ?ATTEMPTS)
+        ?assertEqual(
+            lists:sort(ExpChildrenList),
+            lists:sort(element(2, {ok, _} = ls(SyncNode, SessId, DirGuid))),
+            ?ATTEMPTS
+        )
     end, SyncProviders).
 
 
@@ -264,3 +272,12 @@ resolve_file(FileSelector) ->
     catch error:{badkeys, _} ->
         {FileSelector, file_id:guid_to_space_id(FileSelector)}
     end.
+
+
+%% @private
+-spec write_file(node(), session:id(), file_id:file_guid(), binary()) ->
+    ok | no_return().
+write_file(Node, SessId, FileGuid, Content) ->
+    {ok, FileHandle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {guid, FileGuid}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:write(Node, FileHandle, 0, Content)),
+    ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).

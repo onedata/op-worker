@@ -41,9 +41,8 @@
 -export([
     credentials_to_gs_auth_override/1,
     infer_access_token_ttl/1,
-    get_subject/1,
     get_caveats/1,
-    acquire_offline_user_access_token/2,
+    acquire_offline_user_access_token/1,
     verify_credentials/1
 ]).
 
@@ -57,6 +56,7 @@
     tokens:serialized().
 -type client_tokens() :: #client_tokens{}.
 
+%% @formatter:off
 % Record containing access token for user authorization in OZ.
 -record(token_credentials, {
     access_token :: access_token(),
@@ -72,6 +72,7 @@
 -type verification_result() ::
     {ok, aai:auth(), TokenValidUntil :: undefined | time:seconds()} |
     errors:error().
+%% @formatter:on
 
 -export_type([
     access_token/0, consumer_token/0, client_tokens/0,
@@ -176,16 +177,6 @@ infer_access_token_ttl(#token_credentials{access_token = AccessToken}) ->
     caveats:infer_ttl(tokens:get_caveats(try_to_deserialize_token(AccessToken))).
 
 
--spec get_subject(credentials()) -> aai:subject().
-get_subject(?ROOT_CREDENTIALS) ->
-    ?ROOT_IDENTITY;
-get_subject(?GUEST_CREDENTIALS) ->
-    ?GUEST_IDENTITY;
-get_subject(#token_credentials{access_token = AccessToken}) ->
-    #token{subject = Subject} = try_to_deserialize_token(AccessToken),
-    Subject.
-
-
 -spec get_caveats(credentials()) -> {ok, [caveats:caveat()]} | errors:error().
 get_caveats(?ROOT_CREDENTIALS) ->
     {ok, []};
@@ -205,19 +196,33 @@ get_caveats(TokenCredentials) ->
 %% @see provider_offline_access
 %% @end
 %%--------------------------------------------------------------------
--spec acquire_offline_user_access_token(od_user:id(), token_credentials()) ->
-    {ok, tokens:serialized()} | errors:error().
-acquire_offline_user_access_token(UserId, #token_credentials{
+-spec acquire_offline_user_access_token(token_credentials()) ->
+    {ok, od_user:id(), tokens:serialized()} | errors:error().
+acquire_offline_user_access_token(TokenCredentials = #token_credentials{
     access_token = AccessToken,
     consumer_token = ConsumerToken,
     peer_ip = PeerIp,
     interface = Interface,
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
-    token_logic:acquire_offline_user_access_token(
-        UserId, AccessToken, resolve_consumer_token(ConsumerToken),
-        PeerIp, Interface, DataAccessCaveatsPolicy
-    ).
+    % the token must be verified first to check the subject (simply checking the
+    % token's carried subject is not enough as legacy tokens don't have one)
+    case verify_credentials(TokenCredentials) of
+        {ok, #auth{subject = ?SUB(user, UserId)}, _} ->
+            case token_logic:acquire_offline_user_access_token(
+                UserId, AccessToken, resolve_consumer_token(ConsumerToken),
+                PeerIp, Interface, DataAccessCaveatsPolicy
+            ) of
+                {ok, OfflineAccessToken} ->
+                    {ok, UserId, OfflineAccessToken};
+                {error, _} = AcquireError ->
+                    AcquireError
+            end;
+        {ok, _, _} ->
+            ?ERROR_TOKEN_SUBJECT_INVALID;
+        {error, _} = VerificationError ->
+            VerificationError
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -279,7 +284,7 @@ verify_token_credentials(#token_credentials{
         ) of
             {ok, Subject, TokenTTL} ->
                 ensure_subject_is_a_supported_user(Subject),
-                AaiAuth = #auth{
+                Auth = #auth{
                     subject = Subject,
                     caveats = tokens:get_caveats(Token)
                 },
@@ -287,8 +292,8 @@ verify_token_credentials(#token_credentials{
                     undefined -> undefined;
                     _ -> ?NOW() + TokenTTL
                 end,
-                TokenRef = auth_cache:get_token_ref(Token),
-                {TokenRef, {ok, AaiAuth, TokenExpiration}};
+                TokenRef = auth_cache:get_token_ref(Subject, Token),
+                {TokenRef, {ok, Auth, TokenExpiration}};
             ?ERROR_TOKEN_SERVICE_FORBIDDEN(?SERVICE(?OP_WORKER, _)) = ServiceForbiddenError ->
                 % this error may be generated when the user is not supported by the
                 % provider - check if this is the case and return a clearer error
