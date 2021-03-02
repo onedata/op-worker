@@ -46,7 +46,6 @@ routes() -> [
     %% Remove QoS requirement
     {<<"/qos_requirements/:qid">>, rest_handler, #rest_req{
         method = 'DELETE',
-        consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_qos, 
             id = ?BINDING(qid), 
@@ -76,7 +75,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Evaluate qos expression
+    %% Evaluate QoS expression
     {<<"/spaces/:sid/evaluate_qos_expression">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
