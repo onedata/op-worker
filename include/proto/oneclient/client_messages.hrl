@@ -22,6 +22,7 @@
     % session id on behalf which operations should be carried
     effective_session_id :: undefined | session:id(),
     effective_client_tokens :: undefined | auth_manager:client_tokens(),
+    effective_session_mode = normal :: session:mode(),
     message_stream :: undefined | #message_stream{},
     message_body :: tuple()
 }).

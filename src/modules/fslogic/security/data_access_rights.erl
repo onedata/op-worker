@@ -71,7 +71,7 @@ assert_granted(UserCtx, FileCtx0, AccessRequirements0) ->
             % Special case - user in 'open_handle' mode should be treated as guest
             % when checking permissions
             UserCtx2 = case user_ctx:is_in_open_handle_mode(UserCtx) of
-                true -> user_ctx:set_mode(user_ctx:new(?GUEST_SESS_ID), open_handle);
+                true -> user_ctx:set_session_mode(user_ctx:new(?GUEST_SESS_ID), open_handle);
                 false -> UserCtx
             end,
             lists:foldl(fun(AccessRequirement, FileCtx1) ->

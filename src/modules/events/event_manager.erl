@@ -480,12 +480,14 @@ handle_in_process(Request, _State) ->
 handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
     #flush_events{context = Context, notify = Notify} = Request,
     {ok, Credentials} = session:get_credentials(SessId),
+    {ok, SessMode} = session:get_mode(SessId),
     StreamId = sequencer:term_to_stream_id(Context),
     ClientMsg = #client_message{
         message_stream = #message_stream{stream_id = StreamId},
         message_body = Request,
         effective_session_id = SessId,
-        effective_client_tokens = auth_manager:get_client_tokens(Credentials)
+        effective_client_tokens = auth_manager:get_client_tokens(Credentials),
+        effective_session_mode = SessMode
     },
     Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
@@ -507,12 +509,14 @@ handle_remotely(Request, ProviderId, SessId) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
     {ok, Credentials} = session:get_credentials(SessId),
+    {ok, SessMode} = session:get_mode(SessId),
     communicator:stream_to_provider(
         session_utils:get_provider_session_id(outgoing, ProviderId),
         #client_message{
             message_body = Request,
             effective_session_id = SessId,
-            effective_client_tokens = auth_manager:get_client_tokens(Credentials)
+            effective_client_tokens = auth_manager:get_client_tokens(Credentials),
+            effective_session_mode = SessMode
         },
         StreamId, undefined
     ),

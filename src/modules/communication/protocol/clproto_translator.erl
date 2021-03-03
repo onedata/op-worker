@@ -33,6 +33,7 @@
 %% API
 -export([
     translate_handshake_error/1,
+    session_mode_translate_to_protobuf/1, session_mode_translate_from_protobuf/1,
     translate_from_protobuf/1, translate_to_protobuf/1
 ]).
 
@@ -67,6 +68,18 @@ translate_handshake_error(<<"no_discharge_macaroon_for_caveat">>) ->
     'NO_DISCHARGE_MACAROON_FOR_CAVEAT';
 translate_handshake_error(_) ->
     'INTERNAL_SERVER_ERROR'.
+
+
+-spec session_mode_translate_to_protobuf(undefined | session:mode()) ->
+    'NORMAL' | 'OPEN_HANDLE'.
+session_mode_translate_to_protobuf(open_handle) -> 'OPEN_HANDLE';
+session_mode_translate_to_protobuf(_) -> 'NORMAL'.
+
+
+-spec session_mode_translate_from_protobuf(undefined | 'NORMAL' | 'OPEN_HANDLE') ->
+    session:mode().
+session_mode_translate_from_protobuf('OPEN_HANDLE') -> open_handle;
+session_mode_translate_from_protobuf(_) -> normal.
 
 
 %%--------------------------------------------------------------------
@@ -276,13 +289,15 @@ translate_from_protobuf(#'ClientHandshakeRequest'{
     macaroon = Macaroon,
     session_id = Nonce,
     version = Version,
-    compatible_oneprovider_versions = CompOpVersions
+    compatible_oneprovider_versions = CompOpVersions,
+    session_mode = SessionMode
 }) ->
     #client_handshake_request{
         client_tokens = translate_from_protobuf(Macaroon),
         nonce = Nonce,
         version = Version,
-        compatible_oneprovider_versions = CompOpVersions
+        compatible_oneprovider_versions = CompOpVersions,
+        session_mode = session_mode_translate_from_protobuf(SessionMode)
     };
 translate_from_protobuf(#'ProviderHandshakeRequest'{
     provider_id = ProviderId,
