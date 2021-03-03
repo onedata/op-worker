@@ -285,10 +285,16 @@ reuse_or_create_session(SessId, SessType, SessMode, Identity, Credentials, Proxy
         {ok, Caveats} ->
             case data_constraints:get(Caveats) of
                 {ok, DataConstraints} ->
-                    reuse_or_create_session(
-                        SessId, SessType, SessMode, Identity,
-                        Credentials, DataConstraints, ProxyVia
-                    );
+                    case {SessMode, data_constraints:are_allow_all_constraints(DataConstraints)} of
+                        {open_handle, false} ->
+                            % Data constraints are not allowed in 'open_handle' mode
+                            {error, invalid_token};
+                        _ ->
+                            reuse_or_create_session(
+                                SessId, SessType, SessMode, Identity,
+                                Credentials, DataConstraints, ProxyVia
+                            )
+                    end;
                 {error, invalid_constraints} ->
                     {error, invalid_token}
             end;
