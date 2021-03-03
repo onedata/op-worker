@@ -467,7 +467,7 @@ data_spec_get(#gri{aspect = file_qos_summary}) -> #{
 };
 
 data_spec_get(#gri{aspect = download_url}) -> #{
-    required => #{id => {binary, guid}}
+    required => #{<<"file_ids">> => {list_of_binaries, guid}}
 }.
 
 
@@ -480,8 +480,7 @@ authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadata;
-    As =:= download_url
+    As =:= rdf_metadata
 ->
     file_id:is_share_guid(FileGuid);
 
@@ -495,8 +494,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= rdf_metadata;
     As =:= distribution;
     As =:= acl;
-    As =:= shares;
-    As =:= download_url
+    As =:= shares
 ->
     middleware_utils:has_access_to_file(Auth, Guid);
 
@@ -506,7 +504,13 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = trans
 
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = file_qos_summary}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
+
+authorize_get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
+    FileIds = maps:get(<<"file_ids">>, Data),
+    lists:all(fun(Guid) ->
+        middleware_utils:has_access_to_file(Auth, Guid)
+    end, FileIds).
 
 
 %% @private
@@ -523,10 +527,15 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= acl;
     As =:= shares;
     As =:= transfers;
-    As =:= file_qos_summary;
-    As =:= download_url
+    As =:= file_qos_summary
 ->
-    middleware_utils:assert_file_managed_locally(Guid).
+    middleware_utils:assert_file_managed_locally(Guid);
+
+validate_get(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
+    FileIds = maps:get(<<"file_ids">>, Data),
+    lists:foreach(fun(Guid) ->
+        middleware_utils:assert_file_managed_locally(Guid)
+    end, FileIds).
 
 
 %%--------------------------------------------------------------------
@@ -670,9 +679,10 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, 
         <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))
     }};
 
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) ->
+get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,
-    case page_file_download:get_file_download_url(SessionId, FileGuid) of
+    FileGuidList = maps:get(<<"file_ids">>, Data),
+    case page_file_download:get_file_download_url(SessionId, FileGuidList) of
         {ok, URL} ->
             {ok, value, URL};
         {error, _} = Error ->

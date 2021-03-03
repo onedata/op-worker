@@ -31,18 +31,18 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the URL under which given file can be downloaded. The URL contains
-%% a one-time download code. Performs a permissions test first and denies
-%% requests for inaccessible files.
+%% Returns the URL under which given files can be downloaded. The URL contains
+%% a one-time download code. When downloading single file performs a permissions 
+%% test first and denies requests if inaccessible.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_download_url(session:id(), fslogic_worker:file_guid()) ->
+-spec get_file_download_url(session:id(), [fslogic_worker:file_guid()]) ->
     {ok, binary()} | errors:error().
-get_file_download_url(SessionId, FileGuid) ->
+get_file_download_url(SessionId, FileGuidList) ->
     try
-        maybe_sync_first_file_block(SessionId, FileGuid),
+        maybe_sync_first_file_block(SessionId, FileGuidList),
         Hostname = oneprovider:get_domain(),
-        {ok, Code} = file_download_code:create(SessionId, FileGuid),
+        {ok, Code} = file_download_code:create(SessionId, FileGuidList),
         URL = str_utils:format_bin("https://~s~s/~s", [
             Hostname, ?FILE_DOWNLOAD_PATH, Code
         ]),
@@ -64,12 +64,12 @@ get_file_download_url(SessionId, FileGuid) ->
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:verify(FileDownloadCode) of
-        {true, SessionId, FileGuid} ->
+        {true, SessionId, FileGuidList} ->
             OzUrl = oneprovider:get_oz_url(),
             Req2 = gui_cors:allow_origin(OzUrl, Req),
             Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
             handle_http_download(
-                SessionId, FileGuid,
+                SessionId, FileGuidList,
                 fun() -> file_download_code:remove(FileDownloadCode) end,
                 Req3
             );
@@ -84,18 +84,26 @@ handle(<<"GET">>, Req) ->
 
 
 %% @private
--spec maybe_sync_first_file_block(session:id(), file_id:file_guid()) -> ok.
-maybe_sync_first_file_block(SessionId, FileGuid) ->
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, read)),
-    ReadBlockSize = http_download_utils:get_read_block_size(FileHandle),
-    case lfm:read(FileHandle, 0, ReadBlockSize) of
-        {error, ?ENOSPC} -> 
-            % Translate POSIX error to something better understandable by user.
-            throw(?ERROR_QUOTA_EXCEEDED);
-        Res ->
-            ?check(Res)
-    end,
-    lfm:monitored_release(FileHandle),
+-spec maybe_sync_first_file_block(session:id(), [fslogic_worker:file_guid()]) -> ok.
+maybe_sync_first_file_block(SessionId, [FileGuid]) ->
+    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
+            {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, read)),
+            ReadBlockSize = http_download_utils:get_read_block_size(FileHandle),
+            case lfm:read(FileHandle, 0, ReadBlockSize) of
+                {error, ?ENOSPC} ->
+                    % Translate POSIX error to something better understandable by user.
+                    throw(?ERROR_QUOTA_EXCEEDED);
+                Res ->
+                    ?check(Res)
+            end,
+            lfm:monitored_release(FileHandle),
+            ok;
+        _ -> 
+            ok
+    end;
+maybe_sync_first_file_block(_SessionId, _FileGuidList) ->
+    % do not perform access test, inaccessible files will be ignored
     ok.
 
 
@@ -109,26 +117,48 @@ maybe_sync_first_file_block(SessionId, FileGuid) ->
 %%--------------------------------------------------------------------
 -spec handle_http_download(
     session:id(),
-    fslogic_worker:file_guid(),
+    [fslogic_worker:file_guid()],
     OnSuccessCallback :: fun(() -> ok),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-handle_http_download(SessionId, FileGuid, OnSuccessCallback, Req0) ->
-    case lfm:stat(SessionId, {guid, FileGuid}) of
-        {ok, #file_attr{name = FileName} = FileAttrs} ->
-            %% @todo VFS-2073 - check if needed
-            %% FileNameUrlEncoded = http_utils:url_encode(FileName),
-            Req1 = cowboy_req:set_resp_header(
-                <<"content-disposition">>,
-                <<"attachment; filename=\"", FileName/binary, "\"">>,
-                %% @todo VFS-2073 - check if needed
-                %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
-                Req0
-            ),
+handle_http_download(SessionId, FileGuidList, OnSuccessCallback, Req0) ->
+    FileAttrsList = lists:foldl(
+        fun (_FileGuid, {error, _} = Error) -> Error;
+            (FileGuid, Acc) ->
+            case lfm:stat(SessionId, {guid, FileGuid}) of
+                {ok, #file_attr{} = FileAttr} -> [FileAttr | Acc];
+                {error, _Errno} = Error -> Error
+            end
+    end, [], FileGuidList),
+    case FileAttrsList of
+        [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
+            Req1 = set_header(FileName, Req0),
             http_download_utils:stream_file(
-                SessionId, FileAttrs, OnSuccessCallback, Req1
+                SessionId, Attr, OnSuccessCallback, Req1
+            );
+        [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
+            Req1 = set_header(<<FileName/binary, ".tar.gz">>, Req0),
+            http_download_utils:stream_archive(
+                SessionId, FileAttrsList, OnSuccessCallback, Req1
+            );
+        [_ | _] ->
+            Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
+            Req1 = set_header(<<"onedata-download-", Timestamp/binary, ".tar.gz">>, Req0),
+            http_download_utils:stream_archive(
+                SessionId, FileAttrsList, OnSuccessCallback, Req1
             );
         {error, Errno} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req0)
     end.
+
+set_header(Filename, Req) ->
+    %% @todo VFS-2073 - check if needed
+    %% FileNameUrlEncoded = http_utils:url_encode(FileName),
+    cowboy_req:set_resp_header(
+        <<"content-disposition">>,
+        <<"attachment; filename=\"", Filename/binary, "\"">>,
+        %% @todo VFS-2073 - check if needed
+        %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
+        Req
+    ).

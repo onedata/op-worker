@@ -237,7 +237,7 @@
 -record(file_download_code, {
     expires :: time:seconds(),
     session_id :: session:id(),
-    file_guid :: fslogic_worker:file_guid()
+    file_guids :: [fslogic_worker:file_guid()]
 }).
 
 -record(offline_access_credentials, {
@@ -942,13 +942,13 @@
     % Uuid of processed directory/file
     doc_id :: file_meta:uuid(),
     % User who scheduled the traverse
-    user_id :: od_user:id(),
+    user_desc :: tree_traverse:user_desc(),
     % Information needed to restart directory listing
     use_listing_token = true :: boolean(),
     last_name :: file_meta:name(),
     last_tree :: od_provider:id(),
     % Traverse task specific info
-    execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
+    children_dirs_handling_mode :: tree_traverse:children_dirs_handling_mode(),
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),

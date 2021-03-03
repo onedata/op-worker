@@ -79,11 +79,13 @@ close_for_task(TaskId) ->
 %% Returned sessions are wrapped in user_ctx:ctx().
 %% @end
 %%--------------------------------------------------------------------
--spec acquire_for_task(od_user:id(), tree_traverse:traverse_info(), tree_traverse:id()) ->
+-spec acquire_for_task(tree_traverse:user_desc(), tree_traverse:traverse_info(), tree_traverse:id()) ->
     {ok, user_ctx:ctx()} | {error, term()}.
-acquire_for_task(?ROOT_USER_ID, _TraverseInfo, _TaskId) ->
+acquire_for_task({_, ?ROOT_USER_ID}, _TraverseInfo, _TaskId) ->
     {ok, user_ctx:new(?ROOT_SESS_ID)};
-acquire_for_task(_UserId, TraverseInfo, TaskId) ->
+acquire_for_task({session, SessionId}, _TraverseInfo, _TaskId) ->
+    {ok, user_ctx:new(SessionId)};
+acquire_for_task({offline_access, _UserId}, TraverseInfo, TaskId) ->
     Pool = maps:get(pool, TraverseInfo),
     case offline_access_manager:get_session_id(TaskId) of
         {ok, SessionId} ->

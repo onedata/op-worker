@@ -18,7 +18,7 @@
 
 -define(NEW_JOBS_DEFAULT_PREPROCESSOR, fun(_, _, _, _) -> ok end).
 -define(DEFAULT_BATCH_SIZE, 1000).
--define(DEFAULT_EXEC_SLAVE_ON_DIR, false).
+-define(DEFAULT_CHILDREN_DIRS_HANDLING_MODE, generate_master_jobs).
 -define(DEFAULT_CHILDREN_MASTER_JOBS_MODE, sync).
 -define(DEFAULT_TRACK_SUBTREE_STATUS, false).
 
@@ -27,7 +27,7 @@
     % File or directory processed by job
     file_ctx :: file_ctx:ctx(),
     % User who scheduled the traverse
-    user_id :: od_user:id(),
+    user_desc :: tree_traverse:user_desc(),
 
     % Fields used for directory listing
     token = ?INITIAL_LS_TOKEN :: file_meta:list_token(),
@@ -37,7 +37,7 @@
 
     % Traverse config
     % generate slave jobs also for directories
-    execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
+    children_dirs_handling_mode :: tree_traverse:children_dirs_handling_mode(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode = ?DEFAULT_CHILDREN_MASTER_JOBS_MODE :: tree_traverse:children_master_jobs_mode(),
     track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean(),
@@ -50,7 +50,7 @@
 -record(tree_traverse_slave, {
     file_ctx :: file_ctx:ctx(),
     % User who scheduled the traverse
-    user_id :: od_user:id(),
+    user_desc :: tree_traverse:user_desc(),
     traverse_info :: tree_traverse:traverse_info(),
     track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean()
 }).

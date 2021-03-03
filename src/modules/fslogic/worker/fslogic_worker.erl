@@ -201,6 +201,7 @@ init(_Args) ->
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
     tree_deletion_traverse:init_pool(),
+    dir_streaming_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
 
     schedule_invalidate_permissions_cache(),

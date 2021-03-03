@@ -53,11 +53,11 @@
     traverse:callback_module()) -> {ok, key()} | {error, term()}.
 save_master_job(Key, Job = #tree_traverse{
     file_ctx = FileCtx,
-    user_id = UserId,
+    user_desc = UserDesc,
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
-    execute_slave_on_dir = OnDir,
+    children_dirs_handling_mode = ChildrenDirsHandlingMode,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
@@ -70,11 +70,11 @@ save_master_job(Key, Job = #tree_traverse{
         callback_module = CallbackModule,
         task_id = TaskID,
         doc_id = Uuid,
-        user_id = UserId,
+        user_desc = UserDesc,
         use_listing_token = Token =/= undefined,
         last_name = LastName,
         last_tree = LastTree,
-        execute_slave_on_dir = OnDir,
+        children_dirs_handling_mode = ChildrenDirsHandlingMode,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
@@ -100,11 +100,11 @@ delete_master_job(Key, _Job, _, _CallbackModule) ->
 get_master_job(#document{value = #tree_traverse_job{
     pool = Pool, task_id = TaskID,
     doc_id = DocID,
-    user_id = UserId,
+    user_desc = UserDesc,
     use_listing_token = UseListingToken,
     last_name = LastName,
     last_tree = LastTree,
-    execute_slave_on_dir = OnDir,
+    children_dirs_handling_mode = ChildrenDirsHandlingMode,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
@@ -114,14 +114,14 @@ get_master_job(#document{value = #tree_traverse_job{
     FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
     Job = #tree_traverse{
         file_ctx = FileCtx,
-        user_id = UserId,
+        user_desc = UserDesc,
         token = case UseListingToken of
             true -> ?INITIAL_LS_TOKEN;
             false -> undefined
         end,
         last_name = LastName,
         last_tree = LastTree,
-        execute_slave_on_dir = OnDir,
+        children_dirs_handling_mode = ChildrenDirsHandlingMode,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
@@ -157,7 +157,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -193,6 +193,24 @@ get_record_struct(2) ->
         {track_subtree_status, boolean},
         {batch_size, integer},
         {traverse_info, binary}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {pool, string},
+        {callback_module, atom},
+        {task_id, string},
+        {doc_id, string},
+        % user_id has been changed to user_desc in this version
+        {user_desc, {atom, string}},
+        {use_listing_token, boolean},
+        {last_name, string},
+        {last_tree, string},
+        % execute_slave_on_dir has been changed to children_dirs_handling_mode in this version
+        {children_dirs_handling_mode, atom},
+        {children_master_jobs_mode, atom},
+        {track_subtree_status, boolean},
+        {batch_size, integer},
+        {traverse_info, binary}
     ]}.
 
 
@@ -222,6 +240,49 @@ upgrade_record(1, {?MODULE, Pool, CallbackModule, TaskId, DocId, LastName, LastT
         sync,
         % track_subtree_status has been added in this version
         false,
+        BatchSize,
+        TraverseInfo
+    }};
+upgrade_record(2, Record) ->
+    {
+        ?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ExecuteSlaveOnDir,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo
+    } = Record,
+    
+    UserDesc = case UserId of
+        ?ROOT_USER_ID -> {root, ?ROOT_USER_ID};
+        _ -> {offline_access, UserId}
+    end,
+    
+    ChildrenDirsHandlingMode = case ExecuteSlaveOnDir of
+        false -> generate_master_jobs;
+        true -> generate_slave_and_master_jobs
+    end,
+    
+    {3, {?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserDesc,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildrenDirsHandlingMode,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
         BatchSize,
         TraverseInfo
     }}.

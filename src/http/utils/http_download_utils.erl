@@ -23,7 +23,8 @@
 %% API
 -export([
     get_read_block_size/1,
-    stream_file/3, stream_file/4, stream_bytes_range/6
+    stream_file/3, stream_file/4, stream_bytes_range/6,
+    stream_archive/4
 ]).
 
 -type read_block_size() :: non_neg_integer().
@@ -51,7 +52,9 @@
     read_block_size :: read_block_size(),
     max_read_blocks_count :: non_neg_integer(),
     encoding_fun :: fun((Data :: binary()) -> EncodedData :: binary()),
-
+    zlib_stream = undefined :: undefined | zlib:zstream(),
+    min_bytes_to_read = 0 :: non_neg_integer(),
+    
     on_success_callback :: fun(() -> ok)
 }).
 -type download_ctx() :: #download_ctx{}.
@@ -131,6 +134,41 @@ stream_file(SessionId, #file_attr{
     end.
 
 
+-spec stream_archive(
+    session:id(),
+    [lfm_attrs:file_attributes()],
+    OnSuccessCallback :: fun(() -> ok),
+    cowboy_req:req()
+) ->
+    cowboy_req:req().
+stream_archive(SessionId, FileAttrsList, OnSuccessCallback, Req0) ->
+    Req1 = cowboy_req:stream_reply(
+        ?HTTP_200_OK,
+        #{?HDR_CONTENT_TYPE => <<"multipart/byteranges">>},
+        Req0
+    ),
+    Z = zlib:open(),
+    ok = zlib:deflateInit(Z, 4, deflated, 31, 8, default),
+    lists:foreach(fun(#file_attr{guid = FileGuid, type = Type}) ->
+        FileCtx = file_ctx:new_by_guid(FileGuid),
+        {Path, FileCtx1} = file_ctx:get_canonical_path(FileCtx),
+        PathPrefix = <<(filename:dirname(Path))/binary, "/">>,
+        FileCtx2 = case Type of
+            ?DIRECTORY_TYPE ->
+                {FileTarHeader, Ctx} = prepare_tar_header(FileCtx1, PathPrefix),
+                send_data_chunk(deflate(Z, FileTarHeader), Req1),
+                Ctx;
+            _ -> FileCtx1
+        end,
+        dir_streaming_traverse:start(FileCtx2, SessionId, self()),
+        stream_archive_loop(Z, Req1, SessionId, PathPrefix)
+    end, FileAttrsList),
+    send_data_chunk(deflate(Z, tar_utils:eof(), finish), Req1),
+    zlib:close(Z),
+    execute_on_success_callback(<<>>, OnSuccessCallback),
+    Req1.
+
+
 -spec stream_bytes_range(
     lfm:handle(),
     file_meta:size(),
@@ -141,14 +179,7 @@ stream_file(SessionId, #file_attr{
 ) ->
     ok | no_return().
 stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize) ->
-    stream_bytes_range(Range, #download_ctx{
-        file_size = FileSize,
-        file_handle = FileHandle,
-        read_block_size = ReadBlockSize,
-        max_read_blocks_count = calculate_max_read_blocks_count(ReadBlockSize),
-        encoding_fun = EncodingFun,
-        on_success_callback = fun() -> ok end
-    }, Req, ?MIN_SEND_RETRY_DELAY).
+    stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, undefined, 0).
 
 
 %%%===================================================================
@@ -205,7 +236,7 @@ stream_whole_file(#download_ctx{
     ),
 
     stream_bytes_range({0, FileSize - 1}, DownloadCtx, Req1, ?MIN_SEND_RETRY_DELAY),
-    execute_on_success_callback(FileHandle, OnSuccessCallback),
+    execute_on_success_callback(lfm_context:get_guid(FileHandle), OnSuccessCallback),
 
     cowboy_req:stream_body(<<"">>, fin, Req1),
     Req1.
@@ -229,7 +260,7 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, #download_ctx{
     ),
 
     stream_bytes_range(Range, DownloadCtx, Req1, ?MIN_SEND_RETRY_DELAY),
-    execute_on_success_callback(FileHandle, OnSuccessCallback),
+    execute_on_success_callback(lfm_context:get_guid(FileHandle), OnSuccessCallback),
 
     cowboy_req:stream_body(<<"">>, fin, Req1),
     Req1.
@@ -261,10 +292,78 @@ stream_multipart_ranged_body(Ranges, #download_ctx{
 
         stream_bytes_range(Range, DownloadCtx, Req1, ?MIN_SEND_RETRY_DELAY)
     end, Ranges),
-    execute_on_success_callback(FileHandle, OnSuccessCallback),
+    execute_on_success_callback(lfm_context:get_guid(FileHandle), OnSuccessCallback),
 
     cowboy_req:stream_body(cow_multipart:close(Boundary), fin, Req1),
     Req1.
+
+
+%% @private
+-spec stream_archive_loop(zlib:zstream(), cowboy_req:req(), session:id(), file_meta:path()) -> 
+    ok.
+stream_archive_loop(Z, Req, SessionId, RootDirPath) ->
+    receive
+        done -> ok;
+        {file_ctx, FileCtx, Pid} ->
+            {FileTarHeader, FileCtx1} = prepare_tar_header(FileCtx, RootDirPath),
+            case file_ctx:is_dir(FileCtx1) of
+                {true, _} ->
+                    send_data_chunk(deflate(Z, FileTarHeader), Req);
+                {false, FileCtx2} ->
+                    stream_archive_file(Z, Req, SessionId, FileCtx2, FileTarHeader)
+            end,
+            Pid ! done,
+            stream_archive_loop(Z, Req, SessionId, RootDirPath)
+    after timer:seconds(5) ->
+        ?error("Unexpected error during archive streaming traverse."),
+        throw(?ERROR_INTERNAL_SERVER_ERROR)
+    end.
+
+
+%% @private
+-spec stream_archive_file(zlib:zstream(), cowboy_req:req(), session:id(), file_ctx:ctx(), 
+    tar_utils:tar_header()) -> ok.
+stream_archive_file(Z, Req, SessionId, FileCtx, FileTarHeader) ->
+    {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx),
+    case lfm:monitored_open(SessionId, {guid, file_ctx:get_guid_const(FileCtx1)}, read) of
+        {ok, FileHandle} ->
+            send_data_chunk(deflate(Z, FileTarHeader), Req),
+            Range = {0, FileSize - 1},
+            ReadBlockSize = get_read_block_size(FileHandle),
+            stream_bytes_range(
+                FileHandle, FileSize, Range, Req, fun(D) -> D end, ReadBlockSize, Z, FileSize),
+            lfm:monitored_release(FileHandle),
+            send_data_chunk(deflate(Z, tar_utils:data_padding(FileSize)), Req),
+            ok;
+        {error, ?EACCES} ->
+            % ignore files with no access
+            ok
+    end.
+
+
+%% @private
+-spec stream_bytes_range(
+    lfm:handle(),
+    file_meta:size(),
+    http_parser:bytes_range(),
+    cowboy_req:req(),
+    EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
+    read_block_size(),
+    zlib:zstream(),
+    MinReadBytes :: non_neg_integer()
+) ->
+    ok | no_return().
+stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, Z, MinReadBytes) ->
+    stream_bytes_range(Range, #download_ctx{
+        file_size = FileSize,
+        file_handle = FileHandle,
+        read_block_size = ReadBlockSize,
+        max_read_blocks_count = calculate_max_read_blocks_count(ReadBlockSize),
+        encoding_fun = EncodingFun,
+        zlib_stream = Z,
+        min_bytes_to_read = MinReadBytes,
+        on_success_callback = fun() -> ok end
+    }, Req, ?MIN_SEND_RETRY_DELAY).
 
 
 %% @private
@@ -275,33 +374,60 @@ stream_multipart_ranged_body(Ranges, #download_ctx{
     SendRetryDelay :: time:millis()
 ) ->
     ok | no_return().
-stream_bytes_range({From, To}, _, _, _) when From > To ->
+stream_bytes_range(Range, DownloadCtx, Req, SendRetryDelay) ->
+    stream_bytes_range(Range, DownloadCtx, Req, SendRetryDelay, 0).
+
+
+%% @private
+-spec stream_bytes_range(
+    http_parser:bytes_range(),
+    download_ctx(),
+    cowboy_req:req(),
+    SendRetryDelay :: time:millis(),
+    ReadBytes :: non_neg_integer()
+) ->
+    ok | no_return().
+stream_bytes_range({From, To}, _, _, _, _) when From > To ->
     ok;
 stream_bytes_range({From, To}, #download_ctx{
     file_handle = FileHandle,
     read_block_size = ReadBlockSize,
     max_read_blocks_count = MaxReadBlocksCount,
-    encoding_fun = EncodingFun
-} = DownloadCtx, Req, SendRetryDelay) ->
+    encoding_fun = EncodingFun,
+    zlib_stream = ZlibStream,
+    min_bytes_to_read = MinBytesToRead
+} = DownloadCtx, Req, SendRetryDelay, ReadBytes) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
-    {ok, _NewFileHandle, Data} = case lfm:read(FileHandle, From, ToRead) of
+    {NewFileHandle, Data} = read_file_data(FileHandle, From, ToRead, MinBytesToRead - ReadBytes),
+
+    case byte_size(Data) of
+        0 -> ok;
+        DataSize ->
+            EncodedData = EncodingFun(Data),
+            DeflatedData = deflate(ZlibStream, EncodedData),
+            NextSendRetryDelay = send_data_chunk(DeflatedData, Req, MaxReadBlocksCount, SendRetryDelay),
+            stream_bytes_range(
+                {From + DataSize, To}, DownloadCtx#download_ctx{file_handle = NewFileHandle}, Req, 
+                NextSendRetryDelay, ReadBytes + DataSize
+            )
+    end.
+
+
+%% @private
+-spec read_file_data(lfm:handle(), From :: non_neg_integer(), ToRead :: non_neg_integer(), 
+    MinBytes :: non_neg_integer()) -> {lfm:handle(), binary()}.
+read_file_data(FileHandle, From, ToRead, MinBytes) ->
+    case lfm:read(FileHandle, From, ToRead) of
         {error, ?ENOSPC} ->
             % Translate POSIX error to something better understandable by user.
             throw(?ERROR_QUOTA_EXCEEDED);
-        Res -> 
-            ?check(Res)
-    end,
-
-    case byte_size(Data) of
-        0 ->
-            ok;
-        DataSize ->
-            NextSendRetryDelay = send_data_chunk(
-                EncodingFun(Data), Req, MaxReadBlocksCount, SendRetryDelay
-            ),
-            stream_bytes_range(
-                {From + DataSize, To}, DownloadCtx, Req, NextSendRetryDelay
-            )
+        Res ->
+            {ok, NewFileHandle, Data} = ?check(Res),
+            FinalData = case byte_size(Data) < MinBytes of
+                true -> str_utils:pad_right(Data, min(MinBytes, ToRead), <<0>>);
+                false -> Data
+            end,
+            {NewFileHandle, FinalData}
     end.
 
 
@@ -318,6 +444,12 @@ stream_bytes_range({From, To}, #download_ctx{
 %% read into memory.
 %% @end
 %%--------------------------------------------------------------------
+-spec send_data_chunk(Data :: binary(), cowboy_req:req()) -> NextRetryDelay :: time:millis().
+send_data_chunk(Data, Req) -> 
+    send_data_chunk(Data, Req, ?MAX_DOWNLOAD_BUFFER_SIZE div ?DEFAULT_READ_BLOCK_SIZE, ?MIN_SEND_RETRY_DELAY).
+
+
+%% @private
 -spec send_data_chunk(
     Data :: binary(),
     cowboy_req:req(),
@@ -325,6 +457,8 @@ stream_bytes_range({From, To}, #download_ctx{
     RetryDelay :: time:millis()
 ) ->
     NextRetryDelay :: time:millis().
+send_data_chunk(<<>>, _Req, _MaxReadBlocksCount, RetryDelay) -> 
+    RetryDelay;
 send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) ->
     {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
 
@@ -342,13 +476,38 @@ send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) -
 
 
 %% @private
--spec execute_on_success_callback(lfm:handle(), OnSuccessCallback :: fun(() -> ok)) -> ok.
-execute_on_success_callback(FileHandle, OnSuccessCallback) ->
+-spec deflate(zlib:zstream() | undefined, binary()) -> binary().
+deflate(Z, Data) ->
+    deflate(Z, Data, none).
+
+
+%% @private
+-spec deflate(zlib:zstream() | undefined, binary(), zlib:zflush()) -> binary().
+deflate(undefined, Data, _Flush) ->
+    Data;
+deflate(Z, Data, Flush) ->
+    iolist_to_binary(zlib:deflate(Z, Data, Flush)).
+
+
+%% @private
+-spec execute_on_success_callback(fslogic_worker:file_guid(), OnSuccessCallback :: fun(() -> ok)) -> ok.
+execute_on_success_callback(Guid, OnSuccessCallback) ->
     try
         ok = OnSuccessCallback()
     catch Type:Reason ->
         ?warning("Failed to execute file download successfully finished callback for file (~p) "
-                 "due to ~p:~p", [
-            lfm_context:get_guid(FileHandle), Type, Reason
-        ])
+                 "due to ~p:~p", [Guid, Type, Reason])
     end.
+
+
+%% @private
+-spec prepare_tar_header(file_ctx:ctx(), file_meta:path()) -> 
+    {tar_utils:tar_header(), file_ctx:ctx()}.
+prepare_tar_header(FileCtx, RootDirPath) ->
+    {Mode, FileCtx1} = file_ctx:get_mode(FileCtx),
+    {{_ATime, _CTime, MTime}, FileCtx2} = file_ctx:get_times(FileCtx1),
+    {IsDir, FileCtx3} = file_ctx:is_dir(FileCtx2),
+    {Size, FileCtx4} = file_ctx:get_file_size(FileCtx3),
+    {Path, FileCtx5} = file_ctx:get_canonical_path(FileCtx4),
+    Filename = string:prefix(Path, RootDirPath),
+    {tar_utils:prepare_header(Filename, Size, Mode, MTime, IsDir), FileCtx5}.
