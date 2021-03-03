@@ -426,7 +426,7 @@ get_parent(FileCtx = #file_ctx{guid = Guid, parent = undefined}, UserCtx) ->
     Parent = case {
         fslogic_uuid:is_root_dir_uuid(ParentUuid),
         IsShareRootFile,
-        user_ctx:in_open_handle_mode(UserCtx)
+        user_ctx:is_in_open_handle_mode(UserCtx)
     } of
         {_, true, true} ->
             % Share root file shall point to virtual share root dir in open handle mode
@@ -766,7 +766,7 @@ get_child(FileCtx, Name, UserCtx) ->
                     get_share_root_dir_child(FileCtx, Name, UserCtx);
                 false ->
                     ShareId = get_share_id_const(FileCtx),
-                    IsInOpenHandleMode = user_ctx:in_open_handle_mode(UserCtx),
+                    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
 
                     case is_space_dir_const(FileCtx) andalso IsInOpenHandleMode andalso ShareId == undefined of
                         true ->
@@ -856,7 +856,7 @@ get_file_children_whitelisted(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
                     list_share_root_dir_children(UserCtx, FileCtx, ChildrenWhiteList);
                 false ->
                     ShareId = get_share_id_const(FileCtx),
-                    IsInOpenHandleMode = user_ctx:in_open_handle_mode(UserCtx),
+                    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
 
                     case is_space_dir_const(FileCtx) andalso IsInOpenHandleMode andalso ShareId == undefined of
                         true ->

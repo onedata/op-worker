@@ -93,6 +93,7 @@
 -define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
 
 -define(AVAILABLE_SHARE_OPERATIONS, [
+    % Checking perms for operations other than 'read' should result in immediate ?EACCES
     check_perms,
     get_parent,
     % TODO VFS-6057 resolve share path up to share not user root dir
@@ -102,6 +103,7 @@
     get_xattr,
     get_metadata,
 
+    % Opening file is available but only in 'read' mode
     open_file,
     open_file_with_extended_info,
     synchronize_block,
@@ -358,19 +360,18 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             {FileCtx0, file_ctx:get_share_id_const(FileCtx0)}
     end,
     try
-        UserCtx1 = case ShareId of
-            undefined ->
+        UserCtx1 = case {user_ctx:is_in_open_handle_mode(UserCtx0), ShareId} of
+            {false, undefined} ->
                 UserCtx0;
-            _ ->
-                case user_ctx:in_open_handle_mode(UserCtx0) of
+            {IsInOpenHandleMode, _} ->
+                case is_operation_available_in_share_mode(Request) of
+                    true -> ok;
+                    false -> throw(?EACCES)
+                end,
+                case IsInOpenHandleMode of
                     true ->
                         UserCtx0;
                     false ->
-                        Operation = get_operation(Request),
-                        case lists:member(Operation, ?AVAILABLE_SHARE_OPERATIONS) of
-                            true -> ok;
-                            false -> throw(?EACCES)
-                        end,
                         % Operations concerning shares must be carried with GUEST auth
                         case user_ctx:is_guest(UserCtx0) of
                             true -> UserCtx0;
@@ -384,7 +385,27 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             fslogic_errors:handle_error(Request, Type, Error)
     end.
 
+
 %% @private
+-spec is_operation_available_in_share_mode(request()) -> boolean().
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file{flag = Flag}
+}}) ->
+    Flag == read;
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file_with_extended_info{flag = Flag}
+}}) ->
+    Flag == read;
+is_operation_available_in_share_mode(#provider_request{
+    provider_request = #check_perms{flag = Flag}
+}) ->
+    Flag == read;
+is_operation_available_in_share_mode(Request) ->
+    lists:member(get_operation(Request), ?AVAILABLE_SHARE_OPERATIONS).
+
+
+%% @private
+-spec get_operation(request()) -> atom().
 get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
     element(1, Req);
 get_operation(#fuse_request{fuse_request = Req}) ->
@@ -393,6 +414,7 @@ get_operation(#provider_request{provider_request = Req}) ->
     element(1, Req);
 get_operation(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
+
 
 %%--------------------------------------------------------------------
 %% @private

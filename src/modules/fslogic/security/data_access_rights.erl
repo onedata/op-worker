@@ -68,8 +68,14 @@ assert_granted(UserCtx, FileCtx0, AccessRequirements0) ->
                         false -> throw(?ENOENT)
                     end
             end,
+            % Special case - user in 'open_handle' mode should be treated as guest
+            % when checking permissions
+            UserCtx2 = case user_ctx:is_in_open_handle_mode(UserCtx) of
+                true -> user_ctx:set_mode(user_ctx:new(?GUEST_SESS_ID), open_handle);
+                false -> UserCtx
+            end,
             lists:foldl(fun(AccessRequirement, FileCtx1) ->
-                check_and_cache_result(UserCtx, FileCtx1, AccessRequirement)
+                check_and_cache_result(UserCtx2, FileCtx1, AccessRequirement)
             end, FileCtx0, AccessRequirements1)
     end.
 
@@ -420,7 +426,10 @@ check_posix_perm(PosixPerm, UserCtx, ShareId, FileCtx0) ->
 -spec check_space_privs(posix_perm(), file_ctx:ctx(), user_ctx:ctx(),
     od_share:id() | undefined) -> {ok, file_ctx:ctx()} | no_return().
 check_space_privs(read, FileCtx, UserCtx, undefined) ->
-    case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
+    IsUserRootDir = file_ctx:is_user_root_dir_const(FileCtx, UserCtx),
+    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
+
+    case IsUserRootDir orelse IsInOpenHandleMode of
         true ->
             {ok, FileCtx};
         false ->
