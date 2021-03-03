@@ -8,26 +8,20 @@
 %%% @doc
 %%% This module is responsible for authorization of fslogic operations.
 %%%
-%%% Onedata provides several file system security models that limit access to
-%%% files and directories. Those are:
-%%% - access token caveats (data constraints),
-%%% - space ownership,
-%%% - space privileges,
-%%% - POSIX permissions,
-%%% - CDMI access control lists (ACLs).
-%%%
-%%% These models fit together as follows:
-%%% 1. If user access token caveats forbids the requested access,
+%%% Onedata incorporates several concepts that regulate the access to data.
+%%% These concepts fit together as follows:
+%%% 1. If user access token data caveats forbids the requested access,
 %%%    the request is denied.
 %%% 2. If user is space owner, the request is granted.
-%%% 3. If user lacks `space_write_data` space privilege in case of operation
+%%% 3. If user is not member of space containing data, the request is denied.
+%%% 4. If user lacks `space_write_data` space privilege in case of operation
 %%%    that modifies file or directory (content, attributes, metadata, etc.)
 %%%    or `space_read_data` space privilege in case of operation that reads
 %%%    file or directory (content, attributes, metadata, etc.), the request
 %%%    is denied.
-%%% 4. If an ACL exists on the file, it is evaluated and used to determine
-%%%    whether access should be granted.
-%%% 5. Otherwise, POSIX permissions are checked.
+%%% 5a. If an ACL exists on the file, it is evaluated to determine whether
+%%%     access should be granted.
+%%% 5b. Otherwise, POSIX permissions are checked.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_authz).

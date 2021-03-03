@@ -97,10 +97,10 @@ is_applicable(_, FileCtx, _) ->
 %%    returned).
 %% @end
 %%--------------------------------------------------------------------
--spec check_against(bitmask(), ace(), data_access_control:user_perms_matrix()) ->
+-spec check_against(bitmask(), ace(), data_access_control:user_perms_check_progress()) ->
     {
         allowed | denied | {inconclusive, LeftoverRequiredPerms :: bitmask()},
-        data_access_control:user_perms_matrix()
+        data_access_control:user_perms_check_progress()
     }.
 check_against(
     RequiredPerms,

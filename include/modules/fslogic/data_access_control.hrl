@@ -103,9 +103,11 @@
 % Record holding information about the permissions to the file granted and
 % denied for the given user. It is build incrementally rather than at once as
 % permissions check consists of number of steps and not all must be completed
-% to tell whether requested permissions are granted or denied. That is why it
-% contains pointer to where it stopped (e.g. space privileges check or concrete
-% ACE in ACL) so that build can be resumed if needed.
+% to tell whether requested permissions are granted or denied. Those steps are:
+% 1. space privileges check - step number `0`
+% 2. depending on file active permissions type either:
+%       a) posix mode check - step number `1`
+%       b) acl check - each ACE in ACL has its own step number starting at `1`
 -record(user_perms_check_progress, {
     finished_step :: non_neg_integer(),
     granted :: ace:bitmask(),

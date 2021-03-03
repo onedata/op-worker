@@ -42,9 +42,9 @@
     od_user:doc(),
     file_ctx:ctx(),
     ace:bitmask(),
-    data_access_control:user_perms_matrix()
+    data_access_control:user_perms_check_progress()
 ) ->
-    {allowed | denied, file_ctx:ctx(), data_access_control:user_perms_matrix()}.
+    {allowed | denied, file_ctx:ctx(), data_access_control:user_perms_check_progress()}.
 check_acl(_Acl, _User, FileCtx, ?no_flags_mask, UserPermsCheckProgress) ->
     {allowed, FileCtx, UserPermsCheckProgress};
 
