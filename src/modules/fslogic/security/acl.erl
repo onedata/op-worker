@@ -12,7 +12,7 @@
 -module(acl).
 -author("Bartosz Walkowicz").
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -24,7 +24,7 @@
 
 %% API
 -export([
-    assert_permitted/4,
+    check_acl/5,
     add_names/1, strip_names/1,
 
     from_json/2, to_json/2,
@@ -37,25 +37,42 @@
 %%%===================================================================
 
 
--spec assert_permitted(acl(), od_user:doc(), ace:bitmask(), file_ctx:ctx()) ->
-    {ok, file_ctx:ctx()} | no_return().
-assert_permitted(_Acl, _User, ?no_flags_mask, FileCtx) ->
-    {ok, FileCtx};
-assert_permitted([], _User, _Operations, _FileCtx) ->
-    throw(?EACCES);
-assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
+-spec check_acl(
+    acl(),
+    od_user:doc(),
+    file_ctx:ctx(),
+    ace:bitmask(),
+    data_access_control:user_perms_check_progress()
+) ->
+    {allowed | denied, file_ctx:ctx(), data_access_control:user_perms_check_progress()}.
+check_acl(_Acl, _User, FileCtx, ?no_flags_mask, UserPermsCheckProgress) ->
+    {allowed, FileCtx, UserPermsCheckProgress};
+
+check_acl([], _User, FileCtx, _Operations, #user_perms_check_progress{
+    finished_step = ?ACL_CHECK(AceNo),
+    granted = GrantedPerms
+} = UserPermsCheckProgress) ->
+    {denied, FileCtx, UserPermsCheckProgress#user_perms_check_progress{
+        finished_step = ?ACL_CHECK(AceNo + 1),
+        % After reaching then end of ACL all not explicitly granted perms are denied
+        denied = ?complement_flags(GrantedPerms)
+    }};
+
+check_acl([Ace | Rest], User, FileCtx, Operations, #user_perms_check_progress{
+    finished_step = ?ACL_CHECK(AceNo)
+} = UserPermsCheckProgress) ->
     case ace:is_applicable(User, FileCtx, Ace) of
         {true, FileCtx2} ->
-            case ace:check_against(Operations, Ace) of
-                allowed ->
-                    {ok, FileCtx2};
-                {inconclusive, LeftoverOperations} ->
-                    assert_permitted(Rest, User, LeftoverOperations, FileCtx2);
-                denied ->
-                    throw(?EACCES)
+            case ace:check_against(Operations, Ace, UserPermsCheckProgress) of
+                {{inconclusive, LeftoverOperations}, NewUserPermsCheckProgress} ->
+                    check_acl(Rest, User, FileCtx2, LeftoverOperations, NewUserPermsCheckProgress);
+                {AllowedOrDenied, NewUserPermsCheckProgress} ->
+                    {AllowedOrDenied, FileCtx2, NewUserPermsCheckProgress}
             end;
         {false, FileCtx2} ->
-            assert_permitted(Rest, User, Operations, FileCtx2)
+            check_acl(Rest, User, FileCtx2, Operations, UserPermsCheckProgress#user_perms_check_progress{
+                finished_step = ?ACL_CHECK(AceNo + 1)
+            })
     end.
 
 
@@ -69,7 +86,7 @@ assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
 add_names(Acl) ->
     lists:map(
         fun(#access_control_entity{identifier = Id, aceflags = Flags} = Ace) ->
-            Name = case ?has_flag(Flags, ?identifier_group_mask) of
+            Name = case ?has_flags(Flags, ?identifier_group_mask) of
                 true -> group_id_to_ace_name(Id);
                 false -> user_id_to_ace_name(Id)
             end,

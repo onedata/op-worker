@@ -13,6 +13,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -54,7 +55,7 @@ schedule_replica_eviction(
 
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors] %todo VFS-4844
+        [?TRAVERSE_ANCESTORS] %todo VFS-4844
     ),
     schedule_replica_eviction_insecure(
         UserCtx, FileCtx2,

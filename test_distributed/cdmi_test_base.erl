@@ -13,12 +13,12 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("http/rest.hrl").
 -include("http/cdmi.hrl").
--include("proto/common/credentials.hrl").
--include("modules/auth/acl.hrl").
--include("modules/fslogic/metadata.hrl").
+-include("http/rest.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/metadata.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/http/headers.hrl").

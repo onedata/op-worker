@@ -12,6 +12,7 @@
 -module(guid_req).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
@@ -32,7 +33,7 @@
     fslogic_worker:fuse_response().
 resolve_guid(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     resolve_guid_insecure(UserCtx, FileCtx1).
 
@@ -45,7 +46,7 @@ resolve_guid(UserCtx, FileCtx0) ->
     fslogic_worker:provider_response().
 get_parent(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     get_parent_insecure(UserCtx, FileCtx1).
 
@@ -58,7 +59,7 @@ get_parent(UserCtx, FileCtx0) ->
     fslogic_worker:provider_response().
 get_file_path(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     get_file_path_insecure(UserCtx, FileCtx1).
 

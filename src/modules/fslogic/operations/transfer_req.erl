@@ -11,6 +11,7 @@
 -module(transfer_req).
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API
@@ -42,7 +43,7 @@ schedule_file_transfer(
 
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
     schedule_transfer_insecure(
         UserCtx, FileCtx1,
@@ -70,7 +71,7 @@ schedule_view_transfer(
 
     SpaceDirCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, SpaceDirCtx0,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
     schedule_transfer_insecure(
         UserCtx, SpaceDirCtx1,
