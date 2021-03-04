@@ -195,10 +195,6 @@ build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, Spac
 
 
 get_share_test(_Config) ->
-    get_share_test_base(<<"file">>),
-    get_share_test_base(<<"dir">>).
-
-get_share_test_base(FileType) ->
     Providers = lists:flatten([
         oct_background:get_provider_nodes(krakow),
         oct_background:get_provider_nodes(paris)
@@ -208,12 +204,9 @@ get_share_test_base(FileType) ->
     ShareName = <<"share">>,
     Description = <<"# Collection ABC\nThis collection contains elements.">>,
 
-    ShareSpec = #share_spec{name = ShareName, description = Description},
-    FileSpec = case FileType of
-        <<"file">> -> #file_spec{shares = [ShareSpec]};
-        <<"dir">> -> #dir_spec{shares = [ShareSpec]}
-    end,
-
+    {FileType, FileSpec} = generate_random_file_spec([
+        #share_spec{name = ShareName, description = Description}
+    ]),
     #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
         user3, SpaceId, FileSpec
     ),
@@ -564,7 +557,6 @@ get_shared_file_or_directory_data_test(_Config) ->
     DirObject = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, DirSpec),
     get_shared_file_or_directory_data_test_base(DirObject).
 
-
 %% @private
 get_shared_file_or_directory_data_test_base(Object = #object{guid = FileGuid}) ->
     AllNodes = oct_background:get_provider_nodes(krakow) ++ oct_background:get_provider_nodes(paris),
@@ -608,6 +600,14 @@ get_shared_file_or_directory_data_test_base(Object = #object{guid = FileGuid}) -
     ),
 
     get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"">>, #{}
+    ),
+
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"?attribute=license">>, #{}
+    ),
+
+    get_shared_file_or_directory_data_test_base(
         Object, <<"getSharedFileJsonMetadata">>, <<"/metadata/json">>, <<"">>, #{}
     ),
     get_shared_file_or_directory_data_test_base(
@@ -616,16 +616,7 @@ get_shared_file_or_directory_data_test_base(Object = #object{guid = FileGuid}) -
 
     get_shared_file_or_directory_data_test_base(
         Object, <<"getSharedFileRdfMetadata">>, <<"/metadata/rdf">>, <<"">>, #{}
-    ),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"">>, #{}
-    ),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"?attribute=license">>, #{}
     ).
-
 
 %% @private
 % use the actual templates that are sent to GUI to make sure they are ok
@@ -645,9 +636,10 @@ get_shared_file_or_directory_data_test_base(Object, TemplateName, CounterpartOpA
     CounterpartOpUrl = api_test_utils:build_rest_url(KrakowNode, [
         str_utils:format_bin("data/~s~s~s", [ShareObjectId, CounterpartOpApiPath, QueryString])
     ]),
-    {ok, _, _, RedirectedResponse} = ?assertMatch(
-        {ok, _, _, _}, http_get_following_redirects(ZoneRedirectorUrl, Headers)
+    {ok, Code, _, RedirectedResponse} = ?assertMatch(
+        {ok, _, _, _} , http_get_following_redirects(ZoneRedirectorUrl, Headers)
     ),
+    ?assert(Code >= 200 andalso Code < 300),
     ?assertMatch(
         {ok, _, _, RedirectedResponse}, http_get_following_redirects(CounterpartOpUrl, Headers)
     ).
@@ -843,10 +835,19 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_testcase(get_shared_file_or_directory_data_test = Case, Config) ->
+    % time must be frozen because the test checks if endpoints returning file
+    % attributes give the same results, but each request bumps the atime of the
+    % file, which causes different results
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
     lfm_proxy:init(Config).
 
 
+end_per_testcase(get_shared_file_or_directory_data_test = Case, Config) ->
+    time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

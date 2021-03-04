@@ -48,10 +48,10 @@ handshake_attributes(_Client) ->
         <<"restTemplates">> => #{
             <<"listSharedDirectoryChildren">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/children"),
             <<"downloadSharedFileContent">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/content"),
-            <<"getSharedFileAttributes">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/"),
+            <<"getSharedFileAttributes">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE(""),
+            <<"getSharedFileExtendedAttributes">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/xattrs"),
             <<"getSharedFileJsonMetadata">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/json"),
-            <<"getSharedFileRdfMetadata">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/rdf"),
-            <<"getSharedFileExtendedAttributes">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/xattrs")
+            <<"getSharedFileRdfMetadata">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/rdf")
         }
     }.
 

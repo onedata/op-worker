@@ -47,13 +47,7 @@
 ]).
 
 -type access_token() :: tokens:serialized().
--type consumer_token() ::
-    % no consumer
-    undefined |
-    % consumer is this provider - must be substituted with a valid identity
-    % token whenever the credentials are used for authorization
-    provider_identity_token |
-    tokens:serialized().
+-type consumer_token() :: undefined | tokens:serialized().
 -type client_tokens() :: #client_tokens{}.
 
 %% @formatter:off
@@ -167,7 +161,7 @@ credentials_to_gs_auth_override(#token_credentials{
         client_auth = {token, AccessToken},
         peer_ip = PeerIp,
         interface = Interface,
-        consumer_token = resolve_consumer_token(ConsumerToken),
+        consumer_token = ConsumerToken,
         data_access_caveats_policy = DataAccessCaveatsPolicy
     }.
 
@@ -210,7 +204,7 @@ acquire_offline_user_access_token(TokenCredentials = #token_credentials{
     case verify_credentials(TokenCredentials) of
         {ok, #auth{subject = ?SUB(user, UserId)}, _} ->
             case token_logic:acquire_offline_user_access_token(
-                UserId, AccessToken, resolve_consumer_token(ConsumerToken),
+                UserId, AccessToken, ConsumerToken,
                 PeerIp, Interface, DataAccessCaveatsPolicy
             ) of
                 {ok, OfflineAccessToken} ->
@@ -279,7 +273,7 @@ verify_token_credentials(#token_credentials{
         % required to extract caveats, plus serves as a sanity check of token structure
         Token = try_to_deserialize_token(AccessToken),
         case token_logic:verify_access_token(
-            AccessToken, resolve_consumer_token(ConsumerToken),
+            AccessToken, ConsumerToken,
             PeerIp, Interface, DataAccessCaveatsPolicy
         ) of
             {ok, Subject, TokenTTL} ->
@@ -333,15 +327,3 @@ ensure_subject_is_a_supported_user(?SUB(user, UserId)) ->
     end;
 ensure_subject_is_a_supported_user(_) ->
     throw(?ERROR_TOKEN_SUBJECT_INVALID).
-
-
-%% @private
--spec resolve_consumer_token(consumer_token()) ->
-    undefined | tokens:serialized() | no_return().
-resolve_consumer_token(provider_identity_token) ->
-    case provider_auth:acquire_identity_token() of
-        {ok, ProviderIdentityToken} -> ProviderIdentityToken;
-        {error, _} = Error -> throw(Error)
-    end;
-resolve_consumer_token(ConsumerToken) ->
-    ConsumerToken.

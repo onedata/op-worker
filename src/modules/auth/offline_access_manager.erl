@@ -197,6 +197,6 @@ to_token_credentials(#offline_access_credentials{
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
     auth_manager:build_token_credentials(
-        OfflineAccessToken, provider_identity_token,
+        OfflineAccessToken, undefined,
         undefined, Interface, DataAccessCaveatsPolicy
     ).
