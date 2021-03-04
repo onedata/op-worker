@@ -1569,7 +1569,7 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
 -spec flush_events(#state{}) -> #state{}.
 flush_events(State) ->
     lists:foreach(fun({ExcludedSessions, LocationChanges}) ->
-        % TODO - catch error and repeat
+        % TODO VFS-7396 catch error and repeat
         ok = fslogic_event_emitter:emit_file_locations_changed(
             lists:reverse(LocationChanges), ExcludedSessions)
     end, lists:reverse(fslogic_cache:clear_location_changes())),
