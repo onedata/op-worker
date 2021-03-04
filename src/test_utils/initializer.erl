@@ -900,7 +900,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
 
     lists:foreach(fun(DomainWorker) ->
         rpc:call(DomainWorker, fslogic_worker, init_paths_caches, [all]),
-        rpc:call(DomainWorker, fslogic_worker, init_file_attr_caches, [all])
+        rpc:call(DomainWorker, fslogic_worker, init_file_protection_flags_caches, [all])
     end, get_different_domain_workers(Config)),
 
     cluster_logic_mock_setup(AllWorkers),

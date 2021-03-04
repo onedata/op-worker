@@ -9,21 +9,20 @@
 %%% This module is responsible for management of file attr caches.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_attr_cache).
+-module(file_protection_flags_cache).
 -author("Bartosz Walkowicz").
 
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_group/0, init_caches/1, invalidate_caches/1]).
--export([name/1]).
+-export([init/1, get_effective_flags/1, invalidate/1]).
 
--define(FILE_ATTR_CACHE_GROUP, <<"file_attr_group">>).
--define(FILE_ATTR_CACHE_NAME(SpaceId),
+-define(FILE_PROTECTION_FLAGS_CACHE_NAME(SpaceId),
     binary_to_atom(<<?MODULE_STRING, "_", SpaceId/binary>>, utf8)
 ).
-
 -define(DEFAULT_CHECK_FREQUENCY, 30000).  % 30 s
 -define(DEFAULT_CACHE_SIZE, 20000).
 
@@ -37,25 +36,11 @@
 %%%===================================================================
 
 
--spec name(od_space:id()) -> atom().
-name(SpaceId) ->
-    ?FILE_ATTR_CACHE_NAME(SpaceId).
-
-
--spec init_group() -> ok | {error, term()}.
-init_group() ->
-    bounded_cache:init_group(?FILE_ATTR_CACHE_GROUP, #{
-        check_frequency => ?DEFAULT_CHECK_FREQUENCY,
-        size => ?DEFAULT_CACHE_SIZE,
-        worker => true
-    }).
-
-
--spec init_caches(od_space:id() | all) -> boolean().
-init_caches(all) ->
+-spec init(od_space:id() | all) -> boolean().
+init(all) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            lists:all(fun init_caches/1, SpaceIds);
+            lists:all(fun init/1, SpaceIds);
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
             ?debug(?UNABLE_TO_INITIALIZE_LOG_MSG, [all, ?ERROR_NO_CONNECTION_TO_ONEZONE]),
             false;
@@ -69,15 +54,18 @@ init_caches(all) ->
         ?critical_stacktrace(?UNABLE_TO_INITIALIZE_LOG_MSG, [all, {Type, Reason}]),
         false
     end;
-init_caches(SpaceId) ->
-    CacheName = ?FILE_ATTR_CACHE_NAME(SpaceId),
+init(SpaceId) ->
+    CacheName = ?FILE_PROTECTION_FLAGS_CACHE_NAME(SpaceId),
 
     try
         case bounded_cache:cache_exists(CacheName) of
             true ->
                 true;
             _ ->
-                Opts = #{group => ?FILE_ATTR_CACHE_GROUP},
+                Opts = #{
+                    check_frequency => ?DEFAULT_CHECK_FREQUENCY,
+                    size => ?DEFAULT_CACHE_SIZE
+                },
                 case bounded_cache:init_cache(CacheName, Opts) of
                     ok ->
                         true;
@@ -92,7 +80,39 @@ init_caches(SpaceId) ->
     end.
 
 
--spec invalidate_caches(od_space:id()) -> ok.
-invalidate_caches(SpaceId) ->
-    ok = effective_value:invalidate(?FILE_ATTR_CACHE_NAME(SpaceId)),
+-spec get_effective_flags(file_ctx:ctx()) -> {ace:bitmask(), file_ctx:ctx()} | no_return().
+get_effective_flags(FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    CacheName = ?FILE_PROTECTION_FLAGS_CACHE_NAME(SpaceId),
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+
+    Callback = fun([#document{key = Uuid, value = #file_meta{protection_flags = Flags}}, ParentValue, CalculationInfo]) ->
+        case fslogic_uuid:is_root_dir_uuid(Uuid) orelse fslogic_uuid:is_space_dir_uuid(Uuid) of
+            true -> {ok, Flags, CalculationInfo};
+            false -> {ok, ?set_flags(ParentValue, Flags), CalculationInfo}
+        end
+    end,
+
+    case effective_value:get_or_calculate(CacheName, FileDoc, Callback) of
+        {ok, EffFlags, _} ->
+            {EffFlags, FileCtx2};
+        {error, {file_meta_missing, _}} ->
+            throw(?ERROR_NOT_FOUND)
+    end.
+
+
+-spec invalidate(od_space:id()) -> ok.
+invalidate(SpaceId) ->
+    ok = invalidate_file_protection_flags_cache(SpaceId),
     ok = permissions_cache:invalidate_on_node().
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec invalidate_file_protection_flags_cache(od_space:id()) -> ok.
+invalidate_file_protection_flags_cache(SpaceId) ->
+    effective_value:invalidate(?FILE_PROTECTION_FLAGS_CACHE_NAME(SpaceId)).

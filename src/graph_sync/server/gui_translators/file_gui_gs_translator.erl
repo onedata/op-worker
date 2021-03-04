@@ -174,7 +174,7 @@ translate_file_details(#file_details{
     has_eff_qos = HasEffQos,
     active_permissions_type = ActivePermissionsType,
     index_startid = StartId,
-    file_flags = FileFlags,
+    protection_flags = EffFileProtectionFlags,
     file_attr = #file_attr{
         guid = FileGuid,
         name = FileName,
@@ -221,7 +221,9 @@ translate_file_details(#file_details{
             PublicFields;
         private ->
             PublicFields#{
-                <<"fileFlags">> => file_meta:flags_to_json(FileFlags),
+                <<"effProtectionFlags">> => file_meta:protection_flags_to_json(
+                    EffFileProtectionFlags
+                ),
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
                 <<"hasDirectQos">> => HasDirectQos,

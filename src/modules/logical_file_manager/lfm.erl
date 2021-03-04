@@ -69,7 +69,7 @@
     create_and_open/3, create_and_open/4, create_and_open/5
 ]).
 %% Functions concerning file permissions
--export([set_perms/3, check_perms/3, update_flags/4, set_acl/3, get_acl/2, remove_acl/2]).
+-export([set_perms/3, check_perms/3, update_protection_flags/4, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
 -export([
     stat/2, get_fs_stats/2, get_details/2,
@@ -591,14 +591,14 @@ set_perms(SessId, FileKey, NewPerms) ->
 check_perms(SessId, FileKey, PermType) ->
     ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
 
--spec update_flags(session:id(), file_key(), ace:bitmask(), ace:bitmask()) ->
+-spec update_protection_flags(session:id(), file_key(), ace:bitmask(), ace:bitmask()) ->
     ok | error_reply().
-update_flags(SessId, FileKey, FlagsToSet, FlagsToReset) ->
+update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToReset) ->
     % TODO VFS-7363 assert file is dataset and user has needed space privileges
     ?run(fun() ->
         {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
         remote_utils:call_fslogic(SessId, file_request, Guid,
-            #update_flags{set = FlagsToSet, reset = FlagsToReset},
+            #update_protection_flags{set = FlagsToSet, reset = FlagsToReset},
             fun(_) -> ok end
         )
     end).

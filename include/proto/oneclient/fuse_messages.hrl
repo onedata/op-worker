@@ -83,7 +83,7 @@
     mode :: file_meta:mode()
 }).
 
--record(update_flags, {
+-record(update_protection_flags, {
     set :: ace:bitmask(),
     reset :: ace:bitmask()
 }).
@@ -173,7 +173,7 @@
     #get_file_attr{} | #get_file_children{} | #get_file_children_attrs{} |
     #get_file_details{} | #get_file_children_details{} |
     #create_dir{} | #delete_file{} | #move_to_trash{} |
-    #update_times{} | #change_mode{} | #update_flags{} |
+    #update_times{} | #change_mode{} | #update_protection_flags{} |
     #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |

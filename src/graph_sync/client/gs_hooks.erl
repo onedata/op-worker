@@ -118,7 +118,7 @@ on_connect_to_oz() ->
     ok = provider_logic:update_subdomain_delegation_ips(),
     ok = auth_cache:report_oz_connection_start(),
     ok = fslogic_worker:init_paths_caches(all),
-    ok = fslogic_worker:init_file_attr_caches(all),
+    ok = fslogic_worker:init_file_protection_flags_caches(all),
     ok = main_harvesting_stream:revise_all_spaces(),
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
     ok = rtransfer_config:add_storages(),

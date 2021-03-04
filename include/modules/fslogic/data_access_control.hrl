@@ -32,6 +32,17 @@
 -define(OR(Requirement1, Requirement2), {Requirement1, 'or', Requirement2}).
 
 
+% File protection flags
+-define(DATA_PROTECTION_BIN, <<"data_protection">>).
+-define(DATA_PROTECTION, 16#00000001).
+-define(METADATA_PROTECTION_BIN, <<"metadata_protection">>).
+-define(METADATA_PROTECTION, 16#00000002).
+% Disables import for file or dir subtree - this flag is implicitly set when
+% either ?DATA_PROTECTION or ?METADATA_PROTECTION flag is set and removed when
+% both of them are reset.
+-define(IMPORT_PROTECTION, 16#00000004).
+
+
 % Permissions respected in readonly mode (operation requiring any other permission,
 % even if granted by posix mode or ACL, will be denied)
 -define(READONLY_MODE_RESPECTED_PERMS, (

@@ -250,7 +250,7 @@ assert_has_permissions(UserCtx, FileCtx0, RequiredPerms) ->
 check_permissions(UserCtx, FileCtx0, RequiredPerms) ->
     ShareId = file_ctx:get_share_id_const(FileCtx0),
     DeniedPerms1 = get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx0, ShareId),
-    {DeniedPerms2, FileCtx1} = get_perms_denied_by_file_protection_flags(UserCtx, FileCtx0),
+    {DeniedPerms2, FileCtx1} = get_perms_denied_by_file_protection_flags(FileCtx0),
     AllDeniedPerms = DeniedPerms1 bor DeniedPerms2,
 
     UserPermsCheckProgress = #user_perms_check_progress{
@@ -295,10 +295,10 @@ get_perms_denied_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
 
 
 %% @private
--spec get_perms_denied_by_file_protection_flags(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec get_perms_denied_by_file_protection_flags(file_ctx:ctx()) ->
     {ace:bitmask(), file_ctx:ctx()}.
-get_perms_denied_by_file_protection_flags(UserCtx, FileCtx0) ->
-    {Flags, FileCtx1} = file_ctx:get_effective_flags(UserCtx, FileCtx0),
+get_perms_denied_by_file_protection_flags(FileCtx0) ->
+    {Flags, FileCtx1} = file_protection_flags_cache:get_effective_flags(FileCtx0),
     DeniedPerms0 = 0,
 
     DeniedPerms1 = case ?has_all_flags(Flags, ?DATA_PROTECTION) of

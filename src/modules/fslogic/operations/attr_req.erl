@@ -26,7 +26,7 @@
 
     get_file_details/2, get_file_details_insecure/3,
 
-    get_child_attr/4, chmod/3, update_flags/4, update_times/5,
+    get_child_attr/4, chmod/3, update_protection_flags/4, update_times/5,
     chmod_attrs_only_insecure/2,
 
     get_fs_stats/2
@@ -150,14 +150,14 @@ get_file_details(UserCtx, FileCtx0) ->
     fslogic_worker:fuse_response().
 get_file_details_insecure(UserCtx, FileCtx, Opts) ->
     {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
-    {FileFlags, FileCtx3} = file_ctx:get_effective_flags(UserCtx, FileCtx2),
+    {EffFileProtectionFlags, FileCtx3} = file_protection_flags_cache:get_effective_flags(FileCtx2),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
 
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
-            file_flags = FileFlags,
+            protection_flags = EffFileProtectionFlags,
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx3),
@@ -196,14 +196,14 @@ chmod(UserCtx, FileCtx0, Mode) ->
     chmod_insecure(UserCtx, FileCtx1, Mode).
 
 
--spec update_flags(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), ace:bitmask()) ->
+-spec update_protection_flags(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), ace:bitmask()) ->
     fslogic_worker:fuse_response().
-update_flags(UserCtx, FileCtx0, FlagsToSet, FlagsToReset) ->
+update_protection_flags(UserCtx, FileCtx0, FlagsToSet, FlagsToReset) ->
     file_ctx:assert_not_special_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0, [traverse_ancestors]
     ),
-    update_flags_insecure(FileCtx1, FlagsToSet, FlagsToReset).
+    update_protection_flags_insecure(FileCtx1, FlagsToSet, FlagsToReset).
 
 
 %%--------------------------------------------------------------------
@@ -305,14 +305,14 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
 
 
 %% @private
--spec update_flags_insecure(file_ctx:ctx(), ace:bitmask(), ace:bitmask()) ->
+-spec update_protection_flags_insecure(file_ctx:ctx(), ace:bitmask(), ace:bitmask()) ->
     fslogic_worker:fuse_response().
-update_flags_insecure(FileCtx, FlagsToSet, FlagsToReset) ->
+update_protection_flags_insecure(FileCtx, FlagsToSet, FlagsToReset) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     ok = file_meta:update_flags(FileUuid, FlagsToSet, FlagsToReset),
 
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    ok = fslogic_worker:invalidate_file_attr_caches(SpaceId),
+    ok = fslogic_worker:invalidate_file_protection_flags_caches(SpaceId),
 
     #fuse_response{status = #status{code = ?OK}}.
 

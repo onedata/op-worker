@@ -194,7 +194,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> acl;
             false -> posix
         end,
-        file_flags = ?no_flags_mask,
+        protection_flags = ?no_flags_mask,
         has_metadata = HasMetadata,
         has_direct_qos = HasDirectQos,
         has_eff_qos = HasParentQos orelse HasDirectQos
@@ -434,7 +434,7 @@ file_details_to_gs_json(undefined, #file_details{
     },
     index_startid = IndexStartId,
     active_permissions_type = ActivePermissionsType,
-    file_flags = FileFlags,
+    protection_flags = EffFileProtectionFlags,
     has_metadata = HasMetadata,
     has_direct_qos = HasDirectQos,
     has_eff_qos = HasEffQos
@@ -452,7 +452,7 @@ file_details_to_gs_json(undefined, #file_details{
         <<"name">> => FileName,
         <<"index">> => IndexStartId,
         <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
-        <<"fileFlags">> => file_meta:flags_to_json(FileFlags),
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffFileProtectionFlags),
         % For space dir gs returns null as parentId instead of user root dir
         % (gui doesn't know about user root dir)
         <<"parentId">> => case fslogic_uuid:is_space_dir_guid(FileGuid) of

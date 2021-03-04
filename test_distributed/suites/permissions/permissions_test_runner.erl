@@ -362,7 +362,7 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
     case ProtectionFlagsToSet > 0 of
         true ->
             % With file protection set operation should fail
-            ok = lfm_proxy:update_flags(
+            ok = lfm_proxy:update_protection_flags(
                 Node, FileOwnerUserSessId, ScenarioRootDirKey, ProtectionFlagsToSet, ?no_flags_mask
             ),
             % Wait some time for caches to be cleared (cache purge is asynchronous)
@@ -370,7 +370,7 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
             ?assertMatch({error, ?EACCES}, Operation(FileOwnerUserSessId, ScenarioRootDirPath, ExtraData)),
 
             % And should succeed without it
-            ok = lfm_proxy:update_flags(
+            ok = lfm_proxy:update_protection_flags(
                 Node, FileOwnerUserSessId, ScenarioRootDirKey, ?no_flags_mask, ProtectionFlagsToSet
             ),
             % Wait some time for caches to be cleared (cache purge is asynchronous)

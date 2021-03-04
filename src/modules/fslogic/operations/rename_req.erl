@@ -517,7 +517,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     case InvalidateCache of
         true ->
             paths_cache:invalidate_caches_on_all_nodes(SpaceId),
-            ok = fslogic_worker:invalidate_file_attr_caches(SpaceId);
+            ok = fslogic_worker:invalidate_file_protection_flags_caches(SpaceId);
         _ ->
             ok
     end,
