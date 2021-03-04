@@ -287,10 +287,8 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
         ExtendedInfo :: file_meta:list_extended_info(),
         NewFileCtx :: file_ctx:ctx()
     }.
-list_children(UserCtx, FileCtx, ListOpts, undefined) ->
-    file_ctx:get_file_children(FileCtx, UserCtx, ListOpts);
 list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
-    file_ctx:get_file_children_whitelisted(FileCtx0, UserCtx, ListOpts, ChildrenWhiteList).
+    file_ctx:get_file_children(FileCtx0, UserCtx, ListOpts, ChildrenWhiteList).
 
 
 %%--------------------------------------------------------------------

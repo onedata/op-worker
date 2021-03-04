@@ -80,8 +80,7 @@
     get_new_storage_file_id/1, get_aliased_name/2,
     get_display_credentials/1, get_times/1,
     get_parent_guid/2, get_child/3,
-    get_file_children/3,
-    get_file_children_whitelisted/4,
+    get_file_children/3, get_file_children/4,
     get_logical_path/2,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2,
@@ -765,10 +764,7 @@ get_child(FileCtx, Name, UserCtx) ->
                 true ->
                     get_share_root_dir_child(FileCtx, Name, UserCtx);
                 false ->
-                    ShareId = get_share_id_const(FileCtx),
-                    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
-
-                    case is_space_dir_const(FileCtx) andalso IsInOpenHandleMode andalso ShareId == undefined of
+                    case is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) of
                         true ->
                             get_space_share_child(FileCtx, Name, UserCtx);
                         false ->
@@ -776,6 +772,7 @@ get_child(FileCtx, Name, UserCtx) ->
                             case canonical_path:resolve(FileDoc, <<"/", Name/binary>>) of
                                 {ok, ChildDoc} ->
                                     SpaceId = get_space_id_const(FileCtx),
+                                    ShareId = get_share_id_const(FileCtx),
                                     Child = new_by_doc(ChildDoc, SpaceId, ShareId),
                                     {Child, FileCtx2};
                                 {error, not_found} ->
@@ -831,7 +828,7 @@ get_space_share_child(SpaceDirCtx, Name, UserCtx) ->
 -spec get_file_children(ctx(), user_ctx:ctx(), file_meta:list_opts()) ->
     {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()}.
 get_file_children(FileCtx, UserCtx, ListOpts) ->
-    get_file_children_whitelisted(FileCtx, UserCtx, ListOpts, undefined).
+    get_file_children(FileCtx, UserCtx, ListOpts, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -839,14 +836,14 @@ get_file_children(FileCtx, UserCtx, ListOpts) ->
 %% Returns list of directory children bounded by specified AllowedChildren.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_children_whitelisted(
+-spec get_file_children(
     ctx(),
     user_ctx:ctx(),
     file_meta:list_opts(),
     ChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     {Children :: [ctx()], file_meta:list_extended_info(), NewFileCtx :: ctx()}.
-get_file_children_whitelisted(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
+get_file_children(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             list_user_root_dir_children(UserCtx, FileCtx, ListOpts, ChildrenWhiteList);
@@ -855,10 +852,7 @@ get_file_children_whitelisted(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
                 true ->
                     list_share_root_dir_children(UserCtx, FileCtx, ChildrenWhiteList);
                 false ->
-                    ShareId = get_share_id_const(FileCtx),
-                    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
-
-                    case is_space_dir_const(FileCtx) andalso IsInOpenHandleMode andalso ShareId == undefined of
+                    case is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) of
                         true ->
                             list_space_open_handle_shares(UserCtx, FileCtx, ListOpts, ChildrenWhiteList);
                         false ->
@@ -866,6 +860,14 @@ get_file_children_whitelisted(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
                     end
             end
     end.
+
+
+%% @private
+-spec is_space_dir_accessed_in_open_handle_mode(user_ctx:ctx(), ctx()) -> boolean().
+is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) ->
+    ShareId = get_share_id_const(FileCtx),
+    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
+    is_space_dir_const(FileCtx) andalso IsInOpenHandleMode andalso ShareId == undefined.
 
 
 %%--------------------------------------------------------------------
@@ -1613,7 +1615,6 @@ list_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) -
         false ->
             []
     end,
-
     {Children, #{is_last => length(Children) < Limit}, UserRootDirCtx}.
 
 
@@ -1655,7 +1656,7 @@ list_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts, ShareWhiteList) ->
         false ->
             []
     end,
-    {Children, #{is_last => true}, SpaceDirCtx}.
+    {Children, #{is_last => length(Children) < Limit}, SpaceDirCtx}.
 
 
 %% @private
