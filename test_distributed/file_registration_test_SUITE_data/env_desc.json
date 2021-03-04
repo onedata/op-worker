@@ -132,10 +132,12 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "s3"
+                        "storage": "s3",
+                        "supported_size": 1000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st1"
+                        "storage": "/mnt/st1",
+                        "supported_size": 1000000000
                     }
                 }
             }

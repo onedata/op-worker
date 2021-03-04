@@ -12,7 +12,7 @@
 -module(truncate_req).
 -author("Tomasz Lichon").
 
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -34,7 +34,7 @@
 truncate(UserCtx, FileCtx0, Size) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?PERMISSIONS(?write_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_object_mask)]
     ),
     FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx1),
     truncate_insecure(UserCtx, FileCtx2, Size, true).

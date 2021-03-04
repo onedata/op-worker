@@ -686,7 +686,7 @@ get_children_attrs_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:get_children_attrs(W, SessId, DirKey, 0, 100))
+            extract_ok(lfm_proxy:get_children_attrs(W, SessId, DirKey, #{offset => 0, size => 100}))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
@@ -711,7 +711,7 @@ get_children_details_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:get_children_details(W, SessId, DirKey, 0, 100, undefined))
+            extract_ok(lfm_proxy:get_children_details(W, SessId, DirKey, #{offset => 0, size => 100}))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
@@ -1536,7 +1536,7 @@ set_acl_test(Config) ->
             name = <<"file1">>,
             perms = [?write_acl]
         }],
-        posix_requires_space_privs = {owner, [?SPACE_WRITE_DATA]},
+        posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
@@ -1567,7 +1567,7 @@ remove_acl_test(Config) ->
             name = <<"file1">>,
             perms = [?write_acl]
         }],
-        posix_requires_space_privs = {owner, [?SPACE_WRITE_DATA]},
+        posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
@@ -2338,7 +2338,7 @@ fill_file_with_dummy_data(Node, SessId, Guid) ->
 create_dummy_file(Node, SessId, DirGuid) ->
     RandomFileName = <<"DUMMY_FILE_", (integer_to_binary(rand:uniform(1024)))/binary>>,
     {ok, {_Guid, FileHandle}} =
-        lfm_proxy:create_and_open(Node, SessId, DirGuid, RandomFileName, 8#664),
+        lfm_proxy:create_and_open(Node, SessId, DirGuid, RandomFileName, ?DEFAULT_FILE_PERMS),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
 
 

@@ -48,6 +48,9 @@
     remove_file_on_remote_provider_should_unlock_space/1,
     replicate_file_smaller_than_quota_should_not_fail/1,
     replicate_file_bigger_than_quota_should_fail/1,
+    replication_of_file_bigger_than_support_should_fail/1,
+    migration_of_file_bigger_than_support_should_fail/1,
+    onf_replication_of_file_bigger_than_support_should_fail/1,
 
     % gui upload tests
     quota_updated_on_gui_upload/1,
@@ -74,6 +77,9 @@ all() ->
         remove_file_on_remote_provider_should_unlock_space,
         replicate_file_smaller_than_quota_should_not_fail,
         replicate_file_bigger_than_quota_should_fail,
+        replication_of_file_bigger_than_support_should_fail,
+        migration_of_file_bigger_than_support_should_fail,
+        onf_replication_of_file_bigger_than_support_should_fail,
 
         % gui upload tests
         quota_updated_on_gui_upload,
@@ -106,7 +112,10 @@ all() ->
 %%     p1: 1000000000 bytes (~953 MB)
 %% space_id5:
 %%     p1: 10000000000 bytes (~9 GB)
-%%     p2: 10000000 bytes  (~9 MB)
+%%     p2: 10000000000 bytes  (~9 GB)
+%% space_id6:
+%%     p1: 20 bytes
+%%     p2: 30 bytes
 
 -define(SPACE_ID5_P2_SUPPORT_SIZE, 10000000).
 
@@ -121,8 +130,11 @@ all() ->
 
 
 write_with_no_quota_left_should_fail(Config) ->
-    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2} =
-        gen_test_env(Config),
+    #env{
+        p1 = P1, p2 = _P2,
+        user1 = User1, user2 = User2,
+        file1 = File1, file2 = File2
+    } = gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
     {ok, _} = create_file(P1, User2, f(<<"space1">>, File2)),
@@ -158,8 +170,11 @@ write_with_no_quota_left_should_fail(Config) ->
     ok.
 
 truncate_bigger_then_quota_should_not_fail(Config) ->
-    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2} =
-        gen_test_env(Config),
+    #env{
+        p1 = P1, p2 = _P2,
+        user1 = User1, user2 = User2,
+        file1 = File1, file2 = File2
+    } = gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
     {ok, _} = create_file(P1, User2, f(<<"space1">>, File2)),
@@ -182,8 +197,11 @@ truncate_bigger_then_quota_should_not_fail(Config) ->
     ok.
 
 truncate_smaller_then_quota_should_not_fail(Config) ->
-    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2} =
-        gen_test_env(Config),
+    #env{
+        p1 = P1, p2 = _P2,
+        user1 = User1, user2 = User2,
+        file1 = File1, file2 = File2
+    } = gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
     {ok, _} = create_file(P1, User2, f(<<"space1">>, File2)),
@@ -206,8 +224,11 @@ truncate_smaller_then_quota_should_not_fail(Config) ->
     ok.
 
 incremental_write_with_no_quota_left_should_fail(Config) ->
-    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2} =
-        gen_test_env(Config),
+    #env{
+        p1 = P1, p2 = _P2,
+        user1 = User1, user2 = User2,
+        file1 = File1, file2 = File2
+    } = gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
     {ok, _} = create_file(P1, User2, f(<<"space1">>, File2)),
@@ -243,8 +264,11 @@ incremental_write_with_no_quota_left_should_fail(Config) ->
     ok.
 
 unlink_should_unlock_space(Config) ->
-    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3} =
-        gen_test_env(Config),
+    #env{
+        p1 = P1, p2 = _P2,
+        user1 = User1, user2 = User2,
+        file1 = File1, file2 = File2, file3 = File3
+    } = gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File2)),
@@ -276,8 +300,12 @@ unlink_should_unlock_space(Config) ->
     ok.
 
 rename_should_unlock_space(Config) ->
-    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3, dir1 = Dir1} =
-        gen_test_env(Config),
+    #env{
+        p1 = P1, p2 = _P2,
+        user1 = User1, user2 = User2,
+        file1 = File1, file2 = File2, file3 = File3,
+        dir1 = Dir1
+    } = gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
     {ok, _} = mkdir(P1, User1,       f(<<"space1">>, Dir1)),
@@ -338,8 +366,11 @@ rename_should_unlock_space(Config) ->
 
 
 rename_with_no_quota_left_should_fail(Config) ->
-    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = _User2, file1 = File1, file2 = File2, file3 = File3} =
-        gen_test_env(Config),
+    #env{
+        p1 = P1, p2 = _P2,
+        user1 = User1, user2 = _User2,
+        file1 = File1, file2 = File2, file3 = File3
+    } = gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1,    f(<<"space1">>, File1)),
     {ok, _} = create_file(P1, User1,    f(<<"space1">>, File2)),
@@ -382,8 +413,7 @@ rename_with_no_quota_left_should_fail(Config) ->
 
 
 multiprovider_test(Config) ->
-    #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} =
-        gen_test_env(Config),
+    #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} = gen_test_env(Config),
     SessId = fun(Worker) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
 
@@ -403,8 +433,10 @@ multiprovider_test(Config) ->
 
 
 remove_file_on_remote_provider_should_unlock_space(Config) ->
-    #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} =
-        gen_test_env(Config),
+    #env{
+        p1 = P1, p2 = P2,
+        file1 = File1, file2 = File2
+    } = gen_test_env(Config),
     SessId = fun(Worker) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
 
@@ -423,8 +455,7 @@ remove_file_on_remote_provider_should_unlock_space(Config) ->
 
 
 replicate_file_smaller_than_quota_should_not_fail(Config) ->
-    #env{p1 = P1, p2 = P2, file1 = File1} =
-        gen_test_env(Config),
+    #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
     SessId = fun(Worker) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
 
@@ -463,14 +494,16 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
 
     FileSize = 8 * ?GB,
 
+    % pretend that quota size in space5 on P2 is equal 8GB
+    {ok, _} =
+        rpc:call(P2, space_quota, update, [<<"space_id5">>, fun(SQ) -> {ok, SQ#space_quota{current_size = 8 * ?GB}} end]),
+
     % Create large file on P1 and schedule replication to P2 with support size/quota
     % smaller than file size
     {ok, Guid} = create_file(P1, SessId(P1), f(<<"space5">>, File1)),
     lists:foreach(fun(Offset) ->
-        ?assertMatch(
-            {ok, _},
-            write_to_file(P1, SessId(P1), f(<<"space5">>, File1), Offset, crypto:strong_rand_bytes(?GB))
-        )
+        ?assertMatch({ok, _},
+            write_to_file(P1, SessId(P1), f(<<"space5">>, File1), Offset, crypto:strong_rand_bytes(?GB)))
     end, lists:seq(0, FileSize-1, ?GB)),
     ?assertMatch(
         {ok, [#{<<"totalBlocksSize">> := FileSize}]},
@@ -496,9 +529,58 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
     ?assertEqual(true, available_size(P2, <<"space_id5">>) > -(FileSize - ?SPACE_ID5_P2_SUPPORT_SIZE), ?ATTEMPTS).
 
 
+replication_of_file_bigger_than_support_should_fail(Config) ->
+    #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    FileSize = 30,
+    SpaceName = <<"space6">>,
+
+    {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
+    ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
+    ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
+        lfm_proxy:get_file_distribution(P1, SessId(P1), {guid, Guid}), ?ATTEMPTS),
+
+    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replication(P1, SessId(P1), {guid, Guid}, ?GET_DOMAIN_BIN(P1))),
+    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replication(P2, SessId(P2), {guid, Guid}, ?GET_DOMAIN_BIN(P1))).
+
+migration_of_file_bigger_than_support_should_fail(Config) ->
+    #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    FileSize = 30,
+    SpaceName = <<"space6">>,
+
+    {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
+    ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
+    ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
+        lfm_proxy:get_file_distribution(P1, SessId(P1), {guid, Guid}), ?ATTEMPTS),
+
+    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replica_eviction(P1, SessId(P1), {guid, Guid}, ?GET_DOMAIN_BIN(P2),
+        ?GET_DOMAIN_BIN(P1)
+    )),
+    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replica_eviction(P2, SessId(P2), {guid, Guid}, ?GET_DOMAIN_BIN(P2),
+        ?GET_DOMAIN_BIN(P1)
+    )).
+
+onf_replication_of_file_bigger_than_support_should_fail(Config) ->
+    #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    FileSize = 30,
+    SpaceName = <<"space6">>,
+
+    {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
+    ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
+    ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
+        lfm_proxy:get_file_distribution(P1, SessId(P1), {guid, Guid}), ?ATTEMPTS),
+
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(P1, SessId(P1), {guid, Guid}, read), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOSPC}, lfm_proxy:read(P1, H, 0, FileSize)).
+
+
 quota_updated_on_gui_upload(Config) ->
-    #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} =
-        gen_test_env(Config),
+    #env{
+        p1 = P1, p2 = P2,
+        file1 = File1, file2 = File2
+    } = gen_test_env(Config),
     UserId = <<"user1">>,
     SessId = fun(Worker) -> ?config({session_id, {UserId, ?GET_DOMAIN(Worker)}}, Config) end,
 
@@ -519,8 +601,11 @@ quota_updated_on_gui_upload(Config) ->
 
 
 failed_gui_upload_test(Config) ->
-    #env{p1 = P1, user1 = User1, file1 = File1, file2 = File2} =
-        gen_test_env(Config),
+    #env{
+        p1 = P1,
+        user1 = User1,
+        file1 = File1, file2 = File2
+    } = gen_test_env(Config),
     SessId = fun(Worker) -> ?config({session_id, {User1, ?GET_DOMAIN(Worker)}}, Config) end,
 
     {ok, #file_attr{guid = DirGuid}} = lfm_proxy:stat(P1, User1, {path, <<"/space4">>}),
@@ -590,11 +675,15 @@ events_sent_test_base(Config, SpaceId, SupportingProvider) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    Posthook = fun(NewConfig) ->
+        initializer:mock_auth_manager(NewConfig),
+        initializer:setup_storage(NewConfig)
+    end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config).
+    initializer:teardown_storage(Config),
+    initializer:unmock_auth_manager(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= events_sent_to_client_directio;
@@ -604,7 +693,6 @@ init_per_testcase(Case, Config) when
     initializer:remove_pending_messages(),
     ssl:start(),
 
-    initializer:mock_auth_manager(Config),
     init_per_testcase(default, Config);
 
 init_per_testcase(Case, Config) when
@@ -661,7 +749,7 @@ end_per_testcase(_Case, Config) ->
 create_file(Worker, SessionId, {path, Path}) ->
     create_file(Worker, SessionId, Path);
 create_file(Worker, SessionId, Path) ->
-    lfm_proxy:create(Worker, SessionId, Path, ?DEFAULT_FILE_MODE).
+    lfm_proxy:create(Worker, SessionId, Path).
 
 open_file(Worker, SessionId, FileKey, OpenMode)->
     lfm_proxy:open(Worker, SessionId, FileKey, OpenMode).
@@ -774,7 +862,7 @@ upload_file(Worker, ?USER(UserId) = Auth, PartsNumber, PartSize, ChunksNumber, F
         rpc:call(Worker, file_upload_manager, is_upload_registered, [UserId, FileGuid]), ?ATTEMPTS
     ).
 
-do_multipart(Worker, ?USER(UserId) = Auth, PartsNumber, PartSize, ChunksNumber, FileGuid) ->
+do_multipart(Worker, ?USER(_UserId) = Auth, PartsNumber, PartSize, ChunksNumber, FileGuid) ->
     Params = #{
         <<"guid">> => FileGuid,
         <<"resumableChunkSize">> => integer_to_binary(PartsNumber*PartSize)

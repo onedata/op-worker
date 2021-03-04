@@ -28,11 +28,12 @@
     update_times/6,
     unlink/3, rm_recursive/3,
     mv/4, mv/5,
+    cp/4, cp/5,
     is_dir/3,
 
     get_file_location/3,
-    create/4, create/5,
-    create_and_open/4, create_and_open/5,
+    create/3, create/4, create/5,
+    create_and_open/3, create_and_open/4, create_and_open/5,
     open/4,
     close/2, close_all/1,
     read/4, silent_read/4, check_size_and_read/4,
@@ -41,10 +42,10 @@
     truncate/4,
 
     mkdir/3, mkdir/4, mkdir/5,
-    get_children/5, get_children/6, get_children/7,
-    get_children_attrs/5, get_children_attrs/6,
+    get_children/4, get_children/5,
+    get_children_attrs/4,
     get_child_attr/4,
-    get_children_details/6,
+    get_children_details/4,
 
     get_xattr/4, get_xattr/5,
     set_xattr/4, set_xattr/6,
@@ -229,6 +230,18 @@ mv(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
     ?EXEC(Worker, lfm:mv(SessId, FileKey, TargetParentKey, TargetName)).
 
 
+-spec cp(node(), session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+cp(Worker, SessId, FileKeyFrom, PathTo) ->
+    ?EXEC(Worker, lfm:cp(SessId, FileKeyFrom, PathTo)).
+
+
+-spec cp(node(), session:id(), fslogic_worker:file_guid_or_path(), fslogic_worker:file_guid_or_path(),
+    file_meta:name()) -> {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+cp(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
+    ?EXEC(Worker, lfm:cp(SessId, FileKey, TargetParentKey, TargetName)).
+
+
 -spec is_dir(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
     ok | lfm:error_reply().
 is_dir(Worker, SessId, FileKey) ->
@@ -247,6 +260,12 @@ get_file_location(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_location(SessId, uuid_to_guid(Worker, FileKey))).
 
 
+-spec create(node(), session:id(), file_meta:path()) ->
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+create(Worker, SessId, FilePath) ->
+    ?EXEC(Worker, lfm:create(SessId, FilePath)).
+
+
 -spec create(node(), session:id(), file_meta:path(), file_meta:posix_permissions()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(Worker, SessId, FilePath, Mode) ->
@@ -258,6 +277,20 @@ create(Worker, SessId, FilePath, Mode) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(Worker, SessId, ParentGuid, Name, Mode) ->
     ?EXEC(Worker, lfm:create(SessId, ParentGuid, Name, Mode)).
+
+
+-spec create_and_open(node(), session:id(), file_meta:path()) ->
+    {ok, {fslogic_worker:file_guid(), lfm:handle()}} |
+    lfm:error_reply().
+create_and_open(Worker, SessId, Path) ->
+    ?EXEC(Worker,
+        case lfm:create_and_open(SessId, Path, rdwr) of
+            {ok, {Guid, Handle}} ->
+                TestHandle = crypto:strong_rand_bytes(10),
+                ets:insert(lfm_handles, {TestHandle, Handle}),
+                {ok, {Guid, TestHandle}};
+            Other -> Other
+        end).
 
 
 -spec create_and_open(node(), session:id(), file_meta:path(), file_meta:posix_permissions()) ->
@@ -458,68 +491,28 @@ mkdir(Worker, SessId, ParentGuid, Name, Mode) ->
     ?EXEC(Worker, lfm:mkdir(SessId, ParentGuid, Name, Mode)).
 
 
--spec get_children(
-    node(),
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
-    Offset :: integer(),
-    Limit :: integer()
-) ->
+-spec get_children(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+    file_meta:list_opts()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | lfm:error_reply().
+get_children(Worker, SessId, FileKey, ListOpts) ->
+    ?EXEC(Worker, lfm:get_children(SessId, uuid_to_guid(Worker, FileKey), ListOpts)).
+
+
+-spec get_children(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+    integer(), integer()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
 get_children(Worker, SessId, FileKey, Offset, Limit) ->
-    ?EXEC(Worker, lfm:get_children(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit)).
+    % TODO VFS-7327 use get_children/4 function accepting options map everywhere in tests
+    case get_children(Worker, SessId, FileKey, #{offset => Offset, size => Limit}) of
+        {ok, List, _ListExtendedInfo} -> {ok, List};
+        {error, _} = Error -> Error
+    end.
 
 
--spec get_children(
-    node(),
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    Token :: undefined | binary()
-) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], binary(), boolean()} | lfm:error_reply().
-get_children(Worker, SessId, FileKey, Offset, Limit, Token) ->
-    get_children(Worker, SessId, FileKey, Offset, Limit, Token, undefined).
-
-
--spec get_children(
-    node(),
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    Token :: undefined | binary(),
-    StartId :: undefined | file_meta:name()
-) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
-get_children(Worker, SessId, FileKey, Offset, Limit, Token, StartId) ->
-    ?EXEC(Worker, lfm:get_children(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, Token, StartId)).
-
-
--spec get_children_attrs(
-    node(),
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
-    Offset :: integer(),
-    Limit :: integer()
-) ->
-    {ok, [#file_attr{}]} | lfm:error_reply().
-get_children_attrs(Worker, SessId, FileKey, Offset, Limit) ->
-    ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit)).
-
-
--spec get_children_attrs(
-    node(),
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    Token :: undefined | binary()
-) ->
-    {ok, [#file_attr{}],  binary(), boolean()} | lfm:error_reply().
-get_children_attrs(Worker, SessId, FileKey, Offset, Limit, Token) ->
-    ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, Token)).
+-spec get_children_attrs(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+    file_meta:list_opts()) -> {ok, [#file_attr{}]} | lfm:error_reply().
+get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
+    ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_guid(Worker, FileKey), ListOpts)).
 
 
 -spec get_child_attr(node(), session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
@@ -528,17 +521,10 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
     ?EXEC(Worker, lfm:get_child_attr(SessId, ParentGuid, ChildName)).
 
 
--spec get_children_details(
-    node(),
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    StartId :: undefined | binary()
-) ->
-    {ok, [lfm_attrs:file_details()], boolean()} | lfm:error_reply().
-get_children_details(Worker, SessId, FileKey, Offset, Limit, StartId) ->
-    ?EXEC(Worker, lfm:get_children_details(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, StartId)).
+-spec get_children_details(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+    file_meta:list_opts()) -> {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | lfm:error_reply().
+get_children_details(Worker, SessId, FileKey, ListOpts) ->
+    ?EXEC(Worker, lfm:get_children_details(SessId, uuid_to_guid(Worker, FileKey), ListOpts)).
 
 
 %%%===================================================================

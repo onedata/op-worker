@@ -16,6 +16,7 @@
 
 
 -include("qos_tests_utils.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 % QoS specification for tests
@@ -1167,7 +1168,7 @@ qos_status_during_traverse_file_without_qos_test_base(Config, SpaceId) ->
     Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
     
     % create file outside QoS range
-    {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), Dir1, generator:gen_name(), 8#664),
+    {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), Dir1, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
     ok = lfm_proxy:close(Worker1, FileHandle),
     lists:foreach(fun(W) ->
@@ -1240,7 +1241,7 @@ qos_status_during_reconciliation_with_file_deletion_test_base(Config, SpaceId) -
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED), ?ATTEMPTS),
     
     lists:foreach(fun(Worker) ->
-        {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), Dir1, generator:gen_name(), 8#664),
+        {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), Dir1, generator:gen_name(), ?DEFAULT_FILE_PERMS),
         {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
         ok = lfm_proxy:close(Worker1, FileHandle),
         ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosList, ?PENDING), ?ATTEMPTS),
@@ -1268,8 +1269,9 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(Config, SpaceId) ->
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?FULFILLED), ?ATTEMPTS),
     
     lists:foreach(fun(Worker) ->
-        {ok, DirGuid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir1, generator:gen_name(), 8#775),
-        {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), 8#664),
+        ct:print("Deleting worker: ~p", [Worker]), % log current deleting worker for greater verbosity during failures
+        {ok, DirGuid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir1, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+        {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
         {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
         ok = lfm_proxy:close(Worker1, FileHandle),
         ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?PENDING), ?ATTEMPTS),

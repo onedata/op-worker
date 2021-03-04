@@ -58,7 +58,7 @@ all() -> [
 
 
 get_dir_children_test(Config) ->
-    {DirPath, DirGuid, _ShareId, Files} = create_get_children_tests_env(normal_mode),
+    {_DirPath, DirGuid, _ShareId, Files} = create_get_children_tests_env(normal_mode),
 
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
@@ -69,7 +69,7 @@ get_dir_children_test(Config) ->
         end
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
@@ -77,25 +77,9 @@ get_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List normal dir using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(DirObjectId),
+                    prepare_args_fun = build_get_children_prepare_rest_args_fun(DirObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, rest, undefined, Data, Files)
-                    end
-                },
-                #scenario_template{
-                    name = <<"List normal dir using deprecated /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(DirPath),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
-                    end
-                },
-                #scenario_template{
-                    name = <<"List normal dir using deprecated /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(DirObjectId),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
                     end
                 },
                 #scenario_template{
@@ -147,7 +131,7 @@ get_shared_dir_children_test(Config) ->
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
     {ok, ShareDirObjectId} = file_id:guid_to_objectid(ShareDirGuid),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -155,20 +139,9 @@ get_shared_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List shared dir using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(ShareDirObjectId),
+                    prepare_args_fun = build_get_children_prepare_rest_args_fun(ShareDirObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, rest, ShareId, Data, Files)
-                    end
-                },
-                % Old endpoint returns "id" and "path" - for now get_path is forbidden
-                % for shares so this method returns ?ERROR_NOT_SUPPORTED in case of
-                % listing share dir
-                #scenario_template{
-                    name = <<"List shared dir using deprecated /files-id/ rest endpoint">>,
-                    type = rest_not_supported,
-                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(ShareDirObjectId),
-                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, _, Response}) ->
-                        ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
                     end
                 },
                 #scenario_template{
@@ -258,7 +231,7 @@ create_get_children_tests_env(TestMode) ->
 
 
 get_file_children_test(Config) ->
-    {_FileType, FilePath, FileGuid, #file_details{
+    {_FileType, _FilePath, FileGuid, #file_details{
         file_attr = #file_attr{
             guid = FileGuid,
             name = FileName
@@ -276,7 +249,7 @@ get_file_children_test(Config) ->
     end,
 
     % Listing file result in returning this file info only - index/limit parameters are ignored.
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = #client_spec{
@@ -293,34 +266,15 @@ get_file_children_test(Config) ->
                 #scenario_template{
                     name = <<"List file using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_get_children_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
-                        ?assertEqual(#{<<"children">> => [#{
-                            <<"id">> => FileObjectId,
-                            <<"name">> => FileName
-                        }]}, Response)
-                    end
-                },
-                #scenario_template{
-                    name = <<"List file using deprecated /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(FilePath),
-                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
-                        ?assertEqual(
-                            [#{<<"id">> => FileObjectId, <<"path">> => FilePath}],
-                            Response
-                        )
-                    end
-                },
-                #scenario_template{
-                    name = <<"List file using deprecated /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
-                        ?assertEqual(
-                            [#{<<"id">> => FileObjectId, <<"path">> => FilePath}],
-                            Response
-                        )
+                        ?assertEqual(#{
+                            <<"children">> => [#{
+                                <<"id">> => FileObjectId,
+                                <<"name">> => FileName
+                            }],
+                            <<"isLast">> => true
+                        }, Response)
                     end
                 },
                 #scenario_template{
@@ -328,7 +282,10 @@ get_file_children_test(Config) ->
                     type = gs,
                     prepare_args_fun = build_get_children_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
-                        ?assertEqual(#{<<"children">> => [FileGuid]}, Result)
+                        ?assertEqual(#{
+                            <<"children">> => [FileGuid],
+                            <<"isLast">> => true
+                        }, Result)
                     end
                 },
                 #scenario_template{
@@ -337,7 +294,8 @@ get_file_children_test(Config) ->
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = _Data}, {ok, Result}) ->
                         ?assertEqual(#{
-                            <<"children">> => [api_test_utils:file_details_to_gs_json(undefined, FileDetails)]
+                            <<"children">> => [api_test_utils:file_details_to_gs_json(undefined, FileDetails)],
+                            <<"isLast">> => true
                         }, Result)
                     end
                 }
@@ -396,7 +354,7 @@ get_shared_file_children_test(Config) ->
     },
 
     % Listing file result in returning this file info only - index/limit parameters are ignored.
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -404,23 +362,15 @@ get_shared_file_children_test(Config) ->
                 #scenario_template{
                     name = <<"List shared file using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(ShareFileObjectId),
+                    prepare_args_fun = build_get_children_prepare_rest_args_fun(ShareFileObjectId),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
-                        ?assertEqual(#{<<"children">> => [#{
-                            <<"id">> => ShareFileObjectId,
-                            <<"name">> => FileName
-                        }]}, Response)
-                    end
-                },
-                % Old endpoint returns "id" and "path" - for now get_path is forbidden
-                % for shares so this method returns ?ERROR_NOT_SUPPORTED in case of
-                % listing share dir
-                #scenario_template{
-                    name = <<"List shared file using deprecated /files-id/ rest endpoint">>,
-                    type = rest_not_supported,
-                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(ShareFileObjectId),
-                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, _, Response}) ->
-                        ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
+                        ?assertEqual(#{
+                            <<"children">> => [#{
+                                <<"id">> => ShareFileObjectId,
+                                <<"name">> => FileName
+                            }],
+                            <<"isLast">> => true
+                        }, Response)
                     end
                 },
                 #scenario_template{
@@ -428,7 +378,10 @@ get_shared_file_children_test(Config) ->
                     type = gs,
                     prepare_args_fun = build_get_children_prepare_gs_args_fun(ShareFileGuid, public),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
-                        ?assertEqual(#{<<"children">> => [ShareFileGuid]}, Result)
+                        ?assertEqual(#{
+                            <<"children">> => [ShareFileGuid],
+                            <<"isLast">> => true
+                        }, Result)
                     end
                 },
                 #scenario_template{
@@ -437,7 +390,8 @@ get_shared_file_children_test(Config) ->
                     prepare_args_fun = build_get_children_details_prepare_gs_args_fun(ShareFileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
                         ?assertEqual(#{
-                            <<"children">> => [api_test_utils:file_details_to_gs_json(ShareId, FileDetails1)]
+                            <<"children">> => [api_test_utils:file_details_to_gs_json(ShareId, FileDetails1)],
+                            <<"isLast">> => true
                         }, Result)
                     end
                 }
@@ -468,7 +422,7 @@ get_shared_file_children_test(Config) ->
     ])).
 
 
-get_user_root_dir_children_test(Config) ->
+get_user_root_dir_children_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P2Node, P1Node],
@@ -488,8 +442,6 @@ get_user_root_dir_children_test(Config) ->
         [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node)]
     end,
 
-    User1Id = oct_background:get_user_id(user1),
-    User2Id = oct_background:get_user_id(user2),
     User4Id = oct_background:get_user_id(user4),
 
     User4RootDirGuid = fslogic_uuid:user_root_dir_guid(User4Id),
@@ -497,7 +449,7 @@ get_user_root_dir_children_test(Config) ->
 
     DataSpec = get_children_data_spec(),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = #client_spec{
@@ -507,19 +459,11 @@ get_user_root_dir_children_test(Config) ->
             },
             scenario_templates = [
                 #scenario_template{
-                    name = <<"List user4 root dir using deprecated /data/ rest endpoint">>,
+                    name = <<"List user4 root dir using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(User4RootDirObjectId),
+                    prepare_args_fun = build_get_children_prepare_rest_args_fun(User4RootDirObjectId),
                     validate_result_fun = fun(#api_test_ctx{node = Node, data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, rest, undefined, Data, GetAllSpacesInfoFun(Node))
-                    end
-                },
-                #scenario_template{
-                    name = <<"List user4 root dir using deprecated /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(User4RootDirObjectId),
-                    validate_result_fun = fun(#api_test_ctx{node = Node, data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_files(Response, deprecated_rest, undefined, Data, GetAllSpacesInfoFun(Node))
                     end
                 },
                 #scenario_template{
@@ -542,31 +486,6 @@ get_user_root_dir_children_test(Config) ->
             ],
             randomly_select_scenarios = true,
             data_spec = DataSpec
-        },
-        % Special case - listing files using path '/' works for all users but
-        % returns only their own spaces
-        #scenario_spec{
-            name = <<"List user root dir using /files/ rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = Providers,
-            client_spec = #client_spec{
-                correct = [user1, user2, user3, user4],
-                unauthorized = [nobody]
-            },
-            prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(<<"/">>),
-            validate_result_fun = fun(#api_test_ctx{
-                node = TestNode,
-                client = Client,
-                data = Data
-            }, {ok, ?HTTP_200_OK, _, Response}) ->
-                ClientSpaces = case Client of
-                    ?USER(User1Id) -> [GetSpaceInfoFun(space_krk, TestNode)];
-                    ?USER(User2Id) -> [GetSpaceInfoFun(space_krk_par, TestNode)];
-                    _ -> GetAllSpacesInfoFun(TestNode)
-                end,
-                validate_listed_files(Response, deprecated_rest, undefined, Data, ClientSpaces)
-            end,
-            data_spec = DataSpec
         }
     ])).
 
@@ -588,7 +507,7 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
     }.
 
 
-get_dir_children_on_provider_not_supporting_space_test(Config) ->
+get_dir_children_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
 
@@ -606,7 +525,7 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
         ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Response)
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = [P2Node],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
@@ -614,19 +533,7 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
                 #scenario_template{
                     name = <<"List dir on provider not supporting space using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(Space1ObjectId),
-                    validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpaceFun
-                },
-                #scenario_template{
-                    name = <<"List dir on provider not supporting space using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(<<"/", ?SPACE_KRK/binary>>),
-                    validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpaceFun
-                },
-                #scenario_template{
-                    name = <<"List dir on provider not supporting space using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(Space1ObjectId),
+                    prepare_args_fun = build_get_children_prepare_rest_args_fun(Space1ObjectId),
                     validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpaceFun
                 },
                 #scenario_template{
@@ -666,42 +573,15 @@ get_children_data_spec() ->
 
 
 %% @private
--spec build_get_children_prepare_new_id_rest_args_fun(file_id:objectid()) ->
+-spec build_get_children_prepare_rest_args_fun(file_id:objectid() | file_meta:path()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_get_children_prepare_new_id_rest_args_fun(FileObjectId) ->
-    build_get_children_prepare_rest_args_fun(new_id, FileObjectId).
-
-
-%% @private
--spec build_get_children_prepare_deprecated_path_rest_args_fun(file_meta:path()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_children_prepare_deprecated_path_rest_args_fun(FilePath) ->
-    build_get_children_prepare_rest_args_fun(deprecated_path, FilePath).
-
-
-%% @private
--spec build_get_children_prepare_deprecated_id_rest_args_fun(file_id:objectid()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_children_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
-    build_get_children_prepare_rest_args_fun(deprecated_id, FileObjectId).
-
-
-%% @private
--spec build_get_children_prepare_rest_args_fun(
-    Endpoint :: new_id | deprecated_path | deprecated_id,
-    ValidId :: file_id:objectid() | file_meta:path()
-) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_children_prepare_rest_args_fun(Endpoint, ValidId) ->
+build_get_children_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
-        RestPath = case Endpoint of
-            new_id -> <<"data/", Id/binary, "/children">>;
-            deprecated_path -> <<"files", Id/binary>>;
-            deprecated_id -> <<"files-id/", Id/binary>>
-        end,
+        RestPath = <<"data/", Id/binary, "/children">>,
+
         #rest_args{
             method = get,
             path = http_utils:append_url_parameters(
@@ -744,7 +624,7 @@ build_prepare_gs_args_fun(FileGuid, Aspect, Scope) ->
 %% @private
 -spec validate_listed_files(
     ListedChildren :: term(),
-    Format :: gs | rest | deprecated_rest | gs_with_details,
+    Format :: gs | rest | gs_with_details,
     ShareId :: undefined | od_share:id(),
     Params :: map(),
     AllFiles :: files()
@@ -765,34 +645,34 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
         {file_id:guid_to_share_guid(Guid, ShareId), Name, Path, Details}
     end, ExpFiles1),
 
+    IsLast = length(ExpFiles1) < Limit,
+
     ExpFiles3 = case Format of
         gs ->
-            #{<<"children">> => lists:map(fun({Guid, _Name, _Path, _Details}) ->
-                Guid
-            end, ExpFiles2)};
+            #{
+                <<"children">> => lists:map(fun({Guid, _Name, _Path, _Details}) -> Guid end, ExpFiles2),
+                <<"isLast">> => IsLast
+            };
 
         rest ->
-            #{<<"children">> => lists:map(fun({Guid, Name, _Path, _Details}) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                #{
-                    <<"id">> => ObjectId,
-                    <<"name">> => Name
-                }
-            end, ExpFiles2)};
-
-        deprecated_rest ->
-            lists:map(fun({Guid, _Name, Path, _Details}) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                #{
-                    <<"id">> => ObjectId,
-                    <<"path">> => Path
-                }
-            end, ExpFiles2);
+            #{
+                <<"children">> => lists:map(fun({Guid, Name, _Path, _Details}) ->
+                    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                    #{
+                        <<"id">> => ObjectId,
+                        <<"name">> => Name
+                    }
+                end, ExpFiles2),
+                <<"isLast">> => IsLast
+            };
 
         gs_with_details ->
-            #{<<"children">> => lists:map(fun({Guid, _Name, _Path, Details}) ->
-                api_test_utils:file_details_to_gs_json(ShareId, Details)
-            end, ExpFiles2)}
+            #{
+                <<"children">> => lists:map(fun({Guid, _Name, _Path, Details}) ->
+                    api_test_utils:file_details_to_gs_json(ShareId, Details)
+                end, ExpFiles2),
+                <<"isLast">> => IsLast
+            }
     end,
 
     ?assertEqual(ExpFiles3, ListedChildren).
@@ -804,8 +684,6 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
 
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
@@ -813,8 +691,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 
 init_per_testcase(_Case, Config) ->

@@ -12,7 +12,7 @@
 -module(permission_req).
 -author("Tomasz Lichon").
 
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
@@ -44,8 +44,8 @@ check_perms(UserCtx, FileCtx, OpenFlag) ->
 
 %% @private
 required_perms(read) ->
-    [traverse_ancestors, ?PERMISSIONS(?read_object_mask)];
+    [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_object_mask)];
 required_perms(write) ->
-    [traverse_ancestors, ?PERMISSIONS(?write_object_mask)];
+    [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_object_mask)];
 required_perms(rdwr) ->
-    [traverse_ancestors, ?PERMISSIONS(?read_object_mask bor ?write_object_mask)].
+    [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_object_mask, ?write_object_mask)].

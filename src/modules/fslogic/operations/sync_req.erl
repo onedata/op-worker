@@ -15,7 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -150,7 +150,7 @@ get_file_distribution(UserCtx, FileCtx0) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors, ?PERMISSIONS(?read_metadata_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_metadata_mask)]
     ),
     get_file_distribution_insecure(UserCtx, FileCtx2).
 
@@ -173,15 +173,16 @@ schedule_file_replication(
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     data_constraints:assert_not_readonly_mode(UserCtx),
     file_ctx:assert_not_readonly_target_storage_const(FileCtx0, TargetProviderId),
+    FileCtx1 = file_ctx:assert_smaller_than_provider_support_size(FileCtx0, TargetProviderId),
 
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
-        [traverse_ancestors]
+    FileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx1,
+        [?TRAVERSE_ANCESTORS]
     ),
 
-    {FilePath, _} = file_ctx:get_logical_path(FileCtx1, UserCtx),
+    {FilePath, FileCtx3} = file_ctx:get_logical_path(FileCtx2, UserCtx),
     schedule_file_replication_insecure(
-        UserCtx, FileCtx1, FilePath, TargetProviderId,
+        UserCtx, FileCtx3, FilePath, TargetProviderId,
         Callback, ViewName, QueryViewParams
     ).
 

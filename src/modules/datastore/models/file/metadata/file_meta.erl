@@ -36,8 +36,7 @@
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,
-    list_children/4, list_children/6,
-    list_children_whitelisted/4
+    list_children/2, list_children_whitelisted/3
 ]).
 -export([get_name/1, set_name/2]).
 -export([get_active_perms_type/1, update_mode/2, update_flags/3, flags_to_json/1, update_acl/2]).
@@ -67,20 +66,27 @@
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
 -type permissions_type() :: posix | acl.
--type link() :: file_meta_links:link().
 -type conflicts() :: [link()].
 
 
--type offset() :: file_meta_links:offset().
--type non_neg_offset() :: file_meta_links:non_neg_offset().
--type limit() :: file_meta_links:size().
+-type list_offset() :: file_meta_links:offset().
+-type list_token() :: file_meta_links:token().
+-type list_size() :: file_meta_links:size().
+-type list_opts() :: file_meta_links:list_opts().
+-type list_last_name() :: file_meta_links:last_name().
+-type list_last_tree() :: file_meta_links:last_tree().
 -type list_extended_info() :: file_meta_links:list_extended_info().
+-type link() :: file_meta_links:link().
 
 -export_type([
-    doc/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
+    doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
     type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
-    offset/0, non_neg_offset/0, limit/0, file_meta/0, list_extended_info/0,
-    link/0, conflicts/0
+    conflicts/0
+]).
+
+-export_type([
+    list_offset/0, list_size/0, list_token/0,
+    list_last_name/0, list_last_tree/0, list_opts/0, list_extended_info/0, link/0
 ]).
 
 -define(CTX, #{
@@ -405,36 +411,12 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv list_children(Entry, Offset, Size, Token, undefined).
-%% @end
-%%--------------------------------------------------------------------
--spec list_children(entry(), offset(), limit(),
-    datastore_links_iter:token() | undefined) ->
+-spec list_children(entry(), list_opts()) ->
     {ok, [link()], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Limit, Token) ->
-    list_children(Entry, Offset, Limit, Token, undefined, undefined).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv list_children_internal(Entry, #{offset => Offset, size => Size, token => Token}).
-%% @end
-%%--------------------------------------------------------------------
--spec list_children(
-    Entry :: entry(),
-    Offset :: undefined | offset(),
-    Limit :: limit(),
-    Token :: undefined | datastore_links_iter:token(),
-    PrevLinkKey :: undefined | name(),
-    PrevTreeId :: undefined | oneprovider:id()
-) ->
-    {ok, [link()], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTreeId) ->
+list_children(Entry, Opts) ->
     ?run(begin
         {ok, FileUuid} = get_uuid(Entry),
-        file_meta_links:list(FileUuid, Offset, Limit, Token, PrevLinkKey, PrevTreeId)
+        file_meta_links:list(FileUuid, Opts)
     end).
 
 
@@ -444,20 +426,12 @@ list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTreeId) ->
 %% and given options (NonNegOffset and Limit).
 %% @end
 %%--------------------------------------------------------------------
--spec list_children_whitelisted(
-    Entry :: entry(),
-    NonNegOffset :: non_neg_offset(),
-    Limit :: limit(),
-    ChildrenWhiteList :: [file_meta:name()]
-) ->
-    {ok, [link()]} | {error, term()}.
-list_children_whitelisted(Entry, NonNegOffset, Limit, ChildrenWhiteList) when NonNegOffset >= 0 ->
-    ChildrenWhiteList2 = lists:filter(fun(ChildName) ->
-        not (is_hidden(ChildName) orelse is_deletion_link(ChildName))
-    end, ChildrenWhiteList),
+-spec list_children_whitelisted(entry(), list_opts(), [file_meta:name()]) ->
+    {ok, [link()], list_extended_info()} | {error, term()}.
+list_children_whitelisted(Entry, ListOpts, ChildrenWhiteList) ->
     ?run(begin
         {ok, FileUuid} = get_uuid(Entry),
-        file_meta_links:list_whitelisted(FileUuid, NonNegOffset, Limit, ChildrenWhiteList2)
+        file_meta_links:list_whitelisted(FileUuid, ListOpts, ChildrenWhiteList)
     end).
 
 

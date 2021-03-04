@@ -90,6 +90,9 @@
 % Trash associated macros
 -define(TRASH_DIR_NAME, <<".trash">>).
 
--define(PERMISSIONS(__BITMASK), {permissions, __BITMASK}).
+% Token that should be passed as initial token to start listing using tokens.
+-define(INITIAL_LS_TOKEN, <<>>).
+
+-define(STICKY_BIT, 2#1000000000).
 
 -endif.

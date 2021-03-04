@@ -269,7 +269,7 @@ file_should_not_be_listed_after_deletion(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>, 8#770),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>),
     {ok, #file_attr{guid = SpaceGuid}} = lfm_proxy:stat(Worker, SessId, {path, <<"/", SpaceName/binary>>}),
     {ok, Children} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, 0,10),
     ?assertMatch(#{FileGuid := <<"test_file">>}, maps:from_list(Children)),
@@ -283,7 +283,7 @@ file_stat_should_return_enoent_after_deletion(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>, 8#770),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
 
@@ -293,7 +293,7 @@ file_open_should_return_enoent_after_deletion(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>, 8#770),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
 
@@ -303,7 +303,7 @@ file_handle_should_work_after_deletion(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>, 8#770),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>),
     {ok, Handle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, rdwr),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
@@ -322,7 +322,7 @@ remove_file_on_ceph_using_client(Config0) ->
     [{_, Ceph} | _] = proplists:get_value(cephrados, ?config(storages, Config)),
     ContainerId = proplists:get_value(container_id, Ceph),
 
-    {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, 8#755),
+    {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath),
     {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
     {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker, Handle),
@@ -361,13 +361,13 @@ remove_opened_file_test_base(Config, SpaceName) ->
     Content2 = crypto:strong_rand_bytes(Size),
 
     % File1
-    {ok, Guid1} = lfm_proxy:create(Worker, SessId(User1), FilePath, 8#777),
+    {ok, Guid1} = lfm_proxy:create(Worker, SessId(User1), FilePath),
     {ok, Handle1} = lfm_proxy:open(Worker, SessId(User1), {path, FilePath}, rdwr),
     {ok, _} = lfm_proxy:write(Worker, Handle1, 0, Content1),
 
     % File2
     ok = lfm_proxy:unlink(Worker, SessId(User2), {path, FilePath}),
-    {ok, _} = lfm_proxy:create(Worker, SessId(User2), FilePath, 8#777),
+    {ok, _} = lfm_proxy:create(Worker, SessId(User2), FilePath),
     {ok, Handle2} = lfm_proxy:open(Worker, SessId(User2), {path, FilePath}, rdwr),
     {ok, _} = lfm_proxy:write(Worker, Handle2, 0, Content2),
     ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle2, 0, Size)),
@@ -400,9 +400,9 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
     FileName = generator:gen_name(),
     FilePath = filepath_utils:join([<<"/">>, SpaceId, FileName]),
     
-    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, FileName, 8#665),
+    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, FileName, ?DEFAULT_FILE_PERMS),
     ok = lfm_proxy:unlink(Worker, SessId, {guid, G1}),
-    {ok, G2} = lfm_proxy:create(Worker, SessId, FilePath, 8#665),
+    {ok, G2} = lfm_proxy:create(Worker, SessId, FilePath),
     {ok, H2} = lfm_proxy:open(Worker, SessId, {guid, G2}, rdwr),
 
     FileCtx1 = rpc:call(Worker, file_ctx, new_by_guid, [G1]),
@@ -560,7 +560,7 @@ create_test_file(Config, Worker, SessId, DeferredFileCreation) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     File = filename:join(["/", SpaceName, "file0"]),
 
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File, 8#770)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File)),
     case DeferredFileCreation of
         true -> ok;
         false ->

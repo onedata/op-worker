@@ -151,7 +151,7 @@ assert_not_readonly_mode(UserCtx) ->
     UserCtx :: user_ctx:ctx(),
     FileCtx :: file_ctx:ctx(),
     AncestorPolicy :: ancestor_policy(),
-    AccessRequirements :: [data_access_rights:requirement()]
+    AccessRequirements :: [data_access_control:requirement()]
 ) ->
     {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
 inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
@@ -159,7 +159,7 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
 
     case DataConstraints#constraints.readonly of
         true ->
-            data_access_rights:assert_operation_available_in_readonly_mode(
+            data_access_control:assert_operation_available_in_readonly_mode(
                 AccessRequirements
             );
         false ->
@@ -176,7 +176,10 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
                 {equal_or_descendant, FileCtx1} ->
                     {undefined, FileCtx1};
                 {{ancestor, ChildrenWhiteList}, FileCtx1} ->
-                    {ChildrenWhiteList, FileCtx1}
+                    ChildrenWhiteList2 = lists:filter(fun(ChildName) ->
+                        not file_meta:is_hidden(ChildName)
+                    end, ChildrenWhiteList),
+                    {ChildrenWhiteList2, FileCtx1}
             end
     end.
 

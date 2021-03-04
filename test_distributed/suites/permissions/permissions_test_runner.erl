@@ -37,7 +37,7 @@
     scenario_root_dir_path :: file_meta:path(),
     files_owner_session_id :: session:id(),
     executioner_session_id :: session:id(),
-    required_space_privs = [] :: {owner, [privileges:space_privilege()]} | [privileges:space_privilege()],
+    required_space_privs = [] :: {file_owner, [privileges:space_privilege()]} | [privileges:space_privilege()],
     required_perms_per_file = #{} :: perms_per_file(),
     extra_data = #{} :: map()
 }).
@@ -264,7 +264,7 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     scenario_root_dir_path = ScenarioRootDirPath,
     files_owner_session_id = FileOwnerSessId,
     executioner_session_id = UserSessId,
-    required_space_privs = {owner, RequiredSpacePrivs},
+    required_space_privs = {file_owner, RequiredSpacePrivs},
     extra_data = ExtraData
 }) ->
     mock_space_user_privileges([Node], SpaceId, UserId, privileges:space_admin()),

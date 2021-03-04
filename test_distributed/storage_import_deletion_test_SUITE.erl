@@ -176,7 +176,7 @@ empty_child_dir_should_not_be_deleted_test_base(Config) ->
     SessionId = ?SESSION_ID(Config, W),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, IsImportedStorage),
     Child = <<"child">>,
-    {ok, Guid} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, Child, 8#775),
+    {ok, Guid} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, Child, ?DEFAULT_DIR_PERMS),
 
     run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W, SessionId, {guid, Guid}), ?TIMEOUT),
@@ -194,9 +194,9 @@ delete_child_subtree_test_base(Config) ->
     ChildDir3 = <<"child_dir3">>,
     ChildFile = <<"child_file">>,
 
-    {ok, DirGuid1} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, ChildDir1, 8#775),
-    {ok, DirGuid2} = lfm_proxy:mkdir(W, SessionId, DirGuid1, ChildDir2, 8#775),
-    {ok, DirGuid3} = lfm_proxy:mkdir(W, SessionId, DirGuid2, ChildDir3, 8#775),
+    {ok, DirGuid1} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, ChildDir1, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid2} = lfm_proxy:mkdir(W, SessionId, DirGuid1, ChildDir2, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid3} = lfm_proxy:mkdir(W, SessionId, DirGuid2, ChildDir3, ?DEFAULT_DIR_PERMS),
     FileGuid = create_file(W, DirGuid3, ChildFile, SessionId),
 
     % delete whole subtree on storage
@@ -224,9 +224,9 @@ delete_nested_child_on_object_storage_test_base(Config) ->
     SpaceStorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, IsImportedStorage),
     SpaceStorageFileId = storage_file_ctx:get_storage_file_id_const(SpaceStorageFileCtx),
 
-    {ok, DirGuid1} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, ChildDir1, 8#775),
-    {ok, DirGuid2} = lfm_proxy:mkdir(W, SessionId, DirGuid1, ChildDir2, 8#775),
-    {ok, DirGuid3} = lfm_proxy:mkdir(W, SessionId, DirGuid2, ChildDir3, 8#775),
+    {ok, DirGuid1} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, ChildDir1, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid2} = lfm_proxy:mkdir(W, SessionId, DirGuid1, ChildDir2, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid3} = lfm_proxy:mkdir(W, SessionId, DirGuid2, ChildDir3, ?DEFAULT_DIR_PERMS),
     FileGuid = create_file(W, DirGuid3, ChildFile1, SessionId),
     FileGuid2 = create_file(W, DirGuid3, ChildFile2, SessionId),
 
@@ -256,7 +256,7 @@ delete_nested_child_on_block_storage_test_base(Config) ->
     ChildDir = <<"child_dir">>,
     ChildFile = <<"child_file">>,
     DirStorageFileCtx = storage_file_ctx:get_child_ctx_const(StorageFileCtx, ChildDir),
-    {ok, DirGuid} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, ChildDir, 8#775),
+    {ok, DirGuid} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, ChildDir, ?DEFAULT_DIR_PERMS),
     FileGuid = create_file(W, DirGuid, ChildFile, SessionId),
 
     delete_file_on_storage(W, FileGuid),
@@ -301,7 +301,7 @@ do_not_delete_child_file_without_location_test_base(Config) ->
     RootStorageFileId = space_storage_file_id(SpaceId, IsImportedStorage),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, IsImportedStorage),
     Child = <<"child1">>,
-    {ok, _} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, 8#664),
+    {ok, _} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, ?DEFAULT_FILE_PERMS),
 
     ChildStorageFileId = filename:join([RootStorageFileId, Child]),
     ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves),
@@ -454,7 +454,7 @@ clean_storage_sync_links(Worker, SpaceId) ->
     storage_sync_links_test_utils:delete_recursive(Worker, space_storage_file_id(SpaceId, false), StorageId).
 
 create_file(Worker, ParentGuid, ChildName, SessionId) ->
-    {ok, Guid} = lfm_proxy:create(Worker, SessionId, ParentGuid, ChildName, 8#664),
+    {ok, Guid} = lfm_proxy:create(Worker, SessionId, ParentGuid, ChildName, ?DEFAULT_FILE_PERMS),
     {ok, H} = lfm_proxy:open(Worker, SessionId, {guid, Guid}, write),
     {ok, _} = lfm_proxy:write(Worker, H, 0, ?TEST_DATA),
     lfm_proxy:close(Worker, H),

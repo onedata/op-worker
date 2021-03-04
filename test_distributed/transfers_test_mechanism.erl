@@ -388,7 +388,7 @@ schedule_replica_eviction_without_permissions(Config, #scenario{
             FileKey = file_key(Guid, Path, FileKeyType),
             EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
             ?assertMatch({error, _},
-                ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, 8#644),
+                ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, ?DEFAULT_FILE_PERMS),
                 schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type))
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
@@ -578,7 +578,7 @@ schedule_replica_migration_without_permissions(Config, #scenario{
                 ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
                 EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
                 ?assertMatch({error, _},
-                    ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, 8#644),
+                    ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, ?DEFAULT_FILE_PERMS),
                     schedule_replica_migration(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type, ReplicatingProviderId))
             end, FilesGuidsAndPaths)
         end, ReplicatingNodes)
@@ -1124,16 +1124,6 @@ schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, rest)
 schedule_file_replication_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config) ->
     erlang:error(not_implemented).
 
-schedule_file_replication_by_rest(Worker, ProviderId, User, {path, FilePath}, Config) ->
-    schedule_transfer_by_rest(
-        Worker,
-        ?config(?SPACE_ID_KEY, Config),
-        User,
-        [?SPACE_SCHEDULE_REPLICATION],
-        <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
-        post,
-        Config
-    );
 schedule_file_replication_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     schedule_transfer_by_rest(
@@ -1141,8 +1131,14 @@ schedule_file_replication_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Co
         file_id:guid_to_space_id(FileGuid),
         User,
         [?SPACE_SCHEDULE_REPLICATION],
-        <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
+        <<"transfers">>,
         post,
+        json_utils:encode(#{
+            <<"type">> => <<"replication">>,
+            <<"replicatingProviderId">> => ProviderId,
+            <<"dataSourceType">> => <<"file">>,
+            <<"fileId">> => FileObjectId
+        }),
         Config
     ).
 
@@ -1152,17 +1148,21 @@ schedule_replication_by_view(ScheduleNode, ProviderId, User, SpaceId, ViewName, 
     schedule_replication_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config).
 
 schedule_replication_by_view_via_rest(Worker, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config) ->
-    QueryParamsBin = create_query_string(QueryViewParams),
     schedule_transfer_by_rest(
         Worker,
         SpaceId,
         User,
         [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS],
-        <<
-            "replicas-view/", ViewName/binary, "?provider_id=", ProviderId/binary,
-            "&space_id=", SpaceId/binary, QueryParamsBin/binary
-        >>,
+        <<"transfers">>,
         post,
+        json_utils:encode(#{
+            <<"type">> => <<"replication">>,
+            <<"replicatingProviderId">> => ProviderId,
+            <<"dataSourceType">> => <<"view">>,
+            <<"spaceId">> => SpaceId,
+            <<"viewName">> => ViewName,
+            <<"queryViewParams">> => query_view_params_to_map(QueryViewParams)
+        }),
         Config
     ).
 
@@ -1177,34 +1177,6 @@ schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, rest)
 schedule_replica_eviction_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config) ->
     erlang:error(not_implemented).
 
-schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Config, MigrationProviderId) ->
-    case MigrationProviderId of
-        % eviction
-        undefined ->
-            schedule_transfer_by_rest(
-                Worker,
-                ?config(?SPACE_ID_KEY, Config),
-                User,
-                [?SPACE_SCHEDULE_EVICTION],
-                <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
-                delete,
-                Config
-            );
-        % migration
-        _ ->
-            schedule_transfer_by_rest(
-                Worker,
-                ?config(?SPACE_ID_KEY, Config),
-                User,
-                [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
-                <<
-                    "replicas/", FilePath/binary, "?provider_id=", ProviderId/binary,
-                    "&migration_provider_id=", MigrationProviderId/binary
-                >>,
-                delete,
-                Config
-            )
-    end;
 schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config, MigrationProviderId) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     case MigrationProviderId of
@@ -1215,8 +1187,14 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Co
                 file_id:guid_to_space_id(FileGuid),
                 User,
                 [?SPACE_SCHEDULE_EVICTION],
-                <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
-                delete,
+                <<"transfers">>,
+                post,
+                json_utils:encode(#{
+                    <<"type">> => <<"eviction">>,
+                    <<"evictingProviderId">> => ProviderId,
+                    <<"dataSourceType">> => <<"file">>,
+                    <<"fileId">> => FileObjectId
+                }),
                 Config
             );
         % migration
@@ -1226,11 +1204,16 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Co
                 file_id:guid_to_space_id(FileGuid),
                 User,
                 [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
-                <<
-                    "replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary,
-                    "&migration_provider_id=", MigrationProviderId/binary
-                >>,
-                delete,
+                <<"transfers">>,
+                post,
+                json_utils:encode(#{
+                    <<"type">> => <<"migration">>,
+                    <<"replicatingProviderId">> => MigrationProviderId,
+                    <<"evictingProviderId">> => ProviderId,
+                    <<"replicatingProviderId">> => MigrationProviderId,
+                    <<"dataSourceType">> => <<"file">>,
+                    <<"fileId">> => FileObjectId
+                }),
                 Config
             )
     end.
@@ -1244,17 +1227,21 @@ schedule_replica_eviction_by_view_via_lfm(_ScheduleNode, _ProviderId, _User, _Sp
     erlang:error(not_implemented).
 
 schedule_replica_eviction_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config) ->
-    QueryParamsBin = create_query_string(QueryViewParams),
     schedule_transfer_by_rest(
         ScheduleNode,
         SpaceId,
         User,
         [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
-        <<
-            "replicas-view/", ViewName/binary, "?provider_id=", ProviderId/binary,
-            "&space_id=", SpaceId/binary, QueryParamsBin/binary
-        >>,
-        delete,
+        <<"transfers">>,
+        post,
+        json_utils:encode(#{
+            <<"type">> => <<"eviction">>,
+            <<"evictingProviderId">> => ProviderId,
+            <<"dataSourceType">> => <<"view">>,
+            <<"spaceId">> => SpaceId,
+            <<"viewName">> => ViewName,
+            <<"queryViewParams">> => query_view_params_to_map(QueryViewParams)
+        }),
         Config
     ).
 
@@ -1275,19 +1262,25 @@ schedule_replica_migration_by_view_via_lfm(_ScheduleNode, _ProviderId, _User, _S
     erlang:error(not_implemented).
 
 schedule_replica_migration_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, MigrationProviderId) ->
-    QueryParamsBin = create_query_string(QueryViewParams),
     schedule_transfer_by_rest(
         ScheduleNode,
         SpaceId,
         User,
         [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
-        <<
-            "replicas-view/", ViewName/binary, "?provider_id=", ProviderId/binary,
-            "&migration_provider_id=", MigrationProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary
-        >>,
-        delete,
+        <<"transfers">>,
+        post,
+        json_utils:encode(#{
+            <<"type">> => <<"migration">>,
+            <<"replicatingProviderId">> => MigrationProviderId,
+            <<"evictingProviderId">> => ProviderId,
+            <<"dataSourceType">> => <<"view">>,
+            <<"spaceId">> => SpaceId,
+            <<"viewName">> => ViewName,
+            <<"queryViewParams">> => query_view_params_to_map(QueryViewParams)
+        }),
         Config
     ).
+
 
 cancel_transfer(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config, lfm) ->
     cancel_transfer_by_lfm(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config);
@@ -1360,12 +1353,13 @@ rerun_transfer(Worker, User, TransferType, ViewTransfer, OldTid, Config) ->
         TransferPrivs ++ ViewPrivs,
         <<"transfers/", OldTid/binary, "/rerun">>,
         post,
+        <<>>,
         Config
     ).
 
-schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, Config) ->
+schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, Body, Config) ->
     AllWorkers = ?config(op_worker_nodes, Config),
-    Headers = [?USER_TOKEN_HEADER(Config, UserId)],
+    Headers = [?USER_TOKEN_HEADER(Config, UserId), {<<"Content-Type">>, <<"application/json">>}],
     AllSpacePrivs = privileges:space_privileges(),
     SpacePrivs = AllSpacePrivs -- RequiredPrivs,
     UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, UserId]),
@@ -1381,24 +1375,24 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, C
                         ok;
                     (PrivsToAdd) ->
                         initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ PrivsToAdd),
-                        {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, []),
+                        {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, Body),
                         ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
                 end, combinations(RequiredPrivs)),
 
                 initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ RequiredPrivs),
-                case rest_test_utils:request(Worker, URL, Method, Headers, []) of
-                    {ok, 201, _, Body} ->
-                        DecodedBody = json_utils:decode(Body),
+                case rest_test_utils:request(Worker, URL, Method, Headers, Body) of
+                    {ok, 201, _, RespBody} ->
+                        DecodedBody = json_utils:decode(RespBody),
                         #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
                         {ok, Tid};
-                    {ok, 400, _, Body} ->
-                        {error, Body}
+                    {ok, 400, _, RespBody} ->
+                        {error, RespBody}
                 end
             after
                 initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, UserSpacePrivs)
             end;
         false ->
-            {ok, Code, _, RespBody} = rest_test_utils:request(Worker, URL, Method, Headers, []),
+            {ok, Code, _, RespBody} = rest_test_utils:request(Worker, URL, Method, Headers, Body),
             ?assertMatch(400, Code),
             ?assertMatch(
                 ?ERROR_SPACE_NOT_SUPPORTED_BY(_),
@@ -1467,28 +1461,12 @@ await_transfer_starts(Node, TransferId) ->
         end
     end, 60).
 
-create_query_string(QueryViewParams) ->
-    lists:foldl(fun(Option, TmpQuery) ->
-        OptionBin = case Option of
-            {Key, Val} ->
-                KeyBin = atom_to_binary(Key, utf8),
-                ValBin = binary_from_term(Val),
-                <<KeyBin/binary, "=", ValBin/binary>>;
-            _ ->
-                TmpOptionBin = atom_to_binary(Option, utf8),
-                <<TmpOptionBin/binary, "=true">>
-        end,
-        <<TmpQuery/binary, "&", OptionBin/binary>>
-    end, <<>>, QueryViewParams).
 
-binary_from_term(Val) when is_binary(Val) ->
-    <<"\"", Val/binary, "\"">>;
-binary_from_term(Val) when is_integer(Val) ->
-    integer_to_binary(Val);
-binary_from_term(Val) when is_float(Val) ->
-    float_to_binary(Val);
-binary_from_term(Val) when is_atom(Val) ->
-    atom_to_binary(Val, utf8).
+query_view_params_to_map(QueryViewParams) ->
+    lists:foldl(fun
+        ({Key, Value}, Acc) -> Acc#{Key => Value};
+        (Key, Acc) -> Acc#{Key => true}
+    end, #{}, QueryViewParams).
 
 
 combinations([]) ->

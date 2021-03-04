@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module provides fslogic access control list definitions, such as
+%%% @doc
+%%% This module provides fslogic access control list definitions, such as
 %%% bitmasks and names for common flags
 %%% @end
 %%%-------------------------------------------------------------------
@@ -15,10 +16,12 @@
 
 -define(ACL_XATTR_NAME, <<"cdmi_acl">>).
 
--define(has_all_flags(Bitmask, Flags), ((Bitmask band (Flags)) =:= (Flags))).
--define(has_any_flags(Bitmask, Flags), ((Bitmask band (Flags)) > 0)).
--define(set_flags(Bitmask, Flags), (Bitmask bor Flags)).
--define(reset_flags(Bitmask, Flags), (Bitmask band (bnot (Flags)))).
+-define(has_all_flags(Bitmask, Flags), (((Bitmask) band (Flags)) =:= (Flags))).
+-define(has_any_flags(Bitmask, Flags), (((Bitmask) band (Flags)) > 0)).
+-define(set_flags(Bitmask, Flags), ((Bitmask) bor (Flags))).
+-define(reset_flags(Bitmask, Flags), ((Bitmask) band (bnot (Flags)))).
+-define(common_flags(Bitmask1, Bitmask2), ((Bitmask1) band (Bitmask2))).
+-define(complement_flags(Bitmask), (bnot (Bitmask))).
 
 % ace types
 -define(allow, <<"ALLOW">>).
@@ -131,27 +134,11 @@
 -define(all_perms, <<"ALL_PERMS">>).
 -define(all_perms_mask, (?all_object_perms_mask bor ?all_container_perms_mask)).
 
-% Permissions denied by file protection flags
--define(DATA_PROTECTION_BLOCKED_PERMS, (
-    ?write_object_mask bor
-    ?add_object_mask bor
-    ?add_subcontainer_mask bor
-    ?delete_mask bor
-    ?delete_child_mask
-)).
--define(METADATA_PROTECTION_BLOCKED_PERMS, (
-    ?write_attributes_mask bor
-    ?write_metadata_mask bor
-    ?write_acl_mask
-)).
-
--type user_id() :: binary().
--type group_id() :: binary().
 
 -record(access_control_entity, {
     acetype :: ?allow_mask | ?deny_mask,
     aceflags = ?no_flags_mask :: ?no_flags_mask | ?identifier_group_mask,
-    identifier :: user_id() | group_id(),
+    identifier :: od_user:id() | od_group:id(),
     name :: undefined | binary(),
     acemask :: non_neg_integer()
 }).

@@ -13,6 +13,7 @@
 -define(LFM_PERMISSIONS_TEST_HRL, 1).
 
 -include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 
 -define(ALL_PERMS, [
     ?read_object,
@@ -129,8 +130,10 @@
     % Tells which space privileges are needed to perform `operation`
     % in case of posix access mode.
     posix_requires_space_privs = [] ::
-        {owner, [privileges:space_privilege()]} |  % only owner with specified privs can perform operation
-        [privileges:space_privilege()],            % any user with specified privs can perform
+        % only owner with specified privs can perform operation
+        {file_owner, [privileges:space_privilege()]} |
+        % any user with specified privs can perform
+        [privileges:space_privilege()],
 
     % Tells which space privileges are needed to perform `operation`
     % in case of acl access mode

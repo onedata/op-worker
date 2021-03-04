@@ -74,6 +74,11 @@
     emails = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
 
+    % Along with the value of 'blocked' user parameter, stores information
+    % whether the value has changed during the last received user doc update
+    % The '{undefined, unchanged}' value is set for shared user scope.
+    blocked = {undefined, unchanged} :: {undefined | boolean(), changed | unchanged},
+
     % List of user's aliases for spaces
     space_aliases = #{} :: #{od_space:id() => od_space:alias()},
 
@@ -935,8 +940,8 @@
     task_id :: traverse:id(),
     % Uuid of processed directory/file
     doc_id :: file_meta:uuid(),
-    % TODO VFS-7101 use offline access token
-    session_id :: session:id(),
+    % User who scheduled the traverse
+    user_id :: od_user:id(),
     % Information needed to restart directory listing
     use_listing_token = true :: boolean(),
     last_name :: file_meta:name(),

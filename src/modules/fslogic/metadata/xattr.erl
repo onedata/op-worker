@@ -12,7 +12,7 @@
 -module(xattr).
 -author("Tomasz Lichon").
 
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -38,7 +38,7 @@
 list(UserCtx, FileCtx0, IncludeInherited, ShowInternal) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
     list_xattrs_insecure(UserCtx, FileCtx1, IncludeInherited, ShowInternal).
 
@@ -78,7 +78,7 @@ get(UserCtx, FileCtx0, XattrName, true = Inherited) ->
 set(UserCtx, FileCtx0, XattrName, XattrValue, Create, Replace) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?PERMISSIONS(?write_metadata_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_metadata_mask)]
     ),
     custom_metadata:set_xattr(
         file_ctx:get_uuid_const(FileCtx1),
@@ -92,7 +92,7 @@ set(UserCtx, FileCtx0, XattrName, XattrValue, Create, Replace) ->
 remove(UserCtx, FileCtx0, XattrName) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?PERMISSIONS(?write_metadata_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_metadata_mask)]
     ),
     FileUuid = file_ctx:get_uuid_const(FileCtx1),
     custom_metadata:remove_xattr(FileUuid, XattrName).
@@ -186,7 +186,7 @@ list_ancestor_xattrs(UserCtx, FileCtx0, GatheredXattrNames) ->
 get_xattr(UserCtx, FileCtx0, XattrName) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?PERMISSIONS(?read_metadata_mask)]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_metadata_mask)]
     ),
     FileUuid = file_ctx:get_uuid_const(FileCtx1),
     custom_metadata:get_xattr(FileUuid, XattrName).

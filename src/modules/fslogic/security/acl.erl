@@ -12,7 +12,7 @@
 -module(acl).
 -author("Bartosz Walkowicz").
 
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -25,7 +25,6 @@
 %% API
 -export([
     check_acl/5,
-%%    assert_permitted/4,
     add_names/1, strip_names/1,
 
     from_json/2, to_json/2,
@@ -39,31 +38,41 @@
 
 
 -spec check_acl(
-    acl(), od_user:doc(), file_ctx:ctx(), ace:bitmask(), data_access_rights:user_perms_matrix()
+    acl(),
+    od_user:doc(),
+    file_ctx:ctx(),
+    ace:bitmask(),
+    data_access_control:user_perms_check_progress()
 ) ->
-    {allowed | denied, file_ctx:ctx(), data_access_rights:user_perms_matrix()}.
-check_acl(_Acl, _User, FileCtx, 0, UserPermsMatrix) ->
-    {allowed, FileCtx, UserPermsMatrix};
-check_acl([], _User, FileCtx, _Operations, {No, AllowedPerms, _DeniedPerms}) ->
-    % After reaching then end of ACL all not explicitly granted perms are denied
-    {denied, FileCtx, {No + 1, AllowedPerms, bnot AllowedPerms}};
-check_acl([Ace | Rest], User, FileCtx, Operations, {No, PrevAllowedPerms, PrevDeniedPerms}) ->
+    {allowed | denied, file_ctx:ctx(), data_access_control:user_perms_check_progress()}.
+check_acl(_Acl, _User, FileCtx, ?no_flags_mask, UserPermsCheckProgress) ->
+    {allowed, FileCtx, UserPermsCheckProgress};
+
+check_acl([], _User, FileCtx, _Operations, #user_perms_check_progress{
+    finished_step = ?ACL_CHECK(AceNo),
+    granted = GrantedPerms
+} = UserPermsCheckProgress) ->
+    {denied, FileCtx, UserPermsCheckProgress#user_perms_check_progress{
+        finished_step = ?ACL_CHECK(AceNo + 1),
+        % After reaching then end of ACL all not explicitly granted perms are denied
+        denied = ?complement_flags(GrantedPerms)
+    }};
+
+check_acl([Ace | Rest], User, FileCtx, Operations, #user_perms_check_progress{
+    finished_step = ?ACL_CHECK(AceNo)
+} = UserPermsCheckProgress) ->
     case ace:is_applicable(User, FileCtx, Ace) of
         {true, FileCtx2} ->
-            case ace:check_against(Operations, PrevAllowedPerms, PrevDeniedPerms, Ace) of
-                {inconclusive, LeftoverOperations, NewAllowedPerms, NewDeniedPerms} ->
-                    check_acl(
-                        Rest, User, FileCtx2, LeftoverOperations,
-                        {No + 1, NewAllowedPerms, NewDeniedPerms}
-                    );
-                {AllowedOrDenied, NewAllowedPerms, NewDeniedPerms} ->
-                    {AllowedOrDenied, FileCtx2, {No + 1, NewAllowedPerms, NewDeniedPerms}}
+            case ace:check_against(Operations, Ace, UserPermsCheckProgress) of
+                {{inconclusive, LeftoverOperations}, NewUserPermsCheckProgress} ->
+                    check_acl(Rest, User, FileCtx2, LeftoverOperations, NewUserPermsCheckProgress);
+                {AllowedOrDenied, NewUserPermsCheckProgress} ->
+                    {AllowedOrDenied, FileCtx2, NewUserPermsCheckProgress}
             end;
         {false, FileCtx2} ->
-            check_acl(
-                Rest, User, FileCtx2, Operations,
-                {No + 1, PrevAllowedPerms, PrevDeniedPerms}
-            )
+            check_acl(Rest, User, FileCtx2, Operations, UserPermsCheckProgress#user_perms_check_progress{
+                finished_step = ?ACL_CHECK(AceNo + 1)
+            })
     end.
 
 

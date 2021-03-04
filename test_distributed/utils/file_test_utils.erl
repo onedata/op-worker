@@ -19,7 +19,7 @@
 
 -export([
     get_content/2, get_content/3,
-    get_attrs/2
+    get_attrs/2, get_attrs/3
 ]).
 -export([await_sync/2]).
 -export([
@@ -64,7 +64,13 @@ get_content(Node, FileGuid, Offset) ->
 -spec get_attrs(node(), file_id:file_guid()) ->
     {ok, lfm_attrs:file_attributes()} | error().
 get_attrs(Node, FileGuid) ->
-    case lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, FileGuid}) of
+    get_attrs(Node, ?ROOT_SESS_ID, FileGuid).
+
+
+-spec get_attrs(node(), session:id(), file_id:file_guid()) ->
+    {ok, lfm_attrs:file_attributes()} | error().
+get_attrs(Node, SessId, FileGuid) ->
+    case lfm_proxy:stat(Node, SessId, {guid, FileGuid}) of
         % File attrs are constructed from several records so it is possible that
         % even if 'file_meta' (the main doc) was synchronized 'times' doc wasn't
         {ok, #file_attr{mtime = 0}} ->

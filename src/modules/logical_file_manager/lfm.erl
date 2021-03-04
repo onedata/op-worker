@@ -46,8 +46,9 @@
 %% Functions operating on directories
 -export([
     mkdir/2, mkdir/3, mkdir/4,
-    get_children/4, get_children/5, get_children/6,
-    get_children_attrs/4, get_children_attrs/5, get_children_details/5,
+    get_children/3,
+    get_children_attrs/3,
+    get_children_details/3,
     get_child_attr/3, get_children_count/2, get_parent/2
 ]).
 %% Functions operating on directories or files
@@ -65,7 +66,8 @@
     silent_read/3, truncate/3,
     release/1, monitored_release/1,
     get_file_distribution/2,
-    create_and_open/4, create_and_open/5]).
+    create_and_open/3, create_and_open/4, create_and_open/5
+]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, update_flags/4, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -125,47 +127,11 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 rm_recursive(SessId, FileKey) ->
     ?run(fun() -> lfm_files:rm_recursive(SessId, FileKey) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets {Guid, Name} for each directory children starting with Offset-th
-%% entry and up to Limit of entries.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(), Limit :: integer()) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | error_reply().
-get_children(SessId, FileKey, Offset, Limit) ->
-    ?run(fun() -> lfm_dirs:get_children(SessId, FileKey, Offset, Limit) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv get_children(SessId, FileKey, Offset, Limit, Token, undefined).
-%% @end
-%%--------------------------------------------------------------------
--spec get_children(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
-        IsLast :: boolean()} | error_reply().
-get_children(SessId, FileKey, Offset, Limit, Token) ->
-    get_children(SessId, FileKey, Offset, Limit, Token, undefined).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets {Guid, Name} for each directory children starting with Offset-th
-%% from specified StartId or Token entry and up to Limit of entries.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children(session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    Token :: undefined | binary(),
-    StartId :: undefined | file_meta:name()
-) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
-        IsLast :: boolean()} | error_reply().
-get_children(SessId, FileKey, Offset, Limit, Token, StartId) ->
-    ?run(fun() -> lfm_dirs:get_children(SessId, FileKey, Offset, Limit, Token, StartId) end).
+-spec get_children(session:id(), fslogic_worker:file_guid_or_path(), file_meta:list_opts()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | error_reply().
+get_children(SessId, FileKey, ListOpts) ->
+    ?run(fun() -> lfm_dirs:get_children(SessId, FileKey, ListOpts) end).
 
 
 %%--------------------------------------------------------------------
@@ -174,34 +140,10 @@ get_children(SessId, FileKey, Offset, Limit, Token, StartId) ->
 %% starting with Offset-th entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(),
-    Limit :: integer()
-) ->
-    {ok, [#file_attr{}]} | error_reply().
-get_children_attrs(SessId, FileKey, Offset, Limit) ->
-    ?run(fun() -> lfm_dirs:get_children_attrs(SessId, FileKey, Offset, Limit) end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets file basic attributes (see file_attr.hrl) for each directory children
-%% starting with Offset-th from specified Token entry and up to Limit of entries.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_attrs(
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    Token :: undefined | binary()
-) ->
-    {ok, [#file_attr{}], NewToken :: binary(), IsLast :: boolean()} |
-    error_reply().
-get_children_attrs(SessId, FileKey, Offset, Limit, Token) ->
-    ?run(fun() -> lfm_dirs:get_children_attrs(SessId, FileKey, Offset, Limit, Token) end).
+-spec get_children_attrs(session:id(), fslogic_worker:file_guid_or_path(), file_meta:list_opts()) ->
+    {ok, [#file_attr{}], file_meta:list_extended_info()} | error_reply().
+get_children_attrs(SessId, FileKey, ListOpts) ->
+    ?run(fun() -> lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts) end).
 
 
 %%--------------------------------------------------------------------
@@ -223,16 +165,10 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 %% of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details(
-    session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(),
-    Limit :: integer(),
-    StartId :: undefined | file_meta:name()
-) ->
-    {ok, [lfm_attrs:file_details()], IsLast :: boolean()} | error_reply().
-get_children_details(SessId, FileKey, Offset, Limit, StartId) ->
-    ?run(fun() -> lfm_dirs:get_children_details(SessId, FileKey, Offset, Limit, StartId) end).
+-spec get_children_details(session:id(), fslogic_worker:file_guid_or_path(), file_meta:list_opts()) ->
+    {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | error_reply().
+get_children_details(SessId, FileKey, ListOpts) ->
+    ?run(fun() -> lfm_dirs:get_children_details(SessId, FileKey, ListOpts) end).
 
 
 %%--------------------------------------------------------------------
@@ -465,6 +401,11 @@ create(SessId, ParentGuid, Name, Mode) ->
 %% Creates and opens a new file
 %% @end
 %%--------------------------------------------------------------------
+-spec create_and_open(session:id(), Path :: file_meta:path(), fslogic_worker:open_flag()) ->
+    {ok, {fslogic_worker:file_guid(), handle()}}| error_reply().
+create_and_open(SessId, Path, OpenFlag) ->
+    ?run(fun() -> lfm_files:create_and_open(SessId, Path, OpenFlag) end).
+
 -spec create_and_open(session:id(), Path :: file_meta:path(),
     Mode :: undefined | file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
     {ok, {fslogic_worker:file_guid(), handle()}}

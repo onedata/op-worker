@@ -24,6 +24,7 @@
 -module(file_ctx).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -72,14 +73,14 @@
 -export([get_local_file_location_doc/1, get_local_file_location_doc/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
+-export([get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2, get_and_check_parent/2, get_original_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
     get_display_credentials/1, get_times/1,
     get_parent_guid/2, get_child/3,
-    get_file_children/4, get_file_children/5, get_file_children/6,
-    get_file_children/7, get_file_children_whitelisted/5,
+    get_file_children/3,
+    get_file_children_whitelisted/4,
     get_logical_path/2,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2,
@@ -91,7 +92,9 @@
     get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1,
     get_effective_flags/2]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
--export([assert_not_readonly_storage/1, assert_file_exists/1]).
+-export([assert_not_readonly_storage/1, assert_file_exists/1, assert_smaller_than_provider_support_size/2]).
+
+-define(DEFAULT_LS_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
 
 %%%===================================================================
 %%% API
@@ -260,25 +263,6 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
     end;
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
     {Path, FileCtx}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's canonical path tokens (starting with "/", "SpaceId/", ...).
-%% @end
-%%--------------------------------------------------------------------
--spec get_canonical_path_tokens(ctx()) -> {[file_meta:name()], ctx()}.
-get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
-    case is_root_dir_const(FileCtx) of
-        true ->
-            {[<<"/">>], FileCtx#file_ctx{canonical_path = <<"/">>}};
-        false ->
-            {CanonicalPathTokens, FileCtx2} = resolve_canonical_path_tokens(FileCtx),
-            CanonicalPath = filename:join(CanonicalPathTokens),
-            {CanonicalPathTokens,
-                FileCtx2#file_ctx{canonical_path = CanonicalPath}}
-    end;
-get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
-    {filepath_utils:split(Path), FileCtx}.
 
 
 -spec get_uuid_based_path(ctx()) -> {file_meta:uuid_based_path(), ctx()}.
@@ -712,69 +696,18 @@ get_child(FileCtx, Name, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv get_file_children(FileCtx, UserCtx, Offset, Limit, undefined).
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit()
-) ->
-    {Children :: [ctx()], NewFileCtx :: ctx()}.
-get_file_children(FileCtx, UserCtx, Offset, Limit) ->
-    case get_file_children(FileCtx, UserCtx, Offset, Limit, undefined) of
-        {Children, FileCtx2} -> {Children, FileCtx2};
-        {Children, _ExtendedInfo, FileCtx2} -> {Children, FileCtx2}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv get_file_children(FileCToken2tx, UserCtx, Offset, Limit, Token, undefined).
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | datastore_links_iter:token()
-) ->
-    {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()} |
-    {Children :: [ctx()], NewFileCtx :: ctx()}.
-get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
-    get_file_children(FileCtx, UserCtx, Offset, Limit, Token, undefined).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv get_file_children(FileCtx, UserCtx, Offset, Limit, Token, undefined).
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | datastore_links_iter:token(),
-    StartId :: undefined | file_meta:name()
-) ->
-    {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()} |
-    {Children :: [ctx()], NewFileCtx :: ctx()}.
-get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
-    get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, undefined).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns list of directory children.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | datastore_links_iter:token(),
-    StartId :: undefined | file_meta:name(),
-    PrevTreeId :: undefined | oneprovider:id()
-) ->
-    {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()} |
-    {Children :: [ctx()], NewFileCtx :: ctx()}.
-get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, PrevTreeId) ->
+-spec get_file_children(ctx(), user_ctx:ctx(), file_meta:list_opts()) ->
+    {Children :: [ctx()], ListExtendedInfo :: file_meta:list_extended_info(), NewFileCtx :: ctx()}.
+get_file_children(FileCtx, UserCtx, Opts) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            {list_user_spaces(UserCtx, Offset, Limit, undefined), FileCtx};
+            Offset = max(maps:get(offset, Opts, 0), 0), % offset can be negative if last_name is passed too
+            Limit = maps:get(size, Opts, ?DEFAULT_LS_BATCH_SIZE),
+            UserSpaces = list_user_spaces(UserCtx, Offset, Limit, undefined),
+            {UserSpaces, #{is_last => length(UserSpaces) < Limit}, FileCtx};
         false ->
             {FileDoc = #document{value = #file_meta{
                 type = FileType
@@ -786,44 +719,40 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, PrevTreeId) -
                     MapFun = fun({Name, Uuid}) ->
                         new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
                     end,
-                    {ok, ChildrenLinks, ListExtendedInfo} =
-                        file_meta:list_children(FileDoc, Offset, Limit, Token, StartId, PrevTreeId),
+                    {ok, ChildrenLinks, ListExtendedInfo} = file_meta:list_children(FileDoc, Opts),
                     {lists:map(MapFun, ChildrenLinks), ListExtendedInfo, FileCtx2};
                 _ ->
                     % In case of listing regular file - return it
-                    {[FileCtx2], FileCtx2}
+                    {[FileCtx2], #{is_last => true}, FileCtx2}
             end
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of directory children bounded by specified AllowedChildren.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_children_whitelisted(ctx(), user_ctx:ctx(),
-    NonNegOffset :: file_meta:non_neg_offset(),
-    Limit :: file_meta:limit(),
-    ChildrenWhiteList :: [file_meta:name()]
-) ->
-    {Children :: [ctx()], NewFileCtx :: ctx()}.
-get_file_children_whitelisted(
-    FileCtx, UserCtx, NonNegOffset, Limit, ChildrenWhiteList
-) when NonNegOffset >= 0 ->
+-spec get_file_children_whitelisted(ctx(), user_ctx:ctx(), file_meta:list_opts(), [file_meta:name()]) ->
+    {Children :: [ctx()], file_meta:list_extended_info(), NewFileCtx :: ctx()}.
+get_file_children_whitelisted(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            {list_user_spaces(UserCtx, NonNegOffset, Limit, ChildrenWhiteList), FileCtx};
+            Offset = max(maps:get(offset, ListOpts, 0), 0), % offset can be negative if last_name is passed too
+            Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_SIZE),
+            UserSpaces = list_user_spaces(UserCtx, Offset, Limit, ChildrenWhiteList),
+            {UserSpaces, #{is_last => length(UserSpaces) < Limit}, FileCtx};
         false ->
             {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
             SpaceId = get_space_id_const(FileCtx2),
             ShareId = get_share_id_const(FileCtx2),
 
-            {ok, ChildrenLinks} = file_meta:list_children_whitelisted(
-                FileDoc, NonNegOffset, Limit, ChildrenWhiteList
-            ),
+            {ok, ChildrenLinks, ListExtendedInfo} = file_meta:list_children_whitelisted(FileDoc, ListOpts,
+                ChildrenWhiteList),
             ChildrenCtxs = lists:map(fun({Name, Uuid}) ->
                 new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
             end, ChildrenLinks),
-            {ChildrenCtxs, FileCtx2}
+            {ChildrenCtxs, ListExtendedInfo, FileCtx2}
     end.
 
 %%--------------------------------------------------------------------
@@ -1356,6 +1285,22 @@ assert_not_readonly_target_storage_const(FileCtx, TargetProviderId) ->
         false -> ok
     end.
 
+
+-spec assert_smaller_than_provider_support_size(ctx(), od_provider:id()) -> ctx().
+assert_smaller_than_provider_support_size(FileCtx, ProviderId) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case space_logic:get_support_size(SpaceId, ProviderId) of
+        {ok, Size} ->
+            {FileSize, FileCtx2} = file_ctx:get_file_size(FileCtx),
+            case FileSize =< Size of
+                true -> FileCtx2;
+                false -> throw(?ENOSPC)
+            end;
+        {error, _} = Error ->
+            throw(Error)
+    end.
+
+
 -spec assert_file_exists(ctx()) -> ctx() | no_return().
 assert_file_exists(FileCtx0) ->
     % If file doesn't exists (or was deleted) fetching doc will fail,
@@ -1525,7 +1470,7 @@ get_file_size_from_remote_locations(FileCtx) ->
     end.
 
 %% @private
--spec list_user_spaces(user_ctx:ctx(), file_meta:offset(), file_meta:limit(),
+-spec list_user_spaces(user_ctx:ctx(), file_meta:list_offset(), file_meta:list_size(),
     SpaceWhiteList :: undefined | [od_space:id()]) -> Children :: [ctx()].
 list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
     SessionId = user_ctx:get_session_id(UserCtx),

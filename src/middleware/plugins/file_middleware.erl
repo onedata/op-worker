@@ -371,7 +371,6 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     boolean().
 get_operation_supported(instance, private) -> true;             % gs only
 get_operation_supported(instance, public) -> true;              % gs only
-get_operation_supported(list, private) -> true;                 % REST only (deprecated)
 get_operation_supported(children, private) -> true;             % REST/gs
 get_operation_supported(children, public) -> true;              % REST/gs
 get_operation_supported(children_details, private) -> true;     % gs only
@@ -398,14 +397,6 @@ get_operation_supported(_, _) -> false.
 -spec data_spec_get(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
 data_spec_get(#gri{aspect = instance}) -> #{
     required => #{id => {binary, guid}}
-};
-
-data_spec_get(#gri{aspect = list}) -> #{
-    required => #{id => {binary, guid}},
-    optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
-        <<"offset">> => {integer, {not_lower_than, 0}}
-    }
 };
 
 data_spec_get(#gri{aspect = As}) when
@@ -496,7 +487,6 @@ authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _
 
 authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
-    As =:= list;
     As =:= children;
     As =:= children_details;
     As =:= attrs;
@@ -523,7 +513,6 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = file_
 -spec validate_get(middleware:req(), middleware:entity()) -> ok | no_return().
 validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
-    As =:= list;
     As =:= children;
     As =:= children_details;
     As =:= attrs;
@@ -549,34 +538,19 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
     ?check(lfm:get_details(Auth#auth.session_id, {guid, FileGuid}));
 
-get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
-    SessionId = Auth#auth.session_id,
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-    Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
-    {ok, Path} = ?check(lfm:get_file_path(SessionId, FileGuid)),
-
-    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
-        {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
-            {ok, Children} = ?check(lfm:get_children(SessionId, {guid, Guid}, Offset, Limit)),
-            {ok, lists:map(fun({ChildGuid, ChildPath}) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
-                #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
-            end, Children)};
-        {ok, #file_attr{guid = Guid}} ->
-            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-            {ok, [#{<<"id">> => ObjectId, <<"path">> => Path}]}
-    end;
-
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
     StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
-    {ok, Children, _, _} = ?check(lfm:get_children(
-        SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId)
-    ),
-    {ok, value, Children};
+    {ok, Children, #{is_last := IsLast}} = ?check(lfm:get_children(
+        SessionId, {guid, FileGuid}, #{
+            offset => Offset,
+            size => Limit,
+            last_name => StartId
+    })),
+    {ok, value, {Children, IsLast}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -584,10 +558,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
-    {ok, ChildrenDetails, _} = ?check(lfm:get_children_details(
-        SessionId, {guid, FileGuid}, Offset, Limit, StartId
+    {ok, ChildrenDetails, #{is_last := IsLast}} = ?check(lfm:get_children_details(
+        SessionId, {guid, FileGuid}, #{offset => Offset, size => Limit, last_name => StartId}
     )),
-    {ok, value, ChildrenDetails};
+    {ok, value, {ChildrenDetails, IsLast}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, scope = Sc}}, _) ->
     RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of

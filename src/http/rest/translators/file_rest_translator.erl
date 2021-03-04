@@ -45,18 +45,20 @@ create_response(#gri{aspect = register_file}, _, value, ObjectId) ->
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(#gri{aspect = As}, Result) when
-    As =:= object_id;
-    As =:= list
+    As =:= object_id
 ->
     ?OK_REPLY(Result);
-get_response(#gri{aspect = children}, Children) ->
-    ?OK_REPLY(#{<<"children">> => lists:map(fun({Guid, Name}) ->
-        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        #{
-            <<"id">> => ObjectId,
-            <<"name">> => Name
-        }
-    end, Children)});
+get_response(#gri{aspect = children}, {Children, IsLast}) ->
+    ?OK_REPLY(#{
+        <<"children">> => lists:map(fun({Guid, Name}) ->
+            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+            #{
+                <<"id">> => ObjectId,
+                <<"name">> => Name
+            }
+        end, Children),
+        <<"isLast">> => IsLast
+    });
 get_response(#gri{aspect = As}, Metadata) when
     As =:= attrs;
     As =:= xattrs;

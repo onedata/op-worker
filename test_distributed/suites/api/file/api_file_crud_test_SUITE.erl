@@ -59,7 +59,7 @@ all() -> [
 %%%===================================================================
 
 
-get_file_instance_test(Config) ->
+get_file_instance_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
@@ -89,7 +89,7 @@ get_file_instance_test(Config) ->
         forbidden_not_in_space = [user1]
     },
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = str_utils:format("Get instance for ~s using gs private api", [FileType]),
             type = gs,
@@ -125,7 +125,7 @@ get_file_instance_test(Config) ->
     ])).
 
 
-get_shared_file_instance_test(Config) ->
+get_shared_file_instance_test(_Config) ->
     [P1] = oct_background:get_provider_nodes(krakow),
     [P2] = oct_background:get_provider_nodes(paris),
     Providers = [P1, P2],
@@ -162,7 +162,7 @@ get_shared_file_instance_test(Config) ->
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, SpaceShareId),
     ExpJsonShareFileDetails = file_details_to_gs_json(SpaceShareId, FileDetailsWithShares),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = str_utils:format("Get instance for directly shared ~s using gs public api", [FileType]),
             type = gs,
@@ -201,7 +201,7 @@ get_shared_file_instance_test(Config) ->
     ])).
 
 
-get_file_instance_on_provider_not_supporting_space_test(Config) ->
+get_file_instance_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
@@ -210,7 +210,7 @@ get_file_instance_on_provider_not_supporting_space_test(Config) ->
         ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = str_utils:format("Get instance for ~s on provider not supporting user using gs api", [
                 FileType
@@ -304,7 +304,7 @@ update_file_instance_test(Config) ->
         Mode
     end,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = str_utils:format("Update ~s instance using gs private api", [FileType]),
             type = gs,
@@ -344,13 +344,13 @@ update_file_instance_test(Config) ->
     ])).
 
 
-update_file_instance_on_provider_not_supporting_space_test(Config) ->
+update_file_instance_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = str_utils:format("Update ~s instance on provider not supporting user using gs api", [
                 FileType
@@ -431,7 +431,7 @@ delete_file_instance_test(Config) ->
 
     MemRef = api_test_memory:init(),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = #client_spec{
@@ -496,13 +496,13 @@ delete_file_instance_test(Config) ->
     ])).
 
 
-delete_file_instance_on_provider_not_supporting_space_test(Config) ->
+delete_file_instance_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = str_utils:format("Delete ~s instance on provider not supporting user using gs api", [
                 FileType
@@ -656,8 +656,6 @@ ensure_guid({mem_ref, MemRef}) -> api_test_memory:get(MemRef, file_guid).
 
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
@@ -665,8 +663,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 
 init_per_testcase(_Case, Config) ->
