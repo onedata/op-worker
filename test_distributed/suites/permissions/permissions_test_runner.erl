@@ -578,6 +578,7 @@ run_open_handle_mode_scenarios(ScenariosRootDirPath, #perms_test_spec{
     space_id = SpaceId,
     owner_user = FileOwner,
     space_user = SpaceUser,
+    space_owner = SpaceOwner,
     requires_traverse_ancestors = RequiresTraverseAncestors,
     available_in_share_mode = AvailableInShareMode,
     operation = Operation,
@@ -598,38 +599,56 @@ run_open_handle_mode_scenarios(ScenariosRootDirPath, #perms_test_spec{
             children = Files
         }
     ),
+    AllFiles = maps:keys(PermsPerFile),
 
-    % Assert that even with all other/anonymous perms set operation can be
-    % performed only when it is available also in share mode
-    case rand:uniform(2) of
-        1 ->
-            AllPosixPermsPerFile = lists:foldl(fun(Guid, Acc) ->
-                Acc#{Guid => 8#007}
-            end, #{}, maps:keys(PermsPerFile)),
-            permissions_test_utils:set_modes(Node, AllPosixPermsPerFile);
-        2 ->
-            AllAclPermsPerFile = lists:foldl(fun(Guid, Acc) ->
-                Acc#{Guid => permissions_test_utils:all_perms(Node, Guid)}
-            end, #{}, maps:keys(PermsPerFile)),
-            permissions_test_utils:set_acls(Node, AllAclPermsPerFile, #{}, ?anonymous, ?no_flags_mask)
+    PermsType = case rand:uniform(2) of
+        1 -> acl;
+        2 -> posix
     end,
 
-    Token = initializer:create_access_token(SpaceUser),
-    SessId = permissions_test_utils:create_session(Node, SpaceUser, Token, open_handle),
+    Executioner = case rand:uniform(3) of
+        1 -> FileOwner;
+        2 -> SpaceOwner;
+        3 -> SpaceUser
+    end,
+    ExecutionerToken = initializer:create_access_token(Executioner),
+    ExecutionerSessId = permissions_test_utils:create_session(
+        Node, Executioner, ExecutionerToken, open_handle
+    ),
 
     case AvailableInShareMode of
         true ->
-            ?assertMatch(ok, Operation(SessId, ScenarioRootDirPath, ExtraData)),
+            % Operation is available in share/public mode but access is still controlled
+            % (even for space owner) by posix mode (other bits) or acl
+            deny_full_perms(PermsType, Node, AllFiles),
+            ?assertMatch({error, ?EACCES}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
+
+            case PermsType of
+                posix ->
+                    AllPosixPermsPerFile = lists:foldl(fun(Guid, Acc) ->
+                        Acc#{Guid => 8#007}
+                    end, #{}, AllFiles),
+                    permissions_test_utils:set_modes(Node, AllPosixPermsPerFile);
+                acl ->
+                    AllAclPermsPerFile = lists:foldl(fun(Guid, Acc) ->
+                        Acc#{Guid => permissions_test_utils:all_perms(Node, Guid)}
+                    end, #{}, AllFiles),
+                    permissions_test_utils:set_acls(Node, AllAclPermsPerFile, #{}, ?anonymous, ?no_flags_mask)
+            end,
+            ?assertMatch(ok, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             run_final_ownership_check(#scenario_ctx{
                 meta_spec = TestSpec,
                 scenario_name = ScenarioName,
                 scenario_root_dir_path = ScenarioRootDirPath,
                 files_owner_session_id = FileOwnerUserSessId,
-                executioner_session_id = SessId
+                executioner_session_id = ExecutionerSessId
             });
         _ ->
-            ?assertMatch({error, ?EACCES}, Operation(SessId, ScenarioRootDirPath, ExtraData))
+            % If operation is not available in share/public mode then operation
+            % should be rejected even if all permissions are granted
+            set_full_perms(PermsType, Node, AllFiles),
+            ?assertMatch({error, ?EACCES}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData))
     end.
 
 
