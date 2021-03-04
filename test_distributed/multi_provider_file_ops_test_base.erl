@@ -2292,17 +2292,8 @@ verify_del(Config, {F, FileUuid, _Locations}) ->
     Attempts = ?config(attempts, Config),
 
     verify(Config, fun(W) ->
-%%            ct:print("Del ~p", [{W, F,  FileUuid, Locations}]),
-%%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
         ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts),
-
         ?match({error, not_found}, rpc:call(W, file_meta, get, [FileUuid]), Attempts)
-%%        ?match(0, count_links(W, FileUuid), Attempts),
-%%
-%%        lists:foreach(fun(Location) ->
-%%            ?match({error, not_found},
-%%                rpc:call(W, file_meta, get, [Location]), Attempts)
-%%        end, proplists:get_value(W, Locations, []))
     end).
 
 verify_dir_size(Config, DirToCheck, DSize) ->
