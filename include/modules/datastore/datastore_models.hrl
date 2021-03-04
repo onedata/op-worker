@@ -249,10 +249,6 @@
     next_renewal_backoff :: time:seconds()
 }).
 
--record(file_force_proxy, {
-    provider_id :: undefined | oneprovider:id()
-}).
-
 %% User session
 -record(session, {
     status :: undefined | session:status(),
@@ -382,9 +378,13 @@
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
-    parent_uuid :: undefined | file_meta:uuid()
+    parent_uuid :: undefined | file_meta:uuid(),
+    is_dataset = false :: boolean()
 }).
 
+% An empty model used for creating dataset_links
+% For more information see dataset_links.erl
+-record(dataset_links, {}).
 
 % An empty model used for creating deletion_markers
 % For more information see deletion_marker.erl

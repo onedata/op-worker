@@ -32,6 +32,7 @@
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
+-export([mark_as_dataset/1, unmark_as_dataset/1, is_dataset/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,
@@ -467,7 +468,11 @@ get_locations_by_uuid(FileUuid) ->
 rename(SourceDoc, #document{key = SourceParentUuid}, #document{key = TargetParentUuid}, TargetName) ->
     rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName);
 rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
-    #document{key = FileUuid, value = #file_meta{name = FileName}, scope = Scope} = SourceDoc,
+    #document{
+        key = FileUuid,
+        value = #file_meta{name = FileName},
+        scope = Scope
+    } = SourceDoc,
     {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{
             name = TargetName,
@@ -475,7 +480,15 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
         }}
     end),
     ok = file_meta_links:add(TargetParentUuid, Scope, TargetName, FileUuid),
-    ok = file_meta_links:delete(SourceParentUuid, Scope, FileName, FileUuid).
+    ok = file_meta_links:delete(SourceParentUuid, Scope, FileName, FileUuid),
+
+    % call by module to mock in tests
+    case file_meta:is_dataset(SourceDoc) of
+        true ->
+            dataset_links:move(Scope, FileUuid, TargetName, SourceParentUuid, TargetParentUuid);
+        false ->
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -663,6 +676,16 @@ get_shares(#file_meta{shares = Shares}) ->
     Shares.
 
 
+-spec mark_as_dataset(uuid()) -> ok.
+mark_as_dataset(Uuid) ->
+    ?extract_ok(update(Uuid, fun(FileMeta) -> {ok, FileMeta#file_meta{is_dataset = true}} end)).
+
+
+-spec unmark_as_dataset(uuid()) -> ok.
+unmark_as_dataset(Uuid) ->
+    ?extract_ok(update(Uuid, fun(FileMeta) -> {ok, FileMeta#file_meta{is_dataset = false}} end)).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates file meta entry for space if not exists
@@ -787,6 +810,14 @@ is_child_of_hidden_dir(Path) ->
     {_, ParentPath} = filepath_utils:basename_and_parent_dir(Path),
     {Parent, _} = filepath_utils:basename_and_parent_dir(ParentPath),
     is_hidden(Parent).
+
+
+-spec is_dataset(file_meta() | doc()) -> boolean().
+is_dataset(#document{value = FM}) ->
+    % call by module to mock in tests
+    is_dataset(FM);
+is_dataset(#file_meta{is_dataset = IsDataset}) ->
+    IsDataset.
 
 
 -spec get_name(doc()) -> binary().
@@ -1007,7 +1038,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    10.
+    11.
 
 %%--------------------------------------------------------------------
 %% @doc
