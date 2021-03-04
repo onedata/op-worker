@@ -12,8 +12,9 @@
 -module(dir_req).
 -author("Tomasz Lichon").
 
--include("modules/auth/acl.hrl").
 -include("global_definitions.hrl").
+-include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
@@ -47,7 +48,7 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
     file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [traverse_ancestors, ?traverse_container, ?add_subcontainer]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_subcontainer_mask)]
     ),
     mkdir_insecure(UserCtx, ParentFileCtx1, Name, Mode).
 
@@ -112,12 +113,12 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
     }.
 get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    PermsToCheck = case IsDir of
-        true -> [traverse_ancestors, ?list_container];
-        false -> [traverse_ancestors]
+    AccessRequirements = case IsDir of
+        true -> [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?list_container_mask)];
+        false -> [?TRAVERSE_ANCESTORS]
     end,
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx1, PermsToCheck
+        UserCtx, FileCtx1, AccessRequirements
     ),
     list_children(UserCtx, FileCtx2, ListOpts, ChildrenWhiteList).
 
@@ -130,12 +131,12 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
     fslogic_worker:fuse_response().
 get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    PermsToCheck = case IsDir of
-        true -> [traverse_ancestors, ?traverse_container, ?list_container];
-        false -> [traverse_ancestors]
+    AccessRequirements = case IsDir of
+        true -> [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?list_container_mask)];
+        false -> [?TRAVERSE_ANCESTORS]
     end,
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx1, PermsToCheck
+        UserCtx, FileCtx1, AccessRequirements
     ),
     get_children_attrs_insecure(
         UserCtx, FileCtx2, ListOpts, IncludeReplicationStatus, ChildrenWhiteList
@@ -150,12 +151,12 @@ get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus) ->
     fslogic_worker:fuse_response().
 get_children_details(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    PermsToCheck = case IsDir of
-        true -> [traverse_ancestors, ?traverse_container, ?list_container];
-        false -> [traverse_ancestors]
+    AccessRequirements = case IsDir of
+        true -> [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?list_container_mask)];
+        false -> [?TRAVERSE_ANCESTORS]
     end,
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx1, PermsToCheck
+        UserCtx, FileCtx1, AccessRequirements
     ),
     get_children_details_insecure(UserCtx, FileCtx2, ListOpts, ChildrenWhiteList).
 

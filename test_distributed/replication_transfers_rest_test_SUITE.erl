@@ -12,7 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

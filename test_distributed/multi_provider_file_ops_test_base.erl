@@ -12,17 +12,17 @@
 -module(multi_provider_file_ops_test_base).
 -author("Jakub Kudzia").
 
--include("middleware/middleware.hrl").
 -include("global_definitions.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/errors.hrl").
--include("modules/auth/acl.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
 %% export for tests

@@ -15,7 +15,7 @@
 -author("Malgorzata Plazek").
 -author("Bartosz Walkowicz").
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").

@@ -37,7 +37,7 @@
     scenario_root_dir_path :: file_meta:path(),
     files_owner_session_id :: session:id(),
     executioner_session_id :: session:id(),
-    required_space_privs = [] :: owner | [privileges:space_privilege()],
+    required_space_privs = [] :: {file_owner, [privileges:space_privilege()]} | [privileges:space_privilege()],
     required_perms_per_file = #{} :: perms_per_file(),
     extra_data = #{} :: map()
 }).
@@ -242,7 +242,8 @@ run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
             erlang:error(space_privs_test_failed)
         after
             mock_space_user_privileges([Node], SpaceId, FileOwner, privileges:space_admin()),
-            mock_space_user_privileges([Node], SpaceId, SpaceUserId, privileges:space_admin())
+            mock_space_user_privileges([Node], SpaceId, SpaceUserId, privileges:space_admin()),
+            invalidate_perms_cache(Node)
         end
     end, [
         {posix, PosixSpacePrivs},
@@ -263,17 +264,17 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     scenario_root_dir_path = ScenarioRootDirPath,
     files_owner_session_id = FileOwnerSessId,
     executioner_session_id = UserSessId,
-    required_space_privs = owner,
+    required_space_privs = {file_owner, RequiredSpacePrivs},
     extra_data = ExtraData
 }) ->
-    % Operation doesn't require any space privileges but can be performed only
-    % by file owner and should fail for any other
     mock_space_user_privileges([Node], SpaceId, UserId, privileges:space_admin()),
     ?assertMatch({error, ?EACCES}, Operation(UserSessId, ScenarioRootDirPath, ExtraData)),
 
     mock_space_user_privileges([Node], SpaceId, FileOwnerId, []),
-    ?assertMatch(ok, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
+    ?assertMatch({error, ?EACCES}, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
 
+    mock_space_user_privileges([Node], SpaceId, FileOwnerId, RequiredSpacePrivs),
+    ?assertMatch(ok, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
     run_final_ownership_check(ScenarioCtx#scenario_ctx{executioner_session_id = FileOwnerSessId});
 
 space_privs_test(ScenarioCtx = #scenario_ctx{

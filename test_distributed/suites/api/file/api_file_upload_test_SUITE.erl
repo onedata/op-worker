@@ -94,16 +94,24 @@ rest_create_file_test(_Config) ->
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, files, [FileGuid]),
 
+    {CorrectClients, ClientFileError} = case rand:uniform(2) of
+        1 ->
+            % space owner - omits permission checks so that operation fails on
+            % file type checks
+            {[user2], ?ERROR_POSIX(?ENOTDIR)};
+        2 ->
+            % files owner - operation fails when checking permissions as
+            % permission to 'add_children` is never given for file
+            {[user3], ?ERROR_POSIX(?EACCES)}
+    end,
+
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Upload file using rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = #client_spec{
-                correct = case rand:uniform(2) of
-                    1 -> [user2];  % space owner - doesn't need any perms
-                    2 -> [user3]   % files owner
-                end,
+                correct = CorrectClients,
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
@@ -129,7 +137,7 @@ rest_create_file_test(_Config) ->
                         body => [Content]
                     },
                     bad_values = [
-                        {bad_id, FileObjectId, {rest, ?ERROR_POSIX(?ENOTDIR)}},
+                        {bad_id, FileObjectId, {rest, ClientFileError}},
 
                         {<<"name">>, UsedFileName, ?ERROR_POSIX(?EEXIST)},
 
