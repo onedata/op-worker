@@ -633,6 +633,12 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
     {ok, File4Guid} = lfm_proxy:create(Worker, NormalSessId, <<"/", SpaceName/binary, "/dir/file4">>),
     mock_space_get_shares(Worker, []),
 
+    Content = <<"content">>,
+    ContentSize = size(Content),
+    {ok, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, NormalSessId, {guid, File4Guid}, write)),
+    ?assertMatch({ok, ContentSize}, lfm_proxy:write(Worker, Handle1, 0, Content)),
+    ?assertMatch(ok, lfm_proxy:close(Worker, Handle1)),
+
     % Assert that when listing in normal mode all space files are returned
     ?assertMatch(
         {ok, [{DirGuid, _}, {File1Guid, _}, {File2Guid, _}, {File3Guid, _}]},
@@ -732,13 +738,15 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
     % but is not possible via space/dir share (those are shares created on parents so
     % permissions check must assert traverse ancestors for them too - dir has 8#770 perms
     % and in 'open_handle' mode 'other' bits are checked so permissions will be denied)
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, OpenHandleSessId, {guid, File4ShareGuid})),
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, OpenHandleSessId, {guid, File4ShareGuid}, read)),
+    ?assertMatch({ok, Content}, lfm_proxy:read(Worker, Handle2, 0, 100)),
+    ?assertMatch(ok, lfm_proxy:close(Worker, Handle2)),
 
     File4DirShareGuid = file_id:guid_to_share_guid(File4Guid, DirShareId),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:stat(Worker, OpenHandleSessId, {guid, File4DirShareGuid})),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, OpenHandleSessId, {guid, File4DirShareGuid}, read)),
 
     File4SpaceShareGuid = file_id:guid_to_share_guid(File4Guid, SpaceShareId),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:stat(Worker, OpenHandleSessId, {guid, File4SpaceShareGuid})),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, OpenHandleSessId, {guid, File4SpaceShareGuid}, read)),
 
     ok.
 
