@@ -68,6 +68,7 @@ rest_create_file_test(_Config) ->
         oct_background:get_provider_nodes(paris)
     ]),
     SpaceOwnerId = oct_background:get_user_id(user2),
+    User3Id = oct_background:get_user_id(user3),
 
     #object{
         guid = DirGuid,
@@ -94,24 +95,16 @@ rest_create_file_test(_Config) ->
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, files, [FileGuid]),
 
-    {CorrectClients, ClientFileError} = case rand:uniform(2) of
-        1 ->
-            % space owner - omits permission checks so that operation fails on
-            % file type checks
-            {[user2], ?ERROR_POSIX(?ENOTDIR)};
-        2 ->
-            % files owner - operation fails when checking permissions as
-            % permission to 'add_children` is never given for file
-            {[user3], ?ERROR_POSIX(?EACCES)}
-    end,
-
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Upload file using rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = #client_spec{
-                correct = CorrectClients,
+                correct = case rand:uniform(2) of
+                    1 -> [user2];  % space owner
+                    2 -> [user3]   % files owner
+                end,
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
@@ -137,7 +130,21 @@ rest_create_file_test(_Config) ->
                         body => [Content]
                     },
                     bad_values = [
-                        {bad_id, FileObjectId, {rest, ClientFileError}},
+                        {bad_id, FileObjectId, {rest, {error_fun, fun(#api_test_ctx{
+                            client = ?USER(UserId),
+                            data = Data
+                        }) ->
+                            case {UserId, maps:get(<<"type">>, Data, <<"reg">>)} of
+                                {User3Id, <<"dir">>} ->
+                                    % User3 gets ?EACCES because operation fails on permissions
+                                    % checks (file has 8#777 mode but this doesn't give anyone
+                                    % ?add_subcontainer perm) rather than file type check which
+                                    % is performed later
+                                    ?ERROR_POSIX(?EACCES);
+                                _ ->
+                                    ?ERROR_POSIX(?ENOTDIR)
+                            end
+                        end}}},
 
                         {<<"name">>, UsedFileName, ?ERROR_POSIX(?EEXIST)},
 
