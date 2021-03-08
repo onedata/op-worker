@@ -545,7 +545,7 @@ validate_delete_share_result(MemRef, UserId, Providers) ->
 % centralized endpoint in Onezone that redirects to one of the supporting providers
 get_shared_file_or_directory_data_test(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
-    FileContent = str_utils:rand_hex(rand:uniform(1000) + 1),
+    FileContent = str_utils:rand_hex(rand:uniform(1000) + 100),
 
     FileSpec = #file_spec{shares = [#share_spec{}], content = FileContent},
     FileObject = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec),
@@ -558,7 +558,7 @@ get_shared_file_or_directory_data_test(_Config) ->
     get_shared_file_or_directory_data_test_base(DirObject).
 
 %% @private
-get_shared_file_or_directory_data_test_base(Object = #object{guid = FileGuid}) ->
+get_shared_file_or_directory_data_test_base(Object = #object{guid = FileGuid, type = Type}) ->
     AllNodes = oct_background:get_provider_nodes(krakow) ++ oct_background:get_provider_nodes(paris),
     api_test_utils:set_and_sync_metadata(AllNodes, FileGuid, <<"xattrs">>, #{
         <<"license">> => <<"CC-O">>,
@@ -573,58 +573,68 @@ get_shared_file_or_directory_data_test_base(Object = #object{guid = FileGuid}) -
     }),
 
     get_shared_file_or_directory_data_test_base(
-        Object, <<"downloadSharedFileContent">>, <<"/content">>, <<"">>, #{}
+        Object, <<"downloadSharedFileContent">>, <<"/content">>, <<"">>, #{}, case Type of
+            ?REGULAR_FILE_TYPE -> ?HTTP_200_OK;
+            ?DIRECTORY_TYPE -> ?HTTP_400_BAD_REQUEST
+        end
     ),
     get_shared_file_or_directory_data_test_base(
-        Object, <<"downloadSharedFileContent">>, <<"/content">>, <<"">>, #{<<"range">> => <<"bytes=3-86">>}
-    ),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"listSharedDirectoryChildren">>, <<"/children">>, <<"">>, #{}
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"listSharedDirectoryChildren">>, <<"/children">>, <<"?offset=1&limit=1">>, #{}
-    ),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileAttributes">>, <<"">>, <<"">>, #{}
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileAttributes">>, <<"/">>, <<"">>, #{}
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileAttributes">>, <<"">>, <<"?attribute=size">>, #{}
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileAttributes">>, <<"/">>, <<"?attribute=mtime">>, #{}
+        Object, <<"downloadSharedFileContent">>, <<"/content">>, <<"">>, #{<<"range">> => <<"bytes=3-86">>}, case Type of
+            ?REGULAR_FILE_TYPE -> ?HTTP_206_PARTIAL_CONTENT;
+            ?DIRECTORY_TYPE -> ?HTTP_400_BAD_REQUEST
+        end
     ),
 
     get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"">>, #{}
+        Object, <<"listSharedDirectoryChildren">>, <<"/children">>, <<"">>
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"listSharedDirectoryChildren">>, <<"/children">>, <<"?offset=1&limit=1">>
     ),
 
     get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"?attribute=license">>, #{}
+        Object, <<"getSharedFileAttributes">>, <<"">>, <<"">>
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileAttributes">>, <<"/">>, <<"">>
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileAttributes">>, <<"">>, <<"?attribute=size">>
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileAttributes">>, <<"/">>, <<"?attribute=mtime">>
     ),
 
     get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileJsonMetadata">>, <<"/metadata/json">>, <<"">>, #{}
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileJsonMetadata">>, <<"/metadata/json">>, <<"?filter_type=keypath&filter=topKey.nestedKey">>, #{}
+        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"">>
     ),
 
     get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileRdfMetadata">>, <<"/metadata/rdf">>, <<"">>, #{}
+        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"?attribute=license">>
+    ),
+
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileJsonMetadata">>, <<"/metadata/json">>, <<"">>
+    ),
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileJsonMetadata">>, <<"/metadata/json">>, <<"?filter_type=keypath&filter=topKey.nestedKey">>
+    ),
+
+    get_shared_file_or_directory_data_test_base(
+        Object, <<"getSharedFileRdfMetadata">>, <<"/metadata/rdf">>, <<"">>
     ).
 
 %% @private
-% use the actual templates that are sent to GUI to make sure they are ok
-get_shared_file_or_directory_data_test_base(Object, TemplateName, CounterpartOpApiPath, QueryString, Headers) ->
+get_shared_file_or_directory_data_test_base(Object, TemplateName, CounterpartOpApiPath, QueryString) ->
+    get_shared_file_or_directory_data_test_base(
+        Object, TemplateName, CounterpartOpApiPath, QueryString, #{}, ?HTTP_200_OK
+    ).
+get_shared_file_or_directory_data_test_base(Object, TemplateName, CounterpartOpApiPath, QueryString, Headers, ExpCode) ->
     #object{guid = FileGuid, shares = [ShareId]} = Object,
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
 
+    % use the actual templates that are sent to GUI to make sure they are ok
     KrakowNode = hd(oct_background:get_provider_nodes(krakow)),
     #{<<"restTemplates">> := RestTemplates} = rpc:call(
         KrakowNode, gui_gs_translator, handshake_attributes, [anything]
@@ -636,10 +646,9 @@ get_shared_file_or_directory_data_test_base(Object, TemplateName, CounterpartOpA
     CounterpartOpUrl = api_test_utils:build_rest_url(KrakowNode, [
         str_utils:format_bin("data/~s~s~s", [ShareObjectId, CounterpartOpApiPath, QueryString])
     ]),
-    {ok, Code, _, RedirectedResponse} = ?assertMatch(
-        {ok, _, _, _} , http_get_following_redirects(ZoneRedirectorUrl, Headers)
+    {ok, _, _, RedirectedResponse} = ?assertMatch(
+        {ok, ExpCode, _, _}, http_get_following_redirects(ZoneRedirectorUrl, Headers)
     ),
-    ?assert(Code >= 200 andalso Code < 300),
     ?assertMatch(
         {ok, _, _, RedirectedResponse}, http_get_following_redirects(CounterpartOpUrl, Headers)
     ).
