@@ -591,7 +591,12 @@ set_perms(SessId, FileKey, NewPerms) ->
 check_perms(SessId, FileKey, PermType) ->
     ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
 
--spec update_protection_flags(session:id(), file_key(), ace:bitmask(), ace:bitmask()) ->
+-spec update_protection_flags(
+    session:id(),
+    file_key(),
+    data_access_control:bitmask(),
+    data_access_control:bitmask()
+) ->
     ok | error_reply().
 update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToReset) ->
     % TODO VFS-7363 assert file is dataset and user has needed space privileges

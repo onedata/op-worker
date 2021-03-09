@@ -19,6 +19,14 @@
 -include("modules/fslogic/acl.hrl").
 
 
+-define(has_all_flags(Bitmask, Flags), (((Bitmask) band (Flags)) =:= (Flags))).
+-define(has_any_flags(Bitmask, Flags), (((Bitmask) band (Flags)) > 0)).
+-define(set_flags(Bitmask, Flags), ((Bitmask) bor (Flags))).
+-define(reset_flags(Bitmask, Flags), ((Bitmask) band (bnot (Flags)))).
+-define(common_flags(Bitmask1, Bitmask2), ((Bitmask1) band (Bitmask2))).
+-define(complement_flags(Bitmask), (bnot (Bitmask))).
+
+
 % Access Requirements
 -define(OWNERSHIP, ownership).
 -define(PUBLIC_ACCESS, public_access).
@@ -137,8 +145,8 @@
 %       b) acl check - each ACE in ACL has its own step number starting at `1`
 -record(user_perms_check_progress, {
     finished_step :: non_neg_integer(),
-    granted :: ace:bitmask(),
-    denied :: ace:bitmask()
+    granted :: data_access_control:bitmask(),
+    denied :: data_access_control:bitmask()
 }).
 
 % Steps performed during access control checks

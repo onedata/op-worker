@@ -11,7 +11,7 @@
 -module(storage_import_acl).
 -author("Jakub Kudzia").
 
--include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 

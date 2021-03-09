@@ -16,13 +16,6 @@
 
 -define(ACL_XATTR_NAME, <<"cdmi_acl">>).
 
--define(has_all_flags(Bitmask, Flags), (((Bitmask) band (Flags)) =:= (Flags))).
--define(has_any_flags(Bitmask, Flags), (((Bitmask) band (Flags)) > 0)).
--define(set_flags(Bitmask, Flags), ((Bitmask) bor (Flags))).
--define(reset_flags(Bitmask, Flags), ((Bitmask) band (bnot (Flags)))).
--define(common_flags(Bitmask1, Bitmask2), ((Bitmask1) band (Bitmask2))).
--define(complement_flags(Bitmask), (bnot (Bitmask))).
-
 % ace types
 -define(allow, <<"ALLOW">>).
 -define(allow_mask, 16#00000000).

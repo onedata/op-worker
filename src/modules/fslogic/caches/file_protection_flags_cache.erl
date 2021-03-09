@@ -26,7 +26,7 @@
 -define(DEFAULT_CHECK_FREQUENCY, 30000).  % 30 s
 -define(DEFAULT_CACHE_SIZE, 20000).
 
--define(UNABLE_TO_INITIALIZE_LOG_MSG,
+-define(UNABLE_TO_INITIALIZE_LOG_FMT,
     "Unable to initialize file attr bounded cache for ~p space(s) due to: ~p"
 ).
 
@@ -42,16 +42,16 @@ init(all) ->
         {ok, SpaceIds} ->
             lists:all(fun init/1, SpaceIds);
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug(?UNABLE_TO_INITIALIZE_LOG_MSG, [all, ?ERROR_NO_CONNECTION_TO_ONEZONE]),
+            ?debug(?UNABLE_TO_INITIALIZE_LOG_FMT, [all, ?ERROR_NO_CONNECTION_TO_ONEZONE]),
             false;
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug(?UNABLE_TO_INITIALIZE_LOG_MSG, [all, ?ERROR_UNREGISTERED_ONEPROVIDER]),
+            ?debug(?UNABLE_TO_INITIALIZE_LOG_FMT, [all, ?ERROR_UNREGISTERED_ONEPROVIDER]),
             false;
         {error, _} = Error ->
-            ?critical(?UNABLE_TO_INITIALIZE_LOG_MSG, [all, Error]),
+            ?critical(?UNABLE_TO_INITIALIZE_LOG_FMT, [all, Error]),
             false
     catch Type:Reason ->
-        ?critical_stacktrace(?UNABLE_TO_INITIALIZE_LOG_MSG, [all, {Type, Reason}]),
+        ?critical_stacktrace(?UNABLE_TO_INITIALIZE_LOG_FMT, [all, {Type, Reason}]),
         false
     end;
 init(SpaceId) ->
@@ -70,17 +70,18 @@ init(SpaceId) ->
                     ok ->
                         true;
                     {error, _} = Error ->
-                        ?critical(?UNABLE_TO_INITIALIZE_LOG_MSG, [SpaceId, Error]),
+                        ?critical(?UNABLE_TO_INITIALIZE_LOG_FMT, [SpaceId, Error]),
                         false
                 end
         end
     catch Type:Reason ->
-        ?critical_stacktrace(?UNABLE_TO_INITIALIZE_LOG_MSG, [SpaceId, {Type, Reason}]),
+        ?critical_stacktrace(?UNABLE_TO_INITIALIZE_LOG_FMT, [SpaceId, {Type, Reason}]),
         false
     end.
 
 
--spec get_effective_flags(file_ctx:ctx()) -> {ace:bitmask(), file_ctx:ctx()} | no_return().
+-spec get_effective_flags(file_ctx:ctx()) ->
+    {data_access_control:bitmask(), file_ctx:ctx()} | no_return().
 get_effective_flags(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     CacheName = ?FILE_PROTECTION_FLAGS_CACHE_NAME(SpaceId),

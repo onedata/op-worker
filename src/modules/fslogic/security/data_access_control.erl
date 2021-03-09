@@ -26,11 +26,13 @@
     assert_operation_available_in_readonly_mode/1
 ]).
 
+-type bitmask() :: integer().
+
 -type type() ::
     ownership
     | public_access
     | traverse_ancestors            % Means ancestors' exec permission
-    | {permissions, ace:bitmask()}.
+    | {permissions, bitmask()}.
 
 -type requirement() ::
     root
@@ -39,7 +41,7 @@
 
 -type user_perms_check_progress() :: #user_perms_check_progress{}.
 
--export_type([type/0, requirement/0, user_perms_check_progress/0]).
+-export_type([bitmask/0, type/0, requirement/0, user_perms_check_progress/0]).
 
 
 %%%===================================================================
@@ -202,7 +204,7 @@ check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
 
 
 %% @private
--spec assert_has_permissions(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask()) ->
+-spec assert_has_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask()) ->
     file_ctx:ctx() | no_return().
 assert_has_permissions(UserCtx, FileCtx0, RequiredPerms) ->
     UserId = user_ctx:get_user_id(UserCtx),
@@ -245,7 +247,7 @@ assert_has_permissions(UserCtx, FileCtx0, RequiredPerms) ->
 
 
 %% @private
--spec check_permissions(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask()) ->
+-spec check_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask()) ->
     {allowed | denied, file_ctx:ctx(), user_perms_check_progress()}.
 check_permissions(UserCtx, FileCtx0, RequiredPerms) ->
     ShareId = file_ctx:get_share_id_const(FileCtx0),
@@ -270,7 +272,7 @@ check_permissions(UserCtx, FileCtx0, RequiredPerms) ->
 -spec get_perms_denied_by_lack_of_space_privs(
     user_ctx:ctx(), file_ctx:ctx(), undefined | od_share:id()
 ) ->
-    ace:bitmask().
+    bitmask().
 get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx, undefined) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -296,29 +298,24 @@ get_perms_denied_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
 
 %% @private
 -spec get_perms_denied_by_file_protection_flags(file_ctx:ctx()) ->
-    {ace:bitmask(), file_ctx:ctx()}.
+    {bitmask(), file_ctx:ctx()}.
 get_perms_denied_by_file_protection_flags(FileCtx0) ->
     {Flags, FileCtx1} = file_protection_flags_cache:get_effective_flags(FileCtx0),
-    DeniedPerms0 = 0,
 
-    DeniedPerms1 = case ?has_all_flags(Flags, ?DATA_PROTECTION) of
-        true -> ?set_flags(DeniedPerms0, ?DATA_PROTECTION_BLOCKED_PERMS);
-        false -> DeniedPerms0
-    end,
-    DeniedPerms2 = case ?has_all_flags(Flags, ?METADATA_PROTECTION) of
-        true -> ?set_flags(DeniedPerms0, ?METADATA_PROTECTION_BLOCKED_PERMS);
-        false -> DeniedPerms1
-    end,
-    {DeniedPerms2, FileCtx1}.
+    DeniedPerms = lists:foldl(fun({ProtectionFlag, RestrictedPerms}, DeniedPermsAcc) ->
+        case ?has_all_flags(Flags, ProtectionFlag) of
+            true -> ?set_flags(DeniedPermsAcc, RestrictedPerms);
+            false -> DeniedPermsAcc
+        end
+    end, ?no_flags_mask, [
+        {?DATA_PROTECTION, ?DATA_PROTECTION_BLOCKED_PERMS},
+        {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_PERMS}
+    ]),
+    {DeniedPerms, FileCtx1}.
 
 
 %% @private
--spec check_permissions(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    ace:bitmask(),
-    user_perms_check_progress()
-) ->
+-spec check_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask(), user_perms_check_progress()) ->
     {allowed | denied, file_ctx:ctx(), user_perms_check_progress()}.
 check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsCheckProgress) ->
     case file_ctx:get_active_perms_type(FileCtx0, include_deleted) of
@@ -330,9 +327,7 @@ check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsCheckProgress) ->
 
 
 %% @private
--spec check_posix_permissions(
-    user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), user_perms_check_progress()
-) ->
+-spec check_posix_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask(), user_perms_check_progress()) ->
     {allowed | denied, file_ctx:ctx(), user_perms_check_progress()}.
 check_posix_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_check_progress{
     finished_step = ?PERMISSION_RESTRAINTS_CHECK,
@@ -404,7 +399,7 @@ has_parent_sticky_bit_set(UserCtx, FileCtx0) ->
 
 
 %% @private
--spec get_posix_allowed_perms(0..7, file_meta:type()) -> ace:bitmask().
+-spec get_posix_allowed_perms(0..7, file_meta:type()) -> bitmask().
 get_posix_allowed_perms(2#000, _) ->
     ?POSIX_ALWAYS_GRANTED_PERMS;
 get_posix_allowed_perms(2#001, _) ->
@@ -432,12 +427,7 @@ get_posix_allowed_perms(2#111, _) ->
 
 
 %% @private
--spec check_acl_permissions(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    ace:bitmask(),
-    user_perms_check_progress()
-) ->
+-spec check_acl_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask(), user_perms_check_progress()) ->
     {allowed | denied, file_ctx:ctx(), user_perms_check_progress()}.
 check_acl_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_check_progress{
     finished_step = ?ACL_CHECK(AceNo)

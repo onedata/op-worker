@@ -979,7 +979,7 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
     scenario_ctx(),
     Type :: allow | deny,
     AceWho :: binary(),
-    AceFlags :: ace:bitmask()
+    AceFlags :: data_access_control:bitmask()
 ) ->
     ok | no_return().
 run_acl_perms_scenario(ScenarioCtx = #scenario_ctx{

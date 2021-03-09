@@ -196,7 +196,12 @@ chmod(UserCtx, FileCtx0, Mode) ->
     chmod_insecure(UserCtx, FileCtx1, Mode).
 
 
--spec update_protection_flags(user_ctx:ctx(), file_ctx:ctx(), ace:bitmask(), ace:bitmask()) ->
+-spec update_protection_flags(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    data_access_control:bitmask(),
+    data_access_control:bitmask()
+) ->
     fslogic_worker:fuse_response().
 update_protection_flags(UserCtx, FileCtx0, FlagsToSet, FlagsToReset) ->
     file_ctx:assert_not_special_const(FileCtx0),
@@ -305,11 +310,15 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
 
 
 %% @private
--spec update_protection_flags_insecure(file_ctx:ctx(), ace:bitmask(), ace:bitmask()) ->
+-spec update_protection_flags_insecure(
+    file_ctx:ctx(),
+    data_access_control:bitmask(),
+    data_access_control:bitmask()
+) ->
     fslogic_worker:fuse_response().
 update_protection_flags_insecure(FileCtx, FlagsToSet, FlagsToReset) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    ok = file_meta:update_flags(FileUuid, FlagsToSet, FlagsToReset),
+    ok = file_meta:update_protection_flags(FileUuid, FlagsToSet, FlagsToReset),
 
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     ok = fslogic_worker:invalidate_file_protection_flags_caches(SpaceId),

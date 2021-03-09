@@ -20,9 +20,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 -type ace() :: #access_control_entity{}.
--type bitmask() :: integer().
 
--export_type([ace/0, bitmask/0]).
+-export_type([ace/0]).
 
 %% API
 -export([
@@ -97,9 +96,13 @@ is_applicable(_, FileCtx, _) ->
 %%    returned).
 %% @end
 %%--------------------------------------------------------------------
--spec check_against(bitmask(), ace(), data_access_control:user_perms_check_progress()) ->
+-spec check_against(
+    data_access_control:bitmask(),
+    ace(),
+    data_access_control:user_perms_check_progress()
+) ->
     {
-        allowed | denied | {inconclusive, LeftoverRequiredPerms :: bitmask()},
+        allowed | denied | {inconclusive, LeftoverRequiredPerms :: data_access_control:bitmask()},
         data_access_control:user_perms_check_progress()
     }.
 check_against(
@@ -234,7 +237,7 @@ validate(#access_control_entity{
 
 
 %% @private
--spec cdmi_acetype_to_bitmask(binary()) -> bitmask().
+-spec cdmi_acetype_to_bitmask(binary()) -> data_access_control:bitmask().
 cdmi_acetype_to_bitmask(<<"0x", _/binary>> = AceType) ->
     binary_to_bitmask(AceType);
 cdmi_acetype_to_bitmask(?allow) -> ?allow_mask;
@@ -242,7 +245,7 @@ cdmi_acetype_to_bitmask(?deny) -> ?deny_mask.
 
 
 %% @private
--spec cdmi_aceflags_to_bitmask(binary() | [binary()]) -> bitmask().
+-spec cdmi_aceflags_to_bitmask(binary() | [binary()]) -> data_access_control:bitmask().
 cdmi_aceflags_to_bitmask(<<"0x", _/binary>> = AceFlags) ->
     binary_to_bitmask(AceFlags);
 cdmi_aceflags_to_bitmask(AceFlagsBin) when is_binary(AceFlagsBin) ->
@@ -258,7 +261,7 @@ cdmi_aceflags_to_bitmask(AceFlagsList) ->
     ).
 
 
--spec cdmi_acemask_to_bitmask(binary() | [binary()]) -> bitmask().
+-spec cdmi_acemask_to_bitmask(binary() | [binary()]) -> data_access_control:bitmask().
 cdmi_acemask_to_bitmask(<<"0x", _/binary>> = AceMask) ->
     binary_to_bitmask(AceMask);
 cdmi_acemask_to_bitmask(PermsBin) when is_binary(PermsBin) ->
@@ -280,7 +283,7 @@ cdmi_acemask_to_bitmask(PermsList) ->
 
 
 %% @private
--spec permission_to_bitmask(binary()) -> bitmask().
+-spec permission_to_bitmask(binary()) -> data_access_control:bitmask().
 permission_to_bitmask(?list_container) -> ?list_container_mask;
 permission_to_bitmask(?read_object) -> ?read_object_mask;
 permission_to_bitmask(?write_object) -> ?write_object_mask;
@@ -316,12 +319,12 @@ decode_cdmi_identifier(CdmiIdentifier) ->
 
 
 %% @private
--spec bitmask_to_binary(bitmask()) -> binary().
+-spec bitmask_to_binary(data_access_control:bitmask()) -> binary().
 bitmask_to_binary(Mask) -> <<"0x", (integer_to_binary(Mask, 16))/binary>>.
 
 
 %% @private
--spec binary_to_bitmask(binary()) -> bitmask().
+-spec binary_to_bitmask(binary()) -> data_access_control:bitmask().
 binary_to_bitmask(<<"0x", Mask/binary>>) -> binary_to_integer(Mask, 16).
 
 

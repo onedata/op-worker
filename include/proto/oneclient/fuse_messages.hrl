@@ -84,8 +84,8 @@
 }).
 
 -record(update_protection_flags, {
-    set :: ace:bitmask(),
-    reset :: ace:bitmask()
+    set :: data_access_control:bitmask(),
+    reset :: data_access_control:bitmask()
 }).
 
 -record(rename, {
