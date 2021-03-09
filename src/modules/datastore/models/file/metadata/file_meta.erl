@@ -830,9 +830,9 @@ update_mode(FileUuid, NewMode) ->
 
 -spec update_protection_flags(uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
     ok | {error, term()}.
-update_protection_flags(FileUuid, FlagsToSet, FlagsToReset) ->
+update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
     ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{protection_flags = CurrFlags} = FileMeta) ->
-        NewFlags0 = ?set_flags(?reset_flags(CurrFlags, FlagsToReset), FlagsToSet),
+        NewFlags0 = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet),
         NewFlags1 = case ?has_any_flags(NewFlags0, ?DATA_PROTECTION bor ?METADATA_PROTECTION) of
             true -> ?set_flags(NewFlags0, ?IMPORT_PROTECTION);
             false -> ?reset_flags(NewFlags0, ?IMPORT_PROTECTION)

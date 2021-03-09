@@ -203,12 +203,12 @@ chmod(UserCtx, FileCtx0, Mode) ->
     data_access_control:bitmask()
 ) ->
     fslogic_worker:fuse_response().
-update_protection_flags(UserCtx, FileCtx0, FlagsToSet, FlagsToReset) ->
+update_protection_flags(UserCtx, FileCtx0, FlagsToSet, FlagsToUnset) ->
     file_ctx:assert_not_special_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0, [traverse_ancestors]
     ),
-    update_protection_flags_insecure(FileCtx1, FlagsToSet, FlagsToReset).
+    update_protection_flags_insecure(FileCtx1, FlagsToSet, FlagsToUnset).
 
 
 %%--------------------------------------------------------------------
@@ -316,9 +316,9 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
     data_access_control:bitmask()
 ) ->
     fslogic_worker:fuse_response().
-update_protection_flags_insecure(FileCtx, FlagsToSet, FlagsToReset) ->
+update_protection_flags_insecure(FileCtx, FlagsToSet, FlagsToUnset) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    ok = file_meta:update_protection_flags(FileUuid, FlagsToSet, FlagsToReset),
+    ok = file_meta:update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset),
 
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     ok = fslogic_worker:invalidate_file_protection_flags_caches(SpaceId),

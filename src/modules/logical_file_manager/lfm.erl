@@ -598,12 +598,12 @@ check_perms(SessId, FileKey, PermType) ->
     data_access_control:bitmask()
 ) ->
     ok | error_reply().
-update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToReset) ->
+update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToUnset) ->
     % TODO VFS-7363 assert file is dataset and user has needed space privileges
     ?run(fun() ->
         {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
         remote_utils:call_fslogic(SessId, file_request, Guid,
-            #update_protection_flags{set = FlagsToSet, reset = FlagsToReset},
+            #update_protection_flags{set = FlagsToSet, unset = FlagsToUnset},
             fun(_) -> ok end
         )
     end).

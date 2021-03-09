@@ -51,27 +51,19 @@
 
 -spec assert_granted(user_ctx:ctx(), file_ctx:ctx(), [requirement()]) ->
     file_ctx:ctx() | no_return().
-assert_granted(UserCtx, FileCtx0, AccessRequirements0) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx0),
-    IsSpaceOwner = user_ctx:is_space_owner(UserCtx, SpaceId),
-    IsSpaceDir = file_ctx:is_space_dir_const(FileCtx0),
-
-    case user_ctx:is_root(UserCtx) orelse (IsSpaceOwner andalso not IsSpaceDir) of
+assert_granted(UserCtx, FileCtx, AccessRequirements) ->
+    case user_ctx:is_root(UserCtx) of
         true ->
-            FileCtx0;
+            FileCtx;
         false ->
-            AccessRequirements1 = case user_ctx:is_guest(UserCtx) of
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+
+            case user_ctx:is_space_owner(UserCtx, SpaceId) of
                 true ->
-                    [?PUBLIC_ACCESS | AccessRequirements0];
+                    assert_control_granted_for_space_owner(UserCtx, FileCtx, AccessRequirements);
                 false ->
-                    case file_ctx:is_in_user_space_const(FileCtx0, UserCtx) of
-                        true -> AccessRequirements0;
-                        false -> throw(?ENOENT)
-                    end
-            end,
-            lists:foldl(fun(AccessRequirement, FileCtx1) ->
-                assert_meets_access_requirement(UserCtx, FileCtx1, AccessRequirement)
-            end, FileCtx0, AccessRequirements1)
+                    assert_control_granted_for_user(UserCtx, FileCtx, AccessRequirements)
+            end
     end.
 
 
@@ -111,6 +103,57 @@ is_available_in_readonly_mode(Requirement) when
     true;
 is_available_in_readonly_mode(?OR(AccessType1, AccessType2)) ->
     is_available_in_readonly_mode(AccessType1) andalso is_available_in_readonly_mode(AccessType2).
+
+
+%% @private
+-spec assert_control_granted_for_space_owner(user_ctx:ctx(), file_ctx:ctx(), [requirement()]) ->
+    file_ctx:ctx() | no_return().
+assert_control_granted_for_space_owner(UserCtx, FileCtx0, AccessRequirements) ->
+    IsSpaceDir = file_ctx:is_space_dir_const(FileCtx0),
+
+    case IsSpaceDir of
+        true ->
+            % In case of space dir space owner is treated as any other user
+            assert_control_granted_for_user(UserCtx, FileCtx0, AccessRequirements);
+        false ->
+            % For any other file or directory space owner omits permissions checks
+            % but should still be restricted by file protection flags
+            {DeniedPerms, FileCtx1} = get_perms_denied_by_file_protection_flags(FileCtx0),
+
+            IsRequirementMetBySpaceOwner = fun
+                F(?PERMISSIONS(RequiredPerms)) ->
+                    case ?common_flags(RequiredPerms, DeniedPerms) of
+                        ?no_flags_mask -> true;
+                        _ -> false
+                    end;
+                F(?OR(AccessRequirement1, AccessRequirement2)) ->
+                    F(AccessRequirement1) orelse F(AccessRequirement2);
+                F(_) ->
+                    true
+            end,
+            case lists:all(IsRequirementMetBySpaceOwner, AccessRequirements) of
+                true -> FileCtx1;
+                false -> throw(?EACCES)
+            end
+    end.
+
+
+%% @private
+-spec assert_control_granted_for_user(user_ctx:ctx(), file_ctx:ctx(), [requirement()]) ->
+    file_ctx:ctx() | no_return().
+assert_control_granted_for_user(UserCtx, FileCtx0, AccessRequirements0) ->
+    AccessRequirements1 = case user_ctx:is_guest(UserCtx) of
+        true ->
+            [?PUBLIC_ACCESS | AccessRequirements0];
+        false ->
+            case file_ctx:is_in_user_space_const(FileCtx0, UserCtx) of
+                true -> AccessRequirements0;
+                false -> throw(?ENOENT)
+            end
+    end,
+    lists:foldl(fun(AccessRequirement, FileCtx1) ->
+        assert_meets_access_requirement(UserCtx, FileCtx1, AccessRequirement)
+    end, FileCtx0, AccessRequirements1).
 
 
 %% @private

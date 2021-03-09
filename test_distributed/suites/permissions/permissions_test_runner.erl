@@ -322,7 +322,9 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     ok | no_return().
 run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
     test_node = Node,
+    space_owner = SpaceOwner,
     owner_user = FileOwner,
+    space_user = SpaceUser,
     requires_traverse_ancestors = RequiresTraverseAncestors,
     operation = Operation,
     files = Files
@@ -343,7 +345,7 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
     ScenarioRootDirKey = maps:get(ScenarioRootDirPath, ExtraData),
 
     % Assert that even with all perms set operation cannot be performed
-    % without space privileges
+    % with file protection flags set
     set_full_perms(posix, Node, maps:keys(PermsPerFile)),
 
     AllNeededPerms = lists:usort(lists:flatten(maps:values(PermsPerFile))),
@@ -361,28 +363,35 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
     case ProtectionFlagsToSet > 0 of
         true ->
+            Executioner = case rand:uniform(3) of
+                1 -> FileOwner;
+                2 -> SpaceOwner;
+                3 -> SpaceUser
+            end,
+            ExecutionerSessId = ?config({session_id, {Executioner, ?GET_DOMAIN(Node)}}, Config),
+
             % With file protection set operation should fail
             ok = lfm_proxy:update_protection_flags(
-                Node, FileOwnerUserSessId, ScenarioRootDirKey, ProtectionFlagsToSet, ?no_flags_mask
+                Node, ExecutionerSessId, ScenarioRootDirKey, ProtectionFlagsToSet, ?no_flags_mask
             ),
             % Wait some time for caches to be cleared (cache purge is asynchronous)
             timer:sleep(100),
-            ?assertMatch({error, ?EACCES}, Operation(FileOwnerUserSessId, ScenarioRootDirPath, ExtraData)),
+            ?assertMatch({error, ?EACCES}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             % And should succeed without it
             ok = lfm_proxy:update_protection_flags(
-                Node, FileOwnerUserSessId, ScenarioRootDirKey, ?no_flags_mask, ProtectionFlagsToSet
+                Node, ExecutionerSessId, ScenarioRootDirKey, ?no_flags_mask, ProtectionFlagsToSet
             ),
             % Wait some time for caches to be cleared (cache purge is asynchronous)
             timer:sleep(100),
-            ?assertMatch(ok, Operation(FileOwnerUserSessId, ScenarioRootDirPath, ExtraData)),
+            ?assertMatch(ok, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             run_final_ownership_check(#scenario_ctx{
                 meta_spec = TestSpec,
                 scenario_name = ScenarioName,
                 scenario_root_dir_path = ScenarioRootDirPath,
                 files_owner_session_id = FileOwnerUserSessId,
-                executioner_session_id = FileOwnerUserSessId
+                executioner_session_id = ExecutionerSessId
             });
         false ->
             ok

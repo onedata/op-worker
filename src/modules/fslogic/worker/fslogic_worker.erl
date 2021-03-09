@@ -170,15 +170,15 @@ init_paths_caches(Space) ->
 
 -spec init_file_protection_flags_caches(od_space:id() | all) -> ok.
 init_file_protection_flags_caches(Space) ->
-    lists:foreach(fun(Node) ->
-        rpc:call(Node, ?MODULE, schedule_init_file_protection_flags_caches, [Space])
-    end, consistent_hashing:get_all_nodes()).
+    Nodes = consistent_hashing:get_all_nodes(),
+    rpc:multicall(Nodes, ?MODULE, schedule_init_file_protection_flags_caches, [Space]),
+    ok.
 
 -spec invalidate_file_protection_flags_caches(od_space:id() | all) -> ok.
 invalidate_file_protection_flags_caches(Space) ->
-    lists:foreach(fun(Node) ->
-        rpc:call(Node, ?MODULE, schedule_invalidate_file_protection_flags_caches, [Space])
-    end, consistent_hashing:get_all_nodes()).
+    Nodes = consistent_hashing:get_all_nodes(),
+    rpc:multicall(Nodes, ?MODULE, schedule_invalidate_file_protection_flags_caches, [Space]),
+    ok.
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -517,8 +517,8 @@ handle_file_request(UserCtx, #get_child_attr{name = Name,
     attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
-handle_file_request(UserCtx, #update_protection_flags{set = FlagsToSet, reset = FlagsToReset}, FileCtx) ->
-    attr_req:update_protection_flags(UserCtx, FileCtx, FlagsToSet, FlagsToReset);
+handle_file_request(UserCtx, #update_protection_flags{set = FlagsToSet, unset = FlagsToUnset}, FileCtx) ->
+    attr_req:update_protection_flags(UserCtx, FileCtx, FlagsToSet, FlagsToUnset);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
     attr_req:update_times(UserCtx, FileCtx, ATime, MTime, CTime);
 handle_file_request(UserCtx, #delete_file{silent = Silent}, FileCtx) ->

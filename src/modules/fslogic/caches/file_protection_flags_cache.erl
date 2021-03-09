@@ -83,22 +83,30 @@ init(SpaceId) ->
 -spec get_effective_flags(file_ctx:ctx()) ->
     {data_access_control:bitmask(), file_ctx:ctx()} | no_return().
 get_effective_flags(FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    CacheName = ?FILE_PROTECTION_FLAGS_CACHE_NAME(SpaceId),
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    case file_ctx:is_root_dir_const(FileCtx) of
+        true ->
+            {?no_flags_mask, FileCtx};
+        false ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            CacheName = ?FILE_PROTECTION_FLAGS_CACHE_NAME(SpaceId),
+            {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
 
-    Callback = fun([#document{key = Uuid, value = #file_meta{protection_flags = Flags}}, ParentValue, CalculationInfo]) ->
-        case fslogic_uuid:is_root_dir_uuid(Uuid) orelse fslogic_uuid:is_space_dir_uuid(Uuid) of
-            true -> {ok, Flags, CalculationInfo};
-            false -> {ok, ?set_flags(ParentValue, Flags), CalculationInfo}
-        end
-    end,
+            Callback = fun([#document{
+                key = Uuid,
+                value = #file_meta{protection_flags = Flags}
+            }, ParentValue, CalculationInfo]) ->
+                case fslogic_uuid:is_root_dir_uuid(Uuid) orelse fslogic_uuid:is_space_dir_uuid(Uuid) of
+                    true -> {ok, Flags, CalculationInfo};
+                    false -> {ok, ?set_flags(ParentValue, Flags), CalculationInfo}
+                end
+            end,
 
-    case effective_value:get_or_calculate(CacheName, FileDoc, Callback) of
-        {ok, EffFlags, _} ->
-            {EffFlags, FileCtx2};
-        {error, {file_meta_missing, _}} ->
-            throw(?ERROR_NOT_FOUND)
+            case effective_value:get_or_calculate(CacheName, FileDoc, Callback) of
+                {ok, EffFlags, _} ->
+                    {EffFlags, FileCtx2};
+                {error, {file_meta_missing, _}} ->
+                    throw(?ERROR_NOT_FOUND)
+            end
     end.
 
 

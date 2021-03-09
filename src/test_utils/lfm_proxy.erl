@@ -196,8 +196,8 @@ check_perms(Worker, SessId, FileKey, OpenFlag) ->
     data_access_control:bitmask()
 ) ->
     ok | {error, term()}.
-update_protection_flags(Worker, SessId, FileKey, FlagsToSet, FlagsToReset) ->
-    ?EXEC(Worker, lfm:update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToReset)).
+update_protection_flags(Worker, SessId, FileKey, FlagsToSet, FlagsToUnset) ->
+    ?EXEC(Worker, lfm:update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToUnset)).
 
 
 -spec set_perms(node(), session:id(), lfm:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->
