@@ -89,7 +89,6 @@ get_target_providers(UserCtx, File, _Req) ->
 -spec get_target_providers_for_attr_req(user_ctx:ctx(), file_partial_ctx:ctx()) ->
     [oneprovider:id()].
 get_target_providers_for_attr_req(UserCtx, FileCtx) ->
-    %todo TL handle guids stored in file_force_proxy
     case file_partial_ctx:is_space_dir_const(FileCtx) of
         true ->
             [oneprovider:get_id()];

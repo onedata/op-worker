@@ -21,7 +21,7 @@
 
 -type block() :: fslogic_blocks:block().
 -type blocks() :: fslogic_blocks:blocks().
--type blocks_tree() :: gb_sets:set(). % TODO - use gb_trees (it is faster)
+-type blocks_tree() :: gb_sets:set(). % TODO VFS-7395 use gb_trees (it is faster)
 -type stored_blocks() :: blocks() | blocks_tree(). % set only when used by blocks' cache
 -type id() :: file_location:id().
 -type location() :: file_location:doc().
@@ -165,7 +165,7 @@ cache_location(#document{key = Key, value = #file_location{uuid = Uuid, blocks =
 -spec update_location(file_meta:uuid(), file_location:id(), file_location:diff(),
     boolean()) -> {ok, file_location:doc()} | {error, term()}.
 update_location(FileUuid, LocId, Diff, ModifyBlocks) ->
-    % TODO 4743 - Cannot update local blocks with update
+    % TODO VFS-4743 - Cannot update local blocks with update
     replica_synchronizer:apply_or_run_locally(FileUuid, fun() ->
         case fslogic_cache:flush(LocId, ModifyBlocks) of
             ok ->

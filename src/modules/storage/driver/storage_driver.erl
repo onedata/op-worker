@@ -234,13 +234,7 @@ mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
                                 throw(ParentError)
                         end
                 end,
-                R = case mkdir(SDHandle, Mode, false) of
-                    ok ->
-                        chmod(SDHandle, Mode); %% @todo: find out why umask(0) in helpers_nif.cc doesn't work
-                    E -> E
-                end,
-                Noop(HelperHandle), %% @todo: check why NIF crashes when this term is destroyed before recursive call
-                R;
+                mkdir(SDHandle, Mode, false);
             {error, Reason} ->
                 {error, Reason}
         end

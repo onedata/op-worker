@@ -237,7 +237,6 @@ get_guid_const(#file_ctx{guid = Guid}) ->
     Guid.
 
 %%--------------------------------------------------------------------
-%% @todo remove this function and pass file_ctx wherever possible
 %% @doc
 %% Returns file UUID entry.
 %% @end
@@ -550,9 +549,7 @@ get_new_storage_file_id(FileCtx) ->
         ?FLAT_STORAGE_PATH ->
             FileUuid = file_ctx:get_uuid_const(FileCtx2),
             StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
-            % TODO - do not get_canonical_path (fix acceptance tests before)
-            {_, FileCtx3} = get_canonical_path(FileCtx2),
-            {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}};
+            {StorageFileId, FileCtx2#file_ctx{storage_file_id = StorageFileId}};
         ?CANONICAL_STORAGE_PATH ->
             {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
             StorageId = storage:get_id(Storage),

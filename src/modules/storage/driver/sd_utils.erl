@@ -5,7 +5,6 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @todo simplify rename logic here
 %%% @doc
 %%% Utility functions for storage file manager module.
 %%%
