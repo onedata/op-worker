@@ -1,6 +1,25 @@
-# Release notes for project op-worker
+Release notes for project op-worker
+===================================
 
-## CHANGELOG
+CHANGELOG
+---------
+
+### 20.02.7
+
+-   **VFS-7276** Improved handling of startup errors in Oneclient,
+    including more graceful handling of various exceptions and more
+    informative error messages including Oneclient and Oneprovider
+    compatibility and invalid token issues.
+-   **VFS-7271** Fixed displaying shared space root directory name in
+    GUI.
+-   **VFS-7165** Add a workaround for Erlang's SSL implementation that
+    would not reload server certificate chain when it is changed (e.g.
+    after Let's Encrypt certificate regeneration).
+-   **VFS-6566** Improved UX and fixed minor issues in share views.
+    Fixed inability to open share hosted by Oneprovider 19.02.x using
+    Onezone 20.02.x.
+-   **VFS-6289** Add support for ANONYMOUS@ principal to ACL.
+
 
 ### 20.02.6
 
