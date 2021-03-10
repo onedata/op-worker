@@ -832,12 +832,8 @@ update_mode(FileUuid, NewMode) ->
     ok | {error, term()}.
 update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
     ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{protection_flags = CurrFlags} = FileMeta) ->
-        NewFlags0 = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet),
-        NewFlags1 = case ?has_any_flags(NewFlags0, ?DATA_PROTECTION bor ?METADATA_PROTECTION) of
-            true -> ?set_flags(NewFlags0, ?IMPORT_PROTECTION);
-            false -> ?reset_flags(NewFlags0, ?IMPORT_PROTECTION)
-        end,
-        {ok, FileMeta#file_meta{protection_flags = NewFlags1}}
+        NewFlags = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet),
+        {ok, FileMeta#file_meta{protection_flags = NewFlags}}
     end)).
 
 
