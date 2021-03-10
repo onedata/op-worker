@@ -105,6 +105,7 @@
 
     % TODO VFS-7361 hide private info in file_location
     get_file_location,
+    get_helper_params,
 
     % Opening file is available but only in 'read' mode
     open_file,
