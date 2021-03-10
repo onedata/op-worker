@@ -31,11 +31,13 @@
 -define(OWNERSHIP, ownership).
 -define(PUBLIC_ACCESS, public_access).
 -define(TRAVERSE_ANCESTORS, traverse_ancestors).
--define(PERMISSIONS(Perms), {permissions, Perms}).
--define(PERMISSIONS(Perm1, Perm2), ?PERMISSIONS(Perm1 bor Perm2)).
--define(PERMISSIONS(Perm1, Perm2, Perm3), ?PERMISSIONS(Perm1 bor Perm2 bor Perm3)).
--define(PERMISSIONS(Perm1, Perm2, Perm3, Perm4),
-    ?PERMISSIONS(Perm1 bor Perm2 bor Perm3 bor Perm4)
+-define(OPERATIONS(Operations), {operations, Operations}).
+-define(OPERATIONS(Operation1, Operation2), ?OPERATIONS(Operation1 bor Operation2)).
+-define(OPERATIONS(Operation1, Operation2, Operation3),
+    ?OPERATIONS(Operation1 bor Operation2 bor Operation3)
+).
+-define(OPERATIONS(Operation1, Operation2, Operation3, Operation4),
+    ?OPERATIONS(Operation1 bor Operation2 bor Operation3 bor Operation4)
 ).
 -define(OR(Requirement1, Requirement2), {Requirement1, 'or', Requirement2}).
 
@@ -51,9 +53,8 @@
 -define(IMPORT_PROTECTION, 16#00000004).
 
 
-% Permissions respected in readonly mode (operation requiring any other permission,
-% even if granted by posix mode or ACL, will be denied)
--define(READONLY_MODE_RESPECTED_PERMS, (
+% Operations available in readonly mode
+-define(READONLY_MODE_AVAILABLE_OPERATIONS, (
     ?read_attributes_mask bor
     ?read_object_mask bor
     ?list_container_mask bor
@@ -63,8 +64,8 @@
 )).
 
 
-% Permissions denied by lack of ?SPACE_WRITE_DATA/?SPACE_READ_DATA space privilege
--define(SPACE_DENIED_WRITE_PERMS, (
+% Operations forbidden by lack of ?SPACE_WRITE_DATA/?SPACE_READ_DATA space privilege
+-define(SPACE_BLOCKED_WRITE_OPERATION, (
     ?write_attributes_mask bor
     ?write_object_mask bor
     ?add_object_mask bor
@@ -74,83 +75,88 @@
     ?write_metadata_mask bor
     ?write_acl_mask
 )).
--define(SPACE_DENIED_READ_PERMS, (
+-define(SPACE_BLOCKED_READ_OPERATIONS, (
     ?read_object_mask bor
     ?list_container_mask bor
     ?read_metadata_mask
 )).
 
 
-% Permissions denied by file protection flags
--define(DATA_PROTECTION_BLOCKED_PERMS, (
+% Operations forbidden by file protection flags
+-define(DATA_PROTECTION_BLOCKED_OPERATIONS, (
     ?write_object_mask bor
     ?add_object_mask bor
     ?add_subcontainer_mask bor
     ?delete_mask bor
     ?delete_child_mask
 )).
--define(METADATA_PROTECTION_BLOCKED_PERMS, (
+-define(METADATA_PROTECTION_BLOCKED_OPERATIONS, (
     ?write_attributes_mask bor
     ?write_metadata_mask bor
     ?write_acl_mask
 )).
 
 
-% Permissions granted by posix mode
--define(POSIX_ALWAYS_GRANTED_PERMS, (
+% Operations allowed by posix mode
+-define(POSIX_ALWAYS_ALLOWED_OPS, (
     ?read_attributes_mask bor
     ?read_acl_mask
 )).
--define(POSIX_READ_ONLY_PERMS, (
+-define(POSIX_READ_ONLY_OPS, (
     ?read_object_mask bor
     ?list_container_mask bor
     ?read_metadata_mask
 )).
--define(POSIX_FILE_WRITE_ONLY_PERMS, (
+-define(POSIX_FILE_WRITE_ONLY_OPS, (
     ?write_object_mask bor
     ?write_attributes_mask bor
     ?write_metadata_mask
 )).
--define(POSIX_DIR_WRITE_ONLY_PERMS, (
+-define(POSIX_DIR_WRITE_ONLY_OPS, (
     ?add_subcontainer_mask bor
     ?write_attributes_mask bor
     ?write_metadata_mask
 )).
--define(POSIX_EXEC_ONLY_PERMS, (
+-define(POSIX_EXEC_ONLY_OPS, (
     ?traverse_container_mask
 )).
--define(POSIX_FILE_WRITE_EXEC_PERMS, (
-    ?POSIX_FILE_WRITE_ONLY_PERMS bor
-    ?POSIX_EXEC_ONLY_PERMS
+-define(POSIX_FILE_WRITE_EXEC_OPS, (
+    ?POSIX_FILE_WRITE_ONLY_OPS bor
+    ?POSIX_EXEC_ONLY_OPS
 )).
--define(POSIX_DIR_WRITE_EXEC_PERMS, (
-    ?POSIX_DIR_WRITE_ONLY_PERMS bor
-    ?POSIX_EXEC_ONLY_PERMS bor
+-define(POSIX_DIR_WRITE_EXEC_OPS, (
+    ?POSIX_DIR_WRITE_ONLY_OPS bor
+    ?POSIX_EXEC_ONLY_OPS bor
 
-    % Special permissions that are granted only when both 'write' and 'exec'
+    % Special operations that are allowed only when both 'write' and 'exec'
     % mode bits are set
     ?add_object_mask bor
     ?delete_child_mask
 )).
 
 
-% Record holding information about the permissions to the file granted and
-% denied for the given user. It is build incrementally rather than at once as
-% permissions check consists of number of steps and not all must be completed
-% to tell whether requested permissions are granted or denied. Those steps are:
-% 1. permission restraints (lack of space privileges and file protection flags)
-%    check - step number `0`
+% Record holding information about the forbidden, allowed and denied operations
+% specific user can perform on the file. It is build incrementally rather than
+% at once as access control check consists of number of steps and not all must
+% be completed to tell whether requested operations are allowed or denied.
+% Those steps are:
+% 1. operations availability (checking lack of space privileges and
+%    file protection flags) check - step number `0`
 % 2. depending on file active permissions type either:
 %       a) posix mode check - step number `1`
 %       b) acl check - each ACE in ACL has its own step number starting at `1`
--record(user_perms_check_progress, {
+-record(user_access_check_progress, {
     finished_step :: non_neg_integer(),
-    granted :: data_access_control:bitmask(),
+    % Operations forbidden for user by lack of space privileges or
+    % data protection flags
+    forbidden :: data_access_control:bitmask(),
+    % Operations allowed/denied for user by posix mode/acl
+    allowed :: data_access_control:bitmask(),
     denied :: data_access_control:bitmask()
 }).
 
 % Steps performed during access control checks
--define(PERMISSION_RESTRAINTS_CHECK, 0).
+-define(OPERATIONS_AVAILABILITY_CHECK, 0).
 -define(POSIX_MODE_CHECK, 1).
 -define(ACL_CHECK(AceNo), AceNo).
 

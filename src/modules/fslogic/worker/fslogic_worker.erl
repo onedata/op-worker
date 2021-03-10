@@ -164,9 +164,9 @@ supervisor_children_spec() ->
 %%--------------------------------------------------------------------
 -spec init_paths_caches(od_space:id() | all) -> ok.
 init_paths_caches(Space) ->
-    lists:foreach(fun(Node) ->
-        rpc:call(Node, ?MODULE, schedule_init_paths_caches, [Space])
-    end, consistent_hashing:get_all_nodes()).
+    Nodes = consistent_hashing:get_all_nodes(),
+    rpc:multicall(Nodes, ?MODULE, schedule_init_paths_caches, [Space]),
+    ok.
 
 -spec init_file_protection_flags_caches(od_space:id() | all) -> ok.
 init_file_protection_flags_caches(Space) ->

@@ -99,50 +99,50 @@ is_applicable(_, FileCtx, _) ->
 -spec check_against(
     data_access_control:bitmask(),
     ace(),
-    data_access_control:user_perms_check_progress()
+    data_access_control:user_access_check_progress()
 ) ->
     {
-        allowed | denied | {inconclusive, LeftoverRequiredPerms :: data_access_control:bitmask()},
-        data_access_control:user_perms_check_progress()
+        allowed | denied | {inconclusive, LeftoverRequiredOps :: data_access_control:bitmask()},
+        data_access_control:user_access_check_progress()
     }.
 check_against(
-    RequiredPerms,
+    RequiredOps,
     #access_control_entity{acetype = ?allow_mask, acemask = AceMask},
-    #user_perms_check_progress{
+    #user_access_check_progress{
         finished_step = ?ACL_CHECK(AceNo),
-        granted = PrevGrantedPerms,
-        denied = PrevDeniedPerms
-    } = UserPermsCheckProgress
+        allowed = PrevAllowedOps,
+        denied = PrevDeniedOps
+    } = UserAccessCheckProgress
 ) ->
-    NewUserPermsCheckProgress = UserPermsCheckProgress#user_perms_check_progress{
+    NewUserAccessCheckProgress = UserAccessCheckProgress#user_access_check_progress{
         finished_step = ?ACL_CHECK(AceNo + 1),
-        granted = ?set_flags(PrevGrantedPerms, ?reset_flags(AceMask, PrevDeniedPerms))
+        allowed = ?set_flags(PrevAllowedOps, ?reset_flags(AceMask, PrevDeniedOps))
     },
-    case ?reset_flags(RequiredPerms, AceMask) of
+    case ?reset_flags(RequiredOps, AceMask) of
         ?no_flags_mask ->
-            {allowed, NewUserPermsCheckProgress};
-        LeftoverRequiredPerms ->
-            {{inconclusive, LeftoverRequiredPerms}, NewUserPermsCheckProgress}
+            {allowed, NewUserAccessCheckProgress};
+        LeftoverRequiredOps ->
+            {{inconclusive, LeftoverRequiredOps}, NewUserAccessCheckProgress}
     end;
 
 check_against(
-    RequiredPerms,
+    RequiredOps,
     #access_control_entity{acetype = ?deny_mask, acemask = AceMask},
-    #user_perms_check_progress{
+    #user_access_check_progress{
         finished_step = ?ACL_CHECK(AceNo),
-        granted = PrevGrantedPerms,
-        denied = PrevDeniedPerms
-    } = UserPermsCheckProgress
+        allowed = PrevGrantedOps,
+        denied = PrevDeniedOps
+    } = UserAccessCheckProgress
 ) ->
-    NewUserPermsCheckProgress = UserPermsCheckProgress#user_perms_check_progress{
+    NewUserAccessCheckProgress = UserAccessCheckProgress#user_access_check_progress{
         finished_step = ?ACL_CHECK(AceNo + 1),
-        denied = ?set_flags(PrevDeniedPerms, ?reset_flags(AceMask, PrevGrantedPerms))
+        denied = ?set_flags(PrevDeniedOps, ?reset_flags(AceMask, PrevGrantedOps))
     },
-    case ?common_flags(RequiredPerms, AceMask) of
+    case ?common_flags(RequiredOps, AceMask) of
         ?no_flags_mask ->
-            {{inconclusive, RequiredPerms}, NewUserPermsCheckProgress};
+            {{inconclusive, RequiredOps}, NewUserAccessCheckProgress};
         _ ->
-            {denied, NewUserPermsCheckProgress}
+            {denied, NewUserAccessCheckProgress}
     end.
 
 
@@ -264,13 +264,13 @@ cdmi_aceflags_to_bitmask(AceFlagsList) ->
 -spec cdmi_acemask_to_bitmask(binary() | [binary()]) -> data_access_control:bitmask().
 cdmi_acemask_to_bitmask(<<"0x", _/binary>> = AceMask) ->
     binary_to_bitmask(AceMask);
-cdmi_acemask_to_bitmask(PermsBin) when is_binary(PermsBin) ->
-    cdmi_acemask_to_bitmask(parse_csv(PermsBin));
-cdmi_acemask_to_bitmask(PermsList) ->
+cdmi_acemask_to_bitmask(OpsBin) when is_binary(OpsBin) ->
+    cdmi_acemask_to_bitmask(parse_csv(OpsBin));
+cdmi_acemask_to_bitmask(OpsList) ->
     % op doesn't differentiate between ?delete_object and ?delete_subcontainer
     % so they must be either specified both or none of them.
-    HasDeleteObject = lists:member(?delete_object, PermsList),
-    HasDeleteSubContainer = lists:member(?delete_subcontainer, PermsList),
+    HasDeleteObject = lists:member(?delete_object, OpsList),
+    HasDeleteSubContainer = lists:member(?delete_subcontainer, OpsList),
     case {HasDeleteObject, HasDeleteSubContainer} of
         {false, false} -> ok;
         {true, true} -> ok;
@@ -278,27 +278,27 @@ cdmi_acemask_to_bitmask(PermsList) ->
     end,
 
     lists:foldl(fun(Perm, Bitmask) ->
-        ?set_flags(Bitmask, permission_to_bitmask(Perm))
-    end, 0, PermsList).
+        ?set_flags(Bitmask, operation_to_bitmask(Perm))
+    end, 0, OpsList).
 
 
 %% @private
--spec permission_to_bitmask(binary()) -> data_access_control:bitmask().
-permission_to_bitmask(?list_container) -> ?list_container_mask;
-permission_to_bitmask(?read_object) -> ?read_object_mask;
-permission_to_bitmask(?write_object) -> ?write_object_mask;
-permission_to_bitmask(?add_object) -> ?add_object_mask;
-permission_to_bitmask(?add_subcontainer) -> ?add_subcontainer_mask;
-permission_to_bitmask(?read_metadata) -> ?read_metadata_mask;
-permission_to_bitmask(?write_metadata) -> ?write_metadata_mask;
-permission_to_bitmask(?traverse_container) -> ?traverse_container_mask;
-permission_to_bitmask(?delete) -> ?delete_mask;
-permission_to_bitmask(?delete_object) -> ?delete_child_mask;
-permission_to_bitmask(?delete_subcontainer) -> ?delete_child_mask;
-permission_to_bitmask(?read_attributes) -> ?read_attributes_mask;
-permission_to_bitmask(?write_attributes) -> ?write_attributes_mask;
-permission_to_bitmask(?read_acl) -> ?read_acl_mask;
-permission_to_bitmask(?write_acl) -> ?write_acl_mask.
+-spec operation_to_bitmask(binary()) -> data_access_control:bitmask().
+operation_to_bitmask(?list_container) -> ?list_container_mask;
+operation_to_bitmask(?read_object) -> ?read_object_mask;
+operation_to_bitmask(?write_object) -> ?write_object_mask;
+operation_to_bitmask(?add_object) -> ?add_object_mask;
+operation_to_bitmask(?add_subcontainer) -> ?add_subcontainer_mask;
+operation_to_bitmask(?read_metadata) -> ?read_metadata_mask;
+operation_to_bitmask(?write_metadata) -> ?write_metadata_mask;
+operation_to_bitmask(?traverse_container) -> ?traverse_container_mask;
+operation_to_bitmask(?delete) -> ?delete_mask;
+operation_to_bitmask(?delete_object) -> ?delete_child_mask;
+operation_to_bitmask(?delete_subcontainer) -> ?delete_child_mask;
+operation_to_bitmask(?read_attributes) -> ?read_attributes_mask;
+operation_to_bitmask(?write_attributes) -> ?write_attributes_mask;
+operation_to_bitmask(?read_acl) -> ?read_acl_mask;
+operation_to_bitmask(?write_acl) -> ?write_acl_mask.
 
 
 %% @private

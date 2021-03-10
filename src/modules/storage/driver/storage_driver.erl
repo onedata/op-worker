@@ -574,7 +574,7 @@ read_internal(SDHandle, Offset, MaxSize) ->
 open_for_read(SDHandle) ->
     open_with_permissions_check(
         SDHandle#sd_handle{session_id = ?ROOT_SESS_ID},
-        [?PERMISSIONS(?read_object_mask)], read
+        [?OPERATIONS(?read_object_mask)], read
     ).
 
 
@@ -588,7 +588,7 @@ open_for_read(SDHandle) ->
 open_for_write(SDHandle) ->
     open_with_permissions_check(
         SDHandle#sd_handle{session_id = ?ROOT_SESS_ID},
-        [?PERMISSIONS(?write_object_mask)], write
+        [?OPERATIONS(?write_object_mask)], write
     ).
 
 
@@ -602,7 +602,7 @@ open_for_write(SDHandle) ->
 open_for_rdwr(SDHandle) ->
     open_with_permissions_check(
         SDHandle#sd_handle{session_id = ?ROOT_SESS_ID},
-        [?PERMISSIONS(?read_object_mask, ?write_object_mask)], rdwr
+        [?OPERATIONS(?read_object_mask, ?write_object_mask)], rdwr
     ).
 
 

@@ -176,7 +176,7 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
 get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus) ->
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask)]
     ),
     get_child_attr_insecure(UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus).
 
@@ -222,7 +222,7 @@ update_protection_flags(UserCtx, FileCtx0, FlagsToSet, FlagsToUnset) ->
 update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?OR(?OWNERSHIP, ?PERMISSIONS(?write_attributes_mask))]
+        [?TRAVERSE_ANCESTORS, ?OR(?OWNERSHIP, ?OPERATIONS(?write_attributes_mask))]
     ),
     update_times_insecure(UserCtx, FileCtx1, ATime, MTime, CTime).
 

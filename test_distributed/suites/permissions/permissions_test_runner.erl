@@ -357,8 +357,8 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
             false -> Acc
         end
     end, ?no_flags_mask, [
-        {?DATA_PROTECTION, ?DATA_PROTECTION_BLOCKED_PERMS},
-        {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_PERMS}
+        {?DATA_PROTECTION, ?DATA_PROTECTION_BLOCKED_OPERATIONS},
+        {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_OPERATIONS}
     ]),
 
     case ProtectionFlagsToSet > 0 of

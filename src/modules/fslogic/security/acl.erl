@@ -42,37 +42,38 @@
     od_user:doc(),
     file_ctx:ctx(),
     data_access_control:bitmask(),
-    data_access_control:user_perms_check_progress()
+    data_access_control:user_access_check_progress()
 ) ->
-    {allowed | denied, file_ctx:ctx(), data_access_control:user_perms_check_progress()}.
-check_acl(_Acl, _User, FileCtx, ?no_flags_mask, UserPermsCheckProgress) ->
-    {allowed, FileCtx, UserPermsCheckProgress};
+    {allowed | denied, file_ctx:ctx(), data_access_control:user_access_check_progress()}.
+check_acl(_Acl, _User, FileCtx, ?no_flags_mask, UserAccessCheckProgress) ->
+    {allowed, FileCtx, UserAccessCheckProgress};
 
-check_acl([], _User, FileCtx, _Operations, #user_perms_check_progress{
+check_acl([], _User, FileCtx, _Operations, #user_access_check_progress{
     finished_step = ?ACL_CHECK(AceNo),
-    granted = GrantedPerms
-} = UserPermsCheckProgress) ->
-    {denied, FileCtx, UserPermsCheckProgress#user_perms_check_progress{
+    allowed = AllowedOps
+} = UserAccessCheckProgress) ->
+    {denied, FileCtx, UserAccessCheckProgress#user_access_check_progress{
         finished_step = ?ACL_CHECK(AceNo + 1),
-        % After reaching then end of ACL all not explicitly granted perms are denied
-        denied = ?complement_flags(GrantedPerms)
+        % After reaching then end of ACL all not explicitly allowed ops are denied
+        denied = ?complement_flags(AllowedOps)
     }};
 
-check_acl([Ace | Rest], User, FileCtx, Operations, #user_perms_check_progress{
+check_acl([Ace | Rest], User, FileCtx, Operations, #user_access_check_progress{
     finished_step = ?ACL_CHECK(AceNo)
-} = UserPermsCheckProgress) ->
+} = UserAccessCheckProgress) ->
     case ace:is_applicable(User, FileCtx, Ace) of
         {true, FileCtx2} ->
-            case ace:check_against(Operations, Ace, UserPermsCheckProgress) of
-                {{inconclusive, LeftoverOperations}, NewUserPermsCheckProgress} ->
-                    check_acl(Rest, User, FileCtx2, LeftoverOperations, NewUserPermsCheckProgress);
-                {AllowedOrDenied, NewUserPermsCheckProgress} ->
-                    {AllowedOrDenied, FileCtx2, NewUserPermsCheckProgress}
+            case ace:check_against(Operations, Ace, UserAccessCheckProgress) of
+                {{inconclusive, LeftoverOperations}, NewUserAccessCheckProgress} ->
+                    check_acl(Rest, User, FileCtx2, LeftoverOperations, NewUserAccessCheckProgress);
+                {AllowedOrDenied, NewUserAccessCheckProgress} ->
+                    {AllowedOrDenied, FileCtx2, NewUserAccessCheckProgress}
             end;
         {false, FileCtx2} ->
-            check_acl(Rest, User, FileCtx2, Operations, UserPermsCheckProgress#user_perms_check_progress{
+            NewUserAccessCheckProgress = UserAccessCheckProgress#user_access_check_progress{
                 finished_step = ?ACL_CHECK(AceNo + 1)
-            })
+            },
+            check_acl(Rest, User, FileCtx2, Operations, NewUserAccessCheckProgress)
     end.
 
 

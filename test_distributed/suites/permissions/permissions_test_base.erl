@@ -2298,7 +2298,7 @@ check_perms(Node, User, Guid, Perms, Config) ->
 
     rpc:call(Node, ?MODULE, check_perms, [
         UserCtx, file_ctx:new_by_guid(Guid),
-        [?PERMISSIONS(permissions_test_utils:perms_to_bitmask(Perms))]
+        [?OPERATIONS(permissions_test_utils:perms_to_bitmask(Perms))]
     ]).
 
 

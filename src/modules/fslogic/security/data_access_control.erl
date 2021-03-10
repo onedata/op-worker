@@ -23,7 +23,7 @@
 %% API
 -export([
     assert_granted/3,
-    assert_operation_available_in_readonly_mode/1
+    assert_available_in_readonly_mode/1
 ]).
 
 -type bitmask() :: integer().
@@ -32,16 +32,16 @@
     ownership
     | public_access
     | traverse_ancestors            % Means ancestors' exec permission
-    | {permissions, bitmask()}.
+    | {operations, bitmask()}.
 
 -type requirement() ::
     root
     | type()
     | {type(), 'or', type()}.
 
--type user_perms_check_progress() :: #user_perms_check_progress{}.
+-type user_access_check_progress() :: #user_access_check_progress{}.
 
--export_type([bitmask/0, type/0, requirement/0, user_perms_check_progress/0]).
+-export_type([bitmask/0, type/0, requirement/0, user_access_check_progress/0]).
 
 
 %%%===================================================================
@@ -67,15 +67,9 @@ assert_granted(UserCtx, FileCtx, AccessRequirements) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether operation requiring specified access requirements
-%% can be executed in readonly mode.
-%% @end
-%%--------------------------------------------------------------------
--spec assert_operation_available_in_readonly_mode([requirement()]) ->
+-spec assert_available_in_readonly_mode([requirement()]) ->
     ok | no_return().
-assert_operation_available_in_readonly_mode(AccessRequirements) ->
+assert_available_in_readonly_mode(AccessRequirements) ->
     case lists:all(fun is_available_in_readonly_mode/1, AccessRequirements) of
         true -> ok;
         false -> throw(?EACCES)
@@ -89,8 +83,8 @@ assert_operation_available_in_readonly_mode(AccessRequirements) ->
 
 %% @private
 -spec is_available_in_readonly_mode(requirement()) -> boolean().
-is_available_in_readonly_mode(?PERMISSIONS(Perms)) ->
-    case ?reset_flags(Perms, ?READONLY_MODE_RESPECTED_PERMS) of
+is_available_in_readonly_mode(?OPERATIONS(Operations)) ->
+    case ?reset_flags(Operations, ?READONLY_MODE_AVAILABLE_OPERATIONS) of
         ?no_flags_mask -> true;
         _ -> false
     end;
@@ -116,13 +110,13 @@ assert_control_granted_for_space_owner(UserCtx, FileCtx0, AccessRequirements) ->
             % In case of space dir space owner is treated as any other user
             assert_control_granted_for_user(UserCtx, FileCtx0, AccessRequirements);
         false ->
-            % For any other file or directory space owner omits permissions checks
-            % but should still be restricted by file protection flags
-            {DeniedPerms, FileCtx1} = get_perms_denied_by_file_protection_flags(FileCtx0),
+            % For any other file or directory space owner omits all control checks
+            % with exceptions to file protection flags
+            {ForbiddenOps, FileCtx1} = get_operations_blocked_by_file_protection_flags(FileCtx0),
 
             IsRequirementMetBySpaceOwner = fun
-                F(?PERMISSIONS(RequiredPerms)) ->
-                    case ?common_flags(RequiredPerms, DeniedPerms) of
+                F(?OPERATIONS(RequiredOps)) ->
+                    case ?common_flags(RequiredOps, ForbiddenOps) of
                         ?no_flags_mask -> true;
                         _ -> false
                     end;
@@ -133,7 +127,7 @@ assert_control_granted_for_space_owner(UserCtx, FileCtx0, AccessRequirements) ->
             end,
             case lists:all(IsRequirementMetBySpaceOwner, AccessRequirements) of
                 true -> FileCtx1;
-                false -> throw(?EACCES)
+                false -> throw(?EPERM)
             end
     end.
 
@@ -159,8 +153,8 @@ assert_control_granted_for_user(UserCtx, FileCtx0, AccessRequirements0) ->
 %% @private
 -spec assert_meets_access_requirement(user_ctx:ctx(), file_ctx:ctx(), requirement()) ->
     file_ctx:ctx() | no_return().
-assert_meets_access_requirement(UserCtx, FileCtx, ?PERMISSIONS(RequiredPerms)) ->
-    assert_has_permissions(UserCtx, FileCtx, RequiredPerms);
+assert_meets_access_requirement(UserCtx, FileCtx, ?OPERATIONS(RequiredOps)) ->
+    assert_operations_allowed(UserCtx, FileCtx, RequiredOps);
 
 assert_meets_access_requirement(UserCtx, FileCtx0, Requirement) when
     Requirement == ?OWNERSHIP;
@@ -238,7 +232,7 @@ check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
         {undefined, FileCtx1} ->
             {ok, FileCtx1};
         {ParentCtx0, FileCtx1} ->
-            ParentCtx1 = assert_has_permissions(
+            ParentCtx1 = assert_operations_allowed(
                 UserCtx, ParentCtx0, ?traverse_container_mask
             ),
             assert_meets_access_requirement(UserCtx, ParentCtx1, ?TRAVERSE_ANCESTORS),
@@ -247,143 +241,154 @@ check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
 
 
 %% @private
--spec assert_has_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask()) ->
+-spec assert_operations_allowed(user_ctx:ctx(), file_ctx:ctx(), bitmask()) ->
     file_ctx:ctx() | no_return().
-assert_has_permissions(UserCtx, FileCtx0, RequiredPerms) ->
+assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
     UserId = user_ctx:get_user_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx0),
     % TODO VFS-6224 do not construct cache key outside of permissions_cache module
     CacheKey = {user_perms_matrix, UserId, Guid},
 
     Result = case permissions_cache:check_permission(CacheKey) of
-        {ok, #user_perms_check_progress{
-            granted = GrantedPerms,
-            denied = DeniedPerms
-        } = UserPermsCheckProgress} ->
-            case ?reset_flags(RequiredPerms, GrantedPerms) of
+        {ok, #user_access_check_progress{
+            forbidden = ForbiddenOps,
+            allowed = AllowedOps,
+            denied = DeniedOps
+        } = UserAccessCheckProgress} ->
+            case ?common_flags(RequiredOps, ForbiddenOps) of
                 ?no_flags_mask ->
-                    {allowed, FileCtx0};
-                LeftoverRequiredPerms ->
-                    case ?common_flags(LeftoverRequiredPerms, DeniedPerms) of
+                    case ?reset_flags(RequiredOps, AllowedOps) of
                         ?no_flags_mask ->
-                            check_permissions(
-                                UserCtx, FileCtx0, LeftoverRequiredPerms, UserPermsCheckProgress
-                            );
-                        _ ->
-                            throw(?EACCES)
-                    end
+                            {allowed, FileCtx0};
+                        LeftoverRequiredOps ->
+                            case ?common_flags(LeftoverRequiredOps, DeniedOps) of
+                                ?no_flags_mask ->
+                                    check_file_permissions(
+                                        UserCtx, FileCtx0, LeftoverRequiredOps,
+                                        UserAccessCheckProgress
+                                    );
+                                _ ->
+                                    throw(?EACCES)
+                            end
+                    end;
+                _ ->
+                    throw(?EPERM)
             end;
         calculate ->
-            check_permissions(UserCtx, FileCtx0, RequiredPerms)
+            check_operations(UserCtx, FileCtx0, RequiredOps)
     end,
 
     case Result of
         {allowed, FileCtx1} ->
             FileCtx1;
-        {allowed, FileCtx1, NewUserPermsCheckProgress} ->
-            permissions_cache:cache_permission(CacheKey, NewUserPermsCheckProgress),
+        {allowed, FileCtx1, NewUserAccessCheckProgress} ->
+            permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
             FileCtx1;
-        {denied, FileCtx1, NewUserPermsCheckProgress} ->
-            permissions_cache:cache_permission(CacheKey, NewUserPermsCheckProgress),
-            throw(?EACCES)
+        {denied, FileCtx1, NewUserAccessCheckProgress} ->
+            permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
+            throw(?EACCES);
+        {forbidden, FileCtx1, NewUserAccessCheckProgress} ->
+            permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
+            throw(?EPERM)
     end.
 
 
 %% @private
--spec check_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask()) ->
-    {allowed | denied, file_ctx:ctx(), user_perms_check_progress()}.
-check_permissions(UserCtx, FileCtx0, RequiredPerms) ->
+-spec check_operations(user_ctx:ctx(), file_ctx:ctx(), bitmask()) ->
+    {forbidden | allowed | denied, file_ctx:ctx(), user_access_check_progress()}.
+check_operations(UserCtx, FileCtx0, RequiredOps) ->
     ShareId = file_ctx:get_share_id_const(FileCtx0),
-    DeniedPerms1 = get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx0, ShareId),
-    {DeniedPerms2, FileCtx1} = get_perms_denied_by_file_protection_flags(FileCtx0),
-    AllDeniedPerms = DeniedPerms1 bor DeniedPerms2,
+    ForbiddenOps1 = get_operations_blocked_by_lack_of_space_privs(UserCtx, FileCtx0, ShareId),
+    {ForbiddenOps2, FileCtx1} = get_operations_blocked_by_file_protection_flags(FileCtx0),
+    AllForbiddenOps = ForbiddenOps1 bor ForbiddenOps2,
 
-    UserPermsCheckProgress = #user_perms_check_progress{
-        finished_step = ?PERMISSION_RESTRAINTS_CHECK,
-        granted = ?no_flags_mask,
-        denied = AllDeniedPerms
+    UserAccessCheckProgress = #user_access_check_progress{
+        finished_step = ?OPERATIONS_AVAILABILITY_CHECK,
+        forbidden = AllForbiddenOps,
+        allowed = ?no_flags_mask,
+        denied = ?no_flags_mask
     },
-    case ?common_flags(RequiredPerms, AllDeniedPerms) of
+    case ?common_flags(RequiredOps, AllForbiddenOps) of
         ?no_flags_mask ->
-            check_permissions(UserCtx, FileCtx1, RequiredPerms, UserPermsCheckProgress);
+            check_file_permissions(UserCtx, FileCtx1, RequiredOps, UserAccessCheckProgress);
         _ ->
-            {denied, FileCtx1, UserPermsCheckProgress}
+            {forbidden, FileCtx1, UserAccessCheckProgress}
     end.
 
 
 %% @private
--spec get_perms_denied_by_lack_of_space_privs(
+-spec get_operations_blocked_by_lack_of_space_privs(
     user_ctx:ctx(), file_ctx:ctx(), undefined | od_share:id()
 ) ->
     bitmask().
-get_perms_denied_by_lack_of_space_privs(UserCtx, FileCtx, undefined) ->
+get_operations_blocked_by_lack_of_space_privs(UserCtx, FileCtx, undefined) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            % All write permissions are denied for user root dir
-            ?SPACE_DENIED_WRITE_PERMS;
+            % All write operations are denied for user root dir
+            ?SPACE_BLOCKED_WRITE_OPERATION;
         false ->
             {ok, EffUserSpacePrivs} = space_logic:get_eff_privileges(SpaceId, UserId),
 
             lists:foldl(fun
-                (?SPACE_READ_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_DENIED_READ_PERMS);
-                (?SPACE_WRITE_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_DENIED_WRITE_PERMS);
+                (?SPACE_READ_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_BLOCKED_READ_OPERATIONS);
+                (?SPACE_WRITE_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_BLOCKED_WRITE_OPERATION);
                 (_, Bitmask) -> Bitmask
-            end, ?SPACE_DENIED_READ_PERMS bor ?SPACE_DENIED_WRITE_PERMS, EffUserSpacePrivs)
+            end, ?SPACE_BLOCKED_READ_OPERATIONS bor ?SPACE_BLOCKED_WRITE_OPERATION, EffUserSpacePrivs)
     end;
 
-get_perms_denied_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
-    % All write permissions are denied in share mode
-    ?SPACE_DENIED_WRITE_PERMS.
+get_operations_blocked_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
+    % All write operations are denied in share mode
+    ?SPACE_BLOCKED_WRITE_OPERATION.
 
 
 %% @private
--spec get_perms_denied_by_file_protection_flags(file_ctx:ctx()) ->
+-spec get_operations_blocked_by_file_protection_flags(file_ctx:ctx()) ->
     {bitmask(), file_ctx:ctx()}.
-get_perms_denied_by_file_protection_flags(FileCtx0) ->
+get_operations_blocked_by_file_protection_flags(FileCtx0) ->
     {Flags, FileCtx1} = file_protection_flags_cache:get_effective_flags(FileCtx0),
 
-    DeniedPerms = lists:foldl(fun({ProtectionFlag, RestrictedPerms}, DeniedPermsAcc) ->
+    DeniedOps = lists:foldl(fun({ProtectionFlag, RestrictedOps}, DeniedOpsAcc) ->
         case ?has_all_flags(Flags, ProtectionFlag) of
-            true -> ?set_flags(DeniedPermsAcc, RestrictedPerms);
-            false -> DeniedPermsAcc
+            true -> ?set_flags(DeniedOpsAcc, RestrictedOps);
+            false -> DeniedOpsAcc
         end
     end, ?no_flags_mask, [
-        {?DATA_PROTECTION, ?DATA_PROTECTION_BLOCKED_PERMS},
-        {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_PERMS}
+        {?DATA_PROTECTION, ?DATA_PROTECTION_BLOCKED_OPERATIONS},
+        {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_OPERATIONS}
     ]),
-    {DeniedPerms, FileCtx1}.
+    {DeniedOps, FileCtx1}.
 
 
 %% @private
--spec check_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask(), user_perms_check_progress()) ->
-    {allowed | denied, file_ctx:ctx(), user_perms_check_progress()}.
-check_permissions(UserCtx, FileCtx0, RequiredPerms, UserPermsCheckProgress) ->
+-spec check_file_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask(), user_access_check_progress()) ->
+    {allowed | denied, file_ctx:ctx(), user_access_check_progress()}.
+check_file_permissions(UserCtx, FileCtx0, RequiredOps, UserAccessCheckProgress) ->
     case file_ctx:get_active_perms_type(FileCtx0, include_deleted) of
         {posix, FileCtx1} ->
-            check_posix_permissions(UserCtx, FileCtx1, RequiredPerms, UserPermsCheckProgress);
+            check_posix_mode(UserCtx, FileCtx1, RequiredOps, UserAccessCheckProgress);
         {acl, FileCtx1} ->
-            check_acl_permissions(UserCtx, FileCtx1, RequiredPerms, UserPermsCheckProgress)
+            check_acl(UserCtx, FileCtx1, RequiredOps, UserAccessCheckProgress)
     end.
 
 
 %% @private
--spec check_posix_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask(), user_perms_check_progress()) ->
-    {allowed | denied, file_ctx:ctx(), user_perms_check_progress()}.
-check_posix_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_check_progress{
-    finished_step = ?PERMISSION_RESTRAINTS_CHECK,
-    granted = ?no_flags_mask,
-    denied = DeniedPerms
-}) ->
+-spec check_posix_mode(user_ctx:ctx(), file_ctx:ctx(), bitmask(), user_access_check_progress()) ->
+    {allowed | denied, file_ctx:ctx(), user_access_check_progress()}.
+check_posix_mode(UserCtx, FileCtx0, RequiredOps, #user_access_check_progress{
+    finished_step = ?OPERATIONS_AVAILABILITY_CHECK,
+    allowed = ?no_flags_mask,
+    denied = DeniedOps
+} = UserAccessCheckProgress) ->
     {#document{value = #file_meta{
         owner = OwnerId,
         type = FileType,
         mode = Mode
     }}, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
 
-    {UserAffiliation, UserSpecialPerms, FileCtx3} = case user_ctx:get_user_id(UserCtx) of
+    {UserAffiliation, UserSpecialOps, FileCtx3} = case user_ctx:get_user_id(UserCtx) of
         OwnerId ->
             {owner, ?write_acl_mask bor ?delete_mask, FileCtx1};
         _ ->
@@ -398,27 +403,27 @@ check_posix_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_check_prog
     end,
     RelevantModeBits = get_mode_bits_triplet(Mode, UserAffiliation),
 
-    GrantedPosixPerms = ?set_flags(UserSpecialPerms, get_posix_allowed_perms(
+    AllowedPosixOps = ?set_flags(UserSpecialOps, get_posix_allowed_ops(
         RelevantModeBits, FileType
     )),
-    AllAllowedPerms = ?reset_flags(GrantedPosixPerms, DeniedPerms),
-    AllDeniedPerms = ?complement_flags(AllAllowedPerms),
+    AllAllowedOps = ?reset_flags(AllowedPosixOps, DeniedOps),
+    AllDeniedOps = ?complement_flags(AllAllowedOps),
 
-    PermissionsCheckResult = case ?common_flags(RequiredPerms, AllDeniedPerms) of
+    PermissionsCheckResult = case ?common_flags(RequiredOps, AllDeniedOps) of
         ?no_flags_mask -> allowed;
         _ -> denied
     end,
-    {PermissionsCheckResult, FileCtx3, #user_perms_check_progress{
+    {PermissionsCheckResult, FileCtx3, UserAccessCheckProgress#user_access_check_progress{
         finished_step = ?POSIX_MODE_CHECK,
-        granted = AllAllowedPerms,
-        denied = AllDeniedPerms
+        allowed = AllAllowedOps,
+        denied = AllDeniedOps
     }};
 
-check_posix_permissions(UserCtx, FileCtx, RequiredPerms, _) ->
+check_posix_mode(UserCtx, FileCtx, RequiredOps, _) ->
     % Race between reading and clearing cache must have happened (user perms matrix
     % is calculated entirely at once from posix mode so it is not possible for it
     % to has pointer > 0 and not be fully constructed)
-    check_permissions(UserCtx, FileCtx, RequiredPerms).
+    check_operations(UserCtx, FileCtx, RequiredOps).
 
 
 %% @private
@@ -442,50 +447,50 @@ has_parent_sticky_bit_set(UserCtx, FileCtx0) ->
 
 
 %% @private
--spec get_posix_allowed_perms(0..7, file_meta:type()) -> bitmask().
-get_posix_allowed_perms(2#000, _) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS;
-get_posix_allowed_perms(2#001, _) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_EXEC_ONLY_PERMS;
-get_posix_allowed_perms(2#010, ?DIRECTORY_TYPE) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_DIR_WRITE_ONLY_PERMS;
-get_posix_allowed_perms(2#010, _) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_FILE_WRITE_ONLY_PERMS;
-get_posix_allowed_perms(2#011, ?DIRECTORY_TYPE) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_DIR_WRITE_EXEC_PERMS;
-get_posix_allowed_perms(2#011, _) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_FILE_WRITE_EXEC_PERMS;
-get_posix_allowed_perms(2#100, _) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS;
-get_posix_allowed_perms(2#101, _) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_EXEC_ONLY_PERMS;
-get_posix_allowed_perms(2#110, ?DIRECTORY_TYPE) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_DIR_WRITE_ONLY_PERMS;
-get_posix_allowed_perms(2#110, _) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_FILE_WRITE_ONLY_PERMS;
-get_posix_allowed_perms(2#111, ?DIRECTORY_TYPE) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_DIR_WRITE_EXEC_PERMS;
-get_posix_allowed_perms(2#111, _) ->
-    ?POSIX_ALWAYS_GRANTED_PERMS bor ?POSIX_READ_ONLY_PERMS bor ?POSIX_FILE_WRITE_EXEC_PERMS.
+-spec get_posix_allowed_ops(0..7, file_meta:type()) -> bitmask().
+get_posix_allowed_ops(2#000, _) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS;
+get_posix_allowed_ops(2#001, _) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_EXEC_ONLY_OPS;
+get_posix_allowed_ops(2#010, ?DIRECTORY_TYPE) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_DIR_WRITE_ONLY_OPS;
+get_posix_allowed_ops(2#010, _) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_FILE_WRITE_ONLY_OPS;
+get_posix_allowed_ops(2#011, ?DIRECTORY_TYPE) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_DIR_WRITE_EXEC_OPS;
+get_posix_allowed_ops(2#011, _) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_FILE_WRITE_EXEC_OPS;
+get_posix_allowed_ops(2#100, _) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_READ_ONLY_OPS;
+get_posix_allowed_ops(2#101, _) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_READ_ONLY_OPS bor ?POSIX_EXEC_ONLY_OPS;
+get_posix_allowed_ops(2#110, ?DIRECTORY_TYPE) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_READ_ONLY_OPS bor ?POSIX_DIR_WRITE_ONLY_OPS;
+get_posix_allowed_ops(2#110, _) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_READ_ONLY_OPS bor ?POSIX_FILE_WRITE_ONLY_OPS;
+get_posix_allowed_ops(2#111, ?DIRECTORY_TYPE) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_READ_ONLY_OPS bor ?POSIX_DIR_WRITE_EXEC_OPS;
+get_posix_allowed_ops(2#111, _) ->
+    ?POSIX_ALWAYS_ALLOWED_OPS bor ?POSIX_READ_ONLY_OPS bor ?POSIX_FILE_WRITE_EXEC_OPS.
 
 
 %% @private
--spec check_acl_permissions(user_ctx:ctx(), file_ctx:ctx(), bitmask(), user_perms_check_progress()) ->
-    {allowed | denied, file_ctx:ctx(), user_perms_check_progress()}.
-check_acl_permissions(UserCtx, FileCtx0, RequiredPerms, #user_perms_check_progress{
+-spec check_acl(user_ctx:ctx(), file_ctx:ctx(), bitmask(), user_access_check_progress()) ->
+    {allowed | denied, file_ctx:ctx(), user_access_check_progress()}.
+check_acl(UserCtx, FileCtx0, RequiredOps, #user_access_check_progress{
     finished_step = ?ACL_CHECK(AceNo)
-} = UserPermsCheckProgress) ->
+} = UserAccessCheckProgress) ->
     {Acl, FileCtx1} = file_ctx:get_acl(FileCtx0),
 
     case AceNo >= length(Acl) of
         true ->
             % Race between reading and clearing cache must have happened
             % (acl must have been replaced if it is shorter then should be)
-            check_permissions(UserCtx, FileCtx0, RequiredPerms);
+            check_operations(UserCtx, FileCtx0, RequiredOps);
         false ->
             acl:check_acl(
                 lists:nthtail(AceNo, Acl),
                 user_ctx:get_user(UserCtx),
-                FileCtx1, RequiredPerms, UserPermsCheckProgress
+                FileCtx1, RequiredOps, UserAccessCheckProgress
             )
     end.
