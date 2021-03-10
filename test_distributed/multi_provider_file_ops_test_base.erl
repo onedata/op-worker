@@ -741,8 +741,6 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
 
     ok.
 
-% TODO - przetestowac co sie stanie jesli plik zostanie perwszy raz przeczytany przez dopiero co stworzony hardlink u nowego providera
-% TODO - przetestowac co jesli pierwszy raz bedziemy chcieli pisac po hardlinku po skasowaniu pliku ktory nie byl nigdy pisany u providera (nie mial file_location)
 hardlinks_test(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
     hardlinks_test(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
 hardlinks_test(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->

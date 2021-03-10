@@ -64,7 +64,8 @@ check(FileCtx, #document{key = QosEntryId} = QosEntryDoc) ->
 report_started(TraverseId, FileCtx) ->
     {ok, case file_ctx:is_dir(FileCtx) of
         {true, FileCtx1} ->
-            {ok, _} = qos_status_model:create(file_ctx:get_space_id_const(FileCtx), TraverseId, 
+            {ok, _} = qos_status_model:create(file_ctx:get_space_id_const(FileCtx), TraverseId,
+                % TODO VFS-7435 - Integrate hardlinks with QoS
                 file_ctx:get_uuid_const(FileCtx), ?QOS_STATUS_TRAVERSE_START_DIR),
             FileCtx1;
         {false, FileCtx1} -> 

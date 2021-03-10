@@ -10,7 +10,7 @@
 %%% Note: this module operates on effective uuids - all operations on hardlinks
 %%% are treated as operations on original file. Thus, all hardlinks pointing on
 %%% the same file share single file_handles document. It is necessary because
-%%% file can be deleted only after deletion of last hardlink.
+%%% file can be deleted from storage system only after deletion of last hardlink.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_handles).

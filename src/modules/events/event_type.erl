@@ -249,18 +249,18 @@ check_hardlinks_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ct
     {ok, References} = file_ctx:get_references_const(FileCtx),
     BasicAns = get_parent_connected_routing_key(Prefix, FileGuid, Ctx),
     AdditionalKeys = lists:foldl(fun(Uuid, Acc) ->
-            try
-                Guid = file_id:pack_guid(Uuid, SpaceId),
-                AnsForGuid = get_parent_connected_routing_key(Prefix, Guid, undefined),
-                [{Guid, AnsForGuid#event_routing_keys.main_key} | Acc]
-            catch
-                Error:Reason ->
-                    % It is possible that some documents for additional keys are not found
-                    % (e.g. race with delete)
-                    ?debug("error getting parent connected key ~p:~p for uuid ~p", [Error, Reason, Uuid]),
-                    Acc
-            end
-        end, [], References -- [file_ctx:get_uuid_const(FileCtx)]),
+        try
+            Guid = file_id:pack_guid(Uuid, SpaceId),
+            AnsForGuid = get_parent_connected_routing_key(Prefix, Guid, undefined),
+            [{Guid, AnsForGuid#event_routing_keys.main_key} | Acc]
+        catch
+            Error:Reason ->
+                % It is possible that some documents for additional keys are not found
+                % (e.g. race with delete)
+                ?debug("error getting parent connected key ~p:~p for uuid ~p", [Error, Reason, Uuid]),
+                Acc
+        end
+    end, [], References -- [file_ctx:get_uuid_const(FileCtx)]),
     BasicAns#event_routing_keys{additional_keys = AdditionalKeys};
 check_hardlinks_and_get_parent_connected_routing_key(Prefix, FileGuid, _) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),

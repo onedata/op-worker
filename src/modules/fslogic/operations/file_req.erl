@@ -103,11 +103,11 @@ make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
 
     TargetFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, TargetFileCtx1,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
     TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
-        [traverse_ancestors, ?traverse_container, ?add_object]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     make_link_insecure(UserCtx, TargetFileCtx2, TargetParentFileCtx1, Name).
 
@@ -119,7 +119,7 @@ make_symlink(UserCtx, ParentFileCtx0, Name, Link) ->
     file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [traverse_ancestors, ?traverse_container, ?add_object]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     make_symlink_insecure(UserCtx, ParentFileCtx1, Name, Link).
 
@@ -128,7 +128,7 @@ make_symlink(UserCtx, ParentFileCtx0, Name, Link) ->
 read_symlink(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
     read_symlink_insecure(UserCtx, FileCtx1).
 
@@ -383,7 +383,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
             ParentUuid = file_ctx:get_uuid_const(TargetParentFileCtx3),
             SpaceId = file_ctx:get_space_id_const(TargetParentFileCtx3),
             Doc = file_meta_hardlinks:new_hardlink_doc(FileUuid, Name, ParentUuid, SpaceId),
-            {ok, #document{key = HardlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc), %todo pass file_ctx
+            {ok, #document{key = HardlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
                 {ok, _} = file_meta_hardlinks:register_hardlink(FileUuid, HardlinkUuid), % TODO VFS-7445 - revert after error
@@ -420,7 +420,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
             Owner = user_ctx:get_user_id(UserCtx),
             Doc = file_meta_symlinks:new_symlink_doc(Name, ParentUuid, SpaceId, Owner, Link),
-            {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc), %todo pass file_ctx
+            {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
                 CTime = global_clock:timestamp_seconds(),

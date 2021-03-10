@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for management of file_meta softlinks.
+%%% This module is responsible for management of file_meta symlinks.
 %%%-------------------------------------------------------------------
 -module(file_meta_symlinks).
 -author("Michal Wrzeszcz").
