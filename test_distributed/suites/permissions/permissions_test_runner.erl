@@ -271,7 +271,7 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     ?assertMatch({error, ?EACCES}, Operation(UserSessId, ScenarioRootDirPath, ExtraData)),
 
     mock_space_user_privileges([Node], SpaceId, FileOwnerId, []),
-    ?assertMatch({error, ?EACCES}, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
+    ?assertMatch({error, ?EPERM}, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
 
     mock_space_user_privileges([Node], SpaceId, FileOwnerId, RequiredSpacePrivs),
     ?assertMatch(ok, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
@@ -294,7 +294,7 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     % Operation should fail if user doesn't have all of the required space privileges
     lists:foreach(fun(SomeOfRequiredPrivs) ->
         mock_space_user_privileges([Node], SpaceId, UserId, AllSpacePrivs -- SomeOfRequiredPrivs),
-        ?assertMatch({error, ?EACCES}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData))
+        ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData))
     end, combinations(RequiredPrivs) -- [[]]),
 
     % And should succeed if he has only required ones
@@ -346,7 +346,7 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
     % Assert that even with all perms set operation cannot be performed
     % with file protection flags set
-    set_full_perms(posix, Node, maps:keys(PermsPerFile)),
+    set_full_perms(acl, Node, maps:keys(PermsPerFile)),
 
     AllNeededPerms = lists:usort(lists:flatten(maps:values(PermsPerFile))),
     AllNeededPermsBitmask = permissions_test_utils:perms_to_bitmask(AllNeededPerms),
@@ -372,15 +372,15 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
             % With file protection set operation should fail
             ok = lfm_proxy:update_protection_flags(
-                Node, ExecutionerSessId, ScenarioRootDirKey, ProtectionFlagsToSet, ?no_flags_mask
+                Node, ?ROOT_SESS_ID, ScenarioRootDirKey, ProtectionFlagsToSet, ?no_flags_mask
             ),
             % Wait some time for caches to be cleared (cache purge is asynchronous)
             timer:sleep(100),
-            ?assertMatch({error, ?EACCES}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
+            ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             % And should succeed without it
             ok = lfm_proxy:update_protection_flags(
-                Node, ExecutionerSessId, ScenarioRootDirKey, ?no_flags_mask, ProtectionFlagsToSet
+                Node, ?ROOT_SESS_ID, ScenarioRootDirKey, ?no_flags_mask, ProtectionFlagsToSet
             ),
             % Wait some time for caches to be cleared (cache purge is asynchronous)
             timer:sleep(100),
@@ -635,7 +635,7 @@ run_share_test_scenario(#scenario_ctx{
 
     % Even with all perms set operation should fail
     ?assertMatchWithPerms(
-        {error, ?EACCES},
+        {error, ?EPERM},
         Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
         ScenarioName, Node, FilesOwnerSessId,
         maps:map(fun(_, _) -> <<"all">> end, PermsPerFile)

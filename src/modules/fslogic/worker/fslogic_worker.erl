@@ -395,7 +395,7 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
                 Operation = get_operation(Request),
                 case lists:member(Operation, ?AVAILABLE_SHARE_OPERATIONS) of
                     true -> ok;
-                    false -> throw(?EACCES)
+                    false -> throw(?EPERM)
                 end,
                 % Operations concerning shares must be carried with GUEST auth
                 case user_ctx:is_guest(UserCtx0) of

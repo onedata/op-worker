@@ -206,7 +206,7 @@ chmod(UserCtx, FileCtx0, Mode) ->
 update_protection_flags(UserCtx, FileCtx0, FlagsToSet, FlagsToUnset) ->
     file_ctx:assert_not_special_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors]
+        UserCtx, FileCtx0, [traverse_ancestors, ?OPERATIONS(?write_attributes_mask)]
     ),
     update_protection_flags_insecure(FileCtx1, FlagsToSet, FlagsToUnset).
 
