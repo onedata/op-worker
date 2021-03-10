@@ -64,7 +64,7 @@ create_share_test(_Config) ->
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
             verify_fun = build_verify_file_shares_fun(MemRef, Providers, user3, FileGuid),
             scenario_templates = [
                 #scenario_template{
@@ -439,7 +439,7 @@ delete_share_test(_Config) ->
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
             verify_fun = build_verify_file_shares_fun(MemRef, Providers, user3, FileGuid),
             scenario_templates = [
                 #scenario_template{

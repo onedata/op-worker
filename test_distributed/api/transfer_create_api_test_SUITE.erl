@@ -239,7 +239,7 @@ create_view_transfer_required_privs(migration) ->
 %% @private
 build_op_transfer_spec(replication, DataSourceType, _SrcNode, DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
-        op_transfer, DataSourceType
+        DataSourceType
     ),
     #data_spec{
         required = [
@@ -262,7 +262,7 @@ build_op_transfer_spec(replication, DataSourceType, _SrcNode, DstNode) ->
     };
 build_op_transfer_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
-        op_transfer, DataSourceType
+        DataSourceType
     ),
     #data_spec{
         required = [
@@ -285,7 +285,7 @@ build_op_transfer_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
     };
 build_op_transfer_spec(migration, DataSourceType, SrcNode, DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
-        op_transfer, DataSourceType
+        DataSourceType
     ),
     #data_spec{
         required = [
@@ -312,17 +312,15 @@ build_op_transfer_spec(migration, DataSourceType, SrcNode, DstNode) ->
 
 
 %% @private
--spec get_data_source_dependent_data_spec_aspects(
-    Middleware :: op_transfer, DataSourceType :: binary()
-) -> {
+-spec get_data_source_dependent_data_spec_aspects(DataSourceType :: binary()) -> {
     RequiredParams :: [binary()],
     OptionalParams :: [binary()],
     CorrectValues :: #{Key :: binary() => Values :: [term()]},
     BadValues :: [{Key :: binary(), Value :: term(), errors:error()}]
 }.
-get_data_source_dependent_data_spec_aspects(op_transfer, <<"file">>) ->
+get_data_source_dependent_data_spec_aspects(<<"file">>) ->
     {[<<"fileId">>], [], #{<<"fileId">> => [?PLACEHOLDER]}, []};
-get_data_source_dependent_data_spec_aspects(op_transfer, <<"view">>) ->
+get_data_source_dependent_data_spec_aspects(<<"view">>) ->
     RequiredParams = [<<"spaceId">>, <<"viewName">>],
     OptionalParams = [<<"queryViewParams">>],
     CorrectValues = #{

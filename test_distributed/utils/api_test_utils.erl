@@ -670,10 +670,10 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId,
         {<<"fileId">>, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
         
         {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
-        
-        % operation on shared file is forbidden - it should result in ?EACCES
-        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EACCES)},
-        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?EACCES)}
+
+        % operation is not available in share mode - it should result in ?EPERM
+        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EPERM)},
+        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?EPERM)}
     ],
 
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).

@@ -1581,7 +1581,7 @@ create_share_dir(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
+    ?assertMatch({error, ?EPERM}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1589,7 +1589,7 @@ create_share_dir(Config) ->
 
     % User root dir can not be shared
     ?assertMatch(
-        {error, ?EACCES},
+        {error, ?EPERM},
         lfm_proxy:create_share(W, SessId, {guid, fslogic_uuid:user_root_dir_guid(UserId)}, <<"share_name">>)
     ),
     % But space dir can
@@ -1621,7 +1621,7 @@ create_share_file(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
+    ?assertMatch({error, ?EPERM}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1650,7 +1650,7 @@ remove_share(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:remove_share(W, SessId, ShareId1)),
+    ?assertMatch({error, ?EPERM}, lfm_proxy:remove_share(W, SessId, ShareId1)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
