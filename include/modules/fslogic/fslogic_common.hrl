@@ -83,6 +83,8 @@
 % Token that should be passed as initial token to start listing using tokens.
 -define(INITIAL_LS_TOKEN, <<>>).
 
+-define(STICKY_BIT, 2#1000000000).
+
 % Hardlinks associated macros
 -define(HARDLINK_UUID_PREFIX, "link_").
 

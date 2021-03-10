@@ -12,9 +12,9 @@
 -ifndef(PROVIDER_MESSAGES_HRL).
 -define(PROVIDER_MESSAGES_HRL, 1).
 
--include("modules/auth/acl.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/qos.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 

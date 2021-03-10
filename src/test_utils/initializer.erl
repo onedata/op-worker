@@ -397,7 +397,6 @@ setup_storage([], Config) ->
     Config;
 setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
-    %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir ++ " -m 777"]),
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     Args = #{
@@ -1255,6 +1254,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
         UserPrivileges = maps:get(UserId, EffUsers, []),
         lists_utils:is_subset(Privileges, UserPrivileges)
+    end),
+
+    test_utils:mock_expect(Workers, space_logic, get_eff_privileges, fun(SpaceId, UserId) ->
+        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
+        {ok, maps:get(UserId, EffUsers, [])}
     end),
 
     test_utils:mock_expect(Workers, space_logic, is_supported, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->

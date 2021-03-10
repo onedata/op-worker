@@ -499,7 +499,7 @@ create_transfer(Type, DataSourceType, SrcNode, DstNode, UserId, QueryViewParams,
         operation = create,
         data = Data
     },
-    {ok, value, TransferId} = ?assertMatch(
+    {ok, resource, {#gri{id = TransferId}, _}} = ?assertMatch(
         {ok, _, _},
         rpc:call(SrcNode, middleware, handle, [Req])
     ),

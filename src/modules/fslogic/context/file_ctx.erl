@@ -27,8 +27,8 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/auth/acl.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -251,7 +251,6 @@ get_effective_guid_const(#file_ctx{guid = Guid} = FileCtx) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @todo remove this function and pass file_ctx wherever possible
 %% @doc
 %% Returns file UUID entry.
 %% @end
@@ -612,10 +611,8 @@ get_new_storage_file_id(FileCtx) ->
         ?FLAT_STORAGE_PATH ->
             FileUuid = file_ctx:get_uuid_const(EffectiveFileCtx2),
             StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
-            % TODO - do not get_canonical_path (fix acceptance tests before)
-            {_, EffectiveFileCtx3} = get_canonical_path(EffectiveFileCtx2),
-            case equals(EffectiveFileCtx3, FileCtx) of
-                true -> {StorageFileId, EffectiveFileCtx3#file_ctx{storage_file_id = StorageFileId}};
+            case equals(EffectiveFileCtx2, FileCtx) of
+                true -> {StorageFileId, EffectiveFileCtx2#file_ctx{storage_file_id = StorageFileId}};
                 false -> {StorageFileId, FileCtx#file_ctx{storage_file_id = StorageFileId}}
             end;
         ?CANONICAL_STORAGE_PATH ->

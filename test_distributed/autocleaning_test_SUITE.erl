@@ -14,8 +14,8 @@
 -include("global_definitions.hrl").
 -include("distribution_assert.hrl").
 -include("lfm_test_utils.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/auth/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

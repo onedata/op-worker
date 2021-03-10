@@ -19,8 +19,8 @@
 
 -behaviour(middleware_plugin).
 
--include("modules/auth/acl.hrl").
 -include("middleware/middleware.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -371,7 +371,6 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     boolean().
 get_operation_supported(instance, private) -> true;             % gs only
 get_operation_supported(instance, public) -> true;              % gs only
-get_operation_supported(list, private) -> true;                 % REST only (deprecated)
 get_operation_supported(children, private) -> true;             % REST/gs
 get_operation_supported(children, public) -> true;              % REST/gs
 get_operation_supported(children_details, private) -> true;     % gs only
@@ -398,14 +397,6 @@ get_operation_supported(_, _) -> false.
 -spec data_spec_get(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
 data_spec_get(#gri{aspect = instance}) -> #{
     required => #{id => {binary, guid}}
-};
-
-data_spec_get(#gri{aspect = list}) -> #{
-    required => #{id => {binary, guid}},
-    optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
-        <<"offset">> => {integer, {not_lower_than, 0}}
-    }
 };
 
 data_spec_get(#gri{aspect = As}) when
@@ -496,7 +487,6 @@ authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _
 
 authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
-    As =:= list;
     As =:= children;
     As =:= children_details;
     As =:= attrs;
@@ -523,7 +513,6 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = file_
 -spec validate_get(middleware:req(), middleware:entity()) -> ok | no_return().
 validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
-    As =:= list;
     As =:= children;
     As =:= children_details;
     As =:= attrs;
@@ -548,24 +537,6 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
     ?check(lfm:get_details(Auth#auth.session_id, {guid, FileGuid}));
-
-get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
-    SessionId = Auth#auth.session_id,
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-    Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
-    {ok, Path} = ?check(lfm:get_file_path(SessionId, FileGuid)),
-
-    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
-        {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
-            {ok, Children, _} = ?check(lfm:get_children(SessionId, {guid, Guid}, #{offset => Offset, size => Limit})),
-            {ok, lists:map(fun({ChildGuid, ChildPath}) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
-                #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
-            end, Children)};
-        {ok, #file_attr{guid = Guid}} ->
-            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-            {ok, [#{<<"id">> => ObjectId, <<"path">> => Path}]}
-    end;
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,

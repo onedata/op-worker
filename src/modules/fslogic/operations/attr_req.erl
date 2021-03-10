@@ -12,7 +12,7 @@
 -module(attr_req).
 -author("Tomasz Lichon").
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
@@ -82,7 +82,7 @@
     fslogic_worker:fuse_response().
 get_file_attr(UserCtx, FileCtx0, IncludeReplicationStatus, IncludeLinkCount) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     get_file_attr_insecure(UserCtx, FileCtx1, #{
         allow_deleted_files => false,
@@ -136,7 +136,7 @@ get_file_attr_and_conflicts_insecure(UserCtx, FileCtx, Opts) ->
     fslogic_worker:fuse_response().
 get_file_details(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     get_file_details_insecure(UserCtx, FileCtx1, #{
         allow_deleted_files => false,
@@ -178,7 +178,7 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
 get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus, IncludeLinkCount) ->
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [traverse_ancestors, ?traverse_container]
+        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask)]
     ),
     get_child_attr_insecure(UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus, IncludeLinkCount).
 
@@ -193,7 +193,7 @@ chmod(UserCtx, FileCtx0, Mode) ->
     file_ctx:assert_not_special_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, owner]
+        [?TRAVERSE_ANCESTORS, ?OWNERSHIP]
     ),
     chmod_insecure(UserCtx, FileCtx1, Mode).
 
@@ -209,7 +209,7 @@ chmod(UserCtx, FileCtx0, Mode) ->
 update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, {owner, 'or', ?write_attributes}]
+        [?TRAVERSE_ANCESTORS, ?OR(?OWNERSHIP, ?PERMISSIONS(?write_attributes_mask))]
     ),
     update_times_insecure(UserCtx, FileCtx1, ATime, MTime, CTime).
 
@@ -222,7 +222,7 @@ update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
     fslogic_worker:fuse_response().
 get_fs_stats(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors]
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]
     ),
     get_fs_stats_insecure(UserCtx, FileCtx1).
 

@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module provides fslogic access control list definitions, such as
+%%% @doc
+%%% This module provides fslogic access control list definitions, such as
 %%% bitmasks and names for common flags
 %%% @end
 %%%-------------------------------------------------------------------
@@ -15,8 +16,11 @@
 
 -define(ACL_XATTR_NAME, <<"cdmi_acl">>).
 
-% Returns true if Bitmask contains all bits from Flag
--define(has_flag(Bitmask, Flag), ((Bitmask band Flag) =:= Flag)).
+-define(has_flags(Bitmask, Flags), (((Bitmask) band (Flags)) =:= (Flags))).
+-define(set_flags(Bitmask, Flags), ((Bitmask) bor (Flags))).
+-define(reset_flags(Bitmask, Flags), ((Bitmask) band (bnot (Flags)))).
+-define(common_flags(Bitmask1, Bitmask2), ((Bitmask1) band (Bitmask2))).
+-define(complement_flags(Bitmask), (bnot (Bitmask))).
 
 % ace types
 -define(allow, <<"ALLOW">>).
@@ -129,13 +133,10 @@
 -define(all_perms, <<"ALL_PERMS">>).
 -define(all_perms_mask, (?all_object_perms_mask bor ?all_container_perms_mask)).
 
--type user_id() :: binary().
--type group_id() :: binary().
-
 -record(access_control_entity, {
     acetype :: ?allow_mask | ?deny_mask,
     aceflags = ?no_flags_mask :: ?no_flags_mask | ?identifier_group_mask,
-    identifier :: user_id() | group_id(),
+    identifier :: od_user:id() | od_group:id(),
     name :: undefined | binary(),
     acemask :: non_neg_integer()
 }).

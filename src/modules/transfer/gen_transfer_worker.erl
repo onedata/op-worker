@@ -21,9 +21,9 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/auth/acl.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% gen_server callbacks
@@ -52,7 +52,7 @@
 %% Callback called to get permissions required to check before starting transfer.
 %% @end
 %%--------------------------------------------------------------------
--callback required_permissions() -> [data_access_rights:requirement()].
+-callback required_permissions() -> [data_access_control:requirement()].
 
 
 %%--------------------------------------------------------------------

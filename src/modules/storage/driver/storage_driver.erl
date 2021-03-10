@@ -12,8 +12,8 @@
 %%%-------------------------------------------------------------------
 -module(storage_driver).
 
--include("modules/auth/acl.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
@@ -234,13 +234,7 @@ mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
                                 throw(ParentError)
                         end
                 end,
-                R = case mkdir(SDHandle, Mode, false) of
-                    ok ->
-                        chmod(SDHandle, Mode); %% @todo: find out why umask(0) in helpers_nif.cc doesn't work
-                    E -> E
-                end,
-                Noop(HelperHandle), %% @todo: check why NIF crashes when this term is destroyed before recursive call
-                R;
+                mkdir(SDHandle, Mode, false);
             {error, Reason} ->
                 {error, Reason}
         end
@@ -574,7 +568,7 @@ read_internal(SDHandle, Offset, MaxSize) ->
 open_for_read(SDHandle) ->
     open_with_permissions_check(
         SDHandle#sd_handle{session_id = ?ROOT_SESS_ID},
-        [?read_object], read
+        [?PERMISSIONS(?read_object_mask)], read
     ).
 
 
@@ -588,7 +582,7 @@ open_for_read(SDHandle) ->
 open_for_write(SDHandle) ->
     open_with_permissions_check(
         SDHandle#sd_handle{session_id = ?ROOT_SESS_ID},
-        [?write_object], write
+        [?PERMISSIONS(?write_object_mask)], write
     ).
 
 
@@ -602,7 +596,7 @@ open_for_write(SDHandle) ->
 open_for_rdwr(SDHandle) ->
     open_with_permissions_check(
         SDHandle#sd_handle{session_id = ?ROOT_SESS_ID},
-        [?read_object, ?write_object], rdwr
+        [?PERMISSIONS(?read_object_mask, ?write_object_mask)], rdwr
     ).
 
 
@@ -611,7 +605,7 @@ open_for_rdwr(SDHandle) ->
 %% @equiv open/2, but with permission control
 %% @end
 %%--------------------------------------------------------------------
--spec open_with_permissions_check(handle(), [data_access_rights:requirement()],
+-spec open_with_permissions_check(handle(), [data_access_control:requirement()],
     helpers:open_flag()) -> {ok, handle()} | error_reply().
 open_with_permissions_check(#sd_handle{
     session_id = SessionId,
