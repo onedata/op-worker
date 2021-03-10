@@ -144,6 +144,7 @@ add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos_insecure(file_ctx:ctx()) -> fslogic_worker:provider_response().
 get_effective_file_qos_insecure(FileCtx) ->
+    % TODO VFS-7435 - Integrate hardlinks with QoS
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case file_qos:get_effective(FileUuid) of
         {ok, EffQos} ->

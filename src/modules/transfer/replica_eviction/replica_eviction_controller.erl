@@ -152,7 +152,7 @@ handle_cast(start_replica_eviction, State = #state{
     flush(),
     case replica_eviction_status:handle_active(TransferId) of
         {ok, _} ->
-            FileCtx = file_ctx:new_by_guid(FileGuid),
+            FileCtx = file_ctx:new_by_guid(FileGuid), % TODO VFS-7443 - maybe use effective guid?
             TransferParams = #transfer_params{
                 transfer_id = TransferId,
                 user_ctx = user_ctx:new(SessionId),

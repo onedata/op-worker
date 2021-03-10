@@ -218,7 +218,7 @@ generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
             create_storage_file(SDHandle, FileCtx4);
         {error, ?EEXIST} ->
             handle_eexists(VerifyDeletionLink, UserCtx, SDHandle, FileCtx3);
-         {error, ?EACCES} ->
+        {error, ?EACCES} ->
             % eacces is possible because there is race condition
             % on creating and chowning parent dir
             % for this reason it is acceptable to try chowning parent once
@@ -352,7 +352,7 @@ create_storage_file(SDHandle, FileCtx) ->
     FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx),
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     Mode = file_meta:get_mode(FileDoc),
-    case file_meta:get_type(FileDoc) of
+    case file_meta:get_effective_type(FileDoc) of
         ?REGULAR_FILE_TYPE ->
             case storage_driver:create(SDHandle, Mode) of
                 ok ->
@@ -399,9 +399,17 @@ create_missing_parent_dirs(UserCtx, FileCtx) ->
         true ->
             FileCtx;
         false ->
-            {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
-            create_missing_parent_dirs(UserCtx, ParentCtx, []),
-            FileCtx2
+            EffectiveFileCtx = file_ctx:ensure_effective_ctx(FileCtx),
+            case file_ctx:equals(FileCtx, EffectiveFileCtx) of
+                true -> % regular file - use provided ctx
+                    {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+                    create_missing_parent_dirs(UserCtx, ParentCtx, []),
+                    FileCtx2;
+                false -> % hardlink - use effective ctx and do not return changes on ctx
+                    {ParentCtx, _} = file_ctx:get_parent(EffectiveFileCtx, undefined),
+                    create_missing_parent_dirs(UserCtx, ParentCtx, []),
+                    FileCtx
+            end
     end.
 
 %%-------------------------------------------------------------------
@@ -510,7 +518,7 @@ mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
     file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 handle_eexists(VerifyDeletionLink, UserCtx, SDHandle, FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    case file_meta:get_type(FileDoc) of
+    case file_meta:get_effective_type(FileDoc) of
         ?REGULAR_FILE_TYPE -> handle_conflicting_file(VerifyDeletionLink, UserCtx, SDHandle, FileCtx);
         ?DIRECTORY_TYPE -> handle_conflicting_directory(FileCtx2)
     end.

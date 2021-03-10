@@ -51,6 +51,15 @@ change_replicated(SpaceId, Change) ->
 
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
+    value = #file_meta{deleted = Del1, type = ?HARDLINK_TYPE},
+    deleted = Del2
+} = FileDoc) when Del1 or Del2 ->
+    ?debug("change_replicated_internal: deleted hardlink file_meta ~p", [FileUuid]),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
+    fslogic_delete:handle_remotely_deleted_file(FileCtx),
+    ok;
+change_replicated_internal(SpaceId, #document{
+    key = FileUuid,
     value = #file_meta{mode = CurrentMode, deleted = Del1},
     deleted = Del2
 } = FileDoc) when Del1 or Del2 ->
@@ -68,6 +77,14 @@ change_replicated_internal(SpaceId, #document{
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
     ok = file_meta_posthooks:execute_hooks(FileUuid);
+change_replicated_internal(SpaceId, #document{
+    key = FileUuid,
+    deleted = false,
+    value = #file_meta{type = ?HARDLINK_TYPE}
+} = FileDoc) ->
+    ?debug("change_replicated_internal: changed hardlink file_meta ~p", [FileUuid]),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     deleted = false,

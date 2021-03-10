@@ -10,6 +10,9 @@
 %%% All hooks will be executed once upon the next change of file_meta
 %%% document associated with given file, then hooks list will be cleared.
 %%% Any exported function can be used as a hook.
+%%% Note: currently hooks are only triggered for directories. There are
+%%% no hardlinks to directories. When hooks on regular files are
+%%% introduced, consider usage of effective uuid.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_posthooks).

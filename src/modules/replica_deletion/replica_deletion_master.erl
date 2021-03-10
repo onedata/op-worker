@@ -86,7 +86,7 @@
 
 % message types
 -define(DELETION(FileUuid, ProviderId, Blocks, Version), #deletion{
-    uuid = FileUuid,
+    uuid = FileUuid, % TODO VFS-7443 - maybe use effective uuid?
     supporting_provider = ProviderId,
     blocks = Blocks,
     version = Version

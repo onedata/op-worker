@@ -139,7 +139,8 @@ aggregate(Statuses) ->
 report_traverse_start(TraverseId, FileCtx) ->
     {ok, case file_ctx:is_dir(FileCtx) of
         {true, FileCtx1} ->
-            {ok, _} = create(file_ctx:get_space_id_const(FileCtx), TraverseId, 
+            {ok, _} = create(file_ctx:get_space_id_const(FileCtx), TraverseId,
+                % TODO VFS-7435 - Integrate hardlinks with QoS
                 file_ctx:get_uuid_const(FileCtx), start_dir),
             FileCtx1;
         {false, FileCtx1} -> 

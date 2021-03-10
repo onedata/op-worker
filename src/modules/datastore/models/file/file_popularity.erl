@@ -6,7 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model tracking popularity of files
+%%% Model tracking popularity of files.
+%%% Note: this module operates on effective uuids - all operations on hardlinks
+%%% are treated as operations on original file. Thus, popularity of all hardlinks
+%%% pointing particular file ale counted together.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_popularity).
@@ -53,7 +56,7 @@ update_size(FileCtx, NewSize) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
             DefaultFilePopularity = empty_file_popularity(FileCtx),
             DefaultToCreate = #document{
                 key = FileUuid,
@@ -83,7 +86,7 @@ increment_open(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
             Diff = fun(FilePopularity) ->
                 {ok, increase_popularity(FileCtx, FilePopularity)}
             end,
@@ -108,7 +111,7 @@ increment_open(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get(file_meta:uuid()) -> {ok, doc()} | {error, term()}.
 get(FileUuid) ->
-    datastore_model:get(?CTX, FileUuid).
+    datastore_model:get(?CTX, fslogic_uuid:ensure_effective_uuid(FileUuid)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -117,7 +120,7 @@ get(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec delete(file_meta:uuid()) -> ok | {error, term()}.
 delete(FileUuid) ->
-    datastore_model:delete(?CTX, FileUuid).
+    datastore_model:delete(?CTX, fslogic_uuid:ensure_effective_uuid(FileUuid)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -126,7 +129,7 @@ delete(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec update(file_meta:uuid(), datastore_model:diff()) -> {ok, record()} | {error, term()}.
 update(FileUuid, Diff) ->
-    datastore_model:update(?CTX, FileUuid, Diff).
+    datastore_model:update(?CTX, fslogic_uuid:ensure_effective_uuid(FileUuid), Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -135,7 +138,7 @@ update(FileUuid, Diff) ->
 %%--------------------------------------------------------------------
 -spec get_or_default(file_ctx:ctx()) -> {ok, doc()} | {error, term()}.
 get_or_default(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
     case file_popularity:get(FileUuid) of
         {ok, Doc} ->
             {ok, Doc};
@@ -194,7 +197,7 @@ increase_popularity(FileCtx, FilePopularity) ->
 histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, FileCtx) ->
     {LocalSize, _FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
     #file_popularity{
-        file_uuid = file_ctx:get_uuid_const(FileCtx),
+        file_uuid = file_ctx:get_effective_uuid_const(FileCtx),
         space_id = file_ctx:get_space_id_const(FileCtx),
         size = LocalSize,
         open_count = time_slot_histogram:get_sum(MonthlyHistogram),

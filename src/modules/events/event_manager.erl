@@ -288,7 +288,7 @@ get_provider(Request, Manager) ->
         undefined ->
             self;
         {file, FileCtx} ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
+            FileGuid = file_ctx:get_guid_const(FileCtx), % TODO VFS-7448 - test production of events for hardlinks
             case get_from_memory(Manager, guid_to_provider, FileGuid) of
                 {ok, ID} ->
                     ID;

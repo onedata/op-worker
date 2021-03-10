@@ -7,6 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% API for files' extended attributes.
+%%% Note: this module bases on custom_metadata and as effect all operations
+%%% on hardlinks are treated as operations on original file (custom_metadata
+%%% is shared between hardlinks and original file).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(xattr).

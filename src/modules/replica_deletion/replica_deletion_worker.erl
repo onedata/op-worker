@@ -186,6 +186,7 @@ custom_predicate(SpaceId, JobType, JobId) ->
 -spec delete_if_not_opened(file_meta:uuid(), od_space:id(), [fslogic_blocks:blocks()], version_vector:version_vector(),
     replica_deletion:id(), replica_deletion:job_type(), replica_deletion:job_id()) -> any().
 delete_if_not_opened(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId) ->
+    % TODO VFS-7443 - work on original files for hardlinks
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     case file_handles:is_file_opened(FileUuid) of

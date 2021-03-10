@@ -412,15 +412,17 @@ translate_from_protobuf(#'FileRequest'{
         context_guid = ContextGuid,
         file_request = translate_from_protobuf(Record)
     };
-translate_from_protobuf(#'GetFileAttr'{include_replication_status = IRS}) ->
-    #get_file_attr{include_replication_status = IRS};
+translate_from_protobuf(#'GetFileAttr'{include_replication_status = IRS, include_link_count = ILC}) ->
+    #get_file_attr{include_replication_status = IRS, include_link_count = ILC};
 translate_from_protobuf(#'GetChildAttr'{
     name = Name,
-    include_replication_status = IRS
+    include_replication_status = IRS,
+    include_link_count = ILC
 }) ->
     #get_child_attr{
         name = Name,
-        include_replication_status = IRS
+        include_replication_status = IRS,
+        include_link_count = ILC
     };
 translate_from_protobuf(#'GetFileChildren'{
     offset = Offset,
@@ -438,13 +440,15 @@ translate_from_protobuf(#'GetFileChildrenAttrs'{
     offset = Offset,
     size = Size,
     index_token = Token,
-    include_replication_status = IRS
+    include_replication_status = IRS,
+    include_link_count = ILC
 }) ->
     #get_file_children_attrs{
         offset = Offset,
         size = Size,
         index_token = Token,
-        include_replication_status = IRS
+        include_replication_status = IRS,
+        include_link_count = ILC
     };
 translate_from_protobuf(#'CreateDir'{
     name = Name,
@@ -500,6 +504,22 @@ translate_from_protobuf(#'MakeFile'{
         name = Name,
         mode = Mode
     };
+translate_from_protobuf(#'MakeLink'{
+    target_parent_uuid = TargetParentGuid,
+    target_name = Name
+}) ->
+    #make_link{
+        target_parent_guid = TargetParentGuid,
+        target_name = Name
+    };
+translate_from_protobuf(#'MakeSymlink'{
+    target_name = TargetName,
+    link = Link
+}) ->
+    #make_symlink{
+        target_name = TargetName,
+        link = Link
+    };
 translate_from_protobuf(#'OpenFile'{flag = Flag}) ->
     #open_file{flag = open_flag_translate_from_protobuf(Flag)};
 translate_from_protobuf(#'OpenFileWithExtendedInfo'{flag = Flag}) ->
@@ -508,6 +528,8 @@ translate_from_protobuf(#'OpenFileWithExtendedInfo'{flag = Flag}) ->
     };
 translate_from_protobuf(#'GetFileLocation'{}) ->
     #get_file_location{};
+translate_from_protobuf(#'ReadSymlink'{}) ->
+    #read_symlink{};
 translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
     #release{handle_id = HandleId};
 translate_from_protobuf(#'Truncate'{size = Size}) ->
@@ -588,7 +610,8 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         provider_id = FileAttr#'FileAttr'.provider_id,
         shares = FileAttr#'FileAttr'.shares,
         owner_id = FileAttr#'FileAttr'.owner_id,
-        fully_replicated = FileAttr#'FileAttr'.fully_replicated
+        fully_replicated = FileAttr#'FileAttr'.fully_replicated,
+        nlink = FileAttr#'FileAttr'.nlink
     };
 translate_from_protobuf(#'FileChildren'{
     child_links = FileEntries,
@@ -694,6 +717,12 @@ translate_from_protobuf(#'FileOpened'{
 }) ->
     #file_opened{
         handle_id = HandleId
+    };
+translate_from_protobuf(#'Symlink'{
+    link = Link
+}) ->
+    #symlink{
+        link = Link
     };
 translate_from_protobuf(#'FileOpenedExtended'{
     handle_id = HandleId,
@@ -1491,13 +1520,15 @@ translate_to_protobuf(#get_file_children_attrs{
     offset = Offset,
     size = Size,
     index_token = Token,
-    include_replication_status = IRS
+    include_replication_status = IRS,
+    include_link_count = ILC
 }) ->
     {get_file_children_attrs, #'GetFileChildrenAttrs'{
         offset = Offset,
         size = Size,
         index_token = Token,
-        include_replication_status = IRS
+        include_replication_status = IRS,
+        include_link_count = ILC
     }};
 translate_to_protobuf(#create_dir{
     name = Name,
@@ -1549,6 +1580,22 @@ translate_to_protobuf(#make_file{
         name = Name,
         mode = Mode
     }};
+translate_to_protobuf(#make_link{
+    target_parent_guid = TargetParentGuid,
+    target_name = Name
+}) ->
+    {make_link, #'MakeLink'{
+        target_parent_uuid = TargetParentGuid,
+        target_name = Name
+    }};
+translate_to_protobuf(#make_symlink{
+    target_name = TargetName,
+    link = Link
+}) ->
+    {make_symlink, #'MakeSymlink'{
+        target_name = TargetName,
+        link = Link
+    }};
 translate_to_protobuf(#open_file{flag = Flag}) ->
     {open_file, #'OpenFile'{
         flag = open_flag_translate_to_protobuf(Flag)}
@@ -1559,6 +1606,8 @@ translate_to_protobuf(#open_file_with_extended_info{flag = Flag}) ->
     };
 translate_to_protobuf(#get_file_location{}) ->
     {get_file_location, #'GetFileLocation'{}};
+translate_to_protobuf(#read_symlink{}) ->
+    {read_symlink, #'ReadSymlink'{}};
 translate_to_protobuf(#release{handle_id = HandleId}) ->
     {release, #'Release'{handle_id = HandleId}};
 translate_to_protobuf(#truncate{size = Size}) ->
@@ -1628,7 +1677,8 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         provider_id = FileAttr#file_attr.provider_id,
         shares = FileAttr#file_attr.shares,
         owner_id = FileAttr#file_attr.owner_id,
-        fully_replicated = FileAttr#file_attr.fully_replicated
+        fully_replicated = FileAttr#file_attr.fully_replicated,
+        nlink = FileAttr#file_attr.nlink
     }};
 translate_to_protobuf(#file_children{
     child_links = FileEntries,
@@ -1743,6 +1793,12 @@ translate_to_protobuf(#file_opened{
 }) ->
     {file_opened, #'FileOpened'{
         handle_id = HandleId
+    }};
+translate_to_protobuf(#symlink{
+    link = Link
+}) ->
+    {symlink, #'Symlink'{
+        link = Link
     }};
 translate_to_protobuf(#file_opened_extended{} = Record) ->
     {file_opened_extended, #'FileOpenedExtended'{

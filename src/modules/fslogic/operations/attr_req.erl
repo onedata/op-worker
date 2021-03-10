@@ -21,12 +21,12 @@
 
 %% API
 -export([
-    get_file_attr/3, get_file_attr_insecure/3,
+    get_file_attr/4, get_file_attr_insecure/3,
     get_file_attr_and_conflicts_insecure/3,
 
     get_file_details/2, get_file_details_insecure/3,
 
-    get_child_attr/4, chmod/3, update_times/5,
+    get_child_attr/5, chmod/3, update_times/5,
     chmod_attrs_only_insecure/2,
 
     get_fs_stats/2
@@ -49,7 +49,10 @@
     name_conflicts_resolution_policy => name_conflicts_resolution_policy(),
 
     % Tells whether replication status should be included in answer
-    include_replication_status => boolean()
+    include_replication_status => boolean(),
+
+    % Tells whether hardlink count should be included in answer
+    include_link_count => boolean()
 }.
 
 -export_type([name_conflicts_resolution_policy/0, compute_file_attr_opts/0]).
@@ -75,9 +78,9 @@
 %% @equiv get_file_attr_insecure/3 with permission checks and default options
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
+-spec get_file_attr(user_ctx:ctx(), file_ctx:ctx(), boolean(), boolean()) ->
     fslogic_worker:fuse_response().
-get_file_attr(UserCtx, FileCtx0, IncludeReplicationStatus) ->
+get_file_attr(UserCtx, FileCtx0, IncludeReplicationStatus, IncludeLinkCount) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
     ),
@@ -85,7 +88,8 @@ get_file_attr(UserCtx, FileCtx0, IncludeReplicationStatus) ->
         allow_deleted_files => false,
         include_size => true,
         name_conflicts_resolution_policy => resolve_name_conflicts,
-        include_replication_status => IncludeReplicationStatus
+        include_replication_status => IncludeReplicationStatus,
+        include_link_count => IncludeLinkCount
     }).
 
 
@@ -170,13 +174,13 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
-    Name :: file_meta:name(), boolean()) -> fslogic_worker:fuse_response().
-get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus) ->
+    Name :: file_meta:name(), boolean(), boolean()) -> fslogic_worker:fuse_response().
+get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus, IncludeLinkCount) ->
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [traverse_ancestors, ?traverse_container]
     ),
-    get_child_attr_insecure(UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus).
+    get_child_attr_insecure(UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus, IncludeLinkCount).
 
 
 %%--------------------------------------------------------------------
@@ -235,10 +239,10 @@ get_fs_stats(UserCtx, FileCtx0) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr_insecure(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
-    Name :: file_meta:name(), boolean()) -> fslogic_worker:fuse_response().
-get_child_attr_insecure(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus) ->
+    Name :: file_meta:name(), boolean(), boolean()) -> fslogic_worker:fuse_response().
+get_child_attr_insecure(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus, IncludeLinkCount) ->
     {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserCtx),
-    Response = attr_req:get_file_attr(UserCtx, ChildFileCtx, IncludeReplicationStatus),
+    Response = attr_req:get_file_attr(UserCtx, ChildFileCtx, IncludeReplicationStatus, IncludeLinkCount),
     ensure_proper_file_name(Response, Name).
 
 
@@ -285,7 +289,7 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 -spec chmod_attrs_only_insecure(file_ctx:ctx(),
     fslogic_worker:posix_permissions()) -> ok | {error, term()}.
 chmod_attrs_only_insecure(FileCtx, Mode) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
     ok = file_meta:update_mode(FileUuid, Mode),
     ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx),
@@ -354,6 +358,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
             file_ctx:get_file_doc(FileCtx)
     end,
     Type = file_meta:get_type(FileDoc),
+    EffectiveType = file_meta:get_effective_type(FileDoc),
 
     {{ATime, CTime, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
     {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
@@ -362,13 +367,17 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         undefined -> get_private_attrs(UserCtx, FileCtx4, FileDoc);
         _ -> get_masked_private_attrs(ShareId, FileCtx4, FileDoc)
     end,
+
     {ReplicationStatus, Size, FileCtx6} =
-        case {Type, maps:get(include_replication_status, Opts, false), maps:get(include_size, Opts, true)} of
+        case {EffectiveType, maps:get(include_replication_status, Opts, false), maps:get(include_size, Opts, true)} of
             {?REGULAR_FILE_TYPE, true, true} ->
                 file_ctx:get_replication_status_and_size(FileCtx5);
             {?REGULAR_FILE_TYPE, true, _} ->
                 {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx5),
                 {RS, undefined, Ctx};
+            {?SYMLINK_TYPE, _, true} ->
+                {ok, Symlink} = file_meta_symlinks:get_symlink(FileDoc),
+                {undefined, byte_size(Symlink), FileCtx5};
             {_, _, true} ->
                 {S, Ctx} = file_ctx:get_file_size(FileCtx5),
                 {undefined, S, Ctx};
@@ -379,6 +388,13 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         UserCtx, FileDoc, FileCtx6, ParentGuid,
         maps:get(name_conflicts_resolution_policy, Opts, resolve_name_conflicts)
     ),
+
+    {ok, LinksCount} = case maps:get(include_link_count, Opts, false) of
+        true ->
+            file_ctx:get_reference_count_const(FileCtx7);
+        _ ->
+            {ok, undefined}
+    end,
 
     FileAttr = #file_attr{
         guid = FileGuid,
@@ -395,7 +411,8 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         shares = Shares,
         provider_id = ProviderId,
         owner_id = OwnerId,
-        fully_replicated = ReplicationStatus
+        fully_replicated = ReplicationStatus,
+        nlink = LinksCount
     },
     {FileAttr, FileDoc, ConflictingFiles, FileCtx7}.
 

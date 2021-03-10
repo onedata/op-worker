@@ -79,7 +79,7 @@ reconcile_file_for_qos_entries(_FileCtx, []) ->
 reconcile_file_for_qos_entries(FileCtx, QosEntries) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     TaskId = datastore_key:new(),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx), % TODO VFS-7435 - Integrate hardlinks with QoS
     Options = #{
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,

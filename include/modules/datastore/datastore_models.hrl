@@ -376,13 +376,15 @@
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
-    acl = [] :: acl:acl(),
-    owner :: od_user:id(),
+    acl = [] :: acl:acl(), % VFS-7437 Handle conflict resolution similarly to hardlinks
+    owner :: undefined | od_user:id(), % undefined for hardlink doc
     is_scope = false :: boolean(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
-    shares = [] :: [od_share:id()],
+    shares = [] :: [od_share:id()], % VFS-7437 Handle conflict resolution similarly to hardlinks
     deleted = false :: boolean(),
-    parent_uuid :: undefined | file_meta:uuid()
+    parent_uuid :: undefined | file_meta:uuid(),
+    hardlinks = #{} :: file_meta_hardlinks:hardlinks_map(),
+    symlink :: undefined | file_meta_symlinks:symlink()
 }).
 
 

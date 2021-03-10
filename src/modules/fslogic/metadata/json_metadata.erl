@@ -14,6 +14,10 @@
 %%% other xattrs)
 %%% - Filters, that is path under/from which json metadata should be
 %%% set/fetched.
+%%% Note: this module bases on custom_metadata and as effect all operations
+%%% on hardlinks are treated as operations on original file (custom_metadata
+%%% is shared between hardlinks and original file). Thus, use of 'inherited'
+%%% flag on hardlink results in usage of ancestors of original file.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(json_metadata).
@@ -31,7 +35,6 @@
 %%% API
 %%%===================================================================
 
-
 -spec get(
     user_ctx:ctx(),
     file_ctx:ctx(),
@@ -42,7 +45,8 @@
 get(UserCtx, FileCtx, Query, Inherited) ->
     Result = case Inherited of
         true ->
-            case gather_ancestors_json_metadata(UserCtx, FileCtx, []) of
+            % Note: usage of original file ancestors for hardlink.
+            case gather_ancestors_json_metadata(UserCtx, file_ctx:ensure_effective_ctx(FileCtx), []) of
                 {ok, []} ->
                     ?ERROR_NOT_FOUND;
                 {ok, GatheredJsons} ->
@@ -140,7 +144,7 @@ get_direct_json_metadata(UserCtx, FileCtx0) ->
     {ok, file_meta:uuid()} | {error, term()}.
 set_insecure(FileCtx, JsonToInsert, Query, Create, Replace) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, FileObjectId} = file_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
+    {ok, FileObjectId} = file_id:guid_to_objectid(file_ctx:get_effective_guid_const(FileCtx)),
     ToCreate = #document{
         key = FileUuid,
         value = #custom_metadata{

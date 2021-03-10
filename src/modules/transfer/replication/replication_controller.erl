@@ -154,7 +154,7 @@ handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
 ) ->
     case replication_status:handle_enqueued(TransferId) of
         {ok, _} ->
-            FileCtx = file_ctx:new_by_guid(FileGuid),
+            FileCtx = file_ctx:new_by_guid(FileGuid), % TODO VFS-7443 - maybe use effective guid?
             TransferParams = #transfer_params{
                 transfer_id = TransferId,
                 user_ctx = user_ctx:new(SessionId),

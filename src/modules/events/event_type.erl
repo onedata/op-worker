@@ -13,7 +13,9 @@
 -author("Krzysztof Trzepla").
 
 -include("modules/events/definitions.hrl").
+-include("modules/events/routing.hrl").
 -include("modules/monitoring/events.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_routing_key/2, get_attr_routing_keys/2, get_replica_status_routing_keys/2,
@@ -41,25 +43,40 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_routing_key(Evt :: event:base() | event:type(), RoutingCtx :: routing_ctx()) ->
-    {ok, Key :: subscription_manager:key()} |
-    {ok, Key :: subscription_manager:key(), od_space:id()} | {error, session_only}.
+    {ok, subscription_manager:event_routing_keys()} | {error, session_only}.
 get_routing_key(#event{type = Type}, RoutingCtx) ->
     get_routing_key(Type, RoutingCtx);
 get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingCtx) ->
-    get_parent_connected_routing_key(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingCtx);
+    {ok, check_hardlinks_and_get_parent_connected_routing_key(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingCtx)};
 get_routing_key(#file_location_changed_event{file_location = FileLocation}, _RoutingCtx) ->
-    {ok, <<"file_location_changed.", (FileLocation#file_location.uuid)/binary>>};
+    FileUuid = FileLocation#file_location.uuid,
+    {ok, References} = file_meta_hardlinks:get_references(fslogic_uuid:ensure_effective_uuid(FileUuid)),
+    AdditionalKeys = lists:map(fun(Uuid) ->
+        {Uuid, <<"file_location_changed.", Uuid/binary>>}
+    end, References -- [FileUuid]),
+    {ok, #event_routing_keys{
+        main_key = <<"file_location_changed.", FileUuid/binary>>,
+        additional_keys = AdditionalKeys
+    }};
 get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, _RoutingCtx) ->
-    Uuid = file_id:guid_to_uuid(FileGuid),
-    {ok, <<"file_perm_changed.", Uuid/binary>>};
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    {ok, References} = file_meta_hardlinks:get_references(fslogic_uuid:ensure_effective_uuid(FileUuid)),
+    AdditionalKeys = lists:map(fun(Uuid) ->
+        {file_id:pack_guid(Uuid, SpaceId), <<"file_perm_changed.", Uuid/binary>>}
+    end, References -- [FileUuid]),
+    {ok, #event_routing_keys{
+        main_key = <<"file_perm_changed.", FileUuid/binary>>,
+        additional_keys = AdditionalKeys
+    }};
 get_routing_key(#file_removed_event{file_guid = FileGuid}, RoutingCtx) ->
-    get_parent_connected_routing_key(<<"file_removed.">>, FileGuid, RoutingCtx);
+    {ok, get_parent_connected_routing_key(<<"file_removed.">>, FileGuid, RoutingCtx)};
 get_routing_key(#file_renamed_event{top_entry = Entry}, RoutingCtx) ->
-    get_parent_connected_routing_key(<<"file_renamed.">>, Entry#file_renamed_entry.old_guid, RoutingCtx);
+    {ok, get_parent_connected_routing_key(<<"file_renamed.">>, Entry#file_renamed_entry.old_guid, RoutingCtx)};
 get_routing_key(#quota_exceeded_event{}, _RoutingCtx) ->
-    {ok, <<"quota_exceeded">>};
+    {ok, #event_routing_keys{main_key = <<"quota_exceeded">>}};
 get_routing_key(#helper_params_changed_event{storage_id = StorageId}, _RoutingCtx) ->
-    {ok, <<"helper_params_changed.", StorageId/binary>>};
+    {ok, #event_routing_keys{main_key = <<"helper_params_changed.", StorageId/binary>>}};
 get_routing_key(_, _) ->
     {error, session_only}.
 
@@ -71,11 +88,10 @@ get_routing_key(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_attr_routing_keys(Guid :: fslogic_worker:file_guid(), RoutingCtx :: routing_ctx()) ->
-    [{ok, Key :: subscription_manager:key()} |
-    {ok, Key :: subscription_manager:key(), od_space:id()} | {error, session_only}].
+    {subscription_manager:event_routing_keys(), subscription_manager:event_routing_keys()}.
 get_attr_routing_keys(Guid, RoutingCtx) ->
-    [get_parent_connected_routing_key(<<"file_attr_changed.">>, Guid, RoutingCtx),
-        get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx)].
+    {check_hardlinks_and_get_parent_connected_routing_key(<<"file_attr_changed.">>, Guid, RoutingCtx),
+        check_hardlinks_and_get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,10 +101,9 @@ get_attr_routing_keys(Guid, RoutingCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_replica_status_routing_keys(Guid :: fslogic_worker:file_guid(), RoutingCtx :: routing_ctx()) ->
-    {ok, Key :: subscription_manager:key()} |
-    {ok, Key :: subscription_manager:key(), od_space:id()} | {error, session_only}.
+    subscription_manager:event_routing_keys().
 get_replica_status_routing_keys(Guid, RoutingCtx) ->
-    get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx).
+    check_hardlinks_and_get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -222,24 +237,58 @@ update_context(Evt, _Ctx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Gets routing keys for events where it bases on file's parent guid or routing information.
+%% If file has hardlinks, several keys inside record can be returned.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_hardlinks_and_get_parent_connected_routing_key(binary(), fslogic_worker:file_guid(), routing_ctx()) ->
+    subscription_manager:event_routing_keys().
+check_hardlinks_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx} = Ctx) ->
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    % TODO VFS-7444 - maybe check type and do not get references for dir?
+    {ok, References} = file_ctx:get_references_const(FileCtx),
+    BasicAns = get_parent_connected_routing_key(Prefix, FileGuid, Ctx),
+    AdditionalKeys = lists:foldl(fun(Uuid, Acc) ->
+            try
+                Guid = file_id:pack_guid(Uuid, SpaceId),
+                AnsForGuid = get_parent_connected_routing_key(Prefix, Guid, undefined),
+                [{Guid, AnsForGuid#event_routing_keys.main_key} | Acc]
+            catch
+                Error:Reason ->
+                    % It is possible that some documents for additional keys are not found
+                    % (e.g. race with delete)
+                    ?debug("error getting parent connected key ~p:~p for uuid ~p", [Error, Reason, Uuid]),
+                    Acc
+            end
+        end, [], References -- [file_ctx:get_uuid_const(FileCtx)]),
+    BasicAns#event_routing_keys{additional_keys = AdditionalKeys};
+check_hardlinks_and_get_parent_connected_routing_key(Prefix, FileGuid, _) ->
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    check_hardlinks_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx => FileCtx}).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Gets routing key for events where it bases on file's parent guid or routing information.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent_connected_routing_key(binary(), fslogic_worker:file_guid(), routing_ctx()) ->
-    {ok, Key :: subscription_manager:key()} |
-    % If event is connected with space directory, space id is added to response to filter subscribers
-    {ok, Key :: subscription_manager:key(), od_space:id()} | {error, session_only}.
+    subscription_manager:event_routing_keys().
 get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx, parent := Parent}) ->
     case {Parent, file_ctx:is_space_dir_const(FileCtx)} of
         {undefined, _} -> % for user's dir parent is undefined (it has no parent)
             Uuid = file_id:guid_to_uuid(FileGuid),
-            {ok, <<Prefix/binary, Uuid/binary>>};
+            #event_routing_keys{main_key = <<Prefix/binary, Uuid/binary>>};
         {_, true} ->
             Uuid = file_id:guid_to_uuid(Parent),
-            {ok, <<Prefix/binary, Uuid/binary>>, file_ctx:get_space_id_const(FileCtx)};
+            #event_routing_keys{
+                main_key = <<Prefix/binary, Uuid/binary>>,
+                filter = file_ctx:get_space_id_const(FileCtx)
+            };
         _ ->
             Uuid = file_id:guid_to_uuid(Parent),
-            {ok, <<Prefix/binary, Uuid/binary>>}
+            #event_routing_keys{main_key = <<Prefix/binary, Uuid/binary>>}
     end;
 get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx}) ->
     {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),

@@ -118,7 +118,7 @@ start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs) ->
 -spec start_traverse(file_ctx:ctx(), qos_entry:id(), storage:id(), traverse:id()) -> ok.
 start_traverse(FileCtx, QosEntryId, StorageId, TaskId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx), % TODO VFS-7435 - Integrate hardlinks with QoS
     ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId, StorageId),
     case lookup_file_meta_doc(FileCtx) of
         {ok, FileCtx1} ->

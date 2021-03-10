@@ -102,7 +102,7 @@ reconcile_qos(FileUuid, SpaceId) ->
     when Option :: ignore_missing_files.
 reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
     {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    FileUuid = file_ctx:get_uuid_const(FileCtx1), % TODO VFS-7435 - Integrate hardlinks with QoS
     SpaceId = file_ctx:get_space_id_const(FileCtx1),
     case file_qos:get_effective(FileUuid) of
         {error, {file_meta_missing, MissingUuid}} ->

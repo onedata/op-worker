@@ -11,6 +11,7 @@
 -module(fslogic_event_emitter).
 -author("Krzysztof Trzepla").
 
+-include("modules/events/routing.hrl").
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/server_messages.hrl").
@@ -25,6 +26,7 @@
     emit_file_perm_changed/1, emit_file_removed/2,
     emit_file_renamed_no_exclude/5, emit_file_renamed_to_client/5, emit_quota_exceeded/0,
     emit_helper_params_changed/1]).
+-export([multiply_event/2]).
 
 %%%===================================================================
 %%% API
@@ -87,15 +89,30 @@ emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, ExcludedSes
         {#document{}, FileCtx2} ->
             case subscription_manager:get_attr_event_subscribers(
                 file_ctx:get_guid_const(FileCtx2), #{file_ctx => FileCtx2}, SizeChanged) of
-                [{ok, WithoutStatusSessIds}, {ok, WithStatusSessIds}] ->
+                {
+                    #event_subscribers{
+                        subscribers = WithoutStatusSessIds,
+                        subscribers_for_hardlinks = WithoutStatusSessIdsProplist
+                    },
+                    #event_subscribers{
+                        subscribers = WithStatusSessIds,
+                        subscribers_for_hardlinks = WithStatusSessIdsProplist
+                    }
+                } ->
                     emit_file_attr_changed_with_replication_status_internal(FileCtx2,
-                        WithoutStatusSessIds -- ExcludedSessions, WithStatusSessIds -- ExcludedSessions);
-                [{ok, WithStatusSessIds}] ->
-                    emit_file_attr_changed_with_replication_status_internal(FileCtx2, [],
-                        WithStatusSessIds -- ExcludedSessions);
-                [{error, Reason}, _] ->
+                        WithoutStatusSessIds -- ExcludedSessions, WithStatusSessIds -- ExcludedSessions),
+                    WithStatusSessIdsMap = maps:from_list(WithStatusSessIdsProplist),
+                    lists:foreach(fun({Guid, SessIds}) ->
+                        emit_file_attr_changed_with_replication_status_internal(file_ctx:new_by_guid(Guid),
+                            SessIds, maps:get(Guid, WithStatusSessIdsMap, []))
+                    end, WithoutStatusSessIdsProplist),
+                    lists:foreach(fun({Guid, SessIds}) ->
+                        emit_file_attr_changed_with_replication_status_internal(file_ctx:new_by_guid(Guid),
+                            [], SessIds)
+                    end, WithStatusSessIdsProplist -- WithoutStatusSessIdsProplist);
+                {{error, Reason}, _} ->
                     {error, Reason};
-                [_, {error, Reason2}] ->
+                {_, {error, Reason2}} ->
                     {error, Reason2}
             end;
         Other ->
@@ -264,6 +281,39 @@ emit_helper_params_changed(StorageId) ->
     event:emit(#helper_params_changed_event{
         storage_id = StorageId
     }).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new event on the basis of existing one and new guid/uuid that is base for multiplication.
+%% For #file_location_changed_event{} uuid should be used, guid for other events.
+%% @end
+%%--------------------------------------------------------------------
+-spec multiply_event(event:type(), file_id:file_guid() | file_meta:uuid()) -> event:type().
+multiply_event(#file_perm_changed_event{} = Event, NewGuid) ->
+    Event#file_perm_changed_event{file_guid = NewGuid};
+multiply_event(#file_location_changed_event{file_location = FileLocation} = Event, NewUuid) ->
+    Event#file_location_changed_event{file_location = FileLocation#file_location{uuid = NewUuid}};
+multiply_event(#file_attr_changed_event{file_attr = FileAttr} = Event, NewGuid) ->
+    FileCtx = file_ctx:new_by_guid(NewGuid),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {#document{value = #file_meta{
+        name = Name,
+        parent_uuid = ParentUuid,
+        type = Type,
+        provider_id = ProviderId
+    }}, _FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    UpdatedFileAttr = FileAttr#file_attr{
+        guid = NewGuid,
+        name = Name,
+        parent_guid = file_id:pack_guid(ParentUuid, SpaceId),
+        type = Type,
+        provider_id = ProviderId
+    },
+    Event#file_attr_changed_event{file_attr = UpdatedFileAttr};
+multiply_event(Event, _) ->
+    ?error("Trying to multiply event ~p of type that cannot be multiplied", [Event]),
+    throw(not_supported_event_multiplication).
+
 
 %%%===================================================================
 %%% Internal functions

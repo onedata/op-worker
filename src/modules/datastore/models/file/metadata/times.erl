@@ -6,6 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc Model for holding files' times.
+%%% Note: this module operates on effective uuids - all operations on hardlinks
+%%% are treated as operations on original file. Thus, all hardlinks pointing on
+%%% the same file share single times document.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(times).
@@ -20,8 +23,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([get_or_default/1, save/1, get/1, exists/1, delete/1, update/2, create/1,
-    create_or_update/2, save/5]).
+-export([get_or_default/1, save/1, get/1, delete/1, create_or_update/2, save/5]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -86,26 +88,9 @@ save(FileUuid, SpaceId, ATime, MTime, CTime) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save(doc()) -> {ok, key()} | {error, term()}.
-save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates permission cache.
-%% @end
-%%--------------------------------------------------------------------
--spec update(key(), diff()) -> {ok, key()} | {error, term()}.
-update(FileUuid, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, FileUuid, Diff)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates permission cache.
-%% @end
-%%--------------------------------------------------------------------
--spec create(doc()) -> {ok, key()} | {error, term()}.
-create(Doc) ->
-    ?extract_key(datastore_model:create(?CTX, Doc)).
+save(#document{key = Key} = Doc) ->
+    ?extract_key(datastore_model:save(?CTX#{generated_key => true},
+        Doc#document{key = fslogic_uuid:ensure_effective_uuid(Key)})).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -116,7 +101,7 @@ create(Doc) ->
 -spec create_or_update(doc(), diff()) ->
     {ok, key()} | {error, term()}.
 create_or_update(#document{key = Key, value = Default}, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff, Default)).
+    ?extract_key(datastore_model:update(?CTX, fslogic_uuid:ensure_effective_uuid(Key), Diff, Default)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,8 +109,8 @@ create_or_update(#document{key = Key, value = Default}, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(key()) -> {ok, doc()} | {error, term()}.
-get(FileUuid) ->
-    datastore_model:get(?CTX, FileUuid).
+get(Uuid) ->
+    datastore_model:get(?CTX, fslogic_uuid:ensure_effective_uuid(Uuid)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -134,17 +119,7 @@ get(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec delete(key()) -> ok | {error, term()}.
 delete(FileUuid) ->
-    datastore_model:delete(?CTX, FileUuid).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether permission cache exists.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(key()) -> boolean().
-exists(FileUuid) ->
-    {ok, Exists} = datastore_model:exists(?CTX, FileUuid),
-    Exists.
+    datastore_model:delete(?CTX, fslogic_uuid:ensure_effective_uuid(FileUuid)).
 
 %%%===================================================================
 %%% datastore_model callbacks

@@ -599,7 +599,7 @@ try_to_delete_file(ParentCtx, ChildName) ->
             SpaceId = file_ctx:get_space_id_const(ParentCtx),
             case canonical_path:to_uuid(ParentUuid, ChildName) of
                 {ok, FileUuid} ->
-                    file_meta_links:delete(ParentUuid, SpaceId, ChildName, FileUuid);
+                    file_meta_datastore_links:delete(ParentUuid, SpaceId, ChildName, FileUuid);
                 {error, not_found} ->
                     ok
             end
@@ -758,7 +758,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
                             ?warning(
                                 "Stalled file_meta link ~p from parent ~p pointing to uuid ~p detected. "
                                 "The link will be deleted", [FileName, ParentUuid, FileUuid2]),
-                            ok = file_meta_links:delete(ParentUuid, SpaceId, FileName, FileUuid2),
+                            ok = file_meta_datastore_links:delete(ParentUuid, SpaceId, FileName, FileUuid2),
                             stalled_link;
                         false ->
                             % FileUuid2 was found in a remote links tree.

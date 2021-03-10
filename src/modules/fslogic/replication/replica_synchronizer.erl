@@ -9,6 +9,8 @@
 %%% Creates a process per FileGuid/SessionId that handles remote file
 %%% synchronization by *this user* (more specifically: this session),
 %%% for *this file*.
+%%% Note: this module operates on effective uuids. Synchronizer is always
+%%% created for original file, event if hardlink ctx is provided in argument.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(replica_synchronizer).
@@ -335,8 +337,9 @@ apply_or_run_locally(Uuid, InCacheFun, ApplyOnCacheFun, FallbackFun) ->
 -spec apply_if_alive_no_check(file_meta:uuid(), term()) ->
     term().
 apply_if_alive_no_check(Uuid, FunOrMsg) ->
-    Node = datastore_key:any_responsible_node(Uuid),
-    rpc:call(Node, ?MODULE, apply_if_alive_internal, [Uuid, FunOrMsg]).
+    EffectiveUuid = fslogic_uuid:ensure_effective_uuid(Uuid),
+    Node = datastore_key:any_responsible_node(EffectiveUuid),
+    rpc:call(Node, ?MODULE, apply_if_alive_internal, [EffectiveUuid, FunOrMsg]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -347,9 +350,9 @@ apply_if_alive_no_check(Uuid, FunOrMsg) ->
 -spec apply_no_check(file_ctx:ctx(), term()) ->
     term().
 apply_no_check(FileCtx, FunOrMsg) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
-    Node = datastore_key:any_responsible_node(Uuid),
-    rpc:call(Node, ?MODULE, apply_internal, [FileCtx, FunOrMsg]).
+    {EffectiveUuid, EffectiveFileCtx} = file_ctx:ensure_effective_and_get_uuid(FileCtx),
+    Node = datastore_key:any_responsible_node(EffectiveUuid),
+    rpc:call(Node, ?MODULE, apply_internal, [EffectiveFileCtx, FunOrMsg]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -360,8 +363,9 @@ apply_no_check(FileCtx, FunOrMsg) ->
 -spec apply_or_run_locally_no_check(file_meta:uuid(), fun(() -> term()), fun(() -> term())) ->
     term().
 apply_or_run_locally_no_check(Uuid, Fun, FallbackFun) ->
-    Node = datastore_key:any_responsible_node(Uuid),
-    rpc:call(Node, ?MODULE, apply_or_run_locally_internal, [Uuid, Fun, FallbackFun]).
+    EffectiveUuid = fslogic_uuid:ensure_effective_uuid(Uuid),
+    Node = datastore_key:any_responsible_node(EffectiveUuid),
+    rpc:call(Node, ?MODULE, apply_or_run_locally_internal, [EffectiveUuid, Fun, FallbackFun]).
 
 %%%===================================================================
 %%% Apply and start functions helpers
@@ -500,13 +504,13 @@ get_process(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec init_or_return_existing(file_ctx:ctx()) -> no_return() | normal.
 init_or_return_existing(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {Pid, _} = gproc:reg_or_locate({n, l, FileUuid}),
+    {EffectiveUuid, EffectiveFileCtx} = file_ctx:ensure_effective_and_get_uuid(FileCtx),
+    {Pid, _} = gproc:reg_or_locate({n, l, EffectiveUuid}),
     ok = proc_lib:init_ack({ok, Pid}),
     % TODO VFS-6389 - check race with node changing
     case self() of
         Pid ->
-            {ok, State, Timeout} = init(FileCtx),
+            {ok, State, Timeout} = init(EffectiveFileCtx),
             gen_server2:enter_loop(?MODULE, [], State, Timeout);
         _ ->
             normal
@@ -518,9 +522,10 @@ init_or_return_existing(FileCtx) ->
 
 -spec init(file_ctx:ctx()) -> {ok, #state{}, Timeout :: non_neg_integer()}.
 init(FileCtx) ->
-    fslogic_cache:init(file_ctx:get_uuid_const(FileCtx)),
+    {EffectiveUuid, EffectiveFileCtx} = file_ctx:ensure_effective_and_get_uuid(FileCtx),
+    fslogic_cache:init(EffectiveUuid),
     {ok, #state{
-        file_ctx = FileCtx,
+        file_ctx = EffectiveFileCtx,
         in_progress = ordsets:new()
     }, ?DIE_AFTER}.
 

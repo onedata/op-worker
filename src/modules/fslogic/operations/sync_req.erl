@@ -233,7 +233,7 @@ schedule_file_replication_insecure(
     Callback, ViewName, QueryViewParams
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx), % TODO VFS-7443 - effective or not? - test for hardlinks
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
         TargetProviderId, Callback, ViewName, QueryViewParams),
     #provider_response{

@@ -32,6 +32,8 @@
 
     get_file_location/3,
     create/3, create/4, create/5,
+    make_link/4, make_link/5,
+    make_symlink/4, make_symlink/5, read_symlink/3,
     create_and_open/3, create_and_open/4, create_and_open/5,
     open/4,
     close/2, close_all/1,
@@ -253,6 +255,12 @@ get_file_location(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_location(SessId, uuid_to_guid(Worker, FileKey))).
 
 
+-spec read_symlink(node(), session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, file_meta_symlinks:symlink()} | lfm:error_reply().
+read_symlink(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:read_symlink(SessId, uuid_to_guid(Worker, FileKey))).
+
+
 -spec create(node(), session:id(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(Worker, SessId, FilePath) ->
@@ -270,6 +278,29 @@ create(Worker, SessId, FilePath, Mode) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(Worker, SessId, ParentGuid, Name, Mode) ->
     ?EXEC(Worker, lfm:create(SessId, ParentGuid, Name, Mode)).
+
+
+-spec make_link(node(), session:id(), file_meta:path(), fslogic_worker:file_guid()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_link(Worker, SessId, LinkPath, FileGuid) ->
+    ?EXEC(Worker, lfm:make_link(SessId, LinkPath, FileGuid)).
+
+-spec make_link(node(), session:id(), fslogic_worker:file_guid_or_path(),
+    fslogic_worker:file_guid(), file_meta:name()) -> {ok, #file_attr{}} | lfm:error_reply().
+make_link(Worker, SessId, FileKey, TargetParentGuid, Name) ->
+    ?EXEC(Worker, lfm:make_link(SessId, FileKey, TargetParentGuid, Name)).
+
+
+-spec make_symlink(node(), session:id(), LinkPath :: file_meta:path(), LinkTarget :: file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(Worker, SessId, LinkPath, LinkTarget) ->
+    ?EXEC(Worker, lfm:make_symlink(SessId, LinkPath, LinkTarget)).
+
+-spec make_symlink(node(), session:id(), ParentKey :: fslogic_worker:file_guid_or_path(),
+    Name :: file_meta:name(), LinkTarget :: file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(Worker, SessId, ParentKey, Name, Link) ->
+    ?EXEC(Worker, lfm:make_symlink(SessId, ParentKey, Name, Link)).
 
 
 -spec create_and_open(node(), session:id(), file_meta:path()) ->

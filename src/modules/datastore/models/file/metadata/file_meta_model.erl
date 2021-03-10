@@ -214,6 +214,29 @@ get_record_struct(10) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string}
+    ]};
+get_record_struct(11) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        % field group_owner has been deleted in this version
+        {is_scope, boolean},
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string},
+        % New fields:
+        {hardlinks, #{string => [string]}},
+        {symlink, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -278,6 +301,13 @@ upgrade_record(9, {
 }) ->
     {10, {?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid
+    }};
+upgrade_record(10, {
+    ?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, _GroupOwner, IsScope,
+    ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {11, {?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid, #{}, undefined
     }}.
 
 
@@ -310,7 +340,18 @@ resolve_conflict(_Ctx,
             ok
     end,
 
-    default.
+    case file_meta_hardlinks:merge_hardlinks_maps(NewDoc, PrevDoc) of
+        not_mutated ->
+            default;
+        {mutated, MergedHardlinksMap} ->
+            #document{revs = [NewRev | _]} = NewDoc,
+            #document{revs = [PrevlRev | _]} = PrevDoc,
+            DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevlRev) of
+                true -> NewDoc;
+                false -> PrevDoc
+            end,
+            {true, DocBase#document{value = RecordBase#file_meta{hardlinks = MergedHardlinksMap}}}
+    end.
 
 
 

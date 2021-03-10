@@ -83,4 +83,7 @@
 % Token that should be passed as initial token to start listing using tokens.
 -define(INITIAL_LS_TOKEN, <<>>).
 
+% Hardlinks associated macros
+-define(HARDLINK_UUID_PREFIX, "link_").
+
 -endif.

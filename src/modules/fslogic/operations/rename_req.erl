@@ -69,7 +69,7 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     no_return() | #fuse_response{}.
 rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
+    TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx), % TODO VFS-7446 - rename vs hardlinks
     {SourceFileType, SourceFileCtx2} = get_type(SourceFileCtx),
     {TargetFileType, TargetGuid} =
         remotely_get_child_type(SessId, TargetParentGuid, TargetName),

@@ -41,10 +41,9 @@
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/6, new_doc/7, type/1, get_ancestors/1,
-    get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1,
+    get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
-% For tests
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -58,7 +57,7 @@
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
--type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE.
+-type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE | ?HARDLINK_TYPE.
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
@@ -68,19 +67,19 @@
 -type conflicts() :: [link()].
 
 
--type list_offset() :: file_meta_links:offset().
--type list_token() :: file_meta_links:token().
--type list_size() :: file_meta_links:size().
--type list_opts() :: file_meta_links:list_opts().
--type list_last_name() :: file_meta_links:last_name().
--type list_last_tree() :: file_meta_links:last_tree().
--type list_extended_info() :: file_meta_links:list_extended_info().
--type link() :: file_meta_links:link().
+-type list_offset() :: file_meta_datastore_links:offset().
+-type list_token() :: file_meta_datastore_links:token().
+-type list_size() :: file_meta_datastore_links:size().
+-type list_opts() :: file_meta_datastore_links:list_opts().
+-type list_last_name() :: file_meta_datastore_links:last_name().
+-type list_last_tree() :: file_meta_datastore_links:last_tree().
+-type list_extended_info() :: file_meta_datastore_links:list_extended_info().
+-type link() :: file_meta_datastore_links:link().
 
 -export_type([
-    doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
-    type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
-    conflicts/0
+    doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0,
+    name/0, uuid_or_path/0, entry/0, type/0, size/0, mode/0, time/0,
+    posix_permissions/0, permissions_type/0, conflicts/0
 ]).
 
 -export_type([
@@ -170,11 +169,11 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         LocalTreeId = oneprovider:get_id(),
         case file_meta:save(FileDoc3) of
             {ok, FileDocFinal = #document{key = FileUuid}} ->
-                case file_meta_links:check_and_add(ParentUuid, ParentScopeId, TreesToCheck, FileName, FileUuid) of
+                case file_meta_datastore_links:check_and_add(ParentUuid, ParentScopeId, TreesToCheck, FileName, FileUuid) of
                     ok ->
                         {ok, FileDocFinal};
                     {error, already_exists} = Eexists ->
-                        case file_meta_links:get(ParentUuid, TreesToCheck, FileName) of
+                        case file_meta_datastore_links:get(ParentUuid, TreesToCheck, FileName) of
                             {ok, Links} ->
                                 FileExists = lists:any(fun(#link{target = Uuid, tree_id = TreeId, rev = Rev}) ->
                                     Deleted = case get_including_deleted(Uuid) of
@@ -187,7 +186,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
                                     end,
                                     case {Deleted, TreeId} of
                                         {true, LocalTreeId} ->
-                                            file_meta_links:delete_local(ParentUuid, ParentScopeId, FileName, Rev),
+                                            file_meta_datastore_links:delete_local(ParentUuid, ParentScopeId, FileName, Rev),
                                             false;
                                         _ ->
                                             not Deleted
@@ -255,6 +254,18 @@ get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
             parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     }};
+get_including_deleted(<<?HARDLINK_UUID_PREFIX, _/binary>> = LinkUuid) ->
+    % When hardlink document is requested it is merged using document
+    % representing hardlink and document representing target file
+    case datastore_model:get(?CTX#{include_deleted => true}, LinkUuid) of
+        {ok, LinkDoc} ->
+            FileUuid = fslogic_uuid:ensure_effective_uuid(LinkUuid),
+            case datastore_model:get(?CTX#{include_deleted => true}, FileUuid) of
+                {ok, FileDoc} -> file_meta_hardlinks:merge_hardlink_and_file_doc(LinkDoc, FileDoc);
+                Error2 -> Error2
+            end;
+        Error -> Error
+    end;
 get_including_deleted(FileUuid) ->
     datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
 
@@ -264,7 +275,7 @@ get_including_deleted(FileUuid) ->
 %% Updates file meta.
 %% @end
 %%--------------------------------------------------------------------
--spec update(uuid() | entry(), diff()) -> {ok, uuid()} | {error, term()}.
+-spec update(uuid() | entry(), diff()) -> {ok, doc()} | {error, term()}.
 update({uuid, FileUuid}, Diff) ->
     update(FileUuid, Diff);
 update(#document{value = #file_meta{}, key = Key}, Diff) ->
@@ -275,7 +286,7 @@ update({path, Path}, Diff) ->
         update(Doc, Diff)
     end);
 update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
+    datastore_model:update(?CTX, Key, Diff).
 
 
 %%--------------------------------------------------------------------
@@ -295,7 +306,7 @@ delete(#document{
     }
 }) ->
     ?run(begin
-        ok = file_meta_links:delete(ParentUuid, Scope, FileName, FileUuid),
+        ok = file_meta_datastore_links:delete(ParentUuid, Scope, FileName, FileUuid),
         delete_without_link(FileUuid)
     end);
 delete({path, Path}) ->
@@ -389,7 +400,7 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
         [TreeIdPrefix | Tokens2] ->
             Name2 = list_to_binary(lists:reverse(Tokens2)),
             PrefixSize = erlang:size(TreeIdPrefix),
-            {ok, TreeIds} = file_meta_links:get_trees(ParentUuid),
+            {ok, TreeIds} = file_meta_datastore_links:get_trees(ParentUuid),
             TreeIds2 = lists:filter(fun(TreeId) ->
                 case TreeId of
                     <<TreeIdPrefix:PrefixSize/binary, _/binary>> -> true;
@@ -415,7 +426,7 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
 list_children(Entry, Opts) ->
     ?run(begin
         {ok, FileUuid} = get_uuid(Entry),
-        file_meta_links:list(FileUuid, Opts)
+        file_meta_datastore_links:list(FileUuid, Opts)
     end).
 
 
@@ -430,7 +441,7 @@ list_children(Entry, Opts) ->
 list_children_whitelisted(Entry, ListOpts, ChildrenWhiteList) ->
     ?run(begin
         {ok, FileUuid} = get_uuid(Entry),
-        file_meta_links:list_whitelisted(FileUuid, ListOpts, ChildrenWhiteList)
+        file_meta_datastore_links:list_whitelisted(FileUuid, ListOpts, ChildrenWhiteList)
     end).
 
 
@@ -473,8 +484,8 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
             parent_uuid = TargetParentUuid
         }}
     end),
-    ok = file_meta_links:add(TargetParentUuid, Scope, TargetName, FileUuid),
-    ok = file_meta_links:delete(SourceParentUuid, Scope, FileName, FileUuid).
+    ok = file_meta_datastore_links:add(TargetParentUuid, Scope, TargetName, FileUuid),
+    ok = file_meta_datastore_links:delete(SourceParentUuid, Scope, FileName, FileUuid).
 
 
 %%--------------------------------------------------------------------
@@ -551,6 +562,14 @@ get_type(#file_meta{type = Type}) ->
     Type;
 get_type(#document{value = FileMeta}) ->
     get_type(FileMeta).
+
+-spec get_effective_type(file_meta() | doc()) -> type().
+get_effective_type(#file_meta{type = ?HARDLINK_TYPE}) ->
+    ?REGULAR_FILE_TYPE;
+get_effective_type(#file_meta{type = Type}) ->
+    Type;
+get_effective_type(#document{value = FileMeta}) ->
+    get_effective_type(FileMeta).
 
 
 -spec get_owner(file_meta() | doc()) -> od_user:id().
@@ -859,7 +878,7 @@ check_name_and_get_conflicting_files(#document{
 -spec check_name_and_get_conflicting_files(uuid(), name(), uuid(), od_provider:id()) ->
     ok | {conflicting, ExtendedName :: name(), Conflicts :: conflicts()}.
 check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId) ->
-    file_meta_links:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId).
+    file_meta_datastore_links:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId).
 
 
 %%--------------------------------------------------------------------
@@ -957,7 +976,7 @@ is_valid_filename(FileName) when is_binary(FileName) ->
 -spec get_child_uuid_and_tree_id(uuid(), datastore_links:tree_ids(), name()) ->
     {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
 get_child_uuid_and_tree_id(ParentUuid, TreeIds, Name) ->
-    case file_meta_links:get(ParentUuid, TreeIds, Name) of
+    case file_meta_datastore_links:get(ParentUuid, TreeIds, Name) of
         {ok, [#link{target = FileUuid, tree_id = TreeId}]} ->
             {ok, FileUuid, TreeId};
         {ok, [#link{} | _]} ->
@@ -1006,7 +1025,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    10.
+    11.
 
 %%--------------------------------------------------------------------
 %% @doc
