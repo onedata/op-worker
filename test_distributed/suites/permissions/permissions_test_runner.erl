@@ -326,6 +326,7 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
     owner_user = FileOwner,
     space_user = SpaceUser,
     requires_traverse_ancestors = RequiresTraverseAncestors,
+    space_id = SpaceId,
     operation = Operation,
     files = Files
 } = TestSpec, Config) ->
@@ -374,16 +375,14 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
             ok = lfm_proxy:update_protection_flags(
                 Node, ?ROOT_SESS_ID, ScenarioRootDirKey, ProtectionFlagsToSet, ?no_flags_mask
             ),
-            % Wait some time for caches to be cleared (cache purge is asynchronous)
-            timer:sleep(100),
+            await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
             ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             % And should succeed without it
             ok = lfm_proxy:update_protection_flags(
                 Node, ?ROOT_SESS_ID, ScenarioRootDirKey, ?no_flags_mask, ProtectionFlagsToSet
             ),
-            % Wait some time for caches to be cleared (cache purge is asynchronous)
-            timer:sleep(100),
+            await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
             ?assertMatch(ok, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             run_final_ownership_check(#scenario_ctx{
@@ -396,6 +395,37 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
         false ->
             ok
     end.
+
+
+%% @private
+-spec await_caches_clearing(node(), od_space:id(), od_user:id(), map()) -> ok.
+await_caches_clearing(Node, SpaceId, UserId, ExtraData) ->
+    Attempts = 30,
+    Interval = 100,
+    ProtectionFlagsCache = binary_to_atom(<<"file_protection_flags_cache_", SpaceId/binary>>, utf8),
+
+    AreProtectionFlagsCached = fun(FileUuid) ->
+        case rpc:call(Node, bounded_cache, get, [ProtectionFlagsCache, FileUuid]) of
+            {ok, _} -> true;
+            ?ERROR_NOT_FOUND -> false
+        end
+    end,
+
+    IsPermEntryCached = fun(Entry) ->
+        case rpc:call(Node, permissions_cache, check_permission, [Entry]) of
+            {ok, _} -> true;
+            calculate -> false
+        end
+    end,
+
+    lists:foreach(fun
+        ({guid, FileGuid}) ->
+            FileUuid = file_id:guid_to_uuid(FileGuid),
+            ?assertMatch(false, AreProtectionFlagsCached(FileUuid), Attempts, Interval),
+            ?assertMatch(false, IsPermEntryCached({{user_perms_matrix, UserId, FileGuid}}), Attempts, Interval);
+        (_) ->
+            ok
+    end, maps:values(ExtraData)).
 
 
 %%%===================================================================
