@@ -794,5 +794,5 @@ mock_zone_sequence_check(Config) ->
     Workers =  ?config(op_worker_nodes, Config),
     % note that space_logic is usually mocked by initializer before
     test_utils:mock_expect(Workers, space_logic, get_latest_emitted_seq, fun(_, _) ->
-        {ok, 1000000000}
+        {ok, {1000000000, global_clock:timestamp_seconds()}}
     end).
