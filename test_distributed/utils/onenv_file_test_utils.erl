@@ -17,6 +17,7 @@
 -author("Bartosz Walkowicz").
 
 -include("onenv_file_test_utils.hrl").
+-include("distribution_assert.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
@@ -51,7 +52,7 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
     ),
 
     FileInfo = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc),
-    await_sync(SyncProviders, UserId, FileInfo),
+    await_sync(CreationProvider, SyncProviders, UserId, FileInfo),
     await_parent_links_sync(SyncProviders, UserId, ParentGuid, FileInfo),
 
     FileInfo.
@@ -132,20 +133,21 @@ create_shares(Node, SessId, FileGuid, ShareSpecs) ->
 
 
 %% @private
--spec await_sync([oct_background:entity_selector()], od_user:id(), object()) ->
+-spec await_sync(oct_background:entity_selector(), [oct_background:entity_selector()], od_user:id(), object()) ->
     ok | no_return().
-await_sync(SyncProviders, UserId, #object{type = ?REGULAR_FILE_TYPE} = Object) ->
-    await_file_attr_sync(SyncProviders, UserId, Object);
+await_sync(CreationProvider, SyncProviders, UserId, #object{type = ?REGULAR_FILE_TYPE} = Object) ->
+    await_file_attr_sync(SyncProviders, UserId, Object),
+    await_file_distribution_sync(CreationProvider, SyncProviders, UserId, Object);
 
-await_sync(SyncProviders, UserId, #object{
+await_sync(CreationProvider, SyncProviders, UserId, #object{
     guid = DirGuid,
     type = ?DIRECTORY_TYPE,
     children = Children
 } = Object) ->
     await_file_attr_sync(SyncProviders, UserId, Object#object{children = undefined}),
 
-    ExpChildrenList = lists:sort(lists_utils:pmap(fun(#object{guid = ChildGuid, name = ChildName} = Child) ->
-        await_sync(SyncProviders, UserId, Child),
+    ExpChildrenList = lists:keysort(2, lists_utils:pmap(fun(#object{guid = ChildGuid, name = ChildName} = Child) ->
+        await_sync(CreationProvider, SyncProviders, UserId, Child),
         {ChildGuid, ChildName}
     end, Children)),
 
@@ -161,6 +163,26 @@ await_file_attr_sync(SyncProviders, UserId, #object{guid = Guid} = Object) ->
         SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
         ObjectAttributes = Object#object{content = undefined, children = undefined},
         ?assertEqual({ok, ObjectAttributes}, get_object_attributes(SyncNode, SessId, Guid), ?ATTEMPTS)
+    end, SyncProviders).
+
+
+%% @private
+-spec await_file_distribution_sync(
+    oct_background:entity_selector(),
+    [oct_background:entity_selector()],
+    od_user:id(),
+    object()
+) ->
+    ok | no_return().
+await_file_distribution_sync(_, _, _, #object{type = ?DIRECTORY_TYPE}) ->
+    ok;
+await_file_distribution_sync(CreationProvider, SyncProviders, UserId, #object{
+    type = ?REGULAR_FILE_TYPE, guid = Guid, content = Content
+}) ->
+    lists:foreach(fun(SyncProvider) ->
+        SessId = oct_background:get_user_session_id(UserId, SyncProvider),
+        SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
+        ?assertDistribution(SyncNode, SessId, ?DIST(CreationProvider, byte_size(Content)), Guid, ?ATTEMPTS)
     end, SyncProviders).
 
 
@@ -190,11 +212,7 @@ await_dir_links_sync(SyncProviders, UserId, DirGuid, ExpChildrenList) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
-        ?assertEqual(
-            lists:sort(ExpChildrenList),
-            lists:sort(element(2, {ok, _} = ls(SyncNode, SessId, DirGuid))),
-            ?ATTEMPTS
-        )
+        ?assertEqual({ok, ExpChildrenList}, ls(SyncNode, SessId, DirGuid), ?ATTEMPTS)
     end, SyncProviders).
 
 
@@ -226,7 +244,6 @@ ls(Node, SessId, Guid, Token, ChildEntriesAcc) ->
         Error ->
             Error
     end.
-
 
 
 %% @private

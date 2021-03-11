@@ -29,16 +29,14 @@
     create_share_test/1,
     get_share_test/1,
     update_share_test/1,
-    delete_share_test/1,
-    get_shared_file_or_directory_data_test/1
+    delete_share_test/1
 ]).
 
 all() -> [
     create_share_test,
     get_share_test,
     update_share_test,
-    delete_share_test,
-    get_shared_file_or_directory_data_test
+    delete_share_test
 ].
 
 -define(ATTEMPTS, 30).
@@ -539,132 +537,6 @@ validate_delete_share_result(MemRef, UserId, Providers) ->
     end, Providers),
 
     api_test_memory:set(MemRef, shares, lists:delete(ShareId, api_test_memory:get(MemRef, shares))).
-
-
-% it should be possible to fetch shared file information and content using a
-% centralized endpoint in Onezone that redirects to one of the supporting providers
-get_shared_file_or_directory_data_test(_Config) ->
-    SpaceId = oct_background:get_space_id(space_krk_par),
-    FileContent = str_utils:rand_hex(rand:uniform(1000) + 100),
-
-    FileSpec = #file_spec{shares = [#share_spec{}], content = FileContent},
-    FileObject = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec),
-    get_shared_file_or_directory_data_test_base(FileObject),
-
-    DirSpec = #dir_spec{shares = [#share_spec{}], children = [
-        #dir_spec{}, #file_spec{}, #dir_spec{}, #file_spec{}, #dir_spec{}
-    ]},
-    DirObject = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, DirSpec),
-    get_shared_file_or_directory_data_test_base(DirObject).
-
-%% @private
-get_shared_file_or_directory_data_test_base(Object = #object{guid = FileGuid, type = Type}) ->
-    AllNodes = oct_background:get_provider_nodes(krakow) ++ oct_background:get_provider_nodes(paris),
-    api_test_utils:set_and_sync_metadata(AllNodes, FileGuid, <<"xattrs">>, #{
-        <<"license">> => <<"CC-O">>,
-        <<"author">> => <<"john doe">>
-    }),
-    api_test_utils:set_and_sync_metadata(AllNodes, FileGuid, <<"rdf">>, ?RDF_METADATA_1),
-    api_test_utils:set_and_sync_metadata(AllNodes, FileGuid, <<"json">>, #{
-        <<"key">> => <<"value">>,
-        <<"topKey">> => #{
-            <<"nestedKey">> => 17
-        }
-    }),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"downloadSharedFileContent">>, <<"/content">>, <<"">>, #{}, case Type of
-            ?REGULAR_FILE_TYPE -> ?HTTP_200_OK;
-            ?DIRECTORY_TYPE -> ?HTTP_400_BAD_REQUEST
-        end
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"downloadSharedFileContent">>, <<"/content">>, <<"">>, #{<<"range">> => <<"bytes=3-86">>}, case Type of
-            ?REGULAR_FILE_TYPE -> ?HTTP_206_PARTIAL_CONTENT;
-            ?DIRECTORY_TYPE -> ?HTTP_400_BAD_REQUEST
-        end
-    ),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"listSharedDirectoryChildren">>, <<"/children">>, <<"">>
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"listSharedDirectoryChildren">>, <<"/children">>, <<"?offset=1&limit=1">>
-    ),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileAttributes">>, <<"">>, <<"">>
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileAttributes">>, <<"/">>, <<"">>
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileAttributes">>, <<"">>, <<"?attribute=size">>
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileAttributes">>, <<"/">>, <<"?attribute=mtime">>
-    ),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"">>
-    ),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileExtendedAttributes">>, <<"/metadata/xattrs">>, <<"?attribute=license">>
-    ),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileJsonMetadata">>, <<"/metadata/json">>, <<"">>
-    ),
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileJsonMetadata">>, <<"/metadata/json">>, <<"?filter_type=keypath&filter=topKey.nestedKey">>
-    ),
-
-    get_shared_file_or_directory_data_test_base(
-        Object, <<"getSharedFileRdfMetadata">>, <<"/metadata/rdf">>, <<"">>
-    ).
-
-%% @private
-get_shared_file_or_directory_data_test_base(Object, TemplateName, CounterpartOpApiPath, QueryString) ->
-    get_shared_file_or_directory_data_test_base(
-        Object, TemplateName, CounterpartOpApiPath, QueryString, #{}, ?HTTP_200_OK
-    ).
-get_shared_file_or_directory_data_test_base(Object, TemplateName, CounterpartOpApiPath, QueryString, Headers, ExpCode) ->
-    #object{guid = FileGuid, shares = [ShareId]} = Object,
-    ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-    {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-    % use the actual templates that are sent to GUI to make sure they are ok
-    KrakowNode = hd(oct_background:get_provider_nodes(krakow)),
-    #{<<"restTemplates">> := RestTemplates} = rpc:call(
-        KrakowNode, gui_gs_translator, handshake_attributes, [anything]
-    ),
-    Template = maps:get(TemplateName, RestTemplates),
-    ZonePath = binary:replace(Template, <<"{{id}}">>, ShareObjectId),
-
-    ZoneRedirectorUrl = <<ZonePath/binary, QueryString/binary>>,
-    CounterpartOpUrl = api_test_utils:build_rest_url(KrakowNode, [
-        str_utils:format_bin("data/~s~s~s", [ShareObjectId, CounterpartOpApiPath, QueryString])
-    ]),
-    {ok, _, _, RedirectedResponse} = ?assertMatch(
-        {ok, ExpCode, _, _}, http_get_following_redirects(ZoneRedirectorUrl, Headers)
-    ),
-    ?assertMatch(
-        {ok, _, _, RedirectedResponse}, http_get_following_redirects(CounterpartOpUrl, Headers)
-    ).
-
-
-%% @private
--spec http_get_following_redirects(http_client:url(), http_client:headers()) ->
-    {ok, RespCode :: non_neg_integer(), RespHeaders :: map(), RespBody :: binary() | map()} |
-    {error, term()}.
-http_get_following_redirects(Url, Headers) ->
-    http_client:get(Url, Headers, <<>>, [
-        {follow_redirect, true},
-        {max_redirect, 5},
-        {ssl_options, [{cacerts, opw_test_rpc:get_cert_chain_ders(krakow)}]},
-        {recv_timeout, 15000}
-    ]).
 
 
 %%%===================================================================
