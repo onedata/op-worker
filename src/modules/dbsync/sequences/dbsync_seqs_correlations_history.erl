@@ -119,7 +119,7 @@ map_remote_seq_to_local_stop_params(SpaceId, ProviderId, RemoteSeqNum) ->
             end;
         _ ->
             case dbsync_seqs_tree:get_next(?CTX, ?KEY(SpaceId), ProviderId, RemoteSeqNum, <<>>) of
-                <<>> ->
+                <<>> -> % sequence mapping not found - use current local sequence instead
                     SyncProgress = dbsync_state:get_sync_progress(SpaceId),
                     Correlation = dbsync_state:get_seqs_correlations(SpaceId), % TODO VFS-7036 - get progress and correlation using one dbsync_state call
                     {LocalSeq, _} = maps:get(LocalProviderId, SyncProgress, {0, 0}),

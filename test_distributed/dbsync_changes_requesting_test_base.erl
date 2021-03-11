@@ -412,7 +412,7 @@ verify_synchronization_logs(SynchronizationLogsGeneratedByRequest, InitialSynchr
     InitialIgnoredLogs = get_synchronization_logs(ignored, ProviderHandlingRequest, InitialSynchronizationLogs),
 
     % Filter initial broadcast logs to request range
-    InitialBroadcastChangesInRange = filer_changes_range(InitialBroadcastChanges, Since, Until),
+    InitialBroadcastChangesInRange = filter_changes_range(InitialBroadcastChanges, Since, Until),
     % Filter ignored logs as they cannot be produced handling test request
     FilteredInitialBroadcastChangesInRange = generate_changes_list_diff(InitialBroadcastChangesInRange, InitialIgnoredLogs),
 
@@ -635,7 +635,7 @@ get_requested_sequences_correlation(Acc) ->
 %%% Comparing and filtering synchronization logs
 %%%===================================================================
 
-filer_changes_range(ChangesList, MinSeq, MaxSeq) ->
+filter_changes_range(ChangesList, MinSeq, MaxSeq) ->
     MaxSeqsMap = lists:foldl(fun(Doc, Acc) ->
         UniqueId = get_doc_unique_id(Doc),
         MaxSeqInMap = maps:get(UniqueId, Acc, 0),
@@ -747,18 +747,22 @@ lose_random_dbsync_batches_on_worker(Worker) ->
     test_utils:mock_expect(Worker, dbsync_changes, apply_batch, fun
         (Batch) ->
             meck:passthrough([Batch]);
-        (Batch = #internal_changes_batch{since = Since}) ->
+        (Batch = #internal_changes_batch{since = Since, custom_request_extension = Extension}) ->
             Counter = case get(dbsync_changes_test_counter) of
                 undefined -> 1;
                 Val -> Val
             end,
             case Counter of
                 3 ->
+                    NewExtension = case Extension of
+                        undefined -> undefined;
+                        _ -> <<>>
+                    end,
                     put(dbsync_changes_test_counter, 1),
                     meck:passthrough([Batch#internal_changes_batch{
                         until = Since,
                         timestamp = undefined,
-                        custom_request_extension = <<>>
+                        custom_request_extension = NewExtension
                     }]);
                 _ ->
                     put(dbsync_changes_test_counter, Counter + 1),

@@ -14,7 +14,7 @@
 -define(DBSYNC_HRL, 1).
 
 %%%===================================================================
-%%% Macros
+%%% Generic macros
 %%%===================================================================
 
 -define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
@@ -24,17 +24,29 @@
 -define(DEFAULT_SEQ, 1).
 -define(DEFAULT_TIMESTAMP, 0).
 
-% Macros used by dbsync_in_stream_worker and connected modules
+-define(CUSTOM_CHANGES_STREAM_INIT(SinceBinary), <<"CUSTOM_STREAM_INIT#", (SinceBinary)/binary>>).
+
+%%%===================================================================
+%%% Macros used by dbsync_in_stream_worker and associated modules
+%%%===================================================================
+
+% Macros used during verification if there is a batch on stash that can be applied
+% immediately - see dis_batch_stash:poll_next_batch/2
 -define(EMPTY_STASH, empty_stash).
--define(REQUEST_CHANGES, request_changes).
--define(APPLY, apply).
+-define(MISSING_CHANGES(MissingUpTo), {missing_changes, MissingUpTo}).
+-define(MISSING_CHANGES(MissingFrom, MissingUpTo), {missing_changes, MissingFrom, MissingUpTo}).
+% Macros describing result of incoming batch handling - see
+% dis_batch_stash:incoming_batch_handling_result() type
+-define(BATCH_READY(Batch), {batch_ready, Batch}).
 -define(CHANGES_STASHED, changes_stashed).
 -define(CHANGES_IGNORED, changes_ignored).
--define(BATCH_APPLICATION_RESULT, batch_application_result).
--define(REQUEST_IF_MISSING, request_if_missing).
--define(SCHEDULE_REQUEST_IF_MISSING, schedule_request_if_missing).
-
--define(CUSTOM_CHANGES_STREAM_INIT_MSG_PREFIX, "CUSTOM_STREAM_INIT#").
+% Macros describing mode of incoming batch handling - see
+% dis_batch_stash:handling_mode() type
+-define(CONSIDER_BATCH, consider_batch).
+-define(FORCE_STASH_BATCH, force_stash_batch).
+% Message describing batch application result
+% (batch is applied by helper process that sends answer to dbsync_in_stream_worker)
+-define(BATCH_APPLICATION_RESULT(Batch, Ans), {batch_application_result, Batch, Ans}).
 
 %%%===================================================================
 %%% Records

@@ -285,7 +285,7 @@ send_custom_request_stream_initial_message(CallerProviderId, LocalSince, #custom
     since = RequestedSince
 }) when is_integer(RequestedSince) ->
     dbsync_communicator:send_changes_and_correlations(CallerProviderId, MutatorId, SpaceId, LocalSince, LocalSince,
-        undefined, [], <<?CUSTOM_CHANGES_STREAM_INIT_MSG_PREFIX, (integer_to_binary(RequestedSince))/binary>>);
+        undefined, [], ?CUSTOM_CHANGES_STREAM_INIT(integer_to_binary(RequestedSince)));
 send_custom_request_stream_initial_message(_, _, _) ->
     % TODO VFS-7262 - handle requesting with sequences map
     ok.
