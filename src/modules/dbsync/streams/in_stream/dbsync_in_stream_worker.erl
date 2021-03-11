@@ -449,9 +449,9 @@ check_batch_in_zone_and_maybe_handle(
     }
 ) ->
     case space_logic:get_latest_emitted_seq(SpaceId, ProviderId) of
-        {ok, Seq} when Seq >= Until ->
+        {ok, {Seq, _}} when Seq >= Until ->
             handle_changes_batch(Batch, State);
-        {ok, Seq} ->
+        {ok, {Seq, _}} ->
             ?warning("Batch [~p, ~p] from provider ~p not supporting space ~p "
             "when last seq according to onezone is ~p", [Since, Until, ProviderId, SpaceId, Seq]),
             State;
@@ -471,16 +471,16 @@ check_seq_in_zone(Delay, State = #state{
     % when they are not needed anymore
     Seq = dis_batch_stash_registry:get_expected_batch_since(StashRegistry, ProviderId),
     case space_logic:get_latest_emitted_seq(SpaceId, ProviderId) of
-        {ok, ZoneSeq} when ZoneSeq > Seq ->
+        {ok, {ZoneSeq, _}} when ZoneSeq > Seq ->
             request_changes_from_other_provider(Seq, ZoneSeq, State),
             {noreply, increase_delay_and_schedule_seq_check_in_zone(Delay, State)};
         {ok, _} ->
             case dbsync_utils:should_terminate_stream(SpaceId, ProviderId) of
-                true ->
+                {ok, true} ->
                     {stop, normal, State};
-                false ->
+                {ok, false} ->
                     {noreply, increase_delay_and_schedule_seq_check_in_zone(Delay, State)};
-                RetireCheckError ->
+                {error, _} = RetireCheckError ->
                     ?warning("Error ~p checking support for provider ~p in space ~p",
                         [RetireCheckError, ProviderId, SpaceId]),
                     {noreply, increase_delay_and_schedule_seq_check_in_zone(Delay, State)}

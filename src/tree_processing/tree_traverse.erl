@@ -15,6 +15,16 @@
 %%% The traverse jobs (see traverse.erl for jobs definition) are persisted using tree_traverse_job datastore model
 %%% which stores jobs locally and synchronizes main job for each task between providers (to allow tasks execution
 %%% on other provider resources).
+%%%
+%%% It is possible to perform traverse in context of a ?ROOT_USER or a normal user.
+%%% ?ROOT_USER is used by default.
+%%% If traverse is scheduled in context of a normal user, its offline session
+%%% will be used to ensure that traverse may progress even when client disconnects
+%%% from provider.
+%%%
+%%% NOTE !!!
+%%% It is a responsibility of the calling module to init and close
+%%% offline access session !!!
 %%% @end
 %%%-------------------------------------------------------------------
 -module(tree_traverse).
@@ -26,6 +36,7 @@
 -include("tree_traverse.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
@@ -46,10 +57,11 @@
 -type master_jobs() :: [master_job()].
 -type slave_job() :: #tree_traverse_slave{}.
 -type slave_jobs() :: [slave_job()].
+-type job() :: master_job() | slave_job().
 -type execute_slave_on_dir() :: boolean().
 -type children_master_jobs_mode() :: sync | async.
--type batch_size() :: non_neg_integer().
--type traverse_info() :: term().
+-type batch_size() :: file_meta:list_size().
+-type traverse_info() :: map().
 -type run_options() :: #{
     % Options of traverse framework
     task_id => id(),
@@ -80,11 +92,11 @@
     fun((
         slave_jobs(),
         master_jobs(),
-        file_meta:list_extended_info(),
-        SubtreeProcessingStatus :: tree_traverse_progress:status()
+        file_meta:list_extended_info() | undefined,
+        SubtreeProcessingStatus :: tree_traverse_progress:status() | {error, term()}
     ) -> ok).
-%formatter:on
 
+%formatter:on
 
 -export_type([id/0, pool/0, master_job/0, slave_job/0, execute_slave_on_dir/0,
     children_master_jobs_mode/0, batch_size/0, traverse_info/0]).
@@ -117,32 +129,28 @@ stop(Pool) ->
 
 -spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), run_options()) -> {ok, id()}.
 run(Pool, DocOrCtx, Opts)  ->
-    run(Pool, DocOrCtx, undefined, Opts).
+    run(Pool, DocOrCtx, ?ROOT_USER_ID, Opts).
 
--spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), user_ctx:ctx() | undefined, run_options()) ->
+-spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), od_user:id(), run_options()) ->
     {ok, id()}.
-run(Pool, DocOrCtx, UserCtx, Opts) when is_atom(Pool) ->
-    run(atom_to_binary(Pool, utf8), DocOrCtx, UserCtx, Opts);
-run(Pool, FileDoc = #document{scope = SpaceId, value = #file_meta{}}, UserCtx, Opts) ->
+run(Pool, DocOrCtx, UserId, Opts) when is_atom(Pool) ->
+    run(atom_to_binary(Pool, utf8), DocOrCtx, UserId, Opts);
+run(Pool, FileDoc = #document{scope = SpaceId, value = #file_meta{}}, UserId, Opts) ->
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    run(Pool, FileCtx, UserCtx, Opts);
-run(Pool, FileCtx, UserCtx, Opts) ->
+    run(Pool, FileCtx, UserId, Opts);
+run(Pool, FileCtx, UserId, Opts) ->
     TaskId = case maps:get(task_id, Opts, undefined) of
         undefined -> datastore_key:new();
         Id -> Id
-    end,
-    % TODO VFS-7101 use offline access token in tree_traverse
-    UserCtx2 = case UserCtx =/= undefined of
-        true -> UserCtx;
-        false -> user_ctx:new(?ROOT_SESS_ID)
     end,
     BatchSize = maps:get(batch_size, Opts, ?DEFAULT_BATCH_SIZE),
     ExecuteSlaveOnDir = maps:get(execute_slave_on_dir, Opts, ?DEFAULT_EXEC_SLAVE_ON_DIR),
     ChildrenMasterJobsMode = maps:get(children_master_jobs, Opts, ?DEFAULT_CHILDREN_MASTER_JOBS_MODE),
     TrackSubtreeStatus = maps:get(track_subtree_status, Opts, ?DEFAULT_TRACK_SUBTREE_STATUS),
-    TraverseInfo = maps:get(traverse_info, Opts, undefined),
+    TraverseInfo = maps:get(traverse_info, Opts, #{}),
+    TraverseInfo2 = TraverseInfo#{pool => Pool},
     Token = case maps:get(use_listing_token, Opts, true) of
-        true -> #link_token{};
+        true -> ?INITIAL_LS_TOKEN;
         false -> undefined
     end,
 
@@ -165,13 +173,13 @@ run(Pool, FileCtx, UserCtx, Opts) ->
 
     Job = #tree_traverse{
         file_ctx = FileCtx,
-        user_ctx = UserCtx2,
+        user_id = UserId,
         token = Token,
         execute_slave_on_dir = ExecuteSlaveOnDir,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
-        traverse_info = TraverseInfo
+        traverse_info = TraverseInfo2
     },
     maybe_create_status_doc(Job, TaskId),
     ok = traverse:run(Pool, TaskId, Job, RunOpts4),
@@ -187,20 +195,12 @@ cancel(Pool, TaskId) ->
 %%% Getters/Setters API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Provides traverse info from master job record.
-%% @end
-%%--------------------------------------------------------------------
--spec get_traverse_info(master_job()) -> traverse_info().
+-spec get_traverse_info(job()) -> traverse_info().
 get_traverse_info(#tree_traverse{traverse_info = TraverseInfo}) ->
+    TraverseInfo;
+get_traverse_info(#tree_traverse_slave{traverse_info = TraverseInfo}) ->
     TraverseInfo.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets traverse info in master job record.
-%% @end
-%%--------------------------------------------------------------------
 -spec set_traverse_info(master_job(), traverse_info()) -> master_job().
 set_traverse_info(TraverseJob, TraverseInfo) ->
     TraverseJob#tree_traverse{traverse_info = TraverseInfo}.
@@ -229,6 +229,7 @@ get_sync_info() ->
         local_links_tree_id => Provider
     }.
 
+
 %%%===================================================================
 %%% Behaviour callbacks
 %%%===================================================================
@@ -255,7 +256,7 @@ do_master_job(Job = #tree_traverse{
     file_ctx = FileCtx,
     children_master_jobs_mode = ChildrenMasterJobsMode
 },
-    #{task_id := TaskId},
+    MasterJobArgs = #{task_id := TaskId},
     NewJobsPreprocessor
 ) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
@@ -264,30 +265,35 @@ do_master_job(Job = #tree_traverse{
         ?REGULAR_FILE_TYPE ->
             {ok, #{slave_jobs => [get_child_slave_job(Job2, FileCtx2)]}};
         ?DIRECTORY_TYPE ->
-            {ChildrenCtxs, ListExtendedInfo, FileCtx3, IsLast} = list_children(Job2),
-            LastName2 = maps:get(last_name, ListExtendedInfo),
-            LastTree2 = maps:get(last_tree, ListExtendedInfo),
-            Token2 = maps:get(token, ListExtendedInfo, undefined),
-            {SlaveJobs, MasterJobs} = generate_children_jobs(Job2, TaskId, ChildrenCtxs),
-            ChildrenCount = length(SlaveJobs) + length(MasterJobs),
-            SubtreeProcessingStatus = maybe_report_children_jobs_to_process(Job2, TaskId, ChildrenCount, IsLast),
-            NewJobsPreprocessor(SlaveJobs, MasterJobs, ListExtendedInfo, SubtreeProcessingStatus),
-            FinalMasterJobs = case IsLast of
-                true ->
-                    MasterJobs;
-                false -> [Job2#tree_traverse{
-                    file_ctx = FileCtx3,
-                    token = Token2,
-                    last_name = LastName2,
-                    last_tree = LastTree2
-                } | MasterJobs]
-            end,
+            case list_children(Job2, MasterJobArgs) of
+                {error, ?EACCES} ->
+                    {ok, #{}};
+                {ok, {ChildrenCtxs, ListExtendedInfo, FileCtx3}} ->
+                    LastName2 = maps:get(last_name, ListExtendedInfo, <<>>),
+                    LastTree2 = maps:get(last_tree, ListExtendedInfo, <<>>),
+                    Token2 = maps:get(token, ListExtendedInfo, undefined),
+                    {SlaveJobs, MasterJobs} = generate_children_jobs(Job2, TaskId, ChildrenCtxs),
+                    ChildrenCount = length(SlaveJobs) + length(MasterJobs),
+                    IsLast = maps:get(is_last, ListExtendedInfo),
+                    SubtreeProcessingStatus = maybe_report_children_jobs_to_process(Job2, TaskId, ChildrenCount, IsLast),
+                    NewJobsPreprocessor(SlaveJobs, MasterJobs, ListExtendedInfo, SubtreeProcessingStatus),
+                    FinalMasterJobs = case IsLast of
+                        true ->
+                            MasterJobs;
+                        false -> [Job2#tree_traverse{
+                            file_ctx = FileCtx3,
+                            token = Token2,
+                            last_name = LastName2,
+                            last_tree = LastTree2
+                        } | MasterJobs]
+                    end,
 
-            ChildrenMasterJobsKey = case ChildrenMasterJobsMode of
-                sync -> master_jobs;
-                async -> async_master_jobs
-            end,
-            {ok, #{slave_jobs => SlaveJobs, ChildrenMasterJobsKey => FinalMasterJobs}}
+                    ChildrenMasterJobsKey = case ChildrenMasterJobsMode of
+                        sync -> master_jobs;
+                        async -> async_master_jobs
+                    end,
+                    {ok, #{slave_jobs => SlaveJobs, ChildrenMasterJobsKey => FinalMasterJobs}}
+            end
         end.
 
 
@@ -347,26 +353,39 @@ report_child_processed(TaskId, ParentUuid) ->
 delete_subtree_status_doc(TaskId, Uuid) ->
     tree_traverse_progress:delete(TaskId, Uuid).
 
+
 %%%===================================================================
 %% Tracking subtree progress status API
 %%%===================================================================
 
--spec list_children(master_job()) ->
-    {
-        Children :: [file_ctx:ctx()],
-        ListExtendedInfo :: file_meta:list_extended_info(),
-        NewFileCtx :: file_ctx:ctx(),
-        IsLast :: boolean()
-    }.
+-spec list_children(master_job(), traverse:master_job_extended_args()) ->
+    {ok, {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}} |
+    {error, term()}.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
-    user_ctx = UserCtx,
+    user_id = UserId,
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
-    batch_size = BatchSize
-}) ->
-    dir_req:get_children_ctxs(UserCtx, FileCtx, 0, BatchSize, Token, LastName, LastTree).
+    batch_size = BatchSize,
+    traverse_info = TraverseInfo
+}, #{task_id := TaskId}) ->
+    case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
+        {ok, UserCtx} ->
+            try
+                {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, #{
+                    size => BatchSize,
+                    token => Token,
+                    last_name => LastName,
+                    last_tree => LastTree
+                })}
+            catch
+                throw:?EACCES ->
+                    {error, ?EACCES}
+            end;
+        {error, ?EACCES} ->
+            {error, ?EACCES}
+    end.
 
 
 -spec generate_children_jobs(master_job(), id(), [file_ctx:ctx()]) -> {[slave_job()], [master_job()]}.
@@ -404,10 +423,12 @@ get_child_master_job(MasterJob, ChildCtx) ->
 
 -spec get_child_slave_job(master_job(), file_ctx:ctx()) -> slave_job().
 get_child_slave_job(#tree_traverse{
+    user_id = UserId,
     traverse_info = TraverseInfo,
     track_subtree_status = TrackSubtreeStatus
 }, ChildCtx) ->
     #tree_traverse_slave{
+        user_id = UserId,
         file_ctx = ChildCtx,
         traverse_info = TraverseInfo,
         track_subtree_status = TrackSubtreeStatus
@@ -440,7 +461,7 @@ maybe_report_children_jobs_to_process(_, _, _, _) ->
 -spec reset_list_options(master_job()) -> master_job().
 reset_list_options(Job) ->
     Job#tree_traverse{
-        token = #link_token{},
+        token = ?INITIAL_LS_TOKEN,
         last_name = <<>>,
         last_tree = <<>>
     }.

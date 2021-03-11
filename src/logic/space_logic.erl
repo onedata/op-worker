@@ -33,7 +33,8 @@
 -export([has_eff_privilege/3, has_eff_privileges/3]).
 -export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
-    get_local_supporting_storage/1, get_storages_by_provider/2, get_all_storage_ids/1]).
+    get_local_supporting_storage/1, get_storages_by_provider/2,
+    get_all_storage_ids/1, get_support_size/2]).
 -export([get_provider_ids/1, get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([is_supported_by_storage/2]).
@@ -42,7 +43,7 @@
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
--export([report_provider_sync_progress/2]).
+-export([report_provider_sync_progress/2, report_provider_capacity_usage/2]).
 -export([get_support_stage_registry/1]).
 -export([get_latest_emitted_seq/2]).
 
@@ -246,6 +247,22 @@ get_all_storage_ids(SpaceId) ->
     end.
 
 
+-spec get_support_size(od_space:id(), od_provider:id()) -> {ok, non_neg_integer()} | errors:error().
+get_support_size(SpaceId, ProviderId) ->
+    % call via module to mock in tests
+    case space_logic:get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{providers = ProviderSupports}}} ->
+            case maps:get(ProviderId, ProviderSupports, undefined) of
+                undefined ->
+                    ?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId);
+                SupportSize ->
+                    {ok, SupportSize}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+
 -spec get_provider_ids(od_space:id()) ->
     {ok, [od_provider:id()]} | errors:error().
 get_provider_ids(SpaceId) ->
@@ -415,6 +432,17 @@ report_provider_sync_progress(SpaceId, CollectiveReport) ->
     }).
 
 
+-spec report_provider_capacity_usage(od_space:id(), provider_capacity_usage:report()) -> ok | errors:error().
+report_provider_capacity_usage(SpaceId, Report) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = space_stats, id = SpaceId, aspect = {provider_capacity_usage, oneprovider:get_id()}},
+        data = #{
+            <<"providerCapacityUsageReport">> => provider_capacity_usage:report_to_json(Report)
+        }
+    }).
+
+
 -spec get_support_stage_registry(od_space:id()) -> {ok, support_stage:registry()} | errors:error().
 get_support_stage_registry(SpaceId) ->
     case get(?ROOT_SESS_ID, SpaceId) of
@@ -426,10 +454,18 @@ get_support_stage_registry(SpaceId) ->
 
 
 -spec get_latest_emitted_seq(od_space:id(), od_provider:id()) ->
-    {ok, provider_sync_progress:seen_seq()} | errors:error().
+    {ok, {provider_sync_progress:seq(), provider_sync_progress:seq_timestamp()}} | errors:error().
 get_latest_emitted_seq(SpaceId, ProviderId) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = get,
+    Request = #gs_req_graph{
+        % use 'create' as the GS channel between OP and OZ does not allow 'get'
+        % operations that return a value and are not cached as a document
+        operation = create,
         gri = #gri{type = space_stats, id = SpaceId, aspect = {latest_emitted_seq, ProviderId}}
-    }).
+    },
+    case gs_client_worker:request(?ROOT_SESS_ID, Request) of
+        {ok, #{<<"seq">> := Seq, <<"seqTimestamp">> := Timestamp}} ->
+            {ok, {Seq, Timestamp}};
+        {error, _} = Error ->
+            Error
+    end.
 

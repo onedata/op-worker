@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -9,23 +9,21 @@
 %%% This file contains tests concerning share basic API (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
--module(share_api_test_SUITE).
+-module(api_share_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("api_file_test_utils.hrl").
 -include("api_test_runner.hrl").
--include("global_definitions.hrl").
+-include("onenv_file_test_utils.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
--include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([
     all/0,
     init_per_suite/1, end_per_suite/1,
     init_per_testcase/2, end_per_testcase/2
 ]).
-
-% exported for rpc test calls
--export([create_share/2, update_share/2, delete_share/2]).
 
 -export([
     create_share_test/1,
@@ -34,16 +32,12 @@
     delete_share_test/1
 ]).
 
-all() ->
-    ?ALL([
-        create_share_test,
-        get_share_test,
-        update_share_test,
-        delete_share_test
-    ]).
-
--define(SHARE_PUBLIC_URL(__SHARE_ID), <<__SHARE_ID/binary, "_public_url">>).
--define(SHARE_HANDLE(__SHARE_ID), <<__SHARE_ID/binary, "_handle_id">>).
+all() -> [
+    create_share_test,
+    get_share_test,
+    update_share_test,
+    delete_share_test
+].
 
 -define(ATTEMPTS, 30).
 
@@ -53,31 +47,32 @@ all() ->
 %%%===================================================================
 
 
-create_share_test(Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+create_share_test(_Config) ->
+    Providers = lists:flatten([
+        oct_background:get_provider_nodes(krakow),
+        oct_background:get_provider_nodes(paris)
+    ]),
+    SpaceId = oct_background:get_space_id(space_krk_par),
 
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
-    file_test_utils:await_sync(P2, FileGuid),
-
+    {FileType, FileSpec} = generate_random_file_spec(),
+    FileInfo = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec),
+    FileGuid = FileInfo#object.guid,
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     MemRef = api_test_memory:init(),
 
-    ?assert(api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
-            verify_fun = build_verify_file_shares_fun(MemRef, Providers, ?USER_IN_BOTH_SPACES, FileGuid, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            verify_fun = build_verify_file_shares_fun(MemRef, Providers, user3, FileGuid),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Create share for ", FileType/binary, " using /shares rest endpoint">>,
                     type = rest,
                     prepare_args_fun = fun create_share_prepare_rest_args_fun/1,
                     validate_result_fun = build_create_share_validate_rest_call_result_fun(
-                        MemRef, Providers, FileType, ?SPACE_2, Config
+                        MemRef, Providers, FileType, SpaceId
                     )
                 },
                 #scenario_template{
@@ -85,7 +80,7 @@ create_share_test(Config) ->
                     type = gs,
                     prepare_args_fun = fun create_share_prepare_gs_args_fun/1,
                     validate_result_fun = build_create_share_validate_gs_call_result_fun(
-                        MemRef, Providers, FileType, Config
+                        MemRef, Providers, FileType, SpaceId
                     )
                 }
             ],
@@ -94,7 +89,7 @@ create_share_test(Config) ->
                 % Operations should be rejected even before checking if share exists
                 % (in case of using share file id) so it is not necessary to use
                 % valid share id
-                FileGuid, ?SPACE_2, <<"NonExistentShare">>, #data_spec{
+                FileGuid, SpaceId, <<"NonExistentShare">>, #data_spec{
                     required = [<<"name">>, <<"fileId">>],
                     optional = [<<"description">>],
                     correct_values = #{
@@ -113,6 +108,8 @@ create_share_test(Config) ->
 
 
 %% @private
+-spec create_share_prepare_rest_args_fun(onenv_api_test_runner:api_test_ctx()) ->
+    onenv_api_test_runner:rest_args().
 create_share_prepare_rest_args_fun(#api_test_ctx{data = Data}) ->
     #rest_args{
         method = post,
@@ -123,6 +120,8 @@ create_share_prepare_rest_args_fun(#api_test_ctx{data = Data}) ->
 
 
 %% @private
+-spec create_share_prepare_gs_args_fun(onenv_api_test_runner:api_test_ctx()) ->
+    onenv_api_test_runner:gs_args().
 create_share_prepare_gs_args_fun(#api_test_ctx{data = Data}) ->
     #gs_args{
         operation = create,
@@ -132,42 +131,50 @@ create_share_prepare_gs_args_fun(#api_test_ctx{data = Data}) ->
 
 
 %% @private
-build_create_share_validate_rest_call_result_fun(MemRef, Providers, FileType, SpaceId, Config) ->
+-spec build_create_share_validate_rest_call_result_fun(
+    api_test_memory:mem_ref(), [node()], api_test_utils:file_type(), od_space:id()
+) ->
+    onenv_api_test_runner:validate_call_result_fun().
+build_create_share_validate_rest_call_result_fun(MemRef, Providers, FileType, SpaceId) ->
     fun(#api_test_ctx{
-        node = Node,
+        node = TestNode,
         client = ?USER(UserId),
         data = Data = #{<<"name">> := ShareName, <<"fileId">> := FileObjectId}
     }, Result) ->
+        {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
         Description = maps:get(<<"description">>, Data, <<"">>),
+
         {ok, _, Headers, Body} = ?assertMatch(
             {ok, ?HTTP_201_CREATED, #{<<"Location">> := _}, #{<<"shareId">> := _}},
             Result
         ),
-        {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
         ShareId = maps:get(<<"shareId">>, Body),
 
         api_test_memory:set(MemRef, shares, [ShareId | api_test_memory:get(MemRef, shares, [])]),
 
-        ExpLocation = rpc:call(Node, oneprovider, get_rest_endpoint, [
-            string:trim(filename:join([<<"/">>, <<"shares">>, ShareId]), leading, [$/])
-        ]),
+        ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"shares">>, ShareId]),
         ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers)),
 
         verify_share_doc(
-            Providers, ShareId, ShareName, Description, SpaceId,
-            FileGuid, FileType, UserId, Config
+            Providers, ShareId, ShareName, Description,
+            SpaceId, FileGuid, FileType, UserId
         )
     end.
 
 
 %% @private
-build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, Config) ->
+-spec build_create_share_validate_gs_call_result_fun(
+    api_test_memory:mem_ref(), [node()], api_test_utils:file_type(), od_space:id()
+) ->
+    onenv_api_test_runner:validate_call_result_fun().
+build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, SpaceId) ->
     fun(#api_test_ctx{
         client = ?USER(UserId),
         data = Data = #{<<"name">> := ShareName, <<"fileId">> := FileObjectId}
     }, Result) ->
-        Description = maps:get(<<"description">>, Data, <<"">>),
         {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
+        Description = maps:get(<<"description">>, Data, <<"">>),
+
         {ok, #{<<"gri">> := ShareGri} = ShareData} = ?assertMatch({ok, _}, Result),
 
         #gri{id = ShareId} = ?assertMatch(
@@ -179,25 +186,28 @@ build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, Conf
         assert_proper_gs_share_translation(ShareId, ShareName, Description, private, FileGuid, FileType, ShareData),
 
         verify_share_doc(
-            Providers, ShareId, ShareName, Description, ?SPACE_2,
-            FileGuid, FileType, UserId, Config
+            Providers, ShareId, ShareName, Description,
+            SpaceId, FileGuid, FileType, UserId
         )
     end.
 
 
-get_share_test(Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
+get_share_test(_Config) ->
+    Providers = lists:flatten([
+        oct_background:get_provider_nodes(krakow),
+        oct_background:get_provider_nodes(paris)
+    ]),
+    SpaceId = oct_background:get_space_id(space_krk_par),
 
     ShareName = <<"share">>,
     Description = <<"# Collection ABC\nThis collection contains elements.">>,
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, ShareName, Description),
-    file_test_utils:await_sync(P2, FileGuid),
 
+    {FileType, FileSpec} = generate_random_file_spec([
+        #share_spec{name = ShareName, description = Description}
+    ]),
+    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, SpaceId, FileSpec
+    ),
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
 
@@ -205,10 +215,17 @@ get_share_test(Config) ->
         bad_values = [{bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}]
     },
 
-    ?assert(api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            client_spec = #client_spec{
+                correct = [
+                    user2, % space owner - doesn't need any perms
+                    user3, user4 % space members - any space member can fetch info about share
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1]
+            },
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get share using /shares rest endpoint">>,
@@ -220,10 +237,10 @@ get_share_test(Config) ->
                             <<"name">> => ShareName,
                             <<"description">> => Description,
                             <<"fileType">> => FileType,
-                            <<"publicUrl">> => ?SHARE_PUBLIC_URL(ShareId),
+                            <<"publicUrl">> => build_share_public_url(ShareId),
                             <<"rootFileId">> => ShareObjectId,
-                            <<"spaceId">> => ?SPACE_2,
-                            <<"handleId">> => ?SHARE_HANDLE(ShareId)
+                            <<"spaceId">> => SpaceId,
+                            <<"handleId">> => null
                         },
                         ?assertEqual({?HTTP_200_OK, ExpShareData}, {RespCode, RespBody})
                     end
@@ -243,7 +260,7 @@ get_share_test(Config) ->
             name = <<"Get share using gs public api">>,
             type = gs,
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
             prepare_args_fun = build_get_share_prepare_gs_args_fun(ShareId, public),
             validate_result_fun = fun(_, {ok, Result}) ->
                 assert_proper_gs_share_translation(ShareId, ShareName, Description, public, FileGuid, FileType, Result)
@@ -254,6 +271,8 @@ get_share_test(Config) ->
 
 
 %% @private
+-spec build_get_share_prepare_rest_args_fun(od_share:id()) ->
+    onenv_api_test_runner:prepare_args_fun().
 build_get_share_prepare_rest_args_fun(ShareId) ->
     fun(#api_test_ctx{data = Data}) ->
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ShareId, Data),
@@ -266,6 +285,8 @@ build_get_share_prepare_rest_args_fun(ShareId) ->
 
 
 %% @private
+-spec build_get_share_prepare_gs_args_fun(od_share:id(), gri:scope()) ->
+    onenv_api_test_runner:prepare_args_fun().
 build_get_share_prepare_gs_args_fun(ShareId, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
@@ -278,48 +299,61 @@ build_get_share_prepare_gs_args_fun(ShareId, Scope) ->
     end.
 
 
-update_share_test(Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+update_share_test(_Config) ->
+    Providers = lists:flatten([
+        oct_background:get_provider_nodes(krakow),
+        oct_background:get_provider_nodes(paris)
+    ]),
+    SpaceKrkParId = oct_background:get_space_id(space_krk_par),
+    User3Id = oct_background:get_user_id(user3),
 
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
-
-    OriginalDescription = <<"### Nested heading at the beginning - total markdown anarchy.">>,
     OriginalShareName = <<"share">>,
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, OriginalShareName, OriginalDescription),
-    file_test_utils:await_sync(P2, FileGuid),
+    OriginalDescription = <<"### Nested heading at the beginning - total markdown anarchy.">>,
+
+    {FileType, FileSpec} = generate_random_file_spec([
+        #share_spec{name = OriginalShareName, description = OriginalDescription}
+    ]),
+    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, SpaceKrkParId, FileSpec
+    ),
 
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, previous_name, OriginalShareName),
     api_test_memory:set(MemRef, previous_description, OriginalDescription),
 
-    ?assert(api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            client_spec = #client_spec{
+                correct = [
+                    user2, % space owner - doesn't need any perms
+                    user3  % files owner (see fun create_shared_file/1)
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1],
+                forbidden_in_space = [user4]  % forbidden by lack of privileges
+            },
             verify_fun = fun
                 (expected_failure, _) ->
                     PreviousName = api_test_memory:get(MemRef, previous_name),
                     PreviousDescription = api_test_memory:get(MemRef, previous_description),
+
                     verify_share_doc(
-                        Providers, ShareId, PreviousName, PreviousDescription, ?SPACE_2,
-                        FileGuid, FileType, ?USER_IN_BOTH_SPACES, Config
-                    ),
-                    true;
+                        Providers, ShareId, PreviousName, PreviousDescription,
+                        SpaceKrkParId, FileGuid, FileType, User3Id
+                    );
                 (expected_success, #api_test_ctx{client = ?USER(UserId), data = Data}) ->
                     PreviousName = api_test_memory:get(MemRef, previous_name),
                     PreviousDescription = api_test_memory:get(MemRef, previous_description),
                     ExpectedName = maps:get(<<"name">>, Data, PreviousName),
                     ExpectedDescription = maps:get(<<"description">>, Data, PreviousDescription),
+
                     verify_share_doc(
-                        Providers, ShareId, ExpectedName, ExpectedDescription, ?SPACE_2,
-                        FileGuid, FileType, UserId, Config
+                        Providers, ShareId, ExpectedName, ExpectedDescription,
+                        SpaceKrkParId, FileGuid, FileType, UserId
                     ),
                     api_test_memory:set(MemRef, previous_name, ExpectedName),
-                    api_test_memory:set(MemRef, previous_description, ExpectedDescription),
-                    true
+                    api_test_memory:set(MemRef, previous_description, ExpectedDescription)
             end,
             scenario_templates = [
                 #scenario_template{
@@ -357,6 +391,8 @@ update_share_test(Config) ->
 
 
 %% @private
+-spec build_update_share_prepare_rest_args_fun(od_share:id()) ->
+    onenv_api_test_runner:prepare_args_fun().
 build_update_share_prepare_rest_args_fun(ShareId) ->
     fun(#api_test_ctx{data = Data0}) ->
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
@@ -371,6 +407,8 @@ build_update_share_prepare_rest_args_fun(ShareId) ->
 
 
 %% @private
+-spec build_update_share_prepare_gs_args_fun(od_share:id()) ->
+    onenv_api_test_runner:prepare_args_fun().
 build_update_share_prepare_gs_args_fun(ShareId) ->
     fun(#api_test_ctx{data = Data0}) ->
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
@@ -383,41 +421,38 @@ build_update_share_prepare_gs_args_fun(ShareId) ->
     end.
 
 
-delete_share_test(Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+delete_share_test(_Config) ->
+    Providers = lists:flatten([
+        oct_background:get_provider_nodes(krakow),
+        oct_background:get_provider_nodes(paris)
+    ]),
+    SpaceId = oct_background:get_space_id(space_krk_par),
 
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
-
-    ShareIds = lists:reverse(lists:map(fun(_) ->
-        {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
-        ShareId
-    end, lists:seq(1, 4))),
-
-    file_test_utils:await_sync(P2, FileGuid),
+    {FileType, FileSpec} = generate_random_file_spec([#share_spec{} || _ <- lists:seq(1, 4)]),
+    #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, SpaceId, FileSpec
+    ),
 
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, shares, ShareIds),
 
-    ?assert(api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
-            verify_fun = build_verify_file_shares_fun(MemRef, Providers, ?USER_IN_BOTH_SPACES, FileGuid, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            verify_fun = build_verify_file_shares_fun(MemRef, Providers, user3, FileGuid),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Delete share for ", FileType/binary, " using /shares rest endpoint">>,
                     type = rest,
                     prepare_args_fun = build_delete_share_prepare_rest_args_fun(MemRef),
-                    validate_result_fun = build_delete_share_validate_rest_call_result_fun(MemRef, Providers, Config)
+                    validate_result_fun = build_delete_share_validate_rest_call_result_fun(MemRef, Providers)
                 },
                 #scenario_template{
                     name = <<"Delete share for ", FileType/binary, " using gs api">>,
                     type = gs,
                     prepare_args_fun = build_delete_share_prepare_gs_args_fun(MemRef),
-                    validate_result_fun = build_delete_share_validate_gs_call_result_fun(MemRef, Providers, Config)
+                    validate_result_fun = build_delete_share_validate_gs_call_result_fun(MemRef, Providers)
                 }
             ],
             data_spec = #data_spec{
@@ -430,12 +465,11 @@ delete_share_test(Config) ->
 
 
 %% @private
+-spec build_delete_share_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
+    onenv_api_test_runner:prepare_args_fun().
 build_delete_share_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
-        Shares = api_test_memory:get(MemRef, shares),
-        ShareId = lists_utils:random_element(Shares),
-        api_test_memory:set(MemRef, share_to_remove, ShareId),
-
+        ShareId = choose_share_to_remove(MemRef),
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ShareId, Data),
 
         #rest_args{
@@ -446,12 +480,11 @@ build_delete_share_prepare_rest_args_fun(MemRef) ->
 
 
 %% @private
+-spec build_delete_share_prepare_gs_args_fun(api_test_memory:mem_ref()) ->
+    onenv_api_test_runner:prepare_args_fun().
 build_delete_share_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
-        Shares = api_test_memory:get(MemRef, shares),
-        ShareId = lists_utils:random_element(Shares),
-        api_test_memory:set(MemRef, share_to_remove, ShareId),
-
+        ShareId = choose_share_to_remove(MemRef),
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
 
         #gs_args{
@@ -463,34 +496,46 @@ build_delete_share_prepare_gs_args_fun(MemRef) ->
 
 
 %% @private
-build_delete_share_validate_rest_call_result_fun(MemRef, Providers, Config) ->
+-spec choose_share_to_remove(api_test_memory:mem_ref()) -> od_share:id().
+choose_share_to_remove(MemRef) ->
+    Shares = api_test_memory:get(MemRef, shares),
+    ShareId = lists_utils:random_element(Shares),
+    api_test_memory:set(MemRef, share_to_remove, ShareId),
+
+    ShareId.
+
+
+%% @private
+-spec build_delete_share_validate_rest_call_result_fun(api_test_memory:mem_ref(), [node()]) ->
+    onenv_api_test_runner:validate_call_result_fun().
+build_delete_share_validate_rest_call_result_fun(MemRef, Providers) ->
     fun(#api_test_ctx{client = ?USER(UserId)}, {ok, RespCode, _, RespBody}) ->
         ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody}),
-        build_validate_delete_share_result(MemRef, UserId, Providers, Config)
+        validate_delete_share_result(MemRef, UserId, Providers)
     end.
 
 
 %% @private
-build_delete_share_validate_gs_call_result_fun(MemRef, Providers, Config) ->
+-spec build_delete_share_validate_gs_call_result_fun(api_test_memory:mem_ref(), [node()]) ->
+    onenv_api_test_runner:validate_call_result_fun().
+build_delete_share_validate_gs_call_result_fun(MemRef, Providers) ->
     fun(#api_test_ctx{client = ?USER(UserId)}, Result) ->
         ?assertEqual(ok, Result),
-        build_validate_delete_share_result(MemRef, UserId, Providers, Config)
+        validate_delete_share_result(MemRef, UserId, Providers)
     end.
 
 
 %% @private
-build_validate_delete_share_result(MemRef, UserId, Providers, Config) ->
-    ShareId = api_test_memory:get(MemRef, share_to_remove),
-    lists:foreach(fun(Node) ->
-        ?assertEqual(
-            ?ERROR_NOT_FOUND,
-            rpc:call(Node, share_logic, get, [?SESS_ID(UserId, Node, Config), ShareId]),
-            ?ATTEMPTS
-        )
-    end, Providers),
-    api_test_memory:set(MemRef, shares, lists:delete(ShareId, api_test_memory:get(MemRef, shares))),
-
+-spec validate_delete_share_result(api_test_memory:mem_ref(), od_user:id(), [node()]) ->
     ok.
+validate_delete_share_result(MemRef, UserId, Providers) ->
+    ShareId = api_test_memory:get(MemRef, share_to_remove),
+
+    lists:foreach(fun(Node) ->
+        ?assertEqual(?ERROR_NOT_FOUND, get_share_doc(Node, UserId, ShareId), ?ATTEMPTS)
+    end, Providers),
+
+    api_test_memory:set(MemRef, shares, lists:delete(ShareId, api_test_memory:get(MemRef, shares))).
 
 
 %%%===================================================================
@@ -499,9 +544,32 @@ build_validate_delete_share_result(MemRef, UserId, Providers, Config) ->
 
 
 %% @private
-verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, FileType, UserId, Config) ->
-    ExpPublicUrl = ?SHARE_PUBLIC_URL(ShareId),
-    ExpHandle = ?SHARE_HANDLE(ShareId),
+-spec generate_random_file_spec() ->
+    {api_test_utils:file_type(), onenv_file_test_utils:file_spec()}.
+generate_random_file_spec() ->
+    generate_random_file_spec([]).
+
+
+%% @private
+-spec generate_random_file_spec([onenv_file_test_utils:shares_spec()]) ->
+    {api_test_utils:file_type(), onenv_file_test_utils:file_spec()}.
+generate_random_file_spec(ShareSpecs) ->
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
+    FileDesc = case FileType of
+        <<"file">> -> #file_spec{shares = ShareSpecs};
+        <<"dir">> -> #dir_spec{shares = ShareSpecs}
+    end,
+    {FileType, FileDesc}.
+
+
+%% @private
+-spec verify_share_doc(
+    [node()], od_share:id(), od_share:name(), od_share:description(),
+    od_space:id(), file_id:file_guid(), api_test_utils:file_type(), od_user:id()
+) ->
+    ok.
+verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, FileType, UserId) ->
+    ExpPublicUrl = build_share_public_url(ShareId),
     ExpFileType = binary_to_atom(FileType, utf8),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
@@ -514,20 +582,32 @@ verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, 
                 root_file = ShareFileGuid,
                 public_url = ExpPublicUrl,
                 file_type = ExpFileType,
-                handle = ExpHandle
+                handle = undefined
             }}},
-            rpc:call(Node, share_logic, get, [?SESS_ID(UserId, Node, Config), ShareId])
+            get_share_doc(Node, UserId, ShareId),
+            ?ATTEMPTS
         )
     end, Providers).
 
 
 %% @private
+-spec get_share_doc(node(), od_user:id(), od_share:id()) -> od_share:doc().
+get_share_doc(Node, UserId, ShareId) ->
+    ProviderId = opw_test_rpc:get_provider_id(Node),
+    UserSessId = oct_background:get_user_session_id(UserId, ProviderId),
+
+    rpc:call(Node, share_logic, get, [UserSessId, ShareId]).
+
+
+%% @private
+-spec assert_proper_gs_share_translation(
+    od_share:id(), od_share:name(), od_share:description(), gri:scope(),
+    file_id:file_guid(), api_test_utils:file_type(), map()
+) ->
+    ok.
 assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileGuid, FileType, GsShareData) ->
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
-    % Unfortunately there is no oz in api tests and so all *_logic modules are
-    % mocked. Because of share_logic mocks created shares already have handle
-    % and dummy public url.
     ExpBasicShareData = #{
         <<"revision">> => 1,
         <<"gri">> => gri:serialize(#gri{
@@ -539,61 +619,66 @@ assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileG
         <<"name">> => ShareName,
         <<"description">> => Description,
         <<"fileType">> => FileType,
-        <<"publicUrl">> => <<ShareId/binary, "_public_url">>,
+        <<"publicUrl">> => build_share_public_url(ShareId),
         <<"rootFile">> => gri:serialize(#gri{
             type = op_file,
             id = ShareFileGuid,
             aspect = instance,
             scope = public
-        })
+        }),
+        <<"handle">> => null
     },
     ExpShareData = case Scope of
         public ->
-            ExpBasicShareData#{<<"handle">> => null};
+            ExpBasicShareData;
         private ->
-            ExpBasicShareData#{
-                <<"handle">> => gri:serialize(#gri{
-                    type = op_handle,
-                    id = <<ShareId/binary, "_handle_id">>,
-                    aspect = instance,
-                    % the share's handle is mocked (with a fake id), consequently
-                    % the user is not a member of the handle and does not have access
-                    % to its private scope, so public scope should be included in the GRI
-                    scope = public
-                }),
-                <<"privateRootFile">> => gri:serialize(#gri{
-                    type = op_file,
-                    id = FileGuid,
-                    aspect = instance,
-                    scope = private
-                })
-            }
+            ExpBasicShareData#{<<"privateRootFile">> => gri:serialize(#gri{
+                type = op_file,
+                id = FileGuid,
+                aspect = instance,
+                scope = private
+            })}
     end,
-
     ?assertEqual(ExpShareData, GsShareData).
 
 
 %% @private
-build_verify_file_shares_fun(MemRef, Providers, UserId, FileGuid, Config) ->
+-spec build_verify_file_shares_fun(
+    api_test_memory:mem_ref(),
+    [node()],
+    oct_background:entity_selector(),
+    file_id:file_guid()
+) ->
+    onenv_api_test_runner:verify_fun().
+build_verify_file_shares_fun(MemRef, Providers, UserSelector, FileGuid) ->
     fun(_, _) ->
-        Shares = api_test_memory:get(MemRef, shares, []),
-        ExpShares = lists:sort(Shares),
-
-        GetFileSharesFun = fun(Node) ->
-            SessId = ?SESS_ID(UserId, Node, Config),
-            {ok, #file_attr{shares = FileShares}} = ?assertMatch(
-                {ok, _},
-                lfm_proxy:stat(Node, SessId, {guid, FileGuid})
-            ),
-            lists:sort(FileShares)
-        end,
+        ExpShares = lists:sort(api_test_memory:get(MemRef, shares, [])),
 
         lists:foreach(fun(Node) ->
-            ?assertEqual(ExpShares, GetFileSharesFun(Node), ?ATTEMPTS)
-        end, Providers),
-
-        true
+            ?assertEqual(ExpShares, get_file_shares(Node, UserSelector, FileGuid), ?ATTEMPTS)
+        end, Providers)
     end.
+
+
+%% @private
+-spec get_file_shares(node(), oct_background:entity_selector(), file_id:file_guid()) ->
+    [od_share:id()].
+get_file_shares(Node, UserSelector, FileGuid) ->
+    ProviderId = opw_test_rpc:get_provider_id(Node),
+    UserSessId = oct_background:get_user_session_id(UserSelector, ProviderId),
+
+    {ok, #file_attr{shares = FileShares}} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:stat(Node, UserSessId, {guid, FileGuid})
+    ),
+    lists:sort(FileShares).
+
+
+%% @private
+-spec build_share_public_url(od_share:id()) -> binary().
+build_share_public_url(ShareId) ->
+    OzDomain = ozw_test_rpc:get_domain(),
+    str_utils:format_bin("https://~s/share/~s", [OzDomain, ShareId]).
 
 
 %%%===================================================================
@@ -602,121 +687,28 @@ build_verify_file_shares_fun(MemRef, Providers, UserId, FileGuid, Config) ->
 
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
-        lists:foreach(fun(Worker) ->
-            % TODO VFS-6251
-            test_utils:set_env(Worker, ?APP_NAME, dbsync_out_stream_handling_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
-            test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
-            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
-        end, ?config(op_worker_nodes, NewConfig2)),
-        ssl:start(),
-        hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(
-            ?TEST_FILE(NewConfig2, "env_desc.json"),
-            NewConfig2
-        ),
-        initializer:mock_auth_manager(NewConfig3, _CheckIfUserIsSupported = true),
-        ssl:start(),
-        hackney:start(),
-        NewConfig3
-    end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "api_tests",
+        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
+        posthook = fun(NewConfig) ->
+            User3Id = oct_background:get_user_id(user3),
+            SpaceId = oct_background:get_space_id(space_krk_par),
+            ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+                ?SPACE_MANAGE_SHARES | privileges:space_member()
+            ]),
+            NewConfig
+        end
+    }).
 
 
-end_per_suite(Config) ->
-    hackney:stop(),
-    ssl:stop(),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:teardown_storage(Config).
+end_per_suite(_Config) ->
+    oct_background:end_per_suite().
 
 
 init_per_testcase(_Case, Config) ->
-    mock_share_logic(Config),
     ct:timetrap({minutes, 10}),
     lfm_proxy:init(Config).
 
 
 end_per_testcase(_Case, Config) ->
-    initializer:unmock_share_logic(Config),
     lfm_proxy:teardown(Config).
-
-
-%%%===================================================================
-%%% Share mocks
-%%%===================================================================
-
-
--spec mock_share_logic(proplists:proplist()) -> ok.
-mock_share_logic(Config) ->
-    TestNode = node(),
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, share_logic),
-
-    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, Description, SpaceId, ShareFileGuid, FileType) ->
-        ShareDoc = #document{key = ShareId, value = #od_share{
-            name = Name,
-            description = Description,
-            space = SpaceId,
-            root_file = ShareFileGuid,
-            public_url = ?SHARE_PUBLIC_URL(ShareId),
-            file_type = FileType,
-            handle = ?SHARE_HANDLE(ShareId)
-        }},
-        rpc:call(TestNode, ?MODULE, create_share, [Workers, ShareDoc])
-    end),
-
-    test_utils:mock_expect(Workers, share_logic, get, fun(_Auth, ShareId) ->
-        od_share:get_from_cache(ShareId)
-    end),
-
-    test_utils:mock_expect(Workers, share_logic, get_public_data, fun(_Auth, ShareId) ->
-        case od_share:get_from_cache(ShareId) of
-            {ok, #document{value = Share} = Doc} ->
-                {ok, Doc#document{value = Share#od_share{
-                    space = undefined,
-                    handle = undefined
-                }}};
-            Error ->
-                Error
-        end
-    end),
-
-    test_utils:mock_expect(Workers, share_logic, update, fun(Auth, ShareId, Data) ->
-        {ok, #document{key = ShareId, value = Share}} = share_logic:get(Auth, ShareId),
-        rpc:call(TestNode, ?MODULE, update_share, [Workers, #document{
-            key = ShareId,
-            value = Share#od_share{
-                name = maps:get(<<"name">>, Data, Share#od_share.name),
-                description = maps:get(<<"description">>, Data, Share#od_share.description)
-            }}
-        ])
-    end),
-
-    test_utils:mock_expect(Workers, share_logic, delete, fun(_Auth, ShareId) ->
-        rpc:call(TestNode, ?MODULE, delete_share, [Workers, ShareId]),
-        ok
-    end).
-
-
-create_share(Providers, ShareDoc = #document{key = ShareId, value = Record}) ->
-    {_, []} = rpc:multicall(Providers, od_share, update_cache, [
-        ShareId, fun(_) -> {ok, Record} end, ShareDoc
-    ]),
-    {ok, ShareId}.
-
-
-update_share(Providers, NewShareDoc = #document{key = ShareId, value = NewRecord}) ->
-    {_, []} = rpc:multicall(Providers, od_share, invalidate_cache, [ShareId]),
-    {_, []} = rpc:multicall(Providers, od_share, update_cache, [
-        ShareId, fun(_) -> {ok, NewRecord} end, NewShareDoc
-    ]),
-    ok.
-
-
-delete_share(Providers, ShareId) ->
-    {_, []} = rpc:multicall(Providers, od_share, invalidate_cache, [ShareId]),
-    ok.

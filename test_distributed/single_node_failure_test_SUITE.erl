@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("distribution_assert.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -97,9 +98,9 @@ create_initial_data_structure(Config) ->
 
     ConflictingDirName = generator:gen_name(),
     {ok, P1DirGuid} =
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP1, SessId(P1), SpaceGuid, ConflictingDirName, 8#755)),
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP1, SessId(P1), SpaceGuid, ConflictingDirName, ?DEFAULT_DIR_PERMS)),
     {ok, P2DirGuid} =
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP2, SessId(P2), SpaceGuid, ConflictingDirName, 8#755)),
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerP2, SessId(P2), SpaceGuid, ConflictingDirName, ?DEFAULT_DIR_PERMS)),
 
     lists:foreach(fun(Dir) ->
         lists:foreach(fun({Worker, ProvId}) ->

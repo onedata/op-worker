@@ -425,7 +425,7 @@ register_auth_validity_checkup_if_user_session(UserSession, TokenCredentials) wh
 schedule_auth_validity_checkup(TokenTTL) ->
     Delay = case TokenTTL of
         undefined -> ?SESSION_VALIDITY_CHECK_INTERVAL;
-        TokenTTL -> min(?SESSION_VALIDITY_CHECK_INTERVAL, TokenTTL)
+        TokenTTL -> min(?SESSION_VALIDITY_CHECK_INTERVAL, max(TokenTTL, 0))
     end,
     erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_VALIDITY).
 

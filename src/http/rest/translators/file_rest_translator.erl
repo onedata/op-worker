@@ -49,14 +49,17 @@ get_response(#gri{aspect = As}, Result) when
     As =:= list
 ->
     ?OK_REPLY(Result);
-get_response(#gri{aspect = children}, Children) ->
-    ?OK_REPLY(#{<<"children">> => lists:map(fun({Guid, Name}) ->
-        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        #{
-            <<"id">> => ObjectId,
-            <<"name">> => Name
-        }
-    end, Children)});
+get_response(#gri{aspect = children}, {Children, IsLast}) ->
+    ?OK_REPLY(#{
+        <<"children">> => lists:map(fun({Guid, Name}) ->
+            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+            #{
+                <<"id">> => ObjectId,
+                <<"name">> => Name
+            }
+        end, Children),
+        <<"isLast">> => IsLast
+    });
 get_response(#gri{aspect = As}, Metadata) when
     As =:= attrs;
     As =:= xattrs;

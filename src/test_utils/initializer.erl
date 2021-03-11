@@ -127,6 +127,7 @@
 -define(TOKENS_SECRET, <<"secret">>).
 -define(TEMPORARY_TOKENS_GENERATION, 1).
 -define(DEFAULT_ONEZONE_DOMAIN, <<"onezone.test">>).
+-define(OFFLINE_ACCESS_TOKEN_EXPIRATION, 3600 * 24 * 7). % 1 week
 
 %%%===================================================================
 %%% API
@@ -272,7 +273,7 @@ create_token(TokenType, UserId, Caveats, Persistence) ->
         tokens:serialize(tokens:construct(#token{
             onezone_domain = <<"zone">>,
             subject = ?SUB(user, UserId),
-            id = UserId,
+            id = str_utils:rand_hex(16),
             type = TokenType,
             persistence = case Persistence of
                 named -> named;
@@ -1054,9 +1055,11 @@ user_logic_mock_setup(Workers, Users, NoHistory) ->
     end,
 
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(UserToken, _, _, _, _) ->
-        case proplists:get_value(UserToken, UsersByToken, undefined) of
-            undefined -> {error, not_found};
-            UserId -> {ok, ?SUB(user, UserId), undefined}
+        case tokens:deserialize(UserToken) of
+            {ok, #token{subject = ?SUB(user, UserId)}} ->
+                {ok, ?SUB(user, UserId), undefined};
+            _ ->
+                {error, not_found}
         end
     end),
     test_utils:mock_expect(Workers, token_logic, is_token_revoked, fun(_TokenId) ->
@@ -1065,6 +1068,14 @@ user_logic_mock_setup(Workers, Users, NoHistory) ->
     test_utils:mock_expect(Workers, token_logic, get_temporary_tokens_generation, fun(_UserId) ->
         {ok, ?TEMPORARY_TOKENS_GENERATION}
     end),
+    test_utils:mock_expect(Workers, token_logic, acquire_offline_user_access_token,
+        fun(_UserId, AccessToken, _ConsumerToken, _PeerIp, _Interface, _DataAccessCaveatsPolicy) ->
+            {ok, T} = tokens:deserialize(AccessToken),
+            ValidUntil = global_clock:timestamp_seconds() + ?OFFLINE_ACCESS_TOKEN_EXPIRATION,
+            OfflineAccessToken = tokens:construct(T, ?TOKENS_SECRET, [#cv_time{valid_until = ValidUntil}]),
+            tokens:serialize(OfflineAccessToken)
+        end
+    ),
 
     test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenCredentials) ->
         AccessToken = auth_manager:get_access_token(TokenCredentials),
@@ -1264,6 +1275,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     end),
     
     test_utils:mock_expect(Workers, space_logic, report_provider_sync_progress, fun(_SpaceId, _) ->
+        ok
+    end),
+
+    test_utils:mock_expect(Workers, space_logic, report_provider_capacity_usage, fun(_SpaceId, _) ->
         ok
     end),
 

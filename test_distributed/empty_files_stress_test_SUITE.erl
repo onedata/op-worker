@@ -76,24 +76,24 @@ many_files_creation_tree_test_base(Config) ->
         undefined ->
             case files_stress_test_base:many_files_creation_tree_test_base(Config, false, true) of
                 [stop | PhaseAns] ->
-                    start_traverse(Config, undefined, <<"1">>),
+                    start_traverse(Config, #{mode => undefined}, <<"1">>),
                     put(stress_phase, traverse),
                     PhaseAns;
                 Other ->
                     Other
             end;
         traverse ->
-            {Stop, Ans} = process_traverse_info(Config, standard, <<"1">>),
+            {Stop, Ans} = process_task_description(Config, standard, <<"1">>),
             case Stop of
                 true ->
-                    start_traverse(Config, precalculate_dir, <<"2">>),
+                    start_traverse(Config, #{mode => precalculate_dir}, <<"2">>),
                     put(stress_phase, traverse2),
                     Ans;
                 _ ->
                     Ans
             end;
         traverse2 ->
-            {Stop, Ans} = process_traverse_info(Config, precalculate_dir, <<"2">>),
+            {Stop, Ans} = process_task_description(Config, precalculate_dir, <<"2">>),
             case Stop of
                 true -> [stop | Ans];
                 _ -> Ans
@@ -114,8 +114,10 @@ init_per_testcase(stress_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 5, 30, 10])),
 
-    CachePid = spawn(Worker, fun() -> cache_proc(
-        #{check_frequency => timer:minutes(1), size => 500}) end),
+    CachePid = spawn(Worker, fun() -> cache_proc(#{
+        check_frequency => timer:minutes(1),
+        size => 500
+    }) end),
 
     files_stress_test_base:init_per_testcase(Case, [{cache_pid, CachePid} | Config]);
 init_per_testcase(_Case, Config) ->
@@ -128,9 +130,9 @@ end_per_testcase(stress_test = Case, Config) ->
     CachePid ! {finish, self()},
     ok = receive
              finished -> ok
-         after
-             1000 -> timeout
-         end,
+     after
+         1000 -> timeout
+     end,
 
     files_stress_test_base:end_per_testcase(Case, Config);
 end_per_testcase(_Case, Config) ->
@@ -140,25 +142,25 @@ end_per_testcase(_Case, Config) ->
 %%% Pool callbacks
 %%%===================================================================
 
-do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, TaskID) ->
+do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, TaskId) ->
     case tree_traverse:get_traverse_info(Job) of
-        precalculate_dir ->
+        #{mode := precalculate_dir} ->
             {Doc, _} = file_ctx:get_file_doc(FileCtx),
             Callback = fun(Args) -> get_file_level(Args) end,
             {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, 0, []),
             case CalculationInfo of
                 0 ->
-                    tree_traverse:do_master_job(Job, TaskID);
+                    tree_traverse:do_master_job(Job, TaskId);
                 _ ->
-                    {ok, Info} = tree_traverse:do_master_job(Job, TaskID),
+                    {ok, Info} = tree_traverse:do_master_job(Job, TaskId),
                     Info2 = Info#{description => #{dirs_evaluation => CalculationInfo}},
                     {ok, Info2}
             end;
         _ ->
-            tree_traverse:do_master_job(Job, TaskID)
+            tree_traverse:do_master_job(Job, TaskId)
     end.
 
-do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, _TaskID) ->
+do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, _TaskId) ->
     Callback = fun(Args) -> get_file_level(Args) end,
     {Doc, _} = file_ctx:get_file_doc(FileCtx),
     {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, 0, []),
@@ -167,8 +169,8 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, _TaskID) ->
         _ -> {ok, #{dirs_evaluation => CalculationInfo}}
     end.
 
-update_job_progress(ID, Job, Pool, TaskID, Status) ->
-    tree_traverse:update_job_progress(ID, Job, Pool, TaskID, Status, ?MODULE).
+update_job_progress(ID, Job, Pool, TaskId, Status) ->
+    tree_traverse:update_job_progress(ID, Job, Pool, TaskId, Status, ?MODULE).
 
 get_job(DocOrID) ->
     tree_traverse:get_job(DocOrID).
@@ -199,7 +201,7 @@ get_file_level([_, undefined, CalculationInfo]) ->
 get_file_level([_, ParentValue, CalculationInfo]) ->
     {ok, ParentValue + 1, CalculationInfo + 1}.
 
-start_traverse(Config, TraverseCache, ID) ->
+start_traverse(Config, TraverseInfo, ID) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
 
@@ -208,11 +210,11 @@ start_traverse(Config, TraverseCache, ID) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     {ok, Guid} = ?assertMatch({ok, _},
         lfm_proxy:resolve_guid(Worker, SessId, <<"/", SpaceName/binary>>)),
-    RunOpts = #{task_id => ID, traverse_cache => TraverseCache},
+    RunOpts = #{task_id => ID, traverse_info => TraverseInfo},
     ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run, [?MODULE,
         file_ctx:new_by_guid(Guid), RunOpts])).
 
-process_traverse_info(Config, Type, ID) ->
+process_task_description(Config, Type, ID) ->
     timer:sleep(timer:seconds(30)),
     [Worker | _] = ?config(op_worker_nodes, Config),
     DirLevel = ?config(dir_level, Config),

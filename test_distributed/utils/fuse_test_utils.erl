@@ -360,7 +360,7 @@ receive_server_message(IgnoredMsgList, Timeout) ->
 
 %% Fuse request messages
 generate_create_file_message(RootGuid, MsgId, File) ->
-    generate_create_file_message(RootGuid, MsgId, File, 8#644).
+    generate_create_file_message(RootGuid, MsgId, File, ?DEFAULT_FILE_PERMS).
 
 generate_create_file_message(RootGuid, MsgId, File, Mode) ->
     FuseRequest = {file_request, #'FileRequest'{
@@ -376,7 +376,7 @@ generate_create_file_message(RootGuid, MsgId, File, Mode) ->
 generate_create_dir_message(RootGuid, MsgId, Name) ->
     FuseRequest = {file_request, #'FileRequest'{
         context_guid = RootGuid,
-        file_request = {create_dir, #'CreateDir'{name = Name, mode = 8#755}}
+        file_request = {create_dir, #'CreateDir'{name = Name, mode = ?DEFAULT_DIR_PERMS}}
     }},
     generate_fuse_request_message(MsgId, FuseRequest).
 
@@ -518,7 +518,7 @@ generate_proxyio_message(MsgId, Parameters, ProxyIORequest) ->
 
 
 create_file(Sock, RootGuid, Filename) ->
-    create_file(Sock, RootGuid, Filename, 8#644, ?MSG_ID).
+    create_file(Sock, RootGuid, Filename, ?DEFAULT_FILE_PERMS, ?MSG_ID).
 
 create_file(Sock, RootGuid, Filename, Mode, MsgId) ->
     ok = ssl:send(Sock, fuse_test_utils:generate_create_file_message(RootGuid, MsgId, Filename, Mode)),

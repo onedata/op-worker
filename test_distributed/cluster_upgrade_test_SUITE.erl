@@ -29,7 +29,7 @@
 -export([
     upgrade_20_02_1_to_20_02_2_space_strategies/1,
     upgrade_20_02_1_to_20_02_2_storage_sync_monitoring/1,
-    upgrade_20_02_x_to_21_02_1_space_supports/1
+    upgrade_21_02_x_to_22_02_1_space_supports/1
 ]).
 
 %%%===================================================================
@@ -39,7 +39,7 @@
 all() -> ?ALL([
     upgrade_20_02_1_to_20_02_2_space_strategies,
     upgrade_20_02_1_to_20_02_2_storage_sync_monitoring,
-    upgrade_20_02_x_to_21_02_1_space_supports
+    upgrade_21_02_x_to_22_02_1_space_supports
 ]).
 
 %%%===================================================================
@@ -362,14 +362,14 @@ upgrade_20_02_1_to_20_02_2_storage_sync_monitoring(Config) ->
     ?assertMatch({ok, SIMDoc5}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId5])).
 
 
-upgrade_20_02_x_to_21_02_1_space_supports(Config) ->
+upgrade_21_02_x_to_22_02_1_space_supports(Config) ->
     AllSpaces = [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>, <<"space_id5">>],
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
-    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, upgrade_support_to_21_02, 2, 5),
+    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, upgrade_support_to_22_02, 2, 5),
     lists:foreach(fun(SpaceId) ->
         {ok, StorageId} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId]),
-        test_utils:mock_assert_num_calls_sum(Worker, storage_logic, upgrade_support_to_21_02, [StorageId, SpaceId], 1)
+        test_utils:mock_assert_num_calls_sum(Worker, storage_logic, upgrade_support_to_22_02, [StorageId, SpaceId], 1)
     end, AllSpaces).
 
 %%%===================================================================
@@ -394,11 +394,11 @@ init_per_testcase(Case = upgrade_20_02_1_to_20_02_2_space_strategies, Config) ->
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(Case = upgrade_20_02_x_to_21_02_1_space_supports, Config) ->
+init_per_testcase(Case = upgrade_21_02_x_to_22_02_1_space_supports, Config) ->
     Workers = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Workers, storage_logic, [passthrough]),
-    test_utils:mock_expect(Workers, storage_logic, upgrade_support_to_21_02, fun(_, _) -> ok end),
+    test_utils:mock_expect(Workers, storage_logic, upgrade_support_to_22_02, fun(_, _) -> ok end),
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 

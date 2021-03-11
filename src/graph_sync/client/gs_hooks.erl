@@ -26,9 +26,7 @@
 -export([handle_deregistered_from_oz/0]).
 -export([handle_entity_deleted/1]).
 
--define(PROVIDER_SYNC_PROGRESS_REPORT_INTERVAL,
-    application:get_env(?APP_NAME, provider_sync_progress_report_interval_sec, 15)
-).
+-define(SPACE_STATS_REPORT_INTERVAL_SEC, op_worker:get_env(space_stats_report_interval_sec, 15)).
 
 %%%===================================================================
 %%% API
@@ -152,7 +150,7 @@ on_connect_to_oz() ->
 %% @private
 -spec on_successful_healthcheck() -> ok | no_return().
 on_successful_healthcheck() ->
-    utils:throttle(?PROVIDER_SYNC_PROGRESS_REPORT_INTERVAL, fun report_provider_sync_progress/0).
+    utils:throttle(?SPACE_STATS_REPORT_INTERVAL_SEC, fun report_space_stats/0).
 
 
 %% @private
@@ -193,6 +191,13 @@ on_entity_deleted(_) ->
 %%%===================================================================
 
 %% @private
+-spec report_space_stats() -> ok.
+report_space_stats() ->
+    report_provider_sync_progress(),
+    report_provider_capacity_usage().
+
+
+%% @private
 -spec report_provider_sync_progress() -> ok.
 report_provider_sync_progress() ->
     try
@@ -212,3 +217,26 @@ report_provider_sync_progress(SpaceId) ->
     end),
     space_logic:report_provider_sync_progress(SpaceId, Report).
 
+
+
+%% @private
+-spec report_provider_capacity_usage() -> ok.
+report_provider_capacity_usage() ->
+    try
+        {ok, Spaces} = provider_logic:get_spaces(),
+        lists:foreach(fun report_provider_capacity_usage/1, Spaces)
+    catch Class:Reason ->
+        ?error_stacktrace("Failed to report provider capacity usage to Onezone due to ~w:~p", [Class, Reason])
+    end.
+
+
+%% @private
+-spec report_provider_capacity_usage(od_space:id()) -> ok.
+report_provider_capacity_usage(SpaceId) ->
+    {ok, StorageIds} = space_logic:get_local_storages(SpaceId),
+    %% @TODO VFS-5497 The list of StorageIds is always 1-element and quota is stored per the whole space.
+    %% When multi-support is implemented, return usage for each supporting storage.
+    Report = provider_capacity_usage:build_report(StorageIds, fun(_StorageId) ->
+        space_quota:current_size(SpaceId)
+    end),
+    space_logic:report_provider_capacity_usage(SpaceId, Report).

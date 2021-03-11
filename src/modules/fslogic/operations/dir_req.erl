@@ -12,18 +12,18 @@
 -module(dir_req).
 -author("Tomasz Lichon").
 
+-include("modules/auth/acl.hrl").
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
 -export([
     mkdir/4,
-    get_children_ctxs/7,
-    get_children/5, get_children/6, get_children/7,
-    get_children_attrs/6,
-    get_children_details/5
+    get_children_ctxs/3,
+    get_children/3,
+    get_children_attrs/4,
+    get_children_details/3
 ]).
 
 -define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
@@ -52,46 +52,12 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
     mkdir_insecure(UserCtx, ParentFileCtx1, Name, Mode).
 
 
--spec get_children(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | binary()
-) ->
+
+-spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
     fslogic_worker:fuse_response().
-get_children(UserCtx, FileCtx, Offset, Limit, Token) ->
-    get_children(UserCtx, FileCtx, Offset, Limit, Token, undefined).
-
-
--spec get_children(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | binary(),
-    StartId :: undefined | file_meta:name()
-) ->
-    fslogic_worker:fuse_response().
-get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
-    get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId, undefined).
-
-
--spec get_children(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | binary(),
-    StartId :: undefined | file_meta:name(),
-    StartTree :: undefined | oneprovider:id()
-) ->
-    fslogic_worker:fuse_response().
-get_children(UserCtx, FileCtx0, Offset, Limit, EncodedToken, StartId, StartTree) ->
+get_children(UserCtx, FileCtx0, ListOpts) ->
     ParentGuid = file_ctx:get_guid_const(FileCtx0),
-    Token = decode_token(EncodedToken),
-    {ChildrenCtxs, ExtendedInfo, FileCtx1, IsLast} =
-        get_children_ctxs(UserCtx, FileCtx0, Offset, Limit, Token, StartId, StartTree),
+    {ChildrenCtxs, ExtendedInfo, FileCtx1} = get_children_ctxs(UserCtx, FileCtx0, ListOpts),
     ChildrenNum = length(ChildrenCtxs),
 
     ChildrenLinks = lists:filtermap(fun({Num, ChildCtx}) ->
@@ -121,13 +87,12 @@ get_children(UserCtx, FileCtx0, Offset, Limit, EncodedToken, StartId, StartTree)
         end
     end, lists:zip(lists:seq(1, ChildrenNum), ChildrenCtxs)),
 
-    NewTokenOrUndefined = maps:get(token, ExtendedInfo, undefined),
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
             child_links = ChildrenLinks,
-            index_token = encode_token(NewTokenOrUndefined),
-            is_last = IsLast
+            index_token = maps:get(token, ExtendedInfo, undefined),
+            is_last = maps:get(is_last, ExtendedInfo)
         }
     }.
 
@@ -138,22 +103,14 @@ get_children(UserCtx, FileCtx0, Offset, Limit, EncodedToken, StartId, StartTree)
 %% TODO VFS-7149 untangle permissions_check and fslogic_worker
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_ctxs(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | file_meta_links:token(),
-    StartId :: undefined | file_meta:name(),
-    StartTree :: undefined | oneprovider:id()
+-spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()
 ) ->
     {
         ChildrenCtxs :: [file_ctx:ctx()],
         ExtendedListInfo :: file_meta:list_extended_info(),
-        NewFileCtx :: file_ctx:ctx(),
-        IsLast :: boolean()
+        NewFileCtx :: file_ctx:ctx()
     }.
-get_children_ctxs(UserCtx, FileCtx0, Offset, Limit, Token, StartId, StartTree) ->
+get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     PermsToCheck = case IsDir of
         true -> [traverse_ancestors, ?list_container];
@@ -162,25 +119,16 @@ get_children_ctxs(UserCtx, FileCtx0, Offset, Limit, Token, StartId, StartTree) -
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, PermsToCheck
     ),
-    list_children(
-        UserCtx, FileCtx2, Offset, Limit, Token, StartId, StartTree, ChildrenWhiteList
-    ).
+    list_children(UserCtx, FileCtx2, ListOpts, ChildrenWhiteList).
 
 
 %%--------------------------------------------------------------------
 %% @equiv get_children_attrs_insecure/7 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | binary(),
-    IncludeReplicationStatus :: boolean()
-) ->
+-spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), boolean()) ->
     fslogic_worker:fuse_response().
-get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token, IncludeReplicationStatus) ->
+get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     PermsToCheck = case IsDir of
         true -> [traverse_ancestors, ?traverse_container, ?list_container];
@@ -190,7 +138,7 @@ get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token, IncludeReplicationSt
         UserCtx, FileCtx1, PermsToCheck
     ),
     get_children_attrs_insecure(
-        UserCtx, FileCtx2, Offset, Limit, Token, IncludeReplicationStatus, ChildrenWhiteList
+        UserCtx, FileCtx2, ListOpts, IncludeReplicationStatus, ChildrenWhiteList
     ).
 
 
@@ -198,15 +146,9 @@ get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token, IncludeReplicationSt
 %% @equiv get_children_details_insecure/6 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    StartId :: undefined | file_meta:name()
-) ->
+-spec get_children_details(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
     fslogic_worker:fuse_response().
-get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
+get_children_details(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     PermsToCheck = case IsDir of
         true -> [traverse_ancestors, ?traverse_container, ?list_container];
@@ -215,9 +157,7 @@ get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, PermsToCheck
     ),
-    get_children_details_insecure(
-        UserCtx, FileCtx2, Offset, Limit, StartId, ChildrenWhiteList
-    ).
+    get_children_details_insecure(UserCtx, FileCtx2, ListOpts, ChildrenWhiteList).
 
 
 %%%===================================================================
@@ -240,10 +180,11 @@ get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
     fslogic_worker:fuse_response().
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
+    ParentFileCtx3 = file_ctx:assert_is_dir(ParentFileCtx2),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
     CTime = global_clock:timestamp_seconds(),
     Owner = user_ctx:get_user_id(UserCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
+    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx3),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
     {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
@@ -254,7 +195,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             value = #times{mtime = CTime, atime = CTime, ctime = CTime},
             scope = SpaceId
         }),
-        fslogic_times:update_mtime_ctime(ParentFileCtx2),
+        fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
         #fuse_response{fuse_response = FileAttr} =
             attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
@@ -284,21 +225,12 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% and allowed by ChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs_insecure(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | binary(),
-    IncludeReplicationStatus :: boolean(),
-    ChildrenWhiteList :: undefined | [file_meta:name()]
+-spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), boolean(),
+    undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
-get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, EncodedToken, IncludeReplicationStatus, ChildrenWhiteList) ->
-    Token = decode_token(EncodedToken),
-    {Children, ExtendedInfo, FileCtx1, IsLast} = list_children(
-        UserCtx, FileCtx0, Offset, Limit, Token, undefined, undefined, ChildrenWhiteList
-    ),
+get_children_attrs_insecure(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, ChildrenWhiteList) ->
+    {Children, ExtendedInfo, FileCtx1} = list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList),
     ChildrenAttrs = map_children(
         UserCtx,
         fun attr_req:get_file_attr_insecure/3,
@@ -308,12 +240,11 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, EncodedToken, Incl
 
     fslogic_times:update_atime(FileCtx1),
 
-    NewTokenOrUndefined = maps:get(token, ExtendedInfo, undefined),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
-            index_token = encode_token(NewTokenOrUndefined),
-            is_last = IsLast
+            index_token = maps:get(token, ExtendedInfo, undefined),
+            is_last = maps:get(is_last, ExtendedInfo)
         }
     }.
 
@@ -326,20 +257,11 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, EncodedToken, Incl
 %% of entries and allowed by ChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details_insecure(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    StartId :: undefined | file_meta:name(),
-    ChildrenWhiteList :: undefined | [file_meta:name()]
-) ->
+-spec get_children_details_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), undefined | [file_meta:name()]) ->
     fslogic_worker:fuse_response().
-get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWhiteList) ->
+get_children_details_insecure(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
     file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
-    {Children, _ExtendedInfo, FileCtx1, IsLast} = list_children(
-        UserCtx, FileCtx0, Offset, Limit, undefined, StartId, undefined, ChildrenWhiteList
-    ),
+    {Children, ListExtendedInfo, FileCtx1} = list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList),
     ChildrenDetails = map_children(
         UserCtx,
         fun attr_req:get_file_details_insecure/3,
@@ -350,48 +272,24 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_details{
             child_details = ChildrenDetails,
-            is_last = IsLast
+            is_last = maps:get(is_last, ListExtendedInfo)
         }
     }.
 
 
 %% @private
--spec list_children(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: file_meta:offset(),
-    Limit :: file_meta:limit(),
-    Token :: undefined | file_meta_links:token(),
-    StartId :: undefined | file_meta:name(),
-    StartTree :: undefined | oneprovider:id(),
+-spec list_children(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(),
     ChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     {
         Children :: [file_ctx:ctx()],
         ExtendedInfo :: file_meta:list_extended_info(),
-        NewFileCtx :: file_ctx:ctx(),
-        IsLast :: boolean()
+        NewFileCtx :: file_ctx:ctx()
     }.
-list_children(UserCtx, FileCtx, Offset, Limit, Token, StartId, StartTree, undefined) ->
-    case file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId, StartTree) of
-        {Children, FileCtx2}  ->
-            {Children, #{}, FileCtx2, length(Children) < Limit};
-        {Children, ExtendedInfo, FileCtx2} ->
-            IsLast = case maps:get(token, ExtendedInfo, undefined) of
-                undefined -> length(Children) < Limit;
-                NewToken -> NewToken#link_token.is_last
-            end,
-            {Children, ExtendedInfo, FileCtx2, IsLast}
-    end;
-list_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, _StartTree, ChildrenWhiteList0) ->
-    ChildrenWhiteList1 = case StartId of
-        undefined ->
-            ChildrenWhiteList0;
-        _ ->
-            lists:dropwhile(fun(Name) -> Name < StartId end, ChildrenWhiteList0)
-    end,
-    {Children, FileCtx1} = file_ctx:get_file_children_whitelisted(
-        FileCtx0, UserCtx, Offset, Limit, ChildrenWhiteList1
-    ),
-    {Children, #{}, FileCtx1, length(Children) < Limit}.
+list_children(UserCtx, FileCtx, ListOpts, undefined) ->
+    file_ctx:get_file_children(FileCtx, UserCtx, ListOpts);
+list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
+    file_ctx:get_file_children_whitelisted(FileCtx0, UserCtx, ListOpts, ChildrenWhiteList).
 
 
 %%--------------------------------------------------------------------
@@ -452,22 +350,6 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus) ->
         ?MAX_MAP_CHILDREN_PROCESSES, ChildrenNum
     ).
 
-
-
--spec decode_token(binary()) -> file_meta_links:token() | undefined.
-decode_token(undefined) ->
-    undefined;
-decode_token(<<>>) ->
-    #link_token{};
-decode_token(Token) ->
-    binary_to_term(Token).
-
-
--spec encode_token(file_meta_links:token() | undefined) -> binary().
-encode_token(undefined) ->
-    <<>>;
-encode_token(Token) ->
-    term_to_binary(Token).
 
 %%--------------------------------------------------------------------
 %% @private

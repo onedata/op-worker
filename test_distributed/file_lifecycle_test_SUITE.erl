@@ -65,7 +65,7 @@ open_race_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)},
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath, 8#777)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath)),
 
     spawn(fun() ->
         Master ! {open_ans, lfm_proxy:open(W, SessId1, {path, FilePath}, read)}
@@ -138,7 +138,7 @@ make_open_race_test(Config, Mock) ->
         ?config({user_id, <<"user1">>}, Config)},
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     spawn(fun() ->
-        Master ! {create_ans, lfm_proxy:create(W, SessId1, FilePath, 8#777)}
+        Master ! {create_ans, lfm_proxy:create(W, SessId1, FilePath)}
     end),
 
     MockProc = receive
@@ -215,7 +215,7 @@ create_open_race_test(Config, Mock) ->
         ?config({user_id, <<"user1">>}, Config)},
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     spawn(fun() ->
-        Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)}
+        Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath)}
     end),
 
     MockProc = receive
@@ -250,7 +250,7 @@ create_delete_race_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)},
     % Init storage dir
-    lfm_proxy:create_and_open(W, SessId1, <<"/space_name1/", (generator:gen_name())/binary>>, 8#777),
+    lfm_proxy:create_and_open(W, SessId1, <<"/space_name1/", (generator:gen_name())/binary>>),
     check_dir_init(W),
 
     test_utils:mock_new(W, file_req, [passthrough]),
@@ -269,7 +269,7 @@ create_delete_race_test(Config) ->
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     spawn(fun() ->
-        Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)}
+        Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath)}
     end),
 
     MockProc = receive
@@ -306,8 +306,8 @@ rename_to_opened_file_test(Config) ->
         ?config({user_id, <<"user1">>}, Config)},
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     FilePath2 = <<"/space_name1/", (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)),
-    {ok, {_, Handle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(W, SessId1, FilePath2, 8#777)),
+    ?assertMatch({ok, _}, lfm_proxy:create_and_open(W, SessId1, FilePath)),
+    {ok, {_, Handle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(W, SessId1, FilePath2)),
     ?assertMatch(ok, lfm_proxy:close(W, Handle)),
 
     ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId1, {path, FilePath2}, FilePath)),
@@ -323,7 +323,7 @@ create_file_existing_on_disk_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)},
     FilePath0 = <<"/space_name1/", (generator:gen_name())/binary>>,
-    lfm_proxy:create_and_open(W, SessId1, FilePath0, 8#777), % To create storage dirs
+    lfm_proxy:create_and_open(W, SessId1, FilePath0), % To create storage dirs
 
     MountPoint = get_mount_point(W),
     StoragePath = filename:join([MountPoint, "space_id1", binary_to_list(FileName)]),
@@ -332,7 +332,7 @@ create_file_existing_on_disk_test(Config) ->
     rpc:call(W, file, close, [FD]),
 
     FilePath = <<"/space_name1/", FileName/binary>>,
-    ?assertMatch({error, eexist}, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)),
+    ?assertMatch({error, eexist}, lfm_proxy:create_and_open(W, SessId1, FilePath)),
     ok.
 
 open_delete_race_test(Config) ->
@@ -373,7 +373,7 @@ open_delete_race_test_base(Config, MockDeletionLink) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)},
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath, 8#777)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath)),
     spawn(fun() ->
         Master ! {open_ans, lfm_proxy:open(W, SessId1, {path, FilePath}, read)}
     end),

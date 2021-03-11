@@ -69,7 +69,7 @@ gui_download_file_test(Config) ->
     ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef, Content),
     VerifyFun = build_download_file_with_gui_endpoint_verify_fun(MemRef, Content),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Download file using gui endpoint and gs private api">>,
             type = gs,
@@ -337,7 +337,7 @@ rest_download_file_test(Config) ->
     ),
     RangesToTestPart2 = AllRangesToTest -- RangesToTestPart1,
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Download file using rest endpoint">>,
             type = rest,
@@ -590,8 +590,6 @@ get_file_guid(MemRef, TestMode) ->
 
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [
@@ -612,8 +610,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 
 init_per_testcase(gui_download_file_test = Case, Config) ->

@@ -13,6 +13,7 @@
 -define(TREE_TRAVERSE_HRL, 1).
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 
 -define(NEW_JOBS_DEFAULT_PREPROCESSOR, fun(_, _, _, _) -> ok end).
@@ -25,14 +26,13 @@
 -record(tree_traverse, {
     % File or directory processed by job
     file_ctx :: file_ctx:ctx(),
-    % TODO VFS-7101 use offline access token
-    % UserCtx of a user who has scheduled traverse
-    user_ctx :: user_ctx:ctx(),
+    % User who scheduled the traverse
+    user_id :: od_user:id(),
 
     % Fields used for directory listing
-    token = #link_token{} :: undefined | datastore_links_iter:token(),
-    last_name = <<>> :: file_meta:name(),
-    last_tree = <<>> :: od_provider:id(),
+    token = ?INITIAL_LS_TOKEN :: file_meta:list_token(),
+    last_name = <<>> :: file_meta:list_last_name(),
+    last_tree = <<>> :: file_meta:list_last_tree(),
     batch_size :: tree_traverse:batch_size(),
 
     % Traverse config
@@ -49,6 +49,8 @@
 % Record that defines slave job
 -record(tree_traverse_slave, {
     file_ctx :: file_ctx:ctx(),
+    % User who scheduled the traverse
+    user_id :: od_user:id(),
     traverse_info :: tree_traverse:traverse_info(),
     track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean()
 }).

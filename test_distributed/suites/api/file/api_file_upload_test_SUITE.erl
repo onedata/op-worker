@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2020 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -13,11 +13,10 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
--include("modules/fslogic/fslogic_common.hrl").
+-include("onenv_file_test_utils.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
--include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([
     all/0,
@@ -63,24 +62,30 @@ all() -> [
 %%%===================================================================
 
 
-rest_create_file_test(Config) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
-    [P2Node] = oct_background:get_provider_nodes(paris),
-    Providers = [P1Node, P2Node],
-
+rest_create_file_test(_Config) ->
+    Providers = lists:flatten([
+        oct_background:get_provider_nodes(krakow),
+        oct_background:get_provider_nodes(paris)
+    ]),
     SpaceOwnerId = oct_background:get_user_id(user2),
-    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
-    {_, DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(
-        <<"dir">>, 8#704
-    ),
+    #object{
+        guid = DirGuid,
+        shares = [DirShareId],
+        children = [#object{
+            guid = FileGuid,
+            name = UsedFileName
+        }]
+    } = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
+        mode = 8#704,
+        shares = [#share_spec{}],
+        % create a child file with full perms instead of default ones so that call to
+        % create child of this file will fail on type check (?ENOTDIR) instead of perms
+        % check (which is performed first)
+        children = [#file_spec{mode = 8#777}]
+    }),
+
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
-
-    UsedFileName = ?RANDOM_FILE_NAME(),
-    FilePath = filename:join([DirPath, UsedFileName]),
-    {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#777),
-    file_test_utils:await_sync(P2Node, FileGuid),
-
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     WriteSize = 300,
@@ -89,16 +94,16 @@ rest_create_file_test(Config) ->
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, files, [FileGuid]),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Upload file using rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = #client_spec{
-                correct = lists_utils:random_sublist([
-                    user2,  % space owner - doesn't need any perms
-                    user3  % files owner (see fun create_shared_file/1)
-                ], 1, 1),
+                correct = case rand:uniform(2) of
+                    1 -> [user2];  % space owner - doesn't need any perms
+                    2 -> [user3]   % files owner
+                end,
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
@@ -189,7 +194,8 @@ build_rest_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
         case {Type, Mode, ShouldResultInWrite, UserId == SpaceOwnerId} of
             {<<"reg">>, <<"0544">>, true, false} ->
                 % It is possible to create file but setting perms forbidding write access
-                % and uploading some data at the same time should result in error
+                % and uploading some data at the same time should result in error for any
+                % user not being space owner
                 ?assertEqual(?HTTP_400_BAD_REQUEST, RespCode),
                 ?assertEqual(?REST_ERROR(?ERROR_POSIX(?EACCES)), RespBody),
                 api_test_memory:set(MemRef, success, false);
@@ -216,8 +222,7 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
     fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
             ExpFilesInDir = api_test_memory:get(MemRef, files),
-            ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid), ?ATTEMPTS),
-            true;
+            ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid), ?ATTEMPTS);
         (expected_success, #api_test_ctx{node = TestNode, data = Data}) ->
             case api_test_memory:get(MemRef, success) of
                 true ->
@@ -230,10 +235,13 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
 
                     ExpName = api_test_memory:get(MemRef, name),
                     {ExpType, DefaultMode} = case maps:get(<<"type">>, Data, <<"reg">>) of
-                        <<"reg">> -> {?REGULAR_FILE_TYPE, <<"0664">>};
-                        <<"dir">> -> {?DIRECTORY_TYPE, <<"0775">>}
+                        <<"reg">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
+                        <<"dir">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
                     end,
-                    ExpMode = binary_to_integer(maps:get(<<"mode">>, Data, DefaultMode), 8),
+                    ExpMode = case maps:get(<<"mode">>, Data, undefined) of
+                        undefined -> DefaultMode;
+                        ModeBin -> binary_to_integer(ModeBin, 8)
+                    end,
 
                     lists:foreach(fun(Provider) ->
                         ?assertMatch(
@@ -254,8 +262,7 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
                     end;
                 false ->
                     ExpFilesInDir = api_test_memory:get(MemRef, files),
-                    ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid)),
-                    true
+                    ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid))
             end
     end.
 
@@ -271,10 +278,19 @@ ls(Node, DirGuid) ->
     end.
 
 
-rest_update_file_content_test(Config) ->
-    Providers = ?config(op_worker_nodes, Config),
+rest_update_file_content_test(_Config) ->
+    Providers = lists:flatten([
+        oct_background:get_provider_nodes(krakow),
+        oct_background:get_provider_nodes(paris)
+    ]),
 
-    {_, _DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(<<"dir">>, 8#704),
+    #object{guid = DirGuid, shares = [DirShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #dir_spec{
+            mode = 8#704,
+            shares = [#share_spec{}],
+            children = [#file_spec{}]
+        }
+    ),
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
     OriginalFileSize = 300,
@@ -285,16 +301,16 @@ rest_update_file_content_test(Config) ->
 
     MemRef = api_test_memory:init(),
 
-    ?assert(onenv_api_test_runner:run_tests(Config, [
+    ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Update file content using rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = #client_spec{
-                correct = lists_utils:random_sublist([
-                    user2, % space owner - doesn't need any perms
-                    user3  % files owner (see fun create_shared_file/1)
-                ], 1, 1),
+                correct = case rand:uniform(2) of
+                    1 -> [user2];  % space owner - doesn't need any perms
+                    2 -> [user3]   % files owner
+                end,
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
@@ -552,7 +568,7 @@ gui_registering_upload_for_non_empty_file_should_fail(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
 
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
     {ok, FileHandle} = lfm_proxy:open(Worker, UserSessId, {guid, FileGuid}, write),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, FileHandle, 0, crypto:strong_rand_bytes(5))),
     lfm_proxy:fsync(Worker, FileHandle),
@@ -570,7 +586,7 @@ gui_registering_upload_for_not_owned_file_should_fail(_Config) ->
     [Worker] = oct_background:get_provider_nodes(krakow),
 
     User2SessId = oct_background:get_user_session_id(user4, krakow),
-    {ok, FileGuid} = lfm_proxy:create(Worker, User2SessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, User2SessId, ?FILE_PATH),
 
     ?assertMatch(
         ?ERROR_BAD_DATA(<<"guid">>, <<"file is not owned by user">>),
@@ -583,7 +599,7 @@ gui_not_registered_upload_should_fail(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
 
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
 
     ?assertMatch(
         upload_not_registered,
@@ -604,7 +620,7 @@ gui_upload_test(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
 
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
 
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
@@ -631,7 +647,7 @@ gui_stale_upload_file_should_be_deleted(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Worker] = oct_background:get_provider_nodes(krakow),
 
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
 
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
@@ -653,7 +669,7 @@ gui_upload_with_time_warps_test(_Config) ->
     [Worker] = oct_background:get_provider_nodes(krakow),
 
     CurrTime = time_test_utils:get_frozen_time_seconds(),
-    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH, ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
 
     FileKey = {guid, FileGuid},
     ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
@@ -779,23 +795,28 @@ unmock_cowboy_multipart(Config) ->
 
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
+        posthook = fun(NewConfig) ->
+            User3Id = oct_background:get_user_id(user3),
+            SpaceId = oct_background:get_space_id(space_krk_par),
+            ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+                ?SPACE_MANAGE_SHARES | privileges:space_member()
+            ]),
+            NewConfig
+        end
     }).
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 
 init_per_testcase(Case, Config) when
     Case =:= gui_not_registered_upload_should_fail;
     Case =:= gui_upload_test
-    ->
+->
     mock_cowboy_multipart(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -808,10 +829,11 @@ init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 20}),
     lfm_proxy:init(Config).
 
+
 end_per_testcase(Case, Config) when
     Case =:= gui_not_registered_upload_should_fail;
     Case =:= gui_upload_test
-    ->
+->
     unmock_cowboy_multipart(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 

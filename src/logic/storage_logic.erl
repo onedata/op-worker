@@ -46,7 +46,7 @@
 -export([set_imported/2, update_readonly_and_imported/3]).
 -export([init_space_support/3, update_space_support_size/3]).
 -export([apply_unsupport_step/3]).
--export([upgrade_support_to_21_02/2]).
+-export([upgrade_support_to_22_02/2]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -327,16 +327,16 @@ apply_unsupport_step(StorageId, SpaceId, UnsupportStep) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Upgrades the space support in Onezone to the new model (21.02).
+%% Upgrades the space support in Onezone to the new model (22.02).
 %% Can be used only by providers already supporting given space.
-%% Dedicated for upgrading Oneprovider from 20.02.* to 21.02.*.
+%% Dedicated for upgrading Oneprovider from 21.02.* to 22.02.*.
 %% @end
 %%--------------------------------------------------------------------
--spec upgrade_support_to_21_02(storage:id(), od_space:id()) -> ok | errors:error().
-upgrade_support_to_21_02(StorageId, SpaceId) ->
+-spec upgrade_support_to_22_02(storage:id(), od_space:id()) -> ok | errors:error().
+upgrade_support_to_22_02(StorageId, SpaceId) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_support_to_21_02, SpaceId}}
+        gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_support_to_22_02, SpaceId}}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
         ok = supported_spaces:add(SpaceId, StorageId),

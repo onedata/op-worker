@@ -11,6 +11,7 @@
 -module(lfm_files_s3_test_SUITE).
 -author("Michal Cwiertnia").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -34,6 +35,9 @@
     lfm_stat_test/1,
     lfm_get_details_test/1,
     lfm_synch_stat_test/1,
+    lfm_cp_file/1,
+    lfm_cp_empty_dir/1,
+    lfm_cp_dir/1,
     lfm_truncate_test/1,
     lfm_truncate_and_write/1,
     lfm_acl_test/1,
@@ -84,11 +88,11 @@
     lfm_open_failure_test/1,
     lfm_create_and_open_failure_test/1,
     lfm_open_in_direct_mode_test/1,
-    lfm_copy_failure_test/1,
+    lfm_mv_failure_test/1,
     lfm_open_multiple_times_failure_test/1,
     lfm_open_failure_multiple_users_test/1,
     lfm_open_and_create_open_failure_test/1,
-    lfm_copy_failure_multiple_users_test/1,
+    lfm_mv_failure_multiple_users_test/1,
     sparse_files_should_be_created/1
 ]).
 
@@ -104,6 +108,9 @@
     lfm_stat_test,
     lfm_get_details_test,
     lfm_synch_stat_test,
+    lfm_cp_file,
+    lfm_cp_empty_dir,
+    lfm_cp_dir,
     lfm_truncate_test,
     lfm_truncate_and_write,
     lfm_acl_test,
@@ -155,11 +162,11 @@
     lfm_open_failure_test,
     lfm_create_and_open_failure_test,
     lfm_open_in_direct_mode_test,
-    lfm_copy_failure_test,
+    lfm_mv_failure_test,
     lfm_open_multiple_times_failure_test,
     lfm_open_failure_multiple_users_test,
     lfm_open_and_create_open_failure_test,
-    lfm_copy_failure_multiple_users_test,
+    lfm_mv_failure_multiple_users_test,
     sparse_files_should_be_created
 ]).
 
@@ -178,13 +185,13 @@ all() ->
 %%%====================================================================
 
 lfm_recreate_handle_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, 8#755, dont_delete_file).
+    lfm_files_test_base:lfm_recreate_handle(Config, ?DEFAULT_FILE_PERMS, dont_delete_file).
 
 lfm_write_after_create_no_perms_test(Config) ->
     lfm_files_test_base:lfm_recreate_handle(Config, 8#444, dont_delete_file).
 
 lfm_recreate_handle_after_delete_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config, 8#755, delete_after_open).
+    lfm_files_test_base:lfm_recreate_handle(Config, ?DEFAULT_FILE_PERMS, delete_after_open).
 
 lfm_open_failure_test(Config) ->
     lfm_files_test_base:lfm_open_failure(Config).
@@ -204,11 +211,11 @@ lfm_open_failure_multiple_users_test(Config) ->
 lfm_open_in_direct_mode_test(Config) ->
     lfm_files_test_base:lfm_open_in_direct_mode(Config).
 
-lfm_copy_failure_test(Config) ->
-    lfm_files_test_base:lfm_copy_failure(Config).
+lfm_mv_failure_test(Config) ->
+    lfm_files_test_base:lfm_mv_failure(Config).
 
-lfm_copy_failure_multiple_users_test(Config) ->
-    lfm_files_test_base:lfm_copy_failure_multiple_users(Config).
+lfm_mv_failure_multiple_users_test(Config) ->
+    lfm_files_test_base:lfm_mv_failure_multiple_users(Config).
 
 readdir_plus_should_return_empty_result_for_empty_dir(Config) ->
     lfm_files_test_base:readdir_plus_should_return_empty_result_for_empty_dir(Config).
@@ -300,6 +307,15 @@ lfm_get_details_test(Config) ->
 lfm_synch_stat_test(Config) ->
     lfm_files_test_base:lfm_synch_stat(Config).
 
+lfm_cp_file(Config) ->
+    lfm_files_test_base:lfm_cp_file(Config).
+
+lfm_cp_empty_dir(Config) ->
+    lfm_files_test_base:lfm_cp_empty_dir(Config).
+
+lfm_cp_dir(Config) ->
+    lfm_files_test_base:lfm_cp_dir(Config).
+
 lfm_truncate_test(Config) ->
     lfm_files_test_base:lfm_truncate(Config).
 
@@ -383,10 +399,14 @@ sparse_files_should_be_created(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{storage_type, s3}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
+    Posthook = fun(NewConfig) ->
+        initializer:mock_auth_manager(NewConfig),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {storage_type, s3}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
 
 end_per_suite(Config) ->
-    Config.
+    initializer:unmock_auth_manager(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= lfm_open_in_direct_mode_test orelse
@@ -406,11 +426,11 @@ init_per_testcase(Case, Config) when
 init_per_testcase(Case, Config) when
     Case =:= lfm_open_failure_test orelse
     Case =:= lfm_create_and_open_failure_test orelse
-    Case =:= lfm_copy_failure_test orelse
+    Case =:= lfm_mv_failure_test orelse
     Case =:= lfm_open_multiple_times_failure_test orelse
     Case =:= lfm_open_failure_multiple_users_test orelse
     Case =:= lfm_open_and_create_open_failure_test orelse
-    Case =:= lfm_copy_failure_multiple_users_test
+    Case =:= lfm_mv_failure_multiple_users_test
 ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver, [passthrough]),
@@ -451,11 +471,11 @@ end_per_testcase(Case, Config) when
 end_per_testcase(Case, Config) when
     Case =:= lfm_open_failure_test orelse
     Case =:= lfm_create_and_open_failure_test orelse
-    Case =:= lfm_copy_failure_test orelse
+    Case =:= lfm_mv_failure_test orelse
     Case =:= lfm_open_multiple_times_failure_test orelse
     Case =:= lfm_open_failure_multiple_users_test orelse
     Case =:= lfm_open_and_create_open_failure_test orelse
-    Case =:= lfm_copy_failure_multiple_users_test
+    Case =:= lfm_mv_failure_multiple_users_test
 ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [storage_driver]),
@@ -484,6 +504,12 @@ end_per_testcase(Case, Config) when
     ->
     [W | _] = ?config(op_worker_nodes, Config),
     rpc:call(W, file_popularity_api, disable, [?SPACE_ID]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case = lfm_cp_dir, Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    % set default value of ls_batch_size env
+    test_utils:set_env(W, op_worker, ls_batch_size, 5000),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->

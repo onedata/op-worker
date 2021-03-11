@@ -16,6 +16,7 @@
 
 -include("global_definitions.hrl").
 -include("tree_traverse.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -154,7 +155,7 @@ rtransfer_multisource_test(Config0) ->
 
     File = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
 
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessId(Worker2), File)),
     OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, File}, rdwr),
     ?assertMatch({ok, _}, OpenAns),
     {ok, Handle} = OpenAns,
@@ -279,18 +280,18 @@ traverse_test_base(Config, StartTaskWorker, DirName) ->
     RunOptions = #{
         target_provider_id => ExecutorID,
         batch_size => 1,
-        traverse_info => self(),
+        traverse_info => #{pid => self()},
         additional_data => TestMap
     },
-    {ok, TaskID} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
+    {ok, TaskId} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
 
     case StartTaskWorker of
         Worker ->
-            ?assertMatch({ok, [TaskID], _},
+            ?assertMatch({ok, [TaskId], _},
                 rpc:call(StartTaskWorker, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]));
         _ ->
-            ?assertMatch({ok, [TaskID], _},
+            ?assertMatch({ok, [TaskId], _},
                 rpc:call(StartTaskWorker, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]))
     end,
 
@@ -312,10 +313,10 @@ traverse_test_base(Config, StartTaskWorker, DirName) ->
     lists:foreach(fun(W) ->
         ?assertMatch({ok, #document{value = #traverse_task{description = Description, enqueued = false,
             canceled = false, status = finished, additional_data = TestMap}}},
-            rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30),
+            rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
-        check_ended(Worker, [TaskID]),
+        check_ended(Worker, [TaskId]),
 
         case W of
             Worker -> check_callbacks(W, 0, 0, 1);
@@ -350,14 +351,18 @@ traverse_cancel_test_base(Config, StartTaskWorker, CancelWorker, DirName) ->
     RunOptions = #{
         target_provider_id => ExecutorID,
         batch_size => 1,
-        traverse_info => {self(), cancel, DirName}
+        traverse_info => #{
+            pid => self(),
+            cancel => true,
+            dir_name => DirName
+        }
     },
-    {ok, TaskID} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
+    {ok, TaskId} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
 
     RecAns = receive
         {cancel, Check} when Check =:= DirName ->
-            ?assertEqual(ok, rpc:call(CancelWorker, tree_traverse, cancel, [?MODULE, TaskID]), 15)
+            ?assertEqual(ok, rpc:call(CancelWorker, tree_traverse, cancel, [?MODULE, TaskId]), 15)
     after
         30000 ->
             timeout
@@ -368,10 +373,10 @@ traverse_cancel_test_base(Config, StartTaskWorker, CancelWorker, DirName) ->
 
     lists:foreach(fun(W) ->
         ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = true, status = canceled}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30),
+            canceled = true, status = canceled}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
-        check_ended(Worker, [TaskID]),
+        check_ended(Worker, [TaskId]),
 
         case W of
             Worker -> check_callbacks(W, 1, 1, 0);
@@ -398,20 +403,25 @@ queued_traverse_cancel_test_base(Config, CancelWorker, DirName) ->
     ?assertMatch({ok, _}, lfm_proxy:resolve_guid(Worker, SessId, Dir1), 30),
 
     ExecutorID = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
+    TraverseInfo0 = #{pid => self()},
     RunOptions0 = #{
         target_provider_id => ExecutorID,
         batch_size => 1,
-        traverse_info => self()
+        traverse_info => TraverseInfo0
     },
-    RunOptions = RunOptions0#{traverse_info => {self(), cancel, DirName}},
-    {ok, TaskID0} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run,
+    RunOptions = RunOptions0#{
+        traverse_info => TraverseInfo0#{
+            cancel => true,
+            dir_name => DirName
+    }},
+    {ok, TaskId0} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions0])),
-    {ok, TaskID} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run,
+    {ok, TaskId} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
 
     RecAns = receive
         {cancel, Check} when Check =:= DirName ->
-            ?assertEqual(ok, rpc:call(CancelWorker, tree_traverse, cancel, [?MODULE, TaskID]), 15)
+            ?assertEqual(ok, rpc:call(CancelWorker, tree_traverse, cancel, [?MODULE, TaskId]), 15)
     after
         30000 ->
             timeout
@@ -422,12 +432,12 @@ queued_traverse_cancel_test_base(Config, CancelWorker, DirName) ->
 
     lists:foreach(fun(W) ->
         ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID0]), 30),
+            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId0]), 30),
         ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = true, status = canceled}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30),
+            canceled = true, status = canceled}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
-        check_ended(Worker, [TaskID0, TaskID]),
+        check_ended(Worker, [TaskId0, TaskId]),
 
         case W of
             Worker -> check_callbacks(W, 1, 1, 1);
@@ -447,15 +457,20 @@ traverse_restart_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:resolve_guid(Worker, SessId, Dir1), 30),
 
     ExecutorID = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
+    TraverseInfo = #{
+        pid => self(),
+        cancel => true,
+        dir_name => DirName
+    },
     RunOptions = #{
         target_provider_id => ExecutorID,
         batch_size => 1,
-        traverse_info => {self(), cancel, DirName}
+        traverse_info => TraverseInfo
     },
-    RunOptions2 = RunOptions#{traverse_info => self()},
-    {ok, TaskID} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run,
+    RunOptions2 = RunOptions#{traverse_info => maps:without([cancel, dir_name], TraverseInfo)},
+    {ok, TaskId} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
-    {ok, TaskID2} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run,
+    {ok, TaskId2} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions2])),
 
     % Stop pools
@@ -481,12 +496,12 @@ traverse_restart_test(Config) ->
 
     lists:foreach(fun(W) ->
         ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30),
+            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30),
         ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID2]), 30),
+            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId2]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, scheduled]), 30),
-        check_ended(Worker, [TaskID, TaskID2])
+        check_ended(Worker, [TaskId, TaskId2])
     end, Workers).
 
 multiple_traverse_test(Config) ->
@@ -523,12 +538,12 @@ multiple_traverse_test_base(Config, StartTaskWorkers, DirName) ->
     RunOptions = #{
         target_provider_id => ExecutorID,
         batch_size => 1,
-        traverse_info => self()
+        traverse_info => #{pid => self()}
     },
-    TaskIDs = lists:map(fun(StartTaskWorker) ->
-        {ok, TaskID} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
+    TaskIds = lists:map(fun(StartTaskWorker) ->
+        {ok, TaskId} = ?assertMatch({ok, _}, rpc:call(StartTaskWorker, tree_traverse, run,
             [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions])),
-        TaskID
+        TaskId
     end, StartTaskWorkers),
 
     Expected = get_expected_jobs(),
@@ -548,13 +563,13 @@ multiple_traverse_test_base(Config, StartTaskWorkers, DirName) ->
     ?assertEqual(lists:sort(Check), lists:sort(Ans)),
 
     lists:foreach(fun(W) ->
-        lists:foreach(fun(TaskID) ->
+        lists:foreach(fun(TaskId) ->
             ?assertMatch({ok, #document{value = #traverse_task{description = Description, enqueued = false,
-                canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30)
-        end, TaskIDs),
+                canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30)
+        end, TaskIds),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
-        check_ended(Worker, TaskIDs),
+        check_ended(Worker, TaskIds),
 
         case W of
             Worker -> check_callbacks(W, 0, 0, 10);
@@ -644,7 +659,7 @@ build_traverse_tree(Worker, SessId, Dir, Num) ->
     lists:foreach(fun(FileNum) ->
         FileNumBin = integer_to_binary(FileNum),
         NewFile = <<Dir/binary, "/", FileNumBin/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, NewFile, 8#600))
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, NewFile))
     end, Files),
 
     NumBin = integer_to_binary(Num),
@@ -655,13 +670,17 @@ build_traverse_tree(Worker, SessId, Dir, Num) ->
 %%% Pool callbacks
 %%%===================================================================
 
-do_master_job(Job, TaskID) ->
-    tree_traverse:do_master_job(Job, TaskID).
+do_master_job(Job, TaskId) ->
+    tree_traverse:do_master_job(Job, TaskId).
 
 do_slave_job(Job = #tree_traverse_slave{
-    traverse_info = {Pid, cancel, DirName},
+    traverse_info = #{
+        pid := Pid,
+        cancel := true,
+        dir_name := DirName
+    },
     file_ctx = FileCtx
-}, TaskID) ->
+}, TaskId) ->
     {#document{value = #file_meta{name = Name}}, _} = file_ctx:get_file_doc(FileCtx),
     case Name of
         <<"2">> ->
@@ -670,17 +689,17 @@ do_slave_job(Job = #tree_traverse_slave{
             timer:sleep(15000);
         _ -> ok
     end,
-    do_slave_job(Job#tree_traverse_slave{traverse_info = Pid}, TaskID);
+    do_slave_job(Job#tree_traverse_slave{traverse_info = #{pid => Pid}}, TaskId);
 do_slave_job(#tree_traverse_slave{
-    traverse_info = TraverseInfo,
+    traverse_info = #{pid := Pid},
     file_ctx = FileCtx
-}, _TaskID) ->
+}, _TaskId) ->
     {#document{value = #file_meta{name = Name}}, _} = file_ctx:get_file_doc(FileCtx),
-    TraverseInfo ! {slave, binary_to_integer(Name)},
+    Pid ! {slave, binary_to_integer(Name)},
     ok.
 
-update_job_progress(ID, Job, Pool, TaskID, Status) ->
-    tree_traverse:update_job_progress(ID, Job, Pool, TaskID, Status, ?MODULE).
+update_job_progress(ID, Job, Pool, TaskId, Status) ->
+    tree_traverse:update_job_progress(ID, Job, Pool, TaskId, Status, ?MODULE).
 
 get_job(DocOrID) ->
     tree_traverse:get_job(DocOrID).
@@ -688,16 +707,16 @@ get_job(DocOrID) ->
 get_sync_info(Job) ->
     tree_traverse:get_sync_info(Job).
 
-on_cancel_init(TaskID, _PoolName) ->
-    save_callback(on_cancel_init, TaskID).
+on_cancel_init(TaskId, _PoolName) ->
+    save_callback(on_cancel_init, TaskId).
 
-task_canceled(TaskID, _PoolName) ->
-    save_callback(task_canceled, TaskID),
+task_canceled(TaskId, _PoolName) ->
+    save_callback(task_canceled, TaskId),
     timer:sleep(2000),
     ok.
 
-task_finished(TaskID, _PoolName) ->
-    save_callback(task_finished, TaskID).
+task_finished(TaskId, _PoolName) ->
+    save_callback(task_finished, TaskId).
 
 %%%===================================================================
 %%% Internal functions
@@ -708,10 +727,10 @@ check_ended(Worker, Tasks) ->
         rpc:call(Worker, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ended]), 30),
     ?assertEqual([], Tasks -- Ans).
 
-save_callback(Callback, TaskID) ->
+save_callback(Callback, TaskId) ->
     critical_section:run(save_callback, fun() ->
         List = application:get_env(?APP_NAME, Callback, []),
-        application:set_env(?APP_NAME, Callback, [{TaskID, stopwatch:start()} | List])
+        application:set_env(?APP_NAME, Callback, [{TaskId, stopwatch:start()} | List])
     end),
     ok.
 
@@ -733,8 +752,8 @@ check_callbacks(Worker, OnCancelNum, CancelNum, FinishNum) ->
     Cancel = rpc:call(Worker, application, get_env, [?APP_NAME, task_canceled, []]),
 
     % the stopwatches are started and saved when a callback is executed
-    lists:foreach(fun({TaskID, InitStopwatch}) ->
-        CancelStopwatch = proplists:get_value(TaskID, Cancel),
+    lists:foreach(fun({TaskId, InitStopwatch}) ->
+        CancelStopwatch = proplists:get_value(TaskId, Cancel),
         ?assert(stopwatch:read_millis(InitStopwatch) - stopwatch:read_millis(CancelStopwatch) >= timer:seconds(2))
     end, Init).
 
