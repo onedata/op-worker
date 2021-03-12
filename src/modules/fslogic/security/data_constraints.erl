@@ -159,7 +159,7 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
 
     case DataConstraints#constraints.readonly of
         true ->
-            data_access_control:assert_operation_available_in_readonly_mode(
+            data_access_control:assert_available_in_readonly_mode(
                 AccessRequirements
             );
         false ->

@@ -53,7 +53,7 @@ create_file(UserCtx, ParentFileCtx0, Name, Mode, Flag) ->
     file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     create_file_insecure(UserCtx, ParentFileCtx1, Name, Mode, Flag).
 
@@ -67,7 +67,7 @@ create_file(UserCtx, ParentFileCtx0, Name, Mode, Flag) ->
 storage_file_created(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     storage_file_created_insecure(UserCtx, FileCtx1).
 
@@ -83,7 +83,7 @@ make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
     file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     make_file_insecure(UserCtx, ParentFileCtx1, Name, Mode).
 
@@ -605,7 +605,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
 open_file_for_read(UserCtx, FileCtx0, HandleId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask)]
     ),
     open_file_insecure(UserCtx, FileCtx1, read, HandleId).
 
@@ -620,7 +620,7 @@ open_file_for_read(UserCtx, FileCtx0, HandleId) ->
 open_file_for_write(UserCtx, FileCtx0, HandleId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_object_mask)]
     ),
     open_file_insecure(UserCtx, FileCtx1, write, HandleId).
 
@@ -635,7 +635,7 @@ open_file_for_write(UserCtx, FileCtx0, HandleId) ->
 open_file_for_rdwr(UserCtx, FileCtx0, HandleId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_object_mask, ?write_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask, ?write_object_mask)]
     ),
     open_file_insecure(UserCtx, FileCtx1, rdwr, HandleId).
 
@@ -650,7 +650,7 @@ open_file_for_rdwr(UserCtx, FileCtx0, HandleId) ->
 open_file_with_extended_info_for_read(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask)]
     ),
     open_file_with_extended_info_insecure(UserCtx, FileCtx1, read).
 
@@ -665,7 +665,7 @@ open_file_with_extended_info_for_read(UserCtx, FileCtx0) ->
 open_file_with_extended_info_for_write(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_object_mask)]
     ),
     open_file_with_extended_info_insecure(UserCtx, FileCtx1, write).
 
@@ -680,7 +680,7 @@ open_file_with_extended_info_for_write(UserCtx, FileCtx0) ->
 open_file_with_extended_info_for_rdwr(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_object_mask, ?write_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask, ?write_object_mask)]
     ),
     open_file_with_extended_info_insecure(UserCtx, FileCtx1, rdwr).
 

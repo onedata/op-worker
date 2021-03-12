@@ -44,8 +44,8 @@ check_perms(UserCtx, FileCtx, OpenFlag) ->
 
 %% @private
 required_perms(read) ->
-    [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_object_mask)];
+    [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask)];
 required_perms(write) ->
-    [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_object_mask)];
+    [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_object_mask)];
 required_perms(rdwr) ->
-    [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_object_mask, ?write_object_mask)].
+    [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask, ?write_object_mask)].

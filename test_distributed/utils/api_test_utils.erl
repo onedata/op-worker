@@ -194,6 +194,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> acl;
             false -> posix
         end,
+        protection_flags = ?no_flags_mask,
         has_metadata = HasMetadata,
         has_direct_qos = HasDirectQos,
         has_eff_qos = HasParentQos orelse HasDirectQos
@@ -433,6 +434,7 @@ file_details_to_gs_json(undefined, #file_details{
     },
     index_startid = IndexStartId,
     active_permissions_type = ActivePermissionsType,
+    protection_flags = EffFileProtectionFlags,
     has_metadata = HasMetadata,
     has_direct_qos = HasDirectQos,
     has_eff_qos = HasEffQos
@@ -450,6 +452,7 @@ file_details_to_gs_json(undefined, #file_details{
         <<"name">> => FileName,
         <<"index">> => IndexStartId,
         <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffFileProtectionFlags),
         % For space dir gs returns null as parentId instead of user root dir
         % (gui doesn't know about user root dir)
         <<"parentId">> => case fslogic_uuid:is_space_dir_guid(FileGuid) of
@@ -668,9 +671,9 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId,
 
         {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
 
-        % operation on shared file is forbidden - it should result in ?EACCES
-        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EACCES)},
-        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?EACCES)}
+        % operation is not available in share mode - it should result in ?EPERM
+        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EPERM)},
+        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?EPERM)}
     ],
 
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
