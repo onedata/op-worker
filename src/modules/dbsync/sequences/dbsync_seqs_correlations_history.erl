@@ -109,17 +109,17 @@ map_remote_seq_to_local_stop_params(SpaceId, ProviderId, RemoteSeqNum) ->
             SyncProgress = dbsync_state:get_sync_progress(SpaceId),
             case maps:get(ProviderId, SyncProgress, {0, 0}) of
                 {LastNum, _} when LastNum =< RemoteSeqNum ->
-                    EncodedProcessedSequences = dbsync_processed_seqs_history:get(SpaceId, LastNum),
+                    Correlation = dbsync_state:get_seqs_correlations(SpaceId), % TODO VFS-7036 - get progress and correlation using one dbsync_state call
+                    EncodedProcessedSequences = dbsync_processed_seqs_history:encode(Correlation),
                     {LastNum, EncodedProcessedSequences};
                 _ ->
                     % TODO VFS-7206 - change from inclusive to exclusive end (+ 1 will not be used)
-                    Correlation = dbsync_state:get_seqs_correlations(SpaceId), % TODO VFS-7036 - get progress and correlation using one dbsync_state call
-                    EncodedProcessedSequences = dbsync_processed_seqs_history:encode(Correlation),
+                    EncodedProcessedSequences = dbsync_processed_seqs_history:get(SpaceId, RemoteSeqNum),
                     {RemoteSeqNum + 1, EncodedProcessedSequences}
             end;
         _ ->
             case dbsync_seqs_tree:get_next(?CTX, ?KEY(SpaceId), ProviderId, RemoteSeqNum, <<>>) of
-                <<>> ->
+                <<>> -> % sequence mapping not found - use current local sequence instead
                     SyncProgress = dbsync_state:get_sync_progress(SpaceId),
                     Correlation = dbsync_state:get_seqs_correlations(SpaceId), % TODO VFS-7036 - get progress and correlation using one dbsync_state call
                     {LocalSeq, _} = maps:get(LocalProviderId, SyncProgress, {0, 0}),
@@ -179,8 +179,21 @@ save_correlation(SpaceId, ProviderId, LocalOfLastRemote, CurrentLocalSeq,
 
     % Add correlation used to find stop sequence up to which changes should be send after a request
     % for remote changes (used by map_remote_seq_to_local_stop_params fun).
-    dbsync_seqs_tree:add_new(?CTX, ?KEY(SpaceId), ProviderId, RemoteConsecutivelyProcessedMax,
-        encode_local_sequences_range(LocalOfLastRemote, CurrentLocalSeq)).
+    UpdateFun = fun
+        (undefined) ->
+            encode_local_sequences_range(LocalOfLastRemote, CurrentLocalSeq);
+        (PrevValue) ->
+            PrevLocalOfLastRemote = get_local_sequence_from_encoded_range(PrevValue, false),
+            case LocalOfLastRemote > PrevLocalOfLastRemote of
+                true -> encode_local_sequences_range(LocalOfLastRemote, CurrentLocalSeq);
+                false -> abort
+            end
+    end,
+
+    dbsync_seqs_tree:overwrite(?CTX, ?KEY(SpaceId), ProviderId, RemoteConsecutivelyProcessedMax, UpdateFun).
+    % TODO VFS-7205 - add_new should be ok and its usage results in smaller request ranges - verify and suite tests.
+%%    dbsync_seqs_tree:add_new(?CTX, ?KEY(SpaceId), ProviderId, RemoteConsecutivelyProcessedMax,
+%%        encode_local_sequences_range(LocalOfLastRemote, CurrentLocalSeq)).
 
 -spec save_or_update_correlation(od_space:id(), oneprovider:id(), datastore_doc:remote_seq(),
     datastore_doc:seq(), datastore_doc:seq()) -> ok.

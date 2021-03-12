@@ -22,7 +22,7 @@
     get_next/5, get_next/6]).
 
 -type sorting_order() :: ascending | descending.
--type link_update_fun() :: fun((link_target() | undefined) -> link_target()).
+-type link_update_fun() :: fun((link_target() | undefined) -> link_target()) | abort.
 -type ctx() :: datastore:ctx().
 -type key() :: datastore:key().
 -type tree_id() :: datastore:tree_id().
@@ -100,12 +100,19 @@ add_new_internal(Ctx, Key, TreeId, LinkName, Value) ->
 overwrite_internal(Ctx, Key, TreeId, LinkName, UpdateFun) when is_function(UpdateFun) ->
     OldValue = case datastore_model:get_links(Ctx, Key, TreeId, LinkName) of
         {ok, [#link{target = LinkTarget}]} ->
-            ok = datastore_model:delete_links(Ctx, Key, TreeId, LinkName),
             LinkTarget;
         {error, not_found} ->
             undefined
     end,
-    add_new_internal(Ctx, Key, TreeId, LinkName, UpdateFun(OldValue));
+    case {UpdateFun(OldValue), OldValue} of
+        {abort, _} ->
+            ok;
+        {NewValue, undefined} ->
+            add_new_internal(Ctx, Key, TreeId, LinkName, NewValue);
+        {NewValue, _} ->
+            ok = datastore_model:delete_links(Ctx, Key, TreeId, LinkName),
+            add_new_internal(Ctx, Key, TreeId, LinkName, NewValue)
+    end;
 overwrite_internal(Ctx, Key, TreeId, LinkName, Value) ->
     ok = datastore_model:delete_links(Ctx, Key, TreeId, LinkName),
     add_new_internal(Ctx, Key, TreeId, LinkName, Value).

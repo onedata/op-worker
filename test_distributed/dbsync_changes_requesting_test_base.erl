@@ -21,11 +21,11 @@
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% API
--export([generic_test_skeleton/2]).
--export([handle_each_correlation_in_out_stream_separately/1, add_delay_to_in_stream_handler/1,
-    use_single_doc_broadcast_batch/1, use_default_broadcast_batch_size/1]).
--export([create_tester_session/1, get_tester_session/0]).
--export([create_dirs_batch/4, verify_dirs_batch/2, verify_sequences_correlation/2]).
+-export([generic_test_skeleton/2, requesting_from_custom_provider_test/1]).
+-export([handle_each_correlation_in_out_stream_separately/1, lose_random_dbsync_batches_on_worker/1,
+    add_delay_to_in_stream_handler/1, use_single_doc_broadcast_batch/1, use_default_broadcast_batch_size/1,
+    mock_zone_sequence_check/1]).
+-export([create_tester_session/1]).
 
 % Record sent by mocks to gather information about synchronization progress
 -record(synchronization_log, {
@@ -110,7 +110,7 @@
 -define(SPACE_NAME, <<"space1">>).
 
 %%%===================================================================
-%%% Test skeleton
+%%% Test skeletons
 %%%===================================================================
 
 generic_test_skeleton(Config0, TestSize) ->
@@ -247,6 +247,64 @@ generic_test_skeleton(Config0, TestSize) ->
 
     ok.
 
+requesting_from_custom_provider_test(Config0) ->
+    % Prepare variables used during test
+    User = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {6, 0, 0, 1}, 120),
+    SpaceName = ?SPACE_NAME,
+    SpaceId = ?SPACE_ID,
+    [Worker1, Worker2 | _] = Workers = ?config(op_worker_nodes, Config),
+    WorkerToProviderId = maps:from_list(lists:map(fun(Worker) ->
+        {Worker, rpc:call(Worker, oneprovider, get_id_or_undefined, [])}
+    end, Workers)),
+    W2Id = maps:get(Worker2, WorkerToProviderId),
+
+    test_utils:mock_expect(Worker1, dbsync_in_stream, handle_cast, fun
+        ({changes_batch, MsgId, MutatorId, #internal_changes_batch{distributor_id = DistributorId} = Batch}, State)
+            when DistributorId =:= W2Id ->
+            case get(requesting_test) of
+                true ->
+                    {noreply, State};
+                _ ->
+                    put(requesting_test, true),
+                    MockedBatch = Batch#internal_changes_batch{since = 0, until = 0, timestamp = 0, docs = []},
+                    meck:passthrough([{changes_batch, MsgId, MutatorId, MockedBatch}, State])
+            end;
+        (Msg, State) ->
+            meck:passthrough([Msg, State])
+    end),
+
+    ok = rpc:call(Worker1, internal_services_manager, stop_service,
+        [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
+    ok = rpc:call(Worker1, internal_services_manager, start_service,
+        [dbsync_worker_sup, <<"dbsync_in_stream", SpaceId/binary>>, start_in_stream, stop_in_stream, [SpaceId], SpaceId]),
+
+    DirSizes = [10, 20, 1, 5, 2, 1],
+    % Create dirs with sleeps to better mix outgoing changes from different providers
+    DirsList1 = create_dirs_batch(Config, SpaceName, Workers, DirSizes),
+    timer:sleep(10000),
+    DirsList2 = create_dirs_batch(Config, SpaceName, lists:reverse(Workers), DirSizes),
+    timer:sleep(5000),
+    DirsList3 = create_dirs_batch(Config, SpaceName, Workers, DirSizes),
+
+    verify_dirs_batch(Config, DirsList1),
+    verify_dirs_batch(Config, DirsList2),
+    verify_dirs_batch(Config, DirsList3),
+
+    % TODO VFS-7205 - why verify_sequences_correlation can be called here when it is expected to fail?
+    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_equal(Workers, SpaceId), 60),
+
+    test_utils:mock_expect(Worker1, dbsync_in_stream, handle_cast, fun(Msg, State) ->
+        meck:passthrough([Msg, State])
+    end),
+    Timestamp0 = rpc:call(Worker1, global_clock, timestamp_seconds, []),
+
+    DirsList4 = create_dirs_batch(Config, SpaceName, Workers, DirSizes),
+    verify_dirs_batch(Config, DirsList4),
+
+    ?assertEqual(true, catch dbsync_test_utils:are_all_seqs_and_timestamps_equal(Workers, SpaceId, Timestamp0), 60),
+    verify_sequences_correlation(WorkerToProviderId, SpaceId).
+
 %%%===================================================================
 %%% Test cases execution and helper functions
 %%%===================================================================
@@ -323,7 +381,7 @@ process_and_send_changes_request(SpaceId, #test_action{
     provider_id = ProviderId,
     worker_handling_request = WorkerHandlingRequest
 } = Action) ->
-    SessionId = dbsync_changes_requesting_test_base:get_tester_session(),
+    SessionId = get_tester_session(),
     ?assertMatch(ok, rpc:call(WorkerHandlingRequest, worker_proxy, call, [
         dbsync_worker, {dbsync_message, SessionId, #custom_changes_request{
             space_id = SpaceId,
@@ -354,7 +412,7 @@ verify_synchronization_logs(SynchronizationLogsGeneratedByRequest, InitialSynchr
     InitialIgnoredLogs = get_synchronization_logs(ignored, ProviderHandlingRequest, InitialSynchronizationLogs),
 
     % Filter initial broadcast logs to request range
-    InitialBroadcastChangesInRange = filer_changes_range(InitialBroadcastChanges, Since, Until),
+    InitialBroadcastChangesInRange = filter_changes_range(InitialBroadcastChanges, Since, Until),
     % Filter ignored logs as they cannot be produced handling test request
     FilteredInitialBroadcastChangesInRange = generate_changes_list_diff(InitialBroadcastChangesInRange, InitialIgnoredLogs),
 
@@ -577,8 +635,16 @@ get_requested_sequences_correlation(Acc) ->
 %%% Comparing and filtering synchronization logs
 %%%===================================================================
 
-filer_changes_range(ChangesList, MinSeq, MaxSeq) ->
-    lists:filter(fun(#document{seq = Seq}) -> Seq >= MinSeq andalso Seq =< MaxSeq end, ChangesList).
+filter_changes_range(ChangesList, MinSeq, MaxSeq) ->
+    MaxSeqsMap = lists:foldl(fun(Doc, Acc) ->
+        UniqueId = get_doc_unique_id(Doc),
+        MaxSeqInMap = maps:get(UniqueId, Acc, 0),
+        Acc#{UniqueId => max(MaxSeqInMap, get_doc_seq(Doc))}
+    end, #{}, ChangesList),
+    lists:filter(fun(Doc) ->
+        MaxInMap = maps:get(get_doc_unique_id(Doc), MaxSeqsMap),
+        get_doc_seq(Doc) >= MinSeq andalso MaxInMap =< MaxSeq
+    end, ChangesList).
 
 generate_changes_list_diff(ChangesList1, ChangesList2) ->
     generate_changes_list_diff(ChangesList1, ChangesList2, existing_or_overriden).
@@ -677,6 +743,31 @@ handle_each_correlation_in_out_stream_separately(Config) ->
             meck:passthrough([Request, State])
     end).
 
+lose_random_dbsync_batches_on_worker(Worker) ->
+    test_utils:mock_expect(Worker, dbsync_changes, apply_batch, fun
+        (Batch = #internal_changes_batch{since = Since, custom_request_extension = Extension}) ->
+            Counter = case get(dbsync_changes_test_counter) of
+                undefined -> 1;
+                Val -> Val
+            end,
+            case Counter of
+                3 ->
+                    NewExtension = case Extension of
+                        undefined -> undefined;
+                        _ -> <<>>
+                    end,
+                    put(dbsync_changes_test_counter, 1),
+                    meck:passthrough([Batch#internal_changes_batch{
+                        until = Since,
+                        timestamp = undefined,
+                        custom_request_extension = NewExtension
+                    }]);
+                _ ->
+                    put(dbsync_changes_test_counter, Counter + 1),
+                    meck:passthrough([Batch])
+            end
+    end).
+
 add_delay_to_in_stream_handler(Config) ->
     Workers =  ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, dbsync_in_stream_worker, handle_info, fun(Info, State) ->
@@ -696,3 +787,10 @@ use_default_broadcast_batch_size(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     BatchSize = ?config(batch_size, Config),
     ok = test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_broadcast_batch_size, BatchSize).
+
+mock_zone_sequence_check(Config) ->
+    Workers =  ?config(op_worker_nodes, Config),
+    % note that space_logic is usually mocked by initializer before
+    test_utils:mock_expect(Workers, space_logic, get_latest_emitted_seq, fun(_, _) ->
+        {ok, {1000000000, global_clock:timestamp_seconds()}}
+    end).

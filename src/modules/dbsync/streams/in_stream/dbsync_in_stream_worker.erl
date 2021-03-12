@@ -16,7 +16,6 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
--include("modules/dbsync/dbsync.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -30,8 +29,7 @@
 -record(state, {
     space_id :: od_space:id(),
     provider_id :: od_provider:id(),
-    seq :: couchbase_changes:seq(),
-    changes_stash :: dbsync_in_stream_stash:stash(),
+    batch_stash_registry :: dis_batch_stash_registry:registry(),
     changes_request_ref :: undefined | reference(),
     apply_batch :: undefined | couchbase_changes:until(),
     % Reference of timer that triggers checking space sync progress in onezone
@@ -40,12 +38,23 @@
 
 -type state() :: #state{}.
 
+-define(REQUEST_MAX_SIZE, op_worker:get_env(dbsync_changes_max_request_size, 1000000)).
+
 -define(ZONE_CHECK_BASE_INTERVAL, application:get_env(?APP_NAME,
     dbsync_zone_check_base_interval, timer:minutes(5))).
 -define(ZONE_CHECK_BACKOFF_RATE, application:get_env(?APP_NAME,
     dbsync_zone_check_backoff_rate, 1.5)).
 -define(ZONE_CHECK_MAX_INTERVAL, application:get_env(?APP_NAME,
     dbsync_zone_checkt_max_interval, timer:minutes(60))).
+
+% Internal messages
+-define(CHECK_STASH_AND_APPLY_OR_SCHEDULE_BATCH_REQUEST(DistributorId),
+    {check_stash_and_apply_or_schedule_batch_request, DistributorId}).
+-define(CHECK_STASH_AND_APPLY_OR_REQUEST_BATCH, check_stash_and_apply_or_request_batch).
+-define(CHECK_SEQ_IN_ZONE(Delay), {check_seq_in_zone, Delay}).
+% Missing changes handling modes
+-define(REQUEST_IF_MISSING, request_if_missing).
+-define(SCHEDULE_REQUEST_IF_MISSING, schedule_request_if_missing).
 
 %%%===================================================================
 %%% API
@@ -75,11 +84,11 @@ start_link(SpaceId, ProviderId) ->
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SpaceId, ProviderId]) ->
+    Seq = dbsync_state:get_seq(SpaceId, ProviderId),
     {ok, #state{
         space_id = SpaceId,
         provider_id = ProviderId,
-        seq = dbsync_state:get_seq(SpaceId, ProviderId),
-        changes_stash = dbsync_in_stream_stash:init(),
+        batch_stash_registry = dis_batch_stash_registry:init(ProviderId, Seq),
         zone_check_ref = schedule_seq_check_in_zone()
     }}.
 
@@ -129,18 +138,9 @@ handle_cast({changes_batch, Batch}, State = #state{
         {false, [ProviderId]} ->
             {noreply, reset_seq_check_in_zone_timer(check_batch_in_zone_and_maybe_handle(Batch, State))}
     end;
-handle_cast(check_batch_stash, State = #state{
-    changes_stash = Stash,
-    provider_id = ProviderId,
-    seq = Seq
-}) ->
-    {Changes, UpdatedStash} = dbsync_in_stream_stash:take_first_batch_if_applicable(Stash, ProviderId, Seq),
-    State2 = State#state{changes_stash = UpdatedStash},
-    case Changes of
-        {Docs, Until, Timestamp} -> {noreply, apply_changes_batch(Seq, Until, Timestamp, Docs, undefined, State2)};
-        missing_changes -> {noreply, schedule_changes_request(State2)};
-        empty_stash -> {noreply, State2}
-    end;
+handle_cast(?CHECK_STASH_AND_APPLY_OR_SCHEDULE_BATCH_REQUEST(DistributorId), State) ->
+    State2 = check_stash_and_apply_or_request_batch(DistributorId, ?SCHEDULE_REQUEST_IF_MISSING, State),
+    {noreply, State2};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -155,28 +155,14 @@ handle_cast(Request, #state{} = State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(request_changes, State = #state{
-    space_id = SpaceId,
-    provider_id = ProviderId,
-    seq = Seq,
-    changes_stash = Stash
-}) ->
-    {UpperRange, UpdatedStash} = dbsync_in_stream_stash:get_first_matching_and_trim_stalled(Stash, ProviderId, Seq),
-    State2 = State#state{changes_stash = UpdatedStash},
-    case UpperRange of
-        empty_stash ->
-            {noreply, State2#state{changes_request_ref = undefined}};
-        Until when Until == Seq ->
-            gen_server2:cast(self(), check_batch_stash),
-            {noreply, State2#state{changes_request_ref = undefined}};
-        Until ->
-            dbsync_communicator:request_changes(ProviderId, SpaceId, Seq, Until),
-            {noreply, schedule_changes_request(State2#state{changes_request_ref = undefined})}
-    end;
-handle_info({batch_application_result, {Since, Until}, Timestamp, CustomRequestExtension, Ans}, #state{} = State) ->
-    State2 = process_batch_application_result(Since, Until, Timestamp, CustomRequestExtension, Ans, State),
+handle_info(?CHECK_STASH_AND_APPLY_OR_REQUEST_BATCH, #state{provider_id = ProviderId} = State) ->
+    State2 = check_stash_and_apply_or_request_batch(ProviderId, ?REQUEST_IF_MISSING,
+        State#state{changes_request_ref = undefined}),
     {noreply, State2};
-handle_info({check_seq_in_zone, Delay}, #state{} = State) ->
+handle_info(?BATCH_APPLICATION_RESULT(Batch, Ans), #state{} = State) ->
+    State2 = process_batch_application_result(Batch, Ans, State),
+    {noreply, State2};
+handle_info(?CHECK_SEQ_IN_ZONE(Delay), #state{} = State) ->
     check_seq_in_zone(Delay, State);
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
@@ -222,45 +208,50 @@ code_change(_OldVsn, State, _Extra) ->
 -spec handle_changes_batch(dbsync_worker:internal_changes_batch(), state()) -> state().
 handle_changes_batch(
     #internal_changes_batch{
-        since = Since,
-        until = Until,
-        timestamp = Timestamp,
-        docs = Docs,
+        since = RemoteSeq,
+        until = RemoteSeq,
+        docs = [],
+        custom_request_extension = ?CUSTOM_CHANGES_STREAM_INIT(RequestedSinceBin),
         distributor_id = Distributor
     },
     State = #state{
-        provider_id = Distributor,
-        changes_stash = Stash,
-        seq = Seq,
-        apply_batch = Apply
+        batch_stash_registry = StashRegistry,
+        provider_id = ProviderId
     }
 ) ->
-    % Provider connected with this stream is distributor of changes
-    case {Since, Apply} of
-        {Seq, undefined} ->
-            apply_changes_batch(Since, Until, Timestamp, Docs, undefined, State);
-        {Higher, undefined} when Higher > Seq ->
-            UpdatedStash = dbsync_in_stream_stash:stash_changes_batch(Stash, Distributor, Seq, Since, Until, Timestamp, Docs),
-            schedule_changes_request(State#state{changes_stash = UpdatedStash});
-        {Higher, _} when Higher >= Apply ->
-            UpdatedStash = dbsync_in_stream_stash:stash_changes_batch(Stash, Distributor, Seq, Since, Until, Timestamp, Docs),
-            schedule_changes_request(State#state{changes_stash = UpdatedStash});
+    Seq = dis_batch_stash_registry:get_expected_batch_since(StashRegistry, ProviderId),
+    % Init custom stream handling if it begins on current sequence
+    case binary_to_integer(RequestedSinceBin) of
+        Seq ->
+            {_OldSeq, UpdatedStashRegistry} =
+                dis_batch_stash_registry:set_expected_batch_since(StashRegistry, Distributor, RemoteSeq),
+            State#state{batch_stash_registry = UpdatedStashRegistry};
         _ ->
             State
     end;
 handle_changes_batch(
-    #internal_changes_batch{
-        since = Since,
-        until = Until,
-        timestamp = Timestamp,
-        docs = Docs,
-        custom_request_extension = CustomRequestExtension,
+    Batch = #internal_changes_batch{
         distributor_id = Distributor
     },
-    State
+    State = #state{
+        batch_stash_registry = StashRegistry
+    }
 ) ->
-    dbsync_changes:apply_batch(Docs, {Since, Until}, Timestamp, Distributor, CustomRequestExtension),
-    State.
+    {Result, UpdatedStashRegistry} = dis_batch_stash_registry:handle_incoming_batch(
+        StashRegistry, Distributor, Batch, infer_batch_handling_mode(State)),
+    State2 = State#state{batch_stash_registry = UpdatedStashRegistry},
+    case Result of
+        ?BATCH_READY(BatchToHandle) -> apply_changes_batch(BatchToHandle, State2);
+        ?CHANGES_STASHED -> schedule_changes_request(State2);
+        _ -> State2
+    end.
+
+-spec infer_batch_handling_mode(state()) -> dis_batch_stash:handling_mode().
+infer_batch_handling_mode(#state{apply_batch = undefined}) ->
+    ?CONSIDER_BATCH; % no batch is being applied - consider incoming batch to be applied
+infer_batch_handling_mode(_) ->
+    ?FORCE_STASH_BATCH. % other batch is being applied - stash incoming batch
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -269,12 +260,10 @@ handle_changes_batch(
 %% constitute a continuous range.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_changes_batch(couchbase_changes:since(), couchbase_changes:until(), dbsync_changes:timestamp(),
-    dbsync_worker:batch_docs(), dbsync_worker:custom_request_extension() | undefined, state()) -> state().
-apply_changes_batch(Since, Until, Timestamp, Docs, CustomRequestExtension, #state{provider_id = ProviderId} = State) ->
+-spec apply_changes_batch(dbsync_worker:internal_changes_batch(), state()) -> state().
+apply_changes_batch(Batch = #internal_changes_batch{until = Until}, State) ->
     State2 = cancel_changes_request(State),
-    {Docs2, Timestamp2, Until2, State3} = prepare_batch(Docs, Timestamp, Until, State2),
-    dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2, ProviderId, CustomRequestExtension),
+    dbsync_changes:apply_batch(Batch),
 
     case op_worker:get_env(dbsync_in_stream_worker_gc, on) of
         on ->
@@ -283,7 +272,7 @@ apply_changes_batch(Since, Until, Timestamp, Docs, CustomRequestExtension, #stat
             ok
     end,
 
-    State3#state{apply_batch = Until2}.
+    State2#state{apply_batch = Until}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -291,51 +280,52 @@ apply_changes_batch(Since, Until, Timestamp, Docs, CustomRequestExtension, #stat
 %% Updates sequence when changes applying ends.
 %% @end
 %%--------------------------------------------------------------------
--spec process_batch_application_result(couchbase_changes:since(), couchbase_changes:until(),
-    dbsync_changes:timestamp(), dbsync_worker:custom_request_extension() | undefined,
+-spec process_batch_application_result(dbsync_worker:internal_changes_batch(),
     dbsync_changes:dbsync_application_result() | timeout, state()) -> state().
-process_batch_application_result(_Since, Until, Timestamp, CustomRequestExtension, Ans,
-    #state{provider_id = ProviderId, space_id = SpaceId} = State) ->
-    State2 = State#state{apply_batch = undefined},
-    case {Ans, CustomRequestExtension} of
-        {#dbsync_application_result{min_erroneous_seq = undefined}, undefined} ->
-            dbsync_pending_seqs:process_dbsync_in_stream_seqs(SpaceId, ProviderId, Ans),
-            gen_server2:cast(self(), check_batch_stash),
-            update_seq(Until, Timestamp, State2);
-        {#dbsync_application_result{min_erroneous_seq = undefined}, ProviderSeqs} ->
-            gen_server2:cast(self(), check_batch_stash),
-            DecodedProviderSeqs = dbsync_processed_seqs_history:decode(ProviderSeqs),
-            case maps:get(ProviderId, DecodedProviderSeqs, undefined) of
-                undefined -> State2;
-                DecodedSeq -> update_seq(DecodedSeq, undefined, State2)
-            end;
-        {#dbsync_application_result{min_erroneous_seq = Seq}, undefined} ->
-            dbsync_pending_seqs:process_dbsync_in_stream_seqs(SpaceId, ProviderId, Ans),
-            State3 = update_seq(Seq, undefined, State2),
-            schedule_changes_request(State3);
-        _ ->
-            schedule_changes_request(State2)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Prepares batch to be applied. If there are no missing changes between batches
-%% it merges them.
-%% @end
-%%--------------------------------------------------------------------
--spec prepare_batch(dbsync_worker:batch_docs(), dbsync_changes:timestamp(), couchbase_changes:until(), state()) ->
-    {dbsync_worker:batch_docs(), dbsync_changes:timestamp(), couchbase_changes:until(), state()}.
-prepare_batch(Docs, Timestamp, Until, State = #state{
-    changes_stash = Stash,
+process_batch_application_result(_, timeout, State) ->
+    schedule_changes_request(State#state{apply_batch = undefined});
+process_batch_application_result(#internal_changes_batch{
+    until = Until,
+    timestamp = Timestamp,
+    distributor_id = DistributorId
+}, #dbsync_application_result{
+    min_erroneous_seq = undefined
+} = Ans, #state{
+    provider_id = DistributorId,
+    space_id = SpaceId
+} = State) ->
+    % Distributor id is equal to stream's provider id - process pending sequences.
+    dbsync_pending_seqs:process_dbsync_in_stream_seqs(SpaceId, DistributorId, Ans),
+    gen_server2:cast(self(), ?CHECK_STASH_AND_APPLY_OR_SCHEDULE_BATCH_REQUEST(DistributorId)),
+    update_seq(Until, Timestamp, DistributorId, State#state{apply_batch = undefined});
+process_batch_application_result(#internal_changes_batch{
+    until = Until,
+    timestamp = Timestamp,
+    distributor_id = DistributorId,
+    custom_request_extension = CustomRequestExtension
+}, #dbsync_application_result{
+    min_erroneous_seq = undefined
+}, #state{
     provider_id = ProviderId
-}) ->
-    {{{Docs2, Until2, Timestamp2}, ExtendedInfo}, UpdatedStash} =
-        dbsync_in_stream_stash:take_and_extend_if_applicable(Stash, ProviderId, Docs, Timestamp, Until),
-    case ExtendedInfo of
-        missing_changes -> {Docs2, Timestamp2, Until2, schedule_changes_request(State#state{changes_stash = UpdatedStash})};
-        _ -> {Docs2, Timestamp2, Until2, State#state{changes_stash = UpdatedStash}}
-    end.
+} = State) ->
+    % Distributor id is not equal to stream's provider id - pending sequences cannot be processed,
+    % use data provider in message extension instead.
+    gen_server2:cast(self(), ?CHECK_STASH_AND_APPLY_OR_SCHEDULE_BATCH_REQUEST(DistributorId)),
+    State2 = update_seq(Until, Timestamp, DistributorId, State#state{apply_batch = undefined}),
+    DecodedProviderSeqs = dbsync_processed_seqs_history:decode(CustomRequestExtension),
+    case maps:get(ProviderId, DecodedProviderSeqs, undefined) of
+        undefined -> State2;
+        DecodedSeq -> update_seq(DecodedSeq, undefined, ProviderId, State2)
+    end;
+process_batch_application_result(#internal_changes_batch{
+    distributor_id = DistributorId
+}, #dbsync_application_result{
+    min_erroneous_seq = MinErroneousSeq
+}, State) ->
+    State2 = update_seq(MinErroneousSeq, undefined, DistributorId, State#state{apply_batch = undefined}),
+    % TODO VFS-7206 - schedule faster check of sequences in zone when needed
+    % (lost changes were sent by distributor that is not provider for which this stream works)
+    schedule_changes_request(State2).
 
 
 %%--------------------------------------------------------------------
@@ -344,12 +334,46 @@ prepare_batch(Docs, Timestamp, Until, State = #state{
 %% Updates sequence number of the beginning of expected changes range.
 %% @end
 %%--------------------------------------------------------------------
--spec update_seq(couchbase_changes:seq(), dbsync_changes:timestamp() | undefined, state()) -> state().
-update_seq(Seq, _Timestamp, State = #state{seq = Seq}) ->
-    State;
-update_seq(Seq, Timestamp, State = #state{space_id = SpaceId, provider_id = ProviderId}) ->
-    dbsync_state:set_sync_progress(SpaceId, ProviderId, Seq, Timestamp),
-    State#state{seq = Seq}.
+-spec update_seq(couchbase_changes:seq(), dbsync_changes:timestamp() | undefined,
+    od_provider:id(), state()) -> state().
+update_seq(Seq, Timestamp, DistributorId, State = #state{space_id = SpaceId, provider_id = DistributorId,
+    batch_stash_registry = StashRegistry}) ->
+    {OldSeq, UpdatedStashRegistry} =
+        dis_batch_stash_registry:set_expected_batch_since(StashRegistry, DistributorId, Seq),
+    case Seq of
+        OldSeq -> ok;
+        _ -> dbsync_state:set_sync_progress(SpaceId, DistributorId, Seq, Timestamp)
+    end,
+    State#state{batch_stash_registry = UpdatedStashRegistry};
+update_seq(Seq, _Timestamp, DistributorId, State = #state{batch_stash_registry = StashRegistry}) ->
+    {_OldSeq, UpdatedStashRegistry} =
+        dis_batch_stash_registry:set_expected_batch_since(StashRegistry, DistributorId, Seq),
+    State#state{batch_stash_registry = UpdatedStashRegistry}.
+
+
+-spec check_stash_and_apply_or_request_batch(od_provider:id(),
+    ?REQUEST_IF_MISSING | ?SCHEDULE_REQUEST_IF_MISSING, state()) -> state().
+check_stash_and_apply_or_request_batch(ProviderId, MissingChangesHandlingMode,
+    State = #state{
+        batch_stash_registry = StashRegistry,
+        space_id = SpaceId}
+) ->
+    {Ans, UpdatedStashRegistry} =
+        dis_batch_stash_registry:poll_next_batch(StashRegistry, ProviderId),
+    State2 = State#state{batch_stash_registry = UpdatedStashRegistry},
+    case {Ans, MissingChangesHandlingMode} of
+        {#internal_changes_batch{} = Batch, _} ->
+            apply_changes_batch(Batch, State2);
+        {?EMPTY_STASH, _} ->
+            State2;
+        {?MISSING_CHANGES_RANGE(Since, Until), ?REQUEST_IF_MISSING} ->
+            Until2 = min(Until, Since + ?REQUEST_MAX_SIZE),
+            dbsync_communicator:request_changes(ProviderId, SpaceId, Since, Until2),
+            schedule_changes_request(State2);
+        {?MISSING_CHANGES_RANGE(_Since, _Until), ?SCHEDULE_REQUEST_IF_MISSING} ->
+            schedule_changes_request(State2)
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -363,7 +387,7 @@ schedule_changes_request(State = #state{
 }) ->
     Delay = op_worker:get_env(dbsync_changes_batch_await_period, timer:seconds(15)),
     State#state{changes_request_ref = erlang:send_after(
-        Delay, self(), request_changes
+        Delay, self(), ?CHECK_STASH_AND_APPLY_OR_REQUEST_BATCH
     )};
 schedule_changes_request(State = #state{
     changes_request_ref = Ref
@@ -400,7 +424,7 @@ schedule_seq_check_in_zone() ->
 
 -spec schedule_seq_check_in_zone(non_neg_integer()) -> reference().
 schedule_seq_check_in_zone(Delay) ->
-    erlang:send_after(Delay, self(), {check_seq_in_zone, Delay}).
+    erlang:send_after(Delay, self(), ?CHECK_SEQ_IN_ZONE(Delay)).
 
 -spec reset_seq_check_in_zone_timer(state()) -> state().
 reset_seq_check_in_zone_timer(State = #state{zone_check_ref = Ref}) ->
@@ -439,13 +463,16 @@ check_batch_in_zone_and_maybe_handle(
 
 -spec check_seq_in_zone(non_neg_integer(), state()) -> {noreply, state()} | {stop, normal, state()}.
 check_seq_in_zone(Delay, State = #state{
-    seq = Seq,
     space_id = SpaceId,
-    provider_id = ProviderId
+    provider_id = ProviderId,
+    batch_stash_registry = StashRegistry
 }) ->
+    % TODO VFS-7206 - destroy stashes of other providers than provider connected with the stream
+    % when they are not needed anymore
+    Seq = dis_batch_stash_registry:get_expected_batch_since(StashRegistry, ProviderId),
     case space_logic:get_latest_emitted_seq(SpaceId, ProviderId) of
         {ok, {ZoneSeq, _}} when ZoneSeq > Seq ->
-            request_changes_from_other_provider(ZoneSeq, State),
+            request_changes_from_other_provider(Seq, ZoneSeq, State),
             {noreply, increase_delay_and_schedule_seq_check_in_zone(Delay, State)};
         {ok, _} ->
             case dbsync_utils:should_terminate_stream(SpaceId, ProviderId) of
@@ -464,14 +491,14 @@ check_seq_in_zone(Delay, State = #state{
             {noreply, increase_delay_and_schedule_seq_check_in_zone(Delay, State)}
     end.
 
--spec request_changes_from_other_provider(couchbase_changes:seq(), state()) -> ok | {error, Reason :: term()}.
-request_changes_from_other_provider(ZoneSeq, #state{
-    seq = Seq,
+-spec request_changes_from_other_provider(couchbase_changes:seq(), couchbase_changes:seq(), state()) ->
+    ok | {error, Reason :: term()}.
+request_changes_from_other_provider(Since, Until, #state{
     space_id = SpaceId,
     provider_id = ProviderId
 }) ->
     % TODO VFS-7036 - limit request range, handle message loss
     case dbsync_utils:get_providers(SpaceId) -- [ProviderId, oneprovider:get_id()] of
-        [TargetProvider | _] -> dbsync_communicator:request_changes(TargetProvider, ProviderId, SpaceId, Seq, ZoneSeq);
+        [TargetProvider | _] -> dbsync_communicator:request_changes(TargetProvider, ProviderId, SpaceId, Since, Until);
         _ -> ok
     end.

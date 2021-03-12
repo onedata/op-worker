@@ -14,12 +14,39 @@
 -define(DBSYNC_HRL, 1).
 
 %%%===================================================================
-%%% Macros
+%%% Generic macros
 %%%===================================================================
 
 -define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
 -define(IN_STREAM_ID(Id), {dbsync_in_stream, Id}).
 -define(OUT_STREAM_ID(Id), {dbsync_out_stream, Id}).
+
+-define(DEFAULT_SEQ, 1).
+-define(DEFAULT_TIMESTAMP, 0).
+
+-define(CUSTOM_CHANGES_STREAM_INIT(SinceBinary), <<"CUSTOM_STREAM_INIT#", (SinceBinary)/binary>>).
+
+%%%===================================================================
+%%% Macros used by dbsync_in_stream_worker and associated modules
+%%%===================================================================
+
+% Macros used during verification if there is a batch on stash that can be applied
+% immediately - see dis_batch_stash:poll_next_batch/2
+-define(EMPTY_STASH, empty_stash).
+-define(MISSING_CHANGES_UNTIL(MissingUpTo), {missing_changes, MissingUpTo}).
+-define(MISSING_CHANGES_RANGE(MissingFrom, MissingUpTo), {missing_changes, MissingFrom, MissingUpTo}).
+% Macros describing result of incoming batch handling - see
+% dis_batch_stash:incoming_batch_handling_result() type
+-define(BATCH_READY(Batch), {batch_ready, Batch}).
+-define(CHANGES_STASHED, changes_stashed).
+-define(CHANGES_IGNORED, changes_ignored).
+% Macros describing mode of incoming batch handling - see
+% dis_batch_stash:handling_mode() type
+-define(CONSIDER_BATCH, consider_batch).
+-define(FORCE_STASH_BATCH, force_stash_batch).
+% Message describing batch application result
+% (batch is applied by helper process that sends answer to dbsync_in_stream_worker)
+-define(BATCH_APPLICATION_RESULT(Batch, Ans), {batch_application_result, Batch, Ans}).
 
 %%%===================================================================
 %%% Records

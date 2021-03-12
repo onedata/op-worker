@@ -77,6 +77,7 @@ start_on_demand_stream(SpaceId, ProviderId, Opts) ->
                         ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
                 end;
             _ ->
+                % TODO VFS-7206 - do not ignore message when stream exists, kill old stream instead
                 ok
         end
     end).

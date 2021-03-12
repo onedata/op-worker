@@ -34,7 +34,7 @@
     compressed_docs :: binary(),
     % TODO VFS-7262 - rename field when requesting changes of multiple providers is integrated with dbsync
     mutator_id = <<>> :: oneprovider:id(),
-    custom_request_extension = <<>> :: dbsync_worker:custom_request_extension()
+    custom_request_extension :: dbsync_worker:custom_request_extension() | undefined
 }).
 
 % Record used to represent changes batch internally.
@@ -47,9 +47,9 @@
     since :: couchbase_changes:since(),
     until :: couchbase_changes:until(),
     timestamp :: dbsync_changes:timestamp(),
-    docs :: dbsync_worker:batch_docs(),
+    docs = [] :: dbsync_worker:batch_docs(),
     distributor_id :: oneprovider:id(),
-    custom_request_extension = <<>> :: dbsync_worker:custom_request_extension()
+    custom_request_extension :: dbsync_worker:custom_request_extension() | undefined
 }).
 
 -record(changes_request2, {
