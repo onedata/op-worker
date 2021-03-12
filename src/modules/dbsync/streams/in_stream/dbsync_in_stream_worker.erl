@@ -238,7 +238,7 @@ handle_changes_batch(
     }
 ) ->
     {Result, UpdatedStashRegistry} = dis_batch_stash_registry:handle_incoming_batch(
-        StashRegistry, Distributor, Batch, get_batch_handling_mode(State)),
+        StashRegistry, Distributor, Batch, infer_batch_handling_mode(State)),
     State2 = State#state{batch_stash_registry = UpdatedStashRegistry},
     case Result of
         ?BATCH_READY(BatchToHandle) -> apply_changes_batch(BatchToHandle, State2);
@@ -246,11 +246,11 @@ handle_changes_batch(
         _ -> State2
     end.
 
--spec get_batch_handling_mode(state()) -> dis_batch_stash:handling_mode().
-get_batch_handling_mode(#state{apply_batch = undefined}) ->
-    ?CONSIDER_BATCH;
-get_batch_handling_mode(_) ->
-    ?FORCE_STASH_BATCH.
+-spec infer_batch_handling_mode(state()) -> dis_batch_stash:handling_mode().
+infer_batch_handling_mode(#state{apply_batch = undefined}) ->
+    ?CONSIDER_BATCH; % no batch is being applied - consider incoming batch to be applied
+infer_batch_handling_mode(_) ->
+    ?FORCE_STASH_BATCH. % other batch is being applied - stash incoming batch
 
 
 %%--------------------------------------------------------------------
@@ -366,11 +366,11 @@ check_stash_and_apply_or_request_batch(ProviderId, MissingChangesHandlingMode,
             apply_changes_batch(Batch, State2);
         {?EMPTY_STASH, _} ->
             State2;
-        {?MISSING_CHANGES(Since, Until), ?REQUEST_IF_MISSING} ->
+        {?MISSING_CHANGES_RANGE(Since, Until), ?REQUEST_IF_MISSING} ->
             Until2 = min(Until, Since + ?REQUEST_MAX_SIZE),
             dbsync_communicator:request_changes(ProviderId, SpaceId, Since, Until2),
             schedule_changes_request(State2);
-        {?MISSING_CHANGES(_Since, _Until), ?SCHEDULE_REQUEST_IF_MISSING} ->
+        {?MISSING_CHANGES_RANGE(_Since, _Until), ?SCHEDULE_REQUEST_IF_MISSING} ->
             schedule_changes_request(State2)
     end.
 

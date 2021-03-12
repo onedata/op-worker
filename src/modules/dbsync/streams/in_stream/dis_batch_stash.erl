@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This modules handles stashing of changes batches of single distributor. It also decides whether
-%%% some batches should be requested to fill hole in stash to allow application of stashed batches.
+%%% This modules handles stashing of changes batches of single distributor. It also
+%%% decides whether incoming batch should be stashed or is ready to be used.
 %%% As each dbsync_in_stream_worker can process batches sent by multiple distributors,
 %%% this module should be used only via dis_batch_stash_registry module.
 %%% @end
@@ -65,7 +65,7 @@ handle_incoming_batch(Stash, Batch = #internal_changes_batch{since = Since}, ?CO
             dis_batch_stash_table:stash(Table, CurrentSeq, Batch),
             ?CHANGES_STASHED;
         _ ->
-            % TODO VFS-7323 - check until - if it is greater than current sequence number, trim batch and apply
+            % TODO VFS-7323 - check until - if it is greater than current sequence number, trim batch and report ready
             ?CHANGES_IGNORED
     end;
 handle_incoming_batch(Stash, Batch, ?FORCE_STASH_BATCH) ->
@@ -74,12 +74,12 @@ handle_incoming_batch(Stash, Batch, ?FORCE_STASH_BATCH) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Tries to take changes to be applied and extends it if possible
-%% (see dis_batch_stash_table:take_and_merge_if_contiguous/2). Returns changes request
-%% range if some changes have to be requested before application of stashed changes is possible.
+%% Tries to take batch beginning from expected batch since. Merges batches if possible
+%% (see dis_batch_stash_table:take_and_merge_if_contiguous/2). Returns information about
+%% missing changes if batch cannot be found.
 %% @end
 %%--------------------------------------------------------------------
--spec poll_next_batch(stash()) -> batch() | ?EMPTY_STASH | ?MISSING_CHANGES(seq(), seq()).
+-spec poll_next_batch(stash()) -> batch() | ?EMPTY_STASH | ?MISSING_CHANGES_RANGE(seq(), seq()).
 poll_next_batch(Stash) ->
     Table = Stash#stash.table,
     CurrentSeq = Stash#stash.expected_batch_since,
@@ -87,8 +87,8 @@ poll_next_batch(Stash) ->
     case dis_batch_stash_table:take_and_prune_older(Table, CurrentSeq) of
         ?EMPTY_STASH ->
             ?EMPTY_STASH;
-        ?MISSING_CHANGES(MissingUpTo) ->
-            ?MISSING_CHANGES(CurrentSeq, MissingUpTo);
+        ?MISSING_CHANGES_UNTIL(MissingUpTo) ->
+            ?MISSING_CHANGES_RANGE(CurrentSeq, MissingUpTo);
         #internal_changes_batch{} = Batch ->
             % TODO VFS-7323 - If hole in table is found by take_and_merge_if_contiguous,
             % return information to schedule changes request immediately

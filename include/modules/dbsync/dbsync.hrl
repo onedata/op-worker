@@ -33,8 +33,8 @@
 % Macros used during verification if there is a batch on stash that can be applied
 % immediately - see dis_batch_stash:poll_next_batch/2
 -define(EMPTY_STASH, empty_stash).
--define(MISSING_CHANGES(MissingUpTo), {missing_changes, MissingUpTo}).
--define(MISSING_CHANGES(MissingFrom, MissingUpTo), {missing_changes, MissingFrom, MissingUpTo}).
+-define(MISSING_CHANGES_UNTIL(MissingUpTo), {missing_changes, MissingUpTo}).
+-define(MISSING_CHANGES_RANGE(MissingFrom, MissingUpTo), {missing_changes, MissingFrom, MissingUpTo}).
 % Macros describing result of incoming batch handling - see
 % dis_batch_stash:incoming_batch_handling_result() type
 -define(BATCH_READY(Batch), {batch_ready, Batch}).

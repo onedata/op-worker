@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This modules handles stashing changes batches in ets table. Stashing means that changes batches
-%%% that cannot be applied at the moment are stored in ets table to provide them later when it is
-%%% possible to apply them. Record #internal_changes_batch{} is stored in ets and its field since
+%%% that cannot be used at the moment are stored in ets table to provide them later when it is
+%%% possible to use them. Record #internal_changes_batch{} is stored in ets and its field since
 %%% is used as a key.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -72,7 +72,7 @@ stash(Table, CurrentSeq, Batch = #internal_changes_batch{until = Until}) ->
 %% older changes. If batch cannot be found, returns reason (empty stash or missing changes).
 %% @end
 %%--------------------------------------------------------------------
--spec take_and_prune_older(table(), seq()) -> batch() | ?EMPTY_STASH | ?MISSING_CHANGES(seq()).
+-spec take_and_prune_older(table(), seq()) -> batch() | ?EMPTY_STASH | ?MISSING_CHANGES_UNTIL(seq()).
 take_and_prune_older(Table, Since) ->
     case ets:first(Table) of
         ?EMPTY_TABLE ->
@@ -85,7 +85,7 @@ take_and_prune_older(Table, Since) ->
             ets:delete(Table, BatchSince),
             take_and_prune_older(Table, Since);
         BatchSince ->
-            ?MISSING_CHANGES(BatchSince)
+            ?MISSING_CHANGES_UNTIL(BatchSince)
     end.
 
 %%--------------------------------------------------------------------

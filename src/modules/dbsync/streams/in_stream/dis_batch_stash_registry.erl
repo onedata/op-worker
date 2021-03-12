@@ -60,7 +60,7 @@ handle_incoming_batch(Registry, ProviderId, Batch, HandlingMode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec poll_next_batch(registry(), od_provider:id()) ->
-    {batch() | ?EMPTY_STASH | ?MISSING_CHANGES(seq(), seq()), registry()}.
+    {batch() | ?EMPTY_STASH | ?MISSING_CHANGES_RANGE(seq(), seq()), registry()}.
 poll_next_batch(Registry, ProviderId) ->
     {Stash, UpdatedRegistry} = acquire_stash(Registry, ProviderId),
     {dis_batch_stash:poll_next_batch(Stash), UpdatedRegistry}.

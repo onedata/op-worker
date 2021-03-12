@@ -745,8 +745,6 @@ handle_each_correlation_in_out_stream_separately(Config) ->
 
 lose_random_dbsync_batches_on_worker(Worker) ->
     test_utils:mock_expect(Worker, dbsync_changes, apply_batch, fun
-        (Batch) ->
-            meck:passthrough([Batch]);
         (Batch = #internal_changes_batch{since = Since, custom_request_extension = Extension}) ->
             Counter = case get(dbsync_changes_test_counter) of
                 undefined -> 1;
