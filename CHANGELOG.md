@@ -6,6 +6,12 @@ CHANGELOG
 
 ### 20.02.7
 
+-   **VFS-7294** Added publicly available REST endpoints for fetching
+    information and data of shared files/directories. The data-related
+    endpoints are offered by Onezone, which redirects to a suitable
+    Oneprovider so that a guest user does not need any knowledge of the
+    environment to access the data. Improved the Web GUI's shares view
+    to present the public endpoints in an easy-to-use manner.
 -   **VFS-7276** Improved handling of startup errors in Oneclient,
     including more graceful handling of various exceptions and more
     informative error messages including Oneclient and Oneprovider
