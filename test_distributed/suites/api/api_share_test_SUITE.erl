@@ -716,19 +716,10 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(get_shared_file_or_directory_data_test = Case, Config) ->
-    % time must be frozen because the test checks if endpoints returning file
-    % attributes give the same results, but each request bumps the atime of the
-    % file, which causes different results
-    time_test_utils:freeze_time(Config),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
     lfm_proxy:init(Config).
 
 
-end_per_testcase(get_shared_file_or_directory_data_test = Case, Config) ->
-    time_test_utils:unfreeze_time(Config),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
