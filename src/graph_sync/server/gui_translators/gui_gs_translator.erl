@@ -15,6 +15,7 @@
 
 -behaviour(gs_translator_behaviour).
 
+-include("http/gui_paths.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -43,7 +44,15 @@ handshake_attributes(_Client) ->
         <<"providerName">> => ProviderName,
         <<"serviceVersion">> => op_worker:get_release_version(),
         <<"onezoneUrl">> => oneprovider:get_oz_url(),
-        <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit()
+        <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit(),
+        <<"restTemplates">> => #{
+            <<"listSharedDirectoryChildren">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/children"),
+            <<"downloadSharedFileContent">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/content"),
+            <<"getSharedFileAttributes">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE(""),
+            <<"getSharedFileExtendedAttributes">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/xattrs"),
+            <<"getSharedFileJsonMetadata">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/json"),
+            <<"getSharedFileRdfMetadata">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/rdf")
+        }
     }.
 
 
@@ -65,12 +74,13 @@ translate_value(_, #gri{type = op_replica} = GRI, Value) ->
 translate_value(_, #gri{type = op_transfer} = GRI, Value) ->
     transfer_gui_gs_translator:translate_value(GRI, Value);
 translate_value(ProtocolVersion, GRI, Data) ->
-    ?error("Cannot translate graph sync create result for:~n"
-           "ProtocolVersion: ~p~n"
-           "GRI: ~p~n"
-           "Data: ~p", [
-        ProtocolVersion, GRI, Data
-    ]),
+    ?error(
+        "Cannot translate graph sync create result for:~n"
+        "ProtocolVersion: ~p~n"
+        "GRI: ~p~n"
+        "Data: ~p",
+        [ProtocolVersion, GRI, Data]
+    ),
     throw(?ERROR_INTERNAL_SERVER_ERROR).
 
 
@@ -105,10 +115,11 @@ translate_resource(_, #gri{type = op_handle_service} = GRI, Data) ->
 translate_resource(_, #gri{type = op_qos} = GRI, Data) ->
     qos_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(ProtocolVersion, GRI, Data) ->
-    ?error("Cannot translate graph sync get result for:~n"
-           "ProtocolVersion: ~p~n"
-           "GRI: ~p~n"
-           "Data: ~p", [
-        ProtocolVersion, GRI, Data
-    ]),
+    ?error(
+        "Cannot translate graph sync get result for:~n"
+        "ProtocolVersion: ~p~n"
+        "GRI: ~p~n"
+        "Data: ~p",
+        [ProtocolVersion, GRI, Data]
+    ),
     throw(?ERROR_INTERNAL_SERVER_ERROR).

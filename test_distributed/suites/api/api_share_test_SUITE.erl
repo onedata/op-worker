@@ -238,6 +238,7 @@ get_share_test(_Config) ->
                             <<"description">> => Description,
                             <<"fileType">> => FileType,
                             <<"publicUrl">> => build_share_public_url(ShareId),
+                            <<"publicRestUrl">> => build_share_public_rest_url(ShareId),
                             <<"rootFileId">> => ShareObjectId,
                             <<"spaceId">> => SpaceId,
                             <<"handleId">> => null
@@ -555,11 +556,11 @@ generate_random_file_spec() ->
     {api_test_utils:file_type(), onenv_file_test_utils:file_spec()}.
 generate_random_file_spec(ShareSpecs) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FileDesc = case FileType of
+    FileSpec = case FileType of
         <<"file">> -> #file_spec{shares = ShareSpecs};
         <<"dir">> -> #dir_spec{shares = ShareSpecs}
     end,
-    {FileType, FileDesc}.
+    {FileType, FileSpec}.
 
 
 %% @private
@@ -570,6 +571,7 @@ generate_random_file_spec(ShareSpecs) ->
     ok.
 verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, FileType, UserId) ->
     ExpPublicUrl = build_share_public_url(ShareId),
+    ExpPublicRestUrl = build_share_public_rest_url(ShareId),
     ExpFileType = binary_to_atom(FileType, utf8),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
@@ -581,6 +583,7 @@ verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, 
                 space = SpaceId,
                 root_file = ShareFileGuid,
                 public_url = ExpPublicUrl,
+                public_rest_url = ExpPublicRestUrl,
                 file_type = ExpFileType,
                 handle = undefined
             }}},
@@ -620,6 +623,7 @@ assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileG
         <<"description">> => Description,
         <<"fileType">> => FileType,
         <<"publicUrl">> => build_share_public_url(ShareId),
+        <<"publicRestUrl">> => build_share_public_rest_url(ShareId),
         <<"rootFile">> => gri:serialize(#gri{
             type = op_file,
             id = ShareFileGuid,
@@ -681,6 +685,13 @@ build_share_public_url(ShareId) ->
     str_utils:format_bin("https://~s/share/~s", [OzDomain, ShareId]).
 
 
+%% @private
+-spec build_share_public_rest_url(od_share:id()) -> binary().
+build_share_public_rest_url(ShareId) ->
+    OzDomain = ozw_test_rpc:get_domain(),
+    str_utils:format_bin("https://~s/api/v3/onezone/shares/~s/public", [OzDomain, ShareId]).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -705,10 +716,19 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_testcase(get_shared_file_or_directory_data_test = Case, Config) ->
+    % time must be frozen because the test checks if endpoints returning file
+    % attributes give the same results, but each request bumps the atime of the
+    % file, which causes different results
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
     lfm_proxy:init(Config).
 
 
+end_per_testcase(get_shared_file_or_directory_data_test = Case, Config) ->
+    time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

@@ -679,6 +679,7 @@ mock_share_logic(Config) ->
             space = SpaceId,
             root_file = ShareFileGuid,
             public_url = <<ShareId/binary, "_public_url">>,
+            public_rest_url = <<ShareId/binary, "_public_rest_url">>,
             file_type = FileType,
             handle = <<ShareId/binary, "_handle_id">>
         }}),
