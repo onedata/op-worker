@@ -479,8 +479,9 @@ handle_in_process(Request, _State) ->
     session:id()) -> ok.
 handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
     #flush_events{context = Context, notify = Notify} = Request,
-    {ok, Credentials} = session:get_credentials(SessId),
-    {ok, SessMode} = session:get_mode(SessId),
+    {ok, SessDoc} = session:get(SessId),
+    Credentials = session:get_credentials(SessDoc),
+    {ok, SessMode} = session:get_mode(SessDoc),
     StreamId = sequencer:term_to_stream_id(Context),
     ClientMsg = #client_message{
         message_stream = #message_stream{stream_id = StreamId},
@@ -508,8 +509,9 @@ handle_remotely(#event{} = Evt, ProviderId, SessId) ->
 handle_remotely(Request, ProviderId, SessId) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
-    {ok, Credentials} = session:get_credentials(SessId),
-    {ok, SessMode} = session:get_mode(SessId),
+    {ok, SessDoc} = session:get(SessId),
+    Credentials = session:get_credentials(SessDoc),
+    {ok, SessMode} = session:get_mode(SessDoc),
     communicator:stream_to_provider(
         session_utils:get_provider_session_id(outgoing, ProviderId),
         #client_message{

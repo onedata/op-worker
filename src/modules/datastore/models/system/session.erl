@@ -302,7 +302,7 @@ get_mode(<<_/binary>> = SessId) ->
     end;
 get_mode(#session{mode = SessMode}) ->
     {ok, SessMode};
-get_mode(#session{mode = SessMode}) ->
+get_mode(#document{value = #session{mode = SessMode}}) ->
     {ok, SessMode}.
 
 

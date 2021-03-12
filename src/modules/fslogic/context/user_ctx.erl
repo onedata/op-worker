@@ -195,11 +195,9 @@ is_direct_io(_, _) ->
 
 -spec is_in_open_handle_mode(ctx()) -> boolean().
 is_in_open_handle_mode(#user_ctx{session = #document{
-    value = #session{mode = open_handle}
+    value = #session{mode = Mode}
 }}) ->
-    true;
-is_in_open_handle_mode(_) ->
-    false.
+    Mode =:= open_handle.
 
 -spec get_session_mode(ctx()) -> session:mode().
 get_session_mode(#user_ctx{session = #document{value = #session{mode = SessMode}}}) ->

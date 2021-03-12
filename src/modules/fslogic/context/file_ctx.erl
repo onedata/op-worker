@@ -304,7 +304,7 @@ get_logical_path(FileCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_file_doc(ctx()) -> {file_meta:doc(), ctx()}.
 get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
-    Uuid = file_id:guid_to_uuid(get_guid_const(FileCtx)),
+    Uuid = get_uuid_const(FileCtx),
     {ok, FileDoc} = case fslogic_uuid:is_share_root_dir_uuid(Uuid) of
         true -> get_share_root_dir_doc(FileCtx, false);
         false -> file_meta:get({uuid, Uuid})
@@ -375,8 +375,7 @@ get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}
 -spec get_share_root_dir_doc(ctx(), IncludingDeleted :: boolean()) ->
     {ok, file_meta:doc()} | {error, not_found}.
 get_share_root_dir_doc(FileCtx, IncludingDeleted) ->
-    ShareDirGuid = get_guid_const(FileCtx),
-    ShareDirUuid = file_id:guid_to_uuid(ShareDirGuid),
+    ShareDirUuid = get_uuid_const(FileCtx),
     ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(ShareDirUuid),
     SpaceId = get_space_id_const(FileCtx),
 
@@ -395,7 +394,7 @@ get_share_root_dir_doc(FileCtx, IncludingDeleted) ->
                     name = ShareId,
                     type = ?DIRECTORY_TYPE,
                     is_scope = false,
-                    mode = 8#755,
+                    mode = ?DEFAULT_SHARE_ROOT_DIR_PERMS,
                     owner = ?ROOT_USER_ID,
                     parent_uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                     deleted = IsDeleted

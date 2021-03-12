@@ -48,7 +48,7 @@ deserialize_client_message(Message, SessionId) ->
         message_body = {_, MsgBody},
         proxy_session_id = EffSessionId,
         proxy_session_macaroon = PToken,
-        session_mode = SessionMode
+        proxy_session_mode = PSessionMode
     } = enif_protobuf:decode(Message, 'ClientMessage'),
 
     {ok, DecodedId} = clproto_message_id:decode(MsgId),
@@ -56,7 +56,7 @@ deserialize_client_message(Message, SessionId) ->
     try
         Stream = clproto_translator:translate_from_protobuf(MsgStm),
         EffSessionAuth = clproto_translator:translate_from_protobuf(PToken),
-        EffSessionMode = clproto_translator:session_mode_translate_from_protobuf(SessionMode),
+        EffSessionMode = clproto_translator:session_mode_translate_from_protobuf(PSessionMode),
         Body = clproto_translator:translate_from_protobuf(MsgBody),
 
         {ok, #client_message{
@@ -145,7 +145,7 @@ serialize_client_message(#client_message{
         message_body = clproto_translator:translate_to_protobuf(MsgBody),
         proxy_session_id = EffSessionId,
         proxy_session_macaroon = clproto_translator:translate_to_protobuf(Auth),
-        session_mode = clproto_translator:session_mode_translate_to_protobuf(EffSessionMode)
+        proxy_session_mode = clproto_translator:session_mode_translate_to_protobuf(EffSessionMode)
     },
 
     case VerifyMsg of
