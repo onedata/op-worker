@@ -22,6 +22,7 @@
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 
 -export([update_version_info/3, upload_op_worker_gui/1]).
 
@@ -73,12 +74,12 @@ upload_op_worker_gui(PackagePath) ->
         {ssl_options, [{cacerts, oneprovider:trusted_ca_certs()}]}
     ],
     case http_client:post(Url, Headers, Body, Opts) of
-        {ok, 200, _, _} ->
+        {ok, ?HTTP_200_OK, _, _} ->
             ok;
         FailureResult ->
             try
-                {ok, 400, _, RespBody} = FailureResult,
-                errors:from_json(json_utils:decode(RespBody))
+                {ok, _, _, RespBody} = FailureResult,
+                errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody)))
             catch _:_ ->
                 {error, {unexpected_gui_upload_result, FailureResult}}
             end

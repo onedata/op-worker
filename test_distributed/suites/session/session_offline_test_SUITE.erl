@@ -27,7 +27,6 @@
     offline_session_creation_for_root_should_fail_test/1,
     offline_session_creation_for_guest_should_fail_test/1,
     offline_session_should_work_as_any_other_session_test/1,
-    offline_session_should_internally_refresh_provider_identity_token/1,
     offline_token_should_be_renewed_if_needed_test/1,
     offline_session_should_properly_react_to_time_warps_test/1
 ]).
@@ -36,7 +35,6 @@ all() -> [
     offline_session_creation_for_root_should_fail_test,
     offline_session_creation_for_guest_should_fail_test,
     offline_session_should_work_as_any_other_session_test,
-    offline_session_should_internally_refresh_provider_identity_token,
     offline_token_should_be_renewed_if_needed_test,
     offline_session_should_properly_react_to_time_warps_test
 ].
@@ -97,49 +95,6 @@ offline_session_should_work_as_any_other_session_test(_Config) ->
         fun force_oz_connection_restart/0,
         fun() -> ozw_test_rpc:simulate_downtime(5) end
     ]).
-
-
-offline_session_should_internally_refresh_provider_identity_token(_Config) ->
-    JobId = ?RAND_JOB_ID(),
-    UserCredentials = get_user_credentials(),
-
-    {ok, SessionId} = ?assertMatch({ok, _}, init_offline_session(JobId, UserCredentials)),
-    OfflineCredentials = get_session_credentials(SessionId),
-    OfflineAccessToken = auth_manager:get_access_token(OfflineCredentials),
-
-    SpaceKrkId = oct_background:get_space_id(space_krk),
-    SpaceKrkGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceKrkId),
-
-    mock_verify_token_to_inform_about_consumer_token_used(OfflineAccessToken),
-
-    ProviderIdentityTokens = lists:map(fun(_) ->
-        % Wait for current provider identity token to expire
-        timer:sleep(timer:seconds(?PROVIDER_TOKEN_TTL + 1)),
-
-        % Clear auth cache so that session credentials would be once again verified
-        % on next operation execution. Otherwise it would be impossible to see what
-        % consumer token is used (normally it is kept as atom placeholder and
-        % substituted only on call to oz)
-        clear_auth_cache(),
-
-        % Then try to perform any lfm operation - it should work properly
-        % as identity token should be internally refreshed
-        ?assertMatch(
-            {ok, #file_attr{guid = SpaceKrkGuid}},
-            lfm_proxy:stat(?NODE, SessionId, {guid, SpaceKrkGuid}),
-            ?ATTEMPTS
-        ),
-
-        receive {consumer_token, ConsumerToken} ->
-            ConsumerToken
-        after 100 ->
-            ct:fail("Consumer token not renewed")
-        end
-    end, lists:seq(1, 5)),
-
-    ?assertEqual(5, length(lists:usort(ProviderIdentityTokens))),
-
-    unmock_verify_token_to_inform_about_consumer_token_used().
 
 
 offline_token_should_be_renewed_if_needed_test(_Config) ->
@@ -358,7 +313,7 @@ mock_acquire_offline_user_access_token_failure() ->
     Self = self(),
 
     test_utils:mock_new(?NODE, auth_manager, [passthrough]),
-    test_utils:mock_expect(?NODE, auth_manager, acquire_offline_user_access_token, fun(_, _) ->
+    test_utils:mock_expect(?NODE, auth_manager, acquire_offline_user_access_token, fun(_) ->
         Self ! acquire_offline_access_token,
         ?ERROR_NO_CONNECTION_TO_ONEZONE
     end).
