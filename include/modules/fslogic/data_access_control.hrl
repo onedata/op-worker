@@ -61,7 +61,7 @@
 
 
 % Operations forbidden by lack of ?SPACE_WRITE_DATA/?SPACE_READ_DATA space privilege
--define(SPACE_BLOCKED_WRITE_OPERATION, (
+-define(SPACE_BLOCKED_WRITE_OPERATIONS, (
     ?write_attributes_mask bor
     ?write_object_mask bor
     ?add_object_mask bor

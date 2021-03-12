@@ -60,9 +60,9 @@ assert_granted(UserCtx, FileCtx, AccessRequirements) ->
 
             case user_ctx:is_space_owner(UserCtx, SpaceId) of
                 true ->
-                    assert_control_granted_for_space_owner(UserCtx, FileCtx, AccessRequirements);
+                    assert_access_granted_for_space_owner(UserCtx, FileCtx, AccessRequirements);
                 false ->
-                    assert_control_granted_for_user(UserCtx, FileCtx, AccessRequirements)
+                    assert_access_granted_for_user(UserCtx, FileCtx, AccessRequirements)
             end
     end.
 
@@ -100,17 +100,17 @@ is_available_in_readonly_mode(?OR(AccessType1, AccessType2)) ->
 
 
 %% @private
--spec assert_control_granted_for_space_owner(user_ctx:ctx(), file_ctx:ctx(), [requirement()]) ->
+-spec assert_access_granted_for_space_owner(user_ctx:ctx(), file_ctx:ctx(), [requirement()]) ->
     file_ctx:ctx() | no_return().
-assert_control_granted_for_space_owner(UserCtx, FileCtx0, AccessRequirements) ->
+assert_access_granted_for_space_owner(UserCtx, FileCtx0, AccessRequirements) ->
     IsSpaceDir = file_ctx:is_space_dir_const(FileCtx0),
 
     case IsSpaceDir of
         true ->
             % In case of space dir space owner is treated as any other user
-            assert_control_granted_for_user(UserCtx, FileCtx0, AccessRequirements);
+            assert_access_granted_for_user(UserCtx, FileCtx0, AccessRequirements);
         false ->
-            % For any other file or directory space owner omits all control checks
+            % For any other file or directory space owner omits all access checks
             % with exceptions to file protection flags
             {ForbiddenOps, FileCtx1} = get_operations_blocked_by_file_protection_flags(FileCtx0),
 
@@ -133,9 +133,9 @@ assert_control_granted_for_space_owner(UserCtx, FileCtx0, AccessRequirements) ->
 
 
 %% @private
--spec assert_control_granted_for_user(user_ctx:ctx(), file_ctx:ctx(), [requirement()]) ->
+-spec assert_access_granted_for_user(user_ctx:ctx(), file_ctx:ctx(), [requirement()]) ->
     file_ctx:ctx() | no_return().
-assert_control_granted_for_user(UserCtx, FileCtx0, AccessRequirements0) ->
+assert_access_granted_for_user(UserCtx, FileCtx0, AccessRequirements0) ->
     AccessRequirements1 = case user_ctx:is_guest(UserCtx) of
         true ->
             [?PUBLIC_ACCESS | AccessRequirements0];
@@ -328,20 +328,20 @@ get_operations_blocked_by_lack_of_space_privs(UserCtx, FileCtx, undefined) ->
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             % All write operations are denied for user root dir
-            ?SPACE_BLOCKED_WRITE_OPERATION;
+            ?SPACE_BLOCKED_WRITE_OPERATIONS;
         false ->
             {ok, EffUserSpacePrivs} = space_logic:get_eff_privileges(SpaceId, UserId),
 
             lists:foldl(fun
                 (?SPACE_READ_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_BLOCKED_READ_OPERATIONS);
-                (?SPACE_WRITE_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_BLOCKED_WRITE_OPERATION);
+                (?SPACE_WRITE_DATA, Bitmask) -> ?reset_flags(Bitmask, ?SPACE_BLOCKED_WRITE_OPERATIONS);
                 (_, Bitmask) -> Bitmask
-            end, ?SPACE_BLOCKED_READ_OPERATIONS bor ?SPACE_BLOCKED_WRITE_OPERATION, EffUserSpacePrivs)
+            end, ?SPACE_BLOCKED_READ_OPERATIONS bor ?SPACE_BLOCKED_WRITE_OPERATIONS, EffUserSpacePrivs)
     end;
 
 get_operations_blocked_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
     % All write operations are denied in share mode
-    ?SPACE_BLOCKED_WRITE_OPERATION.
+    ?SPACE_BLOCKED_WRITE_OPERATIONS.
 
 
 %% @private
