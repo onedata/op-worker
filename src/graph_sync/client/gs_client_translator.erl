@@ -147,13 +147,14 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = private}, Re
     #document{
         key = Id,
         value = #od_share{
+            space = maps:get(<<"spaceId">>, Result),
             name = maps:get(<<"name">>, Result),
             description = maps:get(<<"description">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
+            public_rest_url = maps:get(<<"publicRestUrl">>, Result),
+            root_file = maps:get(<<"rootFileId">>, Result),
             file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
-            space = maps:get(<<"spaceId">>, Result),
-            handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result)),
-            root_file = maps:get(<<"rootFileId">>, Result)
+            handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result))
         }
     };
 translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Result) ->
@@ -163,9 +164,10 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Res
             name = maps:get(<<"name">>, Result),
             description = maps:get(<<"description">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
+            public_rest_url = maps:get(<<"publicRestUrl">>, Result),
+            root_file = maps:get(<<"rootFileId">>, Result),
             file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
-            handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result)),
-            root_file = maps:get(<<"rootFileId">>, Result)
+            handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result))
         }
     };
 

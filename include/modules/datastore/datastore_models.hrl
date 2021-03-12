@@ -131,6 +131,7 @@
     name :: binary(),
     description :: binary(),
     public_url :: binary(),
+    public_rest_url :: binary(),
 
     % Direct relations to other entities
     space = undefined :: undefined | od_space:id(),

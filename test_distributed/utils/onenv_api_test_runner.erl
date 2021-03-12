@@ -46,6 +46,7 @@
 
 -type ct_config() :: proplists:proplist().
 
+%% @formatter:off
 -type scenario_type() ::
     % Standard rest scenario - using fileId in path so that no lookup
     % takes place
@@ -55,6 +56,10 @@
     % supported by specific provider) rather then concrete error a
     % ?ERROR_POSIX(?ENOENT) will be returned
     rest_with_file_path |
+    % Rest scenario using a publicly accessible share guid.
+    % Tests the Onezone's public shared data redirector, that should
+    % redirect to the corresponding endpoint in a suitable Oneprovider.
+    {rest_with_shared_guid, od_space:id()} |
     % Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
     % of request auth and parameters.
     rest_not_supported |
@@ -67,6 +72,7 @@
     % Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
     % of test case due to for example invalid aspect.
     gs_not_supported.
+%% @formatter:on
 
 % List of nodes to which api calls can be directed. However only one node
 % from this list will be chosen (randomly) for each test case.
@@ -333,12 +339,13 @@ run_malformed_data_test_cases(#suite_spec{
     scenario_type()
 ) ->
     boolean().
-is_data_error_applicable_to_scenario({error, _}, _)                          -> true;
-is_data_error_applicable_to_scenario({Scenario, _}, Scenario)                -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, rest)                -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, rest_with_file_path) -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, rest_not_supported)  -> true;
-is_data_error_applicable_to_scenario(_, _)                                   -> false.
+is_data_error_applicable_to_scenario({error, _}, _)                                 -> true;
+is_data_error_applicable_to_scenario({Scenario, _}, Scenario)                       -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest)                       -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest_with_file_path)        -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, {rest_with_shared_guid, _}) -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest_not_supported)         -> true;
+is_data_error_applicable_to_scenario(_, _)                                          -> false.
 
 
 %% @private
@@ -486,7 +493,7 @@ run_expected_success_test_cases(#suite_spec{
                 )
         end,
         OuterAcc and lists:foldl(fun({Scenario, DataSet}, InnerAcc) ->
-            TargetNode = lists_utils:random_element(TargetNodes),
+            TargetNode = choose_target_node(TargetNodes, Scenario),
 
             SetupFun(),
             TestCasePassed = run_exp_success_testcase(
@@ -544,7 +551,7 @@ run_testcases(ScenarioTemplates, TargetNodes, Clients, DataSets, TestCaseFun) ->
     lists:foldl(fun(ScenarioTemplate, PrevScenariosPassed) ->
         PrevScenariosPassed and lists:foldl(fun(Client, PrevClientsPassed) ->
             PrevClientsPassed and lists:foldl(fun(DataSet, PrevDataSetsPassed) ->
-                TargetNode = lists_utils:random_element(TargetNodes),
+                TargetNode = choose_target_node(TargetNodes, ScenarioTemplate),
                 PrevDataSetsPassed and TestCaseFun(
                     TargetNode, Client, DataSet, ScenarioTemplate
                 )
@@ -561,9 +568,9 @@ run_exp_error_testcase(TargetNode, Client, DataSet, ScenarioError, VerifyFun, #s
     type = ScenarioType,
     prepare_args_fun = PrepareArgsFun
 }) ->
-    ExpError = case is_client_supported_by_node(Client, TargetNode) of
-        true -> ScenarioError;
-        false -> ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED)
+    ExpError = case should_expect_lack_of_support_error(ScenarioType, Client, TargetNode) of
+        false -> ScenarioError;
+        {true, Error} -> Error
     end,
     TestCaseCtx = build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet),
 
@@ -599,14 +606,12 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_templ
         Args ->
             Result = make_request(TargetNode, Client, Args),
             try
-                case is_client_supported_by_node(Client, TargetNode) of
-                    true ->
+                case should_expect_lack_of_support_error(ScenarioType, Client, TargetNode) of
+                    false ->
                         ValidateResultFun(TestCaseCtx, Result),
                         VerifyFun(expected_success, TestCaseCtx);
-                    false ->
-                        validate_error_result(
-                            ScenarioType, ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED), Result
-                        ),
+                    {true, Error} ->
+                        validate_error_result(ScenarioType, Error, Result),
                         VerifyFun(expected_failure, TestCaseCtx)
                 end,
                 true
@@ -627,7 +632,8 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_templ
 validate_error_result(Type, ExpError, {ok, RespCode, _RespHeaders, RespBody}) when
     Type == rest;
     Type == rest_with_file_path;
-    Type == rest_not_supported
+    Type == rest_not_supported;
+    element(1, Type) == rest_with_shared_guid
 ->
     ?assertEqual(
         {errors:to_http_code(ExpError), ?REST_ERROR(ExpError)},
@@ -923,13 +929,37 @@ build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet) ->
 
 
 %% @private
--spec is_client_supported_by_node(aai:auth(), node()) ->
+-spec choose_target_node([node()], scenario_template()) -> node().
+choose_target_node(TargetNodes, #scenario_template{type = {rest_with_shared_guid, _}}) ->
+    % when testing the REST endpoints with shared guid, randomly test the Onezone's
+    % public shared data API that should redirect to a suitable provider
+    lists_utils:random_element([?ONEZONE_TARGET_NODE | TargetNodes]);
+choose_target_node(TargetNodes, _) ->
+    lists_utils:random_element(TargetNodes).
+
+
+%% @private
+-spec should_expect_lack_of_support_error(scenario_type(), aai:auth(), node()) ->
     boolean().
-is_client_supported_by_node(?NOBODY, _Node) ->
-    true;
-is_client_supported_by_node(?USER(UserId), Node) ->
+should_expect_lack_of_support_error({rest_with_shared_guid, _}, _Auth, ?ONEZONE_TARGET_NODE) ->
+    % Onezone always redirects to a supporting provider which serves any client
+    % when a share guid is requested
+    false;
+should_expect_lack_of_support_error({rest_with_shared_guid, SpaceId}, _Auth, Node) ->
+    case opw_test_rpc:supports_space(Node, SpaceId) of
+        true -> false;
+        false -> {true, ?ERROR_SPACE_NOT_SUPPORTED_BY(opw_test_rpc:get_provider_id(Node))}
+    end;
+should_expect_lack_of_support_error(_ScenarioType, ?NOBODY, _Node) ->
+    false;
+should_expect_lack_of_support_error(rest_not_supported, _Auth, _Node) ->
+    {true, ?ERROR_NOT_SUPPORTED};
+should_expect_lack_of_support_error(_ScenarioType, ?USER(UserId), Node) ->
     ProvId = opw_test_rpc:get_provider_id(Node),
-    lists:member(UserId, oct_background:get_provider_eff_users(ProvId)).
+    case lists:member(UserId, oct_background:get_provider_eff_users(ProvId)) of
+        true -> false;
+        false -> {true, ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED)}
+    end.
 
 
 %% @private
@@ -980,7 +1010,7 @@ connect_via_gs(Node, Client) ->
     end,
     GsEndpoint = gs_endpoint(Node),
     GsSupportedVersions = opw_test_rpc:gs_protocol_supported_versions(Node),
-    Opts = [{cacerts, opw_test_rpc:get_cert_chain_ders(Node)}],
+    Opts = [{cacerts, get_cert_chain_ders()}],
 
     case gs_client:start_link(GsEndpoint, Auth, GsSupportedVersions, fun(_) -> ok end, Opts) of
         {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} ->
@@ -1013,9 +1043,12 @@ make_rest_request(Node, Client, #rest_args{
 }) ->
     URL = get_rest_endpoint(Node, Path),
     HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
-    CaCerts = opw_test_rpc:get_cert_chain_ders(Node),
-    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 15000}],
-
+    Opts = [
+        {ssl_options, [{cacerts, get_cert_chain_ders()}]},
+        {recv_timeout, 15000},
+        {follow_redirect, true},
+        {max_redirect, 5}
+    ],
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
         {ok, RespCode, RespHeaders, RespBody} ->
             case maps:get(<<"content-type">>, RespHeaders, undefined) of
@@ -1041,13 +1074,29 @@ get_rest_auth_headers(?USER(UserId)) ->
 -spec get_rest_endpoint(node(), ResourcePath :: string() | binary()) ->
     URL :: binary().
 get_rest_endpoint(Node, ResourcePath) ->
+    RestApiRoot = get_rest_api_root(Node),
+    str_utils:join_as_binaries([RestApiRoot, ResourcePath], <<>>).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% In case of rest_with_shared_guid, we also test the Onezone's endpoint that
+%% should redirect to the target endpoint in a supporting Oneprovider:
+%%
+%%     https://$ONEZONE_HOST/api/v3/onezone/shares/data/$FILE_ID[/{...}]
+%%                                     |
+%%                                     v
+%%     https://$ONEPROVIDER_HOST/api/v3/oneprovider/data/$FILE_ID[/{...}]
+%% @end
+%%--------------------------------------------------------------------
+-spec get_rest_api_root(node()) -> URL :: binary().
+get_rest_api_root(?ONEZONE_TARGET_NODE) ->
+    str_utils:format_bin("https://~s/api/v3/onezone/shares/", [ozw_test_rpc:get_domain()]);
+get_rest_api_root(Node) ->
     Port = get_https_server_port_str(Node),
     Domain = opw_test_rpc:get_provider_domain(Node),
-
-    str_utils:join_as_binaries(
-        ["https://", Domain, Port, "/api/v3/oneprovider/", ResourcePath],
-        <<>>
-    ).
+    str_utils:format_bin("https://~s~s/api/v3/oneprovider/", [Domain, Port]).
 
 
 %% @private
@@ -1065,6 +1114,13 @@ get_https_server_port_str(Node) ->
         Port ->
             Port
     end.
+
+
+%% @private
+-spec get_cert_chain_ders() -> [public_key:der_encoded()].
+get_cert_chain_ders() ->
+    % all services have the same cert chain
+    opw_test_rpc:get_cert_chain_ders(krakow).
 
 
 % Returns information about chosen records, such as fields,
