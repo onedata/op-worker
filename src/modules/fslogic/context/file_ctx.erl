@@ -431,7 +431,7 @@ get_parent(FileCtx = #file_ctx{guid = Guid, parent = undefined}, UserCtx) ->
     Parent = case {
         fslogic_uuid:is_root_dir_uuid(ParentUuid),
         IsShareRootFile,
-        user_ctx:is_in_open_handle_mode(UserCtx)
+        (UserCtx =/= undefined andalso user_ctx:is_in_open_handle_mode(UserCtx))
     } of
         {_, true, true} ->
             % Share root file shall point to virtual share root dir in open handle mode

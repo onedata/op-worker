@@ -622,8 +622,13 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
     NormalSessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
+
+    ClientAccessToken = tokens:confine(
+        initializer:create_access_token(User),
+        #cv_interface{interface = oneclient}
+    ),
     OpenHandleSessId = permissions_test_utils:create_session(
-        Worker, User, initializer:create_access_token(User), open_handle
+        Worker, User, ClientAccessToken, open_handle
     ),
 
     {ok, File1Guid} = lfm_proxy:create(Worker, NormalSessId, <<"/", SpaceName/binary, "/file1">>),

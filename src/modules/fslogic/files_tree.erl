@@ -6,54 +6,69 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module provides basic functionality for navigating through files tree.
-%%%
-%%%
-%%%
-%%%
+%%% This module provides basic functionality for navigating through Oneprovider's
+%%% files tree. The structure of it is presented and described below.
 %%%
 %%%                       +----------+
-%%%                       |   ROOT   |-----------------------
+%%%                       |  !ROOT   |_______________________
 %%%                       +----------+                \      \
-%%%                   ----/  / | \   \-----            \      \
+%%%                   ____/  / | \   \_____            \      \
 %%%                  /      /  |  \        \            \      \
-%%%  ---------------/------/---|---\--------\------------\------|----------------------------------
+%%%  ==============================================================================================
 %%%                /      /    |    \        \            \     |   |
 %%%               /      /     |     \        \            \    |   |
 %%%    +-----------+    /      |      \     +-----------+   |  ...  |
-%%%    |   user1   |   /       |       \    |   user2   |   |       |
+%%%    |  @user1   |   /       |       \    |  @user2   |   |       |
 %%%    +-----------+  /        |        \   +-----------+   |       |
 %%%         |        /         |         \     / |          |       |
-%%%  -------|-------/----------|----------\---/--|----------|-------|
-%%%         |      /           |    -------\--   |          |       |
+%%%  ===============================================================|
+%%%         |      /           |    _______\_/   |          |       |
 %%%         |     /            |   /        \    |          |       |
 %%%    +----------+      +----------+      +----------+    ...      |
-%%%    |  space1  |      |  space2  |      |  space3  |             |
-%%%    +----------+      +----------+      +----------+             |
-%%%         |                  |                                    |
-%%%  -------|------------------|------------------------------------|
-%%%         |                  |                                    |
-%%%        ...                ...                                   |
+%%%    | #space1  |      | #space2  |      | #*space3 | ____________|_______________________
+%%%    +----------+      +----------+      +----------+             |        |        |     \
+%%%         |                  |            |    |   \              |  +----------+   |      \
+%%%  ===============================================================|  | ^share1  |   |       \
+%%%         |                  |            |    |     \            |  +----------+   |        |
+%%%        ...                ...           |    |      \___________|_______/         |        |
+%%%                                         |    |                  |                 |        |
+%%%            _____________________________/    |                  |                 |        |
+%%%           /                                  |                  |           +----------+   |
+%%%          /                                   |                  |           | ^share2  |   |
+%%%    +----------+                        +----------+             |           +----------+   |
+%%%    |   file1  |                        |  *dir1   |_____________|_________________/        |
+%%%    +----------+                        +----------+             |                          |
+%%%                                          /       \              |                    +----------+
+%%%                                         /         \             |                    | ^share3  |
+%%%                             +----------+          +----------+  |                    +----------+
+%%%                             |   dir2   |          |  *file2  |__|__________________________/
+%%%                             +----------+          +----------+  |
+%%%                             /    |    \                         |
+%%%                            ...  ...   ...                       |
 %%%                                                                 |
-%%%                                                                 |
-%%%                                                                 |
-%%%                                                                 |
-%%%                                                                 |
-%%%                                                                 |
-%%%                                                                 |
-%%%                                                                 |
-%%%                                                                 |
-%%%  ----------------------------------------------------------------------------------------------
 %%%
-%%%  TODO ^ finish ascii art and describe onedata virtual file system someday
-%%%
-%%%
-%%%
-%%%
-%%%
-%%%
-%%%
-%%%
+%%% Description:
+%%% 1) !ROOT - directory marked as parent for all user_root and space directories.
+%%%            It is used internally by Oneprovider (it is local for each provider)
+%%%            and as such can not be modified nor listed.
+%%% 2) @user - user root directory (mount root after mounting Oneclient).
+%%%            Listing it returns all spaces that user belongs to.
+%%%            Similarly to !ROOT it is local to each provider and can not be modified.
+%%% 3) #space - space directory. It is treated as normal directory and as such it's
+%%%             modification is controlled by access rights.
+%%%             All documents associated with it (and files/dirs inside of it)
+%%%             are synchronized among providers supporting this space.
+%%% 4) ^share - share root directory. It is virtual directory (no documents for it
+%%%             exists in db) that is being used in 'open_handle' mode. In that
+%%%             mode listing space directory return list of share root dirs instead
+%%%             of regular files/dirs in the space so that only shared content can be
+%%%             viewed (from this point down the tree context is changed to share context).
+%%%             In the future it will be used as mount root when mounting Oneclient
+%%%             for share with open handle (in such case it will be treated as root
+%%%             dir with no parent).
+%%% 5) *file - share root file. It is directly shared file or directory or space and
+%%%            the only child of share root dir (in 'open_handle' mode)
+%%% 6) file/dir - regular file/directory.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(files_tree).
