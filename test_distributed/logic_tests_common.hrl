@@ -124,6 +124,7 @@
 -define(SHARE_NAME(__Share), __Share).
 -define(SHARE_DESCRIPTION(__Share), __Share).
 -define(SHARE_PUBLIC_URL(__Share), __Share).
+-define(SHARE_PUBLIC_REST_URL(__Share), __Share).
 -define(SHARE_FILE_TYPE(__Share), dir).
 -define(SHARE_SPACE(__Share), ?SPACE_1).
 -define(SHARE_HANDLE(__Share), ?HANDLE_1).
@@ -445,6 +446,7 @@ end).
     <<"name">> => ?SHARE_NAME(__ShareId),
     <<"description">> => ?SHARE_DESCRIPTION(__ShareId),
     <<"publicUrl">> => ?SHARE_PUBLIC_URL(__ShareId),
+    <<"publicRestUrl">> => ?SHARE_PUBLIC_REST_URL(__ShareId),
     <<"fileType">> => atom_to_binary(?SHARE_FILE_TYPE(__ShareId), utf8),
     <<"handleId">> => ?SHARE_HANDLE(__ShareId),
     <<"rootFileId">> => ?SHARE_ROOT_FILE(__ShareId)

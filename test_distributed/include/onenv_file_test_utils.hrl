@@ -26,7 +26,8 @@
 -record(file_spec, {
     name = undefined :: undefined | binary(),
     mode = ?DEFAULT_FILE_MODE :: file_meta:mode(),
-    shares = [] :: [onenv_file_test_utils:share_spec()]
+    shares = [] :: [onenv_file_test_utils:share_spec()],
+    content = <<"">> :: binary()
 }).
 
 -record(dir_spec, {
@@ -42,7 +43,8 @@
     type :: file_meta:type(),
     mode :: file_meta:mode(),
     shares :: [od_share:id()],
-    children = undefined :: undefined | [onenv_file_test_utils:object()]
+    content = undefined :: undefined | binary(),  % set only for files
+    children = undefined :: undefined | [onenv_file_test_utils:object()]  % set only for dirs
 }).
 
 

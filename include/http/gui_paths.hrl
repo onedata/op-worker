@@ -44,6 +44,13 @@
 -define(SHARE_ID_BINDING, share_id).
 -define(PUBLIC_SHARE_COWBOY_ROUTE, "/share/:share_id").
 
+% Expands to a centralized endpoint in Onezone used to fetch info and contents
+% of any file/directory being a part of any share (by file id) - redirects
+% to a REST endpoint in one of the supporting providers.
+-define(ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE(SubPath),
+    oneprovider:get_oz_url(<<"/api/v3/onezone/shares/data/{{id}}", SubPath>>)
+).
+
 %% All requests to this endpoint will be proxied to onepanel.
 -define(PANEL_REST_PROXY_PATH, "/api/v3/onepanel/").
 

@@ -359,7 +359,7 @@ rest_download_file_test(Config) ->
         },
         #scenario_spec{
             name = <<"Download shared file using rest endpoint">>,
-            type = rest,
+            type = {rest_with_shared_guid, file_id:guid_to_space_id(DirGuid)},
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
 
@@ -478,10 +478,16 @@ build_download_file_verify_fun(MemRef, FileSize) ->
         (expected_success, #api_test_ctx{node = DownloadNode, data = Data}) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
 
-            case P1Node == DownloadNode of
-                true ->
+            case DownloadNode of
+                ?ONEZONE_TARGET_NODE ->
+                    % The request was made via Onezone's shared data redirector,
+                    % we do not have information where it was redirected here.
+                    % Still, the target node is randomized, and other cases
+                    % cover all possible resulting distributions.
+                    ok;
+                P1Node ->
                     file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
-                false ->
+                _Other ->
                     case maps:get(<<"range">>, utils:ensure_defined(Data, #{}), undefined) of
                         undefined ->
                             file_test_utils:await_distribution(Providers, FileGuid, [

@@ -166,13 +166,13 @@ get_shared_file_attrs_test(_Config) ->
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get attrs from shared ", FileType/binary, " using /data/ rest endpoint">>,
-                    type = rest,
+                    type = {rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
                     prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(ShareObjectId),
                     validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
                 },
                 #scenario_template{
                     name = <<"Get attrs from shared ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = rest,
+                    type = {deprecated_rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
                     prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(ShareObjectId),
                     validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
                 },
