@@ -288,7 +288,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
         NewFileCtx :: file_ctx:ctx()
     }.
 list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
-    file_ctx:get_file_children(FileCtx0, UserCtx, ListOpts, ChildrenWhiteList).
+    files_tree:get_children(FileCtx0, UserCtx, ListOpts, ChildrenWhiteList).
 
 
 %%--------------------------------------------------------------------

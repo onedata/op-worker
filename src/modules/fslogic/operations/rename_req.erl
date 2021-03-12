@@ -556,7 +556,7 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
     [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, ChildEntries) ->
     ParentGuid = file_ctx:get_guid_const(ParentFileCtx),
-    {Children, ListExtendedInfo, ParentFileCtx2} = file_ctx:get_file_children(ParentFileCtx, UserCtx, ListOpts),
+    {Children, ListExtendedInfo, ParentFileCtx2} = files_tree:get_children(ParentFileCtx, UserCtx, ListOpts),
     NewChildEntries = lists:flatten(lists:map(fun(ChildCtx) ->
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         ChildStorageFileId = filename:join(ParentStorageFileId, ChildName),
@@ -609,7 +609,7 @@ get_type(FileCtx) ->
     {file_meta:type(), ChildFileCtx :: file_ctx:ctx(), ParentFileCtx :: file_ctx:ctx()} |
     {undefined, undefined, ParentFileCtx :: file_ctx:ctx()}.
 get_child_type(ParentFileCtx, ChildName, UserCtx) ->
-    try file_ctx:get_child(ParentFileCtx, ChildName, UserCtx) of
+    try files_tree:get_child(ParentFileCtx, ChildName, UserCtx) of
         {ChildCtx, ParentFileCtx2} ->
             {ChildType, ChildCtx2} = get_type(ChildCtx),
             {ChildType, ChildCtx2, ParentFileCtx2}

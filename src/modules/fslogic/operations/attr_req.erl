@@ -237,7 +237,7 @@ get_fs_stats(UserCtx, FileCtx0) ->
 -spec get_child_attr_insecure(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
     Name :: file_meta:name(), boolean()) -> fslogic_worker:fuse_response().
 get_child_attr_insecure(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus) ->
-    {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserCtx),
+    {ChildFileCtx, _NewParentFileCtx} = files_tree:get_child(ParentFileCtx, Name, UserCtx),
     Response = attr_req:get_file_attr(UserCtx, ChildFileCtx, IncludeReplicationStatus),
     ensure_proper_file_name(Response, Name).
 
