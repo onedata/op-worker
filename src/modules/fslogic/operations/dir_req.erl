@@ -48,7 +48,7 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
     file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_subcontainer_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_subcontainer_mask)]
     ),
     mkdir_insecure(UserCtx, ParentFileCtx1, Name, Mode).
 
@@ -114,7 +114,7 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
 get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?list_container_mask)];
+        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?list_container_mask)];
         false -> [?TRAVERSE_ANCESTORS]
     end,
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
@@ -132,7 +132,7 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
 get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?list_container_mask)];
+        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
         false -> [?TRAVERSE_ANCESTORS]
     end,
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
@@ -152,7 +152,7 @@ get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus) ->
 get_children_details(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?list_container_mask)];
+        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
         false -> [?TRAVERSE_ANCESTORS]
     end,
     {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
@@ -187,7 +187,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     Owner = user_ctx:get_user_id(UserCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx3),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
-    {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
+    {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File),
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
 
     try

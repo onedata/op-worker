@@ -123,7 +123,7 @@ handle_client_handshake(#client_handshake_request{
         {error, _} = Error ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = Subject, id = TokenId} = Token} ->
-                    ?debug("Cannot authorize user (id: ~p) based on token (id: ~p) "
+                    ?debug("Cannot authorize subject ~w based on token (id: ~s) "
                            "with caveats: ~p due to ~w", [
                         Subject,
                         TokenId,
@@ -131,8 +131,8 @@ handle_client_handshake(#client_handshake_request{
                         Error
                     ]);
                 _ ->
-                    ?debug("Cannot authorize user based on token due to ~w", [
-                        Error
+                    ?debug("Cannot authorize user based on token ~s due to ~w", [
+                        AccessToken, Error
                     ])
             end,
             throw(invalid_token)

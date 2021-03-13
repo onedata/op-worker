@@ -147,14 +147,14 @@ complementary_perms(Node, Guid, Perms) ->
     end.
 
 
--spec perms_to_bitmask([binary()]) -> ace:bitmask().
+-spec perms_to_bitmask([binary()]) -> data_access_control:bitmask().
 perms_to_bitmask(Permissions) ->
     lists:foldl(fun(Perm, BitMask) ->
         BitMask bor perm_to_bitmask(Perm)
     end, ?no_flags_mask, Permissions).
 
 
--spec perm_to_bitmask(binary()) -> ace:bitmask().
+-spec perm_to_bitmask(binary()) -> data_access_control:bitmask().
 perm_to_bitmask(?read_object) -> ?read_object_mask;
 perm_to_bitmask(?list_container) -> ?list_container_mask;
 perm_to_bitmask(?write_object) -> ?write_object_mask;
@@ -218,8 +218,8 @@ set_modes(Node, ModePerFile) ->
     Node :: node(),
     AllowedPermsPerFile :: #{file_id:file_guid() => [binary()]},
     DeniedPermsPerFile :: #{file_id:file_guid() => [binary()]},
-    AceWho :: ace:bitmask(),
-    AceFlags :: ace:bitmask()
+    AceWho :: data_access_control:bitmask(),
+    AceFlags :: data_access_control:bitmask()
 ) ->
     ok.
 set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->

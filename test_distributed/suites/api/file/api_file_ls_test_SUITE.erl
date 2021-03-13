@@ -138,7 +138,7 @@ get_shared_dir_children_test(Config) ->
             scenario_templates = [
                 #scenario_template{
                     name = <<"List shared dir using /data/ rest endpoint">>,
-                    type = rest,
+                    type = {rest_with_shared_guid, file_id:guid_to_space_id(DirGuid)},
                     prepare_args_fun = build_get_children_prepare_rest_args_fun(ShareDirObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, rest, ShareId, Data, Files)
@@ -361,7 +361,7 @@ get_shared_file_children_test(Config) ->
             scenario_templates = [
                 #scenario_template{
                     name = <<"List shared file using /data/ rest endpoint">>,
-                    type = rest,
+                    type = {rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
                     prepare_args_fun = build_get_children_prepare_rest_args_fun(ShareFileObjectId),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
                         ?assertEqual(#{
@@ -500,6 +500,7 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
         file_attr = SpaceAttrs#file_attr{name = SpaceName},
         index_startid = file_id:guid_to_space_id(SpaceDirGuid),
         active_permissions_type = posix,
+        protection_flags = ?no_flags_mask,
         has_metadata = false,
         has_direct_qos = false,
         has_eff_qos = false

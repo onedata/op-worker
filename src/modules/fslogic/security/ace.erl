@@ -20,9 +20,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 -type ace() :: #access_control_entity{}.
--type bitmask() :: integer().
 
--export_type([ace/0, bitmask/0]).
+-export_type([ace/0]).
 
 %% API
 -export([
@@ -74,7 +73,7 @@ is_applicable(#document{key = ?GUEST_USER_ID}, FileCtx, #access_control_entity{
 is_applicable(#document{value = User}, FileCtx, #access_control_entity{
     identifier = GroupId,
     aceflags = AceFlagsBitmask
-}) when ?has_flags(AceFlagsBitmask, ?identifier_group_mask) ->
+}) when ?has_all_flags(AceFlagsBitmask, ?identifier_group_mask) ->
     {lists:member(GroupId, User#od_user.eff_groups), FileCtx};
 
 is_applicable(#document{key = UserId}, FileCtx, #access_control_entity{
@@ -97,49 +96,53 @@ is_applicable(_, FileCtx, _) ->
 %%    returned).
 %% @end
 %%--------------------------------------------------------------------
--spec check_against(bitmask(), ace(), data_access_control:user_perms_check_progress()) ->
+-spec check_against(
+    data_access_control:bitmask(),
+    ace(),
+    data_access_control:user_access_check_progress()
+) ->
     {
-        allowed | denied | {inconclusive, LeftoverRequiredPerms :: bitmask()},
-        data_access_control:user_perms_check_progress()
+        allowed | denied | {inconclusive, LeftoverRequiredOps :: data_access_control:bitmask()},
+        data_access_control:user_access_check_progress()
     }.
 check_against(
-    RequiredPerms,
+    RequiredOps,
     #access_control_entity{acetype = ?allow_mask, acemask = AceMask},
-    #user_perms_check_progress{
+    #user_access_check_progress{
         finished_step = ?ACL_CHECK(AceNo),
-        granted = PrevGrantedPerms,
-        denied = PrevDeniedPerms
-    } = UserPermsCheckProgress
+        allowed = PrevAllowedOps,
+        denied = PrevDeniedOps
+    } = UserAccessCheckProgress
 ) ->
-    NewUserPermsCheckProgress = UserPermsCheckProgress#user_perms_check_progress{
+    NewUserAccessCheckProgress = UserAccessCheckProgress#user_access_check_progress{
         finished_step = ?ACL_CHECK(AceNo + 1),
-        granted = ?set_flags(PrevGrantedPerms, ?reset_flags(AceMask, PrevDeniedPerms))
+        allowed = ?set_flags(PrevAllowedOps, ?reset_flags(AceMask, PrevDeniedOps))
     },
-    case ?reset_flags(RequiredPerms, AceMask) of
+    case ?reset_flags(RequiredOps, AceMask) of
         ?no_flags_mask ->
-            {allowed, NewUserPermsCheckProgress};
-        LeftoverRequiredPerms ->
-            {{inconclusive, LeftoverRequiredPerms}, NewUserPermsCheckProgress}
+            {allowed, NewUserAccessCheckProgress};
+        LeftoverRequiredOps ->
+            {{inconclusive, LeftoverRequiredOps}, NewUserAccessCheckProgress}
     end;
 
 check_against(
-    RequiredPerms,
+    RequiredOps,
     #access_control_entity{acetype = ?deny_mask, acemask = AceMask},
-    #user_perms_check_progress{
+    #user_access_check_progress{
         finished_step = ?ACL_CHECK(AceNo),
-        granted = PrevGrantedPerms,
-        denied = PrevDeniedPerms
-    } = UserPermsCheckProgress
+        allowed = PrevGrantedOps,
+        denied = PrevDeniedOps
+    } = UserAccessCheckProgress
 ) ->
-    NewUserPermsCheckProgress = UserPermsCheckProgress#user_perms_check_progress{
+    NewUserAccessCheckProgress = UserAccessCheckProgress#user_access_check_progress{
         finished_step = ?ACL_CHECK(AceNo + 1),
-        denied = ?set_flags(PrevDeniedPerms, ?reset_flags(AceMask, PrevGrantedPerms))
+        denied = ?set_flags(PrevDeniedOps, ?reset_flags(AceMask, PrevGrantedOps))
     },
-    case ?common_flags(RequiredPerms, AceMask) of
+    case ?common_flags(RequiredOps, AceMask) of
         ?no_flags_mask ->
-            {{inconclusive, RequiredPerms}, NewUserPermsCheckProgress};
+            {{inconclusive, RequiredOps}, NewUserAccessCheckProgress};
         _ ->
-            {denied, NewUserPermsCheckProgress}
+            {denied, NewUserAccessCheckProgress}
     end.
 
 
@@ -216,10 +219,10 @@ validate(#access_control_entity{
     acemask = Mask
 }, FileType) ->
     ValidType = lists:member(Type, [?allow_mask, ?deny_mask]),
-    ValidFlags = ?has_flags(?ALL_FLAGS_BITMASK, Flags),
+    ValidFlags = ?has_all_flags(?ALL_FLAGS_BITMASK, Flags),
     ValidMask = case FileType of
-        file -> ?has_flags(?all_object_perms_mask, Mask);
-        dir -> ?has_flags(?all_container_perms_mask, Mask)
+        file -> ?has_all_flags(?all_object_perms_mask, Mask);
+        dir -> ?has_all_flags(?all_container_perms_mask, Mask)
     end,
 
     case ValidType andalso ValidFlags andalso ValidMask of
@@ -234,7 +237,7 @@ validate(#access_control_entity{
 
 
 %% @private
--spec cdmi_acetype_to_bitmask(binary()) -> bitmask().
+-spec cdmi_acetype_to_bitmask(binary()) -> data_access_control:bitmask().
 cdmi_acetype_to_bitmask(<<"0x", _/binary>> = AceType) ->
     binary_to_bitmask(AceType);
 cdmi_acetype_to_bitmask(?allow) -> ?allow_mask;
@@ -242,7 +245,7 @@ cdmi_acetype_to_bitmask(?deny) -> ?deny_mask.
 
 
 %% @private
--spec cdmi_aceflags_to_bitmask(binary() | [binary()]) -> bitmask().
+-spec cdmi_aceflags_to_bitmask(binary() | [binary()]) -> data_access_control:bitmask().
 cdmi_aceflags_to_bitmask(<<"0x", _/binary>> = AceFlags) ->
     binary_to_bitmask(AceFlags);
 cdmi_aceflags_to_bitmask(AceFlagsBin) when is_binary(AceFlagsBin) ->
@@ -258,16 +261,16 @@ cdmi_aceflags_to_bitmask(AceFlagsList) ->
     ).
 
 
--spec cdmi_acemask_to_bitmask(binary() | [binary()]) -> bitmask().
+-spec cdmi_acemask_to_bitmask(binary() | [binary()]) -> data_access_control:bitmask().
 cdmi_acemask_to_bitmask(<<"0x", _/binary>> = AceMask) ->
     binary_to_bitmask(AceMask);
-cdmi_acemask_to_bitmask(PermsBin) when is_binary(PermsBin) ->
-    cdmi_acemask_to_bitmask(parse_csv(PermsBin));
-cdmi_acemask_to_bitmask(PermsList) ->
+cdmi_acemask_to_bitmask(OpsBin) when is_binary(OpsBin) ->
+    cdmi_acemask_to_bitmask(parse_csv(OpsBin));
+cdmi_acemask_to_bitmask(OpsList) ->
     % op doesn't differentiate between ?delete_object and ?delete_subcontainer
     % so they must be either specified both or none of them.
-    HasDeleteObject = lists:member(?delete_object, PermsList),
-    HasDeleteSubContainer = lists:member(?delete_subcontainer, PermsList),
+    HasDeleteObject = lists:member(?delete_object, OpsList),
+    HasDeleteSubContainer = lists:member(?delete_subcontainer, OpsList),
     case {HasDeleteObject, HasDeleteSubContainer} of
         {false, false} -> ok;
         {true, true} -> ok;
@@ -275,27 +278,27 @@ cdmi_acemask_to_bitmask(PermsList) ->
     end,
 
     lists:foldl(fun(Perm, Bitmask) ->
-        ?set_flags(Bitmask, permission_to_bitmask(Perm))
-    end, 0, PermsList).
+        ?set_flags(Bitmask, operation_to_bitmask(Perm))
+    end, 0, OpsList).
 
 
 %% @private
--spec permission_to_bitmask(binary()) -> bitmask().
-permission_to_bitmask(?list_container) -> ?list_container_mask;
-permission_to_bitmask(?read_object) -> ?read_object_mask;
-permission_to_bitmask(?write_object) -> ?write_object_mask;
-permission_to_bitmask(?add_object) -> ?add_object_mask;
-permission_to_bitmask(?add_subcontainer) -> ?add_subcontainer_mask;
-permission_to_bitmask(?read_metadata) -> ?read_metadata_mask;
-permission_to_bitmask(?write_metadata) -> ?write_metadata_mask;
-permission_to_bitmask(?traverse_container) -> ?traverse_container_mask;
-permission_to_bitmask(?delete) -> ?delete_mask;
-permission_to_bitmask(?delete_object) -> ?delete_child_mask;
-permission_to_bitmask(?delete_subcontainer) -> ?delete_child_mask;
-permission_to_bitmask(?read_attributes) -> ?read_attributes_mask;
-permission_to_bitmask(?write_attributes) -> ?write_attributes_mask;
-permission_to_bitmask(?read_acl) -> ?read_acl_mask;
-permission_to_bitmask(?write_acl) -> ?write_acl_mask.
+-spec operation_to_bitmask(binary()) -> data_access_control:bitmask().
+operation_to_bitmask(?list_container) -> ?list_container_mask;
+operation_to_bitmask(?read_object) -> ?read_object_mask;
+operation_to_bitmask(?write_object) -> ?write_object_mask;
+operation_to_bitmask(?add_object) -> ?add_object_mask;
+operation_to_bitmask(?add_subcontainer) -> ?add_subcontainer_mask;
+operation_to_bitmask(?read_metadata) -> ?read_metadata_mask;
+operation_to_bitmask(?write_metadata) -> ?write_metadata_mask;
+operation_to_bitmask(?traverse_container) -> ?traverse_container_mask;
+operation_to_bitmask(?delete) -> ?delete_mask;
+operation_to_bitmask(?delete_object) -> ?delete_child_mask;
+operation_to_bitmask(?delete_subcontainer) -> ?delete_child_mask;
+operation_to_bitmask(?read_attributes) -> ?read_attributes_mask;
+operation_to_bitmask(?write_attributes) -> ?write_attributes_mask;
+operation_to_bitmask(?read_acl) -> ?read_acl_mask;
+operation_to_bitmask(?write_acl) -> ?write_acl_mask.
 
 
 %% @private
@@ -316,12 +319,12 @@ decode_cdmi_identifier(CdmiIdentifier) ->
 
 
 %% @private
--spec bitmask_to_binary(bitmask()) -> binary().
+-spec bitmask_to_binary(data_access_control:bitmask()) -> binary().
 bitmask_to_binary(Mask) -> <<"0x", (integer_to_binary(Mask, 16))/binary>>.
 
 
 %% @private
--spec binary_to_bitmask(binary()) -> bitmask().
+-spec binary_to_bitmask(binary()) -> data_access_control:bitmask().
 binary_to_bitmask(<<"0x", Mask/binary>>) -> binary_to_integer(Mask, 16).
 
 

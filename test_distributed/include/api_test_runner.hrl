@@ -199,5 +199,9 @@ end)()).
 -define(RANDOM_FILE_NAME(), generator:gen_name()).
 -define(RANDOM_FILE_TYPE(), lists_utils:random_element([<<"file">>, <<"dir">>])).
 
+% used only for rest_with_shared_guid scenario type to indicate that the request
+% should be made to Onezone, which should redirect the client back to a suitable provider
+-define(ONEZONE_TARGET_NODE, onezone_target_node).
+
 
 -endif.

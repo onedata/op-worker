@@ -1215,7 +1215,7 @@ mimetype_and_encoding(Config) ->
     ?assertEqual(?HTTP_200_OK, Code5),
     CdmiResponse5 = (json_utils:decode(Response5)),
     ?assertMatch(#{<<"mimetype">> := <<"text/plain">>}, CdmiResponse5),
-    ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>}, CdmiResponse5), %todo what do we return here if file contains valid utf-8 string and we read byte range?
+    ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>}, CdmiResponse5), %TODO VFS-7376 what do we return here if file contains valid utf-8 string and we read byte range?
     ?assertMatch(#{<<"value">> := FileContent4}, CdmiResponse5),
     %%------------------------------
 

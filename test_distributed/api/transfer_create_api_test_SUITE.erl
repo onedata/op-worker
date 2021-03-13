@@ -239,7 +239,7 @@ create_view_transfer_required_privs(migration) ->
 %% @private
 build_op_transfer_spec(replication, DataSourceType, _SrcNode, DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
-        op_transfer, DataSourceType
+        DataSourceType
     ),
     #data_spec{
         required = [
@@ -262,7 +262,7 @@ build_op_transfer_spec(replication, DataSourceType, _SrcNode, DstNode) ->
     };
 build_op_transfer_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
-        op_transfer, DataSourceType
+        DataSourceType
     ),
     #data_spec{
         required = [
@@ -285,7 +285,7 @@ build_op_transfer_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
     };
 build_op_transfer_spec(migration, DataSourceType, SrcNode, DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
-        op_transfer, DataSourceType
+        DataSourceType
     ),
     #data_spec{
         required = [
@@ -312,17 +312,15 @@ build_op_transfer_spec(migration, DataSourceType, SrcNode, DstNode) ->
 
 
 %% @private
--spec get_data_source_dependent_data_spec_aspects(
-    Middleware :: op_transfer | op_replica, DataSourceType :: binary()
-) -> {
+-spec get_data_source_dependent_data_spec_aspects(DataSourceType :: binary()) -> {
     RequiredParams :: [binary()],
     OptionalParams :: [binary()],
     CorrectValues :: #{Key :: binary() => Values :: [term()]},
     BadValues :: [{Key :: binary(), Value :: term(), errors:error()}]
 }.
-get_data_source_dependent_data_spec_aspects(op_transfer, <<"file">>) ->
+get_data_source_dependent_data_spec_aspects(<<"file">>) ->
     {[<<"fileId">>], [], #{<<"fileId">> => [?PLACEHOLDER]}, []};
-get_data_source_dependent_data_spec_aspects(op_transfer, <<"view">>) ->
+get_data_source_dependent_data_spec_aspects(<<"view">>) ->
     RequiredParams = [<<"spaceId">>, <<"viewName">>],
     OptionalParams = [<<"queryViewParams">>],
     CorrectValues = #{
@@ -346,34 +344,6 @@ get_data_source_dependent_data_spec_aspects(op_transfer, <<"view">>) ->
         {<<"queryViewParams">>, #{<<"limit">> => <<"inf">>}, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
         {<<"queryViewParams">>, #{<<"limit">> => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
         {<<"queryViewParams">>, #{<<"stale">> => <<"fresh">>},
-            ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])}
-    ],
-    {RequiredParams, OptionalParams, CorrectValues, BadValues};
-get_data_source_dependent_data_spec_aspects(op_replica, <<"file">>) ->
-    {[], [], #{}, []};
-get_data_source_dependent_data_spec_aspects(op_replica, <<"view">>) ->
-    RequiredParams = [<<"space_id">>],
-    OptionalParams = [<<"limit">>],
-    CorrectValues = #{
-        <<"space_id">> => [?SPACE_2],
-        % Below value will not affect test (view has only up to 5 files) and checks only
-        % that server accepts it - view transfers with query options should have distinct suite
-        <<"limit">> => [100]
-    },
-    BadValues = [
-        {<<"space_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"space_id">>)}},
-        {<<"space_id">>, <<"NonExistingSpace">>, ?ERROR_FORBIDDEN},
-
-        {bad_id, <<"NonExistingView">>, {error_fun, fun(#api_test_ctx{node = Node}) ->
-            ?ERROR_VIEW_NOT_EXISTS_ON(?GET_DOMAIN_BIN(Node))
-        end}},
-
-        {<<"bbox">>, <<"bbox">>, {rest, ?ERROR_BAD_DATA(<<"bbox">>)}},
-        {<<"bbox">>, 123, {gs, ?ERROR_BAD_VALUE_BINARY(<<"bbox">>)}},
-        {<<"descending">>, <<"ascending">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>)},
-        {<<"limit">>, <<"inf">>, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-        {<<"limit">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
-        {<<"stale">>, <<"fresh">>,
             ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])}
     ],
     {RequiredParams, OptionalParams, CorrectValues, BadValues}.
@@ -497,7 +467,7 @@ init_per_suite(Config) ->
             % TODO VFS-6251
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
             test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)

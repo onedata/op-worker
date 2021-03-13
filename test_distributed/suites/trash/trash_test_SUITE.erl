@@ -572,7 +572,11 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
         file -> FileGuid
     end,
 
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, UserSessIdP1, {guid, GuidWithQos}, <<"key=value">>, 1),
+    {ok, QosEntryId} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:add_qos_entry(P1Node, UserSessIdP1, {guid, GuidWithQos}, <<"key=value">>, 1),
+        ?ATTEMPTS
+    ),
 
     % check whether QoS synchronized the file
     ?assertMatch({ok, {#{QosEntryId := fulfilled}, _}},

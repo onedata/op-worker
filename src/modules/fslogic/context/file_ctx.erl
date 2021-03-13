@@ -74,7 +74,8 @@
 -export([get_local_file_location_doc/1, get_local_file_location_doc/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1,
+-export([
+    get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1,
     get_parent/2, get_and_check_parent/2, get_original_parent/2, get_parent_guid/2,
     get_storage_file_id/1, get_storage_file_id/2,
@@ -88,7 +89,8 @@
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
-    get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1]).
+    get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1
+]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
 -export([assert_not_readonly_storage/1, assert_file_exists/1, assert_smaller_than_provider_support_size/2]).
 
@@ -242,7 +244,6 @@ get_guid_const(#file_ctx{guid = Guid}) ->
     Guid.
 
 %%--------------------------------------------------------------------
-%% @todo remove this function and pass file_ctx wherever possible
 %% @doc
 %% Returns file UUID entry.
 %% @end
@@ -617,9 +618,7 @@ get_new_storage_file_id(FileCtx) ->
         ?FLAT_STORAGE_PATH ->
             FileUuid = file_ctx:get_uuid_const(FileCtx2),
             StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
-            % TODO - do not get_canonical_path (fix acceptance tests before)
-            {_, FileCtx3} = get_canonical_path(FileCtx2),
-            {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}};
+            {StorageFileId, FileCtx2#file_ctx{storage_file_id = StorageFileId}};
         ?CANONICAL_STORAGE_PATH ->
             {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
             StorageId = storage:get_id(Storage),

@@ -630,6 +630,7 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
     OpenHandleSessId = permissions_test_utils:create_session(
         Worker, User, ClientAccessToken, open_handle
     ),
+    rpc:call(Worker, session, set_direct_io, [OpenHandleSessId, SpaceId, false]),
 
     {ok, File1Guid} = lfm_proxy:create(Worker, NormalSessId, <<"/", SpaceName/binary, "/file1">>),
     {ok, File2Guid} = lfm_proxy:create(Worker, NormalSessId, <<"/", SpaceName/binary, "/file2">>),

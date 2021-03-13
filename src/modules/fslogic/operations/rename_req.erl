@@ -284,15 +284,15 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx0, FileType, TargetParentFileC
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, SourceFileCtx1,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, SourceFileParentCtx,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_child_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_child_mask)]
     ),
     TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, TargetParentAddPerm)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, TargetParentAddPerm)]
     ),
     rename_file_on_flat_storage_insecure(
         UserCtx, SourceFileCtx2,
@@ -405,15 +405,15 @@ rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, SourceFileCtx1,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, SourceFileParentCtx,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_child_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_child_mask)]
     ),
     TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     rename_file_insecure(
         UserCtx, SourceFileCtx2, TargetParentFileCtx1, TargetName
@@ -435,15 +435,15 @@ rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, SourceFileCtx1,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, SourceFileParentCtx,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?delete_child_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_child_mask)]
     ),
     TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_subcontainer_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_subcontainer_mask)]
     ),
     rename_dir_insecure(
         UserCtx, SourceFileCtx2, TargetParentFileCtx1, TargetName
@@ -515,8 +515,11 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx3),
     case InvalidateCache of
-        true -> paths_cache:invalidate_caches_on_all_nodes(SpaceId);
-        _ -> ok
+        true ->
+            paths_cache:invalidate_caches_on_all_nodes(SpaceId),
+            ok = fslogic_worker:invalidate_file_protection_flags_caches(SpaceId);
+        _ ->
+            ok
     end,
 
     {Storage, SourceFileCtx5} = file_ctx:get_storage(SourceFileCtx3),

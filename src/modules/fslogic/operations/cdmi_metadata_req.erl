@@ -42,7 +42,7 @@ get_transfer_encoding(UserCtx, FileCtx0) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_attributes_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_attributes_mask)]
     ),
     get_transfer_encoding_insecure(UserCtx, FileCtx2).
 
@@ -64,7 +64,7 @@ set_transfer_encoding(UserCtx, FileCtx0, Encoding, Create, Replace) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_attributes_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_attributes_mask)]
     ),
     set_transfer_encoding_insecure(UserCtx, FileCtx2, Encoding, Create, Replace).
 
@@ -80,7 +80,7 @@ get_cdmi_completion_status(UserCtx, FileCtx0) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_attributes_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_attributes_mask)]
     ),
     get_cdmi_completion_status_insecure(UserCtx, FileCtx2).
 
@@ -102,7 +102,7 @@ set_cdmi_completion_status(UserCtx, FileCtx0, CompletionStatus, Create, Replace)
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_attributes_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_attributes_mask)]
     ),
     set_cdmi_completion_status_insecure(
         UserCtx, FileCtx2,
@@ -121,7 +121,7 @@ get_mimetype(UserCtx, FileCtx0) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_attributes_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_attributes_mask)]
     ),
     get_mimetype_insecure(UserCtx, FileCtx2).
 
@@ -143,7 +143,7 @@ set_mimetype(UserCtx, FileCtx0, Mimetype, Create, Replace) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_attributes_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_attributes_mask)]
     ),
     set_mimetype_insecure(UserCtx, FileCtx2, Mimetype, Create, Replace).
 

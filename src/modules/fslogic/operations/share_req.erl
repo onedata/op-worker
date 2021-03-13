@@ -160,5 +160,5 @@ assert_has_space_privilege(SpaceId, UserId, Privilege) ->
         true ->
             ok;
         false ->
-            ?ERROR(?EACCES)
+            ?ERROR(?EPERM)
     end.

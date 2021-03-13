@@ -4,6 +4,13 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha4
+
+-   **VFS-7378** Removed deprecated Oneprovider REST API. The modern
+    API, available since versions 20.02.\*, operates on file IDs rather
+    than paths. A special endpoint for resolving file IDs based on paths
+    is available.
+
 ### 21.02.0-alpha3
 
 ### 21.02.0-alpha2

@@ -15,6 +15,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("kernel/include/file.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -223,10 +224,22 @@ big_write_test(Config) ->
         NewData
     end, <<>>, lists:seq(1, 10)).
 
-release_test(_Config) ->
-    _File = gen_filename(),
-    %todo
-    ok.
+
+release_test(Config) ->
+    File = gen_filename(),
+
+    {ok, _} = call(Config, file, open, [?path(Config, File), write]),
+
+    {ok, Handle} = call(Config, open, [File, write]),
+
+    ?assertMatch({ok, 4}, call(Handle, write, [0, <<"test">>])),
+    {ok, Dev1} = call(Config, file, open, [?path(Config, File), [read, binary]]),
+    {ok, <<"test">>} = call(Config, file, read, [Dev1, 5]),
+
+    ?assertMatch(ok, call(Handle, release, [])),
+
+    ?assertMatch({error, ?EBADF}, call(Handle, read, [0, 4])).
+
 
 flush_test(Config) ->
     File = gen_filename(),

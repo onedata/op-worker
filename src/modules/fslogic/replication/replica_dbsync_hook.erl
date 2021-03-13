@@ -214,7 +214,6 @@ reconcile_replicas(FileCtx,
         {{_, LocalNum}, {_, ExternalNum}} when LocalNum < ExternalNum ->
             ExternalRename;
         {{_, LocalNum}, {_, ExternalNum}} when LocalNum =:= ExternalNum ->
-            %% TODO: resolve conflicts in the same way as in file_meta and links
             case version_vector:replica_id_is_greater(LocalDoc, ExternalDoc) of
                 true ->
                     skip;

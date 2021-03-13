@@ -1234,7 +1234,7 @@ set_perms_test(Config) ->
     % but not if that access is via shared guid
     permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
     ?assertMatch(
-        {error, ?EACCES},
+        {error, ?EPERM},
         lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, ShareFileGuid}, 8#000)
     ),
     AssertProperStorageAttrsFun(8#777),
@@ -1286,7 +1286,7 @@ set_perms_test(Config) ->
 
     % but not if that access is via shared guid
     ?assertMatch(
-        {error, ?EACCES},
+        {error, ?EPERM},
         lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, ShareFileGuid}, 8#000)
     ),
 
@@ -2298,7 +2298,7 @@ check_perms(Node, User, Guid, Perms, Config) ->
 
     rpc:call(Node, ?MODULE, check_perms, [
         UserCtx, file_ctx:new_by_guid(Guid),
-        [?PERMISSIONS(permissions_test_utils:perms_to_bitmask(Perms))]
+        [?OPERATIONS(permissions_test_utils:perms_to_bitmask(Perms))]
     ]).
 
 

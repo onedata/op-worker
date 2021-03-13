@@ -16,12 +16,6 @@
 
 -define(ACL_XATTR_NAME, <<"cdmi_acl">>).
 
--define(has_flags(Bitmask, Flags), (((Bitmask) band (Flags)) =:= (Flags))).
--define(set_flags(Bitmask, Flags), ((Bitmask) bor (Flags))).
--define(reset_flags(Bitmask, Flags), ((Bitmask) band (bnot (Flags)))).
--define(common_flags(Bitmask1, Bitmask2), ((Bitmask1) band (Bitmask2))).
--define(complement_flags(Bitmask), (bnot (Bitmask))).
-
 % ace types
 -define(allow, <<"ALLOW">>).
 -define(allow_mask, 16#00000000).
@@ -132,6 +126,7 @@
 )).
 -define(all_perms, <<"ALL_PERMS">>).
 -define(all_perms_mask, (?all_object_perms_mask bor ?all_container_perms_mask)).
+
 
 -record(access_control_entity, {
     acetype :: ?allow_mask | ?deny_mask,
