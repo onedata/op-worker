@@ -174,9 +174,8 @@ healthcheck(LastInterval) ->
             ?debug("Skipping Onezone connection as the provider is not registered"),
             {ok, calculate_backoff(LastInterval)};
         {true, true} ->
-            % the hooks on successful healthcheck may only be run if the cluster
-            % is ready, as they require operational workers
-            node_manager:is_cluster_ready() andalso gs_hooks:handle_successful_healthcheck(),
+            % the hooks on successful healthcheck require operational db and workers
+            node_manager:are_db_and_workers_ready() andalso gs_hooks:handle_successful_healthcheck(),
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
         {true, false} ->
             case try_to_start_connection() of
@@ -230,11 +229,11 @@ try_to_start_connection() ->
 start_gs_client_worker() ->
     case gs_client_worker:start() of
         ok ->
-            % the hooks on connection may only be run if the cluster
-            % is ready, as they require operational workers
-            case node_manager:is_cluster_ready() of
+            % the hooks on connection require operational db and workers, but
+            % the connection may be established before in order to perform an upgrade
+            case node_manager:are_db_and_workers_ready() of
                 false ->
-                    ?info("Deferring on-connect-to-oz procedures as the cluster is not ready yet");
+                    ?info("Deferring on-connect-to-oz procedures as DB and workers are not ready yet");
                 true ->
                     run_on_connect_to_oz_procedures()
             end;
