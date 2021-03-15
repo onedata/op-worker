@@ -444,8 +444,8 @@ get_share_root_dir_child(UserCtx, ShareRootDirCtx, Name) ->
     ChildCtx = get_share_root_file(UserCtx, ShareId),
 
     case file_ctx:get_aliased_name(ChildCtx, UserCtx) of
-        {Name, ChildCtx} ->
-            {ChildCtx, ShareRootDirCtx};
+        {Name, ChildCtx2} ->
+            {ChildCtx2, ShareRootDirCtx};
         _ ->
             throw(?ENOENT)
     end.
