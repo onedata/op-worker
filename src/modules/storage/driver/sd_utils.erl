@@ -217,8 +217,8 @@ generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
             create_storage_file(SDHandle, FileCtx4);
         {error, ?EEXIST} ->
             handle_eexists(VerifyDeletionLink, UserCtx, SDHandle, FileCtx3);
-         {error, ?EACCES} ->
-            % eacces is possible because there is race condition
+        {error, Errno} when Errno == ?EACCES orelse Errno == ?EPERM ->
+            % eacces/eperm is possible because there is race condition
             % on creating and chowning parent dir
             % for this reason it is acceptable to try chowning parent once
              % TODO VFS-6432 in case of changing default credentials in LUMA we should not chown parent dir
