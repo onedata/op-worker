@@ -390,7 +390,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
     Type = file_meta:get_type(FileDoc),
 
     {{ATime, CTime, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
-    {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
+    {ParentGuid, FileCtx4} = files_tree:get_and_check_parent_guid(FileCtx3, UserCtx),
 
     {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx5} = case ShareId of
         undefined -> get_private_attrs(UserCtx, FileCtx4, FileDoc);

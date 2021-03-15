@@ -320,7 +320,7 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScop
 
 -spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), helpers:file_id()) -> ok.
 maybe_try_to_delete_parent(FileCtx, UserCtx, DocsDeletionScope, StorageFileId) ->
-    {ParentCtx, _FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
+    {ParentCtx, _FileCtx2} = files_tree:get_parent(FileCtx, UserCtx),
     try
         {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             case file_meta:is_deleted(ParentDoc) of
@@ -349,7 +349,7 @@ maybe_add_deletion_marker(FileCtx, UserCtx) ->
         false ->
             case file_ctx:is_imported_storage(FileCtx) of
                 {true, FileCtx2} ->
-                    {ParentGuid, FileCtx3} = file_ctx:get_parent_guid(FileCtx2, UserCtx),
+                    {ParentGuid, FileCtx3} = files_tree:get_and_check_parent_guid(FileCtx2, UserCtx),
                     {ParentUuid, _} = file_id:unpack_guid(ParentGuid),
                     deletion_marker:add(ParentUuid, FileCtx3);
                 {false, FileCtx2} ->
@@ -372,7 +372,7 @@ remove_deletion_marker(FileCtx, UserCtx, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     case file_ctx:is_imported_storage(FileCtx) of
         {true, FileCtx2} ->
-            {ParentGuid, FileCtx3} = file_ctx:get_parent_guid(FileCtx2, UserCtx),
+            {ParentGuid, FileCtx3} = files_tree:get_and_check_parent_guid(FileCtx2, UserCtx),
             ParentUuid = file_id:guid_to_uuid(ParentGuid),
             deletion_marker:remove_by_name(ParentUuid, filename:basename(StorageFileId)),
             FileCtx3;
@@ -393,7 +393,7 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     Scope = file_ctx:get_space_id_const(FileCtx),
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx, UserCtx),
-    {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
+    {ParentGuid, FileCtx4} = files_tree:get_and_check_parent_guid(FileCtx3, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     ok = file_meta_links:delete(ParentUuid, Scope, FileName, FileUuid),
     FileCtx4.
@@ -409,7 +409,7 @@ delete_file_meta(FileCtx) ->
 -spec update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
 update_parent_timestamps(UserCtx, FileCtx) ->
     try
-        {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
+        {ParentCtx, FileCtx2} = files_tree:get_parent(FileCtx, UserCtx),
         fslogic_times:update_mtime_ctime(ParentCtx),
         FileCtx2
     catch

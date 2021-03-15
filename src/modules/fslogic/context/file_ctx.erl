@@ -77,7 +77,7 @@
 -export([
     get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1,
-    get_parent/2, get_and_check_parent/2, get_original_parent/2, get_parent_guid/2,
+    get_cached_parent_const/1, cache_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
     get_display_credentials/1, get_times/1,
@@ -404,141 +404,14 @@ get_share_root_dir_doc(FileCtx, IncludingDeleted) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns parent's file context. In case of user root dir and share root
-%% dir/file returns the same file_ctx. Therefore, to check if given
-%% file_ctx points to root dir (either user root dir or share root) it is
-%% enough to call this function and compare returned parent ctx's guid
-%% with its own.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent(ctx(), user_ctx:ctx() | undefined) ->
-    {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
-get_parent(FileCtx = #file_ctx{guid = Guid, parent = undefined}, UserCtx) ->
-    {FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(Guid),
-    {Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
-    {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
-
-    IsShareRootFile = case ShareId of
-        undefined ->
-            false;
-        _ ->
-            % ShareId is added to file_meta.shares only for directly shared
-            % files/directories and not their children
-            lists:member(ShareId, Doc#document.value#file_meta.shares)
-    end,
-
-    Parent = case {
-        fslogic_uuid:is_root_dir_uuid(ParentUuid),
-        IsShareRootFile,
-        (UserCtx =/= undefined andalso user_ctx:is_in_open_handle_mode(UserCtx))
-    } of
-        {_, true, true} ->
-            % Share root file shall point to virtual share root dir in open handle mode
-            ShareRootDirUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(ShareId),
-            new_by_guid(file_id:pack_share_guid(ShareRootDirUuid, SpaceId, ShareId));
-        {true, false, _} ->
-            case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
-                andalso UserCtx =/= undefined
-                andalso user_ctx:is_normal_user(UserCtx)
-            of
-                true ->
-                    case is_user_root_dir_const(FileCtx2, UserCtx) of
-                        true ->
-                            FileCtx2;
-                        false ->
-                            UserId = user_ctx:get_user_id(UserCtx),
-                            new_by_guid(fslogic_uuid:user_root_dir_guid(UserId))
-                    end;
-                _ ->
-                    new_by_guid(fslogic_uuid:root_dir_guid())
-            end;
-        {true, true, _} ->
-            case fslogic_uuid:is_space_dir_uuid(FileUuid) of
-                true ->
-                    FileCtx2;
-                false ->
-                    % userRootDir and globalRootDir can not be shared
-                    throw(?EINVAL)
-            end;
-        {false, false, IsInOpenHandleMode} ->
-            case is_share_root_dir_const(FileCtx2) of
-                true ->
-                    case IsInOpenHandleMode of
-                        true ->
-                            % Virtual share root dir should point to normal space dir
-                            new_by_guid(file_id:pack_guid(ParentUuid, SpaceId));
-                        false ->
-                            FileCtx2
-                    end;
-                false ->
-                    new_by_guid(file_id:pack_share_guid(ParentUuid, SpaceId, ShareId))
-            end;
-        {false, true, _} ->
-            FileCtx2
-    end,
-    {Parent, FileCtx2#file_ctx{parent = Parent}};
-get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
-    {Parent, FileCtx}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns 'undefined' if file is root file (either userRootDir or share root)
-%% or proper ParentCtx otherwise.
-%% @end
-%%--------------------------------------------------------------------
--spec get_and_check_parent(ctx(), user_ctx:ctx() | undefined) ->
-    {ParentFileCtx :: undefined | ctx(), NewFileCtx :: ctx()}.
-get_and_check_parent(FileCtx0, UserCtx) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx0),
-    {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
-
-    case file_ctx:get_guid_const(ParentCtx) of
-        FileGuid ->
-            % root dir/share root file -> there are no parents
-            {undefined, FileCtx1};
-        _ ->
-            {ParentCtx, FileCtx1}
-    end.
+-spec get_cached_parent_const(ctx()) -> undefined | ctx().
+get_cached_parent_const(#file_ctx{parent = Parent}) ->
+    Parent.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns GUID of parent or undefined when the file is a root/share root dir.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent_guid(ctx(), user_ctx:ctx() | undefined) -> {fslogic_worker:file_guid() | undefined, ctx()}.
-get_parent_guid(#file_ctx{guid = FileGuid} = FileCtx, UserCtx) ->
-    {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
-    case get_guid_const(ParentCtx) of
-        FileGuid ->
-            {undefined, FileCtx2};
-        ParentGuid ->
-            {ParentGuid, FileCtx2}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% This function returns original parent of a file.
-%% It means that it checks whether file is not a child of trash.
-%% If it is, it returns ctx() of directory which was parent of the file
-%% before it was moved to trash.
-%% TODO VFS-7133 original parent uuid should be stored in file_meta doc
-%% @end
-%%--------------------------------------------------------------------
--spec get_original_parent(ctx(), ctx() | undefined) -> {ctx(), ctx()}.
-get_original_parent(FileCtx, undefined) ->
-    file_ctx:get_parent(FileCtx, undefined);
-get_original_parent(FileCtx, OriginalParentCtx) ->
-    {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
-    case file_ctx:is_trash_dir_const(ParentCtx) of
-        true ->
-            {OriginalParentCtx, FileCtx2};
-        false ->
-            {ParentCtx, FileCtx2}
-    end.
+-spec cache_parent(ctx(), ctx()) -> ctx().
+cache_parent(ParentCtx, FileCtx) ->
+    FileCtx#file_ctx{parent = ParentCtx}.
 
 
 %%--------------------------------------------------------------------

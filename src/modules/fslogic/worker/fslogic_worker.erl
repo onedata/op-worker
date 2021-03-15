@@ -105,7 +105,7 @@
 % This macro is used to disable automatic restart of autocleaning runs in tests
 -define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
 
--define(AVAILABLE_SHARE_OPERATIONS, [
+-define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
     % Checking perms for operations other than 'read' should result in immediate ?EACCES
     check_perms,
     get_parent,
@@ -115,10 +115,6 @@
     list_xattr,
     get_xattr,
     get_metadata,
-
-    % TODO VFS-7361 hide private info in file_location
-    get_file_location,
-    get_helper_params,
 
     % Opening file is available but only in 'read' mode
     open_file,
@@ -134,6 +130,14 @@
     get_child_attr,
     get_file_children_attrs,
     get_file_children_details
+]).
+-define(AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE, [
+    % Necessary operations for direct-io to work (contains private information
+    % like storage id, etc.)
+    get_file_location,
+    get_helper_params
+
+    | ?OPERATIONS_AVAILABLE_IN_SHARE_MODE
 ]).
 
 %%%===================================================================
@@ -398,7 +402,7 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             {false, undefined} ->
                 UserCtx0;
             {IsInOpenHandleMode, _} ->
-                case is_operation_available_in_share_mode(Request) of
+                case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
                     true -> ok;
                     false -> throw(?EPERM)
                 end,
@@ -421,21 +425,24 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
 
 
 %% @private
--spec is_operation_available_in_share_mode(request()) -> boolean().
+-spec is_operation_available_in_share_mode(request(), IsInOpenHandleMode :: boolean()) ->
+    boolean().
 is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
     file_request = #open_file{flag = Flag}
-}}) ->
+}}, _) ->
     Flag == read;
 is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
     file_request = #open_file_with_extended_info{flag = Flag}
-}}) ->
+}}, _) ->
     Flag == read;
 is_operation_available_in_share_mode(#provider_request{
     provider_request = #check_perms{flag = Flag}
-}) ->
+}, _) ->
     Flag == read;
-is_operation_available_in_share_mode(Request) ->
-    lists:member(get_operation(Request), ?AVAILABLE_SHARE_OPERATIONS).
+is_operation_available_in_share_mode(Request, true) ->
+    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE);
+is_operation_available_in_share_mode(Request, false) ->
+    lists:member(get_operation(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
 
 
 %% @private

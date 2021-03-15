@@ -168,7 +168,7 @@ cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
 -spec file_processed(task_id(), file_ctx:ctx(), boolean()) -> ok.
 file_processed(TaskId, FileCtx, RemoveStorageFiles) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
+    {ParentFileCtx, _FileCtx} = files_tree:get_parent(FileCtx, UserCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
     maybe_cleanup_dir(ParentStatus, TaskId, ParentFileCtx, RemoveStorageFiles).

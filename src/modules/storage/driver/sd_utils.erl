@@ -222,7 +222,7 @@ generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
             % on creating and chowning parent dir
             % for this reason it is acceptable to try chowning parent once
              % TODO VFS-6432 in case of changing default credentials in LUMA we should not chown parent dir
-            {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
+            {ParentCtx, FileCtx4} = files_tree:get_parent(FileCtx3, UserCtx),
              case file_ctx:is_root_dir_const(ParentCtx) of
                  true -> ok;
                  false -> files_to_chown:chown_or_defer(ParentCtx)
@@ -238,7 +238,7 @@ generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
                 true ->
                     % pretend that parent directories has been created
                     % this should only happen on imported object storage
-                    {ParentCtx, FileCtx6} = file_ctx:get_parent(FileCtx5, UserCtx),
+                    {ParentCtx, FileCtx6} = files_tree:get_parent(FileCtx5, UserCtx),
                     mark_parent_dirs_created_on_storage(ParentCtx, UserCtx),
                     {ok, FileCtx6};
                 false ->
@@ -398,7 +398,7 @@ create_missing_parent_dirs(UserCtx, FileCtx) ->
         true ->
             FileCtx;
         false ->
-            {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+            {ParentCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
             create_missing_parent_dirs(UserCtx, ParentCtx, []),
             FileCtx2
     end.
@@ -427,7 +427,7 @@ create_missing_parent_dirs(UserCtx, FileCtx, ParentCtxsToCreate) ->
                 end
             end, ParentCtxsToCreate2);
         false ->
-            {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, undefined),
+            {ParentCtx, FileCtx3} = files_tree:get_parent(FileCtx2, undefined),
             % Infinite loop possible if function is executed on space dir - this case stops such loop
             case file_ctx:get_uuid_const(FileCtx) =:= file_ctx:get_uuid_const(ParentCtx) of
                 true ->
@@ -530,7 +530,7 @@ handle_conflicting_directory(FileCtx) ->
     %%            {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, Mode),
     %%            {ok, file_ctx:set_file_id(FileCtx, StorageFileId)};
     %%        _ ->
-    %%            {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
+    %%            {ParentCtx, FileCtx2} = files_tree:get_parent(FileCtx, UserCtx),
     %%            {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
     %%            case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
     %%                {error, not_found} ->
@@ -600,7 +600,7 @@ get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, ParentCtxs) ->
                 {true, _DirCtx2} ->
                     ParentCtxs;
                 {false, DirCtx2} ->
-                    {ParentCtx, DirCtx3} = file_ctx:get_parent(DirCtx2, UserCtx),
+                    {ParentCtx, DirCtx3} = files_tree:get_parent(DirCtx2, UserCtx),
                     get_parent_dirs_not_created_on_storage(ParentCtx, UserCtx, [DirCtx3 | ParentCtxs])
             end
     end.

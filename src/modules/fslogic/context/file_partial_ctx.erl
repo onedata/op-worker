@@ -110,7 +110,7 @@ get_parent(FilePartialCtx = #file_partial_ctx{
     ParentPartialCtx = new_by_canonical_path(UserCtx, filename:dirname(CanonicalPath)),
     {ParentPartialCtx, FilePartialCtx};
 get_parent(FileCtx, UserCtx) ->
-    file_ctx:get_parent(FileCtx, UserCtx).
+    files_tree:get_parent(FileCtx, UserCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
