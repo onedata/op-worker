@@ -227,10 +227,12 @@ try_to_start_connection() ->
 start_gs_client_worker() ->
     case gs_client_worker:start() of
         ok ->
-            case node_manager:get_cluster_status() of
-                {error, cluster_not_ready} ->
-                    ?info("Deferring on-connect-to-oz procedures as the cluster is not ready yet");
-                {ok, _} ->
+            % the hooks on connection require operational db and workers, but
+            % the connection may be established before in order to perform an upgrade
+            case node_manager:are_db_and_workers_ready() of
+                false ->
+                    ?info("Deferring on-connect-to-oz procedures as DB and workers are not ready yet");
+                true ->
                     run_on_connect_to_oz_procedures()
             end;
         already_started ->
