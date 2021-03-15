@@ -357,7 +357,6 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         false ->
             file_ctx:get_file_doc(FileCtx)
     end,
-    Type = file_meta:get_type(FileDoc),
     EffectiveType = file_meta:get_effective_type(FileDoc),
 
     {{ATime, CTime, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
@@ -406,7 +405,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         atime = ATime,
         mtime = MTime,
         ctime = CTime,
-        type = Type,
+        type = EffectiveType,
         size = Size,
         shares = Shares,
         provider_id = ProviderId,

@@ -98,7 +98,7 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
             emit(Evt, SessIds),
             lists:foreach(fun({Context, AdditionalSessIds}) ->
                 try
-                    emit(fslogic_event_emitter:multiply_event(Evt, Context), AdditionalSessIds)
+                    emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
                 catch
                     Error:Reason ->
                         % In case of file_meta deletion from memory and couchbase
@@ -116,7 +116,7 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
             emit(Evt, subtract_unique(Subscribed, Excluded)),
             lists:foreach(fun({Context, AdditionalSessIds}) ->
                 try
-                    emit(fslogic_event_emitter:multiply_event(Evt, Context), AdditionalSessIds)
+                    emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
                 catch
                     Error:Reason ->
                         % In case of file_meta deletion from memory and couchbase

@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for management of file_meta symlinks.
+%%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_symlinks).
 -author("Michal Wrzeszcz").
@@ -19,6 +20,8 @@
 -type symlink() :: file_meta:path().
 -export_type([symlink/0]).
 
+-define(NEW_DOC_MODE, 8#777).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -30,7 +33,7 @@ new_symlink_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
         value = #file_meta{
             name = Name,
             type = ?SYMLINK_TYPE,
-            mode = 8#777,
+            mode = ?NEW_DOC_MODE,
             owner = Owner,
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id(),

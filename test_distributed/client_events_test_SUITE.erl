@@ -399,17 +399,17 @@ events_for_hardlinks_test(Config) ->
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     FileDirId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
-    HardLinkDirId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirWithHardLinkId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
 
     % Test subscription on link and emission on file
     Seq1 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, HardLinkDirId, 500))),
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirWithHardLinkId, 500))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
 
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, FileDirId, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
-    HardlinkGuid = fuse_test_utils:create_hardlink(Sock, FileGuid, HardLinkDirId, generator:gen_name()),
+    HardlinkGuid = fuse_test_utils:create_hardlink(Sock, FileGuid, DirWithHardLinkId, generator:gen_name()),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
 
     CheckList = receive_events_and_check(file_attr_changed, HardlinkGuid),
@@ -430,7 +430,7 @@ events_for_hardlinks_test(Config) ->
     % Test subscription on both link and file
     Seq3 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq3, -Seq3, HardLinkDirId, 500))),
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq3, -Seq3, DirWithHardLinkId, 500))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
 
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(HardlinkGuid), []]),

@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This file contains definition of records used for events routing.
+%%% TODO VFS-7458 - Integrate events and caveats.
 %%% @end
 %%%-------------------------------------------------------------------
 -ifndef(OP_WORKER_MODULES_EVENTS_ROUTING_HRL).

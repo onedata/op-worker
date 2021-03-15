@@ -228,7 +228,6 @@ get_record_struct(11) ->
             {acemask, integer}
         ]}]},
         {owner, string},
-        % field group_owner has been deleted in this version
         {is_scope, boolean},
         {provider_id, string},
         {shares, [string]},

@@ -65,16 +65,18 @@
 
 
 %%%===================================================================
-%%% API
+%%% API with most important helper functions
 %%%===================================================================
 
 -spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), od_provider:id(), boolean()) -> ok.
 delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
+    % TODO VFS-7448 - test events production
     case {fslogic_uuid:is_hardlink_uuid(file_ctx:get_uuid_const(FileCtx)), oneprovider:get_id() =:= Creator} of
         {true, IsCreator} -> delete_hardlink_locally(UserCtx, FileCtx, Silent, IsCreator);
         {false, _} -> delete_regular_file_locally(UserCtx, FileCtx, Silent)
     end.
 
+%% @private
 -spec delete_regular_file_locally(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
 delete_regular_file_locally(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
@@ -87,6 +89,7 @@ delete_regular_file_locally(UserCtx, FileCtx, Silent) ->
             ok
     end.
 
+%% @private
 -spec delete_hardlink_locally(user_ctx:ctx(), file_ctx:ctx(), boolean(), boolean()) -> ok.
 delete_hardlink_locally(UserCtx, FileCtx, Silent, true = _IsCreator) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
@@ -116,8 +119,8 @@ handle_remotely_deleted_file(FileCtx) ->
             % Hardlink created by this provider has been deleted
             handle_remotely_deleted_local_hardlink(FileCtx2);
         _ ->
-            % Hardlink created by other provider or regular file has been d
-            % eleted - check if local documents should be cleaned
+            % Hardlink created by other provider or regular file has been
+            % deleted - check if local documents should be cleaned
             case no_references_left(FileCtx2) of
                 true ->
                     UserCtx = user_ctx:new(?ROOT_SESS_ID),
@@ -127,6 +130,7 @@ handle_remotely_deleted_file(FileCtx) ->
             end
     end.
 
+%% @private
 -spec handle_remotely_deleted_local_hardlink(file_ctx:ctx()) -> ok.
 handle_remotely_deleted_local_hardlink(FileCtx) ->
     case deregister_hardlink_and_check_if_no_references_left(FileCtx) of

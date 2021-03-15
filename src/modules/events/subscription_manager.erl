@@ -86,7 +86,7 @@ get_subscribers(Evt, [RoutingCtx | RoutingInfo]) ->
         #event_subscribers{subscribers = SessIds} = Subscribers ->
             case get_subscribers(Evt, RoutingInfo) of
                 #event_subscribers{subscribers = SessIds2} ->
-                    % Note that list oof routing ctxs is only used for #file_renamed_event{} that cannot
+                    % Note that list of routing ctxs is only used for #file_renamed_event{} that cannot
                     % produce any subscribers for hardlinks
                     Subscribers#event_subscribers{subscribers = SessIds2 ++ (SessIds -- SessIds2)};
                 Other2 ->

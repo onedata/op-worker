@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for management of file_meta hardlinks.
+%%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_hardlinks).
 -author("Michal Wrzeszcz").
@@ -129,7 +130,8 @@ merge_hardlinks_maps(#document{mutators = [Mutator | _], value = #file_meta{hard
 
 -spec get_references_from_map(hardlinks_map()) -> [hardlink()].
 get_references_from_map(Links) ->
-    lists:foldl(fun(ProviderLinks, Acc) -> ProviderLinks ++ Acc end, [], maps:values(Links)).
+    % Note - do not use lists:flatten as it traverses sublists and it is not necessary here
+    lists:flatmap(fun(ProviderLinks) -> ProviderLinks end, maps:values(Links)).
 
 -spec get_reference_map_size(hardlinks_map()) -> non_neg_integer().
 get_reference_map_size(Links) ->

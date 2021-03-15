@@ -91,6 +91,7 @@ make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
 %%--------------------------------------------------------------------
 %% @equiv make_link_insecure/4 with permission checks
 %% @end
+%% TODO VFS-7459 Test permissions for hardlinks and symlinks in suites/permissions/permissions_test_base
 %%--------------------------------------------------------------------
 -spec make_link(user_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), file_meta:name()) ->
     fslogic_worker:fuse_response().

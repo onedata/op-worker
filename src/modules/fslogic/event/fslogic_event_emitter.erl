@@ -26,7 +26,7 @@
     emit_file_perm_changed/1, emit_file_removed/2,
     emit_file_renamed_no_exclude/5, emit_file_renamed_to_client/5, emit_quota_exceeded/0,
     emit_helper_params_changed/1]).
--export([multiply_event/2]).
+-export([clone_event/2]).
 
 %%%===================================================================
 %%% API
@@ -288,12 +288,12 @@ emit_helper_params_changed(StorageId) ->
 %% For #file_location_changed_event{} uuid should be used, guid for other events.
 %% @end
 %%--------------------------------------------------------------------
--spec multiply_event(event:type(), file_id:file_guid() | file_meta:uuid()) -> event:type().
-multiply_event(#file_perm_changed_event{} = Event, NewGuid) ->
+-spec clone_event(event:type(), file_id:file_guid() | file_meta:uuid()) -> event:type().
+clone_event(#file_perm_changed_event{} = Event, NewGuid) ->
     Event#file_perm_changed_event{file_guid = NewGuid};
-multiply_event(#file_location_changed_event{file_location = FileLocation} = Event, NewUuid) ->
+clone_event(#file_location_changed_event{file_location = FileLocation} = Event, NewUuid) ->
     Event#file_location_changed_event{file_location = FileLocation#file_location{uuid = NewUuid}};
-multiply_event(#file_attr_changed_event{file_attr = FileAttr} = Event, NewGuid) ->
+clone_event(#file_attr_changed_event{file_attr = FileAttr} = Event, NewGuid) ->
     FileCtx = file_ctx:new_by_guid(NewGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {#document{value = #file_meta{
@@ -310,7 +310,7 @@ multiply_event(#file_attr_changed_event{file_attr = FileAttr} = Event, NewGuid) 
         provider_id = ProviderId
     },
     Event#file_attr_changed_event{file_attr = UpdatedFileAttr};
-multiply_event(Event, _) ->
+clone_event(Event, _) ->
     ?error("Trying to multiply event ~p of type that cannot be multiplied", [Event]),
     throw(not_supported_event_multiplication).
 
