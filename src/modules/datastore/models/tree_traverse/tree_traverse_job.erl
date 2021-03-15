@@ -261,11 +261,6 @@ upgrade_record(2, Record) ->
         TraverseInfo
     } = Record,
     
-    UserDesc = case UserId of
-        ?ROOT_USER_ID -> {root, ?ROOT_USER_ID};
-        _ -> {offline_access, UserId}
-    end,
-    
     ChildrenDirsHandlingMode = case ExecuteSlaveOnDir of
         false -> generate_master_jobs;
         true -> generate_slave_and_master_jobs
@@ -276,7 +271,7 @@ upgrade_record(2, Record) ->
         CallbackModule,
         TaskId,
         DocId,
-        UserDesc,
+        {offline_access, UserId},
         UseListingToken,
         LastName,
         LastTree,
