@@ -302,9 +302,11 @@ check_value(_, non_empty, _Param, _) ->
 
 check_value(_, guid, Param, Value) ->
     try
-        lists:foreach(fun(G) ->
-            {_, _, _} = file_id:unpack_share_guid(G)
-        end, utils:ensure_list(Value))
+        true = lists:any(fun(G) ->
+            {_, _, _} = file_id:unpack_share_guid(G),
+            true
+        end, utils:ensure_list(Value)),
+        ok
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_IDENTIFIER(Param))
     end;

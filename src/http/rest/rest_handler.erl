@@ -146,11 +146,16 @@ is_authorized(Req, State) ->
             % The user presented some authentication, but he is not supported
             % by this Oneprovider. Still, if the request concerned a shared
             % file, the user should be treated as a guest and served.
-            case (catch resolve_gri_bindings(?GUEST_SESS_ID, State#state.rest_req#rest_req.b_gri, Req)) of
+            #rest_req{
+                parse_body = ParseBody,
+                consumes = Consumes
+            } = State#state.rest_req,
+            {Data, Req2} = get_data(Req, ParseBody, Consumes),
+            case (catch resolve_gri_bindings(?GUEST_SESS_ID, State#state.rest_req#rest_req.b_gri, Data, Req2)) of
                 #gri{scope = public} ->
                     {true, Req, State#state{auth = ?GUEST}};
                 _ ->
-                    {stop, http_req:send_error(Error, Req), State}
+                    {stop, http_req:send_error(Error, Req2), State}
             end;
         {error, _} = Error ->
             {stop, http_req:send_error(Error, Req), State}
@@ -215,7 +220,7 @@ process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_re
         OpReq = #op_req{
             auth = Auth,
             operation = method_to_operation(Method),
-            gri = resolve_gri_bindings(SessionId, GriWithBindings, Req),
+            gri = resolve_gri_bindings(SessionId, GriWithBindings, Data, Req),
             data = Data
         },
         {stop, route_to_proper_handler(OpReq, Req2), State}
@@ -241,15 +246,15 @@ method_to_operation('DELETE') -> delete.
 
 
 %% @private
--spec resolve_gri_bindings(session:id(), bound_gri(), cowboy_req:req()) ->
+-spec resolve_gri_bindings(session:id(), bound_gri(), middleware:data(), cowboy_req:req()) ->
     gri:gri().
-resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
+resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Data, Req) ->
     IdBinding = resolve_bindings(SessionId, Id, Req),
     AsBinding = case As of
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, IdBinding) of
+    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, Data, IdBinding) of
         true -> public;
         false -> Sc
     end,

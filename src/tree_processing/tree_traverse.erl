@@ -85,7 +85,7 @@
     target_provider_id => oneprovider:id()
 }.
 
--type user_desc() :: {offline_access, od_user:id()} | {session, session:id()} | {root, od_user:id()}.
+-type user_desc() :: {offline_access, od_user:id()} | {session, session:id()}.
 
 
 %formatter:off
@@ -132,7 +132,7 @@ stop(Pool) ->
 
 -spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), run_options()) -> {ok, id()}.
 run(Pool, DocOrCtx, Opts)  ->
-    run(Pool, DocOrCtx, {root, ?ROOT_USER_ID}, Opts).
+    run(Pool, DocOrCtx, {offline_access, ?ROOT_USER_ID}, Opts).
 
 -spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), user_desc(), run_options()) ->
     {ok, id()}.

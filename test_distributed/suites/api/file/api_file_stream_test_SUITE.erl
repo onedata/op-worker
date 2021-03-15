@@ -36,7 +36,7 @@ all() -> [
 
 
 -define(DEFAULT_READ_BLOCK_SIZE, 1024).
--define(GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS, 20).
+-define(GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS, 5).
 
 -define(ATTEMPTS, 30).
 
@@ -58,8 +58,6 @@ gui_download_file_test(Config) ->
     {_FileType, _DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(
         <<"dir">>, 8#704
     ),
-    DirShareGuid = file_id:guid_to_share_guid(DirGuid, DirShareId),
-
     FileSize = 4 * ?DEFAULT_READ_BLOCK_SIZE,
     Content = crypto:strong_rand_bytes(FileSize),
 
@@ -88,8 +86,9 @@ gui_download_file_test(Config) ->
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, undefined, #data_spec{
-                    bad_values = [{bad_id, DirGuid, ?ERROR_POSIX(?EISDIR)}]
+                <<"file_ids">>, DirGuid, undefined, #data_spec{
+                    required = [<<"file_ids">>],
+                    correct_values = #{<<"file_ids">> => [guid]}
                 }
             )
         },
@@ -103,8 +102,9 @@ gui_download_file_test(Config) ->
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, DirShareId, #data_spec{
-                    bad_values = [{bad_id, DirShareGuid, ?ERROR_POSIX(?EISDIR)}]
+                <<"file_ids">>, DirGuid, DirShareId, #data_spec{
+                    required = [<<"file_ids">>],
+                    correct_values = #{<<"file_ids">> => [guid]}
                 }
             )
         },
@@ -115,9 +115,16 @@ gui_download_file_test(Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             setup_fun = SetupFun,
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, private),
-            validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERROR_UNAUTHORIZED, Result)
-            end
+            validate_result_fun = fun(TestCaseCtx, Result) ->
+                case maps:find(<<"file_ids">>, TestCaseCtx#api_test_ctx.data) of
+                    error -> ?assertMatch({?ERROR_MISSING_REQUIRED_VALUE(<<"file_ids">>)}, Result);
+                    _ -> ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                end
+            end,
+            data_spec = #data_spec{
+                required = [<<"file_ids">>],
+                correct_values = #{<<"file_ids">> => [guid]}
+            }
         }
     ])).
 
@@ -129,13 +136,23 @@ build_get_download_url_prepare_gs_args_fun(MemRef, TestMode, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
         FileGuid = get_file_guid(MemRef, TestMode),
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
-
+        Data2 = maybe_inject_object_id(Data1, Id),
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = Id, aspect = download_url, scope = Scope},
-            data = Data1
+            gri = #gri{type = op_file, aspect = download_url, scope = Scope},
+            data = Data2
         }
     end.
+
+
+%% @private
+maybe_inject_object_id(Data, Guid) when is_map(Data) ->
+    case maps:get(<<"file_ids">>, Data, undefined) of
+        guid -> Data#{<<"file_ids">> => [Guid]};
+        _ -> Data
+    end;
+maybe_inject_object_id(Data, _Guid) ->
+    Data.
 
 
 %% @private

@@ -506,10 +506,13 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = file_
     SpaceId = file_id:guid_to_space_id(Guid),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
 
-authorize_get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
+authorize_get(#op_req{auth = Auth, gri = #gri{aspect = download_url, scope = Scope}, data = Data}, _) ->
     FileIds = maps:get(<<"file_ids">>, Data),
     lists:all(fun(Guid) ->
-        middleware_utils:has_access_to_file(Auth, Guid)
+        case Scope of
+            private -> middleware_utils:has_access_to_file(Auth, Guid);
+            public -> file_id:is_share_guid(Guid)
+        end
     end, FileIds).
 
 
