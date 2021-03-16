@@ -20,6 +20,7 @@
 -type symlink() :: file_meta:path().
 -export_type([symlink/0]).
 
+% POSIX defines that symlinks have 777 permission by default
 -define(NEW_DOC_MODE, 8#777).
 
 %%%===================================================================

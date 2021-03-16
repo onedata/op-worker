@@ -21,6 +21,8 @@
 %%% - file_partial_ctx
 %%%
 %%% Note: always consider usage of effective ctx (see ensure_effective_ctx/1).
+%%% TODO VFS-7465 - Consider creation of new_by_guid, get_guid/uuid_const functions
+%%% with additional arg IsEffective .
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_ctx).

@@ -135,8 +135,10 @@ handle_remotely_deleted_file(FileCtx) ->
 handle_remotely_deleted_local_hardlink(FileCtx) ->
     case deregister_hardlink_and_check_if_no_references_left(FileCtx) of
         true ->
-            delete_file_meta(FileCtx),
+            delete_file_meta(FileCtx), % Delete hardlink document
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
+            % Delete documents connected with original file as deleted
+            % hardlink is last reference to data
             check_if_opened_and_remove(UserCtx, FileCtx, false, ?LOCAL_DOCS);
         false ->
             delete_file_meta(FileCtx),
