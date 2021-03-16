@@ -88,6 +88,13 @@
 -export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2,
     get_effective_file_qos/2, check_qos_status/2, check_qos_status/3]).
 
+%% Functions concerning datasets
+-export([
+    establish_dataset/2, remove_dataset/2,
+    detach_dataset/2, reattach_dataset/2,
+    get_dataset_attrs/2,
+    list_space_datasets/3, list_nested_datasets/3
+]).
 
 %%%===================================================================
 %%% API
@@ -913,3 +920,42 @@ check_qos_status(SessId, QosEntryId) ->
     {ok, qos_status:summary()} | error_reply().
 check_qos_status(SessId, QosEntryId, FileKey) ->
     ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId, FileKey) end).
+
+%%%===================================================================
+%%% Datasets functions
+%%%===================================================================
+
+
+-spec establish_dataset(session:id(), file_key()) -> {ok, dataset:id()} | error_reply().
+establish_dataset(SessId, FileKey) ->
+    ?run(fun() -> lfm_datasets:establish(SessId, FileKey) end).
+
+
+-spec remove_dataset(session:id(), dataset:id()) -> ok | error_reply().
+remove_dataset(SessId, DatasetId) ->
+    ?run(fun() -> lfm_datasets:remove(SessId, DatasetId) end).
+
+
+-spec detach_dataset(session:id(), dataset:id()) -> ok | error_reply().
+detach_dataset(SessId, DatasetId) ->
+    ?run(fun() -> lfm_datasets:detach(SessId, DatasetId) end).
+
+
+-spec reattach_dataset(session:id(), dataset:id()) -> ok | error_reply().
+reattach_dataset(SessId, DatasetId) ->
+    ?run(fun() -> lfm_datasets:reattach(SessId, DatasetId) end).
+
+
+-spec get_dataset_attrs(session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | error_reply().
+get_dataset_attrs(SessId, DatasetId) ->
+    ?run(fun() -> lfm_datasets:get_attrs(SessId, DatasetId) end).
+
+
+-spec list_space_datasets(session:id(), od_space:id(), datasets_structure:opts()) -> ok | error_reply().
+list_space_datasets(SessId, SpaceId, Opts) ->
+    ?run(fun() -> lfm_datasets:list_space(SessId, SpaceId, Opts) end).
+
+
+-spec list_nested_datasets(session:id(), dataset:id(), datasets_structure:opts()) -> ok | error_reply().
+list_nested_datasets(SessId, DatasetId, Opts) ->
+    ?run(fun() -> lfm_datasets:list_dataset(SessId, DatasetId, Opts) end).

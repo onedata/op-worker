@@ -18,6 +18,7 @@
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/dataset/dataset.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
@@ -32,7 +33,8 @@
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
--export([mark_as_dataset/1, unmark_as_dataset/1, is_dataset/1]).
+-export([establish_dataset/2, reattach_dataset/2, detach_dataset/1, remove_dataset/1,
+    get_dataset/1, get_dataset_state/1, is_dataset_attached/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,
@@ -483,11 +485,12 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
     ok = file_meta_links:delete(SourceParentUuid, Scope, FileName, FileUuid),
 
     % call by module to mock in tests
-    case file_meta:is_dataset(SourceDoc) of
-        true ->
-            dataset_links:move(Scope, FileUuid, TargetName, SourceParentUuid, TargetParentUuid);
-        false ->
-            ok
+    case file_meta:get_dataset(SourceDoc) of
+        undefined ->
+            ok;
+        DatasetId ->
+            % todo should we move dataset if it's attached?
+            dataset_links:move(Scope, DatasetId, FileUuid, TargetName, SourceParentUuid, TargetParentUuid)
     end.
 
 
@@ -676,14 +679,57 @@ get_shares(#file_meta{shares = Shares}) ->
     Shares.
 
 
--spec mark_as_dataset(uuid()) -> ok.
-mark_as_dataset(Uuid) ->
-    ?extract_ok(update(Uuid, fun(FileMeta) -> {ok, FileMeta#file_meta{is_dataset = true}} end)).
+-spec establish_dataset(uuid(), dataset:id()) -> ok | {error, term()}.
+establish_dataset(Uuid, DatasetId) ->
+    ?extract_ok(update(Uuid, fun(FileMeta = #file_meta{dataset = CurrentDatasetId}) ->
+        case CurrentDatasetId =:= undefined orelse CurrentDatasetId =:= DatasetId of
+            true ->
+                {ok, FileMeta#file_meta{
+                    dataset = DatasetId,
+                    dataset_state = ?ATTACHED_DATASET
+                }};
+            false ->
+                {error, already_exists}
+        end
+    end)).
 
 
--spec unmark_as_dataset(uuid()) -> ok.
-unmark_as_dataset(Uuid) ->
-    ?extract_ok(update(Uuid, fun(FileMeta) -> {ok, FileMeta#file_meta{is_dataset = false}} end)).
+-spec reattach_dataset(uuid(), dataset:id()) -> ok | {error, term()}.
+reattach_dataset(Uuid, DatasetId) ->
+    ?extract_ok(update(Uuid, fun
+        (#file_meta{dataset = undefined}) ->
+            ?ERROR_NOT_FOUND;
+        (FileMeta = #file_meta{dataset = CurrentDatasetId}) when DatasetId =:= CurrentDatasetId ->
+            {ok, FileMeta#file_meta{dataset_state = ?ATTACHED_DATASET}};
+        (_) ->
+            % todo find better error?
+            {error, already_exists}
+    end)).
+
+
+-spec detach_dataset(uuid()) -> ok.
+detach_dataset(Uuid) ->
+    Result = ?extract_ok(update(Uuid, fun
+        (#file_meta{dataset = undefined}) ->
+            {error, no_dataset};
+        (FileMeta) ->
+            {ok, FileMeta#file_meta{dataset_state = ?DETACHED_DATASET}}
+    end)),
+    case Result of
+        ok -> ok;
+        {error, no_dataset} -> ok;
+        {error, _} = Error -> Error
+    end.
+
+
+-spec remove_dataset(uuid()) -> ok | {error, term()}.
+remove_dataset(Uuid) ->
+    ?extract_ok(update(Uuid, fun(FileMeta) ->
+        {ok, FileMeta#file_meta{
+            dataset = undefined,
+            dataset_state = undefined
+        }}
+    end)). 
 
 
 %%--------------------------------------------------------------------
@@ -812,12 +858,25 @@ is_child_of_hidden_dir(Path) ->
     is_hidden(Parent).
 
 
--spec is_dataset(file_meta() | doc()) -> boolean().
-is_dataset(#document{value = FM}) ->
-    % call by module to mock in tests
-    is_dataset(FM);
-is_dataset(#file_meta{is_dataset = IsDataset}) ->
-    IsDataset.
+-spec get_dataset(file_meta() | doc()) -> dataset:id().
+get_dataset(#document{value = FM}) ->
+    get_dataset(FM);
+get_dataset(#file_meta{dataset = DatasetId}) ->
+    DatasetId.
+
+
+-spec get_dataset_state(file_meta() | doc()) -> dataset:state().
+get_dataset_state(#document{value = FM}) ->
+    get_dataset_state(FM);
+get_dataset_state(#file_meta{dataset_state = DatasetStatus}) ->
+    DatasetStatus.
+
+
+-spec is_dataset_attached(file_meta() | doc()) -> boolean().
+is_dataset_attached(#document{value = FM}) ->
+    is_dataset_attached(FM);
+is_dataset_attached(#file_meta{dataset_state = DatasetStatus}) ->
+    DatasetStatus =:= ?ATTACHED_DATASET.
 
 
 -spec get_name(doc()) -> binary().

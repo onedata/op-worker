@@ -24,7 +24,9 @@
     active_permissions_type :: file_meta:permissions_type(),
     has_metadata :: boolean(),
     has_direct_qos :: boolean(),
-    has_eff_qos :: boolean()
+    has_eff_qos :: boolean(),
+    eff_datasets :: [dataset:id()],
+    is_dataset_attached :: boolean()
 }).
 
 -endif.

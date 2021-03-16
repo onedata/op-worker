@@ -46,7 +46,8 @@
     storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
-    is_imported_storage :: undefined | boolean()
+    is_imported_storage :: undefined | boolean(),
+    dataset_id :: dataset:id()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -89,7 +90,9 @@
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
-    get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1]).
+    get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1,
+    get_dataset/1
+    ]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
 -export([assert_not_readonly_storage/1, assert_file_exists/1, assert_smaller_than_provider_support_size/2]).
 
@@ -350,6 +353,16 @@ get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefine
     end;
 get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
+
+
+-spec get_dataset(ctx())     -> {dataset:id(), file_ctx:ctx()}.
+get_dataset(FileCtx = #file_ctx{dataset_id = undefined}) ->
+    {Doc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    DatasetIdOrUndefined = file_meta:get_dataset(Doc),
+    {DatasetIdOrUndefined, FileCtx2#file_ctx{dataset_id = DatasetIdOrUndefined}};
+get_dataset(FileCtx = #file_ctx{dataset_id = DatasetId}) ->
+    {DatasetId, FileCtx}.
+
 
 %%--------------------------------------------------------------------
 %% @doc

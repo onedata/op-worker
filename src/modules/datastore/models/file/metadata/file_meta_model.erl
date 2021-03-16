@@ -233,8 +233,9 @@ get_record_struct(11) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string},
-        % field dataset has been added in this version
-        {is_dataset, boolean}
+        % fields dataset and dataset_status has been added in this version
+        {dataset, string},
+        {dataset_status, atom}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -304,7 +305,8 @@ upgrade_record(10, {?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, IsScope,
     ProviderId, Shares, Deleted, ParentUuid
 }) ->
     {11, {?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, IsScope,
-        ProviderId, Shares, Deleted, ParentUuid, false % field dataset has been added in this version
+        % fields dataset and dataset_status has been added in this version
+        ProviderId, Shares, Deleted, ParentUuid, undefined, undefined
     }}.
 
 

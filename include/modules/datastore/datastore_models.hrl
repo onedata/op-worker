@@ -375,16 +375,22 @@
     acl = [] :: acl:acl(),
     owner :: od_user:id(),
     is_scope = false :: boolean(),
-    provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
+    provider_id :: undefined | oneprovider:id(), %% Id of provider that created this file
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
     parent_uuid :: undefined | file_meta:uuid(),
-    is_dataset = false :: boolean()
+    dataset :: undefined | dataset:id(),
+    dataset_state :: undefined | dataset:state()
 }).
 
-% An empty model used for creating dataset_links
-% For more information see dataset_links.erl
--record(dataset_links, {}).
+
+-record(dataset, {
+    % uuid of file to which given dataset is attached
+    uuid :: file_meta:uuid(),
+    creation_time :: time:seconds(),
+    state :: dataset:state(),
+    detached_info :: undefined | dataset:detached_info()
+}).
 
 % An empty model used for creating deletion_markers
 % For more information see deletion_marker.erl

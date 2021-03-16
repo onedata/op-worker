@@ -23,12 +23,12 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
--export([init_paths_caches/1]).
+-export([init_paths_caches/1, init_dataset_eff_caches/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
 % exported for RPC
--export([schedule_init_paths_caches/1]).
+-export([schedule_init_paths_caches/1, schedule_init_datasets_cache/1]).
 
 %%%===================================================================
 %%% Types
@@ -60,6 +60,7 @@
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_PATHS_CACHES(Space), {init_paths_caches, Space}).
+-define(INIT_DATASETS_CACHE(Space), {init_datasets_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
@@ -155,6 +156,13 @@ init_paths_caches(Space) ->
         rpc:call(Node, ?MODULE, schedule_init_paths_caches, [Space])
     end, consistent_hashing:get_all_nodes()).
 
+
+-spec init_dataset_eff_caches(od_space:id() | all) -> ok.
+init_dataset_eff_caches(Space) ->
+    lists:foreach(fun(Node) ->
+        rpc:call(Node, ?MODULE, schedule_init_datasets_cache, [Space])
+    end, consistent_hashing:get_all_nodes()).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -167,9 +175,7 @@ init_paths_caches(Space) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    paths_cache:init_group(),
-    schedule_init_paths_caches(all),
-
+    init_effective_caches(),
     transfer:init(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
@@ -251,10 +257,17 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
     ?debug("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
     {ok, Response};
+handle({fslogic_request, SessId, FslogicRequest}) ->
+    ?debug("fslogic_request(~p): ~p", [SessId, fslogic_log:mask_data_in_message(FslogicRequest)]),
+    Response = handle_request_and_process_response(SessId, FslogicRequest),
+    ?debug("fslogic_request: ~p", [fslogic_log:mask_data_in_message(Response)]),
+    {ok, Response};
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
 handle(?INIT_PATHS_CACHES(Space)) ->
     paths_cache:init(Space);
+handle(?INIT_DATASETS_CACHE(Space)) ->
+    dataset_eff_cache:init(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -315,6 +328,15 @@ init_report() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec init_effective_caches() -> ok.
+init_effective_caches() ->
+    % TODO VFS-7412 refactor effective_value cache
+    paths_cache:init_group(),
+    dataset_eff_cache:init_group(),
+    schedule_init_paths_caches(all),
+    schedule_init_datasets_cache(all).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -681,7 +703,22 @@ handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->
 handle_provider_request(UserCtx, #remove_qos_entry{id = QosEntryId}, FileCtx) ->
     qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
 handle_provider_request(UserCtx, #check_qos_status{qos_id = QosEntryId}, FileCtx) ->
-    qos_req:check_status(UserCtx, FileCtx, QosEntryId).
+    qos_req:check_status(UserCtx, FileCtx, QosEntryId);
+handle_provider_request(UserCtx, #establish_dataset{}, FileCtx) ->
+    dataset_req:establish(FileCtx, UserCtx);
+handle_provider_request(UserCtx, #detach_dataset{id = DatasetId}, _SpaceCtx) ->
+    dataset_req:detach(DatasetId, UserCtx);
+handle_provider_request(UserCtx, #reattach_dataset{id = DatasetId}, _SpaceCtx) ->
+    dataset_req:reattach(DatasetId, UserCtx);
+handle_provider_request(UserCtx, #remove_dataset{id = DatasetId}, _SpaceCtx) ->
+    dataset_req:remove(DatasetId, UserCtx);
+handle_provider_request(UserCtx, #get_dataset_attrs{id = DatasetId}, _SpaceCtx) ->
+    dataset_req:get_attrs(DatasetId, UserCtx);
+handle_provider_request(UserCtx, #list_space_datasets{opts = Opts}, SpaceCtx) ->
+    dataset_req:list_space(file_ctx:get_space_id_const(SpaceCtx), UserCtx, Opts);
+handle_provider_request(UserCtx, #list_nested_datasets{id = DatasetId, opts = Opts}, _SpaceCtx) ->
+    dataset_req:list(DatasetId, UserCtx, Opts).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -717,6 +754,9 @@ schedule_periodical_spaces_autocleaning_check() ->
 
 schedule_init_paths_caches(Space) ->
     schedule(?INIT_PATHS_CACHES(Space), 0).
+
+schedule_init_datasets_cache(Space) ->
+    schedule(?INIT_DATASETS_CACHE(Space), 0).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->

@@ -151,7 +151,10 @@ get_file_details(UserCtx, FileCtx0) ->
 get_file_details_insecure(UserCtx, FileCtx, Opts) ->
     {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
-
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {ok, DatasetEffSummary} = dataset_eff_cache:get(SpaceId, FileDoc),
+    {ok, EffDatasets} = dataset_eff_cache:get_eff_datasets(DatasetEffSummary),
+    {ok, IsAttached} = dataset_eff_cache:is_attached(DatasetEffSummary),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_details{
@@ -160,7 +163,9 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx2),
             has_direct_qos = file_qos:has_any_qos_entry(FileDoc, direct),
-            has_eff_qos = file_qos:has_any_qos_entry(FileDoc, effective)
+            has_eff_qos = file_qos:has_any_qos_entry(FileDoc, effective),
+            eff_datasets = EffDatasets,
+            is_dataset_attached = IsAttached
         }
     }.
 

@@ -68,7 +68,12 @@
 
     get_effective_file_qos/3,
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
-    check_qos_status/3, check_qos_status/4
+    check_qos_status/3, check_qos_status/4,
+
+    establish_dataset/3, remove_dataset/3,
+    detach_dataset/3, reattach_dataset/3,
+    get_dataset_attrs/3,
+    list_space_datasets/4, list_nested_datasets/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -787,6 +792,39 @@ check_qos_status(Worker, SessId, QosEntryId) ->
     {ok, qos_status:summary()} | lfm:error_reply().
 check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
     ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId, FileKey)).
+
+
+%%%===================================================================
+%%% Datasets functions
+%%%===================================================================
+
+-spec establish_dataset(node(), session:id(), lfm:file_key()) -> {ok, dataset:id()} | lfm:error_reply().
+establish_dataset(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:establish_dataset(SessId, FileKey)).
+
+-spec remove_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+remove_dataset(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:remove_dataset(SessId, DatasetId)).
+
+-spec detach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+detach_dataset(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:detach_dataset(SessId, DatasetId)).
+
+-spec reattach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+reattach_dataset(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:reattach_dataset(SessId, DatasetId)).
+
+-spec get_dataset_attrs(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | lfm:error_reply().
+get_dataset_attrs(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:get_dataset_attrs(SessId, DatasetId)).
+
+-spec list_space_datasets(node(), session:id(), od_space:id(), datasets_structure:opts()) -> ok | lfm:error_reply().
+list_space_datasets(Worker, SessId, SpaceId, Opts) ->
+    ?EXEC(Worker, lfm:list_space_datasets(SessId, SpaceId, Opts)).
+
+-spec list_nested_datasets(node(), session:id(), dataset:id(), datasets_structure:opts()) -> ok | lfm:error_reply().
+list_nested_datasets(Worker, SessId, DatasetId, Opts) ->
+    ?EXEC(Worker, lfm:list_nested_datasets(SessId, DatasetId, Opts)).
 
 
 %%%===================================================================

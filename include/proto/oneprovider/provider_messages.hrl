@@ -155,6 +155,33 @@
     qos_id :: qos_entry:id()
 }).
 
+-record(establish_dataset, {
+}).
+
+-record(detach_dataset, {
+    id :: dataset:id()
+}).
+
+-record(reattach_dataset, {
+    id :: dataset:id()
+}).
+
+-record(remove_dataset, {
+    id :: dataset:id()
+}).
+
+-record(get_dataset_attrs, {
+    id :: dataset:id()
+}).
+
+-record(list_space_datasets, {
+    opts :: datasets_structure:opts()
+}).
+
+-record(list_nested_datasets, {
+    id :: dataset:id(),
+    opts :: datasets_structure:opts()
+}).
 
 -type provider_request_type() ::
     #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
@@ -166,7 +193,9 @@
     #schedule_file_replication{} | #schedule_replica_invalidation{} |
     #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
     #create_share{} | #remove_share{} |
-    #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{}.
+    #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
+    #detach_dataset{} | #reattach_dataset{} | #remove_dataset{} | #get_dataset_attrs{} | #list_space_datasets{} |
+    #list_nested_datasets{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -219,11 +248,30 @@
     assigned_entries = #{} :: file_qos:assigned_entries()
 }).
 
+-record(dataset_established, {
+    id :: dataset:id()
+}).
+
+-record(dataset_attrs, {
+    id :: dataset:id(),
+    uuid :: file_meta:uuid()
+}).
+
+-record(dataset_summary, {
+    id :: dataset:id(),
+    uuid :: file_meta:uuid()
+}).
+
+-record(nested_datasets, {
+   datasets = [] :: [{dataset:id(), dataset:name()}],
+   is_last :: boolean()
+}).
+
 -type provider_response_type() ::
-    #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
+    #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
     #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} |
-    #qos_status_response{} | undefined.
+    #qos_status_response{} | #dataset_established{} | #dataset_attrs{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),
@@ -235,6 +283,7 @@
     provider_response :: provider_response_type()
 }).
 
+-define(PROVIDER_OK_RESP, ?PROVIDER_OK_RESP(undefined)).
 -define(PROVIDER_OK_RESP(__RESPONSE), #provider_response{
     status = #status{code = ?OK},
     provider_response = __RESPONSE

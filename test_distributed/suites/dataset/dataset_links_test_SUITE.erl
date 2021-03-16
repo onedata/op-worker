@@ -76,6 +76,8 @@ all() -> ?ALL([
 
 -define(ATTEMPTS, 30).
 
+% TODO test z movem jak zmieni sie guid
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -558,7 +560,7 @@ move_dataset_test_base(Depth, TargetType) ->
     end,
 
     % move highest dataset
-    {HighestDatasetUuid, HighestDatasetName} = hd(Datasets),
+    {HighestDatasetUuid, _HighestDatasetName} = hd(Datasets),
     HighestDatasetGuid = file_id:pack_guid(HighestDatasetUuid, SpaceId),
 
     mock_dataset(P1Node, HighestDatasetUuid),
@@ -630,14 +632,14 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-add_link(Node, SpaceId, DatasetUuid, DatasetName) ->
-    rpc:call(Node, dataset_links, add, [SpaceId, DatasetUuid, DatasetName]).
+add_link(Node, SpaceId, DatasetId, FileUuid, DatasetName) ->
+    rpc:call(Node, dataset_links, add, [SpaceId, DatasetId, FileUuid, DatasetName]).
 
 list_space(Node, SpaceId, Opts) ->
     rpc:call(Node, dataset_links, list_space, [SpaceId, Opts]).
 
-list(Node, SpaceId, DatasetUuid, Opts) ->
-    rpc:call(Node, dataset_links, list, [SpaceId, DatasetUuid, Opts]).
+list(Node, DatasetId, Opts) ->
+    rpc:call(Node, dataset_links, list, [DatasetId, Opts]).
 
 delete_link(Node, SpaceId, DatasetUuid) ->
     rpc:call(Node, dataset_links, delete, [SpaceId, DatasetUuid]).
