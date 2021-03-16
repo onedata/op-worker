@@ -39,7 +39,7 @@
 get_acl(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_acl_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_acl_mask)]
     ),
     get_acl_insecure(UserCtx, FileCtx1).
 
@@ -54,7 +54,7 @@ set_acl(UserCtx, FileCtx0, Acl) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_acl_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_acl_mask)]
     ),
     set_acl_insecure(UserCtx, FileCtx1, Acl).
 
@@ -69,7 +69,7 @@ remove_acl(UserCtx, FileCtx0) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_acl_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_acl_mask)]
     ),
     remove_acl_insecure(UserCtx, FileCtx1).
 

@@ -131,6 +131,7 @@
     name :: binary(),
     description :: binary(),
     public_url :: binary(),
+    public_rest_url :: binary(),
 
     % Direct relations to other entities
     space = undefined :: undefined | od_space:id(),
@@ -376,6 +377,7 @@
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
+    protection_flags = 0 :: data_access_control:bitmask(),
     acl = [] :: acl:acl(), % VFS-7437 Handle conflict resolution similarly to hardlinks
     owner :: undefined | od_user:id(), % undefined for hardlink doc
     is_scope = false :: boolean(),

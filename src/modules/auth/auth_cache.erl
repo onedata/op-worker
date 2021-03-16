@@ -32,7 +32,7 @@
 %% API
 -export([spec/0, start_link/0]).
 -export([
-    get_token_ref/1,
+    get_token_ref/2,
     get_token_credentials_verification_result/1,
     save_token_credentials_verification_result/3,
 
@@ -58,6 +58,7 @@
     terminate/2, code_change/3
 ]).
 
+%% @formatter:off
 -type expiration_marker() ::
     undefined |
     % Used mainly for caching token verification errors like e.g. revoked token
@@ -73,6 +74,7 @@
 -type token_ref() ::
     {named, od_user:id(), tokens:id()} |
     {temporary, od_user:id(), temporary_token_secret:generation()}.
+%% @formatter:on
 
 -record(cache_entry, {
     token_credentials :: auth_manager:token_credentials(),
@@ -173,17 +175,16 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
--spec get_token_ref(tokens:token()) -> token_ref().
-get_token_ref(#token{
-    persistence = named,
-    subject = ?SUB(user, UserId),
-    id = TokenId}
-) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the ref that will be used to cache this token.
+%% Subject must be given explicitly as legacy tokens do not carry a subject.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_token_ref(aai:subject(), tokens:token()) -> token_ref().
+get_token_ref(?SUB(user, UserId), #token{persistence = named, id = TokenId}) ->
     {named, UserId, TokenId};
-get_token_ref(#token{
-    persistence = {temporary, Generation},
-    subject = ?SUB(user, UserId)
-}) ->
+get_token_ref(?SUB(user, UserId), #token{persistence = {temporary, Generation}}) ->
     {temporary, UserId, Generation}.
 
 

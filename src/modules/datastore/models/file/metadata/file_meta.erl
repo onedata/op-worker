@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_models.hrl").
@@ -38,7 +39,7 @@
     list_children/2, list_children_whitelisted/3
 ]).
 -export([get_name/1, set_name/2]).
--export([get_active_perms_type/1, update_mode/2, update_acl/2]).
+-export([get_active_perms_type/1, update_mode/2, update_protection_flags/3, protection_flags_to_json/1, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/6, new_doc/7, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1, get_effective_type/1,
@@ -849,6 +850,28 @@ update_mode(FileUuid, NewMode) ->
     end)).
 
 
+-spec update_protection_flags(uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
+    ok | {error, term()}.
+update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{protection_flags = CurrFlags} = FileMeta) ->
+        NewFlags = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet),
+        {ok, FileMeta#file_meta{protection_flags = NewFlags}}
+    end)).
+
+
+-spec protection_flags_to_json(data_access_control:bitmask()) -> [binary()].
+protection_flags_to_json(FileFlags) ->
+    lists:filtermap(fun({FlagName, FlagMask}) ->
+        case ?has_all_flags(FileFlags, FlagMask) of
+            true -> {true, FlagName};
+            false -> false
+        end
+    end, [
+        {?DATA_PROTECTION_BIN, ?DATA_PROTECTION},
+        {?METADATA_PROTECTION_BIN, ?METADATA_PROTECTION}
+    ]).
+
+
 -spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
 update_acl(FileUuid, NewAcl) ->
     ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
@@ -1028,7 +1051,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    11.
+    file_meta_model:get_record_version().
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -849,8 +849,8 @@ get_metadata_test_base(
     ValidateRestCallResultFun, ValidateGsCallResultFun,
     Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario
 ) ->
-    FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-    {ok, FileShareObjectId} = file_id:guid_to_objectid(FileShareGuid),
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+    {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -861,9 +861,9 @@ get_metadata_test_base(
                     name = str_utils:format("Get ~s metadata from shared ~s using rest endpoint", [
                         MetadataType, FileType
                     ]),
-                    type = rest,
+                    type = {rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
                     prepare_args_fun = build_get_metadata_prepare_rest_args_fun(
-                        MetadataType, FileShareObjectId, QsParameters
+                        MetadataType, ShareFileObjectId, QsParameters
                     ),
                     validate_result_fun = ValidateRestCallResultFun
                 },
@@ -873,7 +873,7 @@ get_metadata_test_base(
                     ]),
                     type = gs,
                     prepare_args_fun = build_get_metadata_prepare_gs_args_fun(
-                        MetadataType, FileShareGuid, public
+                        MetadataType, ShareFileGuid, public
                     ),
                     validate_result_fun = ValidateGsCallResultFun
                 },
@@ -883,7 +883,7 @@ get_metadata_test_base(
                     ]),
                     type = gs_with_shared_guid_and_aspect_private,
                     prepare_args_fun = build_get_metadata_prepare_gs_args_fun(
-                        MetadataType, FileShareGuid, private
+                        MetadataType, ShareFileGuid, private
                     ),
                     validate_result_fun = fun(_, Result) ->
                         ?assertEqual(?ERROR_UNAUTHORIZED, Result)

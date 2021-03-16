@@ -43,7 +43,7 @@ add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
     file_ctx:assert_not_trash_dir_const(FileCtx),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_metadata_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
     add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum, EntryType).
 
@@ -57,7 +57,7 @@ add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
 get_effective_file_qos(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_metadata_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
     get_effective_file_qos_insecure(FileCtx1).
 
@@ -71,7 +71,7 @@ get_effective_file_qos(UserCtx, FileCtx0) ->
 get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
     fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_metadata_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
     get_qos_entry_insecure(QosEntryId).
 
@@ -85,7 +85,7 @@ get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
     fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?write_metadata_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
     remove_qos_entry_insecure(UserCtx, QosEntryId).
 
@@ -99,7 +99,7 @@ remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 check_status(UserCtx, FileCtx0, QosEntryId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?read_metadata_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
     check_status_insecure(FileCtx1, QosEntryId).
 

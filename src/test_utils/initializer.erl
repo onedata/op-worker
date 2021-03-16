@@ -678,6 +678,7 @@ mock_share_logic(Config) ->
             space = SpaceId,
             root_file = ShareFileGuid,
             public_url = <<ShareId/binary, "_public_url">>,
+            public_rest_url = <<ShareId/binary, "_public_rest_url">>,
             file_type = FileType,
             handle = <<ShareId/binary, "_handle_id">>
         }}),
@@ -898,7 +899,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
-        rpc:call(DomainWorker, fslogic_worker, init_paths_caches, [all])
+        rpc:call(DomainWorker, fslogic_worker, init_paths_caches, [all]),
+        rpc:call(DomainWorker, fslogic_worker, init_file_protection_flags_caches, [all])
     end, get_different_domain_workers(Config)),
 
     cluster_logic_mock_setup(AllWorkers),
