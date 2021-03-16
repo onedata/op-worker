@@ -537,6 +537,7 @@ file_details_to_gs_json(ShareId, #file_details{
 add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, DataSpec) ->
     add_file_id_errors_for_operations_available_in_share_mode(<<"id">>, FileGuid, ShareId, DataSpec).
 
+
 -spec add_file_id_errors_for_operations_available_in_share_mode(
     IdKey :: binary(),
     file_id:file_guid(),
@@ -601,6 +602,7 @@ add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, Share
     onenv_api_test_runner:data_spec().
 add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId, DataSpec) ->
     add_file_id_errors_for_operations_not_available_in_share_mode(<<"id">>, FileGuid, ShareId, DataSpec).
+
 
 -spec add_file_id_errors_for_operations_not_available_in_share_mode(
     IdKey :: binary(),

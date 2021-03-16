@@ -45,6 +45,12 @@
 -define(MIN_SEND_RETRY_DELAY, 100).
 -define(MAX_SEND_RETRY_DELAY, 1000).
 
+-define(ZLIB_COMPRESSION_LEVEL, 4).
+-define(ZLIB_MEMORY_LEVEL, 8).
+-define(ZLIB_WINDOW_BITS, 31).
+-define(ZLIB_METHOD, deflated).
+-define(ZLIB_STRATEGY, default).
+
 -record(download_ctx, {
     file_size :: file_meta:size(),
 
@@ -147,24 +153,25 @@ stream_archive(SessionId, FileAttrsList, OnSuccessCallback, Req0) ->
         #{?HDR_CONTENT_TYPE => <<"multipart/byteranges">>},
         Req0
     ),
-    Z = zlib:open(),
-    ok = zlib:deflateInit(Z, 4, deflated, 31, 8, default),
+    ZlibStream = zlib:open(),
+    ok = zlib:deflateInit(ZlibStream, ?ZLIB_COMPRESSION_LEVEL, ?ZLIB_METHOD, ?ZLIB_WINDOW_BITS, 
+        ?ZLIB_MEMORY_LEVEL, ?ZLIB_STRATEGY),
     lists:foreach(fun(#file_attr{guid = FileGuid, type = Type}) ->
         FileCtx = file_ctx:new_by_guid(FileGuid),
         {Path, FileCtx1} = file_ctx:get_canonical_path(FileCtx),
-        PathPrefix = <<(filename:dirname(Path))/binary, "/">>,
+        PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
         FileCtx2 = case Type of
             ?DIRECTORY_TYPE ->
-                {FileTarHeader, Ctx} = prepare_tar_header(FileCtx1, PathPrefix),
-                send_data_chunk(deflate(Z, FileTarHeader), Req1),
-                Ctx;
+                {FileTarHeader, FCtx} = prepare_tar_header(FileCtx1, PathPrefix),
+                send_data_chunk(deflate(ZlibStream, FileTarHeader), Req1),
+                FCtx;
             _ -> FileCtx1
         end,
         dir_streaming_traverse:start(FileCtx2, SessionId, self()),
-        stream_archive_loop(Z, Req1, SessionId, PathPrefix)
+        stream_archive_loop(ZlibStream, Req1, SessionId, PathPrefix)
     end, FileAttrsList),
-    send_data_chunk(deflate(Z, tar_utils:eof(), finish), Req1),
-    zlib:close(Z),
+    send_data_chunk(deflate(ZlibStream, tar_utils:ending_marker(), finish), Req1),
+    zlib:close(ZlibStream),
     execute_on_success_callback(<<>>, OnSuccessCallback),
     Req1.
 
@@ -301,39 +308,36 @@ stream_multipart_ranged_body(Ranges, #download_ctx{
 %% @private
 -spec stream_archive_loop(zlib:zstream(), cowboy_req:req(), session:id(), file_meta:path()) -> 
     ok.
-stream_archive_loop(Z, Req, SessionId, RootDirPath) ->
+stream_archive_loop(ZlibStream, Req, SessionId, RootDirPath) ->
     receive
         done -> ok;
         {file_ctx, FileCtx, Pid} ->
             {FileTarHeader, FileCtx1} = prepare_tar_header(FileCtx, RootDirPath),
             case file_ctx:is_dir(FileCtx1) of
                 {true, _} ->
-                    send_data_chunk(deflate(Z, FileTarHeader), Req);
+                    send_data_chunk(deflate(ZlibStream, FileTarHeader), Req);
                 {false, FileCtx2} ->
-                    stream_archive_file(Z, Req, SessionId, FileCtx2, FileTarHeader)
+                    stream_archive_file(ZlibStream, Req, SessionId, FileCtx2, FileTarHeader)
             end,
             Pid ! done,
-            stream_archive_loop(Z, Req, SessionId, RootDirPath)
-    after timer:seconds(5) ->
-        ?error("Unexpected error during archive streaming traverse."),
-        throw(?ERROR_INTERNAL_SERVER_ERROR)
+            stream_archive_loop(ZlibStream, Req, SessionId, RootDirPath)
     end.
 
 
 %% @private
 -spec stream_archive_file(zlib:zstream(), cowboy_req:req(), session:id(), file_ctx:ctx(), 
     tar_utils:tar_header()) -> ok.
-stream_archive_file(Z, Req, SessionId, FileCtx, FileTarHeader) ->
+stream_archive_file(ZlibStream, Req, SessionId, FileCtx, FileTarHeader) ->
     {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx),
     case lfm:monitored_open(SessionId, {guid, file_ctx:get_guid_const(FileCtx1)}, read) of
         {ok, FileHandle} ->
-            send_data_chunk(deflate(Z, FileTarHeader), Req),
+            send_data_chunk(deflate(ZlibStream, FileTarHeader), Req),
             Range = {0, FileSize - 1},
             ReadBlockSize = get_read_block_size(FileHandle),
             stream_bytes_range(
-                FileHandle, FileSize, Range, Req, fun(D) -> D end, ReadBlockSize, Z, FileSize),
+                FileHandle, FileSize, Range, Req, fun(D) -> D end, ReadBlockSize, ZlibStream, FileSize),
             lfm:monitored_release(FileHandle),
-            send_data_chunk(deflate(Z, tar_utils:data_padding(FileSize)), Req),
+            send_data_chunk(deflate(ZlibStream, tar_utils:data_padding(FileSize)), Req),
             ok;
         {error, ?EACCES} ->
             % ignore files with no access
@@ -353,14 +357,14 @@ stream_archive_file(Z, Req, SessionId, FileCtx, FileTarHeader) ->
     MinReadBytes :: non_neg_integer()
 ) ->
     ok | no_return().
-stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, Z, MinReadBytes) ->
+stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, ZlibStream, MinReadBytes) ->
     stream_bytes_range(Range, #download_ctx{
         file_size = FileSize,
         file_handle = FileHandle,
         read_block_size = ReadBlockSize,
         max_read_blocks_count = calculate_max_read_blocks_count(ReadBlockSize),
         encoding_fun = EncodingFun,
-        zlib_stream = Z,
+        zlib_stream = ZlibStream,
         min_bytes_to_read = MinReadBytes,
         on_success_callback = fun() -> ok end
     }, Req, ?MIN_SEND_RETRY_DELAY).
@@ -419,7 +423,6 @@ stream_bytes_range({From, To}, #download_ctx{
 read_file_data(FileHandle, From, ToRead, MinBytes) ->
     case lfm:read(FileHandle, From, ToRead) of
         {error, ?ENOSPC} ->
-            % Translate POSIX error to something better understandable by user.
             throw(?ERROR_QUOTA_EXCEEDED);
         Res ->
             {ok, NewFileHandle, Data} = ?check(Res),
@@ -485,8 +488,8 @@ deflate(Z, Data) ->
 -spec deflate(zlib:zstream() | undefined, binary(), zlib:zflush()) -> binary().
 deflate(undefined, Data, _Flush) ->
     Data;
-deflate(Z, Data, Flush) ->
-    iolist_to_binary(zlib:deflate(Z, Data, Flush)).
+deflate(ZlibStream, Data, Flush) ->
+    iolist_to_binary(zlib:deflate(ZlibStream, Data, Flush)).
 
 
 %% @private

@@ -92,7 +92,6 @@ maybe_sync_first_file_block(SessionId, [FileGuid]) ->
             ReadBlockSize = http_download_utils:get_read_block_size(FileHandle),
             case lfm:read(FileHandle, 0, ReadBlockSize) of
                 {error, ?ENOSPC} ->
-                    % Translate POSIX error to something better understandable by user.
                     throw(?ERROR_QUOTA_EXCEEDED);
                 Res ->
                     ?check(Res)
@@ -124,21 +123,22 @@ maybe_sync_first_file_block(_SessionId, _FileGuidList) ->
     cowboy_req:req().
 handle_http_download(SessionId, FileGuidList, OnSuccessCallback, Req0) ->
     FileAttrsList = lists:foldl(
-        fun (_FileGuid, {error, _} = Error) -> Error;
+        fun (_FileGuid, {error, _} = Error) -> 
+                Error;
             (FileGuid, Acc) ->
-            case lfm:stat(SessionId, {guid, FileGuid}) of
-                {ok, #file_attr{} = FileAttr} -> [FileAttr | Acc];
-                {error, _Errno} = Error -> Error
-            end
+                case lfm:stat(SessionId, {guid, FileGuid}) of
+                    {ok, #file_attr{} = FileAttr} -> [FileAttr | Acc];
+                    {error, _Errno} = Error -> Error
+                end
     end, [], FileGuidList),
     case FileAttrsList of
         [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
-            Req1 = set_header(FileName, Req0),
+            Req1 = set_header(normalize_filename(FileName), Req0),
             http_download_utils:stream_file(
                 SessionId, Attr, OnSuccessCallback, Req1
             );
         [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
-            Req1 = set_header(<<FileName/binary, ".tar.gz">>, Req0),
+            Req1 = set_header(<<(normalize_filename(FileName))/binary, ".tar.gz">>, Req0),
             http_download_utils:stream_archive(
                 SessionId, FileAttrsList, OnSuccessCallback, Req1
             );
@@ -152,6 +152,9 @@ handle_http_download(SessionId, FileGuidList, OnSuccessCallback, Req0) ->
             http_req:send_error(?ERROR_POSIX(Errno), Req0)
     end.
 
+
+%% @private
+-spec set_header(file_meta:name(), cowboy_req:req()) -> cowboy_req:req().
 set_header(Filename, Req) ->
     %% @todo VFS-2073 - check if needed
     %% FileNameUrlEncoded = http_utils:url_encode(FileName),
@@ -162,3 +165,12 @@ set_header(Filename, Req) ->
         %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
         Req
     ).
+
+
+%% @private
+-spec normalize_filename(file_meta:name()) -> file_meta:name().
+normalize_filename(Filename) ->
+    case re:run(Filename, <<"^ *$">>, [{capture, none}]) of
+        match -> <<"_">>;
+        nomatch -> Filename
+    end.

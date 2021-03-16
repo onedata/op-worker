@@ -33,7 +33,7 @@
 
 all() -> [
     gui_download_file_test,
-    gui_download_dir_test/1,
+    gui_download_dir_test,
     rest_download_file_test
 ].
 

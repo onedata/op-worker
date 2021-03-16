@@ -27,7 +27,7 @@
 -export([do_master_job/2, do_slave_job/2, task_finished/2, task_canceled/2, 
     get_job/1, update_job_progress/5]).
 
--type id() :: qos_traverse_req:id().
+-type id() :: tree_traverse:id().
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 
@@ -47,9 +47,9 @@ start(FileCtx, SessionId, Pid) ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_slave_jobs_limit, 10),
-    ParallelismLimit = application:get_env(?APP_NAME, dir_streaming_traverse_parallelism_limit, 10),
+    MasterJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_master_jobs_limit, 100),
+    SlaveJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_slave_jobs_limit, 100),
+    ParallelismLimit = application:get_env(?APP_NAME, dir_streaming_traverse_parallelism_limit, 100),
 
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
