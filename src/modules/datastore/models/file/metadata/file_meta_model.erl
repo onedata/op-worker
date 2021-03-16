@@ -310,7 +310,7 @@ upgrade_record(9, {
         ProviderId, Shares, Deleted, ParentUuid
     }};
 upgrade_record(10, {
-    ?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, _GroupOwner, IsScope,
+    ?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, IsScope,
     ProviderId, Shares, Deleted, ParentUuid
 }) ->
     {11, {?FILE_META_MODEL, Name, Type, Mode, 0, ACL, Owner, IsScope,

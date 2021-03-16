@@ -377,31 +377,19 @@ get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}
     {ok, file_meta:doc()} | {error, not_found}.
 get_share_root_dir_doc(FileCtx, IncludingDeleted) ->
     ShareDirUuid = get_uuid_const(FileCtx),
-    ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(ShareDirUuid),
     SpaceId = get_space_id_const(FileCtx),
 
-    IsDeleted = case share_logic:get(?ROOT_SESS_ID, ShareId) of
-        {ok, _} -> false;
-        ?ERROR_NOT_FOUND -> true
-    end,
+    #document{
+        value = #file_meta{
+            deleted = IsDeleted
+        }
+    } = ShareRootDirDoc = file_meta:new_share_root_dir_doc(ShareDirUuid, SpaceId),
 
     case {IsDeleted, IncludingDeleted} of
         {true, false} ->
             ?ERROR_NOT_FOUND;
         _ ->
-            {ok, #document{
-                key = ShareDirUuid,
-                value = #file_meta{
-                    name = ShareId,
-                    type = ?DIRECTORY_TYPE,
-                    is_scope = false,
-                    mode = ?DEFAULT_SHARE_ROOT_DIR_PERMS,
-                    owner = ?ROOT_USER_ID,
-                    parent_uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                    provider_id = oneprovider:get_id(),
-                    deleted = IsDeleted
-                }
-            }}
+            {ok, ShareRootDirDoc}
     end.
 
 

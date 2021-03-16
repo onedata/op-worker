@@ -34,7 +34,7 @@
 -export([get_name/1, set_name/2]).
 -export([get_active_perms_type/1, update_mode/2, update_protection_flags/3, protection_flags_to_json/1, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/6, new_doc/7, type/1, get_ancestors/1,
+    make_space_exist/1, new_doc/6, new_doc/7, new_share_root_dir_doc/2, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
@@ -712,6 +712,28 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
             provider_id = oneprovider:get_id()
         },
         scope = SpaceId
+    }.
+
+
+-spec new_share_root_dir_doc(uuid(), od_space:id()) -> doc().
+new_share_root_dir_doc(ShareRootDirUuid, SpaceId) ->
+    ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(ShareRootDirUuid),
+
+    #document{
+        key = ShareRootDirUuid,
+        value = #file_meta{
+            name = ShareId,
+            type = ?DIRECTORY_TYPE,
+            is_scope = false,
+            mode = ?DEFAULT_SHARE_ROOT_DIR_PERMS,
+            owner = ?ROOT_USER_ID,
+            parent_uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+            provider_id = oneprovider:get_id(),
+            deleted = case share_logic:get(?ROOT_SESS_ID, ShareId) of
+                {ok, _} -> false;
+                ?ERROR_NOT_FOUND -> true
+            end
+        }
     }.
 
 
