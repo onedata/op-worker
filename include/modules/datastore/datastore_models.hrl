@@ -383,7 +383,7 @@
     shares = [] :: [od_share:id()], % VFS-7437 Handle conflict resolution similarly to hardlinks
     deleted = false :: boolean(),
     parent_uuid :: undefined | file_meta:uuid(),
-    hardlinks = #{} :: file_meta_hardlinks:hardlinks_map(),
+    links = #{} :: file_meta_hardlinks:links_map(),
     symlink :: undefined | file_meta_symlinks:symlink()
 }).
 

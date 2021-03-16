@@ -16,8 +16,9 @@
 %%% set/fetched.
 %%% Note: this module bases on custom_metadata and as effect all operations
 %%% on hardlinks are treated as operations on original file (custom_metadata
-%%% is shared between hardlinks and original file). Thus, use of 'inherited'
-%%% flag on hardlink results in usage of ancestors of original file.
+%%% is shared between hardlinks and original file). The exception is use of
+%%% 'inherited' flag on link - it results in usage of ancestors of link,
+%%% not the original file.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(json_metadata).
@@ -48,8 +49,8 @@
 get(UserCtx, FileCtx, Query, Inherited) ->
     Result = case Inherited of
         true ->
-            % Note: usage of original file ancestors for hardlink.
-            case gather_ancestors_json_metadata(UserCtx, file_ctx:ensure_effective_ctx(FileCtx), []) of
+            % Note: in case of link, its ancestors will be used instead of original file ancestors.
+            case gather_ancestors_json_metadata(UserCtx, FileCtx, []) of
                 {ok, []} ->
                     ?ERROR_NOT_FOUND;
                 {ok, GatheredJsons} ->

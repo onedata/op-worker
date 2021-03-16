@@ -92,11 +92,11 @@ emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, ExcludedSes
                 {
                     #event_subscribers{
                         subscribers = WithoutStatusSessIds,
-                        subscribers_for_hardlinks = WithoutStatusSessIdsProplist
+                        subscribers_for_links = WithoutStatusSessIdsProplist
                     },
                     #event_subscribers{
                         subscribers = WithStatusSessIds,
-                        subscribers_for_hardlinks = WithStatusSessIdsProplist
+                        subscribers_for_links = WithStatusSessIdsProplist
                     }
                 } ->
                     emit_file_attr_changed_with_replication_status_internal(FileCtx2,

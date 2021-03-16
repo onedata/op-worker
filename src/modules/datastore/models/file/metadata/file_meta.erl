@@ -57,7 +57,7 @@
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
--type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE | ?HARDLINK_TYPE.
+-type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE | ?LINK_TYPE.
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
@@ -254,20 +254,23 @@ get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
             parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     }};
-get_including_deleted(<<?HARDLINK_UUID_PREFIX, _/binary>> = LinkUuid) ->
-    % When hardlink document is requested it is merged using document
-    % representing hardlink and document representing target file
-    case datastore_model:get(?CTX#{include_deleted => true}, LinkUuid) of
-        {ok, LinkDoc} ->
-            FileUuid = fslogic_uuid:ensure_effective_uuid(LinkUuid),
-            case datastore_model:get(?CTX#{include_deleted => true}, FileUuid) of
-                {ok, FileDoc} -> file_meta_hardlinks:merge_hardlink_and_file_doc(LinkDoc, FileDoc);
-                Error2 -> Error2
+get_including_deleted(Uuid) ->
+    case fslogic_uuid:is_link_uuid(Uuid) of
+        true ->
+            % When hardlink document is requested it is merged using document
+            % representing hardlink and document representing target file
+            case datastore_model:get(?CTX#{include_deleted => true}, Uuid) of
+                {ok, LinkDoc} ->
+                    FileUuid = fslogic_uuid:ensure_effective_uuid(Uuid),
+                    case datastore_model:get(?CTX#{include_deleted => true}, FileUuid) of
+                        {ok, FileDoc} -> file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, FileDoc);
+                        Error2 -> Error2
+                    end;
+                Error -> Error
             end;
-        Error -> Error
-    end;
-get_including_deleted(FileUuid) ->
-    datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
+        false ->
+            datastore_model:get(?CTX#{include_deleted => true}, Uuid)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -564,7 +567,7 @@ get_type(#document{value = FileMeta}) ->
     get_type(FileMeta).
 
 -spec get_effective_type(file_meta() | doc()) -> type().
-get_effective_type(#file_meta{type = ?HARDLINK_TYPE}) ->
+get_effective_type(#file_meta{type = ?LINK_TYPE}) ->
     ?REGULAR_FILE_TYPE;
 get_effective_type(#file_meta{type = Type}) ->
     Type;

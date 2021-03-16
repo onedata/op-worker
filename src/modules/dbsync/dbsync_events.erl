@@ -51,7 +51,7 @@ change_replicated(SpaceId, Change) ->
 
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
-    value = #file_meta{deleted = Del1, type = ?HARDLINK_TYPE},
+    value = #file_meta{deleted = Del1, type = ?LINK_TYPE},
     deleted = Del2
 } = FileDoc) when Del1 or Del2 ->
     ?debug("change_replicated_internal: deleted hardlink file_meta ~p", [FileUuid]),
@@ -80,7 +80,7 @@ change_replicated_internal(SpaceId, #document{
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     deleted = false,
-    value = #file_meta{type = ?HARDLINK_TYPE}
+    value = #file_meta{type = ?LINK_TYPE}
 } = FileDoc) ->
     ?debug("change_replicated_internal: changed hardlink file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),

@@ -64,7 +64,7 @@
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_guid_const/1, get_effective_guid_const/1, get_uuid_const/1, get_effective_uuid_const/1,
-    is_hardlink_const/1, get_dir_location_doc_const/1, get_references_const/1, get_reference_count_const/1
+    is_link_const/1, get_dir_location_doc_const/1, get_references_const/1, get_reference_count_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
@@ -270,9 +270,9 @@ get_uuid_const(FileCtx) ->
 get_effective_uuid_const(FileCtx) ->
     fslogic_uuid:ensure_effective_uuid(get_uuid_const(FileCtx)).
 
--spec is_hardlink_const(ctx()) -> boolean().
-is_hardlink_const(FileCtx) ->
-    fslogic_uuid:is_hardlink_uuid(get_uuid_const(FileCtx)).
+-spec is_link_const(ctx()) -> boolean().
+is_link_const(FileCtx) ->
+    fslogic_uuid:is_link_uuid(get_uuid_const(FileCtx)).
 
 %%--------------------------------------------------------------------
 %% @doc Creates new ctx if effective uuid (see fslogic_uuid:ensure_effective_uuid/1) in not
@@ -356,7 +356,7 @@ get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
 get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
 
--spec get_references_const(ctx()) -> {ok, [file_meta_hardlinks:hardlink() | file_meta:uuid()]} | {error, term()}.
+-spec get_references_const(ctx()) -> {ok, [file_meta_hardlinks:link() | file_meta:uuid()]} | {error, term()}.
 get_references_const(FileCtx) ->
     % TODO VFS-7444 - Investigate possibility to cache hardlink references in file_ctx
     FileUuid = get_effective_uuid_const(FileCtx),

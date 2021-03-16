@@ -105,7 +105,7 @@ process_row(Row, #{
     FileCtx = file_ctx:new_by_guid(Guid),
     BatchNo = autocleaning_run_controller:batch_no(RowNumber, BatchSize),
     % TODO VFS-7440 - Can we clean hardlink pointing on deleted file?
-    Continue = not file_ctx:is_hardlink_const(FileCtx) andalso
+    Continue = not file_ctx:is_link_const(FileCtx) andalso
         autocleaning_rules:are_all_rules_satisfied(FileCtx, AutocleaningRules) andalso
         autocleaning_run:is_active(AutocleaningRunId),
     try Continue of

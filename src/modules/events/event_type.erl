@@ -47,7 +47,7 @@
 get_routing_key(#event{type = Type}, RoutingCtx) ->
     get_routing_key(Type, RoutingCtx);
 get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingCtx) ->
-    {ok, check_hardlinks_and_get_parent_connected_routing_key(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingCtx)};
+    {ok, check_links_and_get_parent_connected_routing_key(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingCtx)};
 get_routing_key(#file_location_changed_event{file_location = FileLocation}, _RoutingCtx) ->
     FileUuid = FileLocation#file_location.uuid,
     {ok, References} = file_meta_hardlinks:get_references(fslogic_uuid:ensure_effective_uuid(FileUuid)),
@@ -90,8 +90,8 @@ get_routing_key(_, _) ->
 -spec get_attr_routing_keys(Guid :: fslogic_worker:file_guid(), RoutingCtx :: routing_ctx()) ->
     {subscription_manager:event_routing_keys(), subscription_manager:event_routing_keys()}.
 get_attr_routing_keys(Guid, RoutingCtx) ->
-    {check_hardlinks_and_get_parent_connected_routing_key(<<"file_attr_changed.">>, Guid, RoutingCtx),
-        check_hardlinks_and_get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx)}.
+    {check_links_and_get_parent_connected_routing_key(<<"file_attr_changed.">>, Guid, RoutingCtx),
+        check_links_and_get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -103,7 +103,7 @@ get_attr_routing_keys(Guid, RoutingCtx) ->
 -spec get_replica_status_routing_keys(Guid :: fslogic_worker:file_guid(), RoutingCtx :: routing_ctx()) ->
     subscription_manager:event_routing_keys().
 get_replica_status_routing_keys(Guid, RoutingCtx) ->
-    check_hardlinks_and_get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx).
+    check_links_and_get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -237,13 +237,13 @@ update_context(Evt, _Ctx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Gets routing keys for events where it bases on file's parent guid or routing information.
-%% If file has hardlinks, several keys inside record can be returned.
+%% Gets routing keys for events where it bases on file's parent guid or routing
+%% information. If file has links, several keys inside record can be returned.
 %% @end
 %%--------------------------------------------------------------------
--spec check_hardlinks_and_get_parent_connected_routing_key(binary(), fslogic_worker:file_guid(), routing_ctx()) ->
+-spec check_links_and_get_parent_connected_routing_key(binary(), fslogic_worker:file_guid(), routing_ctx()) ->
     subscription_manager:event_routing_keys().
-check_hardlinks_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx} = Ctx) ->
+check_links_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx} = Ctx) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
     % TODO VFS-7444 - maybe check type and do not get references for dir?
     {ok, References} = file_ctx:get_references_const(FileCtx),
@@ -262,9 +262,9 @@ check_hardlinks_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ct
         end
     end, [], References -- [file_ctx:get_uuid_const(FileCtx)]),
     BasicAns#event_routing_keys{additional_keys = AdditionalKeys};
-check_hardlinks_and_get_parent_connected_routing_key(Prefix, FileGuid, _) ->
+check_links_and_get_parent_connected_routing_key(Prefix, FileGuid, _) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    check_hardlinks_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx => FileCtx}).
+    check_links_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx => FileCtx}).
 
 
 %%--------------------------------------------------------------------

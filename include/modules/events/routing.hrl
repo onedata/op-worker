@@ -26,12 +26,12 @@
 
 %% subscribers for particular event:
 %% subscribers - main list of subscribers
-%% subscribers_for_hardlinks - if file has hardlink, it is necessary to find subscribers also for them,
-%%                             the field contains map guid/uuid of hardlink -> subscribers list
-%%                             (uuid for #file_location_changed_event{}, guid for other events)
+%% subscribers_for_links - if file has hardlink, it is necessary to find subscribers also for them,
+%%                         the field contains list of tuples {guid/uuid of link, subscribers list}
+%%                         (uuid for #file_location_changed_event{}, guid for other events)
 -record(event_subscribers, {
     subscribers = [] :: [session:id()],
-    subscribers_for_hardlinks = [] :: [{file_id:file_guid() | file_meta:uuid(), [session:id()]}]
+    subscribers_for_links = [] :: [{file_id:file_guid() | file_meta:uuid(), [session:id()]}]
 }).
 
 -endif.

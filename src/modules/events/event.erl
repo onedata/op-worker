@@ -94,7 +94,7 @@ emit(Evt, MgrRef) ->
     ok | {error, Reason :: term()}.
 emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
     case subscription_manager:get_subscribers(Evt, RoutingInfo) of
-        #event_subscribers{subscribers = SessIds, subscribers_for_hardlinks = SessIdsForHardlinks} ->
+        #event_subscribers{subscribers = SessIds, subscribers_for_links = SessIdsForLinks} ->
             emit(Evt, SessIds),
             lists:foreach(fun({Context, AdditionalSessIds}) ->
                 try
@@ -105,12 +105,12 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
                         ?warning("error emitting event for additional guid ~p:~p, original event ~p, context ~p",
                             [Error, Reason, Evt, Context])
                 end
-            end, SessIdsForHardlinks);
+            end, SessIdsForLinks);
         {error, Reason} -> {error, Reason}
     end;
 emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
     case subscription_manager:get_subscribers(Evt, RoutingInfo) of
-        #event_subscribers{subscribers = SessIds, subscribers_for_hardlinks = SessIdsForHardlinks} ->
+        #event_subscribers{subscribers = SessIds, subscribers_for_links = SessIdsForLinks} ->
             Excluded = get_event_managers(ExcludedRef),
             Subscribed = get_event_managers(SessIds),
             emit(Evt, subtract_unique(Subscribed, Excluded)),
@@ -123,7 +123,7 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
                         ?warning("error emitting event for additional guid ~p:~p, original event ~p, guid ~p",
                             [Error, Reason, Evt, Context])
                 end
-            end, SessIdsForHardlinks);
+            end, SessIdsForLinks);
         {error, Reason} ->
             {error, Reason}
     end.

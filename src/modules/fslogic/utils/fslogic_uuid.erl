@@ -7,8 +7,8 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Conversions between paths and uuids and operations on effective uuids.
-%%% Effective uuid is term connected with hardlinks. It is uuid of file on
-%%% which hardlink points (or simply file uuid for regular file).
+%%% Effective uuid is term connected with links. It is uuid of file on
+%%% which link points (or simply file uuid for regular file).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_uuid).
@@ -27,14 +27,16 @@
 -export([is_trash_dir_uuid/1, is_trash_dir_guid/1]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
--export([gen_hardlink_uuid/1, is_hardlink_uuid/1, ensure_effective_uuid/1]).
+-export([gen_link_uuid/1, is_link_uuid/1, ensure_effective_uuid/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
 -define(ROOT_DIR_VIRTUAL_SPACE_ID, <<"rootDirVirtualSpaceId">>).
 -define(TRASH_DIR_UUID_PREFIX, "trash_").
--define(HARDLINK_UUID_SEPARATOR, "_file_").
--define(HARDLINK_UUID_RAND_PART_BYTES, 4).
+% Macros for hard links (link is equal to hardlink - see file_meta_hardlinks.erl)
+-define(LINK_UUID_PREFIX, "link_").
+-define(LINK_UUID_SEPARATOR, "_file_").
+-define(LINK_UUID_RAND_PART_BYTES, 4).
 
 %%%===================================================================
 %%% API
@@ -186,23 +188,23 @@ unpack_space_owner(_) ->
     {error, not_space_owner}.
 
 
--spec gen_hardlink_uuid(file_meta:uuid()) -> file_meta_hardlinks:hardlink().
-gen_hardlink_uuid(FileUuid) ->
-    RandPart = str_utils:rand_hex(?HARDLINK_UUID_RAND_PART_BYTES),
-    <<?HARDLINK_UUID_PREFIX, RandPart/binary, ?HARDLINK_UUID_SEPARATOR, FileUuid/binary>>.
+-spec gen_link_uuid(file_meta:uuid()) -> file_meta_hardlinks:link().
+gen_link_uuid(FileUuid) ->
+    RandPart = str_utils:rand_hex(?LINK_UUID_RAND_PART_BYTES),
+    <<?LINK_UUID_PREFIX, RandPart/binary, ?LINK_UUID_SEPARATOR, FileUuid/binary>>.
 
--spec is_hardlink_uuid(file_meta:uuid() | file_meta_hardlinks:hardlink()) -> boolean().
-is_hardlink_uuid(<<?HARDLINK_UUID_PREFIX, _/binary>>) -> true;
-is_hardlink_uuid(_) -> false.
+-spec is_link_uuid(file_meta:uuid() | file_meta_hardlinks:link()) -> boolean().
+is_link_uuid(<<?LINK_UUID_PREFIX, _/binary>>) -> true;
+is_link_uuid(_) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc Returns effective uuid
-%% (file uuid for regular file or uuid of file on which hardlink points).
+%% (file uuid for regular file or uuid of file on which link points).
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_effective_uuid(file_meta:uuid() | file_meta_hardlinks:hardlink()) -> file_meta:uuid().
-ensure_effective_uuid(<<?HARDLINK_UUID_PREFIX, UuidTail/binary>>) ->
-    [_, FileUuid] = binary:split(UuidTail, <<?HARDLINK_UUID_SEPARATOR>>),
+-spec ensure_effective_uuid(file_meta:uuid() | file_meta_hardlinks:link()) -> file_meta:uuid().
+ensure_effective_uuid(<<?LINK_UUID_PREFIX, UuidTail/binary>>) ->
+    [_, FileUuid] = binary:split(UuidTail, <<?LINK_UUID_SEPARATOR>>),
     FileUuid;
 ensure_effective_uuid(Uuid) ->
     Uuid.

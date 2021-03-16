@@ -383,12 +383,12 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
             FileUuid = file_ctx:get_uuid_const(TargetFileCtx),
             ParentUuid = file_ctx:get_uuid_const(TargetParentFileCtx3),
             SpaceId = file_ctx:get_space_id_const(TargetParentFileCtx3),
-            Doc = file_meta_hardlinks:new_hardlink_doc(FileUuid, Name, ParentUuid, SpaceId),
-            {ok, #document{key = HardlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
+            Doc = file_meta_hardlinks:new_doc(FileUuid, Name, ParentUuid, SpaceId),
+            {ok, #document{key = LinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
-                {ok, _} = file_meta_hardlinks:register_hardlink(FileUuid, HardlinkUuid), % TODO VFS-7445 - revert after error
-                FileCtx = file_ctx:new_by_guid(file_id:pack_guid(HardlinkUuid, SpaceId)),
+                {ok, _} = file_meta_hardlinks:register_link(FileUuid, LinkUuid), % TODO VFS-7445 - revert after error
+                FileCtx = file_ctx:new_by_guid(file_id:pack_guid(LinkUuid, SpaceId)),
                 fslogic_times:update_mtime_ctime(TargetParentFileCtx3),
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
@@ -401,7 +401,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
             catch
                 Error:Reason ->
                     % TODO VFS-7441 - test if ?EMLINK is returned to caller process
-                    file_meta:delete(HardlinkUuid),
+                    file_meta:delete(LinkUuid),
                     erlang:Error(Reason)
             end;
         {false, _} ->

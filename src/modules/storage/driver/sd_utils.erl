@@ -352,6 +352,7 @@ create_storage_file(SDHandle, FileCtx) ->
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     Mode = file_meta:get_mode(FileDoc),
     case file_meta:get_effective_type(FileDoc) of
+        % ?SYMLINK_TYPE is impossible as symlinks are not created at storage
         ?REGULAR_FILE_TYPE ->
             case storage_driver:create(SDHandle, Mode) of
                 ok ->
@@ -518,6 +519,7 @@ mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
 handle_eexists(VerifyDeletionLink, UserCtx, SDHandle, FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     case file_meta:get_effective_type(FileDoc) of
+        % ?SYMLINK_TYPE is impossible as symlinks are not created at storage
         ?REGULAR_FILE_TYPE -> handle_conflicting_file(VerifyDeletionLink, UserCtx, SDHandle, FileCtx);
         ?DIRECTORY_TYPE -> handle_conflicting_directory(FileCtx2)
     end.

@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([new_symlink_doc/5, get_symlink/1]).
@@ -44,8 +45,10 @@ new_symlink_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
     }.
 
 -spec get_symlink(file_meta:doc() | file_meta:uuid()) -> {ok, symlink()} | {error, term()}.
-get_symlink(#document{value = #file_meta{symlink = Link}}) ->
+get_symlink(#document{value = #file_meta{type = ?SYMLINK_TYPE, symlink = Link}}) ->
     {ok, Link};
+get_symlink(#document{value = #file_meta{}}) ->
+    {error, ?EINVAL};
 get_symlink(Key) ->
     case file_meta:get(Key) of
         {ok, Doc} ->

@@ -87,7 +87,7 @@ get_subscribers(Evt, [RoutingCtx | RoutingInfo]) ->
             case get_subscribers(Evt, RoutingInfo) of
                 #event_subscribers{subscribers = SessIds2} ->
                     % Note that list of routing ctxs is only used for #file_renamed_event{} that cannot
-                    % produce any subscribers for hardlinks
+                    % produce any subscribers for links
                     Subscribers#event_subscribers{subscribers = SessIds2 ++ (SessIds -- SessIds2)};
                 Other2 ->
                     Other2
@@ -138,7 +138,7 @@ apply_space_id_filter(SessIds, SpaceIDFilter) ->
 process_event_routing_keys(
     #event_routing_keys{main_key = MainKey, filter = Filter, additional_keys = AdditionalKeys} = Record) ->
     try
-        SubscribersForHardlinks = lists:foldl(fun({Context, AdditionalKey}, Acc) ->
+        SubscribersForLinks = lists:foldl(fun({Context, AdditionalKey}, Acc) ->
             case get_subscribers(AdditionalKey) of
                 {ok, []} -> Acc;
                 {ok, KeySessIds} -> [{Context, apply_space_id_filter(KeySessIds, Filter)} | Acc]
@@ -147,7 +147,7 @@ process_event_routing_keys(
         {ok, SessIds} = get_subscribers(MainKey),
         #event_subscribers{
             subscribers = apply_space_id_filter(SessIds, Filter),
-            subscribers_for_hardlinks = SubscribersForHardlinks
+            subscribers_for_links = SubscribersForLinks
         }
     catch
         Error:Reason ->

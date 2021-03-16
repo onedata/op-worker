@@ -22,15 +22,15 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    hardlinks_test/1,
-    first_reading_and_writing_via_hardlink_test/1,
-    create_hardlink_to_hardlink_test/1
+    basic_test/1,
+    first_reading_and_writing_via_link_test/1,
+    create_link_to_link_test/1
 ]).
 
 -define(TEST_CASES, [
-    hardlinks_test,
-    first_reading_and_writing_via_hardlink_test,
-    create_hardlink_to_hardlink_test
+    basic_test,
+    first_reading_and_writing_via_link_test,
+    create_link_to_link_test
 ]).
 
 all() ->
@@ -51,7 +51,7 @@ all() ->
 %%% Test functions
 %%%===================================================================
 
-hardlinks_test(Config0) ->
+basic_test(Config0) ->
     Attempts = 60,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, Attempts),
     SessId = ?config(session, Config),
@@ -78,62 +78,62 @@ hardlinks_test(Config0) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     ct:print("File created and verified"),
 
-    % Create hardlink and verify its stats
-    HardlinkName = generator:gen_name(),
-    Hardlink = <<"/", SpaceName/binary, "/",  HardlinkName/binary>>,
-    {ok, HardlinkAttr} = ?assertMatch({ok, _},
-        lfm_proxy:make_link(Worker1, SessId(Worker1), Hardlink, FileGuid), Attempts),
-    verify_hardlink_attrs(HardlinkName, HardlinkAttr, FileAttr, SpaceGuid),
+    % Create link and verify its stats
+    LinkName = generator:gen_name(),
+    Link = <<"/", SpaceName/binary, "/",  LinkName/binary>>,
+    {ok, LinkAttr} = ?assertMatch({ok, _},
+        lfm_proxy:make_link(Worker1, SessId(Worker1), Link, FileGuid), Attempts),
+    verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid),
     % stat ignores fully_replicated field so use attrs without it in asserts
-    HardlinkAttrWithoutReplicationStatus = HardlinkAttr#file_attr{fully_replicated = undefined},
-    ?assertEqual({ok, HardlinkAttrWithoutReplicationStatus},
-        lfm_proxy:stat(Worker1, SessId(Worker1), {path, Hardlink})),
-    ?assertEqual({ok, HardlinkAttrWithoutReplicationStatus},
-        lfm_proxy:stat(Worker2, SessId(Worker2), {path, Hardlink}), Attempts),
+    LinkAttrWithoutReplicationStatus = LinkAttr#file_attr{fully_replicated = undefined},
+    ?assertEqual({ok, LinkAttrWithoutReplicationStatus},
+        lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link})),
+    ?assertEqual({ok, LinkAttrWithoutReplicationStatus},
+        lfm_proxy:stat(Worker2, SessId(Worker2), {path, Link}), Attempts),
 
-    % Verify reading through hardlink
-    verify_hardlink_read(Worker1, SessId, Hardlink, FileContent),
-    verify_hardlink_read(Worker2, SessId, Hardlink, FileContent),
+    % Verify reading through link
+    verify_link_read(Worker1, SessId, Link, FileContent),
+    verify_link_read(Worker2, SessId, Link, FileContent),
 
-    % Delete hardlink - check that file is not deleted
-    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, Hardlink})),
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, Hardlink})),
+    % Delete link - check that file is not deleted
+    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, Link})),
+    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link})),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, Hardlink}), Attempts),
+    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, Link}), Attempts),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, File})),
 
-    % Create second hardlink on other provider
-    HardlinkName2 = generator:gen_name(),
-    Hardlink2 = <<"/", SpaceName/binary, "/",  HardlinkName2/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:make_link(Worker2, SessId(Worker2), Hardlink2, FileGuid), Attempts),
-    {ok, #file_attr{guid = HardlinkGuid2}} =  ?assertMatch({ok, _},
-        lfm_proxy:stat(Worker1, SessId(Worker1), {path, Hardlink2}), Attempts),
-    HardlinkUuid2 = file_id:guid_to_uuid(HardlinkGuid2),
+    % Create second link on other provider
+    LinkName2 = generator:gen_name(),
+    Link2 = <<"/", SpaceName/binary, "/",  LinkName2/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:make_link(Worker2, SessId(Worker2), Link2, FileGuid), Attempts),
+    {ok, #file_attr{guid = LinkGuid2}} =  ?assertMatch({ok, _},
+        lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link2}), Attempts),
+    LinkUuid2 = file_id:guid_to_uuid(LinkGuid2),
 
-    % Change file through hardlink
-    NewFileContent = write_hardlink(Worker2, SessId, Hardlink2, FileContent),
+    % Change file through link
+    NewFileContent = write_link(Worker2, SessId, Link2, FileContent),
 
-    % Check file content using hardlink
-    verify_hardlink_read(Worker2, SessId, Hardlink2, NewFileContent),
+    % Check file content using link
+    verify_link_read(Worker2, SessId, Link2, NewFileContent),
     % Check file content
-    verify_hardlink_read(Worker2, SessId, File, NewFileContent),
+    verify_link_read(Worker2, SessId, File, NewFileContent),
 
-    % Delete file - verify that hardlink is not deleted and can be read
+    % Delete file - verify that link is not deleted and can be read
     ?assertEqual(ok, lfm_proxy:unlink(Worker2, SessId(Worker2), {path, File})),
     ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, File})),
-    verify_hardlink_read(Worker2, SessId, Hardlink2, NewFileContent),
+    verify_link_read(Worker2, SessId, Link2, NewFileContent),
 
-    % Verify hardlink and file on first provider
+    % Verify link and file on first provider
     ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File}), Attempts),
-    verify_hardlink_read(Worker1, SessId, Hardlink2, NewFileContent, Attempts),
+    verify_link_read(Worker1, SessId, Link2, NewFileContent, Attempts),
 
     % Check if times and file_location documents have not been deleted
-    verify_hardlink_times_and_location_documents(Worker1, Worker2, FileUuid, HardlinkUuid2),
+    verify_link_times_and_location_documents(Worker1, Worker2, FileUuid, LinkUuid2),
 
-    % Delete second hardlink
-    ?assertEqual(ok, lfm_proxy:unlink(Worker2, SessId(Worker2), {path, Hardlink2})),
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, Hardlink2})),
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, Hardlink2}), Attempts),
+    % Delete second link
+    ?assertEqual(ok, lfm_proxy:unlink(Worker2, SessId(Worker2), {path, Link2})),
+    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, Link2})),
+    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link2}), Attempts),
 
     % Check if times and file_location documents have been deleted
     ?assertEqual({error, not_found}, ?GET_TIMES(Worker2, FileUuid)),
@@ -141,7 +141,7 @@ hardlinks_test(Config0) ->
     ?assertEqual({error, not_found}, ?GET_TIMES(Worker1, FileUuid), Attempts),
     ?assertEqual({error, not_found}, ?GET_LOCATION(Worker1, FileUuid), Attempts).
 
-first_reading_and_writing_via_hardlink_test(Config0) ->
+first_reading_and_writing_via_link_test(Config0) ->
     Attempts = 60,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, Attempts),
     SessId = ?config(session, Config),
@@ -165,29 +165,29 @@ first_reading_and_writing_via_hardlink_test(Config0) ->
     FileUuid2 = file_id:guid_to_uuid(FileGuid2),
     ct:print("Files created and verified"),
 
-    % Create hardlinks and verify its stats
-    HardlinkName = generator:gen_name(),
-    Hardlink = <<"/", SpaceName/binary, "/",  HardlinkName/binary>>,
-    {ok, #file_attr{guid = HardlinkGuid} = HardlinkAttr} = ?assertMatch({ok, _},
-        lfm_proxy:make_link(Worker1, SessId(Worker1), Hardlink, FileGuid), Attempts),
-    verify_hardlink_attrs(HardlinkName, HardlinkAttr, FileAttr, SpaceGuid),
-    HardlinkUuid = file_id:guid_to_uuid(HardlinkGuid),
-    HardlinkName2 = generator:gen_name(),
-    Hardlink2 = <<"/", SpaceName/binary, "/",  HardlinkName2/binary>>,
-    {ok, #file_attr{guid = HardlinkGuid2} = HardlinkAttr2} = ?assertMatch({ok, _},
-        lfm_proxy:make_link(Worker1, SessId(Worker1), Hardlink2, FileGuid2), Attempts),
-    HardlinkUuid2 = file_id:guid_to_uuid(HardlinkGuid2),
-    verify_hardlink_attrs(HardlinkName2, HardlinkAttr2, FileAttr2, SpaceGuid),
+    % Create links and verify its stats
+    LinkName = generator:gen_name(),
+    Link = <<"/", SpaceName/binary, "/",  LinkName/binary>>,
+    {ok, #file_attr{guid = LinkGuid} = LinkAttr} = ?assertMatch({ok, _},
+        lfm_proxy:make_link(Worker1, SessId(Worker1), Link, FileGuid), Attempts),
+    verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid),
+    LinkUuid = file_id:guid_to_uuid(LinkGuid),
+    LinkName2 = generator:gen_name(),
+    Link2 = <<"/", SpaceName/binary, "/",  LinkName2/binary>>,
+    {ok, #file_attr{guid = LinkGuid2} = LinkAttr2} = ?assertMatch({ok, _},
+        lfm_proxy:make_link(Worker1, SessId(Worker1), Link2, FileGuid2), Attempts),
+    LinkUuid2 = file_id:guid_to_uuid(LinkGuid2),
+    verify_link_attrs(LinkName2, LinkAttr2, FileAttr2, SpaceGuid),
 
-    % Read/write hardlink on second provider without reading/writing file
+    % Read/write link on second provider without reading/writing file
     % (file_locations are not created for these files)
-    verify_hardlink_read(Worker2, SessId, Hardlink, FileContent, Attempts),
-    write_hardlink(Worker2, SessId, Hardlink2, FileContent, Attempts),
+    verify_link_read(Worker2, SessId, Link, FileContent, Attempts),
+    write_link(Worker2, SessId, Link2, FileContent, Attempts),
 
-    verify_hardlink_times_and_location_documents(Worker1, Worker2, FileUuid, HardlinkUuid),
-    verify_hardlink_times_and_location_documents(Worker1, Worker2, FileUuid2, HardlinkUuid2).
+    verify_link_times_and_location_documents(Worker1, Worker2, FileUuid, LinkUuid),
+    verify_link_times_and_location_documents(Worker1, Worker2, FileUuid2, LinkUuid2).
 
-create_hardlink_to_hardlink_test(Config0) ->
+create_link_to_link_test(Config0) ->
     Attempts = 60,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, Attempts),
     SessId = ?config(session, Config),
@@ -213,34 +213,34 @@ create_hardlink_to_hardlink_test(Config0) ->
     {ok, #file_attr{guid = FileGuid} = FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
     ct:print("File created and verified"),
 
-    % Create hardlink and verify its stats
-    HardlinkName = generator:gen_name(),
-    Hardlink = <<"/", SpaceName/binary, "/",  HardlinkName/binary>>,
-    {ok, HardlinkAttr} = ?assertMatch({ok, _},
-        lfm_proxy:make_link(Worker1, SessId(Worker1), Hardlink, FileGuid), Attempts),
-    verify_hardlink_attrs(HardlinkName, HardlinkAttr, FileAttr, SpaceGuid),
+    % Create link and verify its stats
+    LinkName = generator:gen_name(),
+    Link = <<"/", SpaceName/binary, "/",  LinkName/binary>>,
+    {ok, LinkAttr} = ?assertMatch({ok, _},
+        lfm_proxy:make_link(Worker1, SessId(Worker1), Link, FileGuid), Attempts),
+    verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid),
 
-    % Create hardlink to hardlink and verify its stats
-    HardlinkName2 = generator:gen_name(),
-    Hardlink2 = <<"/", SpaceName/binary, "/",  HardlinkName2/binary>>,
-    {ok, HardlinkAttr2} = ?assertMatch({ok, _},
-        lfm_proxy:make_link(Worker1, SessId(Worker1), Hardlink2, HardlinkAttr#file_attr.guid), Attempts),
-    verify_hardlink_attrs(HardlinkName2, HardlinkAttr2, FileAttr, SpaceGuid),
+    % Create link to link and verify its stats
+    LinkName2 = generator:gen_name(),
+    Link2 = <<"/", SpaceName/binary, "/",  LinkName2/binary>>,
+    {ok, LinkAttr2} = ?assertMatch({ok, _},
+        lfm_proxy:make_link(Worker1, SessId(Worker1), Link2, LinkAttr#file_attr.guid), Attempts),
+    verify_link_attrs(LinkName2, LinkAttr2, FileAttr, SpaceGuid),
 
-    % Verify reading through second hardlink
-    verify_hardlink_read(Worker1, SessId, Hardlink2, FileContent),
-    verify_hardlink_read(Worker2, SessId, Hardlink2, FileContent, Attempts),
+    % Verify reading through second link
+    verify_link_read(Worker1, SessId, Link2, FileContent),
+    verify_link_read(Worker2, SessId, Link2, FileContent, Attempts),
 
-    % Delete hardlinks and file and verify
-    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, Hardlink})),
-    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, Hardlink2})),
+    % Delete links and file and verify
+    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, Link})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, Link2})),
     ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, File})),
 
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, Hardlink})),
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, Hardlink2})),
+    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link})),
+    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link2})),
     ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, Hardlink}), Attempts),
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, Hardlink2}), Attempts),
+    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, Link}), Attempts),
+    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, Link2}), Attempts),
     ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, File}), Attempts).
 
 %%%===================================================================
@@ -266,58 +266,58 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-verify_hardlink_attrs(HardlinkName, HardlinkAttr, FileAttr, SpaceGuid) ->
-    ?assertNotEqual(FileAttr#file_attr.guid, HardlinkAttr#file_attr.guid),
-    ?assert(fslogic_uuid:is_hardlink_uuid(file_id:guid_to_uuid(HardlinkAttr#file_attr.guid))),
-    ?assertNot(fslogic_uuid:is_hardlink_uuid(file_id:guid_to_uuid(FileAttr#file_attr.guid))),
-    ?assertEqual(HardlinkName, HardlinkAttr#file_attr.name),
-    ?assertEqual(SpaceGuid, HardlinkAttr#file_attr.parent_guid),
+verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid) ->
+    ?assertNotEqual(FileAttr#file_attr.guid, LinkAttr#file_attr.guid),
+    ?assert(fslogic_uuid:is_link_uuid(file_id:guid_to_uuid(LinkAttr#file_attr.guid))),
+    ?assertNot(fslogic_uuid:is_link_uuid(file_id:guid_to_uuid(FileAttr#file_attr.guid))),
+    ?assertEqual(LinkName, LinkAttr#file_attr.name),
+    ?assertEqual(SpaceGuid, LinkAttr#file_attr.parent_guid),
 
-    ?assertEqual(FileAttr#file_attr.type, HardlinkAttr#file_attr.type),
-    ?assertEqual(FileAttr#file_attr.mode, HardlinkAttr#file_attr.mode),
-    ?assertEqual(FileAttr#file_attr.uid, HardlinkAttr#file_attr.uid),
-    ?assertEqual(FileAttr#file_attr.gid, HardlinkAttr#file_attr.gid),
-    ?assertEqual(FileAttr#file_attr.atime, HardlinkAttr#file_attr.atime),
-    ?assertEqual(FileAttr#file_attr.mtime, HardlinkAttr#file_attr.mtime),
-    ?assertEqual(FileAttr#file_attr.ctime, HardlinkAttr#file_attr.ctime),
-    ?assertEqual(FileAttr#file_attr.size, HardlinkAttr#file_attr.size),
-    ?assertEqual(FileAttr#file_attr.size, HardlinkAttr#file_attr.size),
-    ?assertEqual(FileAttr#file_attr.shares, HardlinkAttr#file_attr.shares),
-    ?assertEqual(FileAttr#file_attr.provider_id, HardlinkAttr#file_attr.provider_id),
-    ?assertEqual(FileAttr#file_attr.owner_id, HardlinkAttr#file_attr.owner_id),
-    ?assertEqual(true, HardlinkAttr#file_attr.fully_replicated).
+    ?assertEqual(FileAttr#file_attr.type, LinkAttr#file_attr.type),
+    ?assertEqual(FileAttr#file_attr.mode, LinkAttr#file_attr.mode),
+    ?assertEqual(FileAttr#file_attr.uid, LinkAttr#file_attr.uid),
+    ?assertEqual(FileAttr#file_attr.gid, LinkAttr#file_attr.gid),
+    ?assertEqual(FileAttr#file_attr.atime, LinkAttr#file_attr.atime),
+    ?assertEqual(FileAttr#file_attr.mtime, LinkAttr#file_attr.mtime),
+    ?assertEqual(FileAttr#file_attr.ctime, LinkAttr#file_attr.ctime),
+    ?assertEqual(FileAttr#file_attr.size, LinkAttr#file_attr.size),
+    ?assertEqual(FileAttr#file_attr.size, LinkAttr#file_attr.size),
+    ?assertEqual(FileAttr#file_attr.shares, LinkAttr#file_attr.shares),
+    ?assertEqual(FileAttr#file_attr.provider_id, LinkAttr#file_attr.provider_id),
+    ?assertEqual(FileAttr#file_attr.owner_id, LinkAttr#file_attr.owner_id),
+    ?assertEqual(true, LinkAttr#file_attr.fully_replicated).
 
-verify_hardlink_read(Worker, SessId, HardlinkOrFile, FileContent) ->
-    verify_hardlink_read(Worker, SessId, HardlinkOrFile, FileContent, 0).
+verify_link_read(Worker, SessId, LinkOrFile, FileContent) ->
+    verify_link_read(Worker, SessId, LinkOrFile, FileContent, 0).
 
-verify_hardlink_read(Worker, SessId, HardlinkOrFile, FileContent, Attempts) ->
+verify_link_read(Worker, SessId, LinkOrFile, FileContent, Attempts) ->
     FileSize = byte_size(FileContent),
-    ?match({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker, SessId(Worker), {path, HardlinkOrFile}), Attempts),
-    {ok, LinkHandle112} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId(Worker), {path, HardlinkOrFile}, rdwr)),
+    ?match({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker, SessId(Worker), {path, LinkOrFile}), Attempts),
+    {ok, LinkHandle112} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId(Worker), {path, LinkOrFile}, rdwr)),
     ?assertEqual({ok, FileContent}, lfm_proxy:read(Worker, LinkHandle112, 0, 100)),
     ?assertEqual(ok, lfm_proxy:close(Worker, LinkHandle112)).
 
-verify_hardlink_times_and_location_documents(Worker1, Worker2, FileUuid, HardlinkUuid) ->
+verify_link_times_and_location_documents(Worker1, Worker2, FileUuid, LinkUuid) ->
     % Check if times and file_location documents exists
     ?assertMatch({ok, _}, ?GET_TIMES(Worker1, FileUuid)),
     {ok, #document{key = FileLocation1Uuid}} = ?assertMatch({ok, _}, ?GET_LOCATION(Worker1, FileUuid)),
     ?assertMatch({ok, _}, ?GET_TIMES(Worker2, FileUuid)),
     {ok, #document{key = FileLocation2Uuid}} = ?assertMatch({ok, _}, ?GET_LOCATION(Worker2, FileUuid)),
 
-    % Check if times and file_location documents are returned for hardlink
-    ?assertMatch({ok, #document{key = FileUuid}}, ?GET_TIMES(Worker1, HardlinkUuid)),
-    ?assertMatch({ok, #document{key = FileLocation1Uuid}}, ?GET_LOCATION(Worker1, HardlinkUuid)),
-    ?assertMatch({ok, #document{key = FileUuid}}, ?GET_TIMES(Worker2, HardlinkUuid)),
-    ?assertMatch({ok, #document{key = FileLocation2Uuid}}, ?GET_LOCATION(Worker2, HardlinkUuid)),
+    % Check if times and file_location documents are returned for link
+    ?assertMatch({ok, #document{key = FileUuid}}, ?GET_TIMES(Worker1, LinkUuid)),
+    ?assertMatch({ok, #document{key = FileLocation1Uuid}}, ?GET_LOCATION(Worker1, LinkUuid)),
+    ?assertMatch({ok, #document{key = FileUuid}}, ?GET_TIMES(Worker2, LinkUuid)),
+    ?assertMatch({ok, #document{key = FileLocation2Uuid}}, ?GET_LOCATION(Worker2, LinkUuid)),
 
-    % Check if times and file_location documents have not been created for hardlink uuid,
+    % Check if times and file_location documents have not been created for link uuid,
     % Use datastore api to skip usage of effective key inside modules
     TimesCtx = #{model => times},
     FileLocationCtx = #{model => file_location},
-    ?assertEqual({error, not_found}, rpc:call(Worker1, datastore_model, get, [TimesCtx, HardlinkUuid])),
-    ?assertEqual({error, not_found}, rpc:call(Worker1, datastore_model, get, [FileLocationCtx, HardlinkUuid])),
-    ?assertEqual({error, not_found}, rpc:call(Worker2, datastore_model, get, [TimesCtx, HardlinkUuid])),
-    ?assertEqual({error, not_found}, rpc:call(Worker2, datastore_model, get, [FileLocationCtx, HardlinkUuid])).
+    ?assertEqual({error, not_found}, rpc:call(Worker1, datastore_model, get, [TimesCtx, LinkUuid])),
+    ?assertEqual({error, not_found}, rpc:call(Worker1, datastore_model, get, [FileLocationCtx, LinkUuid])),
+    ?assertEqual({error, not_found}, rpc:call(Worker2, datastore_model, get, [TimesCtx, LinkUuid])),
+    ?assertEqual({error, not_found}, rpc:call(Worker2, datastore_model, get, [FileLocationCtx, LinkUuid])).
 
 create_file_to_be_linked(Worker, SessId, File, FileContent) ->
     ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId(Worker), File, 8#755)),
@@ -326,12 +326,12 @@ create_file_to_be_linked(Worker, SessId, File, FileContent) ->
     ?assertEqual({ok, FileSize}, lfm_proxy:write(Worker, Handle, 0, FileContent)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
-write_hardlink(Worker, SessId, Hardlink, FileContent) ->
-    write_hardlink(Worker, SessId, Hardlink, FileContent, 0).
+write_link(Worker, SessId, Link, FileContent) ->
+    write_link(Worker, SessId, Link, FileContent, 0).
 
-write_hardlink(Worker, SessId, Hardlink, FileContent, Attempts) ->
+write_link(Worker, SessId, Link, FileContent, Attempts) ->
     {ok, Ans} = ?match({ok, _}, begin
-        {ok, LinkHandle11} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId(Worker), {path, Hardlink}, rdwr)),
+        {ok, LinkHandle11} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId(Worker), {path, Link}, rdwr)),
         NewFileContent = <<FileContent/binary, "xyz">>,
         FileSize = byte_size(FileContent),
         ?assertEqual({ok, 3}, lfm_proxy:write(Worker, LinkHandle11, FileSize, <<"xyz">>)),

@@ -22,9 +22,6 @@
 
 -export([
     db_sync_basic_opts_test/1,
-    hardlinks_test/1,
-    first_reading_and_writing_via_hardlink_test/1,
-    create_hardlink_to_hardlink_test/1,
     db_sync_many_ops_test/1,
     db_sync_many_ops_test_base/1,
     db_sync_distributed_modification_test/1,
@@ -37,9 +34,6 @@
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test,
-    hardlinks_test,
-    first_reading_and_writing_via_hardlink_test,
-    create_hardlink_to_hardlink_test,
     db_sync_many_ops_test,
     db_sync_distributed_modification_test,
     db_sync_create_after_del_test,
@@ -85,15 +79,6 @@ create_on_different_providers_test(Config) ->
 
 db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-hardlinks_test(Config) ->
-    multi_provider_file_ops_test_base:hardlinks_test(Config, <<"user1">>, {4,0,0,2}, 60).
-
-first_reading_and_writing_via_hardlink_test(Config) ->
-    multi_provider_file_ops_test_base:first_reading_and_writing_via_hardlink_test(Config, <<"user1">>, {4,0,0,2}, 60).
-
-create_hardlink_to_hardlink_test(Config) ->
-    multi_provider_file_ops_test_base:create_hardlink_to_hardlink_test(Config, <<"user1">>, {4,0,0,2}, 60).
 
 db_sync_basic_opts_with_errors_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60, false).

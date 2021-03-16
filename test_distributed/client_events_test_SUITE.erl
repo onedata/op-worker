@@ -399,20 +399,20 @@ events_for_hardlinks_test(Config) ->
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     FileDirId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
-    DirWithHardLinkId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirWithLinkId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
 
     % Test subscription on link and emission on file
     Seq1 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirWithHardLinkId, 500))),
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirWithLinkId, 500))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
 
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, FileDirId, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
-    HardlinkGuid = fuse_test_utils:create_hardlink(Sock, FileGuid, DirWithHardLinkId, generator:gen_name()),
+    LinkGuid = fuse_test_utils:make_link(Sock, FileGuid, DirWithLinkId, generator:gen_name()),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
 
-    CheckList = receive_events_and_check(file_attr_changed, HardlinkGuid),
+    CheckList = receive_events_and_check(file_attr_changed, LinkGuid),
     ?assertNot(lists:member({file_attr_changed, FileGuid}, CheckList)),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
@@ -422,29 +422,29 @@ events_for_hardlinks_test(Config) ->
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq2, -Seq2, FileDirId, 500))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
-    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(HardlinkGuid), []]),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(LinkGuid), []]),
 
     CheckList2 = receive_events_and_check(file_attr_changed, FileGuid),
-    ?assertNot(lists:member({file_attr_changed, HardlinkGuid}, CheckList2)),
+    ?assertNot(lists:member({file_attr_changed, LinkGuid}, CheckList2)),
 
     % Test subscription on both link and file
     Seq3 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq3, -Seq3, DirWithHardLinkId, 500))),
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq3, -Seq3, DirWithLinkId, 500))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
 
-    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(HardlinkGuid), []]),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(LinkGuid), []]),
     CheckList3 = receive_events_and_check(file_attr_changed, FileGuid),
-    case lists:member({file_attr_changed, HardlinkGuid}, CheckList3) of
+    case lists:member({file_attr_changed, LinkGuid}, CheckList3) of
         true -> ok; % Event has been already received with previous event
-        false -> receive_events_and_check(file_attr_changed, HardlinkGuid)
+        false -> receive_events_and_check(file_attr_changed, LinkGuid)
     end,
 
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
     CheckList4 = receive_events_and_check(file_attr_changed, FileGuid),
-    case lists:member({file_attr_changed, HardlinkGuid}, CheckList4) of
+    case lists:member({file_attr_changed, LinkGuid}, CheckList4) of
         true -> ok; % Event has been already received with previous event
-        false -> receive_events_and_check(file_attr_changed, HardlinkGuid)
+        false -> receive_events_and_check(file_attr_changed, LinkGuid)
     end,
 
     ?assertEqual(ok, ssl:send(Sock,
