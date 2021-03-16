@@ -108,7 +108,7 @@ make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
     ),
     TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     make_link_insecure(UserCtx, TargetFileCtx2, TargetParentFileCtx1, Name).
 
@@ -120,7 +120,7 @@ make_symlink(UserCtx, ParentFileCtx0, Name, Link) ->
     file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?PERMISSIONS(?traverse_container_mask, ?add_object_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     make_symlink_insecure(UserCtx, ParentFileCtx1, Name, Link).
 
