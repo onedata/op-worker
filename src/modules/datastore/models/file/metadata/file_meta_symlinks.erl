@@ -16,7 +16,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([new_symlink_doc/5, get_symlink/1]).
+-export([new_doc/5, get/1]).
 
 -type symlink() :: file_meta:path().
 -export_type([symlink/0]).
@@ -28,8 +28,8 @@
 %%% API
 %%%===================================================================
 
--spec new_symlink_doc(file_meta:name(), file_meta:uuid(), od_space:id(), od_user:id(), symlink()) -> file_meta:doc().
-new_symlink_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
+-spec new_doc(file_meta:name(), file_meta:uuid(), od_space:id(), od_user:id(), symlink()) -> file_meta:doc().
+new_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
     #document{
         key = undefined,
         value = #file_meta{
@@ -44,14 +44,14 @@ new_symlink_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
         scope = SpaceId
     }.
 
--spec get_symlink(file_meta:doc() | file_meta:uuid()) -> {ok, symlink()} | {error, term()}.
-get_symlink(#document{value = #file_meta{type = ?SYMLINK_TYPE, symlink = Link}}) ->
+-spec get(file_meta:doc() | file_meta:uuid()) -> {ok, symlink()} | {error, term()}.
+get(#document{value = #file_meta{type = ?SYMLINK_TYPE, symlink = Link}}) ->
     {ok, Link};
-get_symlink(#document{value = #file_meta{}}) ->
+get(#document{value = #file_meta{}}) ->
     {error, ?EINVAL};
-get_symlink(Key) ->
+get(Key) ->
     case file_meta:get(Key) of
         {ok, Doc} ->
-            get_symlink(Doc);
+            file_meta_symlinks:get(Doc);
         Other -> Other
     end.

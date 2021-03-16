@@ -399,7 +399,7 @@ create_missing_parent_dirs(UserCtx, FileCtx) ->
         true ->
             FileCtx;
         false ->
-            EffectiveFileCtx = file_ctx:ensure_effective_ctx(FileCtx),
+            EffectiveFileCtx = file_ctx:ensure_effective(FileCtx),
             case file_ctx:equals(FileCtx, EffectiveFileCtx) of
                 true -> % regular file - use provided ctx
                     {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),

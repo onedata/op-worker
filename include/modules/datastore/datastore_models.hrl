@@ -16,7 +16,7 @@
 -include("modules/events/subscriptions.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/storage/luma/luma.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.

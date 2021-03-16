@@ -27,7 +27,7 @@
 -export([is_trash_dir_uuid/1, is_trash_dir_guid/1]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
--export([gen_link_uuid/1, is_link_uuid/1, ensure_effective_uuid/1]).
+-export([gen_link_uuid/1, is_link_uuid/1, ensure_effective_uuid/1, ensure_effective_guid/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
@@ -209,6 +209,17 @@ ensure_effective_uuid(<<?LINK_UUID_PREFIX, UuidTail/binary>>) ->
 ensure_effective_uuid(Uuid) ->
     Uuid.
 
+%%--------------------------------------------------------------------
+%% @doc Returns effective guid (guid corresponding with effective uuid - see ensure_effective_uuid/1).
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_effective_guid(file_id:file_guid()) -> file_id:file_guid().
+ensure_effective_guid(Guid) ->
+    Uuid = file_id:guid_to_uuid(Guid),
+    case ensure_effective_uuid(Uuid) of
+        Uuid -> Guid;
+        EffectiveUuid -> file_id:pack_guid(EffectiveUuid, file_id:guid_to_space_id(Guid))
+    end.
 
 %%%===================================================================
 %%% Internal functions

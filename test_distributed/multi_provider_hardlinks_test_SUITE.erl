@@ -61,11 +61,12 @@ basic_test(Config0) ->
 
     % Setup environment
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
+    FileName = generator:gen_name(),
+    File = <<Dir/binary, "/", FileName/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
     FileContent = <<"1234567890abcd">>,
     FileSize = byte_size(FileContent),
-    create_file_to_be_linked(Worker1, SessId, File, FileContent),
+    FileGuid = file_ops_test_utils:create_file(Worker1, SessId(Worker1), DirGuid, FileName, FileContent),
 
     % Verify environment
     multi_provider_file_ops_test_base:verify_stats(Config, Dir, true),
@@ -73,10 +74,10 @@ basic_test(Config0) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileSize}},
             lfm_proxy:stat(W, SessId(W), {path, File}), Attempts)
     end),
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, <<"/", SpaceName/binary>>})),
-    {ok, #file_attr{guid = FileGuid} = FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
+    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _},
+        lfm_proxy:stat(Worker1, SessId(Worker1), {path, <<"/", SpaceName/binary>>})),
+    {ok, FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    ct:print("File created and verified"),
 
     % Create link and verify its stats
     LinkName = generator:gen_name(),
@@ -92,8 +93,8 @@ basic_test(Config0) ->
         lfm_proxy:stat(Worker2, SessId(Worker2), {path, Link}), Attempts),
 
     % Verify reading through link
-    verify_link_read(Worker1, SessId, Link, FileContent),
-    verify_link_read(Worker2, SessId, Link, FileContent),
+    verify_stat_and_read(Worker1, SessId, Link, FileContent),
+    verify_stat_and_read(Worker2, SessId, Link, FileContent),
 
     % Delete link - check that file is not deleted
     ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, Link})),
@@ -105,27 +106,27 @@ basic_test(Config0) ->
     % Create second link on other provider
     LinkName2 = generator:gen_name(),
     Link2 = <<"/", SpaceName/binary, "/",  LinkName2/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:make_link(Worker2, SessId(Worker2), Link2, FileGuid), Attempts),
-    {ok, #file_attr{guid = LinkGuid2}} =  ?assertMatch({ok, _},
-        lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link2}), Attempts),
+    {ok, #file_attr{guid = LinkGuid2}} = ?assertMatch({ok, _},
+        lfm_proxy:make_link(Worker2, SessId(Worker2), Link2, FileGuid), Attempts),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link2}), Attempts),
     LinkUuid2 = file_id:guid_to_uuid(LinkGuid2),
 
     % Change file through link
-    NewFileContent = write_link(Worker2, SessId, Link2, FileContent),
+    NewFileContent = write(Worker2, SessId, Link2, FileContent),
 
     % Check file content using link
-    verify_link_read(Worker2, SessId, Link2, NewFileContent),
+    verify_stat_and_read(Worker2, SessId, Link2, NewFileContent),
     % Check file content
-    verify_link_read(Worker2, SessId, File, NewFileContent),
+    verify_stat_and_read(Worker2, SessId, File, NewFileContent),
 
     % Delete file - verify that link is not deleted and can be read
     ?assertEqual(ok, lfm_proxy:unlink(Worker2, SessId(Worker2), {path, File})),
     ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, File})),
-    verify_link_read(Worker2, SessId, Link2, NewFileContent),
+    verify_stat_and_read(Worker2, SessId, Link2, NewFileContent),
 
     % Verify link and file on first provider
     ?assertEqual({error, enoent}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File}), Attempts),
-    verify_link_read(Worker1, SessId, Link2, NewFileContent, Attempts),
+    verify_stat_and_read(Worker1, SessId, Link2, NewFileContent, Attempts),
 
     % Check if times and file_location documents have not been deleted
     verify_link_times_and_location_documents(Worker1, Worker2, FileUuid, LinkUuid2),
@@ -151,19 +152,21 @@ first_reading_and_writing_via_link_test(Config0) ->
 
     % Setup environment
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-    File2 = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
+    FileName = generator:gen_name(),
+    File = <<Dir/binary, "/", FileName/binary>>,
+    FileName2 = generator:gen_name(),
+    File2 = <<Dir/binary, "/", FileName/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
     FileContent = <<"1234567890abcd">>,
-    create_file_to_be_linked(Worker1, SessId, File, FileContent),
-    create_file_to_be_linked(Worker1, SessId, File2, FileContent),
+    FileGuid = file_ops_test_utils:create_file(Worker1, SessId(Worker1), DirGuid, FileName, FileContent),
+    FileGuid2 = file_ops_test_utils:create_file(Worker1, SessId(Worker1), DirGuid, FileName2, FileContent),
 
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, <<"/", SpaceName/binary>>})),
-    {ok, #file_attr{guid = FileGuid} = FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
-    {ok, #file_attr{guid = FileGuid2} = FileAttr2} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File2})),
+    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _},
+        lfm_proxy:stat(Worker1, SessId(Worker1), {path, <<"/", SpaceName/binary>>})),
+    {ok, FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
+    {ok, FileAttr2} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File2})),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     FileUuid2 = file_id:guid_to_uuid(FileGuid2),
-    ct:print("Files created and verified"),
 
     % Create links and verify its stats
     LinkName = generator:gen_name(),
@@ -181,8 +184,8 @@ first_reading_and_writing_via_link_test(Config0) ->
 
     % Read/write link on second provider without reading/writing file
     % (file_locations are not created for these files)
-    verify_link_read(Worker2, SessId, Link, FileContent, Attempts),
-    write_link(Worker2, SessId, Link2, FileContent, Attempts),
+    verify_stat_and_read(Worker2, SessId, Link, FileContent, Attempts),
+    write(Worker2, SessId, Link2, FileContent, Attempts),
 
     verify_link_times_and_location_documents(Worker1, Worker2, FileUuid, LinkUuid),
     verify_link_times_and_location_documents(Worker1, Worker2, FileUuid2, LinkUuid2).
@@ -197,11 +200,12 @@ create_link_to_link_test(Config0) ->
 
     % Setup environment
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
+    FileName = generator:gen_name(),
+    File = <<Dir/binary, "/", FileName/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
     FileContent = <<"1234567890abcd">>,
     FileSize = byte_size(FileContent),
-    create_file_to_be_linked(Worker1, SessId, File, FileContent),
+    FileGuid = file_ops_test_utils:create_file(Worker1, SessId(Worker1), DirGuid, FileName, FileContent),
 
     % Verify environment
     multi_provider_file_ops_test_base:verify_stats(Config, Dir, true),
@@ -209,9 +213,9 @@ create_link_to_link_test(Config0) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileSize}},
             lfm_proxy:stat(W, SessId(W), {path, File}), Attempts)
     end),
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, <<"/", SpaceName/binary>>})),
-    {ok, #file_attr{guid = FileGuid} = FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
-    ct:print("File created and verified"),
+    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _},
+        lfm_proxy:stat(Worker1, SessId(Worker1), {path, <<"/", SpaceName/binary>>})),
+    {ok, FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
 
     % Create link and verify its stats
     LinkName = generator:gen_name(),
@@ -228,8 +232,8 @@ create_link_to_link_test(Config0) ->
     verify_link_attrs(LinkName2, LinkAttr2, FileAttr, SpaceGuid),
 
     % Verify reading through second link
-    verify_link_read(Worker1, SessId, Link2, FileContent),
-    verify_link_read(Worker2, SessId, Link2, FileContent, Attempts),
+    verify_stat_and_read(Worker1, SessId, Link2, FileContent),
+    verify_stat_and_read(Worker2, SessId, Link2, FileContent, Attempts),
 
     % Delete links and file and verify
     ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, Link})),
@@ -277,20 +281,22 @@ verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid) ->
     ?assertEqual(FileAttr#file_attr.mode, LinkAttr#file_attr.mode),
     ?assertEqual(FileAttr#file_attr.uid, LinkAttr#file_attr.uid),
     ?assertEqual(FileAttr#file_attr.gid, LinkAttr#file_attr.gid),
-    ?assertEqual(FileAttr#file_attr.atime, LinkAttr#file_attr.atime),
-    ?assertEqual(FileAttr#file_attr.mtime, LinkAttr#file_attr.mtime),
-    ?assertEqual(FileAttr#file_attr.ctime, LinkAttr#file_attr.ctime),
     ?assertEqual(FileAttr#file_attr.size, LinkAttr#file_attr.size),
     ?assertEqual(FileAttr#file_attr.size, LinkAttr#file_attr.size),
     ?assertEqual(FileAttr#file_attr.shares, LinkAttr#file_attr.shares),
     ?assertEqual(FileAttr#file_attr.provider_id, LinkAttr#file_attr.provider_id),
     ?assertEqual(FileAttr#file_attr.owner_id, LinkAttr#file_attr.owner_id),
-    ?assertEqual(true, LinkAttr#file_attr.fully_replicated).
+    ?assertEqual(true, LinkAttr#file_attr.fully_replicated),
 
-verify_link_read(Worker, SessId, LinkOrFile, FileContent) ->
-    verify_link_read(Worker, SessId, LinkOrFile, FileContent, 0).
+    % Time can be changed by event after file creation
+    ?assert(FileAttr#file_attr.atime =< LinkAttr#file_attr.atime),
+    ?assert(FileAttr#file_attr.mtime =< LinkAttr#file_attr.mtime),
+    ?assert(FileAttr#file_attr.ctime =< LinkAttr#file_attr.ctime).
 
-verify_link_read(Worker, SessId, LinkOrFile, FileContent, Attempts) ->
+verify_stat_and_read(Worker, SessId, LinkOrFile, FileContent) ->
+    verify_stat_and_read(Worker, SessId, LinkOrFile, FileContent, 0).
+
+verify_stat_and_read(Worker, SessId, LinkOrFile, FileContent, Attempts) ->
     FileSize = byte_size(FileContent),
     ?match({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker, SessId(Worker), {path, LinkOrFile}), Attempts),
     {ok, LinkHandle112} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId(Worker), {path, LinkOrFile}, rdwr)),
@@ -319,17 +325,10 @@ verify_link_times_and_location_documents(Worker1, Worker2, FileUuid, LinkUuid) -
     ?assertEqual({error, not_found}, rpc:call(Worker2, datastore_model, get, [TimesCtx, LinkUuid])),
     ?assertEqual({error, not_found}, rpc:call(Worker2, datastore_model, get, [FileLocationCtx, LinkUuid])).
 
-create_file_to_be_linked(Worker, SessId, File, FileContent) ->
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId(Worker), File, 8#755)),
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId(Worker), {path, File}, rdwr)),
-    FileSize = byte_size(FileContent),
-    ?assertEqual({ok, FileSize}, lfm_proxy:write(Worker, Handle, 0, FileContent)),
-    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
+write(Worker, SessId, Link, FileContent) ->
+    write(Worker, SessId, Link, FileContent, 0).
 
-write_link(Worker, SessId, Link, FileContent) ->
-    write_link(Worker, SessId, Link, FileContent, 0).
-
-write_link(Worker, SessId, Link, FileContent, Attempts) ->
+write(Worker, SessId, Link, FileContent, Attempts) ->
     {ok, Ans} = ?match({ok, _}, begin
         {ok, LinkHandle11} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId(Worker), {path, Link}, rdwr)),
         NewFileContent = <<FileContent/binary, "xyz">>,

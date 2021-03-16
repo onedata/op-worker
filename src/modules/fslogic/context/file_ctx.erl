@@ -20,7 +20,7 @@
 %%% - FileDoc, SpaceId, ShareId (can be undefined if file is not in a share context)
 %%% - file_partial_ctx
 %%%
-%%% Note: always consider usage of effective ctx (see ensure_effective_ctx/1).
+%%% Note: always consider usage of effective ctx (see ensure_effective/1).
 %%% TODO VFS-7465 - Consider creation of new_by_guid, get_guid/uuid_const functions
 %%% with additional arg IsEffective .
 %%% @end
@@ -59,7 +59,7 @@
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/2, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, set_file_location/2, set_file_id/2,
-    set_is_dir/2, ensure_effective_ctx/1, ensure_effective_and_get_uuid/1]).
+    set_is_dir/2, ensure_effective/1, ensure_effective_and_get_uuid/1]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
@@ -239,18 +239,9 @@ get_space_dir_uuid_const(FileCtx) ->
 get_guid_const(#file_ctx{guid = Guid}) ->
     Guid.
 
-%%--------------------------------------------------------------------
-%% @doc Returns effective guid (guid that corresponds to effective uuid see get_effective_uuid_const/1).
-%% @end
-%%--------------------------------------------------------------------
 -spec get_effective_guid_const(ctx()) -> fslogic_worker:file_guid().
-get_effective_guid_const(#file_ctx{guid = Guid} = FileCtx) ->
-    Uuid = get_uuid_const(FileCtx),
-    EffectiveUuid = fslogic_uuid:ensure_effective_uuid(Uuid),
-    case EffectiveUuid of
-        Uuid -> Guid;
-        _ -> file_id:pack_guid(EffectiveUuid, get_space_id_const(FileCtx))
-    end.
+get_effective_guid_const(FileCtx) ->
+    fslogic_uuid:ensure_effective_guid(get_guid_const(FileCtx)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -262,10 +253,6 @@ get_uuid_const(FileCtx) ->
     Guid = get_guid_const(FileCtx),
     file_id:guid_to_uuid(Guid).
 
-%%--------------------------------------------------------------------
-%% @doc Returns effective uuid (see fslogic_uuid:ensure_effective_uuid/1).
-%% @end
-%%--------------------------------------------------------------------
 -spec get_effective_uuid_const(ctx()) -> file_meta:uuid().
 get_effective_uuid_const(FileCtx) ->
     fslogic_uuid:ensure_effective_uuid(get_uuid_const(FileCtx)).
@@ -275,12 +262,12 @@ is_link_const(FileCtx) ->
     fslogic_uuid:is_link_uuid(get_uuid_const(FileCtx)).
 
 %%--------------------------------------------------------------------
-%% @doc Creates new ctx if effective uuid (see fslogic_uuid:ensure_effective_uuid/1) in not
-%% equal file uuid (ctx has been created for link and it is replaced with ctx of target file).
+%% @doc Creates new ctx if effective uuid (see fslogic_uuid:ensure_effective_uuid/1) is not
+%% equal to file uuid (ctx has been created for link and it is replaced with ctx of target file).
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_effective_ctx(ctx()) -> ctx().
-ensure_effective_ctx(FileCtx) ->
+-spec ensure_effective(ctx()) -> ctx().
+ensure_effective(FileCtx) ->
     {_, EffectiveCtx} = ensure_effective_and_get_uuid(FileCtx),
     EffectiveCtx.
 
@@ -605,7 +592,7 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
 
 -spec get_new_storage_file_id(ctx()) -> {helpers:file_id(), ctx()}.
 get_new_storage_file_id(FileCtx) ->
-    EffectiveFileCtx = ensure_effective_ctx(FileCtx),
+    EffectiveFileCtx = ensure_effective(FileCtx),
     {Storage, EffectiveFileCtx2} = get_storage(EffectiveFileCtx),
     Helper = storage:get_helper(Storage),
     SpaceId = file_ctx:get_space_id_const(EffectiveFileCtx2),

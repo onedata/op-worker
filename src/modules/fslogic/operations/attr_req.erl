@@ -375,7 +375,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
                 {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx5),
                 {RS, undefined, Ctx};
             {?SYMLINK_TYPE, _, true} ->
-                {ok, Symlink} = file_meta_symlinks:get_symlink(FileDoc),
+                {ok, Symlink} = file_meta_symlinks:get(FileDoc),
                 {undefined, byte_size(Symlink), FileCtx5};
             {_, _, true} ->
                 {S, Ctx} = file_ctx:get_file_size(FileCtx5),

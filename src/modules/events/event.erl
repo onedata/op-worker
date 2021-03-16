@@ -101,7 +101,7 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
                     emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
                 catch
                     Error:Reason ->
-                        % In case of file_meta deletion from memory and couchbase
+                        % Race with file/link deletion can result in error logged here
                         ?warning("error emitting event for additional guid ~p:~p, original event ~p, context ~p",
                             [Error, Reason, Evt, Context])
                 end
@@ -119,7 +119,7 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
                     emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
                 catch
                     Error:Reason ->
-                        % In case of file_meta deletion from memory and couchbase
+                        % Race with file/link deletion can result in error logged here
                         ?warning("error emitting event for additional guid ~p:~p, original event ~p, guid ~p",
                             [Error, Reason, Evt, Context])
                 end

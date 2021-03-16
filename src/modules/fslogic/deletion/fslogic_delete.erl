@@ -71,9 +71,17 @@
 -spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), od_provider:id(), boolean()) -> ok.
 delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
     % TODO VFS-7448 - test events production
-    case {fslogic_uuid:is_link_uuid(file_ctx:get_uuid_const(FileCtx)), oneprovider:get_id() =:= Creator} of
-        {true, IsCreator} -> delete_hardlink_locally(UserCtx, FileCtx, Silent, IsCreator);
-        {false, _} -> delete_regular_file_locally(UserCtx, FileCtx, Silent)
+    case {file_ctx:is_link_const(FileCtx), oneprovider:get_id() =:= Creator} of
+        {false, _} ->
+            delete_regular_file_locally(UserCtx, FileCtx, Silent);
+        {true, true} ->
+            % Only creator can delete hardlink to prevent races on references
+            % in #file_meta{} and allow conflicts resolution
+            delete_hardlink_locally(UserCtx, FileCtx, Silent);
+        {true, false} ->
+            % Hardlink will be deleted by creator in dbsync hook
+            delete_parent_link(FileCtx, UserCtx),
+            ok
     end.
 
 %% @private
@@ -90,8 +98,8 @@ delete_regular_file_locally(UserCtx, FileCtx, Silent) ->
     end.
 
 %% @private
--spec delete_hardlink_locally(user_ctx:ctx(), file_ctx:ctx(), boolean(), boolean()) -> ok.
-delete_hardlink_locally(UserCtx, FileCtx, Silent, true = _IsCreator) ->
+-spec delete_hardlink_locally(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
+delete_hardlink_locally(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
     case deregister_link_and_check_if_no_references_left(FileCtx) of
         true ->
@@ -102,11 +110,7 @@ delete_hardlink_locally(UserCtx, FileCtx, Silent, true = _IsCreator) ->
             FileCtx2 = delete_parent_link(FileCtx, UserCtx),
             delete_file_meta(FileCtx2),
             ok
-    end;
-delete_hardlink_locally(UserCtx, FileCtx, _Silent, _IsCreator) ->
-    % Hardlink will be deleted by creator in dbsync hook
-    delete_parent_link(FileCtx, UserCtx),
-    ok.
+    end.
 
 
 -spec handle_remotely_deleted_file(file_ctx:ctx()) -> ok.
@@ -207,9 +211,9 @@ cleanup_opened_files() ->
 deregister_link_and_check_if_no_references_left(FileCtx) ->
     LinkUuid = file_ctx:get_uuid_const(FileCtx),
     FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
-    {ok, Counter} = file_meta_hardlinks:deregister_link(FileUuid, LinkUuid),
-    % VFS-7444 - maybe update doc in FileCtx
-    Counter =:= 0.
+    {ok, Doc} = file_meta_hardlinks:deregister(FileUuid, LinkUuid), % VFS-7444 - maybe update doc in FileCtx
+    {ok, RefCount} = file_meta_hardlinks:get_reference_count(Doc),
+    RefCount =:= 0.
 
 -spec no_references_left(file_ctx:ctx()) -> boolean().
 no_references_left(FileCtx) ->
@@ -490,7 +494,7 @@ delete_file_meta(FileCtx) ->
 
 -spec delete_effective_file_meta(file_ctx:ctx()) -> file_ctx:ctx().
 delete_effective_file_meta(FileCtx) ->
-    delete_file_meta(file_ctx:new_by_guid(file_ctx:get_effective_guid_const(FileCtx))).
+    delete_file_meta(file_ctx:ensure_effective(FileCtx)).
 
 
 -spec update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().

@@ -88,7 +88,7 @@ remove_acl(UserCtx, FileCtx0) ->
 -spec get_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_acl_insecure(_UserCtx, FileCtx) ->
-    {Acl, _} = file_ctx:get_acl(file_ctx:ensure_effective_ctx(FileCtx)),
+    {Acl, _} = file_ctx:get_acl(file_ctx:ensure_effective(FileCtx)),
     % ACLs are kept in database without names, as they might change.
     % Resolve the names here.
     #provider_response{

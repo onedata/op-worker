@@ -19,12 +19,15 @@
 
 %% API
 -export([new_doc/4, merge_link_and_file_doc/2,
-    register_link/2, deregister_link/2,
+    register/2, deregister/2,
     get_reference_count/1, get_references/1,
     merge_links_maps/2]).
 
 -type link() :: file_meta:uuid().
--type links_map() :: #{oneprovider:id() => link()}.
+% List of links to file. It is kept as a map where list of links is divided
+% into lists of links created by providers. Such structure is needed for
+% conflicts resolution (see merge_links_maps/2).
+-type links_map() :: #{oneprovider:id() => [link()]}.
 -export_type([link/0, links_map/0]).
 
 % TODO VFS-7441 - Test number of links that can be stored in file_meta doc
@@ -38,7 +41,7 @@
 %% @doc
 %% Creates document for link.
 %% NOTE: when link document is requested it is merged using document representing
-%% link and document representing target file (see get_including_deleted/1).
+%% link and document representing target file (see file_meta:get_including_deleted/1).
 %% @end
 %%--------------------------------------------------------------------
 -spec new_doc(file_meta:uuid(), file_meta:name(), file_meta:uuid(), od_space:id()) -> file_meta:doc().
@@ -65,8 +68,8 @@ merge_link_and_file_doc(LinkDoc = #document{value = LinkRecord}, #document{value
         }
     }}.
 
--spec register_link(file_meta:uuid(), link()) -> {ok, file_meta:doc()} | {error, term()}.
-register_link(FileUuid, LinkUuid) ->
+-spec register(file_meta:uuid(), link()) -> {ok, file_meta:doc()} | {error, term()}.
+register(FileUuid, LinkUuid) ->
     ProviderId = oneprovider:get_id(),
     file_meta:update(FileUuid, fun(#file_meta{links = Links} = Record) ->
         case get_reference_map_size(Links) of
@@ -78,26 +81,24 @@ register_link(FileUuid, LinkUuid) ->
         end
     end).
 
--spec deregister_link(file_meta:uuid(), link()) -> {ok, non_neg_integer()} | {error, term()}.
-deregister_link(FileUuid, LinkUuid) ->
+-spec deregister(file_meta:uuid(), link()) -> {ok, file_meta:doc()} | {error, term()}.
+deregister(FileUuid, LinkUuid) ->
     ProviderId = oneprovider:get_id(),
-    Ans = file_meta:update(FileUuid, fun(#file_meta{links = Links} = Record) ->
+    file_meta:update(FileUuid, fun(#file_meta{links = Links} = Record) ->
         ProviderLinks = maps:get(ProviderId, Links, []),
-        {ok, Record#file_meta{links = Links#{ProviderId => ProviderLinks -- [LinkUuid]}}}
-    end),
-
-    case Ans of
-        {ok, Doc}->
-            get_reference_count(Doc);
-        Other ->
-            Other
-    end.
+        case ProviderLinks -- [LinkUuid] of
+            [] -> {ok, Record#file_meta{links = maps:remove(ProviderId, Links)}};
+            NewProviderLinks -> {ok, Record#file_meta{links = Links#{ProviderId => NewProviderLinks}}}
+        end
+    end).
 
 -spec get_reference_count(file_meta:uuid() | file_meta:doc()) -> {ok, non_neg_integer()} | {error, term()}.
-get_reference_count(#document{deleted = Del1, value = #file_meta{links = Links, deleted = Del2}}) when Del1 or Del2 ->
-    {ok, get_reference_map_size(Links)};
-get_reference_count(#document{value = #file_meta{links = Links}}) ->
-    {ok, get_reference_map_size(Links) + 1};
+get_reference_count(Doc = #document{value = #file_meta{links = Links}}) ->
+    ReferencesCount = get_reference_map_size(Links),
+    case file_meta:is_deleted(Doc) of
+        true -> {ok, ReferencesCount};
+        false -> {ok, ReferencesCount + 1}
+    end;
 get_reference_count(Key) ->
     case file_meta:get_including_deleted(Key) of
         {ok, Doc} -> get_reference_count(Doc);
@@ -105,10 +106,12 @@ get_reference_count(Key) ->
     end.
 
 -spec get_references(file_meta:uuid() | file_meta:doc()) -> {ok, [link() | file_meta:uuid()]} | {error, term()}.
-get_references(#document{deleted = Del1, value = #file_meta{links = Links, deleted = Del2}}) when Del1 or Del2 ->
-    {ok, get_references_from_map(Links)};
-get_references(#document{key = MainDocKey, value = #file_meta{links = Links}}) ->
-    {ok, [MainDocKey | get_references_from_map(Links)]};
+get_references(Doc = #document{key = TargetKey, value = #file_meta{links = Links}}) ->
+    References = get_references_from_map(Links),
+    case file_meta:is_deleted(Doc) of
+        true -> {ok, References};
+        false -> {ok, [TargetKey | References]}
+    end;
 get_references(Key) ->
     case file_meta:get_including_deleted(Key) of
         {ok, Doc} -> get_references(Doc);
@@ -137,4 +140,4 @@ get_references_from_map(Links) ->
 
 -spec get_reference_map_size(links_map()) -> non_neg_integer().
 get_reference_map_size(Links) ->
-    lists:foldl(fun(ProviderLinks, Acc) -> length(ProviderLinks) + Acc end, 0, maps:values(Links)).
+    maps:fold(fun(_, ProviderLinks, Acc) -> length(ProviderLinks) + Acc end, 0, Links).

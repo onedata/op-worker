@@ -100,7 +100,7 @@ make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
     file_ctx:assert_not_trash_dir_const(TargetFileCtx0, Name),
     % TODO VFS-7439 - Investigate eaccess error when creating hardlink to hardlink if next line is deletred
     % Check permissions on original target
-    TargetFileCtx1 = file_ctx:ensure_effective_ctx(TargetFileCtx0),
+    TargetFileCtx1 = file_ctx:ensure_effective(TargetFileCtx0),
 
     TargetFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, TargetFileCtx1,
@@ -387,7 +387,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
             {ok, #document{key = LinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
-                {ok, _} = file_meta_hardlinks:register_link(FileUuid, LinkUuid), % TODO VFS-7445 - revert after error
+                {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid), % TODO VFS-7445 - revert after error
                 FileCtx = file_ctx:new_by_guid(file_id:pack_guid(LinkUuid, SpaceId)),
                 fslogic_times:update_mtime_ctime(TargetParentFileCtx3),
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
@@ -420,7 +420,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
             ParentUuid = file_ctx:get_uuid_const(ParentFileCtx3),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
             Owner = user_ctx:get_user_id(UserCtx),
-            Doc = file_meta_symlinks:new_symlink_doc(Name, ParentUuid, SpaceId, Owner, Link),
+            Doc = file_meta_symlinks:new_doc(Name, ParentUuid, SpaceId, Owner, Link),
             {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
@@ -453,7 +453,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
 -spec read_symlink_insecure(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:fuse_response().
 read_symlink_insecure(_UserCtx, FileCtx) ->
     {Doc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    {ok, Link} = file_meta_symlinks:get_symlink(Doc),
+    {ok, Link} = file_meta_symlinks:get(Doc),
     fslogic_times:update_atime(FileCtx2),
     #fuse_response{
         status = #status{code = ?OK},

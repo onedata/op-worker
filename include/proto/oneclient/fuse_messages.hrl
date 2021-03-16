@@ -15,9 +15,9 @@
 
 -include("common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/file_details.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 -define(AUTO_HELPER_MODE, 'AUTO').
 -define(FORCE_PROXY_HELPER_MODE, 'FORCE_PROXY').
