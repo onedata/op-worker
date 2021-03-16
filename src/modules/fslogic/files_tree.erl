@@ -50,19 +50,19 @@
 %%% Description:
 %%% 1) !ROOT - directory marked as parent for all user_root and space directories.
 %%%            It is used internally by Oneprovider (it is local for each provider)
-%%%            and as such can not be modified nor listed.
+%%%            and as such cannot be modified nor listed.
 %%% 2) @user - user root directory (mount root after mounting Oneclient).
 %%%            Listing it returns all spaces that user belongs to.
-%%%            Similarly to !ROOT it is local to each provider and can not be modified.
+%%%            Similarly to !ROOT it is local to each provider and cannot be modified.
 %%% 3) #space - space directory. It is treated as normal directory and as such it's
 %%%             modification is controlled by access rights.
 %%%             All documents associated with it (and files/dirs inside of it)
 %%%             are synchronized among providers supporting this space.
-%%% 4) ^share - share root directory. It is virtual directory (no documents for it
-%%%             exists in db) that is being used in 'open_handle' mode. In that
-%%%             mode listing space directory return list of share root dirs instead
+%%% 4) ^share - share root directory. It is virtual directory (there are no associated
+%%%             documents in the db) that is being used in 'open_handle' mode. In that
+%%%             mode listing space directory returns list of share root dirs instead
 %%%             of regular files/dirs in the space so that only shared content can be
-%%%             viewed (from this point down the tree context is changed to share context).
+%%%             viewed (from this point down the tree the context is changed to shared one).
 %%%             In the future it will be used as mount root when mounting Oneclient
 %%%             for share with open handle (in such case it will be treated as root
 %%%             dir with no parent).
@@ -103,7 +103,8 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns GUID of parent or undefined when the file is a root/share root dir.
+%% Returns 'undefined' if file is root file (either userRootDir or share root)
+%% or proper ParentGuid otherwise.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_and_check_parent_guid(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
