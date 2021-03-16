@@ -225,7 +225,7 @@ emit_file_removed(FileCtx, ExcludedSessions) ->
     file_meta:name(), user_ctx:ctx()) -> ok | {error, Reason :: term()}.
 emit_file_renamed_to_client(FileCtx, NewParentGuid, NewName, PrevName, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    {OldParentGuid, _FileCtx2} = files_tree:get_and_check_parent_guid(FileCtx, UserCtx),
+    {OldParentGuid, _FileCtx2} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
     emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName, [SessionId]).
 
 %%--------------------------------------------------------------------

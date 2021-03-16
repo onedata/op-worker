@@ -125,7 +125,7 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
 -spec delete_using_trash_insecure(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
     fslogic_worker:fuse_response().
 delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
-    {ParentGuid, FileCtx2} = files_tree:get_and_check_parent_guid(FileCtx, UserCtx),
+    {ParentGuid, FileCtx2} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
     FileCtx3 = trash:move_to_trash(FileCtx2, UserCtx),
     {ok, _} = trash:schedule_deletion_from_trash(FileCtx3, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid)),
     ?FUSE_OK_RESP.

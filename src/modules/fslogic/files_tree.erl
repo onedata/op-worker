@@ -81,7 +81,7 @@
 
 %% API
 -export([
-    get_and_check_parent_guid/2, get_and_check_parent/2,
+    get_parent_guid_if_not_root_dir/2, get_parent_if_not_root_dir/2,
     get_original_parent/2,
     get_parent/2,
 
@@ -107,9 +107,9 @@
 %% or proper ParentGuid otherwise.
 %% @end
 %%--------------------------------------------------------------------
--spec get_and_check_parent_guid(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
+-spec get_parent_guid_if_not_root_dir(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
     {undefined | file_id:file_guid(), file_ctx:ctx()}.
-get_and_check_parent_guid(FileCtx, UserCtx) ->
+get_parent_guid_if_not_root_dir(FileCtx, UserCtx) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
 
@@ -125,9 +125,9 @@ get_and_check_parent_guid(FileCtx, UserCtx) ->
 %% or proper ParentCtx otherwise.
 %% @end
 %%--------------------------------------------------------------------
--spec get_and_check_parent(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
+-spec get_parent_if_not_root_dir(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
     {ParentFileCtx :: undefined | file_ctx:ctx(), NewFileCtx :: file_ctx:ctx()}.
-get_and_check_parent(FileCtx0, UserCtx) ->
+get_parent_if_not_root_dir(FileCtx0, UserCtx) ->
     FileGuid = file_ctx:get_guid_const(FileCtx0),
     {ParentCtx, FileCtx1} = get_parent(FileCtx0, UserCtx),
 

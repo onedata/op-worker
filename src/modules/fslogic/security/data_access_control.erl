@@ -236,7 +236,7 @@ check_access_requirement(UserCtx, FileCtx0, ?PUBLIC_ACCESS) ->
     end;
 
 check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
-    case files_tree:get_and_check_parent(FileCtx0, UserCtx) of
+    case files_tree:get_parent_if_not_root_dir(FileCtx0, UserCtx) of
         {undefined, FileCtx1} ->
             {ok, FileCtx1};
         {ParentCtx0, FileCtx1} ->
