@@ -398,6 +398,7 @@ get_share_root_dir_doc(FileCtx, IncludingDeleted) ->
                     mode = ?DEFAULT_SHARE_ROOT_DIR_PERMS,
                     owner = ?ROOT_USER_ID,
                     parent_uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                    provider_id = oneprovider:get_id(),
                     deleted = IsDeleted
                 }
             }}

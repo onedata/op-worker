@@ -298,7 +298,7 @@ get_parent_internal(FileCtx, UserCtx) ->
                             % Virtual share root dir should point to normal space dir
                             file_ctx:new_by_guid(file_id:pack_guid(ParentUuid, SpaceId));
                         false ->
-                            FileCtx2
+                            throw(?ENOENT)
                     end;
                 false ->
                     file_ctx:new_by_guid(file_id:pack_share_guid(ParentUuid, SpaceId, ShareId))
