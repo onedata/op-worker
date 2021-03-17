@@ -254,7 +254,7 @@ get_fs_stats(UserCtx, FileCtx0) ->
 -spec get_child_attr_insecure(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
     Name :: file_meta:name(), boolean()) -> fslogic_worker:fuse_response().
 get_child_attr_insecure(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus) ->
-    {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserCtx),
+    {ChildFileCtx, _NewParentFileCtx} = files_tree:get_child(ParentFileCtx, Name, UserCtx),
     Response = attr_req:get_file_attr(UserCtx, ChildFileCtx, IncludeReplicationStatus),
     ensure_proper_file_name(Response, Name).
 
@@ -390,7 +390,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
     Type = file_meta:get_type(FileDoc),
 
     {{ATime, CTime, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
-    {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
+    {ParentGuid, FileCtx4} = files_tree:get_parent_guid_if_not_root_dir(FileCtx3, UserCtx),
 
     {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx5} = case ShareId of
         undefined -> get_private_attrs(UserCtx, FileCtx4, FileDoc);

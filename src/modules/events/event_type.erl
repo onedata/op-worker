@@ -242,12 +242,12 @@ get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx, parent
             {ok, <<Prefix/binary, Uuid/binary>>}
     end;
 get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx}) ->
-    {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),
+    {ParentGuid, _} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, undefined),
     get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx => FileCtx, parent => ParentGuid});
 get_parent_connected_routing_key(Prefix, FileGuid, #{parent := Parent}) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx => FileCtx, parent => Parent});
 get_parent_connected_routing_key(Prefix, FileGuid, _) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),
+    {ParentGuid, _} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, undefined),
     get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx => FileCtx, parent => ParentGuid}).

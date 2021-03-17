@@ -50,7 +50,7 @@ delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
     file_ctx:assert_not_special_const(FileCtx0),
     FileCtx1 = file_ctx:assert_is_dir(FileCtx0),
 
-    {FileParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
+    {FileParentCtx, FileCtx2} = files_tree:get_parent(FileCtx1, UserCtx),
     FileCtx3 = fslogic_authz:ensure_authorized(UserCtx, FileCtx2, [
         ?TRAVERSE_ANCESTORS,
         ?OPERATIONS(?delete_mask, ?list_container_mask, ?traverse_container_mask, ?delete_child_mask)
@@ -74,7 +74,7 @@ delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
 %%--------------------------------------------------------------------
 -spec delete_dir(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) -> fslogic_worker:fuse_response().
 delete_dir(UserCtx, FileCtx0, Silent) ->
-    {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+    {FileParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_mask, ?list_container_mask)]
@@ -94,7 +94,7 @@ delete_dir(UserCtx, FileCtx0, Silent) ->
 -spec delete_file(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 delete_file(UserCtx, FileCtx0, Silent) ->
-    {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+    {FileParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_mask)]
@@ -114,7 +114,7 @@ delete_file(UserCtx, FileCtx0, Silent) ->
 %%--------------------------------------------------------------------
 -spec check_if_empty_and_delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) -> fslogic_worker:fuse_response().
 check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
-    case file_ctx:get_file_children(FileCtx, UserCtx, #{offset => 0, size => 1}) of
+    case files_tree:get_children(FileCtx, UserCtx, #{offset => 0, size => 1}) of
         {[], _ListExtendedInfo, FileCtx2} ->
             delete_insecure(UserCtx, FileCtx2, Silent);
         {_, _, _FileCtx2} ->
@@ -125,7 +125,7 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
 -spec delete_using_trash_insecure(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
     fslogic_worker:fuse_response().
 delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
-    {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    {ParentGuid, FileCtx2} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
     FileCtx3 = trash:move_to_trash(FileCtx2, UserCtx),
     {ok, _} = trash:schedule_deletion_from_trash(FileCtx3, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid)),
     ?FUSE_OK_RESP.

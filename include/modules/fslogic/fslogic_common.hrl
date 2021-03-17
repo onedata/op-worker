@@ -55,6 +55,7 @@
 
 %% Default permissions for directories
 -define(DEFAULT_DIR_PERMS, 8#775).
+-define(DEFAULT_SHARE_ROOT_DIR_PERMS, 8#555).
 -define(DEFAULT_DIR_MODE, ?DEFAULT_DIR_PERMS bor 8#40000).
 
 %% Mode of deleted opened files directory

@@ -397,7 +397,7 @@ transfer_dir(State, FileCtx, ListOpts, TransferParams = #transfer_params{
     transfer_id = TransferId,
     user_ctx = UserCtx
 }) ->
-    {Children, ListExtendedInfo, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, ListOpts),
+    {Children, ListExtendedInfo, FileCtx2} = files_tree:get_children(FileCtx, UserCtx, ListOpts),
 
     Length = length(Children),
     transfer:increment_files_to_process_counter(TransferId, Length),

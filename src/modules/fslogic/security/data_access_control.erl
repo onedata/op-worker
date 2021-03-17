@@ -104,10 +104,12 @@ is_available_in_readonly_mode(?OR(AccessType1, AccessType2)) ->
     file_ctx:ctx() | no_return().
 assert_access_granted_for_space_owner(UserCtx, FileCtx0, AccessRequirements) ->
     IsSpaceDir = file_ctx:is_space_dir_const(FileCtx0),
+    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
 
-    case IsSpaceDir of
+    case IsSpaceDir orelse IsInOpenHandleMode of
         true ->
-            % In case of space dir space owner is treated as any other user
+            % In case of space dir or 'open_handle' session mode space owner
+            % is treated as any other user
             assert_access_granted_for_user(UserCtx, FileCtx0, AccessRequirements);
         false ->
             % For any other file or directory space owner omits all access checks
@@ -145,8 +147,14 @@ assert_access_granted_for_user(UserCtx, FileCtx0, AccessRequirements0) ->
                 false -> throw(?ENOENT)
             end
     end,
+    % Special case - user in 'open_handle' mode should be treated as ?GUEST
+    % when checking permissions
+    UserCtx2 = case user_ctx:is_in_open_handle_mode(UserCtx) of
+        true -> user_ctx:set_session_mode(user_ctx:new(?GUEST_SESS_ID), open_handle);
+        false -> UserCtx
+    end,
     lists:foldl(fun(AccessRequirement, FileCtx1) ->
-        assert_meets_access_requirement(UserCtx, FileCtx1, AccessRequirement)
+        assert_meets_access_requirement(UserCtx2, FileCtx1, AccessRequirement)
     end, FileCtx0, AccessRequirements1).
 
 
@@ -221,14 +229,14 @@ check_access_requirement(UserCtx, FileCtx0, ?PUBLIC_ACCESS) ->
                 true ->
                     {ok, FileCtx1};
                 false ->
-                    {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx1, UserCtx),
+                    {ParentCtx, FileCtx2} = files_tree:get_parent(FileCtx1, UserCtx),
                     assert_meets_access_requirement(UserCtx, ParentCtx, ?PUBLIC_ACCESS),
                     {ok, FileCtx2}
             end
     end;
 
 check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
-    case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
+    case files_tree:get_parent_if_not_root_dir(FileCtx0, UserCtx) of
         {undefined, FileCtx1} ->
             {ok, FileCtx1};
         {ParentCtx0, FileCtx1} ->
@@ -324,10 +332,10 @@ check_operations(UserCtx, FileCtx0, RequiredOps) ->
 get_operations_blocked_by_lack_of_space_privs(UserCtx, FileCtx, undefined) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
+    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
 
-    case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
+    case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) orelse IsInOpenHandleMode of
         true ->
-            % All write operations are denied for user root dir
             ?SPACE_BLOCKED_WRITE_OPERATIONS;
         false ->
             {ok, EffUserSpacePrivs} = space_logic:get_eff_privileges(SpaceId, UserId),
@@ -437,7 +445,7 @@ get_mode_bits_triplet(Mode, other) -> ?common_flags(Mode, 2#111).
 -spec has_parent_sticky_bit_set(user_ctx:ctx(), file_ctx:ctx()) ->
     {boolean(), file_ctx:ctx()}.
 has_parent_sticky_bit_set(UserCtx, FileCtx0) ->
-    {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
 
     {#document{value = #file_meta{
         mode = Mode
