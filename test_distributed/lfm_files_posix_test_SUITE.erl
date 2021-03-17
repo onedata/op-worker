@@ -822,7 +822,7 @@ lfm_create_and_read_symlink(Config) ->
     ?assert(LinkAttrs#file_attr.ctime > 0),
 
     % Read link and check it
-    timer:sleep(timer:seconds(2)), % ensure time change
+    time_test_utils:simulate_seconds_passing(2), % ensure time change
     ?assertEqual({ok, LinkTarget}, lfm_proxy:read_symlink(W, SessId, {path, Path})),
     {ok, LinkAttrs2} = ?assertMatch(
         {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, fully_replicated = undefined, parent_guid = DirGuid}},
@@ -910,6 +910,10 @@ init_per_testcase(ShareTest, Config) when
     initializer:mock_share_logic(Config),
     init_per_testcase(?DEFAULT_CASE(ShareTest), Config);
 
+init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
@@ -977,6 +981,10 @@ end_per_testcase(Case = lfm_cp_dir, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     % set default value of ls_batch_size env
     test_utils:set_env(W, op_worker, ls_batch_size, 5000),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
+    time_test_utils:unfreeze_time(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
