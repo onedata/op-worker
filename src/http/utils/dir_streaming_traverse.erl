@@ -47,9 +47,9 @@ start(FileCtx, SessionId, Pid) ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_master_jobs_limit, 100),
-    SlaveJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_slave_jobs_limit, 100),
-    ParallelismLimit = application:get_env(?APP_NAME, dir_streaming_traverse_parallelism_limit, 100),
+    MasterJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_master_jobs_limit, 50),
+    SlaveJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_slave_jobs_limit, 50),
+    ParallelismLimit = application:get_env(?APP_NAME, dir_streaming_traverse_parallelism_limit, 50),
 
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 

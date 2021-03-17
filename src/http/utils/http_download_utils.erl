@@ -45,12 +45,6 @@
 -define(MIN_SEND_RETRY_DELAY, 100).
 -define(MAX_SEND_RETRY_DELAY, 1000).
 
--define(ZLIB_COMPRESSION_LEVEL, 4).
--define(ZLIB_MEMORY_LEVEL, 8).
--define(ZLIB_WINDOW_BITS, 31).
--define(ZLIB_METHOD, deflated).
--define(ZLIB_STRATEGY, default).
-
 -record(download_ctx, {
     file_size :: file_meta:size(),
 
@@ -58,7 +52,7 @@
     read_block_size :: read_block_size(),
     max_read_blocks_count :: non_neg_integer(),
     encoding_fun :: fun((Data :: binary()) -> EncodedData :: binary()),
-    zlib_stream = undefined :: undefined | zlib:zstream(),
+    tar_archive = undefined :: undefined | tar_utils:state(),
     min_bytes_to_read = 0 :: non_neg_integer(),
     
     on_success_callback :: fun(() -> ok)
@@ -153,25 +147,23 @@ stream_archive(SessionId, FileAttrsList, OnSuccessCallback, Req0) ->
         #{?HDR_CONTENT_TYPE => <<"multipart/byteranges">>},
         Req0
     ),
-    ZlibStream = zlib:open(),
-    ok = zlib:deflateInit(ZlibStream, ?ZLIB_COMPRESSION_LEVEL, ?ZLIB_METHOD, ?ZLIB_WINDOW_BITS, 
-        ?ZLIB_MEMORY_LEVEL, ?ZLIB_STRATEGY),
-    lists:foreach(fun(#file_attr{guid = FileGuid, type = Type}) ->
+    TarArchive = tar_utils:open_archive_stream(),
+    FinalTarArchive = lists:foldl(fun(#file_attr{guid = FileGuid, type = Type}, InnerTarArchive) ->
         FileCtx = file_ctx:new_by_guid(FileGuid),
         {Path, FileCtx1} = file_ctx:get_canonical_path(FileCtx),
         PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
-        FileCtx2 = case Type of
+        {UpdatedTarArchive, FileCtx2} = case Type of
             ?DIRECTORY_TYPE ->
-                {FileTarHeader, FCtx} = prepare_tar_header(FileCtx1, PathPrefix),
-                send_data_chunk(deflate(ZlibStream, FileTarHeader), Req1),
-                FCtx;
-            _ -> FileCtx1
+                {Bytes, A, FCtx} = new_tar_file_entry(InnerTarArchive, FileCtx1, PathPrefix),
+                send_data_chunk(Bytes, Req1),
+                {A, FCtx};
+            _ -> 
+                {TarArchive, FileCtx1}
         end,
         dir_streaming_traverse:start(FileCtx2, SessionId, self()),
-        stream_archive_loop(ZlibStream, Req1, SessionId, PathPrefix)
-    end, FileAttrsList),
-    send_data_chunk(deflate(ZlibStream, tar_utils:ending_marker(), finish), Req1),
-    zlib:close(ZlibStream),
+        stream_archive_loop(UpdatedTarArchive, Req1, SessionId, PathPrefix)
+    end, TarArchive, FileAttrsList),
+    send_data_chunk(tar_utils:close_archive_stream(FinalTarArchive), Req1),
     execute_on_success_callback(<<>>, OnSuccessCallback),
     Req1.
 
@@ -306,42 +298,45 @@ stream_multipart_ranged_body(Ranges, #download_ctx{
 
 
 %% @private
--spec stream_archive_loop(zlib:zstream(), cowboy_req:req(), session:id(), file_meta:path()) -> 
-    ok.
-stream_archive_loop(ZlibStream, Req, SessionId, RootDirPath) ->
+-spec stream_archive_loop(tar_utils:state(), cowboy_req:req(), session:id(), file_meta:path()) -> 
+    tar_utils:state().
+stream_archive_loop(TarArchive, Req, SessionId, RootDirPath) ->
     receive
-        done -> ok;
+        done -> TarArchive;
         {file_ctx, FileCtx, Pid} ->
-            {FileTarHeader, FileCtx1} = prepare_tar_header(FileCtx, RootDirPath),
-            case file_ctx:is_dir(FileCtx1) of
-                {true, _} ->
-                    send_data_chunk(deflate(ZlibStream, FileTarHeader), Req);
+            TarArchive2 = case file_ctx:is_dir(FileCtx) of
+                {true, FileCtx1} ->
+                    {Bytes, TarArchive1, _FileCtx2} = new_tar_file_entry(TarArchive, FileCtx1, RootDirPath),
+                    send_data_chunk(Bytes, Req),
+                    TarArchive1;
                 {false, FileCtx2} ->
-                    stream_archive_file(ZlibStream, Req, SessionId, FileCtx2, FileTarHeader)
+                    stream_archive_file(TarArchive, Req, SessionId, FileCtx2, RootDirPath)
             end,
             Pid ! done,
-            stream_archive_loop(ZlibStream, Req, SessionId, RootDirPath)
+            stream_archive_loop(TarArchive2, Req, SessionId, RootDirPath)
     end.
 
 
 %% @private
--spec stream_archive_file(zlib:zstream(), cowboy_req:req(), session:id(), file_ctx:ctx(), 
-    tar_utils:tar_header()) -> ok.
-stream_archive_file(ZlibStream, Req, SessionId, FileCtx, FileTarHeader) ->
+-spec stream_archive_file(tar_utils:state(), cowboy_req:req(), session:id(), file_ctx:ctx(), 
+    file_meta:path()) -> tar_utils:state().
+stream_archive_file(TarArchive, Req, SessionId, FileCtx, RootDirPath) ->
     {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx),
     case lfm:monitored_open(SessionId, {guid, file_ctx:get_guid_const(FileCtx1)}, read) of
         {ok, FileHandle} ->
-            send_data_chunk(deflate(ZlibStream, FileTarHeader), Req),
+            {Bytes, TarArchive1, _FileCtx2} = new_tar_file_entry(TarArchive, FileCtx1, RootDirPath),
+            send_data_chunk(Bytes, Req),
             Range = {0, FileSize - 1},
             ReadBlockSize = get_read_block_size(FileHandle),
-            stream_bytes_range(
-                FileHandle, FileSize, Range, Req, fun(D) -> D end, ReadBlockSize, ZlibStream, FileSize),
+            TarArchive2 = stream_bytes_range(
+                FileHandle, FileSize, Range, Req, fun(D) -> D end, ReadBlockSize, TarArchive1, FileSize),
             lfm:monitored_release(FileHandle),
-            send_data_chunk(deflate(ZlibStream, tar_utils:data_padding(FileSize)), Req),
-            ok;
+            TarArchive2;
+        {error, ?ENOENT} ->
+            TarArchive;
         {error, ?EACCES} ->
             % ignore files with no access
-            ok
+            TarArchive
     end.
 
 
@@ -353,18 +348,18 @@ stream_archive_file(ZlibStream, Req, SessionId, FileCtx, FileTarHeader) ->
     cowboy_req:req(),
     EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     read_block_size(),
-    zlib:zstream(),
+    tar_utils:state(),
     MinReadBytes :: non_neg_integer()
 ) ->
-    ok | no_return().
-stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, ZlibStream, MinReadBytes) ->
+    tar_utils:state() | no_return().
+stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, TarArchive, MinReadBytes) ->
     stream_bytes_range(Range, #download_ctx{
         file_size = FileSize,
         file_handle = FileHandle,
         read_block_size = ReadBlockSize,
         max_read_blocks_count = calculate_max_read_blocks_count(ReadBlockSize),
         encoding_fun = EncodingFun,
-        zlib_stream = ZlibStream,
+        tar_archive = TarArchive,
         min_bytes_to_read = MinReadBytes,
         on_success_callback = fun() -> ok end
     }, Req, ?MIN_SEND_RETRY_DELAY).
@@ -377,7 +372,7 @@ stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize,
     cowboy_req:req(),
     SendRetryDelay :: time:millis()
 ) ->
-    ok | no_return().
+    tar_utils:state() | no_return().
 stream_bytes_range(Range, DownloadCtx, Req, SendRetryDelay) ->
     stream_bytes_range(Range, DownloadCtx, Req, SendRetryDelay, 0).
 
@@ -391,14 +386,14 @@ stream_bytes_range(Range, DownloadCtx, Req, SendRetryDelay) ->
     ReadBytes :: non_neg_integer()
 ) ->
     ok | no_return().
-stream_bytes_range({From, To}, _, _, _, _) when From > To ->
-    ok;
+stream_bytes_range({From, To}, #download_ctx{tar_archive = TarArchive}, _, _, _) when From > To ->
+    TarArchive;
 stream_bytes_range({From, To}, #download_ctx{
     file_handle = FileHandle,
     read_block_size = ReadBlockSize,
     max_read_blocks_count = MaxReadBlocksCount,
     encoding_fun = EncodingFun,
-    zlib_stream = ZlibStream,
+    tar_archive = TarArchive,
     min_bytes_to_read = MinBytesToRead
 } = DownloadCtx, Req, SendRetryDelay, ReadBytes) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
@@ -407,12 +402,17 @@ stream_bytes_range({From, To}, #download_ctx{
     case byte_size(Data) of
         0 -> ok;
         DataSize ->
-            EncodedData = EncodingFun(Data),
-            DeflatedData = deflate(ZlibStream, EncodedData),
-            NextSendRetryDelay = send_data_chunk(DeflatedData, Req, MaxReadBlocksCount, SendRetryDelay),
+            {BytesToSend, FinalTarArchive} = case TarArchive of
+                undefined -> {Data, undefined};
+                _ ->
+                    TarArchive2 = tar_utils:append_to_file_content(TarArchive, EncodingFun(Data), DataSize),
+                    tar_utils:flush(TarArchive2)
+            end,
+            NextSendRetryDelay = send_data_chunk(BytesToSend, Req, MaxReadBlocksCount, SendRetryDelay),
             stream_bytes_range(
-                {From + DataSize, To}, DownloadCtx#download_ctx{file_handle = NewFileHandle}, Req, 
-                NextSendRetryDelay, ReadBytes + DataSize
+                {From + DataSize, To}, 
+                DownloadCtx#download_ctx{file_handle = NewFileHandle, tar_archive = FinalTarArchive}, 
+                Req, NextSendRetryDelay, ReadBytes + DataSize
             )
     end.
 
@@ -479,20 +479,6 @@ send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) -
 
 
 %% @private
--spec deflate(zlib:zstream() | undefined, binary()) -> binary().
-deflate(Z, Data) ->
-    deflate(Z, Data, none).
-
-
-%% @private
--spec deflate(zlib:zstream() | undefined, binary(), zlib:zflush()) -> binary().
-deflate(undefined, Data, _Flush) ->
-    Data;
-deflate(ZlibStream, Data, Flush) ->
-    iolist_to_binary(zlib:deflate(ZlibStream, Data, Flush)).
-
-
-%% @private
 -spec execute_on_success_callback(fslogic_worker:file_guid(), OnSuccessCallback :: fun(() -> ok)) -> ok.
 execute_on_success_callback(Guid, OnSuccessCallback) ->
     try
@@ -504,13 +490,19 @@ execute_on_success_callback(Guid, OnSuccessCallback) ->
 
 
 %% @private
--spec prepare_tar_header(file_ctx:ctx(), file_meta:path()) -> 
-    {tar_utils:tar_header(), file_ctx:ctx()}.
-prepare_tar_header(FileCtx, RootDirPath) ->
+-spec new_tar_file_entry(tar_utils:state(), file_ctx:ctx(), file_meta:path()) -> 
+    {binary(), tar_utils:state(), file_ctx:ctx()}.
+new_tar_file_entry(TarArchive, FileCtx, RootDirPath) ->
     {Mode, FileCtx1} = file_ctx:get_mode(FileCtx),
     {{_ATime, _CTime, MTime}, FileCtx2} = file_ctx:get_times(FileCtx1),
     {IsDir, FileCtx3} = file_ctx:is_dir(FileCtx2),
     {Size, FileCtx4} = file_ctx:get_file_size(FileCtx3),
     {Path, FileCtx5} = file_ctx:get_canonical_path(FileCtx4),
     Filename = string:prefix(Path, RootDirPath),
-    {tar_utils:prepare_header(Filename, Size, Mode, MTime, IsDir), FileCtx5}.
+    FileType = case IsDir of
+        true -> directory;
+        false -> regular
+    end,
+    TarArchive1 = tar_utils:new_file_entry(TarArchive, Filename, Size, Mode, MTime, FileType),
+    {Bytes, TarArchive2} = tar_utils:flush(TarArchive1),
+    {Bytes, TarArchive2, FileCtx5}.

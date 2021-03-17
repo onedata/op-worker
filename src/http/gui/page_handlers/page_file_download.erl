@@ -128,6 +128,7 @@ handle_http_download(SessionId, FileGuidList, OnSuccessCallback, Req0) ->
             (FileGuid, Acc) ->
                 case lfm:stat(SessionId, {guid, FileGuid}) of
                     {ok, #file_attr{} = FileAttr} -> [FileAttr | Acc];
+                    {error, ?EACCES} -> Acc;
                     {error, _Errno} = Error -> Error
                 end
     end, [], FileGuidList),
@@ -148,6 +149,8 @@ handle_http_download(SessionId, FileGuidList, OnSuccessCallback, Req0) ->
             http_download_utils:stream_archive(
                 SessionId, FileAttrsList, OnSuccessCallback, Req1
             );
+        [] ->
+            http_req:send_error(?ERROR_POSIX(?EACCES), Req0);
         {error, Errno} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req0)
     end.

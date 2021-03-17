@@ -69,7 +69,7 @@ is_shared_file_request(op_file, _, Id, _Data) when is_binary(Id) ->
     file_id:is_share_guid(Id);
 is_shared_file_request(op_file, download_url, _Id, Data) ->
     FileIds = maps:get(<<"file_ids">>, Data, []),
-    lists:any(fun(Id) ->
+    is_list(FileIds) andalso lists:any(fun(Id) ->
         file_id:is_share_guid(Id)
     end, FileIds);
 is_shared_file_request(op_replica, As, Id, _Data) when
