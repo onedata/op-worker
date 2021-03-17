@@ -54,7 +54,7 @@
 %                 (listing space dir return virtual share root dirs corresponding to
 %                 shares having open handle instead of space dirs and files) and is
 %                 treated as guest when checking privileges.
-%                 Currently supported only in 'fuse' adn 'guest' session type.
+%                 Currently supported only in 'fuse' and 'guest' session type.
 -type mode() :: normal | open_handle.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
