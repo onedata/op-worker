@@ -244,7 +244,7 @@ get_record_struct(11) ->
         {deleted, boolean},
         {parent_uuid, string},
         % following fields have been added in this version:
-        {links, #{string => [string]}},
+        {references, #{string => [string]}},
         {symlink, string}
     ]}.
 
@@ -351,17 +351,17 @@ resolve_conflict(_Ctx,
             ok
     end,
 
-    case file_meta_hardlinks:merge_links_maps(NewDoc, PrevDoc) of
+    case file_meta_hardlinks:merge_references_maps(NewDoc, PrevDoc) of
         not_mutated ->
             default;
-        {mutated, MergedLinksMap} ->
+        {mutated, MergedReferences} ->
             #document{revs = [NewRev | _]} = NewDoc,
             #document{revs = [PrevlRev | _]} = PrevDoc,
             DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevlRev) of
                 true -> NewDoc;
                 false -> PrevDoc
             end,
-            {true, DocBase#document{value = RecordBase#file_meta{links = MergedLinksMap}}}
+            {true, DocBase#document{value = RecordBase#file_meta{references = MergedReferences}}}
     end.
 
 

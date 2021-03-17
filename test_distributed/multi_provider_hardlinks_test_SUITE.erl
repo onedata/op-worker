@@ -23,13 +23,13 @@
 
 -export([
     basic_test/1,
-    first_reading_and_writing_via_link_test/1,
+    first_access_performed_via_link_test/1,
     create_link_to_link_test/1
 ]).
 
 -define(TEST_CASES, [
     basic_test,
-    first_reading_and_writing_via_link_test,
+    first_access_performed_via_link_test,
     create_link_to_link_test
 ]).
 
@@ -51,6 +51,16 @@ all() ->
 %%% Test functions
 %%%===================================================================
 
+% Test scenario is as follows:
+% - creation of file and link via provider 1
+% - verification of link access via both providers
+% - deletion of link
+% - verification that link is deleted and file is still accessible
+% - creation of second link via provider 2
+% - changing of file via link
+% - deletion of file
+% - verification that data still can be accessed via link
+% - deletion of second link
 basic_test(Config0) ->
     Attempts = 60,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, Attempts),
@@ -142,7 +152,11 @@ basic_test(Config0) ->
     ?assertEqual({error, not_found}, ?GET_TIMES(Worker1, FileUuid), Attempts),
     ?assertEqual({error, not_found}, ?GET_LOCATION(Worker1, FileUuid), Attempts).
 
-first_reading_and_writing_via_link_test(Config0) ->
+% Test scenario is as follows:
+% - creation of file two files and two links via provider 1
+% - reading link 1 via provider 2 (note that file 1 has never been accessed via provider 2)
+% - writing link 2 via provider 2 (note that file 2 has never been accessed via provider 2)
+first_access_performed_via_link_test(Config0) ->
     Attempts = 60,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, Attempts),
     SessId = ?config(session, Config),

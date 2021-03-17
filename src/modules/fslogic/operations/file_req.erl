@@ -380,6 +380,11 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
     TargetParentFileCtx2 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx),
     case file_ctx:is_dir(TargetParentFileCtx2) of
         {true, TargetParentFileCtx3} ->
+            case file_ctx:is_dir(TargetFileCtx) of
+                {true, _} -> throw(?EISDIR);
+                {false, _} -> ok
+            end,
+
             FileUuid = file_ctx:get_uuid_const(TargetFileCtx),
             ParentUuid = file_ctx:get_uuid_const(TargetParentFileCtx3),
             SpaceId = file_ctx:get_space_id_const(TargetParentFileCtx3),

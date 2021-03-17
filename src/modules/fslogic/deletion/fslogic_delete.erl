@@ -65,7 +65,7 @@
 
 
 %%%===================================================================
-%%% API with most important helper functions
+%%% API and file-deletion flow functions
 %%%===================================================================
 
 -spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), od_provider:id(), boolean()) -> ok.
@@ -117,7 +117,9 @@ delete_hardlink_locally(UserCtx, FileCtx, Silent) ->
 handle_remotely_deleted_file(FileCtx) ->
     % TODO VFS-7445 - test race between hardlink and original file file_meta documents
     % when last hardlink is deleted and file has been deleted before
-    {#document{value = #file_meta{provider_id = Creator, type = Type}}, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    Type = file_meta:get_type(FileDoc),
+    Creator = file_meta:get_provider_id(FileDoc),
     case {Type, oneprovider:get_id()} of
         {?LINK_TYPE, Creator} ->
             % Hardlink created by this provider has been deleted
