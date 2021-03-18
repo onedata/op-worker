@@ -458,7 +458,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
 -spec read_symlink_insecure(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:fuse_response().
 read_symlink_insecure(_UserCtx, FileCtx) ->
     {Doc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    {ok, Link} = file_meta_symlinks:get(Doc),
+    {ok, Link} = file_meta_symlinks:readlink(Doc),
     fslogic_times:update_atime(FileCtx2),
     #fuse_response{
         status = #status{code = ?OK},

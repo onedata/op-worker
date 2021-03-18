@@ -103,12 +103,26 @@ emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, ExcludedSes
                         WithoutStatusSessIds -- ExcludedSessions, WithStatusSessIds -- ExcludedSessions),
                     WithStatusSessIdsMap = maps:from_list(WithStatusSessIdsProplist),
                     lists:foreach(fun({Guid, SessIds}) ->
-                        emit_file_attr_changed_with_replication_status_internal(file_ctx:new_by_guid(Guid),
-                            SessIds, maps:get(Guid, WithStatusSessIdsMap, []))
+                        try
+                            emit_file_attr_changed_with_replication_status_internal(file_ctx:new_by_guid(Guid),
+                                SessIds, maps:get(Guid, WithStatusSessIdsMap, []))
+                        catch
+                            Class:Reason ->
+                                % Race with file/link deletion can result in error logged here
+                                ?warning("Error emitting file_attr_changed event for additional guid - ~w:~p~nguid: ~s",
+                                    [Class, Reason, Guid])
+                        end
                     end, WithoutStatusSessIdsProplist),
                     lists:foreach(fun({Guid, SessIds}) ->
-                        emit_file_attr_changed_with_replication_status_internal(file_ctx:new_by_guid(Guid),
-                            [], SessIds)
+                        try
+                            emit_file_attr_changed_with_replication_status_internal(file_ctx:new_by_guid(Guid),
+                                [], SessIds)
+                        catch
+                            Class:Reason ->
+                                % Race with file/link deletion can result in error logged here
+                                ?warning("Error emitting file_attr_changed event for additional guid - ~w:~p~nguid: ~s",
+                                    [Class, Reason, Guid])
+                        end
                     end, WithStatusSessIdsProplist -- WithoutStatusSessIdsProplist);
                 {{error, Reason}, _} ->
                     {error, Reason};
@@ -284,7 +298,7 @@ emit_helper_params_changed(StorageId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new event on the basis of existing one and new guid/uuid that is base for multiplication.
+%% Creates new event on the basis of existing one and new guid/uuid that is base for cloning.
 %% For #file_location_changed_event{} uuid should be used, guid for other events.
 %% @end
 %%--------------------------------------------------------------------
@@ -311,8 +325,8 @@ clone_event(#file_attr_changed_event{file_attr = FileAttr} = Event, NewGuid) ->
     },
     Event#file_attr_changed_event{file_attr = UpdatedFileAttr};
 clone_event(Event, _) ->
-    ?error("Trying to multiply event ~p of type that cannot be multiplied", [Event]),
-    throw(not_supported_event_multiplication).
+    ?error("Trying to clone event ~p of type that cannot be cloned", [Event]),
+    throw(not_supported_event_cloning).
 
 
 %%%===================================================================

@@ -100,10 +100,10 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
                 try
                     emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
                 catch
-                    Error:Reason ->
+                    Class:Reason ->
                         % Race with file/link deletion can result in error logged here
-                        ?warning("error emitting event for additional guid ~p:~p, original event ~p, context ~p",
-                            [Error, Reason, Evt, Context])
+                        ?warning("Error emitting event for additional guid - ~w:~p~ncontext: ~s~noriginal event: ~p",
+                            [Class, Reason, Context, Evt])
                 end
             end, SessIdsForLinks);
         {error, Reason} -> {error, Reason}
@@ -118,10 +118,10 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
                 try
                     emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
                 catch
-                    Error:Reason ->
+                    Class:Reason ->
                         % Race with file/link deletion can result in error logged here
-                        ?warning("error emitting event for additional guid ~p:~p, original event ~p, guid ~p",
-                            [Error, Reason, Evt, Context])
+                        ?warning("Error emitting event for additional guid - ~w:~p~ncontext: ~s~noriginal event: ~p",
+                            [Class, Reason, Context, Evt])
                 end
             end, SessIdsForLinks);
         {error, Reason} ->

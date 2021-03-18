@@ -50,7 +50,7 @@ get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingCtx) ->
     {ok, check_links_and_get_parent_connected_routing_key(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingCtx)};
 get_routing_key(#file_location_changed_event{file_location = FileLocation}, _RoutingCtx) ->
     FileUuid = FileLocation#file_location.uuid,
-    {ok, References} = file_meta_hardlinks:get_references(fslogic_uuid:ensure_effective_uuid(FileUuid)),
+    {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_effective_uuid(FileUuid)),
     AdditionalKeys = lists:map(fun(Uuid) ->
         {Uuid, <<"file_location_changed.", Uuid/binary>>}
     end, References -- [FileUuid]),
@@ -61,7 +61,7 @@ get_routing_key(#file_location_changed_event{file_location = FileLocation}, _Rou
 get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, _RoutingCtx) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, References} = file_meta_hardlinks:get_references(fslogic_uuid:ensure_effective_uuid(FileUuid)),
+    {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_effective_uuid(FileUuid)),
     AdditionalKeys = lists:map(fun(Uuid) ->
         {file_id:pack_guid(Uuid, SpaceId), <<"file_perm_changed.", Uuid/binary>>}
     end, References -- [FileUuid]),
@@ -246,7 +246,7 @@ update_context(Evt, _Ctx) ->
 check_links_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx} = Ctx) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
     % TODO VFS-7444 - maybe check type and do not get references for dir?
-    {ok, References} = file_ctx:get_references_const(FileCtx),
+    {ok, References} = file_ctx:list_references_const(FileCtx),
     BasicAns = get_parent_connected_routing_key(Prefix, FileGuid, Ctx),
     AdditionalKeys = lists:foldl(fun(Uuid, Acc) ->
         try

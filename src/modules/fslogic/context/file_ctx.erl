@@ -22,7 +22,7 @@
 %%%
 %%% Note: always consider usage of effective ctx (see ensure_effective/1).
 %%% TODO VFS-7465 - Consider creation of new_by_guid, get_guid/uuid_const functions
-%%% with additional arg IsEffective .
+%%% with additional arg IsEffective.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_ctx).
@@ -64,7 +64,7 @@
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_guid_const/1, get_effective_guid_const/1, get_uuid_const/1, get_effective_uuid_const/1,
-    is_link_const/1, get_dir_location_doc_const/1, get_references_const/1, get_reference_count_const/1
+    is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, count_references_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
@@ -345,16 +345,16 @@ get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
 get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
 
--spec get_references_const(ctx()) -> {ok, [file_meta_hardlinks:link() | file_meta:uuid()]} | {error, term()}.
-get_references_const(FileCtx) ->
+-spec list_references_const(ctx()) -> {ok, [file_meta_hardlinks:link() | file_meta:uuid()]} | {error, term()}.
+list_references_const(FileCtx) ->
     % TODO VFS-7444 - Investigate possibility to cache hardlink references in file_ctx
     FileUuid = get_effective_uuid_const(FileCtx),
-    file_meta_hardlinks:get_references(FileUuid).
+    file_meta_hardlinks:list_references(FileUuid).
 
--spec get_reference_count_const(ctx()) -> {ok, non_neg_integer()} | {error, term()}.
-get_reference_count_const(FileCtx) ->
+-spec count_references_const(ctx()) -> {ok, non_neg_integer()} | {error, term()}.
+count_references_const(FileCtx) ->
     FileUuid = get_effective_uuid_const(FileCtx),
-    file_meta_hardlinks:get_reference_count(FileUuid).
+    file_meta_hardlinks:count_references(FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc

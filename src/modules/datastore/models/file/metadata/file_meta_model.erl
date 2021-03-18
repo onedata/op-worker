@@ -351,7 +351,7 @@ resolve_conflict(_Ctx,
             ok
     end,
 
-    case file_meta_hardlinks:merge_references_maps(NewDoc, PrevDoc) of
+    case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
         not_mutated ->
             default;
         {mutated, MergedReferences} ->

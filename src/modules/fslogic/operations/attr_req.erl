@@ -409,7 +409,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
                 {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx5),
                 {RS, undefined, Ctx};
             {?SYMLINK_TYPE, _, true} ->
-                {ok, Symlink} = file_meta_symlinks:get(FileDoc),
+                {ok, Symlink} = file_meta_symlinks:readlink(FileDoc),
                 {undefined, byte_size(Symlink), FileCtx5};
             {_, _, true} ->
                 {S, Ctx} = file_ctx:get_file_size(FileCtx5),
@@ -424,7 +424,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
 
     {ok, LinksCount} = case maps:get(include_link_count, Opts, false) of
         true ->
-            file_ctx:get_reference_count_const(FileCtx7);
+            file_ctx:count_references_const(FileCtx7);
         _ ->
             {ok, undefined}
     end,

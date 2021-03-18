@@ -18,15 +18,15 @@
 -include_lib("ctool/include/posix/errno.hrl").
 
 %% API
--export([new_doc/4, merge_link_and_file_doc/2,
+-export([empty_references/0, new_doc/4, merge_link_and_file_doc/2,
     register/2, deregister/2,
-    get_reference_count/1, get_references/1,
-    merge_references_maps/2]).
+    count_references/1, list_references/1,
+    merge_references/2]).
 
 -type link() :: file_meta:uuid().
 % List of links to file. It is kept as a map where list of links is divided
 % into lists of links created by providers. Such structure is needed for
-% conflicts resolution (see merge_references_maps/2).
+% conflicts resolution (see merge_references/2).
 -type references_by_provider() :: #{oneprovider:id() => [link()]}.
 -export_type([link/0, references_by_provider/0]).
 
@@ -36,6 +36,15 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes empty references structure stored in #file_meta{} record.
+%% @end
+%%--------------------------------------------------------------------
+-spec empty_references() -> references_by_provider().
+empty_references() ->
+    #{}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -72,7 +81,7 @@ merge_link_and_file_doc(LinkDoc = #document{value = LinkRecord}, #document{value
 register(FileUuid, LinkUuid) ->
     ProviderId = oneprovider:get_id(),
     file_meta:update(FileUuid, fun(#file_meta{references = References} = Record) ->
-        case get_reference_map_size(References) of
+        case count_references_in_map(References) of
             LinksNum when LinksNum > ?MAX_LINKS_NUM ->
                 {error, ?EMLINK};
             _ ->
@@ -92,34 +101,34 @@ deregister(FileUuid, LinkUuid) ->
         end
     end).
 
--spec get_reference_count(file_meta:uuid() | file_meta:doc()) -> {ok, non_neg_integer()} | {error, term()}.
-get_reference_count(Doc = #document{value = #file_meta{references = References}}) ->
-    ReferencesCount = get_reference_map_size(References),
+-spec count_references(file_meta:uuid() | file_meta:doc()) -> {ok, non_neg_integer()} | {error, term()}.
+count_references(Doc = #document{value = #file_meta{references = References}}) ->
+    ReferencesCount = count_references_in_map(References),
     case file_meta:is_deleted(Doc) of
         true -> {ok, ReferencesCount};
         false -> {ok, ReferencesCount + 1}
     end;
-get_reference_count(Key) ->
+count_references(Key) ->
     case file_meta:get_including_deleted(Key) of
-        {ok, Doc} -> get_reference_count(Doc);
+        {ok, Doc} -> count_references(Doc);
         Other -> Other
     end.
 
--spec get_references(file_meta:uuid() | file_meta:doc()) -> {ok, [link() | file_meta:uuid()]} | {error, term()}.
-get_references(Doc = #document{key = TargetKey, value = #file_meta{references = References}}) ->
-    ReferencesList = get_references_from_map(References),
+-spec list_references(file_meta:uuid() | file_meta:doc()) -> {ok, [link() | file_meta:uuid()]} | {error, term()}.
+list_references(Doc = #document{key = TargetKey, value = #file_meta{references = References}}) ->
+    ReferencesList = references_to_list(References),
     case file_meta:is_deleted(Doc) of
         true -> {ok, ReferencesList};
         false -> {ok, [TargetKey | ReferencesList]}
     end;
-get_references(Key) ->
+list_references(Key) ->
     case file_meta:get_including_deleted(Key) of
-        {ok, Doc} -> get_references(Doc);
+        {ok, Doc} -> list_references(Doc);
         Other -> Other
     end.
 
--spec merge_references_maps(file_meta:doc(), file_meta:doc()) -> not_mutated | {mutated, references_by_provider()}.
-merge_references_maps(#document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}},
+-spec merge_references(file_meta:doc(), file_meta:doc()) -> not_mutated | {mutated, references_by_provider()}.
+merge_references(#document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}},
     #document{value = #file_meta{references = OldReferences}}) ->
     ChangedMutatorReferences = maps:get(Mutator, NewReferences, []),
     OldMutatorReferences = maps:get(Mutator, OldReferences, []),
@@ -133,11 +142,11 @@ merge_references_maps(#document{mutators = [Mutator | _], value = #file_meta{ref
 %%% Internal functions
 %%%===================================================================
 
--spec get_references_from_map(references_by_provider()) -> [link()].
-get_references_from_map(References) ->
+-spec references_to_list(references_by_provider()) -> [link()].
+references_to_list(References) ->
     % Note - do not use lists:flatten as it traverses sublists and it is not necessary here
     lists:flatmap(fun(ProviderReferences) -> ProviderReferences end, maps:values(References)).
 
--spec get_reference_map_size(references_by_provider()) -> non_neg_integer().
-get_reference_map_size(References) ->
+-spec count_references_in_map(references_by_provider()) -> non_neg_integer().
+count_references_in_map(References) ->
     maps:fold(fun(_, ProviderReferences, Acc) -> length(ProviderReferences) + Acc end, 0, References).

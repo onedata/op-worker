@@ -71,9 +71,9 @@
 -spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), od_provider:id(), boolean()) -> ok.
 delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
     % TODO VFS-7448 - test events production
-    case {file_ctx:is_link_const(FileCtx), oneprovider:get_id() =:= Creator} of
+    case {file_ctx:is_link_const(FileCtx), oneprovider:is_self(Creator)} of
         {false, _} ->
-            delete_regular_file_locally(UserCtx, FileCtx, Silent);
+            check_references_and_remove(UserCtx, FileCtx, Silent);
         {true, true} ->
             % Only creator can delete hardlink to prevent races on references
             % in #file_meta{} and allow conflicts resolution
@@ -85,13 +85,13 @@ delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
     end.
 
 %% @private
--spec delete_regular_file_locally(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
-delete_regular_file_locally(UserCtx, FileCtx, Silent) ->
+-spec check_references_and_remove(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
+check_references_and_remove(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
-    case no_references_left(FileCtx) of
-        true ->
-            remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS);
+    case has_any_references(FileCtx) of
         false ->
+            remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS);
+        true ->
             % There are hardlinks to file - do not delete documents, remove only link
             delete_parent_link(FileCtx, UserCtx),
             ok
@@ -101,12 +101,12 @@ delete_regular_file_locally(UserCtx, FileCtx, Silent) ->
 -spec delete_hardlink_locally(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
 delete_hardlink_locally(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
-    case deregister_link_and_check_if_no_references_left(FileCtx) of
-        true ->
+    case deregister_link_and_check_if_has_any_references(FileCtx) of
+        false ->
             remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS),
             % File meta for original file has not been deleted because hardlink existed - delete it now
             delete_effective_file_meta(FileCtx);
-        false ->
+        true ->
             FileCtx2 = delete_parent_link(FileCtx, UserCtx),
             delete_file_meta(FileCtx2),
             ok
@@ -120,18 +120,18 @@ handle_remotely_deleted_file(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     Type = file_meta:get_type(FileDoc),
     Creator = file_meta:get_provider_id(FileDoc),
-    case {Type, oneprovider:get_id()} of
-        {?LINK_TYPE, Creator} ->
+    case {Type, oneprovider:is_self(Creator)} of
+        {?LINK_TYPE, true} ->
             % Hardlink created by this provider has been deleted
             handle_remotely_deleted_local_hardlink(FileCtx2);
         _ ->
             % Hardlink created by other provider or regular file has been
             % deleted - check if local documents should be cleaned
-            case no_references_left(FileCtx2) of
-                true ->
+            case has_any_references(FileCtx2) of
+                false ->
                     UserCtx = user_ctx:new(?ROOT_SESS_ID),
                     remove_or_handle_opened_file(UserCtx, FileCtx2, false, ?LOCAL_DOCS);
-                false ->
+                true ->
                     ok
             end
     end.
@@ -139,14 +139,14 @@ handle_remotely_deleted_file(FileCtx) ->
 %% @private
 -spec handle_remotely_deleted_local_hardlink(file_ctx:ctx()) -> ok.
 handle_remotely_deleted_local_hardlink(FileCtx) ->
-    case deregister_link_and_check_if_no_references_left(FileCtx) of
-        true ->
+    case deregister_link_and_check_if_has_any_references(FileCtx) of
+        false ->
             delete_file_meta(FileCtx), % Delete hardlink document
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
             % Delete documents connected with original file as deleted
             % hardlink is last reference to data
             remove_or_handle_opened_file(UserCtx, FileCtx, false, ?LOCAL_DOCS);
-        false ->
+        true ->
             delete_file_meta(FileCtx),
             ok
     end.
@@ -209,19 +209,19 @@ cleanup_opened_files() ->
 %%% Internal functions
 %%%===================================================================
 
--spec deregister_link_and_check_if_no_references_left(file_ctx:ctx()) -> boolean().
-deregister_link_and_check_if_no_references_left(FileCtx) ->
+-spec deregister_link_and_check_if_has_any_references(file_ctx:ctx()) -> boolean().
+deregister_link_and_check_if_has_any_references(FileCtx) ->
     LinkUuid = file_ctx:get_uuid_const(FileCtx),
     FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
-    {ok, Doc} = file_meta_hardlinks:deregister(FileUuid, LinkUuid), % VFS-7444 - maybe update doc in FileCtx
-    {ok, RefCount} = file_meta_hardlinks:get_reference_count(Doc),
-    RefCount =:= 0.
+    {ok, FileMetaDoc} = file_meta_hardlinks:deregister(FileUuid, LinkUuid), % VFS-7444 - maybe update doc in FileCtx
+    {ok, RefCount} = file_meta_hardlinks:count_references(FileMetaDoc),
+    RefCount =/= 0.
 
--spec no_references_left(file_ctx:ctx()) -> boolean().
-no_references_left(FileCtx) ->
+-spec has_any_references(file_ctx:ctx()) -> boolean().
+has_any_references(FileCtx) ->
     FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
-    {ok, Counter} = file_meta_hardlinks:get_reference_count(FileUuid),
-    Counter =:= 0.
+    {ok, RefCount} = file_meta_hardlinks:count_references(FileUuid),
+    RefCount =/= 0.
 
 %%--------------------------------------------------------------------
 %% @private

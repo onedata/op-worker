@@ -16,7 +16,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([new_doc/5, get/1]).
+-export([new_doc/5, readlink/1]).
 
 -type symlink() :: file_meta:path().
 -export_type([symlink/0]).
@@ -44,14 +44,14 @@ new_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
         scope = SpaceId
     }.
 
--spec get(file_meta:doc() | file_meta:uuid()) -> {ok, symlink()} | {error, term()}.
-get(#document{value = #file_meta{type = ?SYMLINK_TYPE, symlink = Link}}) ->
+-spec readlink(file_meta:doc() | file_meta:uuid()) -> {ok, symlink()} | {error, term()}.
+readlink(#document{value = #file_meta{type = ?SYMLINK_TYPE, symlink = Link}}) ->
     {ok, Link};
-get(#document{value = #file_meta{}}) ->
+readlink(#document{value = #file_meta{}}) ->
     {error, ?EINVAL};
-get(Key) ->
+readlink(Key) ->
     case file_meta:get(Key) of
         {ok, Doc} ->
-            file_meta_symlinks:get(Doc);
+            readlink(Doc);
         Other -> Other
     end.
