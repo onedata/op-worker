@@ -34,7 +34,7 @@
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
 -export([establish_dataset/2, reattach_dataset/2, detach_dataset/1, remove_dataset/1,
-    get_dataset/1, get_dataset_state/1, is_dataset_attached/1]).
+    get_dataset/1, is_dataset_attached/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,
@@ -475,7 +475,7 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
         value = #file_meta{name = FileName},
         scope = Scope
     } = SourceDoc,
-    {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
+    {ok, TargetDoc} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{
             name = TargetName,
             parent_uuid = TargetParentUuid
@@ -483,16 +483,7 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
     end),
     ok = file_meta_links:add(TargetParentUuid, Scope, TargetName, FileUuid),
     ok = file_meta_links:delete(SourceParentUuid, Scope, FileName, FileUuid),
-
-    % call by module to mock in tests
-    case file_meta:get_dataset(SourceDoc) of
-        undefined ->
-            ok;
-        DatasetId ->
-            % todo should we move dataset if it's attached?
-            dataset_links:move(Scope, DatasetId, FileUuid, TargetName, SourceParentUuid, TargetParentUuid)
-    end.
-
+    dataset_api:move_if_applicable(SourceDoc, TargetDoc).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -863,13 +854,6 @@ get_dataset(#document{value = FM}) ->
     get_dataset(FM);
 get_dataset(#file_meta{dataset = DatasetId}) ->
     DatasetId.
-
-
--spec get_dataset_state(file_meta() | doc()) -> dataset:state().
-get_dataset_state(#document{value = FM}) ->
-    get_dataset_state(FM);
-get_dataset_state(#file_meta{dataset_state = DatasetStatus}) ->
-    DatasetStatus.
 
 
 -spec is_dataset_attached(file_meta() | doc()) -> boolean().

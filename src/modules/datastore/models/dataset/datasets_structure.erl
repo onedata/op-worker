@@ -94,19 +94,24 @@ add(SpaceId, ForestType, DatasetPath, DatasetId) ->
 
 
 -spec get(od_space:id(), forest_type(), link_name()) ->
-    {ok, [internal_link()]} | [{ok, [internal_link()]}] | {error, term()}.
+    {ok, link_value()} | {error, term()}.
 get(SpaceId, ForestType, DatasetPath) ->
-    datastore_model:get_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), all, DatasetPath).
+    case datastore_model:get_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), all, DatasetPath) of
+        {ok, [#link{target = DatasetId}]} ->
+            {ok, DatasetId};
+        Error = {error, _} ->
+            Error
+    end.
 
 
 delete(SpaceId, ForestType, DatasetPath) ->
-    case get(SpaceId, ForestType, DatasetPath) of
-        {ok, [#link{tree_id = TreeId, name = LinkName, rev = Rev}]} ->
+    case datastore_model:get_links(?CTX, ?FOREST(ForestType, SpaceId), all, DatasetPath) of
+        {ok, [#link{tree_id = TreeId, name = DatasetPath, rev = Rev}]} ->
             % TODO VFS-7363 do we need to check Rev?
             % pass Rev to ensure that link with the same Rev is deleted
             case oneprovider:is_self(TreeId) of
-                true -> delete_local(SpaceId, ForestType, LinkName, Rev);
-                false -> delete_remote(SpaceId, ForestType, TreeId, LinkName, Rev)
+                true -> delete_local(SpaceId, ForestType, DatasetPath, Rev);
+                false -> delete_remote(SpaceId, ForestType, TreeId, DatasetPath, Rev)
             end;
         ?ERROR_NOT_FOUND ->
             ok

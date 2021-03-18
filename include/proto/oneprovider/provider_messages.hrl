@@ -170,11 +170,15 @@
     id :: dataset:id()
 }).
 
--record(get_dataset_attrs, {
+-record(get_dataset_info, {
     id :: dataset:id()
 }).
 
+-record(get_file_eff_dataset_summary, {
+}).
+
 -record(list_space_datasets, {
+    state :: dataset:state(),
     opts :: datasets_structure:opts()
 }).
 
@@ -194,8 +198,8 @@
     #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
     #create_share{} | #remove_share{} |
     #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
-    #detach_dataset{} | #reattach_dataset{} | #remove_dataset{} | #get_dataset_attrs{} | #list_space_datasets{} |
-    #list_nested_datasets{}.
+    #establish_dataset{} | #detach_dataset{} | #reattach_dataset{} | #remove_dataset{} |
+    #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_space_datasets{} | #list_nested_datasets{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -252,14 +256,18 @@
     id :: dataset:id()
 }).
 
--record(dataset_attrs, {
+-record(dataset_info, {
     id :: dataset:id(),
-    uuid :: file_meta:uuid()
+    guid :: fslogic_worker:file_guid(),
+    path :: file_meta:path(),
+    type :: file_meta:type(),
+    creation_time :: time:seconds(),
+    parent :: undefined | dataset:id()
 }).
 
--record(dataset_summary, {
-    id :: dataset:id(),
-    uuid :: file_meta:uuid()
+-record(file_eff_dataset_summary, {
+    direct_dataset :: dataset:id(),
+    eff_ancestor_datasets :: [dataset:id()]
 }).
 
 -record(nested_datasets, {
@@ -271,7 +279,7 @@
     #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
     #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} |
-    #qos_status_response{} | #dataset_established{} | #dataset_attrs{} | undefined.
+    #qos_status_response{} | #dataset_established{} | #dataset_info{} | #file_eff_dataset_summary{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

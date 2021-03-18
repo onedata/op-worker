@@ -712,10 +712,12 @@ handle_provider_request(UserCtx, #reattach_dataset{id = DatasetId}, _SpaceCtx) -
     dataset_req:reattach(DatasetId, UserCtx);
 handle_provider_request(UserCtx, #remove_dataset{id = DatasetId}, _SpaceCtx) ->
     dataset_req:remove(DatasetId, UserCtx);
-handle_provider_request(UserCtx, #get_dataset_attrs{id = DatasetId}, _SpaceCtx) ->
+handle_provider_request(UserCtx, #get_dataset_info{id = DatasetId}, _SpaceCtx) ->
     dataset_req:get_attrs(DatasetId, UserCtx);
-handle_provider_request(UserCtx, #list_space_datasets{opts = Opts}, SpaceCtx) ->
-    dataset_req:list_space(file_ctx:get_space_id_const(SpaceCtx), UserCtx, Opts);
+handle_provider_request(UserCtx, #get_file_eff_dataset_summary{}, FileCtx) ->
+    dataset_req:get_file_eff_summary(FileCtx, UserCtx);
+handle_provider_request(UserCtx, #list_space_datasets{state = State, opts = Opts}, SpaceCtx) ->
+    dataset_req:list_space(file_ctx:get_space_id_const(SpaceCtx), State, UserCtx, Opts);
 handle_provider_request(UserCtx, #list_nested_datasets{id = DatasetId, opts = Opts}, _SpaceCtx) ->
     dataset_req:list(DatasetId, UserCtx, Opts).
 

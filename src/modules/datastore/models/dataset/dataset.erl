@@ -19,8 +19,8 @@
 
 %% API
 -export([create/2, delete/1]).
--export([get_uuid/1, get_space_id/1, get_state/1, get_detached_info/1, get/1]).
--export([mark_detached/3, mark_reattached/1]).
+-export([get_uuid/1, get_space_id/1, get_state/1, get_detached_info/1, get_creation_time/1, get/1]).
+-export([mark_detached/4, mark_reattached/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -35,8 +35,9 @@
 -type path() :: file_meta:uuid_based_path().
 -type error() :: {error, term()}.
 -type detached_info() :: detached_dataset_info:info().
+-type membership() :: ?NONE_DATASET_MEMBERSHIP | ?DIRECT_DATASET_MEMBERSHIP | ?ANCESTOR_DATASET_MEMBERSHIP.
 
--export_type([id/0, state/0, path/0, detached_info/0]).
+-export_type([id/0, state/0, path/0, detached_info/0, membership/0]).
 
 
 % @formatter:on
@@ -126,8 +127,8 @@ get(DatasetId) ->
     datastore_model:get(?CTX, DatasetId).
 
 
--spec mark_detached(id(), path(), file_meta:path()) -> ok | error().
-mark_detached(DatasetId, DatasetPath, FileRootPath) ->
+-spec mark_detached(id(), path(), file_meta:path(), file_meta:type()) -> ok | error().
+mark_detached(DatasetId, DatasetPath, FileRootPath, FileRootType) ->
     update(DatasetId, fun(Dataset) ->
         {ok, Dataset#dataset{
             state = ?DETACHED_DATASET,

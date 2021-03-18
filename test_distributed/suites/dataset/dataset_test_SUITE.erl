@@ -12,6 +12,7 @@
 -module(dataset_test_SUITE).
 -author("Jakub Kudzia").
 
+-include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -98,32 +99,29 @@ detach_and_reattach_dataset(_Config) ->
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     Uuid = file_id:guid_to_uuid(Guid),
     {ok, DatasetId} = lfm_proxy:establish_dataset(P1Node, UserSessIdP1, {guid, Guid}),
-    ?assertMatch({ok, #dataset_attrs{
+    ?assertMatch({ok, #dataset_info{
         id = DatasetId,
-        uuid = Uuid
-    }}, lfm_proxy:get_dataset_attrs(P1Node, UserSessIdP1, DatasetId)),
+        guid = Uuid
+    }}, lfm_proxy:get_dataset_info(P1Node, UserSessIdP1, DatasetId)),
     ?assertMatch({ok, #file_details{
-        eff_datasets = [DatasetId],
-        is_dataset_attached = true
+        eff_dataset_membership = ?DIRECT_DATASET_MEMBERSHIP
     }}, lfm_proxy:get_details(P1Node, UserSessIdP1, {guid, Guid})),
 
     lfm_proxy:detach_dataset(P1Node, UserSessIdP1, DatasetId),
 
-    ?assertMatch({ok, #dataset_attrs{
+    ?assertMatch({ok, #dataset_info{
         id = DatasetId,
-        uuid = Uuid
-    }}, lfm_proxy:get_dataset_attrs(P1Node, UserSessIdP1, DatasetId)),
+        guid = Uuid
+    }}, lfm_proxy:get_dataset_info(P1Node, UserSessIdP1, DatasetId)),
 
     ?assertMatch({ok, #file_details{
-        eff_datasets = [],
-        is_dataset_attached = false
+        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP
     }}, lfm_proxy:get_details(P1Node, UserSessIdP1, {guid, Guid})),
 
     ?assertMatch(ok, lfm_proxy:reattach_dataset(P1Node, UserSessIdP1, DatasetId)),
 
     ?assertMatch({ok, #file_details{
-        eff_datasets = [DatasetId],
-        is_dataset_attached = true
+        eff_dataset_membership = ?DIRECT_DATASET_MEMBERSHIP
     }}, lfm_proxy:get_details(P1Node, UserSessIdP1, {guid, Guid})).
 
 establish_dataset_on_not_existing_file_should_fail(_Config) ->
@@ -171,7 +169,7 @@ establish_nested_datasets_structure(_Config) ->
 
     lists:foreach(fun({Guid, DatasetId}) ->
 
-        ct:pal("D: ~p", [lfm_proxy:get_dataset_attrs(P1Node, UserSessIdP1, DatasetId)]),
+        ct:pal("D: ~p", [lfm_proxy:get_dataset_info(P1Node, UserSessIdP1, DatasetId)]),
         ct:pal("F: ~p", [lfm_proxy:get_details(P1Node, UserSessIdP1, {guid, Guid})])
 
     end, lists:zip(GuidsReversed, DatasetIds)).
@@ -188,13 +186,12 @@ establish_dataset_attached_to_generic_file_test_base(Guid) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     Uuid = file_id:guid_to_uuid(Guid),
     {ok, DatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, {guid, Guid})),
-    ?assertMatch({ok, #dataset_attrs{
+    ?assertMatch({ok, #dataset_info{
         id = DatasetId,
-        uuid = Uuid
-    }}, lfm_proxy:get_dataset_attrs(P1Node, UserSessIdP1, DatasetId)),
+        guid = Uuid
+    }}, lfm_proxy:get_dataset_info(P1Node, UserSessIdP1, DatasetId)),
     ?assertMatch({ok, #file_details{
-        eff_datasets = [DatasetId],
-        is_dataset_attached = true
+        eff_dataset_membership = ?DIRECT_DATASET_MEMBERSHIP
     }}, lfm_proxy:get_details(P1Node, UserSessIdP1, {guid, Guid})).
 
 

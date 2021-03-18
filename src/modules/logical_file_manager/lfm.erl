@@ -92,8 +92,8 @@
 -export([
     establish_dataset/2, remove_dataset/2,
     detach_dataset/2, reattach_dataset/2,
-    get_dataset_attrs/2,
-    list_space_datasets/3, list_nested_datasets/3
+    get_dataset_info/2, get_file_eff_dataset_summary/2,
+    list_space_datasets/4, list_nested_datasets/3
 ]).
 
 %%%===================================================================
@@ -946,14 +946,17 @@ reattach_dataset(SessId, DatasetId) ->
     ?run(fun() -> lfm_datasets:reattach(SessId, DatasetId) end).
 
 
--spec get_dataset_attrs(session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | error_reply().
-get_dataset_attrs(SessId, DatasetId) ->
-    ?run(fun() -> lfm_datasets:get_attrs(SessId, DatasetId) end).
+-spec get_dataset_info(session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | error_reply().
+get_dataset_info(SessId, DatasetId) ->
+    ?run(fun() -> lfm_datasets:get_info(SessId, DatasetId) end).
 
+-spec get_file_eff_dataset_summary(session:id(), file_key()) -> {ok, lfm_datasets:file_eff_summary()} | error_reply().
+get_file_eff_dataset_summary(SessId, FileKey) ->
+    ?run(fun() -> lfm_datasets:get_file_eff_summary(SessId, FileKey) end).
 
--spec list_space_datasets(session:id(), od_space:id(), datasets_structure:opts()) -> ok | error_reply().
-list_space_datasets(SessId, SpaceId, Opts) ->
-    ?run(fun() -> lfm_datasets:list_space(SessId, SpaceId, Opts) end).
+-spec list_space_datasets(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) -> ok | error_reply().
+list_space_datasets(SessId, SpaceId, State, Opts) ->
+    ?run(fun() -> lfm_datasets:list_space(SessId, SpaceId, State, Opts) end).
 
 
 -spec list_nested_datasets(session:id(), dataset:id(), datasets_structure:opts()) -> ok | error_reply().

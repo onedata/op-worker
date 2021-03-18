@@ -24,8 +24,8 @@
     detach/2,
     remove/2,
     get_attrs/2,
-    update_attrs/2,
-    list_space/3,
+    get_file_eff_summary/2,
+    list_space/4,
     list/3
 ]).
 
@@ -56,20 +56,27 @@ remove(DatasetId, UserCtx) ->
 
 
 get_attrs(DatasetId, UserCtx) ->
-    {ok, AttrsMap} = dataset_api:get_info(DatasetId),
-    ?PROVIDER_OK_RESP(#dataset_attrs{
+    {ok, Info} = dataset_api:get_info(DatasetId),
+    ?PROVIDER_OK_RESP(#dataset_info{
         id = DatasetId,
-        uuid = maps:get(<<"uuid">>, AttrsMap)
+        guid = maps:get(<<"fileRootGuid">>, Info),
+        path = maps:get(<<"fileRootPath">>, Info),
+        type = maps:get(<<"fileRootType">>, Info),
+        creation_time = maps:get(<<"creationTime">>, Info),
+        parent = maps:get(<<"parentDatasetId">>, Info)
     }).
 
 
-update_attrs(DatasetId, UserCtx) ->
-    ok = dataset_api:update_attrs(DatasetId),
-    ?PROVIDER_OK_RESP.
+get_file_eff_summary(FileCtx, UserCtx) ->
+    {ok, Summary} = dataset_api:get_effective_summary(FileCtx),
+    ?PROVIDER_OK_RESP(#file_eff_dataset_summary{
+        direct_dataset = maps:get(<<"directDataset">>, Summary),
+        eff_ancestor_datasets = maps:get(<<"effectiveAncestorDatasets">>, Summary)
+    }).
 
 
-list_space(SpaceId, UserCtx, Opts) ->
-    {ok, Datasets, IsLast} = dataset_api:list_top_datasets(SpaceId, Opts),
+list_space(SpaceId, State, UserCtx, Opts) ->
+    {ok, Datasets, IsLast} = dataset_api:list_top_datasets(SpaceId, State, Opts),
     ?PROVIDER_OK_RESP(#nested_datasets{datasets = Datasets, is_last = IsLast}).
 
 

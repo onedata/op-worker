@@ -72,8 +72,8 @@
 
     establish_dataset/3, remove_dataset/3,
     detach_dataset/3, reattach_dataset/3,
-    get_dataset_attrs/3,
-    list_space_datasets/4, list_nested_datasets/4
+    get_dataset_info/3, get_file_eff_dataset_summary/3,
+    list_space_datasets/5, list_nested_datasets/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -814,13 +814,18 @@ detach_dataset(Worker, SessId, DatasetId) ->
 reattach_dataset(Worker, SessId, DatasetId) ->
     ?EXEC(Worker, lfm:reattach_dataset(SessId, DatasetId)).
 
--spec get_dataset_attrs(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | lfm:error_reply().
-get_dataset_attrs(Worker, SessId, DatasetId) ->
-    ?EXEC(Worker, lfm:get_dataset_attrs(SessId, DatasetId)).
+-spec get_dataset_info(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | lfm:error_reply().
+get_dataset_info(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:get_dataset_info(SessId, DatasetId)).
 
--spec list_space_datasets(node(), session:id(), od_space:id(), datasets_structure:opts()) -> ok | lfm:error_reply().
-list_space_datasets(Worker, SessId, SpaceId, Opts) ->
-    ?EXEC(Worker, lfm:list_space_datasets(SessId, SpaceId, Opts)).
+-spec get_file_eff_dataset_summary(node(), session:id(), lfm:file_key()) -> {ok, lfm_datasets:file_eff_summary()} | lfm:error_reply().
+get_file_eff_dataset_summary(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_file_eff_dataset_summary(SessId, FileKey)).
+
+-spec list_space_datasets(node(), session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
+    ok | lfm:error_reply().
+list_space_datasets(Worker, SessId, SpaceId, State, Opts) ->
+    ?EXEC(Worker, lfm:list_space_datasets(SessId, SpaceId, State, Opts)).
 
 -spec list_nested_datasets(node(), session:id(), dataset:id(), datasets_structure:opts()) -> ok | lfm:error_reply().
 list_nested_datasets(Worker, SessId, DatasetId, Opts) ->

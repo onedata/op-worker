@@ -16,7 +16,8 @@
 -define(ATTACHED_DATASET, attached).
 -define(DETACHED_DATASET, detached).
 
--define(ATTACHED_FOREST, <<"ATTACHED>>">>).
--define(DETACHED_FOREST, <<"DETACHED>>">>).
+-define(NONE_DATASET_MEMBERSHIP, none).
+-define(DIRECT_DATASET_MEMBERSHIP, direct).
+-define(ANCESTOR_DATASET_MEMBERSHIP, ancestor).
 
 -endif.

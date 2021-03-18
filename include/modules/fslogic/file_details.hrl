@@ -25,8 +25,7 @@
     has_metadata :: boolean(),
     has_direct_qos :: boolean(),
     has_eff_qos :: boolean(),
-    eff_datasets :: [dataset:id()],
-    is_dataset_attached :: boolean()
+    eff_dataset_membership :: dataset:membership()
 }).
 
 -endif.

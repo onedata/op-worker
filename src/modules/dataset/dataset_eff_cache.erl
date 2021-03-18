@@ -23,8 +23,9 @@
 
 %% API
 -export([init/1, init_group/0, invalidate_on_all_nodes/1]).
--export([is_attached/1, is_attached/2]).
--export([get/2, get_eff_datasets/1, get_eff_datasets/2]).
+-export([get_eff_ancestor_datasets/1]).
+-compile([{no_auto_import, [get/1]}]).
+
 
 %% RPC API
 -export([invalidate/1]).
@@ -41,11 +42,10 @@
 }).
 
 -record(summary, {
-    is_attached :: boolean(),
-    eff_datasets = [] :: [dataset_api:id()]
+    direct_attached_dataset :: undefined | dataset:id(),
+    eff_ancestor_datasets = [] :: [dataset:id()]
 }).
 
--type key() :: file_meta:uuid() | file_meta:doc().
 -type summary() :: #summary{}.
 -type error() :: {error, term()}.
 
@@ -128,51 +128,14 @@ invalidate_on_all_nodes(SpaceId) ->
     end, Res).
 
 
--spec get(od_space:id(), key()) -> {ok, summary()} | error().
-get(SpaceId, Doc = #document{}) ->
-    CacheName = ?CACHE_NAME(SpaceId),
-    Callback = fun([Doc, ParentSummary, CalculationInfo]) ->
-        {ok, calculate_dataset_summary(Doc, ParentSummary), CalculationInfo}
-    end,
-    case effective_value:get_or_calculate(CacheName, Doc, Callback) of
-        {ok, Summary, _} ->
-            {ok, Summary};
-        {error, {file_meta_missing, _}} ->
-            ?ERROR_NOT_FOUND
-    end;
-get(SpaceId, Uuid) ->
-    case file_meta:get(Uuid) of
-        {ok, Doc} ->
-            get(SpaceId, Doc);
+-spec get_eff_ancestor_datasets(file_meta:doc()) -> {ok, [dataset_api:id()]} | error().
+get_eff_ancestor_datasets(FileDoc) ->
+    case get(FileDoc) of
+        {ok, #summary{eff_ancestor_datasets = EffAncestorDatasets}} ->
+            {ok, EffAncestorDatasets};
         {error, _} = Error ->
             Error
     end.
-
-
--spec is_attached(od_space:id(), key()) -> {ok, boolean() | error()}.
-is_attached(SpaceId, UuidOrDoc) ->
-    case get(SpaceId, UuidOrDoc) of
-        {ok, Summary} ->
-            is_attached(Summary);
-        {error, _} = Error ->
-            Error
-    end.
-
-is_attached(#summary{is_attached = IsAttached}) ->
-    {ok, IsAttached}.
-
-
--spec get_eff_datasets(od_space:id(), key()) -> {ok, [dataset_api:id()]} | error().
-get_eff_datasets(SpaceId, UuidOrDoc) ->
-    case get(SpaceId, UuidOrDoc) of
-        {ok, Summary} ->
-            get_eff_datasets(Summary);
-        {error, _} = Error ->
-            Error
-    end.
-
-get_eff_datasets(#summary{eff_datasets = EffDatasets}) ->
-    {ok, EffDatasets}.
 
 
 %%%===================================================================
@@ -189,36 +152,45 @@ invalidate(SpaceId) ->
 %%%===================================================================
 
 
+-spec get(file_meta:doc()) -> {ok, summary()} | error().
+get(FileDoc) ->
+    SpaceId = file_meta:get_scope_id(FileDoc),
+    CacheName = ?CACHE_NAME(SpaceId),
+    Callback = fun([Doc, ParentSummary, CalculationInfo]) ->
+        {ok, calculate_dataset_summary(Doc, ParentSummary), CalculationInfo}
+    end,
+    case effective_value:get_or_calculate(CacheName, FileDoc, Callback) of
+        {ok, Summary, _} ->
+            {ok, Summary};
+        {error, {file_meta_missing, _}} ->
+            ?ERROR_NOT_FOUND
+    end.
+
+
 -spec calculate_dataset_summary(file_meta:doc(), summary() | undefined) -> summary().
 calculate_dataset_summary(Doc = #document{}, undefined) ->
-    IsDatasetAttached = file_meta:is_dataset_attached(Doc),
-    EffDatasets = case IsDatasetAttached of
-        false -> [];
-        true -> [file_meta:get_dataset(Doc)]
-    end,
-    ?alert("Calc1: ~p", [    #summary{
-        is_attached = IsDatasetAttached,
-        eff_datasets = EffDatasets
-    }]),
     #summary{
-        is_attached = IsDatasetAttached,
-        eff_datasets = EffDatasets
+        direct_attached_dataset = get_direct_dataset_if_attached(Doc),
+        eff_ancestor_datasets = []
     };
 calculate_dataset_summary(Doc = #document{}, #summary{
-    eff_datasets = ParentEffDatasets
+    direct_attached_dataset = ParentDirectAttachedDataset,
+    eff_ancestor_datasets = ParentEffAncestorDatasets
 }) ->
-    Dataset = file_meta:get_dataset(Doc),
-    IsDatasetAttached = file_meta:is_dataset_attached(Doc),
-    EffDatasets = case IsDatasetAttached of
-        true -> [Dataset | ParentEffDatasets];
-        false -> ParentEffDatasets
+    EffAncestorDatasets = case ParentDirectAttachedDataset =/= undefined of
+        true -> [ParentDirectAttachedDataset | ParentEffAncestorDatasets];
+        false -> ParentEffAncestorDatasets
     end,
-
-    ?alert("Calc2: ~p", [    #summary{
-        is_attached = IsDatasetAttached,
-        eff_datasets = EffDatasets
-    }]),
     #summary{
-        is_attached = IsDatasetAttached,
-        eff_datasets = EffDatasets
+        direct_attached_dataset = get_direct_dataset_if_attached(Doc),
+        eff_ancestor_datasets = EffAncestorDatasets
     }.
+
+
+-spec get_direct_dataset_if_attached(file_meta:doc()) -> dataset:id() | undefined.
+get_direct_dataset_if_attached(FileDoc) ->
+    IsDatasetAttached = file_meta:is_dataset_attached(FileDoc),
+    case IsDatasetAttached of
+        true -> file_meta:get_dataset(FileDoc);
+        false -> undefined
+    end.

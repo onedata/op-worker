@@ -15,9 +15,9 @@
 -include("modules/dataset/dataset.hrl").
 
 %% API
--export([add/3, delete/1, delete/2, list_top_datasets/2, list/2]).
+-export([add/3, delete/1, delete/2, list_top_datasets/2, list/2, move/5]).
 
--define(FOREST_TYPE, ?ATTACHED_FOREST).
+-define(FOREST_TYPE, <<"ATTACHED>>">>).
 
 %%%===================================================================
 %%% API functions
@@ -49,7 +49,11 @@ list(DatasetDoc, Opts) ->
     {ok, DatasetPath} = dataset_path:get(SpaceId, Uuid),
     datasets_structure:list(SpaceId, ?FOREST_TYPE, DatasetPath, Opts).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+
+move(SpaceId, DatasetId, Uuid, SourceParentUuid, TargetParentUuid) ->
+    {ok, SourceParentDatasetPath} = dataset_path:get(SpaceId, SourceParentUuid),
+    {ok, TargetParentDatasetPath} = dataset_path:get(SpaceId, TargetParentUuid),
+    SourceDatasetPath = filepath_utils:join([SourceParentDatasetPath, Uuid]),
+    TargetDatasetPath = filepath_utils:join([TargetParentDatasetPath, Uuid]),
+    datasets_structure:move(SpaceId, ?FOREST_TYPE, DatasetId, SourceDatasetPath, TargetDatasetPath).
 
