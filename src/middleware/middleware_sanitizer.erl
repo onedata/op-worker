@@ -300,11 +300,9 @@ check_value(json, non_empty, Param, Map) when map_size(Map) == 0 ->
 check_value(_, non_empty, _Param, _) ->
     ok;
 
+check_value(_, guid, Param, []) ->
+    throw(?ERROR_BAD_VALUE_IDENTIFIER(Param));
 check_value(_, guid, Param, Value) ->
-    case Value of
-        [] -> throw(?ERROR_BAD_VALUE_IDENTIFIER(Param));
-        _ -> ok
-    end,
     try
         lists:foreach(fun(G) ->
             {_, _, _} = file_id:unpack_share_guid(G)

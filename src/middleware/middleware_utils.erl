@@ -55,24 +55,22 @@ resolve_file_path(SessionId, Path) ->
 switch_context_if_shared_file_request(#op_req{gri = #gri{
     type = Type,
     id = Id,
-    aspect = Aspect
-}, data = Data} = OpReq) ->
-    case is_shared_file_request(Type, Aspect, Id, Data) of
+    aspect = Aspect,
+    scope = Scope
+}} = OpReq) ->
+    case is_shared_file_request(Type, Aspect, Scope, Id) of
         true -> OpReq#op_req{auth = ?GUEST};
         false -> OpReq
     end.
 
 
--spec is_shared_file_request(gri:entity_type(), gri:aspect(), gri:entity_id(), middleware:data()) ->
+-spec is_shared_file_request(gri:entity_type(), gri:aspect(), gri:scope(), gri:entity_id()) ->
     boolean().
-is_shared_file_request(op_file, _, Id, _Data) when is_binary(Id) ->
+is_shared_file_request(op_file, download_url, Scope, _) ->
+    Scope == public;
+is_shared_file_request(op_file, _, _, Id) when is_binary(Id) ->
     file_id:is_share_guid(Id);
-is_shared_file_request(op_file, download_url, _Id, Data) ->
-    FileIds = maps:get(<<"file_ids">>, Data, []),
-    is_list(FileIds) andalso lists:any(fun(Id) ->
-        file_id:is_share_guid(Id)
-    end, FileIds);
-is_shared_file_request(op_replica, As, Id, _Data) when
+is_shared_file_request(op_replica, As, _, Id) when
     As =:= instance;
     As =:= distribution
 ->

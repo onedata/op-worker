@@ -13,8 +13,8 @@
 
 -include_lib("ctool/include/http/codes.hrl").
 
--ifndef(REST_HRL).
--define(REST_HRL, 1).
+-ifndef(DOWNLOAD_HRL).
+-define(DOWNLOAD_HRL, 1).
 
 % (bound GRI) - GRI with bindings that is converted to proper GRI
 % when bindings are resolved.

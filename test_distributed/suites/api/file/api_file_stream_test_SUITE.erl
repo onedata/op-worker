@@ -141,8 +141,11 @@ gui_download_test_base(Config, FileType, ClientSpec) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             setup_fun = SetupFun,
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, private),
-            validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+            validate_result_fun = fun(#api_test_ctx{client = Client}, Result) ->
+                case Client of
+                    ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
+                    _ -> ?assertEqual(?ERROR_FORBIDDEN, Result)
+                end
             end,
             data_spec = DataSpec
         }
@@ -246,7 +249,7 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, DownloadType) ->
     [FileCreationNode] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
 
-    fun(#api_test_ctx{node = DownloadNode}, Result) ->
+    fun(#api_test_ctx{node = DownloadNode, data = Data, client = Client}, Result) ->
         FileGuid = api_test_memory:get(MemRef, guid),
 
         case DownloadType of
@@ -279,7 +282,17 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, DownloadType) ->
                     single_file ->
                         ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl));
                     archive ->
-                        ?assertMatch({ok, _}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl))
+                        User4Id = oct_background:get_user_id(user4),
+                        {ok, Bytes} = ?assertMatch({ok, _}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                        case {Client, length(maps:get(<<"file_ids">>, Data))} of
+                            {?USER(User4Id), 1} ->
+                                % user4 does not have access to files, so downloaded archive contains only dir entry
+                                check_archive(MemRef, Bytes, ExpContent, directory, ignore_files);
+                            {_, 1} ->
+                                check_archive(MemRef, Bytes, ExpContent, directory);
+                            {_, _} -> 
+                                check_archive(MemRef, Bytes, ExpContent, multi_file)
+                        end
                 end,
                 ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory), ?ATTEMPTS),
                 ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
@@ -318,7 +331,7 @@ block_file_streaming(OpNode, ErrorReturned, single_file) ->
 block_file_streaming(OpNode, ErrorReturned, archive) ->
     test_node_starter:load_modules([OpNode], [?MODULE]),
     ok = test_utils:mock_new(OpNode, http_download_utils),
-    ok = test_utils:mock_expect(OpNode, http_download_utils, stream_archive, fun(_, _, _, Req) ->
+    ok = test_utils:mock_expect(OpNode, http_download_utils, stream_tarball, fun(_, _, _, Req) ->
         http_req:send_error(ErrorReturned, Req)
     end).
 
@@ -387,21 +400,20 @@ build_download_file_with_gui_endpoint_verify_fun(MemRef, Content, DownloadType) 
                 true ->
                     file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
                 false ->
-                    ExpDist = case api_test_memory:get(MemRef, download_succeeded) of
-                        true -> 
+                    ExpDist = case {api_test_memory:get(MemRef, download_succeeded), DownloadType} of
+                        {true, single_file} -> 
+                            [{P1Node, FileSize}, {DownloadNode, FileSize}];
+                        {true, archive} ->
                             % applies to directory download, because user4 is in correct clients there
                             User4Id = oct_background:get_user_id(user4),
                             case Client of
                                 ?USER(User4Id) -> [{P1Node, FileSize}];
                                 _ -> [{P1Node, FileSize}, {DownloadNode, FileSize}]
                             end;
-                        false -> 
-                            case DownloadType of
-                                single_file ->
-                                    [{P1Node, FileSize}, {DownloadNode, FirstBlockFetchedSize}];
-                                archive ->
-                                    [{P1Node, FileSize}]
-                            end
+                        {false, single_file} -> 
+                            [{P1Node, FileSize}, {DownloadNode, FirstBlockFetchedSize}];
+                        {false, archive} -> 
+                            [{P1Node, FileSize}]
                     end,
                     file_test_utils:await_distribution(Providers, FileGuid, ExpDist)
             end
@@ -693,11 +705,11 @@ build_download_file_setup_fun(MemRef, Content, FileType) ->
         [FileGuid, FileGuid2] = FileGuids = case FileType of
             <<"file">> ->
                 FilePath1 = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-                {ok, G} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath1, ?DEFAULT_FILE_PERMS),
+                {ok, G} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath1, 8#604),
                 [Guid, G];
             <<"dir">> ->
-                {ok, NestedGuid} = lfm_proxy:create(P1Node, UserSessIdP1, Guid, ?RANDOM_FILE_NAME(), ?DEFAULT_FILE_PERMS),
-                {ok, NestedGuid2} = lfm_proxy:create(P1Node, UserSessIdP1, Guid, ?RANDOM_FILE_NAME(), ?DEFAULT_FILE_PERMS),
+                {ok, NestedGuid} = lfm_proxy:create(P1Node, UserSessIdP1, Guid, ?RANDOM_FILE_NAME(), 8#604),
+                {ok, NestedGuid2} = lfm_proxy:create(P1Node, UserSessIdP1, Guid, ?RANDOM_FILE_NAME(), 8#604),
                 [NestedGuid, NestedGuid2]
         end,
     
@@ -746,22 +758,35 @@ get_file_guid(MemRef, Placeholder, TestMode) ->
 
 
 %% @private
--spec new_tar_file_entry(node(), tar_utils:archive(), fslogic_worker:file_guid(), file_meta:path()) ->
-    {binary(), tar_utils:archive()}.
-new_tar_file_entry(Worker, TarArchive, Guid, RootDirPath) ->
-    FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [Guid]),
-    {Mode, FileCtx1} = rpc:call(Worker, file_ctx, get_mode, [FileCtx]),
-    {{_ATime, _CTime, MTime}, FileCtx2} = rpc:call(Worker, file_ctx, get_times, [FileCtx1]),
-    {IsDir, FileCtx3} = rpc:call(Worker, file_ctx, is_dir, [FileCtx2]),
-    {Size, FileCtx4} = rpc:call(Worker, file_ctx, get_file_size, [FileCtx3]),
-    {Path, _FileCtx5} = rpc:call(Worker, file_ctx, get_canonical_path, [FileCtx4]),
-    Filename = string:prefix(Path, RootDirPath),
-    FileType = case IsDir of
-        true -> directory;
-        false -> regular
-    end,
-    TarArchive1 = tar_utils:new_file_entry(TarArchive, Filename, Size, Mode, MTime, FileType),
-    tar_utils:flush(TarArchive1).
+-spec check_archive(api_test_memory:mem_ref(), binary(), binary(), directory | multi_file) -> ok.
+check_archive(MemRef, Bytes, ExpContent, Type) ->
+    check_archive(MemRef, Bytes, ExpContent, Type, check_files).
+
+%% @private
+-spec check_archive(api_test_memory:mem_ref(), binary(), binary(), directory | multi_file, ignore_file | check_files) -> ok.
+check_archive(MemRef, Bytes, ExpContent, directory, FilesStrategy) ->
+    ?assertEqual(ok, erl_tar:extract({binary, Bytes}, [compressed, {cwd, "/tmp/"}])),
+    {ok, After} = file:list_dir("/tmp"),
+    DirGuid = api_test_memory:get(MemRef, guid),
+    [Node] = oct_background:get_provider_nodes(krakow),
+    {ok, #file_attr{name = Dirname}} = lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, DirGuid}),
+    ?assertEqual(true, lists:member(binary_to_list(Dirname), After)),
+    check_archive_files_content(MemRef, ExpContent, Dirname, FilesStrategy);
+check_archive(MemRef, Bytes, ExpContent, multi_file, FilesStrategy) ->
+    ?assertEqual(ok, erl_tar:extract({binary, Bytes}, [compressed, {cwd, "/tmp/"}])),
+    check_archive_files_content(MemRef, ExpContent, <<>>, FilesStrategy).
+
+
+%% @private
+-spec check_archive_files_content(api_test_memory:mem_ref(), binary(), binary(), ignore_file | check_files) -> ok.
+check_archive_files_content(_MemRef, _ExpContent, _ParentName, ignore_files) -> ok;
+check_archive_files_content(MemRef, ExpContent, ParentName, check_files) ->
+    lists:foreach(fun(Placeholder) ->
+        Guid = api_test_memory:get(MemRef, Placeholder),
+        [Node] = oct_background:get_provider_nodes(krakow),
+        {ok, #file_attr{name = Filename}} = lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, Guid}),
+        ?assertEqual({ok, ExpContent}, file:read_file(filename:join(["/tmp", ParentName, Filename])))
+    end, [file_guid, file_guid2]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

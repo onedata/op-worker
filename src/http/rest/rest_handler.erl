@@ -35,8 +35,7 @@
 -record(state, {
     auth = undefined :: undefined | aai:auth(),
     rest_req = undefined :: undefined | rest_req(),
-    allowed_methods :: [method()],
-    data = undefined :: undefined | middleware:data()
+    allowed_methods :: [method()]
 }).
 -type state() :: #state{}.
 -type opts() :: #{method() => rest_req()}.
@@ -147,12 +146,11 @@ is_authorized(Req, State) ->
             % The user presented some authentication, but he is not supported
             % by this Oneprovider. Still, if the request concerned a shared
             % file, the user should be treated as a guest and served.
-            {Data, Req2} = get_data(Req, State),
-            case (catch resolve_gri_bindings(?GUEST_SESS_ID, State#state.rest_req#rest_req.b_gri, Data, Req2)) of
+            case (catch resolve_gri_bindings(?GUEST_SESS_ID, State#state.rest_req#rest_req.b_gri, Req)) of
                 #gri{scope = public} ->
-                    {true, Req, State#state{auth = ?GUEST, data = Data}};
+                    {true, Req, State#state{auth = ?GUEST}};
                 _ ->
-                    {stop, http_req:send_error(Error, Req2), State#state{data = Data}}
+                    {stop, http_req:send_error(Error, Req), State}
             end;
         {error, _} = Error ->
             {stop, http_req:send_error(Error, Req), State}
@@ -208,17 +206,19 @@ delete_resource(Req, State) ->
     {stop, cowboy_req:req(), state()}.
 process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_req = #rest_req{
     method = Method,
+    parse_body = ParseBody,
+    consumes = Consumes,
     b_gri = GriWithBindings
 }} = State) ->
     try
-        {Data, Req2} = get_data(Req, State),
+        {Data, Req2} = get_data(Req, ParseBody, Consumes),
         OpReq = #op_req{
             auth = Auth,
             operation = method_to_operation(Method),
-            gri = resolve_gri_bindings(SessionId, GriWithBindings, Data, Req),
+            gri = resolve_gri_bindings(SessionId, GriWithBindings, Req),
             data = Data
         },
-        {stop, route_to_proper_handler(OpReq, Req2), State#state{data = Data}}
+        {stop, route_to_proper_handler(OpReq, Req2), State}
     catch
         throw:Error ->
             {stop, http_req:send_error(Error, Req), State};
@@ -241,15 +241,15 @@ method_to_operation('DELETE') -> delete.
 
 
 %% @private
--spec resolve_gri_bindings(session:id(), bound_gri(), middleware:data(), cowboy_req:req()) ->
+-spec resolve_gri_bindings(session:id(), bound_gri(), cowboy_req:req()) ->
     gri:gri().
-resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Data, Req) ->
+resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
     IdBinding = resolve_bindings(SessionId, Id, Req),
     AsBinding = case As of
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, IdBinding, Data) of
+    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, Sc, IdBinding) of
         true -> public;
         false -> Sc
     end,
@@ -287,16 +287,13 @@ resolve_bindings(_SessionId, Other, _Req) ->
 %% include data from request body.
 %% Depending on specified ParseBody option request body will be saved as is
 %% under content-type key or as json object containing additional parameters.
-%% NOTE: This function can be called only once per request
 %% @end
 %%--------------------------------------------------------------------
--spec get_data(cowboy_req:req(), state()) ->
+-spec get_data(cowboy_req:req(), parse_body(), Consumes :: [term()]) ->
     {middleware:data(), cowboy_req:req()}.
-get_data(Req, #state{data = Data}) when Data =/= undefined ->
-    {Data, Req};
-get_data(Req, #state{rest_req = #rest_req{parse_body = ignore}}) ->
+get_data(Req, ignore, _Consumes) ->
     {http_parser:parse_query_string(Req), Req};
-get_data(Req, #state{rest_req = #rest_req{parse_body = as_json_params}}) ->
+get_data(Req, as_json_params, _Consumes) ->
     QueryParams = http_parser:parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ParsedBody = try
@@ -309,7 +306,7 @@ get_data(Req, #state{rest_req = #rest_req{parse_body = as_json_params}}) ->
     end,
     is_map(ParsedBody) orelse throw(?ERROR_MALFORMED_DATA),
     {maps:merge(ParsedBody, QueryParams), Req2};
-get_data(Req, #state{rest_req = #rest_req{parse_body = {as_is, KeyName}, consumes = Consumes}}) ->
+get_data(Req, {as_is, KeyName}, Consumes) ->
     QueryParams = http_parser:parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ContentType = case Consumes of

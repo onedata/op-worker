@@ -136,7 +136,7 @@ get_record_struct(2) ->
     {record, [
         {expires, integer},
         {session_id, string},
-        {file_guids, [string]}
+        {file_guids, [string]} % modified field
     ]}.
 
 
@@ -154,8 +154,9 @@ upgrade_record(1, Record) ->
         SessionId,
         FileGuid
     } = Record,
-    {2, #file_download_code{
-        expires = Expires,
-        session_id = SessionId,
-        file_guids = [FileGuid]
+    {2, {
+        file_download_code,
+        Expires,
+        SessionId,
+        [FileGuid]
     }}.

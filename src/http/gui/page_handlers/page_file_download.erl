@@ -33,16 +33,17 @@
 %% @doc
 %% Returns the URL under which given files can be downloaded. The URL contains
 %% a one-time download code. When downloading single file performs a permissions 
-%% test first and denies requests if inaccessible.
+%% test first and denies requests if inaccessible. In case of multi_file/directory 
+%% download no such test is performed - inaccessible files are ignored during streaming.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_download_url(session:id(), [fslogic_worker:file_guid()]) ->
     {ok, binary()} | errors:error().
-get_file_download_url(SessionId, FileGuidList) ->
+get_file_download_url(SessionId, FileGuids) ->
     try
-        maybe_sync_first_file_block(SessionId, FileGuidList),
+        maybe_sync_first_file_block(SessionId, FileGuids),
         Hostname = oneprovider:get_domain(),
-        {ok, Code} = file_download_code:create(SessionId, FileGuidList),
+        {ok, Code} = file_download_code:create(SessionId, FileGuids),
         URL = str_utils:format_bin("https://~s~s/~s", [
             Hostname, ?FILE_DOWNLOAD_PATH, Code
         ]),
@@ -84,6 +85,13 @@ handle(<<"GET">>, Req) ->
 
 
 %% @private
+%% @doc
+%% Checks file permissions and syncs first file block when downloading single 
+%% regular file. In case of multi file download access test is not performed, 
+%% as inaccessible files will be ignored. Also first block sync is not needed, 
+%% because first bytes (gzip header) are sent instantly after streaming started.
+%% @end
+%%--------------------------------------------------------------------
 -spec maybe_sync_first_file_block(session:id(), [fslogic_worker:file_guid()]) -> ok.
 maybe_sync_first_file_block(SessionId, [FileGuid]) ->
     case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
@@ -102,18 +110,9 @@ maybe_sync_first_file_block(SessionId, [FileGuid]) ->
             ok
     end;
 maybe_sync_first_file_block(_SessionId, _FileGuidList) ->
-    % do not perform access test, inaccessible files will be ignored
     ok.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Asserts the validity of multipart POST request and proceeds with
-%% parsing or returns an error. Returns list of parsed filed values and
-%% file body.
-%% @end
-%%--------------------------------------------------------------------
 -spec handle_http_download(
     session:id(),
     [fslogic_worker:file_guid()],
@@ -122,43 +121,39 @@ maybe_sync_first_file_block(_SessionId, _FileGuidList) ->
 ) ->
     cowboy_req:req().
 handle_http_download(SessionId, FileGuidList, OnSuccessCallback, Req0) ->
-    FileAttrsList = lists:foldl(
-        fun (_FileGuid, {error, _} = Error) -> 
-                Error;
-            (FileGuid, Acc) ->
+    FileAttrsList = lists_utils:foldl_while(
+        fun (FileGuid, Acc) ->
                 case lfm:stat(SessionId, {guid, FileGuid}) of
-                    {ok, #file_attr{} = FileAttr} -> [FileAttr | Acc];
-                    {error, ?EACCES} -> Acc;
-                    {error, _Errno} = Error -> Error
+                    {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
+                    {error, ?EACCES} -> {cont, Acc};
+                    {error, _Errno} = Error -> {halt, Error}
                 end
     end, [], FileGuidList),
     case FileAttrsList of
+        {error, Errno} ->
+            http_req:send_error(?ERROR_POSIX(Errno), Req0);
         [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
-            Req1 = set_header(normalize_filename(FileName), Req0),
+            Req1 = set_content_disposition_header(normalize_filename(FileName), Req0),
             http_download_utils:stream_file(
                 SessionId, Attr, OnSuccessCallback, Req1
             );
         [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
-            Req1 = set_header(<<(normalize_filename(FileName))/binary, ".tar.gz">>, Req0),
-            http_download_utils:stream_archive(
+            Req1 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar.gz">>, Req0),
+            http_download_utils:stream_tarball(
                 SessionId, FileAttrsList, OnSuccessCallback, Req1
             );
-        [_ | _] ->
+        _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
-            Req1 = set_header(<<"onedata-download-", Timestamp/binary, ".tar.gz">>, Req0),
-            http_download_utils:stream_archive(
+            Req1 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar.gz">>, Req0),
+            http_download_utils:stream_tarball(
                 SessionId, FileAttrsList, OnSuccessCallback, Req1
-            );
-        [] ->
-            http_req:send_error(?ERROR_POSIX(?EACCES), Req0);
-        {error, Errno} ->
-            http_req:send_error(?ERROR_POSIX(Errno), Req0)
+            )
     end.
 
 
 %% @private
--spec set_header(file_meta:name(), cowboy_req:req()) -> cowboy_req:req().
-set_header(Filename, Req) ->
+-spec set_content_disposition_header(file_meta:name(), cowboy_req:req()) -> cowboy_req:req().
+set_content_disposition_header(Filename, Req) ->
     %% @todo VFS-2073 - check if needed
     %% FileNameUrlEncoded = http_utils:url_encode(FileName),
     cowboy_req:set_resp_header(
