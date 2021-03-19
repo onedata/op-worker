@@ -36,12 +36,20 @@
 %%% API
 %%%===================================================================
 
--spec run([lfm_attrs:file_attributes()], session:id(), cowboy_req:req()) -> ok.
+-spec run([lfm_attrs:file_attributes()], session:id(), cowboy_req:req()) -> ok | {error, term()}.
 run(FileAttrsList, SessionId, CowboyReq) ->
-    TarStream = tar_utils:open_archive_stream(),
-    FinalTarStream = stream_many_files(FileAttrsList, SessionId, TarStream, CowboyReq),
-    http_streaming_utils:send_data_chunk(tar_utils:close_archive_stream(FinalTarStream), CowboyReq),
-    ok.
+    TaskId = datastore_key:new(),
+    case tree_traverse_session:setup_for_task(user_ctx:new(SessionId), TaskId) of
+        ok ->
+            {ok, UserId} = session:get_user_id(SessionId),
+            TarStream = tar_utils:open_archive_stream(),
+            {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
+            FinalTarStream = stream_many_files(FileAttrsList, TaskId, UserCtx, TarStream, CowboyReq),
+            http_streaming_utils:send_data_chunk(tar_utils:close_archive_stream(FinalTarStream), CowboyReq),
+            tree_traverse_session:close_for_task(TaskId);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec init_pool() -> ok  | no_return().
@@ -90,11 +98,11 @@ do_master_job(Job, MasterJobArgs) ->
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_desc = UserDesc, traverse_info = TraverseInfo}, TaskId) ->
+do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_id = UserId}, TaskId) ->
     {ok, #{ <<"connection_pid">> := EncodedPid }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     Pid = transfer_utils:decode_pid(EncodedPid),
     Guid = file_ctx:get_guid_const(FileCtx),
-    {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserDesc, TraverseInfo, TaskId),
+    {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
     {ok, FileAttrs} = lfm:stat(user_ctx:get_session_id(UserCtx), {guid, Guid}),
     Pid ! {file_attrs, FileAttrs, self()},
     case slave_job_loop(Pid) of
@@ -124,42 +132,44 @@ slave_job_loop(Pid) ->
 
 
 %% @private
--spec stream_many_files(lfm_attrs:file_attributes(), session:id(), tar_utils:stream(), cowboy_req:req()) ->
-    tar_utils:stream().
-stream_many_files([], _SessionId, TarStream, _CowboyReq) -> 
+-spec stream_many_files([lfm_attrs:file_attributes()], id(), user_ctx:ctx(), tar_utils:stream(), 
+    cowboy_req:req()) -> tar_utils:stream().
+stream_many_files([], _TaskId, _UserCtx, TarStream, _CowboyReq) -> 
     TarStream;
 stream_many_files(
-    [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE} = FileAttrs | Tail], 
-    SessionId, TarStream, CowboyReq
+    [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE} = FileAttrs | Tail],
+    TaskId, UserCtx, TarStream, CowboyReq
 ) ->
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
     % add starting dir to archive here as traverse do not execute slave job on it
     {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, PathPrefix),
     http_streaming_utils:send_data_chunk(Bytes, CowboyReq),
+    traverse_task:delete_ended(?POOL_NAME, TaskId), %% @TODO VFS-6212 start traverse with cleanup option
     Options = #{
+        task_id => TaskId,
         batch_size => 1,
         children_master_jobs_mode => sync,
         children_dirs_handling_mode => generate_slave_and_master_jobs,
         additional_data => #{<<"connection_pid">> => transfer_utils:encode_pid(self())}
     },
     {ok, _} = tree_traverse:run(
-        ?POOL_NAME, file_ctx:new_by_guid(Guid), {session, SessionId}, Options),
-    TarStream2 = stream_loop(TarStream1, CowboyReq, SessionId, PathPrefix),
-    stream_many_files(Tail, SessionId, TarStream2, CowboyReq);
+        ?POOL_NAME, file_ctx:new_by_guid(Guid), user_ctx:get_user_id(UserCtx), Options),
+    TarStream2 = stream_loop(TarStream1, CowboyReq, user_ctx:get_session_id(UserCtx), PathPrefix),
+    stream_many_files(Tail, TaskId, UserCtx, TarStream2, CowboyReq);
 stream_many_files(
     [#file_attr{guid = Guid, type = ?REGULAR_FILE_TYPE} = FileAttrs | Tail], 
-    SessionId, TarStream, CowboyReq
+    TaskId, UserCtx, TarStream, CowboyReq
 ) ->
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
-    TarStream1 = stream_file(TarStream, CowboyReq, SessionId, FileAttrs, PathPrefix),
-    stream_many_files(Tail, SessionId, TarStream1, CowboyReq).
+    TarStream1 = stream_file(TarStream, CowboyReq, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
+    stream_many_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq).
 
 
 %% @private
--spec stream_file(tar_utils:state(), cowboy_req:req(), session:id(), lfm_attrs:file_attributes(),
-    file_meta:path()) -> tar_utils:state().
+-spec stream_file(tar_utils:stream(), cowboy_req:req(), session:id(), lfm_attrs:file_attributes(),
+    file_meta:path()) -> tar_utils:stream().
 stream_file(TarStream, Req, SessionId, FileAttrs, RootDirPath) ->
     #file_attr{size = FileSize, guid = Guid} = FileAttrs,
     case lfm:monitored_open(SessionId, {guid, Guid}, read) of
@@ -181,8 +191,8 @@ stream_file(TarStream, Req, SessionId, FileAttrs, RootDirPath) ->
 
 
 %% @private
--spec stream_loop(tar_utils:state(), cowboy_req:req(), session:id(), file_meta:path()) ->
-    tar_utils:state().
+-spec stream_loop(tar_utils:stream(), cowboy_req:req(), session:id(), file_meta:path()) ->
+    tar_utils:stream().
 stream_loop(TarStream, Req, SessionId, RootDirPath) ->
     receive
         {file_attrs, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs, Pid} ->
@@ -199,8 +209,8 @@ stream_loop(TarStream, Req, SessionId, RootDirPath) ->
 
 
 %% @private
--spec new_tar_file_entry(tar_utils:state(), lfm_attrs:file_attributes(), file_meta:path()) ->
-    {binary(), tar_utils:state()}.
+-spec new_tar_file_entry(tar_utils:stream(), lfm_attrs:file_attributes(), file_meta:path()) ->
+    {binary(), tar_utils:stream()}.
 new_tar_file_entry(TarStream, FileAttrs, StartingDirPath) ->
     #file_attr{mode = Mode, mtime = MTime, type = Type, size = FileSize, guid = Guid} = FileAttrs,
     FinalMode = case {file_id:is_share_guid(Guid), Type} of
@@ -220,7 +230,7 @@ new_tar_file_entry(TarStream, FileAttrs, StartingDirPath) ->
 
 %% TODO VFS-6057 resolve share path up to share not user root dir
 %% @private
--spec get_file_path(fslogic_worker:file_guid()) -> file_meta:path().
+-spec get_file_path(fslogic_worker:file_guid()) -> {ok, file_meta:path()} | {error, term()}.
 get_file_path(ShareGuid) ->
     {Uuid, SpaceId, _} = file_id:unpack_share_guid(ShareGuid),
     Guid = file_id:pack_guid(Uuid, SpaceId),

@@ -116,7 +116,7 @@ stream_tarball(SessionId, FileAttrsList, OnSuccessCallback, Req0) ->
         #{?HDR_CONTENT_TYPE => <<"multipart/byteranges">>},
         Req0
     ),
-    dir_streaming_traverse:run(FileAttrsList, SessionId, Req1),
+    ok = dir_streaming_traverse:run(FileAttrsList, SessionId, Req1),
     execute_on_success_callback(<<>>, OnSuccessCallback),
     Req1.
 

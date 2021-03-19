@@ -27,7 +27,7 @@
     % File or directory processed by job
     file_ctx :: file_ctx:ctx(),
     % User who scheduled the traverse
-    user_desc :: tree_traverse:user_desc(),
+    user_id :: od_user:id(),
 
     % Fields used for directory listing
     token = ?INITIAL_LS_TOKEN :: file_meta:list_token(),
@@ -50,7 +50,7 @@
 -record(tree_traverse_slave, {
     file_ctx :: file_ctx:ctx(),
     % User who scheduled the traverse
-    user_desc :: tree_traverse:user_desc(),
+    user_id :: od_user:id(),
     traverse_info :: tree_traverse:traverse_info(),
     track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean()
 }).

@@ -64,9 +64,9 @@ stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize)
     cowboy_req:req(),
     EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     read_block_size(),
-    tar_utils:state()
+    tar_utils:stream()
 ) ->
-    tar_utils:state() | no_return().
+    tar_utils:stream() | no_return().
 stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, TarStream) ->
     stream_bytes_range(Range, #download_ctx{
         file_size = FileSize,
@@ -85,7 +85,7 @@ stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize,
     cowboy_req:req(),
     SendRetryDelay :: time:millis()
 ) ->
-    tar_utils:state() | no_return().
+    tar_utils:stream() | no_return().
 stream_bytes_range(Range, DownloadCtx, Req, SendRetryDelay) ->
     stream_bytes_range(Range, DownloadCtx, Req, SendRetryDelay, 0).
 

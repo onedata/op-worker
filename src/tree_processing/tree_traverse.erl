@@ -18,8 +18,9 @@
 %%%
 %%% It is possible to perform traverse in context of a ?ROOT_USER or a normal user.
 %%% ?ROOT_USER is used by default.
-%%% If traverse is scheduled in context of a normal user, unless session id is provided, user's offline session
-%%% will be used to ensure that traverse may progress even when client disconnects from provider.
+%%% If traverse is scheduled in context of a normal user, its offline session
+%%% will be used to ensure that traverse may progress even when client disconnects
+%%% from provider.
 %%%
 %%% NOTE !!!
 %%% It is a responsibility of the calling module to init and close
@@ -85,8 +86,6 @@
     target_provider_id => oneprovider:id()
 }.
 
--type user_desc() :: {offline_access, od_user:id()} | {session, session:id()}.
-
 
 %formatter:off
 % This callback is executed after generating children jobs but before executing them (before returning
@@ -102,7 +101,7 @@
 %formatter:on
 
 -export_type([id/0, pool/0, master_job/0, slave_job/0, children_dirs_handling_mode/0,
-    children_master_jobs_mode/0, batch_size/0, traverse_info/0, user_desc/0]).
+    children_master_jobs_mode/0, batch_size/0, traverse_info/0]).
 
 %%%===================================================================
 %%% Main API
@@ -132,16 +131,16 @@ stop(Pool) ->
 
 -spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), run_options()) -> {ok, id()}.
 run(Pool, DocOrCtx, Opts)  ->
-    run(Pool, DocOrCtx, {offline_access, ?ROOT_USER_ID}, Opts).
+    run(Pool, DocOrCtx, ?ROOT_USER_ID, Opts).
 
--spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), user_desc(), run_options()) ->
+-spec run(traverse:pool() | atom(), file_meta:doc() | file_ctx:ctx(), od_user:id(), run_options()) ->
     {ok, id()}.
-run(Pool, DocOrCtx, UserDesc, Opts) when is_atom(Pool) ->
-    run(atom_to_binary(Pool, utf8), DocOrCtx, UserDesc, Opts);
-run(Pool, FileDoc = #document{scope = SpaceId, value = #file_meta{}}, UserDesc, Opts) ->
+run(Pool, DocOrCtx, UserId, Opts) when is_atom(Pool) ->
+    run(atom_to_binary(Pool, utf8), DocOrCtx, UserId, Opts);
+run(Pool, FileDoc = #document{scope = SpaceId, value = #file_meta{}}, UserId, Opts) ->
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    run(Pool, FileCtx, UserDesc, Opts);
-run(Pool, FileCtx, UserDesc, Opts) ->
+    run(Pool, FileCtx, UserId, Opts);
+run(Pool, FileCtx, UserId, Opts) ->
     TaskId = case maps:get(task_id, Opts, undefined) of
         undefined -> datastore_key:new();
         Id -> Id
@@ -176,7 +175,7 @@ run(Pool, FileCtx, UserDesc, Opts) ->
 
     Job = #tree_traverse{
         file_ctx = FileCtx,
-        user_desc = UserDesc,
+        user_id = UserId,
         token = Token,
         children_dirs_handling_mode = ChildrenDirsHandlingMode,
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -361,14 +360,14 @@ delete_subtree_status_doc(TaskId, Uuid) ->
     {error, term()}.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
-    user_desc = UserDesc,
+    user_id = UserId,
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }, #{task_id := TaskId}) ->
-    case tree_traverse_session:acquire_for_task(UserDesc, TraverseInfo, TaskId) of
+    case tree_traverse_session:acquire_for_task(UserId, maps:get(pool, TraverseInfo), TaskId) of
         {ok, UserCtx} ->
             try
                 {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, #{
@@ -421,12 +420,12 @@ get_child_master_job(MasterJob, ChildCtx) ->
 
 -spec get_child_slave_job(master_job(), file_ctx:ctx()) -> slave_job().
 get_child_slave_job(#tree_traverse{
-    user_desc = UserDesc,
+    user_id = UserId,
     traverse_info = TraverseInfo,
     track_subtree_status = TrackSubtreeStatus
 }, ChildCtx) ->
     #tree_traverse_slave{
-        user_desc = UserDesc,
+        user_id = UserId,
         file_ctx = ChildCtx,
         traverse_info = TraverseInfo,
         track_subtree_status = TrackSubtreeStatus

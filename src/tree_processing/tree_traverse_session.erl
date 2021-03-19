@@ -40,13 +40,13 @@
 %% This function initializes session suitable for user who scheduled
 %% given task.
 %% For normal user offline session is initialized.
-%% For ?ROOT_USER such initialization is not performed as
-%% ?ROOT_SESS_ID will be returned from acquire_session_for_task/3 function.
+%% For special user (root, guest) such initialization is not performed as
+%% its session will be returned from acquire_session_for_task/3 function.
 %% @end
 %%--------------------------------------------------------------------
 -spec setup_for_task(user_ctx:ctx(), tree_traverse:id()) -> ok | {error, term()}.
 setup_for_task(UserCtx, TaskId) ->
-    case user_ctx:is_root(UserCtx) of
+    case user_ctx:is_root(UserCtx) or user_ctx:is_guest(UserCtx) of
         true ->
             ok;
         false ->
@@ -74,19 +74,18 @@ close_for_task(TaskId) ->
 %% @doc
 %% This function acquires session suitable for user who scheduled
 %% given task.
-%% For normal user offline session is acquired while for ?ROOT_USER
-%% ?ROOT_SESS_ID is returned.
+%% For normal user offline session is acquired while for special 
+%% user (root, guest) its session is returned.
 %% Returned sessions are wrapped in user_ctx:ctx().
 %% @end
 %%--------------------------------------------------------------------
--spec acquire_for_task(tree_traverse:user_desc(), tree_traverse:traverse_info(), tree_traverse:id()) ->
+-spec acquire_for_task(od_user:id(), tree_traverse:pool(), tree_traverse:id()) ->
     {ok, user_ctx:ctx()} | {error, term()}.
-acquire_for_task({_, ?ROOT_USER_ID}, _TraverseInfo, _TaskId) ->
+acquire_for_task(?ROOT_USER_ID, _Pool, _TaskId) ->
     {ok, user_ctx:new(?ROOT_SESS_ID)};
-acquire_for_task({session, SessionId}, _TraverseInfo, _TaskId) ->
-    {ok, user_ctx:new(SessionId)};
-acquire_for_task({offline_access, _UserId}, TraverseInfo, TaskId) ->
-    Pool = maps:get(pool, TraverseInfo),
+acquire_for_task(?GUEST_USER_ID, _Pool, _TaskId) ->
+    {ok, user_ctx:new(?GUEST_SESS_ID)};
+acquire_for_task(_UserId, Pool, TaskId) ->
     case offline_access_manager:get_session_id(TaskId) of
         {ok, SessionId} ->
             {ok, user_ctx:new(SessionId)};
