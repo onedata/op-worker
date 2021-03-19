@@ -38,7 +38,7 @@
     read_block_size :: read_block_size(),
     max_read_blocks_count :: non_neg_integer(),
     encoding_fun :: fun((Data :: binary()) -> EncodedData :: binary()),
-    tar_stream = undefined :: undefined | tar_utils:state(),
+    tar_stream = undefined :: undefined | tar_utils:stream(),
     
     on_success_callback :: fun(() -> ok)
 }).

@@ -52,7 +52,7 @@ get_read_block_size(FileHandle) ->
     EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     read_block_size()
 ) ->
-    ok | no_return().
+    tar_utils:stream() | undefined | no_return().
 stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize) ->
     stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, undefined).
 
@@ -64,9 +64,9 @@ stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize)
     cowboy_req:req(),
     EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     read_block_size(),
-    tar_utils:stream()
+    tar_utils:stream() | undefined
 ) ->
-    tar_utils:stream() | no_return().
+    tar_utils:stream() | undefined | no_return().
 stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, TarStream) ->
     stream_bytes_range(Range, #download_ctx{
         file_size = FileSize,
@@ -85,7 +85,7 @@ stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize,
     cowboy_req:req(),
     SendRetryDelay :: time:millis()
 ) ->
-    tar_utils:stream() | no_return().
+    tar_utils:stream() | undefined | no_return().
 stream_bytes_range(Range, DownloadCtx, Req, SendRetryDelay) ->
     stream_bytes_range(Range, DownloadCtx, Req, SendRetryDelay, 0).
 
@@ -124,7 +124,7 @@ calculate_max_read_blocks_count(ReadBlockSize) ->
     SendRetryDelay :: time:millis(),
     ReadBytes :: non_neg_integer()
 ) ->
-    ok | no_return().
+    tar_utils:stream() | undefined | no_return().
 stream_bytes_range({From, To}, #download_ctx{tar_stream = TarStream}, _, _, _) when From > To ->
     TarStream;
 stream_bytes_range({From, To}, #download_ctx{
@@ -143,7 +143,7 @@ stream_bytes_range({From, To}, #download_ctx{
     {NewFileHandle, Data} = read_file_data(FileHandle, From, ToRead, MinBytesToRead - ReadBytes),
 
     case byte_size(Data) of
-        0 -> ok;
+        0 -> TarStream;
         DataSize ->
             {BytesToSend, FinalTarStream} = case TarStream of
                 undefined -> {EncodingFun(Data), undefined};

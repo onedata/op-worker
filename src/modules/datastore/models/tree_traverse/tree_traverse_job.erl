@@ -57,7 +57,7 @@ save_master_job(Key, Job = #tree_traverse{
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
-    children_dirs_handling_mode = ChildrenDirsHandlingMode,
+    child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
@@ -74,7 +74,7 @@ save_master_job(Key, Job = #tree_traverse{
         use_listing_token = Token =/= undefined,
         last_name = LastName,
         last_tree = LastTree,
-        children_dirs_handling_mode = ChildrenDirsHandlingMode,
+        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
@@ -104,7 +104,7 @@ get_master_job(#document{value = #tree_traverse_job{
     use_listing_token = UseListingToken,
     last_name = LastName,
     last_tree = LastTree,
-    children_dirs_handling_mode = ChildrenDirsHandlingMode,
+    child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
@@ -121,7 +121,7 @@ get_master_job(#document{value = #tree_traverse_job{
         end,
         last_name = LastName,
         last_tree = LastTree,
-        children_dirs_handling_mode = ChildrenDirsHandlingMode,
+        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
@@ -204,8 +204,8 @@ get_record_struct(3) ->
         {use_listing_token, boolean},
         {last_name, string},
         {last_tree, string},
-        % execute_slave_on_dir has been changed to children_dirs_handling_mode in this version
-        {children_dirs_handling_mode, atom},
+        % execute_slave_on_dir has been changed to child_dirs_job_generation_policy in this version
+        {child_dirs_job_generation_policy, atom},
         {children_master_jobs_mode, atom},
         {track_subtree_status, boolean},
         {batch_size, integer},
@@ -260,7 +260,7 @@ upgrade_record(2, Record) ->
         TraverseInfo
     } = Record,
     
-    ChildrenDirsHandlingMode = case ExecuteSlaveOnDir of
+    ChildDirsJobGenerationPolicy = case ExecuteSlaveOnDir of
         false -> generate_master_jobs;
         true -> generate_slave_and_master_jobs
     end,
@@ -274,7 +274,7 @@ upgrade_record(2, Record) ->
         UseListingToken,
         LastName,
         LastTree,
-        ChildrenDirsHandlingMode,
+        ChildDirsJobGenerationPolicy,
         ChildrenMasterJobsMode,
         TrackSubtreeStatus,
         BatchSize,

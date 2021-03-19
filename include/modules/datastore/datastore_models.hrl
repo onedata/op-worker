@@ -948,7 +948,7 @@
     last_name :: file_meta:name(),
     last_tree :: od_provider:id(),
     % Traverse task specific info
-    children_dirs_handling_mode :: tree_traverse:children_dirs_handling_mode(),
+    child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),

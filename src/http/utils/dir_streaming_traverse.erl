@@ -150,7 +150,7 @@ stream_many_files(
         task_id => TaskId,
         batch_size => 1,
         children_master_jobs_mode => sync,
-        children_dirs_handling_mode => generate_slave_and_master_jobs,
+        child_dirs_job_generation_policy => generate_slave_and_master_jobs,
         additional_data => #{<<"connection_pid">> => transfer_utils:encode_pid(self())}
     },
     {ok, _} = tree_traverse:run(

@@ -154,8 +154,8 @@ upgrade_record(1, Record) ->
         SessionId,
         FileGuid
     } = Record,
-    {2, {
-        file_download_code,
+    
+    {2, {file_download_code,
         Expires,
         SessionId,
         [FileGuid]

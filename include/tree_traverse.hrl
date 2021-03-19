@@ -18,7 +18,7 @@
 
 -define(NEW_JOBS_DEFAULT_PREPROCESSOR, fun(_, _, _, _) -> ok end).
 -define(DEFAULT_BATCH_SIZE, 1000).
--define(DEFAULT_CHILDREN_DIRS_HANDLING_MODE, generate_master_jobs).
+-define(DEFAULT_CHILD_DIRS_JOB_GENERATION_POLICY, generate_master_jobs).
 -define(DEFAULT_CHILDREN_MASTER_JOBS_MODE, sync).
 -define(DEFAULT_TRACK_SUBTREE_STATUS, false).
 
@@ -37,7 +37,7 @@
 
     % Traverse config
     % generate slave jobs also for directories
-    children_dirs_handling_mode :: tree_traverse:children_dirs_handling_mode(),
+    child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode = ?DEFAULT_CHILDREN_MASTER_JOBS_MODE :: tree_traverse:children_master_jobs_mode(),
     track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean(),
