@@ -105,7 +105,8 @@
 % This macro is used to disable automatic restart of autocleaning runs in tests
 -define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
 
--define(AVAILABLE_SHARE_OPERATIONS, [
+-define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
+    % Checking perms for operations other than 'read' should result in immediate ?EACCES
     check_perms,
     get_parent,
     % TODO VFS-6057 resolve share path up to share not user root dir
@@ -115,6 +116,7 @@
     get_xattr,
     get_metadata,
 
+    % Opening file is available but only in 'read' mode
     open_file,
     open_file_with_extended_info,
     synchronize_block,
@@ -128,6 +130,14 @@
     get_child_attr,
     get_file_children_attrs,
     get_file_children_details
+]).
+-define(AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE, [
+    % Necessary operations for direct-io to work (contains private information
+    % like storage id, etc.)
+    get_file_location,
+    get_helper_params
+
+    | ?OPERATIONS_AVAILABLE_IN_SHARE_MODE
 ]).
 
 %%%===================================================================
@@ -390,19 +400,23 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             {FileCtx0, file_ctx:get_share_id_const(FileCtx0)}
     end,
     try
-        UserCtx1 = case ShareId of
-            undefined ->
+        UserCtx1 = case {user_ctx:is_in_open_handle_mode(UserCtx0), ShareId} of
+            {false, undefined} ->
                 UserCtx0;
-            _ ->
-                Operation = get_operation(Request),
-                case lists:member(Operation, ?AVAILABLE_SHARE_OPERATIONS) of
+            {IsInOpenHandleMode, _} ->
+                case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
                     true -> ok;
                     false -> throw(?EPERM)
                 end,
-                % Operations concerning shares must be carried with GUEST auth
-                case user_ctx:is_guest(UserCtx0) of
-                    true -> UserCtx0;
-                    false -> user_ctx:new(?GUEST_SESS_ID)
+                case IsInOpenHandleMode of
+                    true ->
+                        UserCtx0;
+                    false ->
+                        % Operations concerning shares must be carried with GUEST auth
+                        case user_ctx:is_guest(UserCtx0) of
+                            true -> UserCtx0;
+                            false -> user_ctx:new(?GUEST_SESS_ID)
+                        end
                 end
         end,
         handle_request_locally(UserCtx1, Request, FileCtx1)
@@ -411,7 +425,30 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             fslogic_errors:handle_error(Request, Type, Error)
     end.
 
+
 %% @private
+-spec is_operation_available_in_share_mode(request(), IsInOpenHandleMode :: boolean()) ->
+    boolean().
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file{flag = Flag}
+}}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file_with_extended_info{flag = Flag}
+}}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(#provider_request{
+    provider_request = #check_perms{flag = Flag}
+}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(Request, true) ->
+    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE);
+is_operation_available_in_share_mode(Request, false) ->
+    lists:member(get_operation(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
+
+
+%% @private
+-spec get_operation(request()) -> atom().
 get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
     element(1, Req);
 get_operation(#fuse_request{fuse_request = Req}) ->
@@ -420,6 +457,7 @@ get_operation(#provider_request{provider_request = Req}) ->
     element(1, Req);
 get_operation(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
+
 
 %%--------------------------------------------------------------------
 %% @private

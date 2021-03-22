@@ -223,7 +223,7 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
 
     case TaskType of
         <<"traverse">> ->
-            {ParentFileCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+            {ParentFileCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
             ok = qos_status:report_traverse_finished_for_file(TaskId, FileCtx2, ParentFileCtx);
         <<"reconcile">> ->
             ok

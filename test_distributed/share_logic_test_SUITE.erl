@@ -384,7 +384,7 @@ confined_access_token_test(Config) ->
     % oneclient interface caveat
     ?assertMatch(
         ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
-        rpc:call(Node, share_logic, get, [TokenCredentials, ?SHARE_1])
+        rpc:call(Node, share_logic, delete, [TokenCredentials, ?SHARE_1])
     ),
     % Nevertheless, following requests should be made:
     % - first to verify token credentials,

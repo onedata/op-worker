@@ -26,7 +26,7 @@
     ensure_file_created_on_storage/2,
     ensure_dir_created_on_storage/2,
 
-    create_session/3,
+    create_session/3, create_session/4,
 
     all_perms/2, complementary_perms/3,
     perms_to_bitmask/1, perm_to_bitmask/1,
@@ -106,6 +106,12 @@ ensure_dir_created_on_storage(Node, DirGuid) ->
 -spec create_session(node(), od_user:id(), tokens:serialized()) ->
     session:id().
 create_session(Node, UserId, AccessToken) ->
+    create_session(Node, UserId, AccessToken, normal).
+
+
+-spec create_session(node(), od_user:id(), tokens:serialized(), session:mode()) ->
+    session:id().
+create_session(Node, UserId, AccessToken, SessionMode) ->
     Nonce = crypto:strong_rand_bytes(10),
     Identity = ?SUB(user, UserId),
     TokenCredentials = auth_manager:build_token_credentials(
@@ -116,7 +122,7 @@ create_session(Node, UserId, AccessToken) ->
         Node,
         session_manager,
         reuse_or_create_fuse_session,
-        [Nonce, Identity, TokenCredentials]
+        [Nonce, Identity, SessionMode, TokenCredentials]
     )),
     SessionId.
 
