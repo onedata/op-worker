@@ -304,6 +304,7 @@ cleanup() ->
     file_registration:stop_pool(),
     replica_deletion_master:stop_workers_pool(),
     tree_deletion_traverse:stop_pool(),
+    dir_streaming_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
     ok.
 

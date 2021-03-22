@@ -20,7 +20,8 @@
 
 -record(share_spec, {
     name = <<"share">> :: binary(),
-    description = <<>> :: binary()
+    description = <<>> :: binary(),
+    sharing_user = undefined :: oct_background:entity_selector()
 }).
 
 -record(file_spec, {

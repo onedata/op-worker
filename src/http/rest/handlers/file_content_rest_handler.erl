@@ -128,7 +128,7 @@ process_request(#op_req{
 }, Req) ->
     case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
-            http_download_utils:stream_file(SessionId, FileAttrs, Req);
+            http_streaming_utils:stream_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             throw(?ERROR_POSIX(?EISDIR))
     end;

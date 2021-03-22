@@ -49,7 +49,7 @@
 
 
 -spec create(session:id(), [fslogic_worker:file_guid()]) -> {ok, code()} | {error, term()}.
-create(SessionId, FileGuidList) ->
+create(SessionId, FileGuids) ->
     Ctx = ?CTX,
 
     ExpirationInterval = ?EXPIRATION_INTERVAL,
@@ -61,7 +61,7 @@ create(SessionId, FileGuidList) ->
             % remove document from db and not from memory
             expires = ?NOW() + ExpirationInterval,
             session_id = SessionId,
-            file_guids = FileGuidList
+            file_guids = FileGuids
         }
     },
     case datastore_model:save(CtxWithExpiration, Doc) of
@@ -78,9 +78,9 @@ verify(Code) ->
         {ok, #document{value = #file_download_code{
             expires = Expires,
             session_id = SessionId,
-            file_guids = FileGuidList
+            file_guids = FileGuids
         }}} when Now < Expires ->
-            {true, SessionId, FileGuidList};
+            {true, SessionId, FileGuids};
         {ok, _} ->
             ok = datastore_model:delete(?CTX, Code),
             false;

@@ -508,10 +508,13 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = file_
 
 authorize_get(#op_req{auth = Auth, gri = #gri{aspect = download_url, scope = Scope}, data = Data}, _) ->
     Predicate = case Scope of
-        private -> fun(Guid) -> 
-            not file_id:is_share_guid(Guid) 
-                andalso middleware_utils:has_access_to_file(Auth, Guid) end;
-        public -> fun file_id:is_share_guid/1
+        private -> 
+            fun(Guid) -> 
+                not file_id:is_share_guid(Guid) 
+                    andalso middleware_utils:has_access_to_file(Auth, Guid) 
+            end;
+        public -> 
+            fun file_id:is_share_guid/1
     end,
     lists:all(Predicate, maps:get(<<"file_ids">>, Data)).
 
@@ -684,8 +687,8 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, 
 
 get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,
-    FileGuidList = maps:get(<<"file_ids">>, Data),
-    case page_file_download:get_file_download_url(SessionId, FileGuidList) of
+    FileGuids = maps:get(<<"file_ids">>, Data),
+    case page_file_download:get_file_download_url(SessionId, FileGuids) of
         {ok, URL} ->
             {ok, value, URL};
         {error, _} = Error ->

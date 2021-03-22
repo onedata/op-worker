@@ -7,6 +7,8 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Module responsible for tree traverse during archive download.
+%%% Starts new traverse for each directory on the list. Files without access are ignored.
+%%% Must be run by cowboy request handling process.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dir_streaming_traverse).
@@ -15,6 +17,7 @@
 -behavior(traverse_behaviour).
 
 -include("global_definitions.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include("tree_traverse.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -44,8 +47,8 @@ run(FileAttrsList, SessionId, CowboyReq) ->
             {ok, UserId} = session:get_user_id(SessionId),
             TarStream = tar_utils:open_archive_stream(),
             {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-            FinalTarStream = stream_many_files(FileAttrsList, TaskId, UserCtx, TarStream, CowboyReq),
-            http_streaming_utils:send_data_chunk(tar_utils:close_archive_stream(FinalTarStream), CowboyReq),
+            FinalTarStream = stream_multiple_files(FileAttrsList, TaskId, UserCtx, TarStream, CowboyReq),
+            http_streamer:send_data_chunk(tar_utils:close_archive_stream(FinalTarStream), CowboyReq),
             tree_traverse_session:close_for_task(TaskId);
         {error, _} = Error ->
             Error
@@ -74,16 +77,18 @@ stop_pool() ->
 get_job(DocOrID) ->
     tree_traverse:get_job(DocOrID).
 
+
 -spec task_finished(id(), traverse:pool()) -> ok.
-task_finished(TaskId, PoolName) ->
-    {ok, #{ <<"connection_pid">> := EncodedPid }} = traverse_task:get_additional_data(PoolName, TaskId),
-    Pid = transfer_utils:decode_pid(EncodedPid),
+task_finished(TaskId, _PoolName) ->
+    Pid = get_connection_pid(TaskId),
     Pid ! done,
     ok.
 
+
 -spec task_canceled(id(), traverse:pool()) -> ok.
-task_canceled(_TaskId, _PoolName) ->
-    ok.
+task_canceled(TaskId, PoolName) ->
+    task_finished(TaskId, PoolName).
+
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
     tree_traverse:master_job(), traverse:pool(), id(),
@@ -91,25 +96,26 @@ task_canceled(_TaskId, _PoolName) ->
 update_job_progress(Id, Job, Pool, TaskId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TaskId, Status, ?MODULE).
 
--spec do_master_job(tree_traverse:master_job() | tree_traverse:slave_job(), traverse:master_job_extended_args()) ->
-    {ok, traverse:master_job_map()}.
+
+-spec do_master_job(tree_traverse:master_job() | tree_traverse:slave_job(), 
+    traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
     tree_traverse:do_master_job(Job, MasterJobArgs).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
 do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_id = UserId}, TaskId) ->
-    {ok, #{ <<"connection_pid">> := EncodedPid }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
-    Pid = transfer_utils:decode_pid(EncodedPid),
-    Guid = file_ctx:get_guid_const(FileCtx),
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-    {ok, FileAttrs} = lfm:stat(user_ctx:get_session_id(UserCtx), {guid, Guid}),
+    #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttrs} = 
+        attr_req:get_file_attr(UserCtx, FileCtx, false),
+    Pid = get_connection_pid(TaskId),
     Pid ! {file_attrs, FileAttrs, self()},
     case slave_job_loop(Pid) of
-        ok -> ok;
+        ok -> 
+            ok;
         error -> 
-            ?debug("Canceling dir streaming traverse ~p due to unexpected exit of connection process ~p.",
-                [TaskId, Pid]),
+            ?debug("Canceling dir streaming traverse ~p due to unexpected exit "
+                   "of connection process ~p.", [TaskId, Pid]),
             ok = traverse:cancel(?POOL_NAME, TaskId)
     end.
 
@@ -132,11 +138,11 @@ slave_job_loop(Pid) ->
 
 
 %% @private
--spec stream_many_files([lfm_attrs:file_attributes()], id(), user_ctx:ctx(), tar_utils:stream(), 
+-spec stream_multiple_files([lfm_attrs:file_attributes()], id(), user_ctx:ctx(), tar_utils:stream(), 
     cowboy_req:req()) -> tar_utils:stream().
-stream_many_files([], _TaskId, _UserCtx, TarStream, _CowboyReq) -> 
+stream_multiple_files([], _TaskId, _UserCtx, TarStream, _CowboyReq) -> 
     TarStream;
-stream_many_files(
+stream_multiple_files(
     [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE} = FileAttrs | Tail],
     TaskId, UserCtx, TarStream, CowboyReq
 ) ->
@@ -144,7 +150,7 @@ stream_many_files(
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
     % add starting dir to archive here as traverse do not execute slave job on it
     {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, PathPrefix),
-    http_streaming_utils:send_data_chunk(Bytes, CowboyReq),
+    http_streamer:send_data_chunk(Bytes, CowboyReq),
     traverse_task:delete_ended(?POOL_NAME, TaskId), %% @TODO VFS-6212 start traverse with cleanup option
     Options = #{
         task_id => TaskId,
@@ -156,36 +162,37 @@ stream_many_files(
     {ok, _} = tree_traverse:run(
         ?POOL_NAME, file_ctx:new_by_guid(Guid), user_ctx:get_user_id(UserCtx), Options),
     TarStream2 = stream_loop(TarStream1, CowboyReq, user_ctx:get_session_id(UserCtx), PathPrefix),
-    stream_many_files(Tail, TaskId, UserCtx, TarStream2, CowboyReq);
-stream_many_files(
+    stream_multiple_files(Tail, TaskId, UserCtx, TarStream2, CowboyReq);
+stream_multiple_files(
     [#file_attr{guid = Guid, type = ?REGULAR_FILE_TYPE} = FileAttrs | Tail], 
     TaskId, UserCtx, TarStream, CowboyReq
 ) ->
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
     TarStream1 = stream_file(TarStream, CowboyReq, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
-    stream_many_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq).
+    stream_multiple_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq).
 
 
 %% @private
 -spec stream_file(tar_utils:stream(), cowboy_req:req(), session:id(), lfm_attrs:file_attributes(),
     file_meta:path()) -> tar_utils:stream().
-stream_file(TarStream, Req, SessionId, FileAttrs, RootDirPath) ->
+stream_file(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
     #file_attr{size = FileSize, guid = Guid} = FileAttrs,
     case lfm:monitored_open(SessionId, {guid, Guid}, read) of
         {ok, FileHandle} ->
-            {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, RootDirPath),
-            http_streaming_utils:send_data_chunk(Bytes, Req),
+            {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, StartingDirPath),
+            http_streamer:send_data_chunk(Bytes, Req),
             Range = {0, FileSize - 1},
-            ReadBlockSize = http_streaming_utils:get_read_block_size(FileHandle),
-            TarStream2 = http_streaming_utils:stream_bytes_range(
+            ReadBlockSize = http_streamer:get_read_block_size(FileHandle),
+            TarStream2 = http_streamer:stream_bytes_range(
                 FileHandle, FileSize, Range, Req, fun(D) -> D end, ReadBlockSize, TarStream1),
             lfm:monitored_release(FileHandle),
             TarStream2;
         {error, ?ENOENT} ->
             TarStream;
+        {error, ?EPERM} ->
+            TarStream;
         {error, ?EACCES} ->
-            % ignore files with no access
             TarStream
     end.
 
@@ -201,10 +208,11 @@ stream_loop(TarStream, Req, SessionId, RootDirPath) ->
             stream_loop(TarStream2, Req, SessionId, RootDirPath);
         {file_attrs, #file_attr{type = ?DIRECTORY_TYPE} = FileAttrs, Pid} ->
             {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, RootDirPath),
-            http_streaming_utils:send_data_chunk(Bytes, Req),
+            http_streamer:send_data_chunk(Bytes, Req),
             Pid ! done,
             stream_loop(TarStream1, Req, SessionId, RootDirPath);
-        done -> TarStream
+        done -> 
+            TarStream
     end.
 
 
@@ -214,17 +222,17 @@ stream_loop(TarStream, Req, SessionId, RootDirPath) ->
 new_tar_file_entry(TarStream, FileAttrs, StartingDirPath) ->
     #file_attr{mode = Mode, mtime = MTime, type = Type, size = FileSize, guid = Guid} = FileAttrs,
     FinalMode = case {file_id:is_share_guid(Guid), Type} of
-        {true, ?REGULAR_FILE_TYPE} -> 8#664;
-        {true, ?DIRECTORY_TYPE} -> 8#775;
+        {true, ?REGULAR_FILE_TYPE} -> op_worker:get_env(default_file_mode);
+        {true, ?DIRECTORY_TYPE} -> op_worker:get_env(default_dir_mode);
         {false, _} -> Mode
     end,
     {ok, Path} = get_file_path(Guid),
-    Filename = string:prefix(Path, StartingDirPath),
+    FileRelPath = string:prefix(Path, StartingDirPath),
     FileType = case Type of
         ?DIRECTORY_TYPE -> directory;
         ?REGULAR_FILE_TYPE -> regular
     end,
-    TarStream1 = tar_utils:new_file_entry(TarStream, Filename, FileSize, FinalMode, MTime, FileType),
+    TarStream1 = tar_utils:new_file_entry(TarStream, FileRelPath, FileSize, FinalMode, MTime, FileType),
     tar_utils:flush(TarStream1).
 
 
@@ -235,3 +243,12 @@ get_file_path(ShareGuid) ->
     {Uuid, SpaceId, _} = file_id:unpack_share_guid(ShareGuid),
     Guid = file_id:pack_guid(Uuid, SpaceId),
     lfm:get_file_path(?ROOT_SESS_ID, Guid).
+
+
+%% @private
+-spec get_connection_pid(id()) -> pid().
+get_connection_pid(TaskId) ->
+    {ok, #{ <<"connection_pid">> := EncodedPid }} =
+        traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    transfer_utils:decode_pid(EncodedPid).
+    

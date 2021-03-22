@@ -46,7 +46,7 @@
 %%--------------------------------------------------------------------
 -spec setup_for_task(user_ctx:ctx(), tree_traverse:id()) -> ok | {error, term()}.
 setup_for_task(UserCtx, TaskId) ->
-    case user_ctx:is_root(UserCtx) or user_ctx:is_guest(UserCtx) of
+    case user_ctx:is_root(UserCtx) orelse user_ctx:is_guest(UserCtx) of
         true ->
             ok;
         false ->

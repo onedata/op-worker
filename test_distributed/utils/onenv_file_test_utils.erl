@@ -21,7 +21,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
--export([create_and_sync_file_tree/3]).
+-export([create_and_sync_file_tree/3, create_and_sync_file_tree/4]).
 
 -type share_spec() :: #share_spec{}.
 
@@ -41,20 +41,34 @@
 %%% API
 %%%===================================================================
 
-
 -spec create_and_sync_file_tree(oct_background:entity_selector(), object_selector(), object_spec()) ->
-    map().
+    object().
 create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
-    UserId = oct_background:get_user_id(UserSelector),
-    {ParentGuid, SpaceId} = resolve_file(ParentSelector),
-    [CreationProvider | SyncProviders] = oct_background:get_space_supporting_providers(
+    {_ParentGuid, SpaceId} = resolve_file(ParentSelector),
+    [CreationProvider | _] = oct_background:get_space_supporting_providers(
         SpaceId
     ),
+    create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProvider).
 
+
+-spec create_and_sync_file_tree(
+    UserSelector :: oct_background:entity_selector(), 
+    ParentSelector :: object_selector(), 
+    FileDesc :: object_spec(), 
+    CreationProviderSelector :: oct_background:entity_selector()
+) -> 
+    object().
+create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProviderSelector) ->
+    UserId = oct_background:get_user_id(UserSelector),
+    {ParentGuid, SpaceId} = resolve_file(ParentSelector),
+    SupportingProviders = oct_background:get_space_supporting_providers(SpaceId),
+    CreationProvider = oct_background:get_provider_id(CreationProviderSelector),
+    SyncProviders = SupportingProviders -- [CreationProvider],
+    
     FileInfo = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc),
     await_sync(CreationProvider, SyncProviders, UserId, FileInfo),
     await_parent_links_sync(SyncProviders, UserId, ParentGuid, FileInfo),
-
+    
     FileInfo.
 
 
@@ -89,7 +103,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
         name = FileName,
         type = ?REGULAR_FILE_TYPE,
         mode = FileMode,
-        shares = create_shares(CreationNode, UserSessId, FileGuid, ShareSpecs),
+        shares = create_shares(CreationProvider, UserSessId, FileGuid, ShareSpecs),
         content = Content,
         children = undefined
     };
@@ -111,7 +125,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
         name = DirName,
         type = ?DIRECTORY_TYPE,
         mode = DirMode,
-        shares = create_shares(CreationNode, UserSessId, DirGuid, ShareSpecs),
+        shares = create_shares(CreationProvider, UserSessId, DirGuid, ShareSpecs),
         children = lists_utils:pmap(fun(File) ->
             create_file_tree(UserId, DirGuid, CreationProvider, File)
         end, ChildrenDesc)
@@ -119,17 +133,32 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
 
 
 %% @private
--spec create_shares(node(), session:id(), file_id:file_guid(), [share_spec()]) ->
+-spec create_shares(oct_background:entity_selector(), session:id(), file_id:file_guid(), [share_spec()]) ->
     [od_share:id()] | no_return().
-create_shares(Node, SessId, FileGuid, ShareSpecs) ->
-    lists:sort(lists:map(fun(#share_spec{name = Name, description = Description}) ->
+create_shares(CreationProvider, CreatingUserSessId, FileGuid, ShareSpecs) ->
+    CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
+    lists:sort(lists:map(fun(#share_spec{name = Name, description = Description, sharing_user = SharingUser}) ->
+        SessId = ensure_session_id(SharingUser, CreationProvider, CreatingUserSessId),
         {ok, ShareId} = ?assertMatch(
             {ok, _},
-            lfm_proxy:create_share(Node, SessId, {guid, FileGuid}, Name, Description),
+            lfm_proxy:create_share(CreationNode, SessId, {guid, FileGuid}, Name, Description),
             ?ATTEMPTS
         ),
         ShareId
     end, ShareSpecs)).
+
+
+%% @private
+-spec ensure_session_id(
+    SharingUser :: oct_background:entity_selector(), 
+    CreatingProvider :: oct_background:entity_selector(), 
+    session:id()
+) -> 
+    session:id().
+ensure_session_id(undefined, _, CreatingUserSessId) -> 
+    CreatingUserSessId;
+ensure_session_id(SharingUser, CreatingProvider, _CreatingUserSessId) ->
+    oct_background:get_user_session_id(SharingUser, CreatingProvider).
 
 
 %% @private

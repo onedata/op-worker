@@ -65,12 +65,12 @@ get_file_download_url(SessionId, FileGuids) ->
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:verify(FileDownloadCode) of
-        {true, SessionId, FileGuidList} ->
+        {true, SessionId, FileGuids} ->
             OzUrl = oneprovider:get_oz_url(),
             Req2 = gui_cors:allow_origin(OzUrl, Req),
             Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
             handle_http_download(
-                SessionId, FileGuidList,
+                SessionId, FileGuids,
                 fun() -> file_download_code:remove(FileDownloadCode) end,
                 Req3
             );
@@ -83,7 +83,7 @@ handle(<<"GET">>, Req) ->
 %%% Internal functions
 %%%===================================================================
 
-
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Checks file permissions and syncs first file block when downloading single 
@@ -97,7 +97,7 @@ maybe_sync_first_file_block(SessionId, [FileGuid]) ->
     case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
             {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, read)),
-            ReadBlockSize = http_download_utils:get_read_block_size(FileHandle),
+            ReadBlockSize = http_streamer:get_read_block_size(FileHandle),
             case lfm:read(FileHandle, 0, ReadBlockSize) of
                 {error, ?ENOSPC} ->
                     throw(?ERROR_QUOTA_EXCEEDED);
@@ -109,7 +109,7 @@ maybe_sync_first_file_block(SessionId, [FileGuid]) ->
         _ -> 
             ok
     end;
-maybe_sync_first_file_block(_SessionId, _FileGuidList) ->
+maybe_sync_first_file_block(_SessionId, _FileGuids) ->
     ok.
 
 
@@ -120,32 +120,33 @@ maybe_sync_first_file_block(_SessionId, _FileGuidList) ->
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-handle_http_download(SessionId, FileGuidList, OnSuccessCallback, Req0) ->
+handle_http_download(SessionId, FileGuids, OnSuccessCallback, Req0) ->
     FileAttrsList = lists_utils:foldl_while(
         fun (FileGuid, Acc) ->
-                case lfm:stat(SessionId, {guid, FileGuid}) of
-                    {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
-                    {error, ?EACCES} -> {cont, Acc};
-                    {error, _Errno} = Error -> {halt, Error}
-                end
-    end, [], FileGuidList),
+            case lfm:stat(SessionId, {guid, FileGuid}) of
+                {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
+                {error, ?EACCES} -> {cont, Acc};
+                {error, ?EPERM} -> {cont, Acc};
+                {error, _Errno} = Error -> {halt, Error}
+            end
+    end, [], FileGuids),
     case FileAttrsList of
         {error, Errno} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req0);
         [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
             Req1 = set_content_disposition_header(normalize_filename(FileName), Req0),
-            http_download_utils:stream_file(
+            http_streaming_utils:stream_file(
                 SessionId, Attr, OnSuccessCallback, Req1
             );
         [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
             Req1 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar.gz">>, Req0),
-            http_download_utils:stream_tarball(
+            http_streaming_utils:stream_tarball(
                 SessionId, FileAttrsList, OnSuccessCallback, Req1
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
             Req1 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar.gz">>, Req0),
-            http_download_utils:stream_tarball(
+            http_streaming_utils:stream_tarball(
                 SessionId, FileAttrsList, OnSuccessCallback, Req1
             )
     end.
