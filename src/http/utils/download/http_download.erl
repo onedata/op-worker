@@ -6,10 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for handling file download using http and cowboy.
+%%% Functions for handling file download using http and cowboy.
 %%% @end
 %%%--------------------------------------------------------------------
--module(http_streaming_utils).
+-module(http_download).
 -author("Bartosz Walkowicz").
 
 -include("http/gui_download.hrl").
@@ -20,8 +20,8 @@
 
 %% API
 -export([
-    stream_file/3, stream_file/4,
-    stream_tarball/4
+    download_file/3, download_file/4,
+    download_tarball/4
 ]).
 
 
@@ -29,20 +29,20 @@
 %%% API
 %%%===================================================================
 
--spec stream_file(session:id(), lfm_attrs:file_attributes(), cowboy_req:req()) ->
+-spec download_file(session:id(), lfm_attrs:file_attributes(), cowboy_req:req()) ->
     cowboy_req:req().
-stream_file(SessionId, FileAttrs, Req) ->
-    stream_file(SessionId, FileAttrs, fun() -> ok end, Req).
+download_file(SessionId, FileAttrs, Req) ->
+    download_file(SessionId, FileAttrs, fun() -> ok end, Req).
 
 
--spec stream_file(
+-spec download_file(
     session:id(),
     lfm_attrs:file_attributes(),
     OnSuccessCallback :: fun(() -> ok),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-stream_file(SessionId, #file_attr{
+download_file(SessionId, #file_attr{
     guid = FileGuid,
     name = FileName,
     size = FileSize
@@ -83,15 +83,15 @@ stream_file(SessionId, #file_attr{
     end.
 
 
--spec stream_tarball(
+-spec download_tarball(
     session:id(),
     [lfm_attrs:file_attributes()],
     OnSuccessCallback :: fun(() -> ok),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-stream_tarball(SessionId, FileAttrsList, OnSuccessCallback, Req0) ->
-    Req1 = cowboy_req:stream_reply(?HTTP_200_OK, Req0),
+download_tarball(SessionId, FileAttrsList, OnSuccessCallback, Req0) ->
+    Req1 = http_streamer:stream_reply(?HTTP_200_OK, Req0),
     ok = dir_streaming_traverse:run(FileAttrsList, SessionId, Req1),
     execute_on_success_callback(<<>>, OnSuccessCallback),
     Req1.

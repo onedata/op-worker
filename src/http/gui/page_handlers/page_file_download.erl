@@ -135,18 +135,18 @@ handle_http_download(SessionId, FileGuids, OnSuccessCallback, Req0) ->
             http_req:send_error(?ERROR_POSIX(Errno), Req0);
         [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
             Req1 = set_content_disposition_header(normalize_filename(FileName), Req0),
-            http_streaming_utils:stream_file(
+            http_download:download_file(
                 SessionId, Attr, OnSuccessCallback, Req1
             );
         [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
             Req1 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar.gz">>, Req0),
-            http_streaming_utils:stream_tarball(
+            http_download:download_tarball(
                 SessionId, FileAttrsList, OnSuccessCallback, Req1
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
             Req1 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar.gz">>, Req0),
-            http_streaming_utils:stream_tarball(
+            http_download:download_tarball(
                 SessionId, FileAttrsList, OnSuccessCallback, Req1
             )
     end.

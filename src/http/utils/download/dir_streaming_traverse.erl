@@ -17,6 +17,7 @@
 -behavior(traverse_behaviour).
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("tree_traverse.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -222,8 +223,8 @@ stream_loop(TarStream, Req, SessionId, RootDirPath) ->
 new_tar_file_entry(TarStream, FileAttrs, StartingDirPath) ->
     #file_attr{mode = Mode, mtime = MTime, type = Type, size = FileSize, guid = Guid} = FileAttrs,
     FinalMode = case {file_id:is_share_guid(Guid), Type} of
-        {true, ?REGULAR_FILE_TYPE} -> op_worker:get_env(default_file_mode);
-        {true, ?DIRECTORY_TYPE} -> op_worker:get_env(default_dir_mode);
+        {true, ?REGULAR_FILE_TYPE} -> ?DEFAULT_FILE_PERMS;
+        {true, ?DIRECTORY_TYPE} -> ?DEFAULT_DIR_PERMS;
         {false, _} -> Mode
     end,
     {ok, Path} = get_file_path(Guid),
@@ -233,7 +234,7 @@ new_tar_file_entry(TarStream, FileAttrs, StartingDirPath) ->
         ?REGULAR_FILE_TYPE -> regular
     end,
     TarStream1 = tar_utils:new_file_entry(TarStream, FileRelPath, FileSize, FinalMode, MTime, FileType),
-    tar_utils:flush(TarStream1).
+    tar_utils:flush_buffer(TarStream1).
 
 
 %% TODO VFS-6057 resolve share path up to share not user root dir

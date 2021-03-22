@@ -24,7 +24,8 @@
     get_read_block_size/1, calculate_max_read_blocks_count/1,
     stream_file/6,
     stream_bytes_range/3, stream_bytes_range/6, stream_bytes_range/7,
-    send_data_chunk/2
+    send_data_chunk/2,
+    stream_reply/2, stream_reply/3
 ]).
 
 -type read_block_size() :: non_neg_integer().
@@ -81,7 +82,7 @@ stream_file(Ranges, FileHandle, FileSize, EncodingFun, OnSuccessCallback, Req) -
         encoding_fun = EncodingFun,
         on_success_callback = OnSuccessCallback
     },
-    stream_file_insecure(Ranges, DownloadCtx, Req).
+    stream_file_internal(Ranges, DownloadCtx, Req).
 
 
 -spec stream_bytes_range(
@@ -129,6 +130,18 @@ stream_bytes_range(Range, DownloadCtx, Req) ->
 send_data_chunk(Data, Req) ->
     send_data_chunk(Data, Req, ?MAX_DOWNLOAD_BUFFER_SIZE div ?DEFAULT_READ_BLOCK_SIZE, ?MIN_SEND_RETRY_DELAY).
 
+
+-spec stream_reply(cowboy:http_status(), cowboy_req:req()) ->
+    cowboy_req:req().
+stream_reply(Status, Req) ->
+    stream_reply(Status, #{}, Req).
+
+
+-spec stream_reply(cowboy:http_status(), cowboy:http_headers(), cowboy_req:req()) -> 
+    cowboy_req:req().
+stream_reply(Status, Headers, Req) ->
+    cowboy_req:stream_reply(Status, Headers, Req).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -140,13 +153,13 @@ build_content_range_header_value({RangeStart, RangeEnd}, FileSize) ->
 
 
 %% @private
--spec stream_file_insecure(undefined | [http_parser:bytes_range()], http_streamer:download_ctx(),
+-spec stream_file_internal(undefined | [http_parser:bytes_range()], http_streamer:download_ctx(),
     cowboy_req:req()) -> cowboy_req:req().
-stream_file_insecure(undefined, DownloadCtx, Req) ->
+stream_file_internal(undefined, DownloadCtx, Req) ->
     stream_whole_file(DownloadCtx, Req);
-stream_file_insecure([OneRange], DownloadCtx, Req) ->
+stream_file_internal([OneRange], DownloadCtx, Req) ->
     stream_one_ranged_body(OneRange, DownloadCtx, Req);
-stream_file_insecure(Ranges, DownloadCtx, Req) ->
+stream_file_internal(Ranges, DownloadCtx, Req) ->
     stream_multipart_ranged_body(Ranges, DownloadCtx, Req).
 
 
@@ -156,7 +169,7 @@ stream_whole_file(#download_ctx{
     file_size = FileSize,
     on_success_callback = OnSuccessCallback
 } = DownloadCtx, Req0) ->
-    Req1 = cowboy_req:stream_reply(
+    Req1 = stream_reply(
         ?HTTP_200_OK,
         #{?HDR_CONTENT_LENGTH => integer_to_binary(FileSize)},
         Req0
@@ -176,7 +189,7 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, #download_ctx{
     file_size = FileSize,
     on_success_callback = OnSuccessCallback
 } = DownloadCtx, Req0) ->
-    Req1 = cowboy_req:stream_reply(
+    Req1 = stream_reply(
         ?HTTP_206_PARTIAL_CONTENT,
         #{
             ?HDR_CONTENT_LENGTH => integer_to_binary(RangeEnd - RangeStart + 1),
@@ -202,7 +215,7 @@ stream_multipart_ranged_body(Ranges, #download_ctx{
     Boundary = cow_multipart:boundary(),
     ContentType = cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req0),
     
-    Req1 = cowboy_req:stream_reply(
+    Req1 = stream_reply(
         ?HTTP_206_PARTIAL_CONTENT,
         #{?HDR_CONTENT_TYPE => <<"multipart/byteranges; boundary=", Boundary/binary>>},
         Req0
@@ -235,6 +248,28 @@ stream_multipart_ranged_body(Ranges, #download_ctx{
 stream_bytes_range({From, To}, #download_ctx{tar_stream = TarStream}, _, _, _) when From > To ->
     TarStream;
 stream_bytes_range({From, To}, #download_ctx{
+    file_handle = FileHandle,
+    read_block_size = ReadBlockSize,
+    max_read_blocks_count = MaxReadBlocksCount,
+    encoding_fun = EncodingFun,
+    tar_stream = undefined
+} = DownloadCtx, Req, SendRetryDelay, ReadBytes) ->
+    ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
+    {NewFileHandle, Data} = read_file_data(FileHandle, From, ToRead, 0),
+
+    case byte_size(Data) of
+        0 -> 
+            undefined;
+        DataSize ->
+            EncodedData = EncodingFun(Data),
+            NextSendRetryDelay = send_data_chunk(EncodedData, Req, MaxReadBlocksCount, SendRetryDelay),
+            stream_bytes_range(
+                {From + DataSize, To}, 
+                DownloadCtx#download_ctx{file_handle = NewFileHandle}, 
+                Req, NextSendRetryDelay, ReadBytes + DataSize
+            )
+    end;
+stream_bytes_range({From, To}, #download_ctx{
     file_size = FileSize,
     file_handle = FileHandle,
     read_block_size = ReadBlockSize,
@@ -243,32 +278,21 @@ stream_bytes_range({From, To}, #download_ctx{
     tar_stream = TarStream
 } = DownloadCtx, Req, SendRetryDelay, ReadBytes) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
-    MinBytesToRead = case TarStream of
-        undefined -> 
-            0;
-        _ -> 
-            % in tar header file size was provided and such number of bytes 
-            % must be streamed, otherwise incorrect tar archive will be created
-            FileSize 
-    end,
-    {NewFileHandle, Data} = read_file_data(FileHandle, From, ToRead, MinBytesToRead - ReadBytes),
-
+    % in tar header file size was provided and such number of bytes 
+    % must be streamed, otherwise incorrect tar archive will be created
+    {NewFileHandle, Data} = read_file_data(FileHandle, From, ToRead, FileSize - ReadBytes),
+    
     case byte_size(Data) of
-        0 -> 
+        0 ->
             TarStream;
         DataSize ->
             EncodedData = EncodingFun(Data),
-            {BytesToSend, FinalTarStream} = case TarStream of
-                undefined -> 
-                    {EncodedData, undefined};
-                _ ->
-                    TarStream2 = tar_utils:append_to_file_content(TarStream, EncodedData, DataSize),
-                    tar_utils:flush(TarStream2)
-            end,
+            TarStream2 = tar_utils:append_to_file_content(TarStream, EncodedData, DataSize),
+            {BytesToSend, FinalTarStream} = tar_utils:flush_buffer(TarStream2),
             NextSendRetryDelay = send_data_chunk(BytesToSend, Req, MaxReadBlocksCount, SendRetryDelay),
             stream_bytes_range(
-                {From + DataSize, To}, 
-                DownloadCtx#download_ctx{file_handle = NewFileHandle, tar_stream = FinalTarStream}, 
+                {From + DataSize, To},
+                DownloadCtx#download_ctx{file_handle = NewFileHandle, tar_stream = FinalTarStream},
                 Req, NextSendRetryDelay, ReadBytes + DataSize
             )
     end.
