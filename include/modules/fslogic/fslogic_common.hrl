@@ -50,11 +50,11 @@
 -define(SPACE_OWNER_ID(SpaceId), <<?SPACE_OWNER_PREFIX_STR, SpaceId/binary>>).
 
 %% Default permissions for regular files
--define(DEFAULT_FILE_PERMS, op_worker:get_env(default_file_mode)).
+-define(DEFAULT_FILE_PERMS, 8#664).
 -define(DEFAULT_FILE_MODE, ?DEFAULT_FILE_PERMS bor 8#100000).
 
 %% Default permissions for directories
--define(DEFAULT_DIR_PERMS, op_worker:get_env(default_dir_mode)).
+-define(DEFAULT_DIR_PERMS, 8#775).
 -define(DEFAULT_SHARE_ROOT_DIR_PERMS, 8#555).
 -define(DEFAULT_DIR_MODE, ?DEFAULT_DIR_PERMS bor 8#40000).
 

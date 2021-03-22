@@ -9,6 +9,8 @@
 %%% Module responsible for tree traverse during archive download.
 %%% Starts new traverse for each directory on the list. Files without access are ignored.
 %%% Must be run by cowboy request handling process.
+%%% Uses user's offline session to ensure that download may progress even when client 
+%%% disconnects from provider.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dir_streaming_traverse).
@@ -48,7 +50,7 @@ run(FileAttrsList, SessionId, CowboyReq) ->
             {ok, UserId} = session:get_user_id(SessionId),
             TarStream = tar_utils:open_archive_stream(),
             {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-            FinalTarStream = stream_multiple_files(FileAttrsList, TaskId, UserCtx, TarStream, CowboyReq),
+            FinalTarStream = handle_many_files(FileAttrsList, TaskId, UserCtx, TarStream, CowboyReq),
             http_streamer:send_data_chunk(tar_utils:close_archive_stream(FinalTarStream), CowboyReq),
             tree_traverse_session:close_for_task(TaskId);
         {error, _} = Error ->
@@ -122,7 +124,7 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_id = UserId}, TaskId)
 
 
 %%%===================================================================
-%%% Internal functions
+%%% Internal functions run by traverse pool processes
 %%%===================================================================
 
 %% @private
@@ -138,12 +140,16 @@ slave_job_loop(Pid) ->
     end.
 
 
+%%%===================================================================
+%%% Internal functions run by cowboy request handling process
+%%%===================================================================
+
 %% @private
--spec stream_multiple_files([lfm_attrs:file_attributes()], id(), user_ctx:ctx(), tar_utils:stream(), 
+-spec handle_many_files([lfm_attrs:file_attributes()], id(), user_ctx:ctx(), tar_utils:stream(), 
     cowboy_req:req()) -> tar_utils:stream().
-stream_multiple_files([], _TaskId, _UserCtx, TarStream, _CowboyReq) -> 
+handle_many_files([], _TaskId, _UserCtx, TarStream, _CowboyReq) -> 
     TarStream;
-stream_multiple_files(
+handle_many_files(
     [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE} = FileAttrs | Tail],
     TaskId, UserCtx, TarStream, CowboyReq
 ) ->
@@ -163,15 +169,15 @@ stream_multiple_files(
     {ok, _} = tree_traverse:run(
         ?POOL_NAME, file_ctx:new_by_guid(Guid), user_ctx:get_user_id(UserCtx), Options),
     TarStream2 = stream_loop(TarStream1, CowboyReq, user_ctx:get_session_id(UserCtx), PathPrefix),
-    stream_multiple_files(Tail, TaskId, UserCtx, TarStream2, CowboyReq);
-stream_multiple_files(
+    handle_many_files(Tail, TaskId, UserCtx, TarStream2, CowboyReq);
+handle_many_files(
     [#file_attr{guid = Guid, type = ?REGULAR_FILE_TYPE} = FileAttrs | Tail], 
     TaskId, UserCtx, TarStream, CowboyReq
 ) ->
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
     TarStream1 = stream_file(TarStream, CowboyReq, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
-    stream_multiple_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq).
+    handle_many_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq).
 
 
 %% @private
