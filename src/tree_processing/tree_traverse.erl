@@ -34,7 +34,6 @@
 % (other callbacks especially for slave jobs have to be defined)
 
 -include("tree_traverse.hrl").
--include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -58,7 +57,7 @@
 -type slave_job() :: #tree_traverse_slave{}.
 -type slave_jobs() :: [slave_job()].
 -type job() :: master_job() | slave_job().
--type execute_slave_on_dir() :: boolean().
+-type child_dirs_job_generation_policy () :: generate_master_jobs | generate_slave_and_master_jobs.
 -type children_master_jobs_mode() :: sync | async.
 -type batch_size() :: file_meta:list_size().
 -type traverse_info() :: map().
@@ -69,7 +68,10 @@
     group_id => traverse:group(),
     additional_data => traverse:additional_data(),
     % Options used to create jobs
-    execute_slave_on_dir => execute_slave_on_dir(),
+
+    % option determining whether slave jobs should be generated also for child directories.
+    % NOTE: slave job for starting directory will never be generated.
+    child_dirs_job_generation_policy => child_dirs_job_generation_policy(), 
     % flag determining whether token should be used for iterating over file_meta links
     % token shouldn't be used when links may be deleted from tree
     use_listing_token => boolean(),
@@ -98,7 +100,7 @@
 
 %formatter:on
 
--export_type([id/0, pool/0, master_job/0, slave_job/0, execute_slave_on_dir/0,
+-export_type([id/0, pool/0, master_job/0, slave_job/0, child_dirs_job_generation_policy/0,
     children_master_jobs_mode/0, batch_size/0, traverse_info/0]).
 
 %%%===================================================================
@@ -144,7 +146,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         Id -> Id
     end,
     BatchSize = maps:get(batch_size, Opts, ?DEFAULT_BATCH_SIZE),
-    ExecuteSlaveOnDir = maps:get(execute_slave_on_dir, Opts, ?DEFAULT_EXEC_SLAVE_ON_DIR),
+    ChildDirsJobGenerationPolicy = maps:get(child_dirs_job_generation_policy, Opts, ?DEFAULT_CHILD_DIRS_JOB_GENERATION_POLICY),
     ChildrenMasterJobsMode = maps:get(children_master_jobs, Opts, ?DEFAULT_CHILDREN_MASTER_JOBS_MODE),
     TrackSubtreeStatus = maps:get(track_subtree_status, Opts, ?DEFAULT_TRACK_SUBTREE_STATUS),
     TraverseInfo = maps:get(traverse_info, Opts, #{}),
@@ -175,7 +177,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         file_ctx = FileCtx,
         user_id = UserId,
         token = Token,
-        execute_slave_on_dir = ExecuteSlaveOnDir,
+        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
@@ -234,11 +236,6 @@ get_sync_info() ->
 %%% Behaviour callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv do_master_job(Job, MasterJobArgs, fun(_,_,_,_,_,_) -> ok end, fun(_,_,_) -> ok end, sync).
-%% @end
-%%--------------------------------------------------------------------
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) -> 
     {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
@@ -370,7 +367,7 @@ list_children(#tree_traverse{
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }, #{task_id := TaskId}) ->
-    case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
+    case tree_traverse_session:acquire_for_task(UserId, maps:get(pool, TraverseInfo), TaskId) of
         {ok, UserCtx} ->
             try
                 {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, #{
@@ -389,7 +386,7 @@ list_children(#tree_traverse{
 
 
 -spec generate_children_jobs(master_job(), id(), [file_ctx:ctx()]) -> {[slave_job()], [master_job()]}.
-generate_children_jobs(MasterJob = #tree_traverse{execute_slave_on_dir = ExecOnDir}, TaskId, Children) ->
+generate_children_jobs(MasterJob = #tree_traverse{child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy}, TaskId, Children) ->
     {SlaveJobsReversed, MasterJobsReversed} = lists:foldl(fun(ChildCtx, {SlavesAcc, MastersAcc} = Acc) ->
         try
             {ChildDoc, ChildCtx2} = file_ctx:get_file_doc(ChildCtx),
@@ -397,11 +394,11 @@ generate_children_jobs(MasterJob = #tree_traverse{execute_slave_on_dir = ExecOnD
                 ?DIRECTORY_TYPE ->
                     ChildMasterJob = get_child_master_job(MasterJob, ChildCtx2),
                     maybe_create_status_doc(ChildMasterJob, TaskId),
-                    case ExecOnDir of
-                        true ->
+                    case ChildDirsJobGenerationPolicy of
+                        generate_slave_and_master_jobs ->
                             ChildSlaveJob = get_child_slave_job(MasterJob, ChildCtx2),
                             {[ChildSlaveJob | SlavesAcc], [ChildMasterJob | MastersAcc]};
-                        false ->
+                        generate_master_jobs ->
                             {SlavesAcc, [ChildMasterJob | MastersAcc]}
                     end;
                 ?REGULAR_FILE_TYPE ->

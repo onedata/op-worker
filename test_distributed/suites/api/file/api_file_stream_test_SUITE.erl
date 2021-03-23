@@ -13,10 +13,13 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("onenv_file_test_utils.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([
     all/0,
@@ -26,11 +29,18 @@
 
 -export([
     gui_download_file_test/1,
+    gui_download_dir_test/1,
+    gui_download_multiple_files_test/1,
     rest_download_file_test/1
 ]).
 
+%% @TODO VFS-7475 add multiple file test between spaces
+%% @TODO VFS-7475 add test with 1 worker pool 
+%% @TODO VFS-7475 parallelize tests
 all() -> [
     gui_download_file_test,
+    gui_download_dir_test,
+    gui_download_multiple_files_test,
     rest_download_file_test
 ].
 
@@ -45,52 +55,76 @@ all() -> [
 
 -type offset() :: non_neg_integer().
 -type size() :: non_neg_integer().
+-type download_type() :: single_file | tarball.
 
 
 %%%===================================================================
 %%% File download test functions
 %%%===================================================================
 
-
 gui_download_file_test(Config) ->
+    ClientSpec = #client_spec{
+        correct = [
+            user2,  % space owner - doesn't need any perms
+            user3   % files owner
+        ],
+        unauthorized = [nobody],
+        forbidden_not_in_space = [user1],
+        forbidden_in_space = [user4]
+    },
+    gui_download_test_base(Config, <<"file">>, ClientSpec).
+
+gui_download_dir_test(Config) ->
+    ClientSpec = #client_spec{
+        correct = [
+            user2,  % space owner - doesn't need any perms
+            user3,  % files owner
+            user4   % forbidden user in space is allowed to download an empty tarball - files without access are ignored
+        ],
+        unauthorized = [nobody],
+        forbidden_not_in_space = [user1]
+    },
+    gui_download_test_base(Config, <<"dir">>, ClientSpec).
+
+gui_download_test_base(Config, FileType, ClientSpec) ->
     Providers = ?config(op_worker_nodes, Config),
 
     {_FileType, _DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(
         <<"dir">>, 8#704
     ),
-    DirShareGuid = file_id:guid_to_share_guid(DirGuid, DirShareId),
-
     FileSize = 4 * ?DEFAULT_READ_BLOCK_SIZE,
     Content = crypto:strong_rand_bytes(FileSize),
 
     MemRef = api_test_memory:init(),
+    DownloadType = case FileType of
+        <<"file">> -> single_file;
+        <<"dir">> -> tarball
+    end,
 
-    SetupFun = build_download_file_setup_fun(MemRef, Content),
-    ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef, Content),
-    VerifyFun = build_download_file_with_gui_endpoint_verify_fun(MemRef, Content),
+    SetupFun = build_download_file_setup_fun(MemRef, Content, FileType),
+    ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef, Content, DownloadType),
+    VerifyFun = build_download_file_with_gui_endpoint_verify_fun(MemRef, Content, DownloadType), 
 
+    DataSpec = #data_spec{
+        required = [<<"file_ids">>],
+        correct_values = #{<<"file_ids">> => [[guid]]},
+        bad_values = [
+            {<<"file_ids">>, [<<"incorrect_guid">>], ?ERROR_BAD_VALUE_IDENTIFIER(<<"file_ids">>)},
+            {<<"file_ids">>, <<"not_a_list">>, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"file_ids">>)}
+        ]
+    },
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Download file using gui endpoint and gs private api">>,
             type = gs,
             target_nodes = Providers,
-            client_spec = #client_spec{
-                correct = [
-                    user2,  % space owner - doesn't need any perms
-                    user3   % files owner
-                ],
-                unauthorized = [nobody],
-                forbidden_not_in_space = [user1],
-                forbidden_in_space = [user4]
-            },
+            client_spec = ClientSpec,
             setup_fun = SetupFun,
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, normal_mode, private),
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, undefined, #data_spec{
-                    bad_values = [{bad_id, DirGuid, ?ERROR_POSIX(?EISDIR)}]
-                }
+                <<"file_ids">>, DirGuid, undefined, DataSpec
             )
         },
         #scenario_spec{
@@ -103,9 +137,7 @@ gui_download_file_test(Config) ->
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, DirShareId, #data_spec{
-                    bad_values = [{bad_id, DirShareGuid, ?ERROR_POSIX(?EISDIR)}]
-                }
+                <<"file_ids">>, DirGuid, DirShareId, DataSpec
             )
         },
         #scenario_spec{
@@ -115,9 +147,67 @@ gui_download_file_test(Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             setup_fun = SetupFun,
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, private),
-            validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERROR_UNAUTHORIZED, Result)
-            end
+            validate_result_fun = fun(#api_test_ctx{client = Client}, Result) ->
+                case Client of
+                    ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
+                    _ -> ?assertEqual(?ERROR_FORBIDDEN, Result)
+                end
+            end,
+            data_spec = DataSpec
+        }
+    ])).
+
+
+%% @TODO VFS-7475 download file and dir
+gui_download_multiple_files_test(Config) ->
+    Providers = ?config(op_worker_nodes, Config),
+    
+    FileSize = 4 * ?DEFAULT_READ_BLOCK_SIZE,
+    Content = crypto:strong_rand_bytes(FileSize),
+    
+    MemRef = api_test_memory:init(),
+    
+    SetupFun = build_download_file_setup_fun(MemRef, Content, <<"dir">>), 
+    ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef, Content, tarball),
+    VerifyFun = build_download_file_with_gui_endpoint_verify_fun(MemRef, Content, tarball),
+    
+    DataSpec = #data_spec{
+        required = [<<"file_ids">>],
+        correct_values = #{<<"file_ids">> => [[file_guid, file_guid2]]},
+        bad_values = [
+            {<<"file_ids">>, [file_guid, <<"incorrect_guid">>], ?ERROR_BAD_VALUE_IDENTIFIER(<<"file_ids">>)}
+        ]
+    },
+    ?assert(onenv_api_test_runner:run_tests([
+        #scenario_spec{
+            name = <<"Download multiple files using gui endpoint and gs private api">>,
+            type = gs,
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3,  % files owner
+                    user4   % forbidden user in space is allowed to download an empty tarball - files without access are ignored
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1]
+            },
+            setup_fun = SetupFun,
+            prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, normal_mode, private),
+            validate_result_fun = ValidateCallResultFun,
+            verify_fun = VerifyFun,
+            data_spec = DataSpec
+        },
+        #scenario_spec{
+            name = <<"Download shared files using gui endpoint and gs public api">>,
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
+            setup_fun = SetupFun,
+            prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, public),
+            validate_result_fun = ValidateCallResultFun,
+            verify_fun = VerifyFun,
+            data_spec = DataSpec
         }
     ])).
 
@@ -127,45 +217,69 @@ gui_download_file_test(Config) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_download_url_prepare_gs_args_fun(MemRef, TestMode, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        FileGuid = get_file_guid(MemRef, TestMode),
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
-
+        api_test_memory:set(MemRef, scope, Scope),
+        Data1 = maybe_inject_guids(MemRef, Data0, TestMode),
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = Id, aspect = download_url, scope = Scope},
+            gri = #gri{type = op_file, aspect = download_url, scope = Scope},
             data = Data1
         }
     end.
 
 
 %% @private
+maybe_inject_guids(MemRef, Data, TestMode) when is_map(Data) ->
+    case maps:get(<<"file_ids">>, Data, undefined) of
+        List when is_list(List) -> 
+            UpdatedData = Data#{<<"file_ids">> => lists:map(
+                fun (Placeholder) when is_atom(Placeholder) ->
+                        Guid = get_file_guid(MemRef, Placeholder, TestMode),
+                        {FinalId, _} = api_test_utils:maybe_substitute_bad_id(Guid, Data),
+                        FinalId;
+                    (Other) -> Other 
+                end, List)
+            },
+            maps:without([bad_id], UpdatedData);
+        _ -> Data
+    end;
+maybe_inject_guids(_MemRef, Data, _TestMode) ->
+    Data.
+
+
+%% @private
 -spec build_get_download_url_validate_gs_call_fun(
     api_test_memory:mem_ref(),
-    FileContent :: binary()
+    FileContent :: binary(),
+    download_type()
 ) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_get_download_url_validate_gs_call_fun(MemRef, ExpContent) ->
-    FileSize = size(ExpContent),
-    FirstBlockFetchedSize = min(FileSize, ?DEFAULT_READ_BLOCK_SIZE),
-
+build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, DownloadType) ->
     [FileCreationNode] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
 
-    fun(#api_test_ctx{node = DownloadNode}, Result) ->
-        FileGuid = api_test_memory:get(MemRef, file_guid),
+    fun(#api_test_ctx{node = DownloadNode, data = Data, client = Client}, Result) ->
 
-        % Getting file download url should cause first file block to be synced on target provider.
-        ExpDist = case FileCreationNode == DownloadNode of
-            true -> [{FileCreationNode, FileSize}];
-            false -> [{FileCreationNode, FileSize}, {DownloadNode, FirstBlockFetchedSize}]
+        case DownloadType of
+            single_file ->
+                FileSize = size(ExpContent),
+                FirstBlockFetchedSize = min(FileSize, ?DEFAULT_READ_BLOCK_SIZE),
+                % Getting file download url should cause first file block to be synced on target provider.
+                ExpDist = case FileCreationNode == DownloadNode of
+                    true -> [{FileCreationNode, FileSize}];
+                    false -> [{FileCreationNode, FileSize}, {DownloadNode, FirstBlockFetchedSize}]
+                end,
+                FileGuid = api_test_memory:get(MemRef, file_guid),
+                file_test_utils:await_distribution([FileCreationNode, P2Node], FileGuid, ExpDist);
+            tarball ->
+                ok
         end,
-        file_test_utils:await_distribution([FileCreationNode, P2Node], FileGuid, ExpDist),
 
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
         [_, DownloadCode] = binary:split(FileDownloadUrl, [<<"/download/">>]),
 
         case rand:uniform(2) of
             1 ->
+                % test mode is not important as uuids are used to block download
                 % File download code should be still usable after unsuccessful download
                 block_file_streaming(DownloadNode, ?ERROR_POSIX(?EAGAIN)),
                 ?assertEqual(?ERROR_POSIX(?EAGAIN), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
@@ -173,7 +287,24 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent) ->
                 ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
 
                 % But first successful download should make it unusable
-                ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                case DownloadType of
+                    single_file ->
+                        ?assertEqual({ok, ExpContent}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl));
+                    tarball ->
+                        User4Id = oct_background:get_user_id(user4),
+                        {ok, Bytes} = ?assertMatch({ok, _}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                        % user4 does not have access to files, so downloaded tarball contains only dir entry
+                        case {Client, length(maps:get(<<"file_ids">>, Data)), api_test_memory:get(MemRef, scope)} of
+                            {?USER(User4Id), 1, private} ->
+                                check_tarball(MemRef, Bytes, ExpContent, directory, no_files);
+                            {_, 1, _} ->
+                                check_tarball(MemRef, Bytes, ExpContent, directory);
+                            {?USER(User4Id), _, private} -> 
+                                check_tarball(MemRef, Bytes, ExpContent, multiple_files, no_files);
+                            {_, _, _} ->
+                                check_tarball(MemRef, Bytes, ExpContent, multiple_files)
+                        end
+                end,
                 ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory), ?ATTEMPTS),
                 ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
 
@@ -204,10 +335,12 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent) ->
 -spec block_file_streaming(node(), errors:error()) -> ok.
 block_file_streaming(OpNode, ErrorReturned) ->
     test_node_starter:load_modules([OpNode], [?MODULE]),
-    ok = test_utils:mock_new(OpNode, http_download_utils),
-    ok = test_utils:mock_expect(OpNode, http_download_utils, stream_file, fun(_, _, _, Req) ->
+    ok = test_utils:mock_new(OpNode, file_download_utils),
+    ErrorFun = fun(_, _, _, Req) ->
         http_req:send_error(ErrorReturned, Req)
-    end).
+    end,
+    ok = test_utils:mock_expect(OpNode, file_download_utils, download_single_file, ErrorFun),
+    ok = test_utils:mock_expect(OpNode, file_download_utils, download_tarball, ErrorFun).
 
 
 %% @private
@@ -252,10 +385,11 @@ download_file_with_gui_endpoint(Node, FileDownloadUrl) ->
 %% @private
 -spec build_download_file_with_gui_endpoint_verify_fun(
     api_test_memory:mem_ref(),
-    FileContent :: binary()
+    FileContent :: binary(),
+    download_type()
 ) ->
     onenv_api_test_runner:verify_fun().
-build_download_file_with_gui_endpoint_verify_fun(MemRef, Content) ->
+build_download_file_with_gui_endpoint_verify_fun(MemRef, Content, DownloadType) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
@@ -267,15 +401,25 @@ build_download_file_with_gui_endpoint_verify_fun(MemRef, Content) ->
         (expected_failure, _) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
             file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
-        (expected_success, #api_test_ctx{node = DownloadNode}) ->
+        (expected_success, #api_test_ctx{node = DownloadNode, client = Client}) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
             case P1Node == DownloadNode of
                 true ->
                     file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
                 false ->
-                    ExpDist = case api_test_memory:get(MemRef, download_succeeded) of
-                        true -> [{P1Node, FileSize}, {DownloadNode, FileSize}];
-                        false -> [{P1Node, FileSize}, {DownloadNode, FirstBlockFetchedSize}]
+                    ExpDist = case {api_test_memory:get(MemRef, download_succeeded), DownloadType} of
+                        {true, single_file} -> 
+                            [{P1Node, FileSize}, {DownloadNode, FileSize}];
+                        {true, tarball} ->
+                            User4Id = oct_background:get_user_id(user4),
+                            case {Client, api_test_memory:get(MemRef, scope)} of
+                                {?USER(User4Id), private} -> [{P1Node, FileSize}];
+                                _ -> [{P1Node, FileSize}, {DownloadNode, FileSize}]
+                            end;
+                        {false, single_file} -> 
+                            [{P1Node, FileSize}, {DownloadNode, FirstBlockFetchedSize}];
+                        {false, tarball} -> 
+                            [{P1Node, FileSize}]
                     end,
                     file_test_utils:await_distribution(Providers, FileGuid, ExpDist)
             end
@@ -298,7 +442,7 @@ rest_download_file_test(Config) ->
 
     MemRef = api_test_memory:init(),
 
-    SetupFun = build_download_file_setup_fun(MemRef, Content),
+    SetupFun = build_download_file_setup_fun(MemRef, Content, <<"file">>),
     ValidateCallResultFun = build_rest_download_file_validate_call_fun(MemRef, Content, Config),
     VerifyFun = build_download_file_verify_fun(MemRef, FileSize),
 
@@ -473,10 +617,10 @@ build_download_file_verify_fun(MemRef, FileSize) ->
 
     fun
         (expected_failure, _) ->
-            FileGuid = api_test_memory:get(MemRef, file_guid),
+            FileGuid = api_test_memory:get(MemRef, guid),
             file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
         (expected_success, #api_test_ctx{node = DownloadNode, data = Data}) ->
-            FileGuid = api_test_memory:get(MemRef, file_guid),
+            FileGuid = api_test_memory:get(MemRef, guid),
 
             case DownloadNode of
                 ?ONEZONE_TARGET_NODE ->
@@ -546,33 +690,34 @@ get_fetched_block_size({RangeStart, RangeLen}, FileSize) ->
 %% @private
 -spec build_download_file_setup_fun(
     api_test_memory:mem_ref(),
-    FileContent :: binary()
+    FileContent :: binary(),
+    api_test_utils:file_type()
 ) ->
     onenv_api_test_runner:setup_fun().
-build_download_file_setup_fun(MemRef, Content) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
-    [P2Node] = oct_background:get_provider_nodes(paris),
-    Providers = [P1Node, P2Node],
-
-    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
-    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
-
-    FileSize = size(Content),
+build_download_file_setup_fun(MemRef, Content, FileType) ->
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    FileSpec = #file_spec{mode = 8#604, content = Content},
 
     fun() ->
-        FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-        {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
-        {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
-        api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
-
-        ?assertMatch(
-            {ok, #file_attr{size = FileSize, shares = [ShareId]}},
-            file_test_utils:get_attrs(P2Node, FileGuid),
-            ?ATTEMPTS
-        ),
-        file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]),
-
+        {Guid, FileGuid, FileGuid2, ShareId} = case FileType of
+            <<"file">> ->
+                #object{guid = G1, shares = [S]} = onenv_file_test_utils:create_and_sync_file_tree(
+                        user3, SpaceId, FileSpec#file_spec{shares = [#share_spec{}]}, krakow),
+                #object{guid = G2} = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec, krakow),
+                {G1, G1, G2, S};
+            <<"dir">> ->
+                #object{guid = DirGuid, shares = [S], children = Children} = onenv_file_test_utils:create_and_sync_file_tree(
+                    user3, SpaceId, #dir_spec{shares = [#share_spec{}], mode = 8#705, children = [FileSpec, FileSpec]}, krakow),
+                [G1, G2] = lists:map(fun(#object{guid = Guid}) ->
+                    Guid
+                end, Children),
+                {DirGuid, G1, G2, S}
+        end,
+        
+        %% @TODO VFS-7475 use structure from onenv_file_test_utils
+        api_test_memory:set(MemRef, guid, Guid),
         api_test_memory:set(MemRef, file_guid, FileGuid),
+        api_test_memory:set(MemRef, file_guid2, FileGuid2),
         api_test_memory:set(MemRef, share_id, ShareId)
     end.
 
@@ -580,7 +725,13 @@ build_download_file_setup_fun(MemRef, Content) ->
 %% @private
 -spec get_file_guid(api_test_memory:mem_ref(), test_mode()) -> file_id:file_guid().
 get_file_guid(MemRef, TestMode) ->
-    BareGuid = api_test_memory:get(MemRef, file_guid),
+    get_file_guid(MemRef, guid, TestMode).
+
+
+%% @private
+-spec get_file_guid(api_test_memory:mem_ref(), atom(), test_mode()) -> file_id:file_guid().
+get_file_guid(MemRef, Placeholder, TestMode) ->
+    BareGuid = api_test_memory:get(MemRef, Placeholder),
     case TestMode of
         normal_mode ->
             BareGuid;
@@ -588,6 +739,53 @@ get_file_guid(MemRef, TestMode) ->
             ShareId = api_test_memory:get(MemRef, share_id),
             file_id:guid_to_share_guid(BareGuid, ShareId)
     end.
+
+
+%% @TODO VFS-7475 check against provided structure, not hardcoded
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Compares provided tarball (as gzip compressed Bytes) against expected 
+%% structure created in `build_download_file_setup_fun`:
+%%      directory -> expects files in directory;
+%%      multiple_files -> expects files in tarball root.
+%% Files strategy describes how files check should be performed:
+%%      files_exist -> checks that appropriate files are in tarball and have proper content;
+%%      no_files -> checks that there are no files.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_tarball(api_test_memory:mem_ref(), binary(), binary(), directory | multiple_files) -> ok.
+check_tarball(MemRef, Bytes, ExpContent, Type) ->
+    check_tarball(MemRef, Bytes, ExpContent, Type, files_exist).
+
+%% @private
+-spec check_tarball(api_test_memory:mem_ref(), binary(), binary(), directory | multiple_files, no_files | files_exist) -> ok.
+check_tarball(MemRef, Bytes, ExpContent, directory, FilesStrategy) ->
+    ?assertEqual(ok, erl_tar:extract({binary, Bytes}, [compressed, {cwd, "/tmp/"}])),
+    {ok, TmpDirContentAfter} = file:list_dir("/tmp"),
+    DirGuid = api_test_memory:get(MemRef, guid),
+    [Node] = oct_background:get_provider_nodes(krakow),
+    {ok, #file_attr{name = Dirname}} = lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, DirGuid}),
+    ?assertEqual(true, lists:member(binary_to_list(Dirname), TmpDirContentAfter)),
+    check_tarball_files_content(MemRef, ExpContent, Dirname, FilesStrategy);
+check_tarball(MemRef, Bytes, ExpContent, multiple_files, FilesStrategy) ->
+    ?assertEqual(ok, erl_tar:extract({binary, Bytes}, [compressed, {cwd, "/tmp/"}])),
+    check_tarball_files_content(MemRef, ExpContent, <<>>, FilesStrategy).
+
+
+%% @private
+-spec check_tarball_files_content(api_test_memory:mem_ref(), binary(), binary(), no_files | files_exist) -> ok.
+check_tarball_files_content(MemRef, ExpContent, ParentName, FilesStrategy) ->
+    {ok, DirContentAfter} = file:list_dir(filename:join("/tmp", ParentName)),
+    [Node] = oct_background:get_provider_nodes(krakow),
+    lists:foreach(fun(Placeholder) ->
+        Guid = api_test_memory:get(MemRef, Placeholder),
+        {ok, #file_attr{name = Filename}} = lfm_proxy:stat(Node, ?ROOT_SESS_ID, {guid, Guid}),
+        case FilesStrategy of
+            no_files -> ?assertEqual(false, lists:member(binary_to_list(Filename), DirContentAfter));
+            files_exist -> ?assertEqual({ok, ExpContent}, file:read_file(filename:join(["/tmp", ParentName, Filename])))
+        end
+    end, [file_guid, file_guid2]).
 
 
 %%%===================================================================
@@ -611,7 +809,15 @@ init_per_suite(Config) ->
 
                 {download_code_expiration_interval_seconds, ?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS}
             ]}
-        ]
+        ],
+        posthook = fun(NewConfig) ->
+            User3Id = oct_background:get_user_id(user3),
+            SpaceId = oct_background:get_space_id(space_krk_par),
+            ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+                ?SPACE_MANAGE_SHARES | privileges:space_member()
+            ]),
+            NewConfig
+        end
     }).
 
 
@@ -631,8 +837,9 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 
-end_per_testcase(gui_download_file_test, Config) ->
-    lists:foreach(fun unblock_file_streaming/1, ?config(op_worker_nodes, Config)),
-    end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    test_utils:mock_unload(Nodes),
     lfm_proxy:teardown(Config).
+
+

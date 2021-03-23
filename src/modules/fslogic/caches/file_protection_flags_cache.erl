@@ -63,6 +63,7 @@ init(SpaceId) ->
                 true;
             _ ->
                 Opts = #{
+                    worker => true,
                     check_frequency => ?DEFAULT_CHECK_FREQUENCY,
                     size => ?DEFAULT_CACHE_SIZE
                 },

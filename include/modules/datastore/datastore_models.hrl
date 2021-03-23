@@ -237,7 +237,7 @@
 -record(file_download_code, {
     expires :: time:seconds(),
     session_id :: session:id(),
-    file_guid :: fslogic_worker:file_guid()
+    file_guids :: [fslogic_worker:file_guid()]
 }).
 
 -record(offline_access_credentials, {
@@ -949,7 +949,7 @@
     last_name :: file_meta:name(),
     last_tree :: od_provider:id(),
     % Traverse task specific info
-    execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
+    child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),

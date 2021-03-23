@@ -20,11 +20,10 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
--include("modules/datastore/datastore_runner.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include("tree_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% API

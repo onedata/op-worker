@@ -163,7 +163,7 @@ delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
     emit_events := EmitEvents,
     root_original_parent_uuid := RootOriginalParentUuid
 }) ->
-    case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
+    case tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId) of
         {ok, UserCtx} ->
             try
                 % TODO VFS-7133 after extending file_meta with field for storing source parent
@@ -193,7 +193,7 @@ delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
 
 -spec delete_file(file_ctx:ctx(), od_user:id(), id(), info()) -> ok.
 delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}) ->
-    case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
+    case tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId) of
         {ok, UserCtx} ->
             try
                 delete_req:delete(UserCtx, FileCtx, not EmitEvents),
