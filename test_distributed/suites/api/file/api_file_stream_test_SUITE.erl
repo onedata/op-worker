@@ -335,12 +335,12 @@ build_get_download_url_validate_gs_call_fun(MemRef, ExpContent, DownloadType) ->
 -spec block_file_streaming(node(), errors:error()) -> ok.
 block_file_streaming(OpNode, ErrorReturned) ->
     test_node_starter:load_modules([OpNode], [?MODULE]),
-    ok = test_utils:mock_new(OpNode, http_download),
+    ok = test_utils:mock_new(OpNode, file_download_utils),
     ErrorFun = fun(_, _, _, Req) ->
         http_req:send_error(ErrorReturned, Req)
     end,
-    ok = test_utils:mock_expect(OpNode, http_download, download_file, ErrorFun),
-    ok = test_utils:mock_expect(OpNode, http_download, download_tarball, ErrorFun).
+    ok = test_utils:mock_expect(OpNode, file_download_utils, download_single_file, ErrorFun),
+    ok = test_utils:mock_expect(OpNode, file_download_utils, download_tarball, ErrorFun).
 
 
 %% @private

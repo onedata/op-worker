@@ -13,7 +13,7 @@
 %%% disconnects from provider.
 %%% @end
 %%%--------------------------------------------------------------------
--module(tarball_streaming_traverse).
+-module(tarball_download_traverse).
 -author("Michal Stanisz").
 
 -behavior(traverse_behaviour).
