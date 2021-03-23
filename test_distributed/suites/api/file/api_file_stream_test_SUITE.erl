@@ -19,6 +19,7 @@
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([
     all/0,
@@ -33,6 +34,7 @@
     rest_download_file_test/1
 ]).
 
+%% @TODO VFS-7475 add multiple file test between spaces
 %% @TODO VFS-7475 add test with 1 worker pool 
 %% @TODO VFS-7475 parallelize tests
 all() -> [
@@ -695,18 +697,17 @@ get_fetched_block_size({RangeStart, RangeLen}, FileSize) ->
 build_download_file_setup_fun(MemRef, Content, FileType) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
     FileSpec = #file_spec{mode = 8#604, content = Content},
-    ShareSpec = #share_spec{sharing_user = user2},
 
     fun() ->
         {Guid, FileGuid, FileGuid2, ShareId} = case FileType of
             <<"file">> ->
                 #object{guid = G1, shares = [S]} = onenv_file_test_utils:create_and_sync_file_tree(
-                        user3, SpaceId, FileSpec#file_spec{shares = [ShareSpec]}, krakow),
+                        user3, SpaceId, FileSpec#file_spec{shares = [#share_spec{}]}, krakow),
                 #object{guid = G2} = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, FileSpec, krakow),
                 {G1, G1, G2, S};
             <<"dir">> ->
                 #object{guid = DirGuid, shares = [S], children = Children} = onenv_file_test_utils:create_and_sync_file_tree(
-                    user3, SpaceId, #dir_spec{shares = [ShareSpec], mode = 8#705, children = [FileSpec, FileSpec]}, krakow),
+                    user3, SpaceId, #dir_spec{shares = [#share_spec{}], mode = 8#705, children = [FileSpec, FileSpec]}, krakow),
                 [G1, G2] = lists:map(fun(#object{guid = Guid}) ->
                     Guid
                 end, Children),
@@ -808,7 +809,15 @@ init_per_suite(Config) ->
 
                 {download_code_expiration_interval_seconds, ?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS}
             ]}
-        ]
+        ],
+        posthook = fun(NewConfig) ->
+            User3Id = oct_background:get_user_id(user3),
+            SpaceId = oct_background:get_space_id(space_krk_par),
+            ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+                ?SPACE_MANAGE_SHARES | privileges:space_member()
+            ]),
+            NewConfig
+        end
     }).
 
 

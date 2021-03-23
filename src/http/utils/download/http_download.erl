@@ -12,7 +12,7 @@
 -module(http_download).
 -author("Bartosz Walkowicz").
 
--include("http/gui_download.hrl").
+-include("global_definitions.hrl").
 -include("http/rest.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -92,7 +92,7 @@ download_file(SessionId, #file_attr{
     cowboy_req:req().
 download_tarball(SessionId, FileAttrsList, OnSuccessCallback, Req0) ->
     Req1 = http_streamer:stream_reply(?HTTP_200_OK, Req0),
-    ok = dir_streaming_traverse:run(FileAttrsList, SessionId, Req1),
+    ok = tarball_streaming_traverse:run(FileAttrsList, SessionId, Req1),
     execute_on_success_callback(<<>>, OnSuccessCallback),
     Req1.
 

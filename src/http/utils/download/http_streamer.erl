@@ -13,7 +13,6 @@
 -module(http_streamer).
 -author("Bartosz Walkowicz").
 
--include("http/gui_download.hrl").
 -include("http/rest.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -28,10 +27,24 @@
     stream_reply/2, stream_reply/3
 ]).
 
--type read_block_size() :: non_neg_integer().
--type download_ctx() :: #download_ctx{}.
+-define(DEFAULT_READ_BLOCK_SIZE, op_worker:get_env(
+    default_download_read_block_size, 10485760) % 10 MB
+).
+-define(MAX_DOWNLOAD_BUFFER_SIZE, op_worker:get_env(
+    max_download_buffer_size, 20971520) % 20 MB
+).
 
--export_type([read_block_size/0, download_ctx/0]).
+-record(download_ctx, {
+    file_size :: file_meta:size(),
+    
+    file_handle :: lfm:handle(),
+    read_block_size :: http_streamer:read_block_size(),
+    max_read_blocks_count :: non_neg_integer(),
+    encoding_fun :: fun((Data :: binary()) -> EncodedData :: binary()),
+    tar_stream = undefined :: undefined | tar_utils:stream(),
+    
+    on_success_callback :: fun(() -> ok)
+}).
 
 % TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
 % Due to lack of backpressure mechanism in cowboy when streaming files it must
@@ -41,6 +54,11 @@
 % implemented with below boundaries.
 -define(MIN_SEND_RETRY_DELAY, 100).
 -define(MAX_SEND_RETRY_DELAY, 1000).
+
+-type read_block_size() :: non_neg_integer().
+-opaque download_ctx() :: #download_ctx{}.
+
+-export_type([read_block_size/0, download_ctx/0]).
 
 %%%===================================================================
 %%% API
@@ -178,6 +196,7 @@ stream_whole_file(#download_ctx{
     stream_bytes_range({0, FileSize - 1}, DownloadCtx, Req1),
     OnSuccessCallback(),
     
+    %% @TODO VFS-7475 do not use fin 
     cowboy_req:stream_body(<<"">>, fin, Req1),
     Req1.
 
@@ -201,6 +220,7 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, #download_ctx{
     stream_bytes_range(Range, DownloadCtx, Req1),
     OnSuccessCallback(),
     
+    %% @TODO VFS-7475 do not use fin 
     cowboy_req:stream_body(<<"">>, fin, Req1),
     Req1.
 
@@ -232,6 +252,7 @@ stream_multipart_ranged_body(Ranges, #download_ctx{
     end, Ranges),
     OnSuccessCallback(),
     
+    %% @TODO VFS-7475 do not use fin 
     cowboy_req:stream_body(cow_multipart:close(Boundary), fin, Req1),
     Req1.
 

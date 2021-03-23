@@ -135,10 +135,9 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
 %% @private
 -spec create_shares(oct_background:entity_selector(), session:id(), file_id:file_guid(), [share_spec()]) ->
     [od_share:id()] | no_return().
-create_shares(CreationProvider, CreatingUserSessId, FileGuid, ShareSpecs) ->
+create_shares(CreationProvider, SessId, FileGuid, ShareSpecs) ->
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
-    lists:sort(lists:map(fun(#share_spec{name = Name, description = Description, sharing_user = SharingUser}) ->
-        SessId = ensure_session_id(SharingUser, CreationProvider, CreatingUserSessId),
+    lists:sort(lists:map(fun(#share_spec{name = Name, description = Description}) ->
         {ok, ShareId} = ?assertMatch(
             {ok, _},
             lfm_proxy:create_share(CreationNode, SessId, {guid, FileGuid}, Name, Description),
@@ -146,19 +145,6 @@ create_shares(CreationProvider, CreatingUserSessId, FileGuid, ShareSpecs) ->
         ),
         ShareId
     end, ShareSpecs)).
-
-
-%% @private
--spec ensure_session_id(
-    SharingUser :: oct_background:entity_selector(), 
-    CreatingProvider :: oct_background:entity_selector(), 
-    session:id()
-) -> 
-    session:id().
-ensure_session_id(undefined, _, CreatingUserSessId) -> 
-    CreatingUserSessId;
-ensure_session_id(SharingUser, CreatingProvider, _CreatingUserSessId) ->
-    oct_background:get_user_session_id(SharingUser, CreatingProvider).
 
 
 %% @private

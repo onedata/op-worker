@@ -13,7 +13,7 @@
 %%% disconnects from provider.
 %%% @end
 %%%--------------------------------------------------------------------
--module(dir_streaming_traverse).
+-module(tarball_streaming_traverse).
 -author("Michal Stanisz").
 
 -behavior(traverse_behaviour).
@@ -50,7 +50,7 @@ run(FileAttrsList, SessionId, CowboyReq) ->
             {ok, UserId} = session:get_user_id(SessionId),
             TarStream = tar_utils:open_archive_stream(),
             {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-            FinalTarStream = handle_many_files(FileAttrsList, TaskId, UserCtx, TarStream, CowboyReq),
+            FinalTarStream = handle_multiple_files(FileAttrsList, TaskId, UserCtx, TarStream, CowboyReq),
             http_streamer:send_data_chunk(tar_utils:close_archive_stream(FinalTarStream), CowboyReq),
             tree_traverse_session:close_for_task(TaskId);
         {error, _} = Error ->
@@ -140,16 +140,24 @@ slave_job_loop(Pid) ->
     end.
 
 
+%% @private
+-spec get_connection_pid(id()) -> pid().
+get_connection_pid(TaskId) ->
+    {ok, #{ <<"connection_pid">> := EncodedPid }} =
+        traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    transfer_utils:decode_pid(EncodedPid).
+
+
 %%%===================================================================
 %%% Internal functions run by cowboy request handling process
 %%%===================================================================
 
 %% @private
--spec handle_many_files([lfm_attrs:file_attributes()], id(), user_ctx:ctx(), tar_utils:stream(), 
+-spec handle_multiple_files([lfm_attrs:file_attributes()], id(), user_ctx:ctx(), tar_utils:stream(), 
     cowboy_req:req()) -> tar_utils:stream().
-handle_many_files([], _TaskId, _UserCtx, TarStream, _CowboyReq) -> 
+handle_multiple_files([], _TaskId, _UserCtx, TarStream, _CowboyReq) -> 
     TarStream;
-handle_many_files(
+handle_multiple_files(
     [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE} = FileAttrs | Tail],
     TaskId, UserCtx, TarStream, CowboyReq
 ) ->
@@ -169,15 +177,15 @@ handle_many_files(
     {ok, _} = tree_traverse:run(
         ?POOL_NAME, file_ctx:new_by_guid(Guid), user_ctx:get_user_id(UserCtx), Options),
     TarStream2 = stream_loop(TarStream1, CowboyReq, user_ctx:get_session_id(UserCtx), PathPrefix),
-    handle_many_files(Tail, TaskId, UserCtx, TarStream2, CowboyReq);
-handle_many_files(
+    handle_multiple_files(Tail, TaskId, UserCtx, TarStream2, CowboyReq);
+handle_multiple_files(
     [#file_attr{guid = Guid, type = ?REGULAR_FILE_TYPE} = FileAttrs | Tail], 
     TaskId, UserCtx, TarStream, CowboyReq
 ) ->
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
     TarStream1 = stream_file(TarStream, CowboyReq, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
-    handle_many_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq).
+    handle_multiple_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq).
 
 
 %% @private
@@ -250,12 +258,4 @@ get_file_path(ShareGuid) ->
     {Uuid, SpaceId, _} = file_id:unpack_share_guid(ShareGuid),
     Guid = file_id:pack_guid(Uuid, SpaceId),
     lfm:get_file_path(?ROOT_SESS_ID, Guid).
-
-
-%% @private
--spec get_connection_pid(id()) -> pid().
-get_connection_pid(TaskId) ->
-    {ok, #{ <<"connection_pid">> := EncodedPid }} =
-        traverse_task:get_additional_data(?POOL_NAME, TaskId),
-    transfer_utils:decode_pid(EncodedPid).
     
