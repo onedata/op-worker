@@ -33,14 +33,19 @@
     max_download_buffer_size, 20971520) % 20 MB
 ).
 
--record(download_ctx, {
+-type read_block_size() :: non_neg_integer().
+-type encoding_fun() :: fun((Data :: binary()) -> EncodedData :: binary()).
+
+-record(streaming_ctx, {
     file_size :: file_meta:size(),
     file_handle :: lfm:handle(),
-    read_block_size :: http_streamer:read_block_size(),
+    read_block_size :: read_block_size(),
     max_read_blocks_count :: non_neg_integer(),
-    encoding_fun :: fun((Data :: binary()) -> EncodedData :: binary()),
+    encoding_fun :: encoding_fun(),
     tar_stream = undefined :: undefined | tar_utils:stream()
 }).
+
+-type streaming_ctx() :: #streaming_ctx{}.
 
 % TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
 % Due to lack of backpressure mechanism in cowboy when streaming files it must
@@ -50,12 +55,6 @@
 % implemented with below boundaries.
 -define(MIN_SEND_RETRY_DELAY, 100).
 -define(MAX_SEND_RETRY_DELAY, 1000).
-
--type read_block_size() :: non_neg_integer().
--type encoding_fun() :: fun((Data :: binary()) -> EncodedData :: binary()).
--opaque download_ctx() :: #download_ctx{}.
-
--export_type([read_block_size/0, download_ctx/0]).
 
 %%%===================================================================
 %%% API
@@ -104,7 +103,7 @@ stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize)
 ) ->
     tar_utils:stream() | undefined | no_return().
 stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, TarStream) ->
-    stream_bytes_range_internal(Range, #download_ctx{
+    stream_bytes_range_internal(Range, #streaming_ctx{
         file_size = FileSize,
         file_handle = FileHandle,
         read_block_size = ReadBlockSize,
@@ -114,7 +113,7 @@ stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize,
     }, Req, ?MIN_SEND_RETRY_DELAY, 0).
 
 
--spec send_data_chunk(Data :: binary(), cowboy_req:req()) -> NextRetryDelay :: time:millis().
+-spec send_data_chunk(Data :: iodata(), cowboy_req:req()) -> NextRetryDelay :: time:millis().
 send_data_chunk(Data, Req) ->
     send_data_chunk(Data, Req, ?MAX_DOWNLOAD_BUFFER_SIZE div ?DEFAULT_READ_BLOCK_SIZE, ?MIN_SEND_RETRY_DELAY).
 
@@ -143,15 +142,15 @@ calculate_max_read_blocks_count(ReadBlockSize) ->
 %% @private
 -spec stream_bytes_range_internal(
     http_parser:bytes_range(),
-    download_ctx(),
+    streaming_ctx(),
     cowboy_req:req(),
     SendRetryDelay :: time:millis(),
     ReadBytes :: non_neg_integer()
 ) ->
     tar_utils:stream() | undefined | no_return().
-stream_bytes_range_internal({From, To}, #download_ctx{tar_stream = TarStream}, _, _, _) when From > To ->
-    TarStream;
-stream_bytes_range_internal({From, To}, #download_ctx{
+stream_bytes_range_internal({From, To}, #streaming_ctx{tar_stream = TarStreamOrUndefined}, _, _, _) when From > To ->
+    TarStreamOrUndefined;
+stream_bytes_range_internal({From, To}, #streaming_ctx{
     file_handle = FileHandle,
     read_block_size = ReadBlockSize,
     max_read_blocks_count = MaxReadBlocksCount,
@@ -169,11 +168,11 @@ stream_bytes_range_internal({From, To}, #download_ctx{
             NextSendRetryDelay = send_data_chunk(EncodedData, Req, MaxReadBlocksCount, SendRetryDelay),
             stream_bytes_range_internal(
                 {From + DataSize, To}, 
-                DownloadCtx#download_ctx{file_handle = NewFileHandle}, 
+                DownloadCtx#streaming_ctx{file_handle = NewFileHandle}, 
                 Req, NextSendRetryDelay, ReadBytes + DataSize
             )
     end;
-stream_bytes_range_internal({From, To}, #download_ctx{
+stream_bytes_range_internal({From, To}, #streaming_ctx{
     file_size = FileSize,
     file_handle = FileHandle,
     read_block_size = ReadBlockSize,
@@ -196,7 +195,7 @@ stream_bytes_range_internal({From, To}, #download_ctx{
             NextSendRetryDelay = send_data_chunk(BytesToSend, Req, MaxReadBlocksCount, SendRetryDelay),
             stream_bytes_range_internal(
                 {From + DataSize, To},
-                DownloadCtx#download_ctx{file_handle = NewFileHandle, tar_stream = FinalTarStream},
+                DownloadCtx#streaming_ctx{file_handle = NewFileHandle, tar_stream = FinalTarStream},
                 Req, NextSendRetryDelay, ReadBytes + DataSize
             )
     end.
@@ -233,14 +232,12 @@ read_file_data(FileHandle, From, ToRead, MinBytes) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_data_chunk(
-    Data :: binary(),
+    Data :: iodata(),
     cowboy_req:req(),
     MaxReadBlocksCount :: non_neg_integer(),
     RetryDelay :: time:millis()
 ) ->
     NextRetryDelay :: time:millis().
-send_data_chunk(<<>>, _Req, _MaxReadBlocksCount, RetryDelay) -> 
-    RetryDelay;
 send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) ->
     {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
 
