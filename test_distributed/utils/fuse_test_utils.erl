@@ -193,9 +193,10 @@ connect_as_client(Node, Nonce, Token, Version) ->
         message_body = {client_handshake_request, #'ClientHandshakeRequest'{
             session_id = Nonce,
             macaroon = Token,
-            version = Version
-        }
-        }},
+            version = Version,
+            session_mode = 'NORMAL'
+        }}
+    },
     RawMsg = messages:encode_msg(HandshakeMessage),
 
     % when
@@ -275,7 +276,8 @@ connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
         #'ClientHandshakeRequest'{
             session_id = Nonce,
             macaroon = #'Macaroon'{macaroon = AccessToken},
-            version = Version
+            version = Version,
+            session_mode = 'NORMAL'
         }
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),

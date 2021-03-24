@@ -133,11 +133,12 @@ init(Config, Link, Workers) ->
 
 -spec teardown(Config :: list()) -> ok.
 teardown(Config) ->
-    lists:foreach(
-        fun(Worker) ->
-            Pid = rpc:call(Worker, erlang, whereis, [lfm_proxy_server]),
-            Pid ! exit
-        end, ?config(op_worker_nodes, Config)).
+    lists:foreach(fun(Worker) ->
+        case rpc:call(Worker, erlang, whereis, [lfm_proxy_server]) of
+            undefined -> ok;
+            Pid -> Pid ! exit
+        end
+    end, ?config(op_worker_nodes, Config)).
 
 
 %%%===================================================================

@@ -102,17 +102,22 @@ update_mtime_ctime(FileCtx, CurrentTime) ->
 -spec update_times_and_emit(file_ctx:ctx(), times:diff()) -> ok.
 update_times_and_emit(FileCtx, TimesDiff) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    Times = prepare_times(TimesDiff),
-    case times:create_or_update(#document{key = FileUuid,
-        value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesDiff) of
-        {ok, _} ->
-            spawn(fun() ->
-                fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
-            end),
+    case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
+        true ->
             ok;
-        {error, not_changed} -> ok
-    end,
-    ok.
+        false ->
+            Times = prepare_times(TimesDiff),
+            case times:create_or_update(#document{key = FileUuid,
+                value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesDiff) of
+                {ok, _} ->
+                    spawn(fun() ->
+                        fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
+                    end),
+                    ok;
+                {error, not_changed} ->
+                    ok
+            end
+    end.
 
 %%%===================================================================
 %%% Internal functions

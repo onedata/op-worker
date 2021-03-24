@@ -279,7 +279,7 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx0, FileType, TargetParentFileC
         ?DIRECTORY_TYPE -> ?add_subcontainer_mask
     end,
 
-    {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
+    {SourceFileParentCtx, SourceFileCtx1} = files_tree:get_parent(
         SourceFileCtx0, UserCtx
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
@@ -316,7 +316,7 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
     SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
     {ParentDoc, TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
-    {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
+    {SourceParentFileCtx, SourceFileCtx3} = files_tree:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     ok = case TargetGuid of
         undefined ->
@@ -400,7 +400,7 @@ rename_into_different_place_within_non_posix_space(_, _, _, _,
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
-    {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
+    {SourceFileParentCtx, SourceFileCtx1} = files_tree:get_parent(
         SourceFileCtx0, UserCtx
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
@@ -430,7 +430,7 @@ rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
-    {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
+    {SourceFileParentCtx, SourceFileCtx1} = files_tree:get_parent(
         SourceFileCtx0, UserCtx
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
@@ -509,7 +509,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     FileUuid = file_ctx:get_uuid_const(SourceFileCtx),
     {ParentDoc, TargetParentCtx2} = file_ctx:get_file_doc(TargetParentCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
-    {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
+    {SourceParentFileCtx, SourceFileCtx3} = files_tree:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
 
@@ -559,7 +559,7 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
     [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, ChildEntries) ->
     ParentGuid = file_ctx:get_guid_const(ParentFileCtx),
-    {Children, ListExtendedInfo, ParentFileCtx2} = file_ctx:get_file_children(ParentFileCtx, UserCtx, ListOpts),
+    {Children, ListExtendedInfo, ParentFileCtx2} = files_tree:get_children(ParentFileCtx, UserCtx, ListOpts),
     NewChildEntries = lists:flatten(lists:map(fun(ChildCtx) ->
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         ChildStorageFileId = filename:join(ParentStorageFileId, ChildName),
@@ -612,7 +612,7 @@ get_type(FileCtx) ->
     {file_meta:type(), ChildFileCtx :: file_ctx:ctx(), ParentFileCtx :: file_ctx:ctx()} |
     {undefined, undefined, ParentFileCtx :: file_ctx:ctx()}.
 get_child_type(ParentFileCtx, ChildName, UserCtx) ->
-    try file_ctx:get_child(ParentFileCtx, ChildName, UserCtx) of
+    try files_tree:get_child(ParentFileCtx, ChildName, UserCtx) of
         {ChildCtx, ParentFileCtx2} ->
             {ChildType, ChildCtx2} = get_type(ChildCtx),
             {ChildType, ChildCtx2, ParentFileCtx2}

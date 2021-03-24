@@ -57,7 +57,8 @@ reroute(UserCtx, ProviderId, Request) ->
     Msg = #client_message{
         message_body = Request,
         effective_session_id = EffSessionId,
-        effective_client_tokens = auth_manager:get_client_tokens(Credentials)
+        effective_client_tokens = auth_manager:get_client_tokens(Credentials),
+        effective_session_mode = user_ctx:get_session_mode(UserCtx)
     },
 
     {ok, #server_message{

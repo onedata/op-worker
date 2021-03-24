@@ -20,11 +20,10 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
--include("modules/datastore/datastore_runner.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include("tree_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% API
@@ -224,7 +223,7 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
 
     case TaskType of
         <<"traverse">> ->
-            {ParentFileCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+            {ParentFileCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
             ok = qos_status:report_traverse_finished_for_file(TaskId, FileCtx2, ParentFileCtx);
         <<"reconcile">> ->
             ok

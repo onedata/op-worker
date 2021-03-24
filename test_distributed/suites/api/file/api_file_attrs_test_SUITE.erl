@@ -19,8 +19,9 @@
 -include_lib("ctool/include/http/codes.hrl").
 
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -38,18 +39,24 @@
     get_dir_distribution_test/1
 ]).
 
+groups() -> [
+    {all_tests, [parallel], [
+        get_file_attrs_test,
+        get_shared_file_attrs_test,
+        get_attrs_on_provider_not_supporting_space_test,
+
+        get_file_shares_test,
+
+        set_file_mode_test,
+        set_mode_on_provider_not_supporting_space_test,
+
+        get_file_distribution_test,
+        get_dir_distribution_test
+    ]}
+].
+
 all() -> [
-    get_file_attrs_test,
-    get_shared_file_attrs_test,
-    get_attrs_on_provider_not_supporting_space_test,
-
-    get_file_shares_test,
-
-    set_file_mode_test,
-    set_mode_on_provider_not_supporting_space_test,
-
-    get_file_distribution_test,
-    get_dir_distribution_test
+    {group, all_tests}
 ].
 
 
@@ -866,10 +873,18 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_group(_Group, Config) ->
+    lfm_proxy:init(Config, false).
+
+
+end_per_group(_Group, Config) ->
+    lfm_proxy:teardown(Config).
+
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
-    lfm_proxy:init(Config).
+    Config.
 
 
-end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config).
+end_per_testcase(_Case, _Config) ->
+    ok.

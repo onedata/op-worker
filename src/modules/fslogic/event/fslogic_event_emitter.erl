@@ -256,7 +256,7 @@ emit_file_removed(FileCtx, ExcludedSessions) ->
     file_meta:name(), user_ctx:ctx()) -> ok | {error, Reason :: term()}.
 emit_file_renamed_to_client(FileCtx, NewParentGuid, NewName, PrevName, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    {OldParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    {OldParentGuid, _FileCtx2} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
     emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName, [SessionId]).
 
 %%--------------------------------------------------------------------
@@ -434,7 +434,7 @@ emit_suffixes(ConflictingFiles, {parent_guid, ParentGuid}) ->
     end, ConflictingFiles);
 emit_suffixes(Files, {ctx, FileCtx}) ->
     try
-        {ParentCtx, _} = file_ctx:get_parent(FileCtx, user_ctx:new(?ROOT_USER_ID)),
+        {ParentCtx, _} = files_tree:get_parent(FileCtx, user_ctx:new(?ROOT_USER_ID)),
         emit_suffixes(Files, {parent_guid, file_ctx:get_guid_const(ParentCtx)})
     catch
         _:_ -> ok % Parent not fully synchronized

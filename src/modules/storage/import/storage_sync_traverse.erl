@@ -564,7 +564,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                     % ensure it's deleted from the space
                     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
                     storage_import_monitoring:mark_processed_job(SpaceId),
-                    {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
+                    {FileCtx, ParentCtx2} = files_tree:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
                     FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, _SlavesDescription) ->
                         storage_import_monitoring:increment_queue_length_histograms(SpaceId, 1),
                         MasterJobCallback(#{
