@@ -21,7 +21,7 @@
 %% API
 -export([
     download_single_file/3, download_single_file/4,
-    download_tarball/4
+    download_tarball/3, download_tarball/4
 ]).
 
 
@@ -76,6 +76,12 @@ download_single_file(SessionId, #file_attr{
                     http_req:send_error(?ERROR_POSIX(Errno), Req1)
             end
     end.
+
+
+-spec download_tarball( session:id(), [lfm_attrs:file_attributes()], cowboy_req:req()) -> 
+    cowboy_req:req().
+download_tarball(SessionId, FileAttrsList, Req0) ->
+    download_tarball(SessionId, FileAttrsList, fun() -> ok end, Req0).
 
 
 -spec download_tarball(
