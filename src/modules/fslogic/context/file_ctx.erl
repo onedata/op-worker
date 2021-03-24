@@ -41,6 +41,7 @@
     uuid_based_path :: undefined | file_meta:uuid_based_path(),
     guid :: fslogic_worker:file_guid(),
     uuid :: file_meta:uuid(),
+    share_id :: undefined | od_share:id(),
     space_id :: od_space:id(),
     file_doc :: undefined | file_meta:doc(),
     parent :: undefined | ctx(),
@@ -136,8 +137,8 @@ new_by_canonical_path(UserCtx, Path) ->
 %%--------------------------------------------------------------------
 -spec new_by_guid(fslogic_worker:file_guid()) -> ctx().
 new_by_guid(Guid) ->
-    {Uuid, SpaceId} = file_id:unpack_guid(Guid),
-    #file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId}.
+    {Uuid, SpaceId, ShareId} = file_id:unpack_share_guid(Guid),
+    #file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId, share_id = ShareId}.
 
 -spec new_by_uuid_and_space_id(file_meta:uuid(), od_space:id()) -> ctx().
 new_by_uuid_and_space_id(Uuid, SpaceId) ->
@@ -145,7 +146,8 @@ new_by_uuid_and_space_id(Uuid, SpaceId) ->
 
 -spec new_by_uuid_space_and_share_id(file_meta:uuid(), od_space:id(), od_share:id()) -> ctx().
 new_by_uuid_space_and_share_id(Uuid, SpaceId, ShareId) ->
-    #file_ctx{guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId), uuid = Uuid, space_id = SpaceId}.
+    #file_ctx{guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId),
+        uuid = Uuid, space_id = SpaceId, share_id = ShareId}.
 
 -spec new_by_doc(file_meta:doc(), od_space:id()) -> ctx().
 new_by_doc(Doc, SpaceId) ->
@@ -160,7 +162,7 @@ new_by_doc(Doc, SpaceId) ->
 -spec new_by_doc(file_meta:doc(), od_space:id(), undefined | od_share:id()) -> ctx().
 new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId, ShareId) ->
     Guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId),
-    #file_ctx{file_doc = Doc, guid = Guid, uuid = Uuid, space_id = SpaceId}.
+    #file_ctx{file_doc = Doc, guid = Guid, uuid = Uuid, space_id = SpaceId, share_id = ShareId}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -220,8 +222,7 @@ set_is_dir(FileCtx, IsDir) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_share_id_const(ctx()) -> od_share:id() | undefined.
-get_share_id_const(#file_ctx{guid = Guid}) ->
-    {_FileUuid, _SpaceId, ShareId} = file_id:unpack_share_guid(Guid),
+get_share_id_const(#file_ctx{share_id = ShareId}) ->
     ShareId.
 
 %%--------------------------------------------------------------------
