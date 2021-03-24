@@ -20,7 +20,7 @@
 %% API
 -export([empty_references/0, new_doc/4, merge_link_and_file_doc/2,
     register/2, deregister/2,
-    count_references/1, list_references/1,
+    count_references/1, has_any_references/1, list_references/1,
     merge_references/2]).
 
 -type link() :: file_meta:uuid().
@@ -28,7 +28,8 @@
 % into lists of links created by providers. Such structure is needed for
 % conflicts resolution (see merge_references/2).
 -type references_by_provider() :: #{oneprovider:id() => [link()]}.
--export_type([link/0, references_by_provider/0]).
+-type references_presence() :: no_references_left | has_one_or_more_reference.
+-export_type([link/0, references_by_provider/0, references_presence/0]).
 
 % TODO VFS-7441 - Test number of links that can be stored in file_meta doc
 -define(MAX_LINKS_NUM, 65536). % 64 * 1024
@@ -90,16 +91,21 @@ register(FileUuid, LinkUuid) ->
         end
     end).
 
--spec deregister(file_meta:uuid(), link()) -> {ok, file_meta:doc()} | {error, term()}.
+-spec deregister(file_meta:uuid(), link()) -> {ok, references_presence()} | {error, term()}.
 deregister(FileUuid, LinkUuid) ->
     ProviderId = oneprovider:get_id(),
-    file_meta:update(FileUuid, fun(#file_meta{references = References} = Record) ->
+    UpdateAns = file_meta:update(FileUuid, fun(#file_meta{references = References} = Record) ->
         ProviderReferences = maps:get(ProviderId, References, []),
         case ProviderReferences -- [LinkUuid] of
             [] -> {ok, Record#file_meta{references = maps:remove(ProviderId, References)}};
             NewProviderReferences -> {ok, Record#file_meta{references = References#{ProviderId => NewProviderReferences}}}
         end
-    end).
+    end),
+
+    case UpdateAns of
+        {ok, Doc} -> {ok, has_any_references(Doc)};
+        Other -> Other
+    end.
 
 -spec count_references(file_meta:uuid() | file_meta:doc()) -> {ok, non_neg_integer()} | {error, term()}.
 count_references(Doc = #document{value = #file_meta{references = References}}) ->
@@ -114,7 +120,14 @@ count_references(Key) ->
         Other -> Other
     end.
 
--spec list_references(file_meta:uuid() | file_meta:doc()) -> {ok, [link() | file_meta:uuid()]} | {error, term()}.
+-spec has_any_references(file_meta:uuid() | file_meta:doc()) -> references_presence().
+has_any_references(KeyOrDoc) ->
+    case count_references(KeyOrDoc) of
+        {ok, 0} -> no_references_left;
+        {ok, _} -> has_one_or_more_reference
+    end.
+
+-spec list_references(file_meta:uuid() | file_meta:doc()) -> {ok, [link()]} | {error, term()}.
 list_references(Doc = #document{key = TargetKey, value = #file_meta{references = References}}) ->
     ReferencesList = references_to_list(References),
     case file_meta:is_deleted(Doc) of

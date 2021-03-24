@@ -183,7 +183,6 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
     ParentFileCtx3 = file_ctx:assert_is_dir(ParentFileCtx2),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
-    CTime = global_clock:timestamp_seconds(),
     Owner = user_ctx:get_user_id(UserCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx3),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
@@ -191,11 +190,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
 
     try
-        {ok, _} = times:save(#document{
-            key = DirUuid,
-            value = #times{mtime = CTime, atime = CTime, ctime = CTime},
-            scope = SpaceId
-        }),
+        ok = times:new_with_current_times(DirUuid, SpaceId),
         fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
         #fuse_response{fuse_response = FileAttr} =

@@ -386,7 +386,7 @@
     deleted = false :: boolean(),
     parent_uuid :: undefined | file_meta:uuid(),
     references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references_by_provider(),
-    symlink :: undefined | file_meta_symlinks:symlink()
+    symlink_value :: undefined | file_meta_symlinks:symlink()
 }).
 
 

@@ -245,7 +245,7 @@ get_record_struct(11) ->
         {parent_uuid, string},
         % following fields have been added in this version:
         {references, #{string => [string]}},
-        {symlink, string}
+        {symlink_value, string}
     ]}.
 
 

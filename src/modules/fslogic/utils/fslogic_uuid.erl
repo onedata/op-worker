@@ -28,6 +28,7 @@
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
 -export([gen_link_uuid/1, is_link_uuid/1, ensure_effective_uuid/1, ensure_effective_guid/1]).
+-export([gen_symlink_uuid/0, is_symlink_uuid/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
@@ -37,6 +38,8 @@
 -define(LINK_UUID_PREFIX, "link_").
 -define(LINK_UUID_SEPARATOR, "_file_").
 -define(LINK_UUID_RAND_PART_BYTES, 4).
+% Macro for symlinks
+-define(SYMLINK_UUID_PREFIX, "smlnk_").
 
 %%%===================================================================
 %%% API
@@ -220,6 +223,16 @@ ensure_effective_guid(Guid) ->
         Uuid -> Guid;
         EffectiveUuid -> file_id:pack_guid(EffectiveUuid, file_id:guid_to_space_id(Guid))
     end.
+
+
+-spec gen_symlink_uuid() -> file_meta:uuid().
+gen_symlink_uuid() ->
+    RandPart = datastore_key:new(),
+    <<?SYMLINK_UUID_PREFIX, RandPart/binary>>.
+
+-spec is_symlink_uuid(file_meta:uuid()) -> boolean().
+is_symlink_uuid(<<?SYMLINK_UUID_PREFIX, _/binary>>) -> true;
+is_symlink_uuid(_) -> false.
 
 %%%===================================================================
 %%% Internal functions

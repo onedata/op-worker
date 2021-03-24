@@ -31,7 +31,7 @@
 -spec new_doc(file_meta:name(), file_meta:uuid(), od_space:id(), od_user:id(), symlink()) -> file_meta:doc().
 new_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
     #document{
-        key = undefined,
+        key = fslogic_uuid:gen_symlink_uuid(),
         value = #file_meta{
             name = Name,
             type = ?SYMLINK_TYPE,
@@ -39,13 +39,13 @@ new_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
             owner = Owner,
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id(),
-            symlink = Link
+            symlink_value = Link
         },
         scope = SpaceId
     }.
 
 -spec readlink(file_meta:doc() | file_meta:uuid()) -> {ok, symlink()} | {error, term()}.
-readlink(#document{value = #file_meta{type = ?SYMLINK_TYPE, symlink = Link}}) ->
+readlink(#document{value = #file_meta{type = ?SYMLINK_TYPE, symlink_value = Link}}) ->
     {ok, Link};
 readlink(#document{value = #file_meta{}}) ->
     {error, ?EINVAL};

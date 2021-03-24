@@ -23,7 +23,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([get_or_default/1, save/1, get/1, delete/1, create_or_update/2, save/5]).
+-export([get_or_default/1, save/1, save/5, get/1, delete/1,
+    create_or_update/2, new_with_current_times/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -87,10 +88,10 @@ save(FileUuid, SpaceId, ATime, MTime, CTime) ->
 %% Saves permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec save(doc()) -> {ok, key()} | {error, term()}.
+-spec save(doc()) -> {ok, doc()} | {error, term()}.
 save(#document{key = Key} = Doc) ->
-    ?extract_key(datastore_model:save(?CTX#{generated_key => true},
-        Doc#document{key = fslogic_uuid:ensure_effective_uuid(Key)})).
+    datastore_model:save(?CTX#{generated_key => true},
+        Doc#document{key = fslogic_uuid:ensure_effective_uuid(Key)}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,6 +103,11 @@ save(#document{key = Key} = Doc) ->
     {ok, key()} | {error, term()}.
 create_or_update(#document{key = Key, value = Default}, Diff) ->
     ?extract_key(datastore_model:update(?CTX, fslogic_uuid:ensure_effective_uuid(Key), Diff, Default)).
+
+-spec new_with_current_times(file_meta:uuid(), od_space:id()) -> ok | {error, term()}.
+new_with_current_times(FileUuid, SpaceId) ->
+    Time = global_clock:timestamp_seconds(),
+    save(FileUuid, SpaceId, Time, Time, Time).
 
 %%--------------------------------------------------------------------
 %% @doc

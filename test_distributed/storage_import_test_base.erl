@@ -6164,7 +6164,7 @@ remove_link(Worker, ParentUuid, FileName) ->
     ok = rpc:call(Worker, datastore_model, delete_links, [Ctx#{scope => ?SPACE_ID}, ParentUuid, TreeId, FileName]).
 
 remove_link(Worker, ParentUuid, FileName, FileUuid) ->
-    ok = rpc:call(Worker, file_meta_datastore_links, delete, [ParentUuid, ?SPACE_ID, FileName, FileUuid]).
+    ok = rpc:call(Worker, file_meta_forest, delete, [ParentUuid, ?SPACE_ID, FileName, FileUuid]).
 
 clean_traverse_tasks(Worker) ->
     Pool = <<"storage_sync_traverse">>,

@@ -345,7 +345,7 @@ get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
 get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
 
--spec list_references_const(ctx()) -> {ok, [file_meta_hardlinks:link() | file_meta:uuid()]} | {error, term()}.
+-spec list_references_const(ctx()) -> {ok, [file_meta:uuid()]} | {error, term()}.
 list_references_const(FileCtx) ->
     % TODO VFS-7444 - Investigate possibility to cache hardlink references in file_ctx
     FileUuid = get_effective_uuid_const(FileCtx),

@@ -820,6 +820,7 @@ lfm_create_and_read_symlink(Config) ->
     ?assert(LinkAttrs#file_attr.atime > 0),
     ?assert(LinkAttrs#file_attr.mtime > 0),
     ?assert(LinkAttrs#file_attr.ctime > 0),
+    ?assert(fslogic_uuid:is_symlink_uuid(file_id:guid_to_uuid(LinkAttrs#file_attr.guid))),
 
     % Read link and check it
     time_test_utils:simulate_seconds_passing(2), % ensure time change

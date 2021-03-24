@@ -68,14 +68,14 @@
 -type conflicts() :: [link()].
 
 
--type list_offset() :: file_meta_datastore_links:offset().
--type list_token() :: file_meta_datastore_links:token().
--type list_size() :: file_meta_datastore_links:size().
--type list_opts() :: file_meta_datastore_links:list_opts().
--type list_last_name() :: file_meta_datastore_links:last_name().
--type list_last_tree() :: file_meta_datastore_links:last_tree().
--type list_extended_info() :: file_meta_datastore_links:list_extended_info().
--type link() :: file_meta_datastore_links:link().
+-type list_offset() :: file_meta_forest:offset().
+-type list_token() :: file_meta_forest:token().
+-type list_size() :: file_meta_forest:size().
+-type list_opts() :: file_meta_forest:list_opts().
+-type list_last_name() :: file_meta_forest:last_name().
+-type list_last_tree() :: file_meta_forest:last_tree().
+-type list_extended_info() :: file_meta_forest:list_extended_info().
+-type link() :: file_meta_forest:link().
 
 -export_type([
     doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
@@ -170,11 +170,11 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         LocalTreeId = oneprovider:get_id(),
         case file_meta:save(FileDoc3) of
             {ok, FileDocFinal = #document{key = FileUuid}} ->
-                case file_meta_datastore_links:check_and_add(ParentUuid, ParentScopeId, TreesToCheck, FileName, FileUuid) of
+                case file_meta_forest:check_and_add(ParentUuid, ParentScopeId, TreesToCheck, FileName, FileUuid) of
                     ok ->
                         {ok, FileDocFinal};
                     {error, already_exists} = Eexists ->
-                        case file_meta_datastore_links:get(ParentUuid, TreesToCheck, FileName) of
+                        case file_meta_forest:get(ParentUuid, TreesToCheck, FileName) of
                             {ok, Links} ->
                                 FileExists = lists:any(fun(#link{target = Uuid, tree_id = TreeId, rev = Rev}) ->
                                     Deleted = case get_including_deleted(Uuid) of
@@ -187,7 +187,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
                                     end,
                                     case {Deleted, TreeId} of
                                         {true, LocalTreeId} ->
-                                            file_meta_datastore_links:delete_local(ParentUuid, ParentScopeId, FileName, Rev),
+                                            file_meta_forest:delete_local(ParentUuid, ParentScopeId, FileName, Rev),
                                             false;
                                         _ ->
                                             not Deleted
@@ -310,7 +310,7 @@ delete(#document{
     }
 }) ->
     ?run(begin
-        ok = file_meta_datastore_links:delete(ParentUuid, Scope, FileName, FileUuid),
+        ok = file_meta_forest:delete(ParentUuid, Scope, FileName, FileUuid),
         delete_without_link(FileUuid)
     end);
 delete({path, Path}) ->
@@ -404,7 +404,7 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
         [TreeIdPrefix | Tokens2] ->
             Name2 = list_to_binary(lists:reverse(Tokens2)),
             PrefixSize = erlang:size(TreeIdPrefix),
-            {ok, TreeIds} = file_meta_datastore_links:get_trees(ParentUuid),
+            {ok, TreeIds} = file_meta_forest:get_trees(ParentUuid),
             TreeIds2 = lists:filter(fun(TreeId) ->
                 case TreeId of
                     <<TreeIdPrefix:PrefixSize/binary, _/binary>> -> true;
@@ -430,7 +430,7 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
 list_children(Entry, Opts) ->
     ?run(begin
         {ok, FileUuid} = get_uuid(Entry),
-        file_meta_datastore_links:list(FileUuid, Opts)
+        file_meta_forest:list(FileUuid, Opts)
     end).
 
 
@@ -445,7 +445,7 @@ list_children(Entry, Opts) ->
 list_children_whitelisted(Entry, ListOpts, ChildrenWhiteList) ->
     ?run(begin
         {ok, FileUuid} = get_uuid(Entry),
-        file_meta_datastore_links:list_whitelisted(FileUuid, ListOpts, ChildrenWhiteList)
+        file_meta_forest:list_whitelisted(FileUuid, ListOpts, ChildrenWhiteList)
     end).
 
 
@@ -488,8 +488,8 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
             parent_uuid = TargetParentUuid
         }}
     end),
-    ok = file_meta_datastore_links:add(TargetParentUuid, Scope, TargetName, FileUuid),
-    ok = file_meta_datastore_links:delete(SourceParentUuid, Scope, FileName, FileUuid).
+    ok = file_meta_forest:add(TargetParentUuid, Scope, TargetName, FileUuid),
+    ok = file_meta_forest:delete(SourceParentUuid, Scope, FileName, FileUuid).
 
 
 %%--------------------------------------------------------------------
@@ -692,7 +692,6 @@ get_shares(#file_meta{shares = Shares}) ->
 %%--------------------------------------------------------------------
 -spec make_space_exist(SpaceId :: datastore:key()) -> ok | no_return().
 make_space_exist(SpaceId) ->
-    CTime = global_clock:timestamp_seconds(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileDoc = #document{
         key = SpaceDirUuid,
@@ -707,13 +706,8 @@ make_space_exist(SpaceId) ->
     },
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
-            TimesDoc = #document{
-                key = SpaceDirUuid,
-                value = #times{mtime = CTime, atime = CTime, ctime = CTime},
-                scope = SpaceId
-            },
-            case times:save(TimesDoc) of
-                {ok, _} -> ok;
+            case times:new_with_current_times(SpaceDirUuid, SpaceId) of
+                ok -> ok;
                 {error, already_exists} -> ok
             end,
             trash:create(SpaceId),
@@ -904,7 +898,7 @@ check_name_and_get_conflicting_files(#document{
 -spec check_name_and_get_conflicting_files(uuid(), name(), uuid(), od_provider:id()) ->
     ok | {conflicting, ExtendedName :: name(), Conflicts :: conflicts()}.
 check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId) ->
-    file_meta_datastore_links:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId).
+    file_meta_forest:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId).
 
 
 %%--------------------------------------------------------------------
@@ -1002,7 +996,7 @@ is_valid_filename(FileName) when is_binary(FileName) ->
 -spec get_child_uuid_and_tree_id(uuid(), datastore_links:tree_ids(), name()) ->
     {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
 get_child_uuid_and_tree_id(ParentUuid, TreeIds, Name) ->
-    case file_meta_datastore_links:get(ParentUuid, TreeIds, Name) of
+    case file_meta_forest:get(ParentUuid, TreeIds, Name) of
         {ok, [#link{target = FileUuid, tree_id = TreeId}]} ->
             {ok, FileUuid, TreeId};
         {ok, [#link{} | _]} ->

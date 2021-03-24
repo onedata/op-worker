@@ -429,10 +429,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
             {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
-                CTime = global_clock:timestamp_seconds(),
-                {ok, _} = times:save(#document{key = SymlinkUuid, value = #times{
-                    mtime = CTime, atime = CTime, ctime = CTime
-                }, scope = SpaceId}),
+                ok = times:new_with_current_times(SymlinkUuid, SpaceId),
                 fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
                 FileCtx = file_ctx:new_by_guid(file_id:pack_guid(SymlinkUuid, SpaceId)),
@@ -726,10 +723,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
             File = file_meta:new_doc(Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId),
             {ok, #document{key = FileUuid}} = file_meta:create({uuid, ParentUuid}, File),
-            CTime = global_clock:timestamp_seconds(),
-            {ok, _} = times:save(#document{key = FileUuid, value = #times{
-                mtime = CTime, atime = CTime, ctime = CTime
-            }, scope = SpaceId}),
+            ok = times:new_with_current_times(FileUuid, SpaceId),
 
             {file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)), ParentFileCtx2};
         {false, _} ->
