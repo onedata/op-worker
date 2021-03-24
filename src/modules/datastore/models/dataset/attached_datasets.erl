@@ -6,28 +6,35 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Module which implements datasets structure for storing
+%%% attached dataset entries.
+%%% Under the hood it uses datasets_structure module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(attached_datasets).
 -author("Jakub Kudzia").
 
 -include("modules/dataset/dataset.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add/3, delete/1, delete/2, list_top_datasets/2, list/2, move/5]).
+-export([add/4, delete/1, delete/2, list_top_datasets/2, list/2, move/6]).
 
--define(FOREST_TYPE, <<"ATTACHED>>">>).
+-define(FOREST_TYPE, <<"ATTACHED">>).
+
+-type error() :: {error, term()}.
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-add(SpaceId, DatasetId, Uuid) ->
+-spec add(od_space:id(), dataset:id(), file_meta:uuid(), dataset:name()) -> ok | error().
+add(SpaceId, DatasetId, Uuid, DatasetName) ->
     {ok, DatasetPath} = dataset_path:get(SpaceId, Uuid),
-    datasets_structure:add(SpaceId, ?FOREST_TYPE, DatasetPath, DatasetId).
+    datasets_structure:add(SpaceId, ?FOREST_TYPE, DatasetPath, DatasetId, DatasetName).
 
 
+-spec delete(dataset:doc()) -> ok.
 delete(DatasetDoc) ->
     {ok, Uuid} = dataset:get_uuid(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
@@ -35,14 +42,17 @@ delete(DatasetDoc) ->
     delete(SpaceId, DatasetPath).
 
 
+-spec delete(od_space:id(), dataset:path()) -> ok.
 delete(SpaceId, DatasetPath) ->
     datasets_structure:delete(SpaceId, ?FOREST_TYPE, DatasetPath).
 
 
+-spec list_top_datasets(od_space:id(), datasets_structure:opts()) -> {ok, datasets_structure:entries(), boolean()}.
 list_top_datasets(SpaceId, Opts) ->
     datasets_structure:list_space(SpaceId, ?FOREST_TYPE, Opts).
 
 
+-spec list(dataset:doc(), datasets_structure:opts()) -> {ok, datasets_structure:entries(), boolean()}.
 list(DatasetDoc, Opts) ->
     {ok, Uuid} = dataset:get_uuid(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
@@ -50,10 +60,11 @@ list(DatasetDoc, Opts) ->
     datasets_structure:list(SpaceId, ?FOREST_TYPE, DatasetPath, Opts).
 
 
-move(SpaceId, DatasetId, Uuid, SourceParentUuid, TargetParentUuid) ->
+-spec move(od_space:id(), dataset:id(), file_meta:uuid(), file_meta:uuid(), file_meta:uuid(), dataset:name()) -> ok.
+move(SpaceId, DatasetId, Uuid, SourceParentUuid, TargetParentUuid, TargetName) ->
     {ok, SourceParentDatasetPath} = dataset_path:get(SpaceId, SourceParentUuid),
     {ok, TargetParentDatasetPath} = dataset_path:get(SpaceId, TargetParentUuid),
-    SourceDatasetPath = filepath_utils:join([SourceParentDatasetPath, Uuid]),
-    TargetDatasetPath = filepath_utils:join([TargetParentDatasetPath, Uuid]),
-    datasets_structure:move(SpaceId, ?FOREST_TYPE, DatasetId, SourceDatasetPath, TargetDatasetPath).
+    SourceDatasetPath = filename:join([SourceParentDatasetPath, Uuid]),
+    TargetDatasetPath = filename:join([TargetParentDatasetPath, Uuid]),
+    datasets_structure:move(SpaceId, ?FOREST_TYPE, DatasetId, SourceDatasetPath, TargetDatasetPath, TargetName).
 

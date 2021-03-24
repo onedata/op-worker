@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Model for storing information about datasets.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dataset).
@@ -33,11 +33,29 @@
 -type record() :: #dataset{}.
 -type doc() :: datastore_doc:doc(record()).
 -type path() :: file_meta:uuid_based_path().
+-type name() :: file_meta:name().
 -type error() :: {error, term()}.
 -type detached_info() :: detached_dataset_info:info().
 -type membership() :: ?NONE_DATASET_MEMBERSHIP | ?DIRECT_DATASET_MEMBERSHIP | ?ANCESTOR_DATASET_MEMBERSHIP.
 
--export_type([id/0, state/0, path/0, detached_info/0, membership/0]).
+-type info() :: json_utils:json_map().
+%% dataset:info() is represented as a map:
+%% #{
+%%      <<"state">> => dataset:state()
+%%      <<"fileRootGuid">> => file_id:file_guid(),
+%%      <<"fileRootPath">> => file_meta:path(),
+%%      <<"fileRootType">> => file_meta:type(),
+%%      <<"parentDatasetId">> => dataset:id() | undefined,
+%%      <<"creationTime">> => time:seconds()
+%% }
+
+-type effective_summary() :: json_utils:json_map().
+%% dataset:effective_summary() is represented as a map:
+%% #{
+%%      <<"directDataset">> => dataset:id() | undefined,
+%%      <<"effectiveAncestorDatasets">> => [dataset:id()]
+%% }
+-export_type([id/0, doc/0, name/0, state/0, path/0, detached_info/0, membership/0, info/0, effective_summary/0]).
 
 
 % @formatter:on
@@ -72,7 +90,7 @@ delete(DatasetId) ->
     datastore_model:delete(?CTX, DatasetId).
 
 
--spec get_space_id(doc()) -> {ok, od_space:id()}.
+-spec get_space_id(doc() | dataset:id()) -> {ok, od_space:id()}.
 get_space_id(#document{scope = SpaceId}) ->
     {ok, SpaceId};
 get_space_id(DatasetId) ->

@@ -121,7 +121,7 @@ create_share_insecure(UserCtx, FileCtx0, Name, Description) ->
                 {error, _} ->
                     ok = share_logic:delete(SessionId, ShareId),
                     ?ERROR(?EAGAIN);
-                {ok, _} ->
+                ok ->
                     #provider_response{
                         status = #status{code = ?OK},
                         provider_response = #share{share_id = ShareId}
@@ -145,7 +145,7 @@ remove_share_insecure(UserCtx, FileCtx, ShareId) ->
     case file_meta:remove_share(FileCtx, ShareId) of
         {error, not_found} ->
             ?ERROR(?ENOENT);
-        {ok, _} ->
+        ok ->
             ok = share_logic:delete(SessionId, ShareId),
             ok = permissions_cache:invalidate(),
             #provider_response{status = #status{code = ?OK}}

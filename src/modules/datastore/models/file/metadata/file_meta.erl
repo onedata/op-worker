@@ -268,7 +268,7 @@ get_including_deleted(FileUuid) ->
 %% Updates file meta.
 %% @end
 %%--------------------------------------------------------------------
--spec update(uuid() | entry(), diff()) -> {ok, uuid()} | {error, term()}.
+-spec update(uuid() | entry(), diff()) -> {ok, doc()} | {error, term()}.
 update({uuid, FileUuid}, Diff) ->
     update(FileUuid, Diff);
 update(#document{value = #file_meta{}, key = Key}, Diff) ->
@@ -279,7 +279,7 @@ update({path, Path}, Diff) ->
         update(Doc, Diff)
     end);
 update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
+    datastore_model:update(?CTX, Key, Diff).
 
 
 %%--------------------------------------------------------------------
@@ -630,12 +630,12 @@ setup_onedata_user(UserId, EffSpaces) ->
 %% Add shareId to file meta.
 %% @end
 %%--------------------------------------------------------------------
--spec add_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()}  | {error, term()}.
+-spec add_share(file_ctx:ctx(), od_share:id()) -> ok | {error, term()}.
 add_share(FileCtx, ShareId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
         {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
-    end).
+    end)).
 
 
 %%--------------------------------------------------------------------
@@ -643,10 +643,10 @@ add_share(FileCtx, ShareId) ->
 %% Remove shareId from file meta.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()} | {error, term()}.
+-spec remove_share(file_ctx:ctx(), od_share:id()) -> ok | {error, term()}.
 remove_share(FileCtx, ShareId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
         Result = lists:foldl(fun(ShId, {IsMember, Acc}) ->
             case ShareId == ShId of
                 true -> {found, Acc};
@@ -660,7 +660,7 @@ remove_share(FileCtx, ShareId) ->
             {not_found, _} ->
                 {error, not_found}
         end
-    end).
+    end)).
 
 
 -spec get_shares(doc() | file_meta()) -> [od_share:id()].
@@ -715,12 +715,16 @@ detach_dataset(Uuid) ->
 
 -spec remove_dataset(uuid()) -> ok | {error, term()}.
 remove_dataset(Uuid) ->
-    ?extract_ok(update(Uuid, fun(FileMeta) ->
+    Result = ?extract_ok(update(Uuid, fun(FileMeta) ->
         {ok, FileMeta#file_meta{
             dataset = undefined,
             dataset_state = undefined
         }}
-    end)). 
+    end)),
+    case Result of
+        ok -> ok;
+        {error, not_found} -> ok
+    end.
 
 
 %%--------------------------------------------------------------------

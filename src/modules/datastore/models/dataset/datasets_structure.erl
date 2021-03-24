@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% Module which implements generic datasets structure using datastore links.
+%%% WRITEME
 %%% @end
 %%%-------------------------------------------------------------------
 -module(datasets_structure).
@@ -18,37 +19,28 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-% TODO VFS-7363 add docs & specs
-
-
-
-
-% TODO trzeba bedzie zrobic moduł, który przykryje mi drzewo i korzystac z niego do implementacji drzewa attached
-% i detached
-
 %% API
--export([add/4, get/3, delete/3, list_space/3, list/4, move/5]).
+-export([add/5, get/3, delete/3, list_space/3, list/4, move/6]).
 
 %% Test API
 -export([list_all_unsafe/2, delete_all_unsafe/2]).
 
+
 -type link_name() :: dataset:path().
--type link_value() :: dataset:id().
--type encoded_link_value() :: binary().
+-type link_value() :: binary().
 -type link() :: {link_name(), link_value()}.
 -type internal_link() :: datastore_links:link().
 -type link_revision() :: datastore_links:link_rev().
+-type list_mode() :: top | {children, ParentDatasetPath :: link_name()}.
 
--type entry() :: {file_meta:uuid(), file_meta:name()}.
+-type entry() :: {dataset:id(), dataset:name()}.
 -type entries() :: [entry()].
-
-
 
 -type fold_acc() :: term().
 -type fold_fun() :: fun((internal_link(), fold_acc()) -> {ok | stop, fold_acc()} | {error, term()}).
 
 -type tree_id() :: oneprovider:id().
--type forest_type() :: binary(). % ?ATTACHED_FOREST | ?DETACHED_FOREST
+-type forest_type() :: binary().
 
 
 % @formatter:off
@@ -60,54 +52,49 @@
 
 -type opts() :: #{
     offset => offset(),
-    start_index => start_index(),   % todo % czy na pewno ??
+    start_index => start_index(), % TODO VFS-7363 Czy to powinno byc dataset path a moze dataset id i na jego podstawie path?
     limit => limit()
 }.
 
 % @formatter:on
 
+-export_type([opts/0, entries/0, entry/0]).
+
 -define(CTX, (dataset:get_ctx())).
 
 -define(CTX(Scope), ?CTX#{scope => Scope}).
--define(FOREST(Type, SpaceId), str_utils:join_binary([<<"DATASETS">>, Type, SpaceId], ?SEPARATOR)).
+-define(FOREST(Type, SpaceId), str_utils:join_binary([<<"DATASETS">>, Type, SpaceId], ?FOREST_SEP)).
 -define(LOCAL_TREE_ID, oneprovider:get_id()).
 -define(LINK(Name, Value), {Name, Value}).
 -define(DEFAULT_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
 
 
--define(SEPARATOR, <<"###">>).
+-define(FOREST_SEP, <<"###">>).
+-define(VALUE_SEP, <<"///">>).
 
-% todo czym jest link_value ??
-% TODO MOVE musi ogarnac, ze moze sie zmienic guid pliku
-
-% todo trzeba uwazac kiedy podawac sciezke, a keidy nie? bo mzoe juz byc nieaktualna?
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-add(SpaceId, ForestType, DatasetPath, DatasetId) ->
-    Link = ?LINK(DatasetPath, DatasetId),
-    case datastore_model:add_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), ?LOCAL_TREE_ID, Link) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end.
+add(SpaceId, ForestType, DatasetPath, DatasetId, DatasetName) ->
+    add(SpaceId, ForestType, DatasetPath, encode_entry(DatasetId, DatasetName)).
 
 
 -spec get(od_space:id(), forest_type(), link_name()) ->
-    {ok, link_value()} | {error, term()}.
+    {ok, entry()} | {error, term()}.
 get(SpaceId, ForestType, DatasetPath) ->
     case datastore_model:get_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), all, DatasetPath) of
-        {ok, [#link{target = DatasetId}]} ->
-            {ok, DatasetId};
+        {ok, [#link{target = LinkValue}]} ->
+            {ok, decode_entry(LinkValue)};
         Error = {error, _} ->
             Error
     end.
 
 
+-spec delete(od_space:id(), forest_type(), link_name()) -> ok.
 delete(SpaceId, ForestType, DatasetPath) ->
     case datastore_model:get_links(?CTX, ?FOREST(ForestType, SpaceId), all, DatasetPath) of
         {ok, [#link{tree_id = TreeId, name = DatasetPath, rev = Rev}]} ->
-            % TODO VFS-7363 do we need to check Rev?
             % pass Rev to ensure that link with the same Rev is deleted
             case oneprovider:is_self(TreeId) of
                 true -> delete_local(SpaceId, ForestType, DatasetPath, Rev);
@@ -118,46 +105,28 @@ delete(SpaceId, ForestType, DatasetPath) ->
     end.
 
 
--spec list_space(od_space:id(), forest_type(), opts()) -> {ok, [link_value()], IsLast :: boolean()}.
+-spec list_space(od_space:id(), forest_type(), opts()) -> {ok, entries(), IsLast :: boolean()}.
 list_space(SpaceId, ForestType, Opts) ->
-    list_internal(SpaceId, ForestType, undefined, Opts).
+    list_internal(SpaceId, ForestType, top, Opts).
 
 
--spec list(od_space:id(), forest_type(), link_name(), opts()) -> {ok, [link_value()], IsLast :: boolean()}.
+-spec list(od_space:id(), forest_type(), link_name(), opts()) -> {ok, entries(), IsLast :: boolean()}.
 list(SpaceId, ForestType, DatasetPath, Opts) ->
-    list_internal(SpaceId, ForestType, DatasetPath, Opts).
+    list_internal(SpaceId, ForestType, {children, DatasetPath}, Opts).
 
 
-move(SpaceId, ForestType, DatasetId, SourceDatasetPath, TargetDatasetPath) ->
-    {ok, NestedDatasetPaths} = get_all_nested_datasets(SpaceId, ForestType, SourceDatasetPath),
-
+-spec move(od_space:id(), forest_type(), dataset:id(), link_name(), link_name(), dataset:name()) -> ok.
+move(SpaceId, ForestType, DatasetId, SourceDatasetPath, SourceDatasetPath, TargetName) ->
+    % dataset path has not changed, only its name has been changed
+    delete(SpaceId, ForestType, SourceDatasetPath),
+    add(SpaceId, ForestType, SourceDatasetPath, DatasetId, TargetName);
+move(SpaceId, ForestType, DatasetId, SourceDatasetPath, TargetDatasetPath, TargetName) ->
     % move link to moved dataset
     delete(SpaceId, ForestType, SourceDatasetPath),
-    add(SpaceId, ForestType, TargetDatasetPath, DatasetId),
+    add(SpaceId, ForestType, TargetDatasetPath, DatasetId, TargetName),
 
     % move links to nested datasets of the moved dataset
-    PrefixLen = byte_size(SourceDatasetPath) + 1, % +1 is for slash
-    lists:foreach(fun({DatasetPath, DatasetId}) ->
-        delete(SpaceId, ForestType, DatasetPath),
-        Suffix = binary:part(DatasetPath, PrefixLen, byte_size(DatasetPath) - PrefixLen),
-        NewDatasetPath = filename:join(TargetDatasetPath, Suffix),
-        add(SpaceId, ForestType, NewDatasetPath, DatasetId)
-    end, NestedDatasetPaths).
-
-
-
-
-%%-spec get_all_nested_datasets(od_space:id(), identifier()) -> {ok, [link_name()]}.
-get_all_nested_datasets(SpaceId, ForestType, ParentDatasetPath) ->
-    % TODO VFS-7363 use batches
-    fold(SpaceId, ForestType, fun(#link{name = DatasetPath, target = DatasetId}, Acc) ->
-        case is_prefix(ParentDatasetPath, DatasetPath) of
-            true ->  {ok, [{DatasetPath, DatasetId} | Acc]};
-            false -> {stop, Acc}
-        end
-    end, [], #{prev_link_name => ParentDatasetPath, offset => 1}).
-
-
+    move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath).
 
 %%%===================================================================
 %%% Test functions
@@ -187,15 +156,24 @@ delete_all_unsafe(SpaceId, ForestType) ->
 %% DO NOT USE IN PRODUCTION CODE!!!
 %% @end
 %%--------------------------------------------------------------------
--spec list_all_unsafe(od_space:id(), forest_type()) -> {ok, [{link_name(), link_value()}]}.
+-spec list_all_unsafe(od_space:id(), forest_type()) -> {ok, [{link_name(), entry()}]}.
 list_all_unsafe(SpaceId, ForestType) ->
     fold(SpaceId, ForestType, fun(#link{name = LinkName, target = LinkValue}, Acc) ->
-        {ok, [{LinkName, LinkValue} | Acc]}
+        {ok, [{LinkName, decode_entry(LinkValue)} | Acc]}
     end, [], #{}).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec add(od_space:id(), forest_type(), link_name(), link_value()) -> ok.
+add(SpaceId, ForestType, DatasetPath, LinkValue) ->
+    Link = ?LINK(DatasetPath, LinkValue),
+    case datastore_model:add_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), ?LOCAL_TREE_ID, Link) of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end.
+
 
 -spec delete_local(od_space:id(), forest_type(), link_name(), link_revision()) -> ok.
 delete_local(SpaceId, ForestType, LinkName, Revision) ->
@@ -207,67 +185,151 @@ delete_remote(SpaceId, ForestType, TreeId, LinkName, Revision) ->
     ok = datastore_model:mark_links_deleted(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), TreeId, {LinkName, Revision}).
 
 
-list_internal(SpaceId, ForestType, ListedDatasetPath, Opts) ->
+-spec list_internal(od_space:id(), forest_type(), list_mode(), opts()) ->
+    {ok, entries(), boolean()}.
+list_internal(SpaceId, ForestType, ListMode, Opts) ->
     SanitizedOpts = sanitize_opts(Opts),
-    {ok, ReversedDatasets, IsLast} = collect(SpaceId, ForestType, ListedDatasetPath, maps:get(limit, SanitizedOpts)),
+    Limit = maps:get(limit, SanitizedOpts),
+    {ok, ReversedDatasets} = collect_children(SpaceId, ForestType, Limit, ListMode),
     SortedDatasets = sort(ReversedDatasets),
-    {StrippedDatasets, EndReached} = strip(SortedDatasets, Opts),
-    {ok, StrippedDatasets, IsLast andalso EndReached}.
+    {StrippedDatasets, EndReached} = strip(SortedDatasets, SanitizedOpts),
+    {ok, StrippedDatasets, EndReached}.
 
 
-collect(SpaceId, ForestType, ListedDatasetPath, Limit) ->
+-spec collect_children(od_space:id(), forest_type(), limit(), list_mode()) -> {ok, entries()}.
+collect_children(SpaceId, ForestType, Limit, top) ->
+    collect_children(SpaceId, ForestType, undefined, undefined, undefined, Limit, []);
+collect_children(SpaceId, ForestType, Limit, {children, ListedDatasetPath}) ->
+    collect_children(SpaceId, ForestType, ListedDatasetPath, undefined, ListedDatasetPath, Limit, []).
+
+
+-spec collect_children(od_space:id(), forest_type(), link_name() | undefined, link_name() | undefined,
+    link_name() | undefined, limit(), entries()) -> {ok, entries()}.
+collect_children(SpaceId, ForestType, ListedDatasetPath, LastIncludedDatasetPath0, StartIndex, Limit, FinalListReversed) ->
+    % TODO VFS-7363 refactor this function
     InternalOpts0 = #{size => Limit},
-    IsSpaceListed = ListedDatasetPath =:= undefined,
-    InternalOpts = case IsSpaceListed of
-        true -> InternalOpts0#{offset => 0};
-        false -> InternalOpts0#{offset => 1, prev_link_name => ListedDatasetPath}
+    InternalOpts = case StartIndex =:= undefined of
+        true -> InternalOpts0;
+        false -> InternalOpts0#{offset => 1, prev_link_name => StartIndex}
     end,
+    IsSpaceListed = ListedDatasetPath =:= undefined,
     {ok, SpacePath} = dataset_path:get_space_path(SpaceId),
-    {ok, {RevList, _, Count}} = fold(SpaceId, ForestType,
-        fun(#link{name = DatasetPath, target = DatasetId}, {CollectedAcc, PrevIncludedDatasetPath, ListedCountAcc}) ->
+    {ok, {ReversedList, LastIncludedDatasetPath, LastProcessed, EndReached}} = fold(SpaceId, ForestType,
+        fun(#link{name = DatasetPath, target = LinkValue},
+            {CollectedAcc, PrevIncludedDatasetPath, _PrevProcessedDatasetPath, _EndReached}
+        ) ->
             case IsSpaceListed orelse is_prefix(ListedDatasetPath, DatasetPath) of
                 true ->
-                    % todo CurrendDataset i LinkName mogą być równe w przypadku konfilktów, ogarnąć !!!
-                    case
-                        PrevIncludedDatasetPath =/= undefined
-                        andalso is_prefix(PrevIncludedDatasetPath, DatasetPath)
-                    of
+                    case ListedDatasetPath =:= DatasetPath of
                         true ->
-                            % it is a nested dataset, skip it
-                            {ok, {CollectedAcc, PrevIncludedDatasetPath, ListedCountAcc + 1}};
+                            % it is the dataset that is listed, skip it
+                            {ok, {CollectedAcc, PrevIncludedDatasetPath, DatasetPath, false}};
                         false ->
-                            % below case is needed because uuid_based_path() returned from paths_cache
-                            % has SpaceId instead of SpaceUuid which is inconsistent
-                            OkOrStop = case IsSpaceListed andalso DatasetPath =:= SpacePath of
-                                true -> stop;
-                                false -> ok
-                            end,
-                            {OkOrStop, {[DatasetId | CollectedAcc], DatasetPath, ListedCountAcc + 1}}
+                            case
+                                    PrevIncludedDatasetPath =/= undefined andalso
+                                    is_prefix(PrevIncludedDatasetPath, DatasetPath)
+                            of
+                                true ->
+                                    % it is a nested dataset, skip it
+                                    {ok, {CollectedAcc, PrevIncludedDatasetPath, DatasetPath, false}};
+                                false ->
+                                    % if entry of dataset attached to space directory is listed
+                                    % we can stop listing
+                                    SpaceDatasetListed = IsSpaceListed andalso DatasetPath =:= SpacePath,
+                                    OkOrStop = case SpaceDatasetListed of
+                                        true -> stop;
+                                        false -> ok
+                                    end,
+                                    {OkOrStop, {[decode_entry(LinkValue) | CollectedAcc], DatasetPath, DatasetPath,
+                                        SpaceDatasetListed}}
+
+                            end
                     end;
                 false ->
                     % link does not start with the prefix, we can stop the fold
-                    {stop, {CollectedAcc, DatasetPath, ListedCountAcc}}
+                    {stop, {CollectedAcc, PrevIncludedDatasetPath, DatasetPath, true}}
             end
         end,
-        {[], undefined, 0},
+        {[], LastIncludedDatasetPath0, StartIndex, true},
         InternalOpts
     ),
-    {ok, RevList, Count < Limit}.
+
+    case EndReached of
+        true ->
+            {ok, ReversedList ++ FinalListReversed};
+        false ->
+            collect_children(SpaceId, ForestType, ListedDatasetPath,LastIncludedDatasetPath, LastProcessed, Limit,
+                ReversedList ++ FinalListReversed)
+    end.
 
 
--spec sort([entries()]) -> [[entries()]].
+-spec sort(entries()) -> entries().
 sort(Datasets) ->
     lists:sort(fun({_, DatasetName1}, {_, DatasetName2}) ->
         DatasetName1 =< DatasetName2
     end, Datasets).
 
 
-strip(SortedDatasets, Opts) ->
-    % TODO-VFS-7363 use start_id for iterating using batches
-    %%    StartId = maps:get(start_id, Opts, <<>>),
+-spec strip(entries(), opts()) -> {entries(), EndReached :: boolean()}.
+strip(Entries, Opts) ->
+    % TODO VFS-7363 use start_index for iterating using batches
+    %%    StartId = maps:get(start_index, Opts, <<>>),
     Offset = maps:get(offset, Opts, 0),
     Limit = maps:get(limit, Opts),
-    {lists:sublist(SortedDatasets, max(Offset + 1, 1), Limit), max(Offset + 1, 1) + Limit >= length(SortedDatasets)}.
+    {lists:sublist(Entries, max(Offset, 0) + 1, Limit), max(Offset, 0) + Limit > length(Entries)}.
+
+
+-spec move_all_descendants(od_space:id(), forest_type(), link_name(), link_name()) -> ok.
+move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath) ->
+    move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, SourceDatasetPath).
+
+
+-spec move_all_descendants(od_space:id(), forest_type(), link_name(), link_name(), start_index()) -> ok.
+move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, StartIndex) ->
+    {ok, DescendantDatasets, AllListed} = get_descendants_batch(SpaceId, ForestType, SourceDatasetPath,
+        StartIndex, ?DEFAULT_BATCH_SIZE),
+    move_descendants_batch(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, DescendantDatasets),
+    case AllListed of
+        true ->
+            ok;
+        false ->
+            {NextStartIndex, _} = hd(DescendantDatasets),
+            move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, NextStartIndex)
+    end.
+
+
+-spec move_descendants_batch(od_space:id(), forest_type(), dataset:path(), dataset:path(), [link()]) -> ok.
+move_descendants_batch(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, DescendantDatasets) ->
+    PrefixLen = byte_size(SourceDatasetPath) + 1, % +1 is for slash
+    lists:foreach(fun({DatasetPath, LinkValue}) ->
+        delete(SpaceId, ForestType, DatasetPath),
+        Suffix = binary:part(DatasetPath, PrefixLen, byte_size(DatasetPath) - PrefixLen),
+        NewDatasetPath = filename:join(TargetDatasetPath, Suffix),
+        add(SpaceId, ForestType, NewDatasetPath, LinkValue)
+    end, DescendantDatasets).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function returns batch of descendant datasets.
+%% Descendant means that it may not be just direct children but
+%% all datasets which paths start with prefix ParentDatasetPath.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_descendants_batch(od_space:id(), forest_type(), link_name(), start_index(), limit()) ->
+    {ok, [link()], AllListed :: boolean()}.
+get_descendants_batch(SpaceId, ForestType, ParentDatasetPath, StartIndex, Limit) ->
+    {ok, {Links, EndReached, ListedLinksCount}} = fold(SpaceId, ForestType,
+        fun(#link{name = DatasetPath, target = LinkValue}, {ListAcc, _EndReached, ListedLinksCount}) ->
+            case {is_prefix(ParentDatasetPath, DatasetPath), ParentDatasetPath =/= DatasetPath} of
+                {true, true} ->  {ok, {[{DatasetPath, LinkValue} | ListAcc], false, ListedLinksCount + 1}};
+                {true, false} ->  {ok, {ListAcc, false, ListedLinksCount + 1}};
+                {false, _} -> {stop, {ListAcc, true, ListedLinksCount + 1}}
+            end
+        end, {[], false, 0}, #{prev_link_name => StartIndex, size => Limit}),
+
+    {ok, Links, EndReached orelse ListedLinksCount < Limit}.
 
 
 -spec is_prefix(binary(), binary()) -> boolean().
@@ -275,7 +337,7 @@ is_prefix(Prefix, String) ->
     str_utils:binary_starts_with(String, Prefix).
 
 
--spec fold(od_space:id(), forest_type(), fold_fun(), fold_acc(), opts()) ->
+-spec fold(od_space:id(), forest_type(), fold_fun(), fold_acc(), datastore_model:fold_opts()) ->
     {ok, fold_acc()} | {error, term()}.
 fold(SpaceId, ForestType, Fun, AccIn, Opts) ->
     datastore_model:fold_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), all, Fun, AccIn, Opts).
@@ -291,13 +353,13 @@ sanitize_opts(Opts) ->
 
 -spec validate_starting_opts(opts()) -> opts().
 validate_starting_opts(InternalOpts) ->
-    % at least one of: offset, prev_link_name must be defined so that we know
+    % at least one of: offset, start_index must be defined so that we know
     % were to start listing
-    case map_size(maps:with([offset, start_id], InternalOpts)) > 0 of
+    case map_size(maps:with([offset, start_index], InternalOpts)) > 0 of
         true -> InternalOpts;
         false ->
             %%  TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_MISSING_AT_LEAST_ONE_VALUE([offset, token, start_index])),
+            %% throw(?ERROR_MISSING_AT_LEAST_ONE_VALUE([offset, start_index])),
             throw(?EINVAL)
     end.
 
@@ -359,3 +421,14 @@ sanitize_start_index(Opts) ->
             %% throw(?ERROR_BAD_VALUE_BINARY(start_index))
             throw(?EINVAL)
     end.
+
+
+-spec encode_entry(dataset:id(), dataset:name()) -> link_value().
+encode_entry(DatasetId, DatasetName) ->
+    str_utils:join_binary([DatasetId, DatasetName], ?VALUE_SEP).
+
+
+-spec decode_entry(link_value()) -> entry().
+decode_entry(LinkValue) ->
+    [DatasetId, DatasetName] = binary:split(LinkValue, ?VALUE_SEP),
+    {DatasetId, DatasetName}.

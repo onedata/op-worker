@@ -258,6 +258,7 @@
 
 -record(dataset_info, {
     id :: dataset:id(),
+    state :: dataset:state(),
     guid :: fslogic_worker:file_guid(),
     path :: file_meta:path(),
     type :: file_meta:type(),
@@ -279,7 +280,8 @@
     #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
     #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} |
-    #qos_status_response{} | #dataset_established{} | #dataset_info{} | #file_eff_dataset_summary{} | undefined.
+    #qos_status_response{} | #dataset_established{} | #dataset_info{} | #file_eff_dataset_summary{} |
+    #nested_datasets{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

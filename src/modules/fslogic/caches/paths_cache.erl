@@ -100,7 +100,7 @@ get_uuid_based(SpaceId, UuidOrDoc) ->
     get(SpaceId, UuidOrDoc, ?UUID_BASED_PATH).
 
 
--spec get(od_space:id(), file_meta:uuid(), path_type()) ->
+-spec get(od_space:id(), file_meta:uuid() | file_meta:doc(), path_type()) ->
     {ok, file_meta:path() | file_meta:?UUID_BASED_PATH()} | {error, term()}.
 get(SpaceId, Uuid, PathType) when is_binary(Uuid) ->
     case file_meta:get_including_deleted(Uuid) of

@@ -151,7 +151,7 @@ get_file_details(UserCtx, FileCtx0) ->
 get_file_details_insecure(UserCtx, FileCtx, Opts) ->
     {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
-    {EffectiveMembership, _FileCtx3} = dataset_api:get_effective_summary(FileCtx2),
+    EffectiveMembership = dataset_api:get_effective_membership(FileCtx2),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_details{

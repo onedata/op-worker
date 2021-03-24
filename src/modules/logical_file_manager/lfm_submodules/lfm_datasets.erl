@@ -78,7 +78,7 @@ get_info(SessId, DatasetId) ->
         fun(#dataset_info{} = Attrs) -> {ok, Attrs} end).
 
 
--spec get_info(session:id(), lfm:file_key()) ->
+-spec get_file_eff_summary(session:id(), lfm:file_key()) ->
     {ok, file_eff_summary()} | lfm:error_reply().
 get_file_eff_summary(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),

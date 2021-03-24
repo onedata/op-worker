@@ -36,10 +36,7 @@
 
 -define(CACHE_SIZE, application:get_env(?APP_NAME, dataset_eff_cache_size, 65536)).
 -define(CHECK_FREQUENCY, application:get_env(?APP_NAME, dataset_check_frequency, 30000)).
--define(CACHE_OPTS, #{
-    size => ?CACHE_SIZE,
-    check_frequency => ?CHECK_FREQUENCY
-}).
+-define(CACHE_OPTS, #{group => ?CACHE_GROUP}).
 
 -record(summary, {
     direct_attached_dataset :: undefined | dataset:id(),
@@ -82,17 +79,14 @@ init(all) ->
             ?critical_stacktrace("Unable to initialize datasets effective summary cache due to: ~p", [{Error2, Reason}])
     end;
 init(SpaceId) ->
-    ?alert("WIll init: ~p", [?CACHE_NAME(SpaceId)]),
     CacheName = ?CACHE_NAME(SpaceId),
     try
         case effective_value:cache_exists(CacheName) of
             true ->
-                ?alert("EXISTS: ~p", [?CACHE_NAME(SpaceId)]),
                 ok;
             _ ->
                 case effective_value:init_cache(CacheName, ?CACHE_OPTS) of
                     ok ->
-                        ?alert("INIT: ~p", [?CACHE_NAME(SpaceId)]),
                         ok;
                     Error = {error, _} ->
                         ?critical("Unable to initialize datasets effective cache for space ~p due to: ~p",
@@ -144,7 +138,6 @@ get_eff_ancestor_datasets(FileDoc) ->
 
 -spec invalidate(od_space:id()) -> ok.
 invalidate(SpaceId) ->
-    ?alert("WILL INVALIDATE: ~p", [?CACHE_NAME(SpaceId)]),
     ok = effective_value:invalidate(?CACHE_NAME(SpaceId)).
 
 %%%===================================================================
@@ -154,7 +147,7 @@ invalidate(SpaceId) ->
 
 -spec get(file_meta:doc()) -> {ok, summary()} | error().
 get(FileDoc) ->
-    SpaceId = file_meta:get_scope_id(FileDoc),
+    {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
     CacheName = ?CACHE_NAME(SpaceId),
     Callback = fun([Doc, ParentSummary, CalculationInfo]) ->
         {ok, calculate_dataset_summary(Doc, ParentSummary), CalculationInfo}
@@ -173,7 +166,7 @@ calculate_dataset_summary(Doc = #document{}, undefined) ->
         direct_attached_dataset = get_direct_dataset_if_attached(Doc),
         eff_ancestor_datasets = []
     };
-calculate_dataset_summary(Doc = #document{}, #summary{
+calculate_dataset_summary(Doc = #document{}, Sum = #summary{
     direct_attached_dataset = ParentDirectAttachedDataset,
     eff_ancestor_datasets = ParentEffAncestorDatasets
 }) ->
