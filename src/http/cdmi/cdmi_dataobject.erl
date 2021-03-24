@@ -71,7 +71,7 @@ get_binary(Req, #cdmi_req{
     % prepare response
     MimeType = cdmi_metadata:get_mimetype(SessionId, {guid, FileGuid}),
     Req1 = cowboy_req:set_resp_header(?HDR_CONTENT_TYPE, MimeType, Req),
-    Req2 = http_download_utils:stream_file(SessionId, FileAttrs, Req1),
+    Req2 = file_download_utils:download_single_file(SessionId, FileAttrs, Req1),
     {stop, Req2, CdmiReq}.
 
 
@@ -352,7 +352,7 @@ get_file_info(RequestedInfo, #cdmi_req{
                 _ ->
                     Acc#{<<"valuerange">> => iolist_to_binary(
                         [<<"0-">>, integer_to_binary(FileSize - 1)]
-                    )} %todo fix 0--1 when file is empty
+                    )} %TODO VFS-7289 fix 0--1 when file is empty
             end;
         (_, Acc) ->
             Acc

@@ -12,7 +12,8 @@
 -module(xattr).
 -author("Tomasz Lichon").
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -37,7 +38,7 @@
 list(UserCtx, FileCtx0, IncludeInherited, ShowInternal) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
     list_xattrs_insecure(UserCtx, FileCtx1, IncludeInherited, ShowInternal).
 
@@ -56,7 +57,7 @@ get(UserCtx, FileCtx0, XattrName, true = Inherited) ->
         {ok, _} = Result ->
             Result;
         ?ERROR_NOT_FOUND ->
-            case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
+            case files_tree:get_parent_if_not_root_dir(FileCtx0, UserCtx) of
                 {undefined, _FileCtx1} ->
                     ?ERROR_NOT_FOUND;
                 {ParentCtx, _FileCtx1} ->
@@ -77,7 +78,7 @@ get(UserCtx, FileCtx0, XattrName, true = Inherited) ->
 set(UserCtx, FileCtx0, XattrName, XattrValue, Create, Replace) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
     custom_metadata:set_xattr(
         file_ctx:get_uuid_const(FileCtx1),
@@ -91,7 +92,7 @@ set(UserCtx, FileCtx0, XattrName, XattrValue, Create, Replace) ->
 remove(UserCtx, FileCtx0, XattrName) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
     FileUuid = file_ctx:get_uuid_const(FileCtx1),
     custom_metadata:remove_xattr(FileUuid, XattrName).
@@ -165,7 +166,7 @@ list_direct_xattrs(FileCtx) ->
 -spec list_ancestor_xattrs(user_ctx:ctx(), file_ctx:ctx(), [custom_metadata:name()]) ->
     {ok, [custom_metadata:name()]} | {error, term()}.
 list_ancestor_xattrs(UserCtx, FileCtx0, GatheredXattrNames) ->
-    case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
+    case files_tree:get_parent_if_not_root_dir(FileCtx0, UserCtx) of
         {undefined, _FileCtx1} ->
             {ok, GatheredXattrNames};
         {ParentCtx, _FileCtx1} ->
@@ -185,7 +186,7 @@ list_ancestor_xattrs(UserCtx, FileCtx0, GatheredXattrNames) ->
 get_xattr(UserCtx, FileCtx0, XattrName) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
     FileUuid = file_ctx:get_uuid_const(FileCtx1),
     custom_metadata:get_xattr(FileUuid, XattrName).

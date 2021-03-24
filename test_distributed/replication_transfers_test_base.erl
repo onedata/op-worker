@@ -12,12 +12,12 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/errors.hrl").
--include("modules/auth/acl.hrl").
 
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
@@ -1952,7 +1952,7 @@ file_removed_during_replication(Config, Type, FileKeyType) ->
             },
             expected = #expected{
                 expected_transfer = #{
-                    % TODO Below lines commented so that test does not fail here. Uncomment after fixing.
+                    % TODO VFS-6619 Below lines commented so that test does not fail here. Uncomment after fixing.
                     % replication_status => failed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     files_to_process => 1,

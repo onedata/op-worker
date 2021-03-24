@@ -57,7 +57,7 @@ save_master_job(Key, Job = #tree_traverse{
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
-    execute_slave_on_dir = OnDir,
+    child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
@@ -74,7 +74,7 @@ save_master_job(Key, Job = #tree_traverse{
         use_listing_token = Token =/= undefined,
         last_name = LastName,
         last_tree = LastTree,
-        execute_slave_on_dir = OnDir,
+        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
@@ -104,7 +104,7 @@ get_master_job(#document{value = #tree_traverse_job{
     use_listing_token = UseListingToken,
     last_name = LastName,
     last_tree = LastTree,
-    execute_slave_on_dir = OnDir,
+    child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
@@ -121,7 +121,7 @@ get_master_job(#document{value = #tree_traverse_job{
         end,
         last_name = LastName,
         last_tree = LastTree,
-        execute_slave_on_dir = OnDir,
+        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
@@ -157,7 +157,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -193,6 +193,23 @@ get_record_struct(2) ->
         {track_subtree_status, boolean},
         {batch_size, integer},
         {traverse_info, binary}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {pool, string},
+        {callback_module, atom},
+        {task_id, string},
+        {doc_id, string},
+        {user_id, string},
+        {use_listing_token, boolean},
+        {last_name, string},
+        {last_tree, string},
+        % execute_slave_on_dir has been changed to child_dirs_job_generation_policy in this version
+        {child_dirs_job_generation_policy, atom},
+        {children_master_jobs_mode, atom},
+        {track_subtree_status, boolean},
+        {batch_size, integer},
+        {traverse_info, binary}
     ]}.
 
 
@@ -222,6 +239,44 @@ upgrade_record(1, {?MODULE, Pool, CallbackModule, TaskId, DocId, LastName, LastT
         sync,
         % track_subtree_status has been added in this version
         false,
+        BatchSize,
+        TraverseInfo
+    }};
+upgrade_record(2, Record) ->
+    {
+        ?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ExecuteSlaveOnDir,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo
+    } = Record,
+    
+    ChildDirsJobGenerationPolicy = case ExecuteSlaveOnDir of
+        false -> generate_master_jobs;
+        true -> generate_slave_and_master_jobs
+    end,
+    
+    {3, {?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
         BatchSize,
         TraverseInfo
     }}.

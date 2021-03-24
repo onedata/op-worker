@@ -42,6 +42,7 @@
 
 %% API
 -export([get_allow_all_constraints/0, get/1]).
+-export([has_no_constraints/1]).
 -export([assert_not_readonly_mode/1, inspect/4]).
 
 
@@ -78,6 +79,13 @@
 -spec get_allow_all_constraints() -> constraints().
 get_allow_all_constraints() ->
     #constraints{paths = any, guids = any, readonly = false}.
+
+
+-spec has_no_constraints(constraints()) -> boolean().
+has_no_constraints(#constraints{paths = any, guids = any, readonly = false}) ->
+    true;
+has_no_constraints(_) ->
+    false.
 
 
 -spec get([caveats:caveat()]) ->
@@ -151,7 +159,7 @@ assert_not_readonly_mode(UserCtx) ->
     UserCtx :: user_ctx:ctx(),
     FileCtx :: file_ctx:ctx(),
     AncestorPolicy :: ancestor_policy(),
-    AccessRequirements :: [data_access_rights:requirement()]
+    AccessRequirements :: [data_access_control:requirement()]
 ) ->
     {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
 inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
@@ -159,7 +167,7 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
 
     case DataConstraints#constraints.readonly of
         true ->
-            data_access_rights:assert_operation_available_in_readonly_mode(
+            data_access_control:assert_available_in_readonly_mode(
                 AccessRequirements
             );
         false ->
@@ -364,7 +372,7 @@ does_fulfill_guid_constraints(
                         FileCtx, CacheKey, AllGuidConstraints
                     );
                 false ->
-                    {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
+                    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx, UserCtx),
                     DoesParentFulfillGuidConstraints = does_fulfill_guid_constraints(
                         UserCtx, SerializedToken, ParentCtx,
                         AllGuidConstraints

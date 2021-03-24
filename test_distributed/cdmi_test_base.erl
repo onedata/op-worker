@@ -13,12 +13,12 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("http/rest.hrl").
 -include("http/cdmi.hrl").
--include("proto/common/credentials.hrl").
--include("modules/auth/acl.hrl").
--include("modules/fslogic/metadata.hrl").
+-include("http/rest.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/metadata.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -1215,7 +1215,7 @@ mimetype_and_encoding(Config) ->
     ?assertEqual(?HTTP_200_OK, Code5),
     CdmiResponse5 = (json_utils:decode(Response5)),
     ?assertMatch(#{<<"mimetype">> := <<"text/plain">>}, CdmiResponse5),
-    ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>}, CdmiResponse5), %todo what do we return here if file contains valid utf-8 string and we read byte range?
+    ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>}, CdmiResponse5), %TODO VFS-7376 what do we return here if file contains valid utf-8 string and we read byte range?
     ?assertMatch(#{<<"value">> := FileContent4}, CdmiResponse5),
     %%------------------------------
 

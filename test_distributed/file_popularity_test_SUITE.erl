@@ -15,10 +15,10 @@
 -behaviour(view_traverse).
 
 -include("global_definitions.hrl").
--include("modules/auth/acl.hrl").
+-include("lfm_test_utils.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/file_popularity/file_popularity_view.hrl").
--include("lfm_test_utils.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

@@ -91,6 +91,7 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     nonce = Nonce,
+    session_mode = SessMode,
     client_tokens = #client_tokens{
         access_token = AccessToken,
         consumer_token = ConsumerToken
@@ -106,7 +107,7 @@ handle_client_handshake(#client_handshake_request{
     case auth_manager:verify_credentials(TokenCredentials) of
         {ok, #auth{subject = ?SUB(user, UserId) = Subject}, _} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
-                Nonce, Subject, TokenCredentials
+                Nonce, Subject, SessMode, TokenCredentials
             ),
             {UserId, SessionId};
         ?ERROR_FORBIDDEN ->
@@ -122,7 +123,7 @@ handle_client_handshake(#client_handshake_request{
         {error, _} = Error ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = Subject, id = TokenId} = Token} ->
-                    ?debug("Cannot authorize user (id: ~p) based on token (id: ~p) "
+                    ?debug("Cannot authorize subject ~w based on token (id: ~s) "
                            "with caveats: ~p due to ~w", [
                         Subject,
                         TokenId,
@@ -130,8 +131,8 @@ handle_client_handshake(#client_handshake_request{
                         Error
                     ]);
                 _ ->
-                    ?debug("Cannot authorize user based on token due to ~w", [
-                        Error
+                    ?debug("Cannot authorize user based on token ~s due to ~w", [
+                        AccessToken, Error
                     ])
             end,
             throw(invalid_token)

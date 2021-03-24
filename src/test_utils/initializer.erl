@@ -397,7 +397,6 @@ setup_storage([], Config) ->
     Config;
 setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
-    %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir ++ " -m 777"]),
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     Args = #{
@@ -679,6 +678,7 @@ mock_share_logic(Config) ->
             space = SpaceId,
             root_file = ShareFileGuid,
             public_url = <<ShareId/binary, "_public_url">>,
+            public_rest_url = <<ShareId/binary, "_public_rest_url">>,
             file_type = FileType,
             handle = <<ShareId/binary, "_handle_id">>
         }}),
@@ -900,6 +900,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
 
     lists:foreach(fun(DomainWorker) ->
         rpc:call(DomainWorker, fslogic_worker, init_paths_caches, [all]),
+        rpc:call(DomainWorker, fslogic_worker, init_file_protection_flags_caches, [all]),
         rpc:call(DomainWorker, fslogic_worker, init_dataset_eff_caches, [all])
     end, get_different_domain_workers(Config)),
 
@@ -1256,6 +1257,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
         UserPrivileges = maps:get(UserId, EffUsers, []),
         lists_utils:is_subset(Privileges, UserPrivileges)
+    end),
+
+    test_utils:mock_expect(Workers, space_logic, get_eff_privileges, fun(SpaceId, UserId) ->
+        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
+        {ok, maps:get(UserId, EffUsers, [])}
     end),
 
     test_utils:mock_expect(Workers, space_logic, is_supported, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->

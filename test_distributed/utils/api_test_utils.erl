@@ -57,7 +57,9 @@
 ]).
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
+    add_file_id_errors_for_operations_available_in_share_mode/4,
     add_file_id_errors_for_operations_not_available_in_share_mode/3,
+    add_file_id_errors_for_operations_not_available_in_share_mode/4,
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/4,
     maybe_substitute_bad_id/2
 ]).
@@ -194,6 +196,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> acl;
             false -> posix
         end,
+        protection_flags = ?no_flags_mask,
         has_metadata = HasMetadata,
         has_direct_qos = HasDirectQos,
         has_eff_qos = HasParentQos orelse HasDirectQos
@@ -433,6 +436,7 @@ file_details_to_gs_json(undefined, #file_details{
     },
     index_startid = IndexStartId,
     active_permissions_type = ActivePermissionsType,
+    protection_flags = EffFileProtectionFlags,
     has_metadata = HasMetadata,
     has_direct_qos = HasDirectQos,
     has_eff_qos = HasEffQos
@@ -450,6 +454,7 @@ file_details_to_gs_json(undefined, #file_details{
         <<"name">> => FileName,
         <<"index">> => IndexStartId,
         <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffFileProtectionFlags),
         % For space dir gs returns null as parentId instead of user root dir
         % (gui doesn't know about user root dir)
         <<"parentId">> => case fslogic_uuid:is_space_dir_guid(FileGuid) of
@@ -530,7 +535,18 @@ file_details_to_gs_json(ShareId, #file_details{
 ) ->
     onenv_api_test_runner:data_spec().
 add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, DataSpec) ->
-    InvalidFileIdErrors = get_invalid_file_id_errors(),
+    add_file_id_errors_for_operations_available_in_share_mode(<<"id">>, FileGuid, ShareId, DataSpec).
+
+
+-spec add_file_id_errors_for_operations_available_in_share_mode(
+    IdKey :: binary(),
+    file_id:file_guid(),
+    undefined | od_share:id(),
+    undefined | onenv_api_test_runner:data_spec()
+) ->
+    onenv_api_test_runner:data_spec().
+add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, ShareId, DataSpec) ->
+    InvalidFileIdErrors = get_invalid_file_id_errors(IdKey),
 
     NonExistentSpaceGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
     {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
@@ -585,7 +601,18 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
 ) ->
     onenv_api_test_runner:data_spec().
 add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId, DataSpec) ->
-    InvalidFileIdErrors = get_invalid_file_id_errors(),
+    add_file_id_errors_for_operations_not_available_in_share_mode(<<"id">>, FileGuid, ShareId, DataSpec).
+
+
+-spec add_file_id_errors_for_operations_not_available_in_share_mode(
+    IdKey :: binary(),
+    file_id:file_guid(),
+    od_share:id(),
+    undefined | onenv_api_test_runner:data_spec()
+) ->
+    onenv_api_test_runner:data_spec().
+add_file_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, ShareId, DataSpec) ->
+    InvalidFileIdErrors = get_invalid_file_id_errors(IdKey),
 
     NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
     {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
@@ -622,7 +649,7 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
         NonExistentFileErrors,
         ShareFileErrors
     ]),
-    
+
     add_bad_values_to_data_spec(BadFileIdErrors, DataSpec).
 
 
@@ -645,19 +672,19 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId,
 
     NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
     {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
-    
+
     NonExistentSpaceShareGuid = file_id:guid_to_share_guid(NonExistentSpaceGuid, ShareId),
     {ok, NonExistentSpaceShareObjectId} = file_id:guid_to_objectid(NonExistentSpaceShareGuid),
-    
+
     NonExistentFileGuid = file_id:pack_guid(<<"InvalidUuid">>, SpaceId),
     {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
-    
+
     NonExistentFileShareGuid = file_id:guid_to_share_guid(NonExistentFileGuid, ShareId),
     {ok, NonExistentFileShareObjectId} = file_id:guid_to_objectid(NonExistentFileShareGuid),
-    
+
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
-    
+
     BadFileIdValues = [
         {<<"fileId">>, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
         {<<"fileId">>, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
@@ -665,12 +692,12 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId,
         % user has no privileges in non existent space and so he should receive ?ERROR_FORBIDDEN
         {<<"fileId">>, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
         {<<"fileId">>, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
-        
+
         {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
-        
-        % operation on shared file is forbidden - it should result in ?EACCES
-        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EACCES)},
-        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?EACCES)}
+
+        % operation is not available in share mode - it should result in ?EPERM
+        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EPERM)},
+        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?EPERM)}
     ],
 
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
@@ -698,15 +725,15 @@ add_bad_values_to_data_spec(BadValuesToAdd, #data_spec{bad_values = BadValues} =
 
 
 %% @private
-get_invalid_file_id_errors() ->
+get_invalid_file_id_errors(IdKey) ->
     InvalidGuid = <<"InvalidGuid">>,
     {ok, InvalidObjectId} = file_id:guid_to_objectid(InvalidGuid),
-    InvalidIdExpError = ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>),
+    InvalidIdExpError = ?ERROR_BAD_VALUE_IDENTIFIER(IdKey),
 
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
         {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>)}},
+        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)}},
 
         % Errors thrown by middleware and internal logic
         {bad_id, InvalidObjectId, {rest, InvalidIdExpError}},

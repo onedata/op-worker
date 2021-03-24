@@ -19,8 +19,8 @@
 
 -behaviour(middleware_plugin).
 
--include("modules/auth/acl.hrl").
 -include("middleware/middleware.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -371,7 +371,6 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     boolean().
 get_operation_supported(instance, private) -> true;             % gs only
 get_operation_supported(instance, public) -> true;              % gs only
-get_operation_supported(list, private) -> true;                 % REST only (deprecated)
 get_operation_supported(children, private) -> true;             % REST/gs
 get_operation_supported(children, public) -> true;              % REST/gs
 get_operation_supported(children_details, private) -> true;     % gs only
@@ -398,14 +397,6 @@ get_operation_supported(_, _) -> false.
 -spec data_spec_get(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
 data_spec_get(#gri{aspect = instance}) -> #{
     required => #{id => {binary, guid}}
-};
-
-data_spec_get(#gri{aspect = list}) -> #{
-    required => #{id => {binary, guid}},
-    optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
-        <<"offset">> => {integer, {not_lower_than, 0}}
-    }
 };
 
 data_spec_get(#gri{aspect = As}) when
@@ -476,7 +467,7 @@ data_spec_get(#gri{aspect = file_qos_summary}) -> #{
 };
 
 data_spec_get(#gri{aspect = download_url}) -> #{
-    required => #{id => {binary, guid}}
+    required => #{<<"file_ids">> => {list_of_binaries, guid}}
 }.
 
 
@@ -489,14 +480,12 @@ authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadata;
-    As =:= download_url
+    As =:= rdf_metadata
 ->
     file_id:is_share_guid(FileGuid);
 
 authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
-    As =:= list;
     As =:= children;
     As =:= children_details;
     As =:= attrs;
@@ -505,8 +494,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= rdf_metadata;
     As =:= distribution;
     As =:= acl;
-    As =:= shares;
-    As =:= download_url
+    As =:= shares
 ->
     middleware_utils:has_access_to_file(Auth, Guid);
 
@@ -516,14 +504,25 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = trans
 
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = file_qos_summary}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
+
+authorize_get(#op_req{auth = Auth, gri = #gri{aspect = download_url, scope = Scope}, data = Data}, _) ->
+    Predicate = case Scope of
+        private -> 
+            fun(Guid) -> 
+                not file_id:is_share_guid(Guid) 
+                    andalso middleware_utils:has_access_to_file(Auth, Guid) 
+            end;
+        public -> 
+            fun file_id:is_share_guid/1
+    end,
+    lists:all(Predicate, maps:get(<<"file_ids">>, Data)).
 
 
 %% @private
 -spec validate_get(middleware:req(), middleware:entity()) -> ok | no_return().
 validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
-    As =:= list;
     As =:= children;
     As =:= children_details;
     As =:= attrs;
@@ -534,10 +533,15 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= acl;
     As =:= shares;
     As =:= transfers;
-    As =:= file_qos_summary;
-    As =:= download_url
+    As =:= file_qos_summary
 ->
-    middleware_utils:assert_file_managed_locally(Guid).
+    middleware_utils:assert_file_managed_locally(Guid);
+
+validate_get(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
+    FileIds = maps:get(<<"file_ids">>, Data),
+    lists:foreach(fun(Guid) ->
+        middleware_utils:assert_file_managed_locally(Guid)
+    end, FileIds).
 
 
 %%--------------------------------------------------------------------
@@ -548,24 +552,6 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
     ?check(lfm:get_details(Auth#auth.session_id, {guid, FileGuid}));
-
-get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
-    SessionId = Auth#auth.session_id,
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-    Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
-    {ok, Path} = ?check(lfm:get_file_path(SessionId, FileGuid)),
-
-    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
-        {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
-            {ok, Children, _} = ?check(lfm:get_children(SessionId, {guid, Guid}, #{offset => Offset, size => Limit})),
-            {ok, lists:map(fun({ChildGuid, ChildPath}) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
-                #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
-            end, Children)};
-        {ok, #file_attr{guid = Guid}} ->
-            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-            {ok, [#{<<"id">> => ObjectId, <<"path">> => Path}]}
-    end;
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -699,9 +685,10 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, 
         <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))
     }};
 
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) ->
+get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,
-    case page_file_download:get_file_download_url(SessionId, FileGuid) of
+    FileGuids = maps:get(<<"file_ids">>, Data),
+    case page_file_download:get_file_download_url(SessionId, FileGuids) of
         {ok, URL} ->
             {ok, value, URL};
         {error, _} = Error ->

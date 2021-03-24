@@ -23,6 +23,7 @@
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
+    update_protection_flags/5,
     set_perms/4,
     update_times/6,
     unlink/3, rm_recursive/3,
@@ -135,11 +136,12 @@ init(Config, Link, Workers) ->
 
 -spec teardown(Config :: list()) -> ok.
 teardown(Config) ->
-    lists:foreach(
-        fun(Worker) ->
-            Pid = rpc:call(Worker, erlang, whereis, [lfm_proxy_server]),
-            Pid ! exit
-        end, ?config(op_worker_nodes, Config)).
+    lists:foreach(fun(Worker) ->
+        case rpc:call(Worker, erlang, whereis, [lfm_proxy_server]) of
+            undefined -> ok;
+            Pid -> Pid ! exit
+        end
+    end, ?config(op_worker_nodes, Config)).
 
 
 %%%===================================================================
@@ -190,6 +192,18 @@ get_parent(Worker, SessId, FileKey) ->
     ok | {error, term()}.
 check_perms(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker, lfm:check_perms(SessId, FileKey, OpenFlag)).
+
+
+-spec update_protection_flags(
+    node(),
+    session:id(),
+    lfm:file_key(),
+    data_access_control:bitmask(),
+    data_access_control:bitmask()
+) ->
+    ok | {error, term()}.
+update_protection_flags(Worker, SessId, FileKey, FlagsToSet, FlagsToUnset) ->
+    ?EXEC(Worker, lfm:update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToUnset)).
 
 
 -spec set_perms(node(), session:id(), lfm:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->

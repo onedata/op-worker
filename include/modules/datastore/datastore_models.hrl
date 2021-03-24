@@ -131,6 +131,7 @@
     name :: binary(),
     description :: binary(),
     public_url :: binary(),
+    public_rest_url :: binary(),
 
     % Direct relations to other entities
     space = undefined :: undefined | od_space:id(),
@@ -236,7 +237,7 @@
 -record(file_download_code, {
     expires :: time:seconds(),
     session_id :: session:id(),
-    file_guid :: fslogic_worker:file_guid()
+    file_guids :: [fslogic_worker:file_guid()]
 }).
 
 -record(offline_access_credentials, {
@@ -254,6 +255,7 @@
     status :: undefined | session:status(),
     accessed :: undefined | time:seconds(),
     type :: undefined | session:type(),
+    mode = normal :: session:mode(),
     identity :: aai:subject(),
     credentials :: undefined | auth_manager:credentials(),
     data_constraints :: data_constraints:constraints(),
@@ -372,6 +374,7 @@
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
+    protection_flags = 0 :: data_access_control:bitmask(),
     acl = [] :: acl:acl(),
     owner :: od_user:id(),
     is_scope = false :: boolean(),
@@ -952,7 +955,7 @@
     last_name :: file_meta:name(),
     last_tree :: od_provider:id(),
     % Traverse task specific info
-    execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
+    child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),

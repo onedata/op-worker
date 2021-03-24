@@ -68,6 +68,7 @@ rest_create_file_test(_Config) ->
         oct_background:get_provider_nodes(paris)
     ]),
     SpaceOwnerId = oct_background:get_user_id(user2),
+    User3Id = oct_background:get_user_id(user3),
 
     #object{
         guid = DirGuid,
@@ -101,7 +102,7 @@ rest_create_file_test(_Config) ->
             target_nodes = Providers,
             client_spec = #client_spec{
                 correct = case rand:uniform(2) of
-                    1 -> [user2];  % space owner - doesn't need any perms
+                    1 -> [user2];  % space owner
                     2 -> [user3]   % files owner
                 end,
                 unauthorized = [nobody],
@@ -129,7 +130,21 @@ rest_create_file_test(_Config) ->
                         body => [Content]
                     },
                     bad_values = [
-                        {bad_id, FileObjectId, {rest, ?ERROR_POSIX(?ENOTDIR)}},
+                        {bad_id, FileObjectId, {rest, {error_fun, fun(#api_test_ctx{
+                            client = ?USER(UserId),
+                            data = Data
+                        }) ->
+                            case {UserId, maps:get(<<"type">>, Data, <<"reg">>)} of
+                                {User3Id, <<"dir">>} ->
+                                    % User3 gets ?EACCES because operation fails on permissions
+                                    % checks (file has 8#777 mode but this doesn't give anyone
+                                    % ?add_subcontainer perm) rather than file type check which
+                                    % is performed later
+                                    ?ERROR_POSIX(?EACCES);
+                                _ ->
+                                    ?ERROR_POSIX(?ENOTDIR)
+                            end
+                        end}}},
 
                         {<<"name">>, UsedFileName, ?ERROR_POSIX(?EEXIST)},
 

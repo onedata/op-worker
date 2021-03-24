@@ -178,7 +178,6 @@ get_plugin(op_handle_service) -> handle_service_middleware;
 get_plugin(op_metrics) -> metrics_middleware;
 get_plugin(op_provider) -> provider_middleware;
 get_plugin(op_qos) -> qos_middleware;
-get_plugin(op_replica) -> replica_middleware;
 get_plugin(op_share) -> share_middleware;
 get_plugin(op_space) -> space_middleware;
 get_plugin(op_transfer) -> transfer_middleware;
@@ -351,7 +350,7 @@ process_request(#req_ctx{
 
     case {Result, RR} of
         {{ok, resource, {ResultGri, ResultData}}, true} ->
-            % TODO rm hack after implementing subscriptions
+            % TODO VFS-7344 use proper model/record revision number instead of 1 after implementing subscriptions
             {ok, resource, {ResultGri, {ResultData, 1}}};
         _ ->
             Result

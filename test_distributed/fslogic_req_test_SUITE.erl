@@ -526,7 +526,7 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
-                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}},
+                    ?assertMatch(#fuse_response{status = #status{code = ?EPERM}},
                         ?file_req(Worker, SessId, Guid, #create_dir{mode = 8#777, name = <<"test">>}))
                 end, SessIds)
 

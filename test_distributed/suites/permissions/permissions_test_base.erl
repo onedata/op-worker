@@ -1234,7 +1234,7 @@ set_perms_test(Config) ->
     % but not if that access is via shared guid
     permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
     ?assertMatch(
-        {error, ?EACCES},
+        {error, ?EPERM},
         lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, ShareFileGuid}, 8#000)
     ),
     AssertProperStorageAttrsFun(8#777),
@@ -1286,7 +1286,7 @@ set_perms_test(Config) ->
 
     % but not if that access is via shared guid
     ?assertMatch(
-        {error, ?EACCES},
+        {error, ?EPERM},
         lfm_proxy:set_perms(W, FileOwnerUserSessId, {guid, ShareFileGuid}, 8#000)
     ),
 
@@ -1536,7 +1536,7 @@ set_acl_test(Config) ->
             name = <<"file1">>,
             perms = [?write_acl]
         }],
-        posix_requires_space_privs = owner,
+        posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
@@ -1567,7 +1567,7 @@ remove_acl_test(Config) ->
             name = <<"file1">>,
             perms = [?write_acl]
         }],
-        posix_requires_space_privs = owner,
+        posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
@@ -2297,7 +2297,8 @@ check_perms(Node, User, Guid, Perms, Config) ->
     UserCtx = rpc:call(Node, user_ctx, new, [SessId]),
 
     rpc:call(Node, ?MODULE, check_perms, [
-        UserCtx, file_ctx:new_by_guid(Guid), Perms
+        UserCtx, file_ctx:new_by_guid(Guid),
+        [?OPERATIONS(permissions_test_utils:perms_to_bitmask(Perms))]
     ]).
 
 

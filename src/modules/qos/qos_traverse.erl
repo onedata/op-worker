@@ -20,11 +20,10 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
--include("modules/datastore/datastore_runner.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include("tree_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% API
@@ -138,13 +137,14 @@ task_finished(TaskId, _PoolName) ->
         <<"uuid">> := FileUuid,
         <<"task_type">> := TaskType
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
     case TaskType of
         <<"traverse">> ->
             #{<<"qos_entry_id">> := QosEntryId} = AdditionalData,
             ok = qos_entry:remove_traverse_req(QosEntryId, TaskId),
-            ok = qos_status:report_traverse_finished(SpaceId, TaskId, FileUuid);
+            ok = qos_status:report_traverse_finished(TaskId, FileCtx);
         <<"reconcile">> ->
-            ok = qos_status:report_reconciliation_finished(SpaceId, TaskId, FileUuid)
+            ok = qos_status:report_reconciliation_finished(TaskId, FileCtx)
     end.
 
 -spec task_canceled(id(), traverse:pool()) -> ok.
@@ -170,14 +170,12 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_i
             file_ctx:get_uuid_const(ChildDirCtx)
         end, MasterJobs),
         BatchLastFilename = maps:get(last_name, ListExtendedInfo, undefined),
-        Uuid = file_ctx:get_uuid_const(FileCtx),
-        SpaceId = file_ctx:get_space_id_const(FileCtx),
         ok = qos_status:report_next_traverse_batch(
-            SpaceId, TaskId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastFilename),
+            TaskId, FileCtx, ChildrenDirs, ChildrenFiles, BatchLastFilename),
 
         case maps:get(is_last, ListExtendedInfo) of
             true ->
-                ok = qos_status:report_traverse_finished_for_dir(FileCtx, TaskId);
+                ok = qos_status:report_traverse_finished_for_dir(TaskId, FileCtx);
             false ->
                 ok
         end
@@ -225,7 +223,7 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
 
     case TaskType of
         <<"traverse">> ->
-            {ParentFileCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+            {ParentFileCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
             ok = qos_status:report_traverse_finished_for_file(TaskId, FileCtx2, ParentFileCtx);
         <<"reconcile">> ->
             ok

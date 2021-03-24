@@ -142,6 +142,16 @@ is_authorized(Req, State) ->
         {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
             {true, Req, State#state{auth = Auth}};
+        ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED) = Error ->
+            % The user presented some authentication, but he is not supported
+            % by this Oneprovider. Still, if the request concerned a shared
+            % file, the user should be treated as a guest and served.
+            case (catch resolve_gri_bindings(?GUEST_SESS_ID, State#state.rest_req#rest_req.b_gri, Req)) of
+                #gri{scope = public} ->
+                    {true, Req, State#state{auth = ?GUEST}};
+                _ ->
+                    {stop, http_req:send_error(Error, Req), State}
+            end;
         {error, _} = Error ->
             {stop, http_req:send_error(Error, Req), State}
     end.
@@ -239,7 +249,7 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, IdBinding) of
+    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, Sc, IdBinding) of
         true -> public;
         false -> Sc
     end,

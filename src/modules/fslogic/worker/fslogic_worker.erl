@@ -23,12 +23,20 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
--export([init_paths_caches/1, init_dataset_eff_caches/1]).
+-export([
+    init_paths_caches/1,
+    init_file_protection_flags_caches/1, invalidate_file_protection_flags_caches/1,
+    init_dataset_eff_caches/1
+]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
 % exported for RPC
--export([schedule_init_paths_caches/1, schedule_init_datasets_cache/1]).
+-export([
+    schedule_init_paths_caches/1,
+    schedule_init_file_protection_flags_caches/1, schedule_invalidate_file_protection_flags_caches/1,
+    schedule_init_datasets_cache/1
+]).
 
 %%%===================================================================
 %%% Types
@@ -62,6 +70,13 @@
 -define(INIT_PATHS_CACHES(Space), {init_paths_caches, Space}).
 -define(INIT_DATASETS_CACHE(Space), {init_datasets_cache, Space}).
 
+-define(INIT_FILE_PROTECTION_FLAGS_CACHES(Space),
+    {init_file_protection_flags_caches, Space}
+).
+-define(INVALIDATE_FILE_PROTECTION_FLAGS_CACHES(Space),
+    {invalidate_file_protection_flags_caches, Space}
+).
+
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
 
@@ -93,7 +108,8 @@
 % This macro is used to disable automatic restart of autocleaning runs in tests
 -define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
 
--define(AVAILABLE_SHARE_OPERATIONS, [
+-define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
+    % Checking perms for operations other than 'read' should result in immediate ?EACCES
     check_perms,
     get_parent,
     % TODO VFS-6057 resolve share path up to share not user root dir
@@ -103,6 +119,7 @@
     get_xattr,
     get_metadata,
 
+    % Opening file is available but only in 'read' mode
     open_file,
     open_file_with_extended_info,
     synchronize_block,
@@ -116,6 +133,14 @@
     get_child_attr,
     get_file_children_attrs,
     get_file_children_details
+]).
+-define(AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE, [
+    % Necessary operations for direct-io to work (contains private information
+    % like storage id, etc.)
+    get_file_location,
+    get_helper_params
+
+    | ?OPERATIONS_AVAILABLE_IN_SHARE_MODE
 ]).
 
 %%%===================================================================
@@ -152,9 +177,21 @@ supervisor_children_spec() ->
 %%--------------------------------------------------------------------
 -spec init_paths_caches(od_space:id() | all) -> ok.
 init_paths_caches(Space) ->
-    lists:foreach(fun(Node) ->
-        rpc:call(Node, ?MODULE, schedule_init_paths_caches, [Space])
-    end, consistent_hashing:get_all_nodes()).
+    Nodes = consistent_hashing:get_all_nodes(),
+    rpc:multicall(Nodes, ?MODULE, schedule_init_paths_caches, [Space]),
+    ok.
+
+-spec init_file_protection_flags_caches(od_space:id() | all) -> ok.
+init_file_protection_flags_caches(Space) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    rpc:multicall(Nodes, ?MODULE, schedule_init_file_protection_flags_caches, [Space]),
+    ok.
+
+-spec invalidate_file_protection_flags_caches(od_space:id() | all) -> ok.
+invalidate_file_protection_flags_caches(Space) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    rpc:multicall(Nodes, ?MODULE, schedule_invalidate_file_protection_flags_caches, [Space]),
+    ok.
 
 
 -spec init_dataset_eff_caches(od_space:id() | all) -> ok.
@@ -181,6 +218,7 @@ init(_Args) ->
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
     tree_deletion_traverse:init_pool(),
+    tarball_download_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
 
     schedule_invalidate_permissions_cache(),
@@ -268,6 +306,10 @@ handle(?INIT_PATHS_CACHES(Space)) ->
     paths_cache:init(Space);
 handle(?INIT_DATASETS_CACHE(Space)) ->
     dataset_eff_cache:init(Space);
+handle(?INIT_FILE_PROTECTION_FLAGS_CACHES(Space)) ->
+    file_protection_flags_cache:init(Space);
+handle(?INVALIDATE_FILE_PROTECTION_FLAGS_CACHES(Space)) ->
+    file_protection_flags_cache:invalidate(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -286,6 +328,7 @@ cleanup() ->
     file_registration:stop_pool(),
     replica_deletion_master:stop_workers_pool(),
     tree_deletion_traverse:stop_pool(),
+    tarball_download_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
     ok.
 
@@ -335,6 +378,7 @@ init_effective_caches() ->
     paths_cache:init_group(),
     dataset_eff_cache:init_group(),
     schedule_init_paths_caches(all),
+    schedule_init_file_protection_flags_caches(all),
     schedule_init_datasets_cache(all).
 
 
@@ -380,19 +424,23 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             {FileCtx0, file_ctx:get_share_id_const(FileCtx0)}
     end,
     try
-        UserCtx1 = case ShareId of
-            undefined ->
+        UserCtx1 = case {user_ctx:is_in_open_handle_mode(UserCtx0), ShareId} of
+            {false, undefined} ->
                 UserCtx0;
-            _ ->
-                Operation = get_operation(Request),
-                case lists:member(Operation, ?AVAILABLE_SHARE_OPERATIONS) of
+            {IsInOpenHandleMode, _} ->
+                case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
                     true -> ok;
-                    false -> throw(?EACCES)
+                    false -> throw(?EPERM)
                 end,
-                % Operations concerning shares must be carried with GUEST auth
-                case user_ctx:is_guest(UserCtx0) of
-                    true -> UserCtx0;
-                    false -> user_ctx:new(?GUEST_SESS_ID)
+                case IsInOpenHandleMode of
+                    true ->
+                        UserCtx0;
+                    false ->
+                        % Operations concerning shares must be carried with GUEST auth
+                        case user_ctx:is_guest(UserCtx0) of
+                            true -> UserCtx0;
+                            false -> user_ctx:new(?GUEST_SESS_ID)
+                        end
                 end
         end,
         handle_request_locally(UserCtx1, Request, FileCtx1)
@@ -401,7 +449,30 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             fslogic_errors:handle_error(Request, Type, Error)
     end.
 
+
 %% @private
+-spec is_operation_available_in_share_mode(request(), IsInOpenHandleMode :: boolean()) ->
+    boolean().
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file{flag = Flag}
+}}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file_with_extended_info{flag = Flag}
+}}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(#provider_request{
+    provider_request = #check_perms{flag = Flag}
+}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(Request, true) ->
+    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE);
+is_operation_available_in_share_mode(Request, false) ->
+    lists:member(get_operation(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
+
+
+%% @private
+-spec get_operation(request()) -> atom().
 get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
     element(1, Req);
 get_operation(#fuse_request{fuse_request = Req}) ->
@@ -410,6 +481,7 @@ get_operation(#provider_request{provider_request = Req}) ->
     element(1, Req);
 get_operation(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -509,6 +581,8 @@ handle_file_request(UserCtx, #get_child_attr{name = Name,
     attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
+handle_file_request(UserCtx, #update_protection_flags{set = FlagsToSet, unset = FlagsToUnset}, FileCtx) ->
+    attr_req:update_protection_flags(UserCtx, FileCtx, FlagsToSet, FlagsToUnset);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
     attr_req:update_times(UserCtx, FileCtx, ATime, MTime, CTime);
 handle_file_request(UserCtx, #delete_file{silent = Silent}, FileCtx) ->
@@ -756,6 +830,12 @@ schedule_periodical_spaces_autocleaning_check() ->
 
 schedule_init_paths_caches(Space) ->
     schedule(?INIT_PATHS_CACHES(Space), 0).
+
+schedule_init_file_protection_flags_caches(Space) ->
+    schedule(?INIT_FILE_PROTECTION_FLAGS_CACHES(Space), 0).
+
+schedule_invalidate_file_protection_flags_caches(Space) ->
+    schedule(?INVALIDATE_FILE_PROTECTION_FLAGS_CACHES(Space), 0).
 
 schedule_init_datasets_cache(Space) ->
     schedule(?INIT_DATASETS_CACHE(Space), 0).
