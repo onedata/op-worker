@@ -88,10 +88,10 @@ delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
 -spec check_references_and_remove(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
 check_references_and_remove(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
-    case has_any_references(FileCtx) of
+    case inspect_references(FileCtx) of
         no_references_left ->
             remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS);
-        has_one_or_more_reference ->
+        has_at_least_one_reference ->
             % There are hardlinks to file - do not delete documents, remove only link
             delete_parent_link(FileCtx, UserCtx),
             ok
@@ -101,12 +101,12 @@ check_references_and_remove(UserCtx, FileCtx, Silent) ->
 -spec delete_hardlink_locally(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
 delete_hardlink_locally(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
-    case deregister_link_and_check_if_has_any_references(FileCtx) of
+    case deregister_link_and_inspect_references(FileCtx) of
         no_references_left ->
             remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS),
             % File meta for original file has not been deleted because hardlink existed - delete it now
             delete_effective_file_meta(FileCtx);
-        has_one_or_more_reference ->
+        has_at_least_one_reference ->
             FileCtx2 = delete_parent_link(FileCtx, UserCtx),
             delete_file_meta(FileCtx2),
             ok
@@ -127,11 +127,11 @@ handle_remotely_deleted_file(FileCtx) ->
         _ ->
             % Hardlink created by other provider or regular file has been
             % deleted - check if local documents should be cleaned
-            case has_any_references(FileCtx2) of
+            case inspect_references(FileCtx2) of
                 no_references_left ->
                     UserCtx = user_ctx:new(?ROOT_SESS_ID),
                     remove_or_handle_opened_file(UserCtx, FileCtx2, false, ?LOCAL_DOCS);
-                has_one_or_more_reference ->
+                has_at_least_one_reference ->
                     ok
             end
     end.
@@ -139,14 +139,14 @@ handle_remotely_deleted_file(FileCtx) ->
 %% @private
 -spec handle_remotely_deleted_local_hardlink(file_ctx:ctx()) -> ok.
 handle_remotely_deleted_local_hardlink(FileCtx) ->
-    case deregister_link_and_check_if_has_any_references(FileCtx) of
+    case deregister_link_and_inspect_references(FileCtx) of
         no_references_left ->
             delete_file_meta(FileCtx), % Delete hardlink document
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
             % Delete documents connected with original file as deleted
             % hardlink is last reference to data
             remove_or_handle_opened_file(UserCtx, FileCtx, false, ?LOCAL_DOCS);
-        has_one_or_more_reference ->
+        has_at_least_one_reference ->
             delete_file_meta(FileCtx),
             ok
     end.
@@ -209,17 +209,17 @@ cleanup_opened_files() ->
 %%% Internal functions
 %%%===================================================================
 
--spec deregister_link_and_check_if_has_any_references(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
-deregister_link_and_check_if_has_any_references(FileCtx) ->
+-spec deregister_link_and_inspect_references(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
+deregister_link_and_inspect_references(FileCtx) ->
     LinkUuid = file_ctx:get_uuid_const(FileCtx),
     FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
     {ok, ReferencesPresence} = file_meta_hardlinks:deregister(FileUuid, LinkUuid), % VFS-7444 - maybe update doc in FileCtx
     ReferencesPresence.
 
--spec has_any_references(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
-has_any_references(FileCtx) ->
+-spec inspect_references(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
+inspect_references(FileCtx) ->
     FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
-    file_meta_hardlinks:has_any_references(FileUuid).
+    file_meta_hardlinks:inspect_references(FileUuid).
 
 %%--------------------------------------------------------------------
 %% @private

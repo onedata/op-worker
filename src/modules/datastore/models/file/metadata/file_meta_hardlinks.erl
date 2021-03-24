@@ -20,16 +20,16 @@
 %% API
 -export([empty_references/0, new_doc/4, merge_link_and_file_doc/2,
     register/2, deregister/2,
-    count_references/1, has_any_references/1, list_references/1,
+    count_references/1, inspect_references/1, list_references/1,
     merge_references/2]).
 
 -type link() :: file_meta:uuid().
 % List of links to file. It is kept as a map where list of links is divided
 % into lists of links created by providers. Such structure is needed for
 % conflicts resolution (see merge_references/2).
--type references_by_provider() :: #{oneprovider:id() => [link()]}.
--type references_presence() :: no_references_left | has_one_or_more_reference.
--export_type([link/0, references_by_provider/0, references_presence/0]).
+-type references() :: #{oneprovider:id() => [link()]}.
+-type references_presence() :: no_references_left | has_at_least_one_reference.
+-export_type([link/0, references/0, references_presence/0]).
 
 % TODO VFS-7441 - Test number of links that can be stored in file_meta doc
 -define(MAX_LINKS_NUM, 65536). % 64 * 1024
@@ -43,7 +43,7 @@
 %% Initializes empty references structure stored in #file_meta{} record.
 %% @end
 %%--------------------------------------------------------------------
--spec empty_references() -> references_by_provider().
+-spec empty_references() -> references().
 empty_references() ->
     #{}.
 
@@ -103,7 +103,7 @@ deregister(FileUuid, LinkUuid) ->
     end),
 
     case UpdateAns of
-        {ok, Doc} -> {ok, has_any_references(Doc)};
+        {ok, Doc} -> {ok, inspect_references(Doc)};
         Other -> Other
     end.
 
@@ -120,11 +120,11 @@ count_references(Key) ->
         Other -> Other
     end.
 
--spec has_any_references(file_meta:uuid() | file_meta:doc()) -> references_presence().
-has_any_references(KeyOrDoc) ->
+-spec inspect_references(file_meta:uuid() | file_meta:doc()) -> references_presence().
+inspect_references(KeyOrDoc) ->
     case count_references(KeyOrDoc) of
         {ok, 0} -> no_references_left;
-        {ok, _} -> has_one_or_more_reference
+        {ok, _} -> has_at_least_one_reference
     end.
 
 -spec list_references(file_meta:uuid() | file_meta:doc()) -> {ok, [link()]} | {error, term()}.
@@ -140,7 +140,7 @@ list_references(Key) ->
         Other -> Other
     end.
 
--spec merge_references(file_meta:doc(), file_meta:doc()) -> not_mutated | {mutated, references_by_provider()}.
+-spec merge_references(file_meta:doc(), file_meta:doc()) -> not_mutated | {mutated, references()}.
 merge_references(#document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}},
     #document{value = #file_meta{references = OldReferences}}) ->
     ChangedMutatorReferences = maps:get(Mutator, NewReferences, []),
@@ -155,11 +155,11 @@ merge_references(#document{mutators = [Mutator | _], value = #file_meta{referenc
 %%% Internal functions
 %%%===================================================================
 
--spec references_to_list(references_by_provider()) -> [link()].
+-spec references_to_list(references()) -> [link()].
 references_to_list(References) ->
     % Note - do not use lists:flatten as it traverses sublists and it is not necessary here
     lists:flatmap(fun(ProviderReferences) -> ProviderReferences end, maps:values(References)).
 
--spec count_references_in_map(references_by_provider()) -> non_neg_integer().
+-spec count_references_in_map(references()) -> non_neg_integer().
 count_references_in_map(References) ->
     maps:fold(fun(_, ProviderReferences, Acc) -> length(ProviderReferences) + Acc end, 0, References).
