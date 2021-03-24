@@ -613,7 +613,7 @@ open_with_permissions_check(#sd_handle{
     file_uuid = FileUuid,
     share_id = ShareId
 } = SDHandle, AccessRequirements, OpenFlag) ->
-    FileCtx = file_ctx:new_by_uuid_space_and_share_id(FileUuid, SpaceId, ShareId),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId, ShareId),
     UserCtx = user_ctx:new(SessionId),
 
     % TODO VFS-5917
@@ -707,7 +707,7 @@ run_with_helper_handle(FallbackStrategy, #sd_handle{
                         retry_as_root ->
                             ok;
                         retry_as_root_and_chown ->
-                            FileCtx = file_ctx:new_by_uuid_and_space_id(FileUuid, SpaceId),
+                            FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
                             files_to_chown:chown_or_defer(FileCtx)
                     end,
                     FallbackResult;

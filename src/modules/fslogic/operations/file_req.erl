@@ -393,7 +393,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
 
             try
                 {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid), % TODO VFS-7445 - revert after error
-                FileCtx = file_ctx:new_by_uuid_and_space_id(LinkUuid, SpaceId),
+                FileCtx = file_ctx:new_by_uuid(LinkUuid, SpaceId),
                 fslogic_times:update_mtime_ctime(TargetParentFileCtx3),
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
@@ -432,7 +432,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
                 ok = times:save_with_current_times(SymlinkUuid, SpaceId),
                 fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
-                FileCtx = file_ctx:new_by_uuid_and_space_id(SymlinkUuid, SpaceId),
+                FileCtx = file_ctx:new_by_uuid(SymlinkUuid, SpaceId),
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
                     include_size => true,
@@ -725,7 +725,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
             {ok, #document{key = FileUuid}} = file_meta:create({uuid, ParentUuid}, File),
             ok = times:save_with_current_times(FileUuid, SpaceId),
 
-            {file_ctx:new_by_uuid_and_space_id(FileUuid, SpaceId), ParentFileCtx2};
+            {file_ctx:new_by_uuid(FileUuid, SpaceId), ParentFileCtx2};
         {false, _} ->
             throw(?ENOTDIR)
     end.

@@ -359,7 +359,7 @@ maybe_send_request(Request = #request{
     job_type = JobType
 }, SpaceId
 ) ->
-    {StorageId, _} = file_ctx:get_storage_id(file_ctx:new_by_uuid_and_space_id(FileUuid, SpaceId)),
+    {StorageId, _} = file_ctx:get_storage_id(file_ctx:new_by_uuid(FileUuid, SpaceId)),
     case file_qos:is_replica_required_on_storage(FileUuid, StorageId) of
         false ->
             {ok, _} = request_deletion_support(SpaceId, FileUuid, ProviderId, Blocks, Version, JobId, JobType),

@@ -1942,7 +1942,7 @@ verify_locations(W, FileUuid, SpaceId) ->
     end, 0, IDs).
 
 get_locations(W, FileUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_uuid_and_space_id(FileUuid, SpaceId),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     {LocationIds, _} = rpc:call(W, file_ctx, get_file_location_ids, [FileCtx]),
     LocationIds.
 

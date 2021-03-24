@@ -1938,7 +1938,7 @@ new_file_should_have_zero_popularity(Config) ->
                 mth_mov_avg = 0.0
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid_and_space_id(FileUuid, SpaceId)])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid(FileUuid, SpaceId)])
     ).
 
 opening_file_should_increase_file_popularity(Config) ->
@@ -1967,7 +1967,7 @@ opening_file_should_increase_file_popularity(Config) ->
                 mth_hist = [1 | _]
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid_and_space_id(FileUuid, SpaceId)])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid(FileUuid, SpaceId)])
     ),
     ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
@@ -1988,7 +1988,7 @@ opening_file_should_increase_file_popularity(Config) ->
                 mth_mov_avg = 2.0
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid_and_space_id(FileUuid, SpaceId)])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid(FileUuid, SpaceId)])
     ),
     ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open),
     [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hr_hist,

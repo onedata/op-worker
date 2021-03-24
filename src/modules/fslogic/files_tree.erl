@@ -266,7 +266,7 @@ get_parent_internal(FileCtx, UserCtx) ->
         {_, true, true} ->
             % Share root file shall point to virtual share root dir in open handle mode
             ShareRootDirUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(ShareId),
-            file_ctx:new_by_guid(file_id:pack_share_guid(ShareRootDirUuid, SpaceId, ShareId));
+            file_ctx:new_by_uuid(ShareRootDirUuid, SpaceId, ShareId);
         {true, false, _} ->
             case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
                 andalso UserCtx =/= undefined
@@ -297,12 +297,12 @@ get_parent_internal(FileCtx, UserCtx) ->
                     case IsInOpenHandleMode of
                         true ->
                             % Virtual share root dir should point to normal space dir
-                            file_ctx:new_by_guid(file_id:pack_guid(ParentUuid, SpaceId));
+                            file_ctx:new_by_uuid(ParentUuid, SpaceId);
                         false ->
                             throw(?ENOENT)
                     end;
                 false ->
-                    file_ctx:new_by_guid(file_id:pack_share_guid(ParentUuid, SpaceId, ShareId))
+                    file_ctx:new_by_uuid(ParentUuid, SpaceId, ShareId)
             end;
         {false, true, _} ->
             FileCtx2
@@ -385,8 +385,7 @@ get_space_share_child(SpaceDirCtx, Name, UserCtx) ->
     case lists:member(Name, Shares) of
         true ->
             ChildUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(Name),
-            ChildShareGuid = file_id:pack_share_guid(ChildUuid, SpaceId, Name),
-            {file_ctx:new_by_guid(ChildShareGuid), SpaceDirCtx};
+            {file_ctx:new_by_uuid(ChildUuid, SpaceId, Name), SpaceDirCtx};
         false ->
             throw(?ENOENT)
     end.

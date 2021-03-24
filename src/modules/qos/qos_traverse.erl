@@ -137,7 +137,7 @@ task_finished(TaskId, _PoolName) ->
         <<"uuid">> := FileUuid,
         <<"task_type">> := TaskType
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
-    FileCtx = file_ctx:new_by_uuid_and_space_id(FileUuid, SpaceId),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     case TaskType of
         <<"traverse">> ->
             #{<<"qos_entry_id">> := QosEntryId} = AdditionalData,

@@ -1029,7 +1029,7 @@ get_child_uuid_and_tree_id(ParentUuid, TreeIds, Name) ->
 %%--------------------------------------------------------------------
 -spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: datastore:key()) -> ok | no_return().
 emit_space_dir_created(DirUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_uuid_and_space_id(DirUuid, SpaceId),
+    FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
     #fuse_response{fuse_response = FileAttr} =
         attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
             allow_deleted_files => false,

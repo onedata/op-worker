@@ -170,7 +170,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                     FileUuid2 = utils:ensure_defined(FileUuid, ResolvedUuid),
                     case deletion_marker:check(ParentUuid, FileName) of
                         {error, not_found} ->
-                            FileCtx = file_ctx:new_by_uuid_and_space_id(FileUuid2, SpaceId),
+                            FileCtx = file_ctx:new_by_uuid(FileUuid2, SpaceId),
                             storage_import_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
                         {ok, _} ->
                             {?FILE_UNMODIFIED, undefined, StorageFileCtx}

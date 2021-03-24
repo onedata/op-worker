@@ -85,7 +85,7 @@ reconcile_qos(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec reconcile_qos(file_meta:uuid(), od_space:id()) -> ok.
 reconcile_qos(FileUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_uuid_and_space_id(FileUuid, SpaceId),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     reconcile_qos(FileCtx).
 
 
@@ -173,7 +173,7 @@ reevaluate_qos(QosEntryId) when is_binary(QosEntryId) ->
 -spec retry_failed_files(od_space:id()) -> ok.
 retry_failed_files(SpaceId) ->
     qos_entry:apply_to_all_in_failed_files_list(SpaceId, fun(FileUuid) ->
-        FileCtx = file_ctx:new_by_uuid_and_space_id(FileUuid, SpaceId),
+        FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
         ok = qos_entry:remove_from_failed_files_list(SpaceId, FileUuid),
         ok = reconcile_qos_internal(FileCtx, [ignore_missing_files])
     end).

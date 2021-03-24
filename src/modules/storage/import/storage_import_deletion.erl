@@ -289,7 +289,7 @@ new_slave_job(#storage_traverse_master{storage_file_ctx = StorageFileCtx}, Child
     #storage_traverse_slave{
         info = #{
             deletion_job => true,
-            file_ctx => file_ctx:new_by_uuid_and_space_id(ChildUuid, SpaceId),
+            file_ctx => file_ctx:new_by_uuid(ChildUuid, SpaceId),
             storage_id => StorageId
         }}.
 
@@ -318,7 +318,7 @@ new_flat_iterator_child_master_job(Job = #storage_traverse_master{
         storage_file_ctx = ChildCtx,
         info = #{
             iterator_type => IteratorType,
-            file_ctx => file_ctx:new_by_uuid_and_space_id(ChildUuid, SpaceId)}
+            file_ctx => file_ctx:new_by_uuid(ChildUuid, SpaceId)}
     },
     get_master_job(ChildMasterJob).
 

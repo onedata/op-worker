@@ -60,8 +60,9 @@
 -export_type([ctx/0]).
 
 %% Functions creating context and filling its data
--export([new_by_canonical_path/2, new_by_guid/1, new_by_uuid_and_space_id/2, new_by_uuid_space_and_share_id/3,
-    new_by_uuid/4, new_by_doc/2, new_by_doc/3, new_root_ctx/0]).
+-export([new_by_canonical_path/2, new_by_guid/1,
+    new_by_uuid/2, new_by_uuid/3, new_by_uuid/4,
+    new_by_doc/2, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, set_file_location/2, set_file_id/2,
     set_is_dir/2, ensure_effective/1]).
 
@@ -130,15 +131,6 @@ new_by_canonical_path(UserCtx, Path) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new file context using file's Uuid and file name.
-%% @end
-%%--------------------------------------------------------------------
--spec new_by_uuid(file_meta:uuid(), od_space:id(), undefined | od_share:id(), file_meta:name()) -> ctx().
-new_by_uuid(Uuid, SpaceId, ShareId, Name) ->
-    #file_ctx{guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId), file_name = Name}.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Creates new file context using file's GUID.
 %% @end
 %%--------------------------------------------------------------------
@@ -147,14 +139,18 @@ new_by_guid(Guid) ->
     {Uuid, SpaceId, ShareId} = file_id:unpack_share_guid(Guid),
     #file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId, share_id = ShareId}.
 
--spec new_by_uuid_and_space_id(file_meta:uuid(), od_space:id()) -> ctx().
-new_by_uuid_and_space_id(Uuid, SpaceId) ->
+-spec new_by_uuid(file_meta:uuid(), od_space:id()) -> ctx().
+new_by_uuid(Uuid, SpaceId) ->
     #file_ctx{guid = file_id:pack_guid(Uuid, SpaceId), uuid = Uuid, space_id = SpaceId}.
 
--spec new_by_uuid_space_and_share_id(file_meta:uuid(), od_space:id(), od_share:id()) -> ctx().
-new_by_uuid_space_and_share_id(Uuid, SpaceId, ShareId) ->
+-spec new_by_uuid(file_meta:uuid(), od_space:id(), undefined | od_share:id()) -> ctx().
+new_by_uuid(Uuid, SpaceId, ShareId) ->
     #file_ctx{guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId),
         uuid = Uuid, space_id = SpaceId, share_id = ShareId}.
+
+-spec new_by_uuid(file_meta:uuid(), od_space:id(), undefined | od_share:id(), file_meta:name()) -> ctx().
+new_by_uuid(Uuid, SpaceId, ShareId, Name) ->
+    (new_by_uuid(Uuid, SpaceId, ShareId))#file_ctx{file_name = Name}.
 
 -spec new_by_doc(file_meta:doc(), od_space:id()) -> ctx().
 new_by_doc(Doc, SpaceId) ->
@@ -295,7 +291,7 @@ ensure_effective(FileCtx) ->
     Uuid = get_uuid_const(FileCtx),
     case fslogic_uuid:ensure_effective_uuid(Uuid) of
         Uuid -> FileCtx;
-        EffectiveUuid -> new_by_uuid_and_space_id(EffectiveUuid, get_space_id_const(FileCtx))
+        EffectiveUuid -> new_by_uuid(EffectiveUuid, get_space_id_const(FileCtx))
     end.
 
 %%--------------------------------------------------------------------

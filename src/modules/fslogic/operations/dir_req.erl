@@ -187,7 +187,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx3),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
     {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File),
-    FileCtx = file_ctx:new_by_uuid_and_space_id(DirUuid, SpaceId),
+    FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
 
     try
         ok = times:save_with_current_times(DirUuid, SpaceId),

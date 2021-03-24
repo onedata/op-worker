@@ -244,7 +244,7 @@ reconcile_replicas(FileCtx,
             notify_attrs_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2, LocalBlocks);
         {{renamed, RenamedDoc, Uuid, TargetSpaceId}, _} ->
             {ok, _} = fslogic_location_cache:save_location(RenamedDoc),
-            RenamedFileCtx = file_ctx:new_by_uuid_and_space_id(Uuid, TargetSpaceId),
+            RenamedFileCtx = file_ctx:new_by_uuid(Uuid, TargetSpaceId),
             files_to_chown:chown_or_defer(RenamedFileCtx),
             notify_block_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc),
             notify_attrs_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc, LocalBlocks)

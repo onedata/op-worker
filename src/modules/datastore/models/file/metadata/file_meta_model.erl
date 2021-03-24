@@ -341,7 +341,7 @@ resolve_conflict(_Ctx,
     case NewName =/= PrevName of
         true ->
             spawn(fun() ->
-                FileCtx = file_ctx:new_by_uuid_and_space_id(Uuid, SpaceId),
+                FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
                 OldParentGuid = file_id:pack_guid(PrevParentUuid, SpaceId),
                 NewParentGuid = file_id:pack_guid(NewParentUuid, SpaceId),
                 fslogic_event_emitter:emit_file_renamed_no_exclude(
@@ -395,8 +395,8 @@ invalidate_qos_bounded_cache_if_moved_to_trash(
     case PrevParentUuid =/= NewParentUuid andalso fslogic_uuid:is_trash_dir_uuid(NewParentUuid) of
         true ->
             % the file has been moved to trash
-            FileCtx = file_ctx:new_by_uuid_and_space_id(Uuid, SpaceId),
-            PrevParentCtx = file_ctx:new_by_uuid_and_space_id(PrevParentUuid, SpaceId),
+            FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
+            PrevParentCtx = file_ctx:new_by_uuid(PrevParentUuid, SpaceId),
             file_qos:clean_up(FileCtx, PrevParentCtx),
             qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
         false ->
