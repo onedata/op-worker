@@ -214,7 +214,7 @@ file_processed(FileCtx, UserCtx, TaskId, TraverseInfo = #{root_original_parent_u
     case file_qos:get_effective(RootOriginalParentUuid) of
         {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
             SpaceId = file_ctx:get_space_id_const(FileCtx1),
-            OriginalRootParentCtx = file_ctx:new_by_guid(file_id:pack_guid(RootOriginalParentUuid, SpaceId)),
+            OriginalRootParentCtx = file_ctx:new_by_uuid_and_space_id(RootOriginalParentUuid, SpaceId),
             lists:foreach(fun(EffectiveQosEntryId) ->
                 qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId, OriginalRootParentCtx)
             end, EffectiveQosEntries);

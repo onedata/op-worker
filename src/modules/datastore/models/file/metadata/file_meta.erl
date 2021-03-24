@@ -706,7 +706,7 @@ make_space_exist(SpaceId) ->
     },
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
-            case times:new_with_current_times(SpaceDirUuid, SpaceId) of
+            case times:save_with_current_times(SpaceDirUuid, SpaceId) of
                 ok -> ok;
                 {error, already_exists} -> ok
             end,
@@ -1014,7 +1014,7 @@ get_child_uuid_and_tree_id(ParentUuid, TreeIds, Name) ->
 %%--------------------------------------------------------------------
 -spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: datastore:key()) -> ok | no_return().
 emit_space_dir_created(DirUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_uuid_and_space_id(DirUuid, SpaceId),
     #fuse_response{fuse_response = FileAttr} =
         attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
             allow_deleted_files => false,

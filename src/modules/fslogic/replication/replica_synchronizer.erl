@@ -350,8 +350,8 @@ apply_if_alive_no_check(Uuid, FunOrMsg) ->
 -spec apply_no_check(file_ctx:ctx(), term()) ->
     term().
 apply_no_check(FileCtx, FunOrMsg) ->
-    {EffectiveUuid, EffectiveFileCtx} = file_ctx:ensure_effective_and_get_uuid(FileCtx),
-    Node = datastore_key:any_responsible_node(EffectiveUuid),
+    EffectiveFileCtx = file_ctx:ensure_effective(FileCtx),
+    Node = datastore_key:any_responsible_node(file_ctx:get_uuid_const(EffectiveFileCtx)),
     rpc:call(Node, ?MODULE, apply_internal, [EffectiveFileCtx, FunOrMsg]).
 
 %%--------------------------------------------------------------------
@@ -504,8 +504,8 @@ get_process(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec init_or_return_existing(file_ctx:ctx()) -> no_return() | normal.
 init_or_return_existing(FileCtx) ->
-    {EffectiveUuid, EffectiveFileCtx} = file_ctx:ensure_effective_and_get_uuid(FileCtx),
-    {Pid, _} = gproc:reg_or_locate({n, l, EffectiveUuid}),
+    EffectiveFileCtx = file_ctx:ensure_effective(FileCtx),
+    {Pid, _} = gproc:reg_or_locate({n, l, file_ctx:get_uuid_const(EffectiveFileCtx)}),
     ok = proc_lib:init_ack({ok, Pid}),
     % TODO VFS-6389 - check race with node changing
     case self() of
@@ -522,8 +522,8 @@ init_or_return_existing(FileCtx) ->
 
 -spec init(file_ctx:ctx()) -> {ok, #state{}, Timeout :: non_neg_integer()}.
 init(FileCtx) ->
-    {EffectiveUuid, EffectiveFileCtx} = file_ctx:ensure_effective_and_get_uuid(FileCtx),
-    fslogic_cache:init(EffectiveUuid),
+    EffectiveFileCtx = file_ctx:ensure_effective(FileCtx),
+    fslogic_cache:init(file_ctx:get_uuid_const(EffectiveFileCtx)),
     {ok, #state{
         file_ctx = EffectiveFileCtx,
         in_progress = ordsets:new()

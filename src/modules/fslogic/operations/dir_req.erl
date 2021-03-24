@@ -187,10 +187,10 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx3),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
     {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File),
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_uuid_and_space_id(DirUuid, SpaceId),
 
     try
-        ok = times:new_with_current_times(DirUuid, SpaceId),
+        ok = times:save_with_current_times(DirUuid, SpaceId),
         fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
         #fuse_response{fuse_response = FileAttr} =

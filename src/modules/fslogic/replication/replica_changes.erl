@@ -154,7 +154,7 @@ rename_or_delete(FileCtx,
 ) ->
     case provider_logic:supports_space(TargetSpaceId) of
         true ->
-            NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
+            NewFileCtx = file_ctx:new_by_uuid_and_space_id(FileUuid, TargetSpaceId),
             case file_ctx:is_readonly_storage(NewFileCtx) of
                 {true, NewFileCtx2} ->
                     {skipped, NewFileCtx2};

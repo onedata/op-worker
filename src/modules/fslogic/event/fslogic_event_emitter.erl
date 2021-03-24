@@ -419,8 +419,8 @@ emit_suffixes(ConflictingFiles, {parent_guid, ParentGuid}) ->
     lists:foreach(fun({TaggedName, Uuid}) ->
         try
             {_, SpaceId} = file_id:unpack_guid(ParentGuid),
-            Guid = file_id:pack_guid(Uuid, SpaceId),
-            FileCtx = file_ctx:new_by_guid(Guid),
+            FileCtx = file_ctx:new_by_uuid_and_space_id(Uuid, SpaceId),
+            Guid = file_ctx:get_guid_const(FileCtx),
 
             event:emit_to_filtered_subscribers(#file_renamed_event{top_entry = #file_renamed_entry{
                 old_guid = Guid,

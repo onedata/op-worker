@@ -101,7 +101,7 @@ start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs) ->
             start_file_uuid = StartFileUuid, storage_id = StorageId
         } = TraverseReq,
 
-        FileCtx = file_ctx:new_by_guid(file_id:pack_guid(StartFileUuid, SpaceId)),
+        FileCtx = file_ctx:new_by_uuid_and_space_id(StartFileUuid, SpaceId),
         storage:is_local(StorageId) andalso
             start_traverse(FileCtx, QosEntryId, StorageId, TaskId)
     end, ok, AllTraverseReqs),

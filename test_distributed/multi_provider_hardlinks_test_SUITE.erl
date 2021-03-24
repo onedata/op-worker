@@ -82,11 +82,7 @@ basic_test(Config0) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
 
     % Create link and verify its stats
-    LinkName = generator:gen_name(),
-    Link = filename:join(["/", SpaceName, LinkName]),
-    {ok, LinkAttr} = ?assertMatch({ok, _},
-        lfm_proxy:make_link(Worker1, SessId(Worker1), Link, FileGuid), Attempts),
-    verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid),
+    {Link, LinkAttr} = make_and_verify_link(Config, FileGuid, SpaceGuid, FileAttr),
     % stat ignores fully_replicated field so use attrs without it in asserts
     LinkAttrWithoutReplicationStatus = LinkAttr#file_attr{fully_replicated = undefined},
     ?assertEqual({ok, LinkAttrWithoutReplicationStatus},
@@ -175,18 +171,10 @@ first_access_performed_via_link_test(Config0) ->
     FileUuid2 = file_id:guid_to_uuid(FileGuid2),
 
     % Create links and verify its stats
-    LinkName = generator:gen_name(),
-    Link = filename:join(["/", SpaceName, LinkName]),
-    {ok, #file_attr{guid = LinkGuid} = LinkAttr} = ?assertMatch({ok, _},
-        lfm_proxy:make_link(Worker1, SessId(Worker1), Link, FileGuid), Attempts),
-    verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid),
+    {Link, #file_attr{guid = LinkGuid}} = make_and_verify_link(Config, FileGuid, SpaceGuid, FileAttr),
     LinkUuid = file_id:guid_to_uuid(LinkGuid),
-    LinkName2 = generator:gen_name(),
-    Link2 = filename:join(["/", SpaceName, LinkName2]),
-    {ok, #file_attr{guid = LinkGuid2} = LinkAttr2} = ?assertMatch({ok, _},
-        lfm_proxy:make_link(Worker1, SessId(Worker1), Link2, FileGuid2), Attempts),
+    {Link2, #file_attr{guid = LinkGuid2}} = make_and_verify_link(Config, FileGuid2, SpaceGuid, FileAttr2),
     LinkUuid2 = file_id:guid_to_uuid(LinkGuid2),
-    verify_link_attrs(LinkName2, LinkAttr2, FileAttr2, SpaceGuid),
 
     % Read/write link on second provider without reading/writing file
     % (file_locations are not created for these files)
@@ -224,18 +212,10 @@ create_link_to_link_test(Config0) ->
     {ok, FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
 
     % Create link and verify its stats
-    LinkName = generator:gen_name(),
-    Link = filename:join(["/", SpaceName, LinkName]),
-    {ok, LinkAttr} = ?assertMatch({ok, _},
-        lfm_proxy:make_link(Worker1, SessId(Worker1), Link, FileGuid), Attempts),
-    verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid),
+    {Link, #file_attr{guid = LinkGuid}} = make_and_verify_link(Config, FileGuid, SpaceGuid, FileAttr),
 
     % Create link to link and verify its stats
-    LinkName2 = generator:gen_name(),
-    Link2 = filename:join(["/", SpaceName, LinkName2]),
-    {ok, LinkAttr2} = ?assertMatch({ok, _},
-        lfm_proxy:make_link(Worker1, SessId(Worker1), Link2, LinkAttr#file_attr.guid), Attempts),
-    verify_link_attrs(LinkName2, LinkAttr2, FileAttr, SpaceGuid),
+    {Link2, _LinkAttr2} = make_and_verify_link(Config, LinkGuid, SpaceGuid, FileAttr),
 
     % Verify reading through second link
     assert_size_and_content_identical(Worker1, SessId, Link2, FileContent),
@@ -275,6 +255,18 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+make_and_verify_link(Config, FileGuid, SpaceGuid, AttrToVerify) ->
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Attempts = ?config(attempts, Config),
+    Worker1 = ?config(worker1, Config),
+    LinkName = generator:gen_name(),
+    Link = filename:join(["/", SpaceName, LinkName]),
+    {ok, LinkAttr} = ?assertMatch({ok, _},
+        lfm_proxy:make_link(Worker1, SessId(Worker1), Link, FileGuid), Attempts),
+    verify_link_attrs(LinkName, LinkAttr, AttrToVerify, SpaceGuid),
+    {Link, LinkAttr}.
 
 verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid) ->
     ?assertNotEqual(FileAttr#file_attr.guid, LinkAttr#file_attr.guid),

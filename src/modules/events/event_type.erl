@@ -183,11 +183,7 @@ get_context(#file_written_event{file_guid = FileGuid}) ->
 get_context(#file_attr_changed_event{file_attr = FileAttr}) ->
     {file, file_ctx:new_by_guid(FileAttr#file_attr.guid)};
 get_context(#file_location_changed_event{file_location = FileLocation}) ->
-    FileGuid = file_id:pack_guid(
-        FileLocation#file_location.uuid,
-        FileLocation#file_location.space_id
-    ),
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, file_ctx:new_by_uuid_and_space_id(FileLocation#file_location.uuid, FileLocation#file_location.space_id)};
 get_context(#file_perm_changed_event{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
 get_context(#file_removed_event{file_guid = FileGuid}) ->
