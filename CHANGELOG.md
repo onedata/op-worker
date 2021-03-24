@@ -4,6 +4,17 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha5
+
+-   **VFS-7351** It is now possible to download directories and multiple
+    files via gui as a compressed TAR archive.
+-   **VFS-7294** Added publicly available REST endpoints for fetching
+    information and data of shared files/directories. The data-related
+    endpoints are offered by Onezone, which redirects to a suitable
+    Oneprovider so that a guest user does not need any knowledge of the
+    environment to access the data. Improved the Web GUI\'s shares view
+    to present the public endpoints in an easy-to-use manner.
+
 ### 21.02.0-alpha4
 
 -   **VFS-7378** Removed deprecated Oneprovider REST API. The modern
