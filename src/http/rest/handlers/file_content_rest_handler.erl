@@ -129,8 +129,8 @@ process_request(#op_req{
     case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-            throw(?ERROR_POSIX(?EISDIR))
+        {ok, #file_attr{type = ?DIRECTORY_TYPE} = FileAttrs} ->
+            file_download_utils:download_tarball(SessionId, [FileAttrs], Req)
     end;
 
 process_request(#op_req{
