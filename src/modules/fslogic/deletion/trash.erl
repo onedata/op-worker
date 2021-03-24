@@ -14,8 +14,8 @@
 %%% Trash directory is child of a space directory.
 %%%
 %%% TODO VFS-7064 below paragraph will be true after adding link from space directory to trash in 21.02
-%%% Each provider adds link from space to trash to its own file_meta_datastore_links
-%%% tree. The links are not listed as conflicting because file_meta_datastore_links
+%%% Each provider adds link from space to trash to its own file_meta_forest
+%%% tree. The links are not listed as conflicting because file_meta_forest
 %%% module detects that they point to the same uuid.
 %%%
 %%% Currently, deletion using trash is performed on directories via GUI
@@ -54,7 +54,7 @@ create(SpaceId) ->
     ),
     % TODO VFS-7064 use file_meta:create so that link to the trash directory will be added
     %  * remember to filter trash from list result in storage_import_deletion or replica_controller, tree_traverse, etc
-    %  * maybe there should be option passed to file_meta_datastore_links:list that would exclude trash from the result
+    %  * maybe there should be option passed to file_meta_forest:list that would exclude trash from the result
     %% {ok, _} = file_meta:create({uuid, SpaceUuid}, TrashDoc),
     {ok, _} = file_meta:save(TrashDoc),
     ok.
