@@ -23,7 +23,7 @@
     mkdir/4,
     get_children_ctxs/3,
     get_children/3,
-    get_children_attrs/4,
+    get_children_attrs/5,
     get_children_details/3
 ]).
 
@@ -57,12 +57,12 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
 -spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
-    ParentGuid = file_ctx:get_guid_const(FileCtx0),
+    ParentGuid = file_ctx:get_logical_guid_const(FileCtx0),
     {ChildrenCtxs, ExtendedInfo, FileCtx1} = get_children_ctxs(UserCtx, FileCtx0, ListOpts),
     ChildrenNum = length(ChildrenCtxs),
 
     ChildrenLinks = lists:filtermap(fun({Num, ChildCtx}) ->
-        ChildGuid = file_ctx:get_guid_const(ChildCtx),
+        ChildGuid = file_ctx:get_logical_guid_const(ChildCtx),
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         case Num == 1 orelse Num == ChildrenNum of
             true ->
@@ -127,9 +127,9 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
 %% @equiv get_children_attrs_insecure/7 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), boolean()) ->
+-spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), boolean(), boolean()) ->
     fslogic_worker:fuse_response().
-get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus) ->
+get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     AccessRequirements = case IsDir of
         true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
@@ -139,7 +139,7 @@ get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus) ->
         UserCtx, FileCtx1, AccessRequirements
     ),
     get_children_attrs_insecure(
-        UserCtx, FileCtx2, ListOpts, IncludeReplicationStatus, ChildrenWhiteList
+        UserCtx, FileCtx2, ListOpts, IncludeReplicationStatus, IncludeLinkCount, ChildrenWhiteList
     ).
 
 
@@ -183,19 +183,14 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
     ParentFileCtx3 = file_ctx:assert_is_dir(ParentFileCtx2),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
-    CTime = global_clock:timestamp_seconds(),
     Owner = user_ctx:get_user_id(UserCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx3),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx3),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
     {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File),
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
 
     try
-        {ok, _} = times:save(#document{
-            key = DirUuid,
-            value = #times{mtime = CTime, atime = CTime, ctime = CTime},
-            scope = SpaceId
-        }),
+        ok = times:save_with_current_times(DirUuid, SpaceId),
         fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
         #fuse_response{fuse_response = FileAttr} =
@@ -211,7 +206,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         }
     catch
         Error:Reason ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)
@@ -226,17 +221,18 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% and allowed by ChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), boolean(),
-    undefined | [file_meta:name()]
+-spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(),
+    boolean(), boolean(), undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
-get_children_attrs_insecure(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, ChildrenWhiteList) ->
+get_children_attrs_insecure(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, ChildrenWhiteList) ->
     {Children, ExtendedInfo, FileCtx1} = list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList),
     ChildrenAttrs = map_children(
         UserCtx,
         fun attr_req:get_file_attr_insecure/3,
         Children,
-        IncludeReplicationStatus
+        IncludeReplicationStatus,
+        IncludeLinkCount
     ),
 
     fslogic_times:update_atime(FileCtx1),
@@ -267,6 +263,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
         UserCtx,
         fun attr_req:get_file_details_insecure/3,
         Children,
+        false,
         false
     ),
     fslogic_times:update_atime(FileCtx1),
@@ -304,10 +301,11 @@ list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
     MapFunInsecure :: fun((UserCtx, ChildCtx :: file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
         fslogic_worker:fuse_response()),
     Children :: [file_ctx:ctx()],
-    IncludeReplicationStatus :: boolean()
+    IncludeReplicationStatus :: boolean(),
+    IncludeLinkCount :: boolean()
 ) ->
     [fuse_response_type()] when UserCtx :: user_ctx:ctx().
-map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus) ->
+map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, IncludeLinkCount) ->
     ChildrenNum = length(Children),
     NumberedChildren = lists:zip(lists:seq(1, ChildrenNum), Children),
     ComputeFileAttrOpts = #{
@@ -323,7 +321,8 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus) ->
                 true ->
                     MapFunInsecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
                         name_conflicts_resolution_policy => resolve_name_conflicts,
-                        include_replication_status => IncludeReplicationStatus
+                        include_replication_status => IncludeReplicationStatus,
+                        include_link_count => IncludeLinkCount
                     });
                 false ->
                     % Other files than first and last don't need to resolve name
@@ -331,7 +330,8 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus) ->
                     % (file_meta:tag_children to be precise) already did it
                     MapFunInsecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
                         name_conflicts_resolution_policy => allow_name_conflicts,
-                        include_replication_status => IncludeReplicationStatus
+                        include_replication_status => IncludeReplicationStatus,
+                        include_link_count => IncludeLinkCount
                     })
             end,
             Result

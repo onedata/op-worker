@@ -17,8 +17,8 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 -include("modules/harvesting/harvesting.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

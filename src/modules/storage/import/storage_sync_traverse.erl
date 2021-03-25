@@ -458,7 +458,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
                     AsyncMasterJobsNum = length(maps:get(async_master_jobs, MasterJobMap, [])),
                     ToProcess = SlaveJobsNum + AsyncMasterJobsNum,
                     storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
-                    Guid = file_ctx:get_guid_const(FileCtx),
+                    Guid = file_ctx:get_logical_guid_const(FileCtx),
                     FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
                         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                         case Depth =:= MaxDepth of
@@ -642,7 +642,7 @@ schedule_jobs_for_directories_only(#storage_traverse_master{
     {#statbuf{st_mtime = STMtime}, _StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     FinishCallback = fun(_MasterJobExtendedArgs, _SlaveJobsDescription) ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-        Guid = file_ctx:get_guid_const(FileCtx),
+        Guid = file_ctx:get_logical_guid_const(FileCtx),
         case Depth =:= MaxDepth of
             true ->
                 storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, undefined);
@@ -674,7 +674,7 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
         case maps:get(slave_jobs_failed, SlavesDescription) of
             0 ->
                 StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                Guid = file_ctx:get_guid_const(FileCtx),
+                Guid = file_ctx:get_logical_guid_const(FileCtx),
                 {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
                 {ok, SSI} = case Depth =:= MaxDepth of
                     true ->
@@ -721,7 +721,7 @@ schedule_jobs_for_all_files(#storage_traverse_master{
     SlaveJobs = maps:get(slave_jobs, MasterJobMap, []),
     ToProcess = length(AsyncMasterJobs) + length(SlaveJobs),
     storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
-    Guid = file_ctx:get_guid_const(FileCtx),
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
     FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
         case Depth =:= MaxDepth of
@@ -751,7 +751,7 @@ schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
         case maps:get(slave_jobs_failed, SlavesDescription) of
             0 ->
                 StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                Guid = file_ctx:get_guid_const(FileCtx),
+                Guid = file_ctx:get_logical_guid_const(FileCtx),
                 {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
                 {ok, SSI} = case Depth =:= MaxDepth of
                     true ->

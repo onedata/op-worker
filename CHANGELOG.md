@@ -4,6 +4,22 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha6
+
+-   **VFS-7486** Added option to nulldevice helper allowing control of
+    file size returned by getattr in simulated file systems.
+
+### 21.02.0-alpha5
+
+-   **VFS-7351** It is now possible to download directories and multiple
+    files via gui as a compressed TAR archive.
+-   **VFS-7294** Added publicly available REST endpoints for fetching
+    information and data of shared files/directories. The data-related
+    endpoints are offered by Onezone, which redirects to a suitable
+    Oneprovider so that a guest user does not need any knowledge of the
+    environment to access the data. Improved the Web GUI\'s shares view
+    to present the public endpoints in an easy-to-use manner.
+
 ### 21.02.0-alpha4
 
 -   **VFS-7378** Removed deprecated Oneprovider REST API. The modern
@@ -25,6 +41,28 @@ CHANGELOG
 -   **VFS-6566** Improved UX and fixed minor issues in share views.
     Fixed inability to open share hosted by Oneprovider 19.02.x using
     Onezone 20.02.x.
+
+### 20.02.7
+
+-   **VFS-7294** Added publicly available REST endpoints for fetching
+    information and data of shared files/directories. The data-related
+    endpoints are offered by Onezone, which redirects to a suitable
+    Oneprovider so that a guest user does not need any knowledge of the
+    environment to access the data. Improved the Web GUI's shares view
+    to present the public endpoints in an easy-to-use manner.
+-   **VFS-7276** Improved handling of startup errors in Oneclient,
+    including more graceful handling of various exceptions and more
+    informative error messages including Oneclient and Oneprovider
+    compatibility and invalid token issues.
+-   **VFS-7271** Fixed displaying shared space root directory name in
+    GUI.
+-   **VFS-7165** Add a workaround for Erlang's SSL implementation that
+    would not reload server certificate chain when it is changed (e.g.
+    after Let's Encrypt certificate regeneration).
+-   **VFS-6566** Improved UX and fixed minor issues in share views.
+    Fixed inability to open share hosted by Oneprovider 19.02.x using
+    Onezone 20.02.x.
+-   **VFS-6289** Add support for ANONYMOUS@ principal to ACL.
 
 ### 20.02.6
 

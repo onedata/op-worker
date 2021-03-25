@@ -64,7 +64,7 @@ new_handle(SessionId, FileCtx) ->
     {handle() | undefined, file_ctx:ctx()}.
 new_handle(SessionId, FileCtx, Generate) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx), % TODO VFS-7447 - should we use referenced uuid?
     {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
     case file_ctx:get_storage_file_id(FileCtx2, Generate) of
         {undefined, FileCtx3} ->
@@ -94,7 +94,7 @@ new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId) ->
 new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId, ShareId) ->
     #sd_handle{
         file = StorageFileId,
-        file_uuid = FileUuid,
+        file_uuid = FileUuid, % TODO VFS-7447 - should we use referenced uuid?
         session_id = SessionId,
         space_id = SpaceId,
         storage_id = StorageId,
@@ -613,8 +613,7 @@ open_with_permissions_check(#sd_handle{
     file_uuid = FileUuid,
     share_id = ShareId
 } = SDHandle, AccessRequirements, OpenFlag) ->
-    FileGuid = file_id:pack_share_guid(FileUuid, SpaceId, ShareId),
-    FileCtx = file_ctx:new_by_guid(FileGuid),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId, ShareId),
     UserCtx = user_ctx:new(SessionId),
 
     % TODO VFS-5917
@@ -708,8 +707,7 @@ run_with_helper_handle(FallbackStrategy, #sd_handle{
                         retry_as_root ->
                             ok;
                         retry_as_root_and_chown ->
-                            FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-                            FileCtx = file_ctx:new_by_guid(FileGuid),
+                            FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
                             files_to_chown:chown_or_defer(FileCtx)
                     end,
                     FallbackResult;

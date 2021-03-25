@@ -146,7 +146,8 @@ add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos_insecure(file_ctx:ctx()) -> fslogic_worker:provider_response().
 get_effective_file_qos_insecure(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    % TODO VFS-7435 - Integrate hardlinks with QoS
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case file_qos:get_effective(FileUuid) of
         {ok, EffQos} ->
             case file_qos:is_in_trash(EffQos) of
@@ -250,7 +251,7 @@ check_status_insecure(FileCtx, QosEntryId) ->
 -spec add_possible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type(), [storage:id()]) -> fslogic_worker:provider_response().
 add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     AllTraverseReqs = qos_traverse_req:build_traverse_reqs(FileUuid, Storages),
@@ -279,7 +280,7 @@ add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
 -spec add_impossible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
 add_impossible_qos(FileCtx, QosExpression, ReplicasNum, EntryType) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     case qos_entry:create(SpaceId, FileUuid, QosExpression, ReplicasNum, EntryType) of

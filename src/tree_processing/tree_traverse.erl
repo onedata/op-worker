@@ -258,7 +258,7 @@ do_master_job(Job = #tree_traverse{
 ) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     Job2 = Job#tree_traverse{file_ctx = FileCtx2},
-    case file_meta:get_type(FileDoc) of
+    case file_meta:get_effective_type(FileDoc) of
         ?REGULAR_FILE_TYPE ->
             {ok, #{slave_jobs => [get_child_slave_job(Job2, FileCtx2)]}};
         ?DIRECTORY_TYPE ->
@@ -390,7 +390,7 @@ generate_children_jobs(MasterJob = #tree_traverse{child_dirs_job_generation_poli
     {SlaveJobsReversed, MasterJobsReversed} = lists:foldl(fun(ChildCtx, {SlavesAcc, MastersAcc} = Acc) ->
         try
             {ChildDoc, ChildCtx2} = file_ctx:get_file_doc(ChildCtx),
-            case file_meta:get_type(ChildDoc) of
+            case file_meta:get_effective_type(ChildDoc) of
                 ?DIRECTORY_TYPE ->
                     ChildMasterJob = get_child_master_job(MasterJob, ChildCtx2),
                     maybe_create_status_doc(ChildMasterJob, TaskId),
@@ -437,7 +437,7 @@ maybe_create_status_doc(#tree_traverse{
     file_ctx = FileCtx,
     track_subtree_status = true
 }, TaskId) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     tree_traverse_progress:create(TaskId, Uuid);
 maybe_create_status_doc(_, _) ->
     ok.
@@ -449,7 +449,7 @@ maybe_report_children_jobs_to_process(#tree_traverse{
     file_ctx = FileCtx,
     track_subtree_status = true
 }, TaskId, ChildrenCount, AllBatchesListed) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     tree_traverse_progress:report_children_to_process(TaskId, Uuid, ChildrenCount, AllBatchesListed);
 maybe_report_children_jobs_to_process(_, _, _, _) ->
     undefined.
