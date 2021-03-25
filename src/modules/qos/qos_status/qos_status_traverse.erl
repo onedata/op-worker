@@ -66,7 +66,7 @@ report_started(TraverseId, FileCtx) ->
         {true, FileCtx1} ->
             {ok, _} = qos_status_model:create(file_ctx:get_space_id_const(FileCtx), TraverseId,
                 % TODO VFS-7435 - Integrate hardlinks with QoS
-                file_ctx:get_uuid_const(FileCtx), ?QOS_STATUS_TRAVERSE_START_DIR),
+                file_ctx:get_logical_uuid_const(FileCtx), ?QOS_STATUS_TRAVERSE_START_DIR),
             FileCtx1;
         {false, FileCtx1} -> 
             % No need to create qos_status doc for traverse of single file. Because there is no 
@@ -86,7 +86,7 @@ report_finished(TraverseId, FileCtx) ->
     ChildrenDirs :: [file_meta:uuid()], ChildrenFiles :: [file_meta:uuid()], 
     BatchLastFilename :: file_meta:name()) -> ok.
 report_next_batch(TraverseId, FileCtx, ChildrenDirs, ChildrenFiles, BatchLastFilename) ->
-    {ok, _} = qos_status_model:update(TraverseId, file_ctx:get_uuid_const(FileCtx),
+    {ok, _} = qos_status_model:update(TraverseId, file_ctx:get_logical_uuid_const(FileCtx),
         fun(#qos_status{
             child_dirs_count = ChildDirsCount, 
             current_batch_last_filename = LN
@@ -117,7 +117,7 @@ report_finished_for_dir(TraverseId, FileCtx) ->
     ok | {error, term()}.
 report_finished_for_file(TraverseId, FileCtx, OriginalRootParentCtx) ->
     {ParentFileCtx, FileCtx1} = files_tree:get_parent(FileCtx, undefined),
-    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx1),
     ?ok_if_not_found(update_status_doc_and_handle_finished(TraverseId, ParentFileCtx, OriginalRootParentCtx,
         fun(#qos_status{files_list = FilesList} = Value) ->
             case lists:member(FileUuid, FilesList) of
@@ -154,7 +154,7 @@ report_file_deleted(FileCtx, QosEntryDoc, OriginalRootParentCtx) ->
 -spec is_traverse_finished_for_file(traverse:id(), file_ctx:ctx(),
     QosRootFileUuid :: file_meta:uuid(), IsDir :: boolean()) -> boolean().
 is_traverse_finished_for_file(TraverseId, FileCtx, QosRootFileUuid, _IsDir = true) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     case qos_status_model:get(TraverseId, Uuid) of
         {ok, _} ->
             false;
@@ -165,8 +165,8 @@ is_traverse_finished_for_file(TraverseId, FileCtx, QosRootFileUuid, _IsDir = tru
 is_traverse_finished_for_file(TraverseId, FileCtx, QosRootFileUuid, _IsDir = false) ->
     {FileName, _} = file_ctx:get_aliased_name(FileCtx, undefined),
     {ParentFileCtx, FileCtx1} = files_tree:get_parent(FileCtx, undefined),
-    Uuid = file_ctx:get_uuid_const(FileCtx1),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx1),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     case qos_status_model:get(TraverseId, ParentUuid) of
         {ok, #document{
             value = #qos_status{
@@ -190,7 +190,7 @@ is_parent_fulfilled(_TraverseId, _FileCtx, Uuid, QosRootFileUuid) when Uuid == Q
     false;
 is_parent_fulfilled(TraverseId, FileCtx, _Uuid, QosRootFileUuid) ->
     {ParentFileCtx, _FileCtx1} = files_tree:get_parent(FileCtx, undefined),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     has_traverse_link(TraverseId, ParentFileCtx)
         orelse (not has_qos_status_doc(TraverseId, ParentUuid)
         andalso  is_parent_fulfilled(TraverseId, ParentFileCtx, ParentUuid, QosRootFileUuid)).
@@ -222,7 +222,7 @@ has_qos_status_doc(TraverseId, Uuid) ->
 -spec update_status_doc_and_handle_finished(traverse:id(), file_ctx:ctx(), file_ctx:ctx() | undefined, 
     qos_status_model:diff()) -> ok | {error, term()}.
 update_status_doc_and_handle_finished(TraverseId, FileCtx, OriginalRootParentCtx, UpdateFun) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     case qos_status_model:update(TraverseId, Uuid, UpdateFun) of
         {ok, #document{value = #qos_status{
             child_dirs_count = 0, files_list = [], is_last_batch = true, is_start_dir = true}}
@@ -255,7 +255,7 @@ report_child_dir_traversed(TraverseId, FileCtx, OriginalRootParentCtx) ->
 -spec handle_traverse_finished_for_dir(traverse:id(), file_ctx:ctx(), link_strategy()) -> ok.
 handle_traverse_finished_for_dir(TraverseId, FileCtx, LinkStrategy) ->
     {Path, FileCtx1} = file_ctx:get_uuid_based_path(FileCtx),
-    Uuid = file_ctx:get_uuid_const(FileCtx1),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx1),
     SpaceId = file_ctx:get_space_id_const(FileCtx1),
     case LinkStrategy of
         add_link ->

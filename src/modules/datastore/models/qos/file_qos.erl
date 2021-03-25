@@ -276,7 +276,7 @@ clean_up(FileCtx, OriginalParentCtx) ->
             ok
     end,
     % TODO VFS-7435 - Integrate hardlinks with QoS
-    Uuid = file_ctx:get_uuid_const(FileCtx1),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx1),
     case OriginalParentCtx of
         undefined -> ok = delete(Uuid);
         _ -> ok

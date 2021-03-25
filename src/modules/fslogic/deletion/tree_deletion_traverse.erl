@@ -75,7 +75,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
         children_master_jobs_mode => async,
         use_listing_token => false,
         traverse_info => #{
-            root_guid => file_ctx:get_guid_const(RootDirCtx),
+            root_guid => file_ctx:get_logical_guid_const(RootDirCtx),
             emit_events => EmitEvents,
             % TODO VFS-7133 after extending file_meta with field for storing source parent
             % there will be no need to store below 2 values
@@ -172,8 +172,8 @@ delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
                 % get StorageFileId before location is deleted as it's stored in dir_location doc
                 {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
                 delete_req:delete(UserCtx, FileCtx3, not EmitEvents),
-                tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx3)),
-                case file_ctx:get_guid_const(FileCtx3) =:= RootGuid of
+                tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_logical_uuid_const(FileCtx3)),
+                case file_ctx:get_logical_guid_const(FileCtx3) =:= RootGuid of
                     true ->
                         case IsStorageFileCreated of
                             true -> deletion_marker:remove_by_name(RootOriginalParentUuid, filename:basename(StorageFileId));
@@ -221,6 +221,6 @@ file_processed(FileCtx, UserCtx, TaskId, TraverseInfo = #{root_original_parent_u
         _ ->
             ok
     end,
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
     delete_dir_if_subtree_processed(ParentStatus, ParentFileCtx, user_ctx:get_user_id(UserCtx), TaskId, TraverseInfo).

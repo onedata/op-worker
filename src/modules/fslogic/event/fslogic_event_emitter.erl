@@ -88,7 +88,7 @@ emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, ExcludedSes
             ok;
         {#document{}, FileCtx2} ->
             case subscription_manager:get_attr_event_subscribers(
-                file_ctx:get_guid_const(FileCtx2), #{file_ctx => FileCtx2}, SizeChanged) of
+                file_ctx:get_logical_guid_const(FileCtx2), #{file_ctx => FileCtx2}, SizeChanged) of
                 {
                     #event_subscribers{
                         subscribers = WithoutStatusSessIds,
@@ -224,7 +224,7 @@ emit_file_locations_changed(LocationChangesDescription, ExcludedSessions) ->
 -spec emit_file_perm_changed(file_ctx:ctx()) -> ok | {error, Reason :: term()}.
 emit_file_perm_changed(FileCtx) ->
     event:emit(#file_perm_changed_event{
-        file_guid = file_ctx:get_guid_const(FileCtx)
+        file_guid = file_ctx:get_logical_guid_const(FileCtx)
     }).
 
 %%--------------------------------------------------------------------
@@ -235,7 +235,7 @@ emit_file_perm_changed(FileCtx) ->
 -spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_removed(FileCtx, ExcludedSessions) ->
-    Ans = event:emit_to_filtered_subscribers(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
+    Ans = event:emit_to_filtered_subscribers(#file_removed_event{file_guid = file_ctx:get_logical_guid_const(FileCtx)},
         #{file_ctx => FileCtx}, ExcludedSessions),
     {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case file_meta:check_name_and_get_conflicting_files(Doc) of
@@ -364,7 +364,7 @@ emit_file_attr_changed_with_replication_status_internal(FileCtx, WithoutStatusSe
 -spec emit_file_renamed(file_ctx:ctx(), fslogic_worker:file_guid(), fslogic_worker:file_guid(),
     file_meta:name(), file_meta:name(), [session:id()]) -> ok | {error, Reason :: term()}.
 emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclude) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
     {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     ProviderId = file_meta:get_provider_id(Doc),
     {ok, FileUuid} = file_meta:get_uuid(Doc),
@@ -420,7 +420,7 @@ emit_suffixes(ConflictingFiles, {parent_guid, ParentGuid}) ->
         try
             {_, SpaceId} = file_id:unpack_guid(ParentGuid),
             FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
-            Guid = file_ctx:get_guid_const(FileCtx),
+            Guid = file_ctx:get_logical_guid_const(FileCtx),
 
             event:emit_to_filtered_subscribers(#file_renamed_event{top_entry = #file_renamed_entry{
                 old_guid = Guid,
@@ -435,7 +435,7 @@ emit_suffixes(ConflictingFiles, {parent_guid, ParentGuid}) ->
 emit_suffixes(Files, {ctx, FileCtx}) ->
     try
         {ParentCtx, _} = files_tree:get_parent(FileCtx, user_ctx:new(?ROOT_USER_ID)),
-        emit_suffixes(Files, {parent_guid, file_ctx:get_guid_const(ParentCtx)})
+        emit_suffixes(Files, {parent_guid, file_ctx:get_logical_guid_const(ParentCtx)})
     catch
         _:_ -> ok % Parent not fully synchronized
     end.

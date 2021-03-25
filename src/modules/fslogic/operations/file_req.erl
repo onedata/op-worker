@@ -100,7 +100,7 @@ make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
     file_ctx:assert_not_trash_dir_const(TargetFileCtx0, Name),
     % TODO VFS-7439 - Investigate eaccess error when creating hardlink to hardlink if next line is deletred
     % Check permissions on original target
-    TargetFileCtx1 = file_ctx:ensure_effective(TargetFileCtx0),
+    TargetFileCtx1 = file_ctx:ensure_based_on_referenced_guid(TargetFileCtx0),
 
     TargetFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, TargetFileCtx1,
@@ -283,7 +283,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             ?error_stacktrace("create_file_insecure error: ~p:~p",
                 [Error, Reason]),
             sd_utils:unlink(FileCtx, UserCtx),
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             fslogic_location_cache:delete_local_location(FileUuid),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
@@ -310,7 +310,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 
     case StorageFileCreated of
         false ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             UpdateAns = fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
                 (#file_location{storage_file_created = true}) ->
                     {error, already_created};
@@ -363,7 +363,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         Ans#fuse_response{fuse_response = FileAttr2}
     catch
         Error:Reason ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             fslogic_location_cache:delete_local_location(FileUuid),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
@@ -385,8 +385,8 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
                 {false, _} -> ok
             end,
 
-            FileUuid = file_ctx:get_uuid_const(TargetFileCtx),
-            ParentUuid = file_ctx:get_uuid_const(TargetParentFileCtx3),
+            FileUuid = file_ctx:get_logical_uuid_const(TargetFileCtx),
+            ParentUuid = file_ctx:get_logical_uuid_const(TargetParentFileCtx3),
             SpaceId = file_ctx:get_space_id_const(TargetParentFileCtx3),
             Doc = file_meta_hardlinks:new_doc(FileUuid, Name, ParentUuid, SpaceId),
             {ok, #document{key = LinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
@@ -422,7 +422,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
     case file_ctx:is_dir(ParentFileCtx2) of
         {true, ParentFileCtx3} ->
-            ParentUuid = file_ctx:get_uuid_const(ParentFileCtx3),
+            ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx3),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
             Owner = user_ctx:get_user_id(UserCtx),
             Doc = file_meta_symlinks:new_doc(Name, ParentUuid, SpaceId, Owner, Link),
@@ -480,7 +480,7 @@ get_file_location_insecure(UserCtx, FileCtx) ->
             blocks = Blocks,
             file_id = FileId
     }}, FileCtx4} = file_ctx:get_or_create_local_file_location_doc(FileCtx3),
-    FileUuid = file_ctx:get_uuid_const(FileCtx4),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx4),
     SpaceId = file_ctx:get_space_id_const(FileCtx4),
 
     #fuse_response{
@@ -593,12 +593,12 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
             throw(?EROFS);
         throw:?ENOENT ->
             % this error is thrown on race between opening the file and deleting it on storage
-            ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_uuid_const(FileCtx2)]),
+            ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_logical_uuid_const(FileCtx2)]),
             check_and_register_release(FileCtx2, SessId, HandleId0),
             throw(?ENOENT);
         Error:Reason ->
             ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
-                [Error, Reason, file_ctx:get_uuid_const(FileCtx2)]),
+                [Error, Reason, file_ctx:get_logical_uuid_const(FileCtx2)]),
             check_and_register_release(FileCtx2, SessId, HandleId0),
             throw(Reason)
     end.
@@ -615,7 +615,7 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
 maybe_open_on_storage(_FileCtx, _SessId, _Flag, true, _) ->
     ok; % Files are not open on server-side when client uses directIO
 maybe_open_on_storage(FileCtx, SessId, Flag, _DirectIO, HandleId) ->
-    Node = read_write_req:get_proxyio_node(file_ctx:get_uuid_const(FileCtx)),
+    Node = read_write_req:get_proxyio_node(file_ctx:get_logical_uuid_const(FileCtx)),
     case rpc:call(Node, ?MODULE, open_on_storage, [FileCtx, SessId, Flag, HandleId]) of
         ok -> ok;
         {error, Reason} ->
@@ -719,7 +719,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     case file_ctx:is_dir(ParentFileCtx) of
         {true, ParentFileCtx2} ->
             Owner = user_ctx:get_user_id(UserCtx),
-            ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
+            ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx2),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
             File = file_meta:new_doc(Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId),
             {ok, #document{key = FileUuid}} = file_meta:create({uuid, ParentUuid}, File),
@@ -831,7 +831,7 @@ open_file_with_extended_info_for_rdwr(UserCtx, FileCtx0) ->
     boolean(), binary()) -> #fuse_response{}.
 fsync_insecure(UserCtx, FileCtx, _DataOnly, undefined) ->
     Ans = flush_event_queue(UserCtx, FileCtx),
-    case fslogic_location_cache:force_flush(file_ctx:get_uuid_const(FileCtx)) of
+    case fslogic_location_cache:force_flush(file_ctx:get_logical_uuid_const(FileCtx)) of
         ok ->
             Ans;
         _ ->
@@ -854,7 +854,7 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
     end,
 
     Ans = flush_event_queue(UserCtx, FileCtx),
-    case fslogic_location_cache:force_flush(file_ctx:get_uuid_const(FileCtx)) of
+    case fslogic_location_cache:force_flush(file_ctx:get_logical_uuid_const(FileCtx)) of
         ok ->
             Ans;
         _ ->
@@ -873,7 +873,7 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
 -spec flush_event_queue(user_ctx:ctx(), file_ctx:ctx()) -> #fuse_response{}.
 flush_event_queue(UserCtx, FileCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case lfm_event_controller:flush_event_queue(SessId, oneprovider:get_id(),
         FileUuid) of
         ok ->

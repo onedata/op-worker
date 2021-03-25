@@ -57,12 +57,12 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
 -spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
-    ParentGuid = file_ctx:get_guid_const(FileCtx0),
+    ParentGuid = file_ctx:get_logical_guid_const(FileCtx0),
     {ChildrenCtxs, ExtendedInfo, FileCtx1} = get_children_ctxs(UserCtx, FileCtx0, ListOpts),
     ChildrenNum = length(ChildrenCtxs),
 
     ChildrenLinks = lists:filtermap(fun({Num, ChildCtx}) ->
-        ChildGuid = file_ctx:get_guid_const(ChildCtx),
+        ChildGuid = file_ctx:get_logical_guid_const(ChildCtx),
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         case Num == 1 orelse Num == ChildrenNum of
             true ->
@@ -184,7 +184,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx3 = file_ctx:assert_is_dir(ParentFileCtx2),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
     Owner = user_ctx:get_user_id(UserCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx3),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx3),
     File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
     {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File),
     FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
@@ -206,7 +206,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         }
     catch
         Error:Reason ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)

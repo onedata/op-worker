@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module is responsible for handing requests operating on file access
 %%% control lists.
-%%% Note: this module operates on effective uuids - all operations on hardlinks
+%%% Note: this module operates on referenced uuids - all operations on hardlinks
 %%% are treated as operations on original file. Thus, acls are shared
 %%% between hardlinks and original file.
 %%% @end
@@ -88,7 +88,7 @@ remove_acl(UserCtx, FileCtx0) ->
 -spec get_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_acl_insecure(_UserCtx, FileCtx) ->
-    {Acl, _} = file_ctx:get_acl(file_ctx:ensure_effective(FileCtx)),
+    {Acl, _} = file_ctx:get_acl(file_ctx:ensure_based_on_referenced_guid(FileCtx)),
     % ACLs are kept in database without names, as they might change.
     % Resolve the names here.
     #provider_response{
@@ -118,7 +118,7 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
     % ACLs are kept in database without names, as they might change.
     % Strip the names here.
     AclWithoutNames = acl:strip_names(Acl),
-    FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     case file_meta:update_acl(FileUuid, AclWithoutNames) of
         ok ->
             ok = permissions_cache:invalidate(),
@@ -138,7 +138,7 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
 -spec remove_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 remove_acl_insecure(_UserCtx, FileCtx) ->
-    FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     case file_meta:update_acl(FileUuid, []) of
         ok ->
             ok = permissions_cache:invalidate(),

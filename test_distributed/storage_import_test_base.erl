@@ -1311,7 +1311,7 @@ delete_file_reimport_race_test(Config, StorageType) ->
     TestProcess = self(),
     ok = test_utils:mock_new(W1, storage_import_engine),
     ok = test_utils:mock_expect(W1, storage_import_engine, check_location_and_maybe_sync, fun(StorageFileCtx, FileCtx, Info) ->
-        Guid = file_ctx:get_guid_const(FileCtx),
+        Guid = file_ctx:get_logical_guid_const(FileCtx),
         case Guid =:= FileGuid of
             true -> block_importing_process(TestProcess);
             false -> ok
@@ -1466,7 +1466,7 @@ delete_opened_file_reimport_race_test(Config, StorageType) ->
     TestProcess = self(),
     ok = test_utils:mock_new(W1, storage_import_engine),
     ok = test_utils:mock_expect(W1, storage_import_engine, check_location_and_maybe_sync, fun(StorageFileCtx, FileCtx, Info) ->
-        Guid = file_ctx:get_guid_const(FileCtx),
+        Guid = file_ctx:get_logical_guid_const(FileCtx),
         case Guid =:= FileGuid of
             true -> block_importing_process(TestProcess);
             false -> ok

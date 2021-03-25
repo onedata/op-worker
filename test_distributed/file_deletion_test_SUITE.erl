@@ -460,7 +460,7 @@ init_per_testcase(Case, Config) when
     test_utils:mock_expect(Worker, fslogic_delete, handle_release_of_deleted_file,
         fun(FileCtx, _RemovalStatus) ->
             true = file_ctx:is_file_ctx_const(FileCtx),
-            ?FILE_UUID = file_ctx:get_uuid_const(FileCtx),
+            ?FILE_UUID = file_ctx:get_logical_uuid_const(FileCtx),
             ok
         end),
 

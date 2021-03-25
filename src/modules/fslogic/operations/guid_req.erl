@@ -78,7 +78,7 @@ get_file_path(UserCtx, FileCtx0) ->
 -spec resolve_guid_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 resolve_guid_insecure(_UserCtx, FileCtx) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #guid{guid = Guid}

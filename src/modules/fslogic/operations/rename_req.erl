@@ -70,7 +70,7 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     no_return() | #fuse_response{}.
 rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx), % TODO VFS-7446 - rename vs hardlinks
+    TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx), % TODO VFS-7446 - rename vs hardlinks
     {SourceFileType, SourceFileCtx2} = get_type(SourceFileCtx),
     {TargetFileType, TargetGuid} =
         remotely_get_child_type(SessId, TargetParentGuid, TargetName),
@@ -98,8 +98,8 @@ rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) -
     no_return() | #fuse_response{}.
 copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
-    TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
+    SourceGuid = file_ctx:get_logical_guid_const(SourceFileCtx),
+    TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx),
     case file_copy:copy(SessId, SourceGuid, TargetParentGuid, TargetName) of
         {ok, NewCopiedGuid, ChildEntries} ->
             case lfm:rm_recursive(SessId, {guid, SourceGuid}) of
@@ -154,7 +154,7 @@ rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 
     case {SourceEqualsTarget, MoveIntoItself} of
         {true, _} ->
-            rename_into_itself(file_ctx:get_guid_const(SourceFileCtx3));
+            rename_into_itself(file_ctx:get_logical_guid_const(SourceFileCtx3));
         {false, true} ->
             #fuse_response{
                 status = #status{code = ?EINVAL}
@@ -313,7 +313,7 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx0, FileType, TargetParentFileC
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(),
     TargetGuid :: undefined | fslogic_worker:file_guid()) -> #fuse_response{}.
 rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid) ->
-    SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
+    SourceGuid = file_ctx:get_logical_guid_const(SourceFileCtx),
     {ParentDoc, TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
     {SourceParentFileCtx, SourceFileCtx3} = files_tree:get_parent(SourceFileCtx2, UserCtx),
@@ -365,7 +365,7 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
 rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, TheSameType, TheSameType, TargetFileCtx
 ) ->
-    TargetGuid = file_ctx:get_guid_const(TargetFileCtx),
+    TargetGuid = file_ctx:get_logical_guid_const(TargetFileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
 
     {Storage, SourceFileCtx1} = file_ctx:get_storage(SourceFileCtx),
@@ -462,7 +462,7 @@ rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourceFileCtx3, TargetFileId} =
         rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, false),
     replica_updater:rename(SourceFileCtx, TargetFileId),
-    FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
+    FileGuid = file_ctx:get_logical_guid_const(SourceFileCtx3),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -483,7 +483,7 @@ rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourceFileCtx3, TargetFileId} =
         rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, true),
     ChildEntries = rename_child_locations(UserCtx, SourceFileCtx3, TargetFileId),
-    FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
+    FileGuid = file_ctx:get_logical_guid_const(SourceFileCtx3),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -506,7 +506,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     {TargetParentFileId, TargetParentCtx} = file_ctx:get_storage_file_id(TargetParentCtx0),
     TargetFileId = filename:join(TargetParentFileId, TargetName),
 
-    FileUuid = file_ctx:get_uuid_const(SourceFileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(SourceFileCtx),
     {ParentDoc, TargetParentCtx2} = file_ctx:get_file_doc(TargetParentCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
     {SourceParentFileCtx, SourceFileCtx3} = files_tree:get_parent(SourceFileCtx2, UserCtx),
@@ -558,7 +558,7 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
     ParentStorageFileId :: helpers:file_id(), file_meta:list_opts(), [#file_renamed_entry{}]) ->
     [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, ChildEntries) ->
-    ParentGuid = file_ctx:get_guid_const(ParentFileCtx),
+    ParentGuid = file_ctx:get_logical_guid_const(ParentFileCtx),
     {Children, ListExtendedInfo, ParentFileCtx2} = files_tree:get_children(ParentFileCtx, UserCtx, ListOpts),
     NewChildEntries = lists:flatten(lists:map(fun(ChildCtx) ->
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
@@ -568,7 +568,7 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, Ch
                 rename_child_locations(UserCtx, ChildCtx3, ChildStorageFileId);
             {false, ChildCtx3} ->
                 ok = replica_updater:rename(ChildCtx3, ChildStorageFileId),
-                ChildGuid = file_ctx:get_guid_const(ChildCtx3),
+                ChildGuid = file_ctx:get_logical_guid_const(ChildCtx3),
                 #file_renamed_entry{
                     new_name = ChildName,
                     new_parent_guid = ParentGuid,
@@ -647,7 +647,7 @@ remotely_get_child_type(SessId, ParentGuid, ChildName) ->
     file_meta:name()) -> ok | no_return().
 on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFileCtx, TargetName) ->
     {PrevName, SourceFileCtx2} = file_ctx:get_aliased_name(SourceFileCtx, UserCtx),
-    ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
+    ParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx),
     CurrentTime = global_clock:timestamp_seconds(),
     ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
     ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime),

@@ -255,7 +255,7 @@ get_including_deleted(Uuid) ->
             % representing hardlink and document representing target file
             case datastore_model:get(?CTX#{include_deleted => true}, Uuid) of
                 {ok, LinkDoc} ->
-                    FileUuid = fslogic_uuid:ensure_effective_uuid(Uuid),
+                    FileUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
                     case datastore_model:get(?CTX#{include_deleted => true}, FileUuid) of
                         {ok, FileDoc} -> file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, FileDoc);
                         Error2 -> Error2
@@ -640,7 +640,7 @@ setup_onedata_user(UserId, EffSpaces) ->
 %%--------------------------------------------------------------------
 -spec add_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()}  | {error, term()}.
 add_share(FileCtx, ShareId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
         {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
     end).
@@ -653,7 +653,7 @@ add_share(FileCtx, ShareId) ->
 %%--------------------------------------------------------------------
 -spec remove_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()} | {error, term()}.
 remove_share(FileCtx, ShareId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
         Result = lists:foldl(fun(ShId, {IsMember, Acc}) ->
             case ShareId == ShId of

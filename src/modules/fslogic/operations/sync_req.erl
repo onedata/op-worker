@@ -119,7 +119,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     Range = #file_block{offset = Offset, size = Size}, Prefetch, Priority
 ) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
 
     {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Range,
         Prefetch, undefined, Priority),
@@ -233,7 +233,7 @@ schedule_file_replication_insecure(
     Callback, ViewName, QueryViewParams
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx), % TODO VFS-7443 - effective or not? - test for hardlinks
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx), % TODO VFS-7443 - effective or not? - test for hardlinks
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
         TargetProviderId, Callback, ViewName, QueryViewParams),
     #provider_response{

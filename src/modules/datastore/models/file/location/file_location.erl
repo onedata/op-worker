@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc Model for holding files' location data.
-%%% Note: file_location should operate always on effective uuids. Thus, it is only permitted
+%%% Note: file_location should operate always on referenced uuids. Thus, it is only permitted
 %%% to generate document's id using local_id/1 and id/2 functions. Moreover, the document
 %%% should be modified only within replica_synchronizer process.
 %%% @end
@@ -71,7 +71,7 @@ local_id(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec id(file_meta:uuid(), od_provider:id()) -> file_location:id().
 id(Uuid, ProviderId) ->
-    FileUuid = fslogic_uuid:ensure_effective_uuid(Uuid),
+    FileUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
     datastore_key:build_adjacent(ProviderId, FileUuid).
 
 

@@ -154,7 +154,7 @@ chown_file(FileCtx, OwnerId) ->
 -spec defer_chown(file_ctx:ctx(), od_user:id()) -> ok | {error, term()}.
 defer_chown(FileCtx, UserId) ->
     % TODO VFS-7442 - test with hardlinks
-    FileGuid = file_ctx:get_effective_guid_const(FileCtx),
+    FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
     UpdateFun = fun(FTC = #files_to_chown{file_guids = Guids}) ->
         case lists:member(FileGuid, Guids) of
             true -> {ok, FTC};

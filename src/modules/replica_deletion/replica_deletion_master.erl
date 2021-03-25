@@ -86,7 +86,7 @@
 
 % message types
 -define(DELETION(FileUuid, ProviderId, Blocks, Version), #deletion{
-    uuid = FileUuid, % TODO VFS-7443 - maybe use effective uuid?
+    uuid = FileUuid, % TODO VFS-7443 - maybe use referenced uuid?
     supporting_provider = ProviderId,
     blocks = Blocks,
     version = Version
@@ -190,7 +190,7 @@ find_supporter_and_prepare_deletion_request(FileCtx) ->
             undefined;
         {[{Provider, Blocks} | _], FileCtx2} ->
             % todo VFS-4628 handle retries to other providers
-            FileUuid = file_ctx:get_uuid_const(FileCtx2),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
             {LocalLocation, _} = file_ctx:get_local_file_location_doc(FileCtx2, false),
             VV = file_location:get_version_vector(LocalLocation),
             prepare_deletion_request(FileUuid, Provider, Blocks, VV)

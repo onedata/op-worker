@@ -845,7 +845,7 @@ remote_change_of_size_should_notify_clients(Config) ->
 
     % then
     TheFileCtxWithGuid = fun(FileCtx) ->
-        FileGuid =:= file_ctx:get_guid_const(FileCtx)
+        FileGuid =:= file_ctx:get_logical_guid_const(FileCtx)
     end,
     ?assert(rpc:call(W1, meck, called, [fslogic_event_emitter, emit_file_attr_changed,
         [meck:is(TheFileCtxWithGuid), []]])),
