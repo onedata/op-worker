@@ -114,7 +114,7 @@ process_row(Row, #{
             autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo)
     catch
         Error:Reason ->
-            Uuid = file_ctx:get_uuid_const(FileCtx),
+            Uuid = file_ctx:get_logical_uuid_const(FileCtx),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo),
             ?error_stacktrace("Filtering preselected file with uuid ~p in space ~p failed due to ~p:~p",

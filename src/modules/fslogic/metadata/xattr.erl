@@ -84,7 +84,7 @@ set(UserCtx, FileCtx0, XattrName, XattrValue, Create, Replace) ->
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
     custom_metadata:set_xattr(
-        file_ctx:get_uuid_const(FileCtx1),
+        file_ctx:get_logical_uuid_const(FileCtx1),
         file_ctx:get_space_id_const(FileCtx1),
         XattrName, XattrValue, Create, Replace
     ).
@@ -97,7 +97,7 @@ remove(UserCtx, FileCtx0, XattrName) ->
         UserCtx, FileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
-    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx1),
     custom_metadata:remove_xattr(FileUuid, XattrName).
 
 
@@ -156,7 +156,7 @@ list_xattrs_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
 -spec list_direct_xattrs(file_ctx:ctx()) ->
     {ok, [custom_metadata:name()]} | {error, term()}.
 list_direct_xattrs(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     custom_metadata:list_xattrs(FileUuid).
 
 
@@ -191,7 +191,7 @@ get_xattr(UserCtx, FileCtx0, XattrName) ->
         UserCtx, FileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
-    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx1),
     custom_metadata:get_xattr(FileUuid, XattrName).
 
 

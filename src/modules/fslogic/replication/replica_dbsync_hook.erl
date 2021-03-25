@@ -107,7 +107,7 @@ update_outdated_local_location_replica(FileCtx,
     }}
 ) ->
     FirstLocalBlocks = fslogic_location_cache:get_blocks(LocalDoc, #{count => 2}),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     ?debug("Updating outdated replica of file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
@@ -144,7 +144,7 @@ reconcile_replicas(FileCtx,
         }}
 ) ->
     LocalBlocks = fslogic_location_cache:get_blocks(LocalDoc),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     ?debug("Conflicting changes detected on file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
     ExternalChangesNum = version_vector:version_diff(LocalDoc, ExternalDoc),
     LocalChangesNum = version_vector:version_diff(ExternalDoc, LocalDoc),

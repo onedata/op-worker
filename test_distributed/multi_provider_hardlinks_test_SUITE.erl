@@ -315,7 +315,7 @@ verify_link_times_and_location_documents(Worker1, Worker2, FileUuid, LinkUuid) -
     ?assertMatch({ok, #document{key = FileLocation2Uuid}}, ?GET_LOCATION(Worker2, LinkUuid)),
 
     % Check if times and file_location documents have not been created for link uuid,
-    % Use datastore api to skip usage of effective key inside modules
+    % Use datastore api to skip usage of referenced key inside modules
     TimesCtx = #{model => times},
     FileLocationCtx = #{model => file_location},
     ?assertEqual({error, not_found}, rpc:call(Worker1, datastore_model, get, [TimesCtx, LinkUuid])),

@@ -64,7 +64,7 @@ new_handle(SessionId, FileCtx) ->
     {handle() | undefined, file_ctx:ctx()}.
 new_handle(SessionId, FileCtx, Generate) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx), % TODO VFS-7447 - should we use effective uuid?
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx), % TODO VFS-7447 - should we use referenced uuid?
     {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
     case file_ctx:get_storage_file_id(FileCtx2, Generate) of
         {undefined, FileCtx3} ->
@@ -94,7 +94,7 @@ new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId) ->
 new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId, ShareId) ->
     #sd_handle{
         file = StorageFileId,
-        file_uuid = FileUuid, % TODO VFS-7447 - should we use effective uuid?
+        file_uuid = FileUuid, % TODO VFS-7447 - should we use referenced uuid?
         session_id = SessionId,
         space_id = SpaceId,
         storage_id = StorageId,

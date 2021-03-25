@@ -105,7 +105,7 @@ delete_hardlink_locally(UserCtx, FileCtx, Silent) ->
         no_references_left ->
             remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS),
             % File meta for original file has not been deleted because hardlink existed - delete it now
-            delete_effective_file_meta(FileCtx);
+            delete_referenced_file_meta(FileCtx);
         has_at_least_one_reference ->
             FileCtx2 = delete_parent_link(FileCtx, UserCtx),
             delete_file_meta(FileCtx2),
@@ -211,14 +211,14 @@ cleanup_opened_files() ->
 
 -spec deregister_link_and_inspect_references(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
 deregister_link_and_inspect_references(FileCtx) ->
-    LinkUuid = file_ctx:get_uuid_const(FileCtx),
-    FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
+    LinkUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     {ok, ReferencesPresence} = file_meta_hardlinks:deregister(FileUuid, LinkUuid), % VFS-7444 - maybe update doc in FileCtx
     ReferencesPresence.
 
 -spec inspect_references(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
 inspect_references(FileCtx) ->
-    FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     file_meta_hardlinks:inspect_references(FileUuid).
 
 %%--------------------------------------------------------------------
@@ -236,7 +236,7 @@ remove_or_handle_opened_file(UserCtx, FileCtx, Silent, DocsDeletionScope) ->
                 ok = remove_file(FileCtx2, UserCtx, true, ?SPEC(?SINGLE_STEP_DEL, DocsDeletionScope)),
                 maybe_emit_event(FileCtx2, UserCtx, Silent);
             {false, FileCtx2} ->
-                FileUuid = file_ctx:get_uuid_const(FileCtx2),
+                FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
                 case file_handles:is_file_opened(FileUuid) of
                     true ->
                         handle_opened_file(FileCtx2, UserCtx, DocsDeletionScope);
@@ -258,7 +258,7 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
     FileCtx3 = custom_handle_opened_file(FileCtx2, UserCtx, DocsDeletionScope, HandlingMethod),
     RemovalStatus = docs_deletion_scope_to_removal_status(DocsDeletionScope),
     ok = file_handles:mark_to_remove(FileCtx3, RemovalStatus),
-    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
     % Check once more to prevent race with last handle being closed
     case file_handles:is_file_opened(FileUuid) of
         true ->
@@ -475,7 +475,7 @@ delete_parent_link(FileCtx, UserCtx) ->
 maybe_delete_parent_link(FileCtx, _UserCtx, true) ->
     FileCtx;
 maybe_delete_parent_link(FileCtx, UserCtx, false) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     Scope = file_ctx:get_space_id_const(FileCtx),
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx, UserCtx),
     {ParentGuid, FileCtx4} = files_tree:get_parent_guid_if_not_root_dir(FileCtx3, UserCtx),
@@ -492,9 +492,9 @@ delete_file_meta(FileCtx) ->
     ok = file_meta:delete(FileDoc),
     FileCtx2.
 
--spec delete_effective_file_meta(file_ctx:ctx()) -> file_ctx:ctx().
-delete_effective_file_meta(FileCtx) ->
-    delete_file_meta(file_ctx:ensure_effective(FileCtx)).
+-spec delete_referenced_file_meta(file_ctx:ctx()) -> file_ctx:ctx().
+delete_referenced_file_meta(FileCtx) ->
+    delete_file_meta(file_ctx:ensure_based_on_referenced_guid(FileCtx)).
 
 
 -spec update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
@@ -555,7 +555,7 @@ get_open_file_handling_method(FileCtx) ->
 -spec maybe_rename_storage_file(file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, ?ENOENT}.
 maybe_rename_storage_file(FileCtx) ->
     {SourceFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    FileGuid = file_ctx:get_effective_guid_const(FileCtx),
+    FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
     TargetFileId = filename:join(?DELETED_OPENED_FILES_DIR, FileGuid),
     case rename_storage_file(FileCtx2, SourceFileId, TargetFileId) of
         {error, ?ENOENT} ->
@@ -583,7 +583,7 @@ rename_storage_file(FileCtx, SourceFileId, TargetFileId) ->
     % ensure SourceFileId is set in FileCtx
     FileCtx2 = file_ctx:set_file_id(FileCtx, SourceFileId),
     {SDHandle, FileCtx3} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx2 ),
-    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
     case init_file_location_rename(FileUuid, TargetFileId) of
         {ok, #document{value = NewFL}} ->
             case storage_driver:mv(SDHandle, TargetFileId) of
@@ -638,8 +638,8 @@ remove_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
 
 -spec remove_synced_associated_documents(file_ctx:ctx()) -> ok.
 remove_synced_associated_documents(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
     ok = transferred_file:clean_up(FileGuid),
@@ -649,7 +649,7 @@ remove_synced_associated_documents(FileCtx) ->
 -spec remove_local_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id()) -> ok.
 remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
     ok = file_qos:clean_up(FileCtx),
     ok = file_meta_posthooks:delete(FileUuid),
@@ -664,7 +664,7 @@ remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
 %%--------------------------------------------------------------------
 -spec remove_file_handles(file_ctx:ctx()) -> ok.
 remove_file_handles(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     ok = file_handles:delete(FileUuid).
 
 
@@ -680,7 +680,7 @@ docs_deletion_scope_to_removal_status(?ALL_DOCS) -> ?LOCAL_REMOVE.
 
 -spec delete_location(file_ctx:ctx()) -> file_ctx:ctx().
 delete_location(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
     case IsDir of
         true ->
@@ -699,7 +699,7 @@ delete_location(FileCtx) ->
 log_storage_file_deletion_error(FileCtx, Error, IncludeStacktrace) ->
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-    FileGuid = file_ctx:get_guid_const(FileCtx3),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx3),
     Format = "Deleting file ~s on storage ~s with guid ~s failed due to ~p.",
     Args = [StorageFileId, StorageId, FileGuid, Error],
     case IncludeStacktrace of

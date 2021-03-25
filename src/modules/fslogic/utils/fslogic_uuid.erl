@@ -6,8 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Conversions between paths and uuids and operations on effective uuids.
-%%% Effective uuid is term connected with links. It is uuid of file on
+%%% Conversions between paths and uuids and operations on referenced uuids.
+%%% Referenced uuid is term connected with links. It is uuid of file on
 %%% which link points (or simply file uuid for regular file).
 %%% @end
 %%%--------------------------------------------------------------------
@@ -29,7 +29,7 @@
 -export([is_share_root_dir_uuid/1, is_share_root_dir_guid/1]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
--export([gen_link_uuid/1, is_link_uuid/1, ensure_effective_uuid/1]).
+-export([gen_link_uuid/1, is_link_uuid/1, ensure_referenced_uuid/1]).
 -export([gen_symlink_uuid/0, is_symlink_uuid/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
@@ -230,15 +230,15 @@ is_link_uuid(<<?LINK_UUID_PREFIX, _/binary>>) -> true;
 is_link_uuid(_) -> false.
 
 %%--------------------------------------------------------------------
-%% @doc Returns effective uuid
+%% @doc Returns referenced uuid
 %% (file uuid for regular file or uuid of file on which link points).
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_effective_uuid(file_meta:uuid() | file_meta_hardlinks:link()) -> file_meta:uuid().
-ensure_effective_uuid(<<?LINK_UUID_PREFIX, UuidTail/binary>>) ->
+-spec ensure_referenced_uuid(file_meta:uuid() | file_meta_hardlinks:link()) -> file_meta:uuid().
+ensure_referenced_uuid(<<?LINK_UUID_PREFIX, UuidTail/binary>>) ->
     [_, FileUuid] = binary:split(UuidTail, <<?LINK_UUID_SEPARATOR>>),
     FileUuid;
-ensure_effective_uuid(Uuid) ->
+ensure_referenced_uuid(Uuid) ->
     Uuid.
 
 

@@ -306,7 +306,7 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 -spec chmod_attrs_only_insecure(file_ctx:ctx(),
     fslogic_worker:posix_permissions()) -> ok | {error, term()}.
 chmod_attrs_only_insecure(FileCtx, Mode) ->
-    FileUuid = file_ctx:get_effective_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     ok = file_meta:update_mode(FileUuid, Mode),
     ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx),
@@ -321,7 +321,7 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
 ) ->
     fslogic_worker:fuse_response().
 update_protection_flags_insecure(FileCtx, FlagsToSet, FlagsToUnset) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     ok = file_meta:update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset),
 
     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -345,7 +345,7 @@ update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     % TODO VFS-7139: This is temporary solution to be removed after fixing oneclient
     SessId = user_ctx:get_session_id(UserCtx),
     catch lfm_event_controller:flush_event_queue(
-        SessId, oneprovider:get_id(), file_ctx:get_uuid_const(FileCtx)),
+        SessId, oneprovider:get_id(), file_ctx:get_logical_uuid_const(FileCtx)),
 
     TimesDiff1 = fun
         (Times = #times{}) when ATime == undefined -> Times;
@@ -382,7 +382,7 @@ update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
         file_ctx:ctx()
     }.
 resolve_file_attr(UserCtx, FileCtx, Opts) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     {_FileUuid, _SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
 
     {FileDoc, FileCtx2} = case maps:get(allow_deleted_files, Opts, false) of

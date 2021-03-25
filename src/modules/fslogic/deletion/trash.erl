@@ -64,7 +64,7 @@ create(SpaceId) ->
 move_to_trash(FileCtx, UserCtx) ->
     file_ctx:assert_not_special_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     {ParentGuid, FileCtx2} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     FileCtx3 = add_deletion_marker_if_applicable(ParentUuid, FileCtx2),
@@ -98,7 +98,7 @@ schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUu
             {ok, TaskId};
         {error, _} = Error ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
-            Guid = file_ctx:get_guid_const(FileCtx),
+            Guid = file_ctx:get_logical_guid_const(FileCtx),
             ?error("Unable to start deletion of ~s from trash in space ~s due to ~p.", [Guid, SpaceId, Error]),
             Error
     end.

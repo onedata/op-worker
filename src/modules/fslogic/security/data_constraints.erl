@@ -219,7 +219,7 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
     paths = AllowedPaths,
     guids = GuidConstraints
 }, AncestorPolicy) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx0),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx0),
     SerializedToken = get_access_token(UserCtx),
     CacheKey = {data_constraint, SerializedToken, FileGuid},
     case permissions_cache:check_permission(CacheKey) of
@@ -495,7 +495,7 @@ get_canonical_path(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_file_bare_guid(file_ctx:ctx()) -> file_id:file_guid().
 get_file_bare_guid(FileCtx) ->
-    file_id:share_guid_to_guid(file_ctx:get_guid_const(FileCtx)).
+    file_id:share_guid_to_guid(file_ctx:get_logical_guid_const(FileCtx)).
 
 
 %% @private

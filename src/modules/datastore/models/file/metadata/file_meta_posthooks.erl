@@ -12,7 +12,7 @@
 %%% Any exported function can be used as a hook.
 %%% Note: hooks are only triggered for directories. There are
 %%% no hardlinks to directories. When hooks on regular files are
-%%% introduced, consider usage of effective uuid.
+%%% introduced, consider usage of referenced uuid.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_posthooks).

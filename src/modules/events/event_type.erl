@@ -50,7 +50,7 @@ get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingCtx) ->
     {ok, check_links_and_get_parent_connected_routing_key(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingCtx)};
 get_routing_key(#file_location_changed_event{file_location = FileLocation}, _RoutingCtx) ->
     FileUuid = FileLocation#file_location.uuid,
-    {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_effective_uuid(FileUuid)),
+    {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_referenced_uuid(FileUuid)),
     AdditionalKeys = lists:map(fun(Uuid) ->
         {Uuid, <<"file_location_changed.", Uuid/binary>>}
     end, References -- [FileUuid]),
@@ -61,7 +61,7 @@ get_routing_key(#file_location_changed_event{file_location = FileLocation}, _Rou
 get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, _RoutingCtx) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_effective_uuid(FileUuid)),
+    {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_referenced_uuid(FileUuid)),
     AdditionalKeys = lists:map(fun(Uuid) ->
         {file_id:pack_guid(Uuid, SpaceId), <<"file_perm_changed.", Uuid/binary>>}
     end, References -- [FileUuid]),
@@ -203,25 +203,25 @@ get_context(_) ->
 update_context(#event{type = Type} = Evt, Ctx) ->
     Evt#event{type = update_context(Type, Ctx)};
 update_context(#file_read_event{} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Evt#file_read_event{file_guid = FileGuid};
 update_context(#file_written_event{} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Evt#file_written_event{file_guid = FileGuid};
 update_context(#file_attr_changed_event{file_attr = A} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Evt#file_attr_changed_event{file_attr = A#file_attr{guid = FileGuid}};
 update_context(#file_location_changed_event{file_location = L} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Evt#file_location_changed_event{file_location = L#file_location{uuid = FileGuid}};
 update_context(#file_perm_changed_event{} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Evt#file_perm_changed_event{file_guid = FileGuid};
 update_context(#file_removed_event{} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Evt#file_removed_event{file_guid = FileGuid};
 update_context(#file_renamed_event{top_entry = E} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Evt#file_renamed_event{top_entry = E#file_renamed_entry{old_guid = FileGuid}};
 update_context(Evt, _Ctx) ->
     Evt.
@@ -256,7 +256,7 @@ check_links_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx :=
                 ?debug("error getting parent connected key ~p:~p for uuid ~p", [Error, Reason, Uuid]),
                 Acc
         end
-    end, [], References -- [file_ctx:get_uuid_const(FileCtx)]),
+    end, [], References -- [file_ctx:get_logical_uuid_const(FileCtx)]),
     BasicAns#event_routing_keys{additional_keys = AdditionalKeys};
 check_links_and_get_parent_connected_routing_key(Prefix, FileGuid, _) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),

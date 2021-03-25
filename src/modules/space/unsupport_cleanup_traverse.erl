@@ -157,7 +157,7 @@ gen_id(SpaceId, StorageId) ->
 -spec cleanup_dir(task_id(), file_ctx:ctx(), boolean()) -> ok.
 cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
     fslogic_delete:cleanup_file(FileCtx, RemoveStorageFiles),
-    tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
+    tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_logical_uuid_const(FileCtx)),
     case file_ctx:is_space_dir_const(FileCtx) of
         true -> ok;
         false -> file_processed(TaskId, FileCtx, RemoveStorageFiles)
@@ -169,7 +169,7 @@ cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
 file_processed(TaskId, FileCtx, RemoveStorageFiles) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ParentFileCtx, _FileCtx} = files_tree:get_parent(FileCtx, UserCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
     maybe_cleanup_dir(ParentStatus, TaskId, ParentFileCtx, RemoveStorageFiles).
 

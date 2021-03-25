@@ -437,7 +437,7 @@ maybe_create_status_doc(#tree_traverse{
     file_ctx = FileCtx,
     track_subtree_status = true
 }, TaskId) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     tree_traverse_progress:create(TaskId, Uuid);
 maybe_create_status_doc(_, _) ->
     ok.
@@ -449,7 +449,7 @@ maybe_report_children_jobs_to_process(#tree_traverse{
     file_ctx = FileCtx,
     track_subtree_status = true
 }, TaskId, ChildrenCount, AllBatchesListed) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     tree_traverse_progress:report_children_to_process(TaskId, Uuid, ChildrenCount, AllBatchesListed);
 maybe_report_children_jobs_to_process(_, _, _, _) ->
     undefined.

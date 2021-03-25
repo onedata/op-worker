@@ -37,7 +37,7 @@ flush_event_queue(SessionId, ProviderId, FileUuid) ->
             ok;
         false ->
             [Manager] = event:get_event_managers(SessionId),
-            RecvRef = event:flush(ProviderId, fslogic_uuid:ensure_effective_uuid(FileUuid),
+            RecvRef = event:flush(ProviderId, fslogic_uuid:ensure_referenced_uuid(FileUuid),
                 ?FILE_WRITTEN_SUB_ID, self(), Manager),
             receive_loop(RecvRef, Manager)
     end.
