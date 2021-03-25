@@ -70,6 +70,6 @@ get_response(#gri{aspect = rdf_metadata}, RdfMetadata) ->
 
 get_response(#gri{aspect = As}, EffQosResp) when
     As =:= distribution;
-    As =:= file_qos_summary
+    As =:= qos_summary
 ->
     ?OK_REPLY(EffQosResp).

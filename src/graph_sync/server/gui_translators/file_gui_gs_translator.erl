@@ -17,6 +17,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -131,8 +132,31 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
         end, ShareIds)
     };
 
-translate_resource(#gri{aspect = file_qos_summary, scope = private}, QosSummaryResponse) ->
-    maps:without([<<"status">>], QosSummaryResponse).
+translate_resource(#gri{aspect = qos_summary, scope = private}, QosSummaryResponse) ->
+    maps:without([<<"status">>], QosSummaryResponse);
+
+translate_resource(#gri{aspect = dataset_summary, scope = private}, #file_eff_dataset_summary{
+    direct_dataset = DatasetId,
+    eff_ancestor_datasets = EffAncestorDatasets,
+    eff_protection_flags = EffProtectionFlags
+}) ->
+    #{
+        <<"directDataset">> => case DatasetId of
+            undefined ->
+                null;
+            _ ->
+                gri:serialize(#gri{
+                    type = op_dataset, id = DatasetId,
+                    aspect = instance, scope = private
+                })
+        end,
+        <<"effAncestorDatasets">> => lists:map(fun(AncestorId) ->
+            gri:serialize(#gri{
+                type = op_dataset, id = AncestorId, aspect = instance, scope = private
+            })
+        end, EffAncestorDatasets),
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
+    }.
 
 
 -spec translate_distribution(file_id:file_guid(), Distribution :: [file_distribution()]) ->

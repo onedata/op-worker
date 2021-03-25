@@ -380,7 +380,7 @@ prepare_args_fun_gs(MemRef, qos_summary) ->
         {Id, _} = api_test_utils:maybe_substitute_bad_id(Guid, Data),
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = Id, aspect = file_qos_summary, scope = private}
+            gri = #gri{type = op_file, id = Id, aspect = qos_summary, scope = private}
         } 
     end;
 prepare_args_fun_gs(_MemRef, available_qos_parameters) ->
