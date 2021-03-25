@@ -933,11 +933,8 @@ get_attr(<<"storage_group_id">>, #file_attr{gid = Gid}) -> Gid;
 get_attr(<<"file_id">>, #file_attr{guid = Guid}) ->
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     FileId;
+get_attr(<<"parent_id">>, #file_attr{parent_guid = undefined}) ->
+    null;
 get_attr(<<"parent_id">>, #file_attr{parent_guid = ParentGuid}) ->
-    case ParentGuid of
-        undefined ->
-            null;
-        _ ->
-            {ok, ParentId} = file_id:guid_to_objectid(ParentGuid),
-            ParentId
-    end.
+    {ok, ParentId} = file_id:guid_to_objectid(ParentGuid),
+    ParentId.
