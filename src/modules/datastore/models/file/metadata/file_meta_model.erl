@@ -361,7 +361,7 @@ resolve_conflict(_Ctx,
     NewDoc = #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
     PrevDoc = #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}
 ) ->
-    invalidate_file_protection_flags_cache_if_needed(NewDoc, PrevDoc),
+    invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
     spawn(fun() ->
         invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc)
     end),
@@ -387,15 +387,15 @@ resolve_conflict(_Ctx,
 
 
 %% @private
--spec invalidate_file_protection_flags_cache_if_needed(file_meta:doc(), file_meta:doc()) -> ok.
-invalidate_file_protection_flags_cache_if_needed(
+-spec invalidate_dataset_eff_cache_if_needed(file_meta:doc(), file_meta:doc()) -> ok.
+invalidate_dataset_eff_cache_if_needed(
     #document{value = #file_meta{protection_flags = NewFlags, parent_uuid = NewParentUuid}, scope = SpaceId},
     #document{value = #file_meta{protection_flags = OldFlags, parent_uuid = PrevParentUuid}}
 ) ->
     case OldFlags =/= NewFlags orelse PrevParentUuid =/= NewParentUuid of
         true ->
             spawn(fun() ->
-                fslogic_worker:invalidate_file_protection_flags_caches(SpaceId)
+                dataset_eff_cache:invalidate_on_all_nodes(SpaceId)
             end),
             ok;
         false ->

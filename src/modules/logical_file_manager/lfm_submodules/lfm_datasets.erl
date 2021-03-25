@@ -17,8 +17,7 @@
 
 %% API
 -export([
-    establish/2, remove/2,
-    detach/2, reattach/2,
+    establish/3, remove/2, update/5,
     get_info/2, get_file_eff_summary/2,
     list_top_datasets/4, list_nested_datasets/3
 ]).
@@ -32,31 +31,27 @@
 %%% API functions
 %%%===================================================================
 
--spec establish(session:id(), lfm:file_key()) ->
+-spec establish(session:id(), lfm:file_key(), data_access_control:bitmask()) ->
     {ok, dataset:id()} | lfm:error_reply().
-establish(SessId, FileKey) ->
+establish(SessId, FileKey, ProtectionFlags) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid, #establish_dataset{},
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid, #establish_dataset{protection_flags = ProtectionFlags},
         fun(#dataset_established{id = DatasetId}) ->
             {ok, DatasetId}
         end).
 
 
--spec detach(session:id(), dataset:id()) ->
-    ok | lfm:error_reply().
-detach(SessId, DatasetId) ->
+-spec update(session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),
+    data_access_control:bitmask()) -> ok | lfm:error_reply().
+update(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
     SpaceGuid = get_space_guid(DatasetId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #detach_dataset{id = DatasetId},
-        fun(_) -> ok end).
-
-
--spec reattach(session:id(), dataset:id()) ->
-    ok | lfm:error_reply().
-reattach(SessId, DatasetId) ->
-    SpaceGuid = get_space_guid(DatasetId),
-    remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #reattach_dataset{id = DatasetId},
+        #update_dataset{
+            id = DatasetId,
+            state = NewState,
+            flags_to_set = FlagsToSet,
+            flags_to_unset = FlagsToUnset
+        },
         fun(_) -> ok end).
 
 

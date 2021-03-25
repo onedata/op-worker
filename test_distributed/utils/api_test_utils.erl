@@ -196,7 +196,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> acl;
             false -> posix
         end,
-        protection_flags = ?no_flags_mask,
+        eff_protection_flags = ?no_flags_mask,
         has_metadata = HasMetadata,
         has_direct_qos = HasDirectQos,
         has_eff_qos = HasParentQos orelse HasDirectQos
@@ -436,7 +436,7 @@ file_details_to_gs_json(undefined, #file_details{
     },
     index_startid = IndexStartId,
     active_permissions_type = ActivePermissionsType,
-    protection_flags = EffFileProtectionFlags,
+    eff_protection_flags = EffFileProtectionFlags,
     has_metadata = HasMetadata,
     has_direct_qos = HasDirectQos,
     has_eff_qos = HasEffQos

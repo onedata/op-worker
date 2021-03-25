@@ -18,12 +18,13 @@
 
 -include("global_definitions.hrl").
 -include("modules/dataset/dataset.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([init/1, init_group/0, invalidate_on_all_nodes/1]).
--export([get_eff_ancestor_datasets/1]).
+-export([get/1, get_eff_ancestor_datasets/1, get_eff_protection_flags/1]).
 -compile([{no_auto_import, [get/1]}]).
 
 
@@ -38,12 +39,13 @@
 -define(CHECK_FREQUENCY, application:get_env(?APP_NAME, dataset_check_frequency, 30000)).
 -define(CACHE_OPTS, #{group => ?CACHE_GROUP}).
 
--record(summary, {
+-record(entry, {
     direct_attached_dataset :: undefined | dataset:id(),
-    eff_ancestor_datasets = [] :: [dataset:id()]
+    eff_ancestor_datasets = [] :: [dataset:id()],
+    eff_protection_flags :: data_access_control:bitmask()
 }).
 
--type summary() :: #summary{}.
+-type entry() :: #entry{}.
 -type error() :: {error, term()}.
 
 
@@ -66,14 +68,14 @@ init(all) ->
         {ok, SpaceIds} ->
             lists:foreach(fun init/1, SpaceIds);
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize datasets effective summary cache due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+            ?debug("Unable to initialize datasets effective cache due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize datasets effective summary cache due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
+            ?debug("Unable to initialize datasets effective cache due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
-            ?critical("Unable to initialize datasets effective summary cache due to: ~p", [Error])
+            ?critical("Unable to initialize datasets effective cache due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize datasets effective summary cache due to: ~p", [{Error2, Reason}])
+            ?critical_stacktrace("Unable to initialize datasets effective cache due to: ~p", [{Error2, Reason}])
     end;
 init(SpaceId) ->
     CacheName = ?CACHE_NAME(SpaceId),
@@ -106,28 +108,61 @@ invalidate_on_all_nodes(SpaceId) ->
         [] ->
             ok;
         _ ->
-            ?error("Invalidation of datasets effective summary cache for space ~p failed on nodes: ~p (RPC error)", [SpaceId, BadNodes])
+            ?error("Invalidation of datasets effective cache for space ~p failed on nodes: ~p (RPC error)", [SpaceId, BadNodes])
     end,
 
     lists:foreach(fun
         (ok) -> ok;
         ({badrpc, _} = Error) ->
             ?error(
-                "Invalidation of datasets effective summary cache for space ~p failed.~n"
+                "Invalidation of datasets effective cache for space ~p failed.~n"
                 "Reason: ~p", [SpaceId, Error]
             )
     end, Res).
 
 
--spec get_eff_ancestor_datasets(file_meta:doc()) -> {ok, [dataset_api:id()]} | error().
+-spec get_eff_ancestor_datasets(entry() | file_meta:doc()) -> {ok, [dataset_api:id()]} | error().
+get_eff_ancestor_datasets(#entry{eff_ancestor_datasets = EffAncestorDatasets}) ->
+    {ok, EffAncestorDatasets};
 get_eff_ancestor_datasets(FileDoc) ->
     case get(FileDoc) of
-        {ok, #summary{eff_ancestor_datasets = EffAncestorDatasets}} ->
-            {ok, EffAncestorDatasets};
+        {ok, Entry} ->
+            get_eff_ancestor_datasets(Entry);
         {error, _} = Error ->
             Error
     end.
 
+
+-spec get_eff_protection_flags(entry() | file_meta:doc()) -> {ok, data_access_control:bitmask()} | error().
+get_eff_protection_flags(#entry{eff_protection_flags = EffProtectionFlags}) ->
+    {ok, EffProtectionFlags};
+get_eff_protection_flags(FileDoc) ->
+    case get(FileDoc) of
+        {ok, Entry} ->
+            get_eff_protection_flags(Entry);
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get(file_meta:doc()) -> {ok, entry()} | error().
+get(FileDoc = #document{key = FileUuid}) ->
+    case fslogic_uuid:is_root_dir_uuid(FileUuid) of
+        true ->
+            {ok, #entry{eff_protection_flags = ?no_flags_mask}};
+        false ->
+            {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
+            CacheName = ?CACHE_NAME(SpaceId),
+            Callback = fun([Doc, ParentEntry, CalculationInfo]) ->
+                {ok, calculate(Doc, ParentEntry), CalculationInfo}
+            end,
+            case effective_value:get_or_calculate(CacheName, FileDoc, Callback) of
+                {ok, Entry, _} ->
+                    {ok, Entry};
+                {error, {file_meta_missing, _}} ->
+                    ?ERROR_NOT_FOUND
+            end
+    end.
 
 %%%===================================================================
 %%% RPC API functions
@@ -135,45 +170,35 @@ get_eff_ancestor_datasets(FileDoc) ->
 
 -spec invalidate(od_space:id()) -> ok.
 invalidate(SpaceId) ->
-    ok = effective_value:invalidate(?CACHE_NAME(SpaceId)).
+    ok = effective_value:invalidate(?CACHE_NAME(SpaceId)),
+    ok = permissions_cache:invalidate_on_node().
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-
--spec get(file_meta:doc()) -> {ok, summary()} | error().
-get(FileDoc) ->
-    {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
-    CacheName = ?CACHE_NAME(SpaceId),
-    Callback = fun([Doc, ParentSummary, CalculationInfo]) ->
-        {ok, calculate_dataset_summary(Doc, ParentSummary), CalculationInfo}
-    end,
-    case effective_value:get_or_calculate(CacheName, FileDoc, Callback) of
-        {ok, Summary, _} ->
-            {ok, Summary};
-        {error, {file_meta_missing, _}} ->
-            ?ERROR_NOT_FOUND
-    end.
-
-
--spec calculate_dataset_summary(file_meta:doc(), summary() | undefined) -> summary().
-calculate_dataset_summary(Doc = #document{}, undefined) ->
-    #summary{
+-spec calculate(file_meta:doc(), entry() | undefined) -> entry().
+calculate(Doc = #document{}, undefined) ->
+    % space dir as parent entry is undefined
+    #entry{
         direct_attached_dataset = get_direct_dataset_if_attached(Doc),
-        eff_ancestor_datasets = []
+        eff_ancestor_datasets = [],
+        eff_protection_flags = get_protection_flags_if_dataset_attached(Doc)
     };
-calculate_dataset_summary(Doc = #document{}, Sum = #summary{
+calculate(Doc = #document{}, #entry{
     direct_attached_dataset = ParentDirectAttachedDataset,
-    eff_ancestor_datasets = ParentEffAncestorDatasets
+    eff_ancestor_datasets = ParentEffAncestorDatasets,
+    eff_protection_flags = ParentEffProtectionFlags
 }) ->
     EffAncestorDatasets = case ParentDirectAttachedDataset =/= undefined of
         true -> [ParentDirectAttachedDataset | ParentEffAncestorDatasets];
         false -> ParentEffAncestorDatasets
     end,
-    #summary{
+    ProtectionFlags = get_protection_flags_if_dataset_attached(Doc),
+    #entry{
         direct_attached_dataset = get_direct_dataset_if_attached(Doc),
-        eff_ancestor_datasets = EffAncestorDatasets
+        eff_ancestor_datasets = EffAncestorDatasets,
+        eff_protection_flags = ?set_flags(ParentEffProtectionFlags, ProtectionFlags)
     }.
 
 
@@ -183,4 +208,13 @@ get_direct_dataset_if_attached(FileDoc) ->
     case IsDatasetAttached of
         true -> file_meta:get_dataset(FileDoc);
         false -> undefined
+    end.
+
+
+-spec get_protection_flags_if_dataset_attached(file_meta:doc()) -> data_access_control:bitmask().
+get_protection_flags_if_dataset_attached(FileDoc) ->
+    IsDatasetAttached = file_meta:is_dataset_attached(FileDoc),
+    case IsDatasetAttached of
+        true -> file_meta:get_protection_flags(FileDoc);
+        false -> ?no_flags_mask
     end.

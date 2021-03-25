@@ -20,7 +20,7 @@
 %% API
 -export([create/2, delete/1]).
 -export([get_uuid/1, get_space_id/1, get_state/1, get_detached_info/1, get_creation_time/1, get/1]).
--export([mark_detached/4, mark_reattached/1]).
+-export([mark_detached/5, mark_reattached/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -145,12 +145,12 @@ get(DatasetId) ->
     datastore_model:get(?CTX, DatasetId).
 
 
--spec mark_detached(id(), path(), file_meta:path(), file_meta:type()) -> ok | error().
-mark_detached(DatasetId, DatasetPath, FileRootPath, FileRootType) ->
+-spec mark_detached(id(), path(), file_meta:path(), file_meta:type(), data_access_control:bitmask()) -> ok | error().
+mark_detached(DatasetId, DatasetPath, FileRootPath, FileRootType, ProtectionFlags) ->
     update(DatasetId, fun(Dataset) ->
         {ok, Dataset#dataset{
             state = ?DETACHED_DATASET,
-            detached_info = detached_dataset_info:create_info(DatasetPath, FileRootPath, FileRootType)
+            detached_info = detached_dataset_info:create_info(DatasetPath, FileRootPath, FileRootType, ProtectionFlags)
         }}
     end).
 
@@ -199,6 +199,7 @@ get_record_struct(1) ->
         {detached_info, {record, [
             {dataset_path, string},
             {file_root_path, string},
-            {file_root_type, atom}
+            {file_root_type, atom},
+            {protection_flags, integer}
         ]}}
     ]}.

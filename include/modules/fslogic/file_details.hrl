@@ -19,14 +19,14 @@
 
 -record(file_details, {
     file_attr :: #file_attr{},
-    protection_flags :: data_access_control:bitmask(),
     % StartId can be used to list dir children starting from this file
     index_startid :: binary(),
     active_permissions_type :: file_meta:permissions_type(),
     has_metadata :: boolean(),
     has_direct_qos :: boolean(),
     has_eff_qos :: boolean(),
-    eff_dataset_membership :: dataset:membership()
+    eff_dataset_membership :: dataset:membership(),
+    eff_protection_flags :: data_access_control:bitmask()
 }).
 
 -endif.

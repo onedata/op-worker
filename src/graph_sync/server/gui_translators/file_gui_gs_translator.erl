@@ -174,7 +174,7 @@ translate_file_details(#file_details{
     has_eff_qos = HasEffQos,
     active_permissions_type = ActivePermissionsType,
     index_startid = StartId,
-    protection_flags = EffFileProtectionFlags,
+    eff_protection_flags = EffFileProtectionFlags,
     file_attr = #file_attr{
         guid = FileGuid,
         name = FileName,

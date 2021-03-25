@@ -27,8 +27,8 @@
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
--export([establish_dataset/2, reattach_dataset/2, detach_dataset/1, remove_dataset/1,
-    get_dataset/1, is_dataset_attached/1]).
+-export([establish_dataset/3, reattach_dataset/4, detach_dataset/1, remove_dataset/1,
+    get_dataset/1, is_dataset_attached/1, get_protection_flags/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,
@@ -663,14 +663,15 @@ get_shares(#file_meta{shares = Shares}) ->
     Shares.
 
 
--spec establish_dataset(uuid(), dataset:id()) -> ok | {error, term()}.
-establish_dataset(Uuid, DatasetId) ->
+-spec establish_dataset(uuid(), dataset:id(), data_access_control:bitmask()) -> ok | {error, term()}.
+establish_dataset(Uuid, DatasetId, ProtectionFlags) ->
     ?extract_ok(update(Uuid, fun(FileMeta = #file_meta{dataset = CurrentDatasetId}) ->
         case CurrentDatasetId =:= undefined orelse CurrentDatasetId =:= DatasetId of
             true ->
                 {ok, FileMeta#file_meta{
                     dataset = DatasetId,
-                    dataset_state = ?ATTACHED_DATASET
+                    dataset_state = ?ATTACHED_DATASET,
+                    protection_flags = ProtectionFlags
                 }};
             false ->
                 {error, already_exists}
@@ -678,15 +679,20 @@ establish_dataset(Uuid, DatasetId) ->
     end)).
 
 
--spec reattach_dataset(uuid(), dataset:id()) -> ok | {error, term()}.
-reattach_dataset(Uuid, DatasetId) ->
+-spec reattach_dataset(uuid(), dataset:id(), data_access_control:bitmask(), data_access_control:bitmask()) ->
+    ok | {error, term()}.
+reattach_dataset(Uuid, DatasetId, FlagsToSet, FlagsToUnset) ->
     ?extract_ok(update(Uuid, fun
         (#file_meta{dataset = undefined}) ->
             ?ERROR_NOT_FOUND;
-        (FileMeta = #file_meta{dataset = CurrentDatasetId}) when DatasetId =:= CurrentDatasetId ->
-            {ok, FileMeta#file_meta{dataset_state = ?ATTACHED_DATASET}};
+        (FileMeta = #file_meta{dataset = CurrentDatasetId, protection_flags = CurrFlags})
+            when DatasetId =:= CurrentDatasetId
+        ->
+            {ok, FileMeta#file_meta{
+                dataset_state = ?ATTACHED_DATASET,
+                protection_flags = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet)
+            }};
         (_) ->
-            % todo find better error?
             {error, already_exists}
     end)).
 
@@ -711,7 +717,8 @@ remove_dataset(Uuid) ->
     Result = ?extract_ok(update(Uuid, fun(FileMeta) ->
         {ok, FileMeta#file_meta{
             dataset = undefined,
-            dataset_state = undefined
+            dataset_state = undefined,
+            protection_flags = ?no_flags_mask
         }}
     end)),
     case Result of
@@ -880,6 +887,13 @@ is_dataset_attached(#document{value = FM}) ->
     is_dataset_attached(FM);
 is_dataset_attached(#file_meta{dataset_state = DatasetStatus}) ->
     DatasetStatus =:= ?ATTACHED_DATASET.
+
+
+-spec get_protection_flags(file_meta() | doc()) -> data_access_control:bitmask().
+get_protection_flags(#document{value = FM}) ->
+    get_protection_flags(FM);
+get_protection_flags(#file_meta{protection_flags = ProtectionFlags}) ->
+    ProtectionFlags.
 
 
 -spec get_name(doc()) -> binary().

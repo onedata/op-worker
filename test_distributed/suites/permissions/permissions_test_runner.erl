@@ -363,6 +363,8 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
         {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_OPERATIONS}
     ]),
 
+    {ok, DatasetId} = lfm_proxy:establish_dataset(Node, ?ROOT_SESS_ID, ScenarioRootDirKey),
+
     case ProtectionFlagsToSet > 0 of
         true ->
             Executioner = case rand:uniform(3) of
@@ -373,15 +375,14 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
             ExecutionerSessId = ?config({session_id, {Executioner, ?GET_DOMAIN(Node)}}, Config),
 
             % With file protection set operation should fail
-            ok = lfm_proxy:update_protection_flags(
-                Node, ?ROOT_SESS_ID, ScenarioRootDirKey, ProtectionFlagsToSet, ?no_flags_mask
-            ),
+            ok = lfm_proxy:update_dataset(
+                Node, ?ROOT_SESS_ID, DatasetId, undefined, ProtectionFlagsToSet, ?no_flags_mask),
             await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
             ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             % And should succeed without it
-            ok = lfm_proxy:update_protection_flags(
-                Node, ?ROOT_SESS_ID, ScenarioRootDirKey, ?no_flags_mask, ProtectionFlagsToSet
+            ok = lfm_proxy:update_dataset(
+                Node, ?ROOT_SESS_ID, DatasetId, undefined, ?no_flags_mask, ProtectionFlagsToSet
             ),
             await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
             ?assertMatch(ok, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
@@ -403,7 +404,7 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
 await_caches_clearing(Node, SpaceId, UserId, ExtraData) ->
     Attempts = 30,
     Interval = 100,
-    ProtectionFlagsCache = binary_to_atom(<<"file_protection_flags_cache_", SpaceId/binary>>, utf8),
+    ProtectionFlagsCache = binary_to_atom(<<"dataset_effective_cache_", SpaceId/binary>>, utf8),
 
     AreProtectionFlagsCached = fun(FileUuid) ->
         case rpc:call(Node, bounded_cache, get, [ProtectionFlagsCache, FileUuid]) of

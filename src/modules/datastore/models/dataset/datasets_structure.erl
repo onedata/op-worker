@@ -7,7 +7,35 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module which implements generic datasets structure using datastore links.
-%%% WRITEME
+%%% Each link is associated with exactly one dataset.
+%%%
+%%% Link values store dataset's name and id.
+%%%
+%%% Link names are of type dataset:path() which means that is a slash separated
+%%% path to root file of a dataset, where each element is uuid of corresponding
+%%% directory/file.
+%%% e. g.
+%%% Let's assume that there is a directory "c": /space1/a/b/c
+%%% where uuids of the files are as following:
+%%%  * space1 - space1_uuid
+%%%  * a - a_uuid
+%%%  * b - b_uuid
+%%%  * c - c_uuid
+%%%
+%%% If a dataset is established on this file, it's path will be in format:
+%%% /space1_uuid/b_uuid/c_uuid
+%%%
+%%% This format allows to easily determine parent-child relation between datasets.
+%%% e. g.
+%%% Let's assume that there is a file f created under the following path: /space1/a/b/c/d/e/f
+%%% If we establish a dataset also on this file, we will have 2 links:
+%%% * /space1_uuid/b_uuid/c_uuid
+%%% * /space1_uuid/b_uuid/c_uuid/d_uuid/e_uuid/f_uuid
+%%%
+%%% Now, if we list top datasets in the space, we expect to see only dataset "c".
+%%% If we list the dataset c though, we expect to see dataset "f" as
+%%% its direct children (as there are no other datasets established on "d" neither on "e".
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(datasets_structure).
@@ -42,7 +70,6 @@
 -type tree_id() :: oneprovider:id().
 -type forest_type() :: binary().
 
-
 % @formatter:off
 
 -type offset() :: integer().
@@ -52,7 +79,7 @@
 
 -type opts() :: #{
     offset => offset(),
-    start_index => start_index(), % TODO VFS-7363 Czy to powinno byc dataset path a moze dataset id i na jego podstawie path?
+    start_index => start_index(), % TODO VFS-7363 should it be dataset:id(), dataset:path() or dataset:name()
     limit => limit()
 }.
 

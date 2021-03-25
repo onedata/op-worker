@@ -156,14 +156,14 @@
 }).
 
 -record(establish_dataset, {
+    protection_flags = ?no_flags_mask :: data_access_control:bitmask()
 }).
 
--record(detach_dataset, {
-    id :: dataset:id()
-}).
-
--record(reattach_dataset, {
-    id :: dataset:id()
+-record(update_dataset, {
+    id :: dataset:id(),
+    state :: undefined | dataset:state(),
+    flags_to_set = ?no_flags_mask :: data_access_control:bitmask(),
+    flags_to_unset = ?no_flags_mask :: data_access_control:bitmask()
 }).
 
 -record(remove_dataset, {
@@ -198,7 +198,7 @@
     #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
     #create_share{} | #remove_share{} |
     #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
-    #establish_dataset{} | #detach_dataset{} | #reattach_dataset{} | #remove_dataset{} |
+    #establish_dataset{} | #update_dataset{} | #remove_dataset{} |
     #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_nested_datasets{}.
 
 -record(transfer_encoding, {
@@ -263,12 +263,14 @@
     path :: file_meta:path(),
     type :: file_meta:type(),
     creation_time :: time:seconds(),
+    protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     parent :: undefined | dataset:id()
 }).
 
 -record(file_eff_dataset_summary, {
     direct_dataset :: dataset:id(),
-    eff_ancestor_datasets :: [dataset:id()]
+    eff_ancestor_datasets :: [dataset:id()],
+    eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask()
 }).
 
 -record(nested_datasets, {

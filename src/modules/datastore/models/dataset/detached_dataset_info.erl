@@ -15,13 +15,13 @@
 -author("Jakub Kudzia").
 
 %% API
--export([create_info/3, get_path/1, get_file_root_path/1, get_file_root_type/1]).
+-export([create_info/4, get_path/1, get_file_root_path/1, get_file_root_type/1, get_protection_flags/1]).
 
 -record(info, {
     dataset_path :: dataset:path(),
     file_root_path :: file_meta:path(),
-    file_root_type :: file_meta:type()
-    % TODO VFS-7363 protection flags
+    file_root_type :: file_meta:type(),
+    protection_flags :: data_access_control:bitmask()
 }).
 
 -type info() :: #info{}.
@@ -31,12 +31,13 @@
 %%% API functions
 %%%===================================================================
 
--spec create_info(dataset:path(), file_meta:path(), file_meta:type()) -> info().
-create_info(DatasetPath, FileRootPath, FileRootType) ->
+-spec create_info(dataset:path(), file_meta:path(), file_meta:type(), data_access_control:bitmask()) -> info().
+create_info(DatasetPath, FileRootPath, FileRootType, ProtectionFlags) ->
     #info{
         dataset_path = DatasetPath,
         file_root_path = FileRootPath,
-        file_root_type = FileRootType
+        file_root_type = FileRootType,
+        protection_flags = ProtectionFlags
     }.
 
 
@@ -53,3 +54,8 @@ get_file_root_path(#info{file_root_path = FileRootPath}) ->
 -spec get_file_root_type(info()) -> file_meta:type().
 get_file_root_type(#info{file_root_type = FileRootType}) ->
     FileRootType.
+
+
+-spec get_protection_flags(info()) -> data_access_control:bitmask().
+get_protection_flags(#info{protection_flags = ProtectionFlags}) ->
+    ProtectionFlags.

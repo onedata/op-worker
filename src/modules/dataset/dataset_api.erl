@@ -15,10 +15,11 @@
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
--export([establish/1, detach/1, reattach/1, remove/1, move_if_applicable/2]).
--export([get_info/1, get_effective_membership/1, get_effective_summary/1]).
+-export([establish/2, update/4, detach/1, remove/1, move_if_applicable/2]).
+-export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/3, list/2]).
 
 -type id() :: file_meta:uuid().
@@ -27,26 +28,40 @@
 -export_type([id/0]).
 
 % TODO VFS-7363 how should we handle race on creating dataset on the same file in 2 providers?
- %TODO VFS-7373 handle rename between spaces and rename which changes file-guid
-
-% TODO podpiac protection flagi
-% TODO ogarnac testy z protection flagami
-
+% TODO VFS-7373 handle rename between spaces and rename which changes file-guid
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec establish(file_ctx:ctx()) -> {ok, dataset:id()}.
-establish(FileCtx) ->
-    % TODO VFS-7363 ustawienie flag protected
+-spec establish(file_ctx:ctx(), data_access_control:bitmask()) -> {ok, dataset:id()}.
+establish(FileCtx, ProtectionFlags) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     Uuid = file_ctx:get_uuid_const(FileCtx),
     {ok, DatasetId} = dataset:create(Uuid, SpaceId),
     {DatasetName, _FileCtx2} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-    ok = file_meta:establish_dataset(Uuid, DatasetId),
+    ok = file_meta:establish_dataset(Uuid, DatasetId, ProtectionFlags),
     ok = attached_datasets:add(SpaceId, DatasetId, Uuid, DatasetName),
+    dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
     {ok, DatasetId}.
+
+
+-spec update(dataset:id(), undefined | dataset:state(), data_access_control:bitmask(), data_access_control:bitmask()) -> ok.
+update(DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
+    {ok, Doc} = dataset:get(DatasetId),
+    {ok, CurrentState} = dataset:get_state(Doc),
+    case {CurrentState, utils:ensure_defined(NewState, CurrentState)} of
+        {?DETACHED_DATASET, ?ATTACHED_DATASET} ->
+            reattach(DatasetId, FlagsToSet, FlagsToUnset);
+        {?ATTACHED_DATASET, ?DETACHED_DATASET} ->
+            detach(DatasetId);
+        {?ATTACHED_DATASET, ?ATTACHED_DATASET} ->
+            update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset);
+        {?DETACHED_DATASET, ?DETACHED_DATASET} ->
+            throw(?EINVAL)
+            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+            % throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>))
+    end.
 
 
 -spec detach(dataset:id()) -> ok.
@@ -55,35 +70,17 @@ detach(DatasetId) ->
     {ok, Uuid} = dataset:get_uuid(Doc),
     {ok, FileDoc} = file_meta:get_including_deleted(Uuid),
     {ok, SpaceId} = dataset:get_space_id(Doc),
+    CurrProtectionFlags = file_meta:get_protection_flags(FileDoc),
     {ok, DatasetPath} = dataset_path:get(SpaceId, Uuid),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {FileRootPath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
     FileRootType = file_meta:get_type(FileDoc),
     DatasetName = filename:basename(FileRootPath),
-    ok = dataset:mark_detached(DatasetId, DatasetPath, FileRootPath, FileRootType),
+    ok = dataset:mark_detached(DatasetId, DatasetPath, FileRootPath, FileRootType, CurrProtectionFlags),
     attached_datasets:delete(SpaceId, DatasetPath),
     detached_datasets:add(SpaceId, DatasetPath, DatasetId, DatasetName),
     file_meta:detach_dataset(Uuid),
     dataset_eff_cache:invalidate_on_all_nodes(SpaceId).
-
-
--spec reattach(dataset:id()) -> ok | error().
-reattach(DatasetId) ->
-    {ok, Doc} = dataset:get(DatasetId),
-    {ok, Uuid} = dataset:get_uuid(Doc),
-    {ok, SpaceId} = dataset:get_space_id(Doc),
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
-    case file_meta:reattach_dataset(Uuid, DatasetId) of
-        ok ->
-            {DatasetName, _} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-            ok = dataset:mark_reattached(DatasetId),
-            detached_datasets:delete(Doc),
-            attached_datasets:add(SpaceId, DatasetId, Uuid, DatasetName),
-            dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
 
 
 -spec remove(dataset:id()) -> ok.
@@ -121,25 +118,31 @@ get_info(DatasetId) ->
     {ok, maps:merge(CommonInfo, StateDependantInfo)}.
 
 
--spec get_effective_membership(file_ctx:ctx()) -> dataset:membership().
-get_effective_membership(FileCtx) ->
-    {FileDoc, _FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(FileDoc),
+-spec get_effective_membership_and_protection_flags(file_ctx:ctx()) ->
+    {ok, dataset:membership(), data_access_control:bitmask(), file_ctx:ctx()}.
+get_effective_membership_and_protection_flags(FileCtx) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
+    {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
+    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
     IsDirectAttached = file_meta:is_dataset_attached(FileDoc),
     case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
-        {true, _} -> ?DIRECT_DATASET_MEMBERSHIP;
-        {false, true} -> ?ANCESTOR_DATASET_MEMBERSHIP;
-        {false, false} -> ?NONE_DATASET_MEMBERSHIP
+        {true, _} -> {ok, ?DIRECT_DATASET_MEMBERSHIP, EffProtectionFlags, FileCtx2};
+        {false, true} -> {ok, ?ANCESTOR_DATASET_MEMBERSHIP, EffProtectionFlags, FileCtx2};
+        {false, false} -> {ok, ?NONE_DATASET_MEMBERSHIP, EffProtectionFlags, FileCtx2}
     end.
 
 
 -spec get_effective_summary(file_ctx:ctx()) -> {ok, dataset:effective_summary()}.
 get_effective_summary(FileCtx) ->
     {FileDoc, _FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(FileDoc),
+    {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
+    {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
+    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
     {ok, #{
         <<"directDataset">> => file_meta:get_dataset(FileDoc),
-        <<"effectiveAncestorDatasets">> => EffAncestorDatasets
+        <<"effectiveAncestorDatasets">> => EffAncestorDatasets,
+        <<"effectiveProtectionFlags">> =>  EffProtectionFlags
     }}.
 
 
@@ -165,6 +168,33 @@ list(DatasetId, Opts) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec reattach(dataset:id(), data_access_control:bitmask(), data_access_control:bitmask()) -> ok | error().
+reattach(DatasetId, FlagsToSet, FlagsToUnset) ->
+    {ok, Doc} = dataset:get(DatasetId),
+    {ok, Uuid} = dataset:get_uuid(Doc),
+    {ok, SpaceId} = dataset:get_space_id(Doc),
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
+    case file_meta:reattach_dataset(Uuid, DatasetId, FlagsToSet, FlagsToUnset) of
+        ok ->
+            {DatasetName, _} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+            ok = dataset:mark_reattached(DatasetId),
+            detached_datasets:delete(Doc),
+            attached_datasets:add(SpaceId, DatasetId, Uuid, DatasetName),
+            dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec update_protection_flags(dataset:id(), data_access_control:bitmask(), data_access_control:bitmask()) -> ok.
+update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset) ->
+    {ok, Doc} = dataset:get(DatasetId),
+    {ok, SpaceId} = dataset:get_space_id(Doc),
+    {ok, Uuid} = dataset:get_uuid(Doc),
+    ok = file_meta:update_protection_flags(Uuid, FlagsToSet, FlagsToUnset),
+    dataset_eff_cache:invalidate_on_all_nodes(SpaceId).
 
 -spec remove_from_datasets_structure(dataset:doc()) -> ok.
 remove_from_datasets_structure(Doc) ->
@@ -208,6 +238,7 @@ get_attached_info(DatasetDoc) ->
         <<"state">> => ?ATTACHED_DATASET,
         <<"fileRootPath">> => FileRootPath,
         <<"fileRootType">> => FileRootType,
+        <<"protectionFlags">> => file_meta:get_protection_flags(FileDoc),
         <<"parentDatasetId">> => case length(EffAncestorDatasets) == 0 of
             true -> undefined;
             false -> hd(EffAncestorDatasets)
@@ -222,9 +253,11 @@ get_detached_info(DatasetDoc) ->
     FileRootPath = detached_dataset_info:get_file_root_path(DetachedInfo),
     FileRootType = detached_dataset_info:get_file_root_type(DetachedInfo),
     DetachedDatasetPath = detached_dataset_info:get_path(DetachedInfo),
+    ProtectionFlags = detached_dataset_info:get_protection_flags(DetachedInfo),
     #{
         <<"state">> => ?DETACHED_DATASET,
         <<"fileRootPath">> => FileRootPath,
         <<"fileRootType">> => FileRootType,
+        <<"protectionFlags">> => ProtectionFlags,
         <<"parentDatasetId">> => detached_datasets:get_parent(SpaceId, DetachedDatasetPath)
     }.

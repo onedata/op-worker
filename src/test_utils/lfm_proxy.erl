@@ -23,7 +23,6 @@
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
-    update_protection_flags/5,
     set_perms/4,
     update_times/6,
     unlink/3, rm_recursive/3,
@@ -71,8 +70,7 @@
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
     check_qos_status/3, check_qos_status/4,
 
-    establish_dataset/3, remove_dataset/3,
-    detach_dataset/3, reattach_dataset/3,
+    establish_dataset/3, establish_dataset/4, remove_dataset/3, update_dataset/6,
     get_dataset_info/3, get_file_eff_dataset_summary/3,
     list_top_datasets/5, list_nested_datasets/4
 ]).
@@ -192,18 +190,6 @@ get_parent(Worker, SessId, FileKey) ->
     ok | {error, term()}.
 check_perms(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker, lfm:check_perms(SessId, FileKey, OpenFlag)).
-
-
--spec update_protection_flags(
-    node(),
-    session:id(),
-    lfm:file_key(),
-    data_access_control:bitmask(),
-    data_access_control:bitmask()
-) ->
-    ok | {error, term()}.
-update_protection_flags(Worker, SessId, FileKey, FlagsToSet, FlagsToUnset) ->
-    ?EXEC(Worker, lfm:update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToUnset)).
 
 
 -spec set_perms(node(), session:id(), lfm:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->
@@ -812,21 +798,24 @@ check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
 %%% Datasets functions
 %%%===================================================================
 
--spec establish_dataset(node(), session:id(), lfm:file_key()) -> {ok, dataset:id()} | lfm:error_reply().
+-spec establish_dataset(node(), session:id(), lfm:file_key()) ->
+    {ok, dataset:id()} | lfm:error_reply().
 establish_dataset(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:establish_dataset(SessId, FileKey)).
+    establish_dataset(Worker, SessId, FileKey, 0).
+
+-spec establish_dataset(node(), session:id(), lfm:file_key(), data_access_control:bitmask()) ->
+    {ok, dataset:id()} | lfm:error_reply().
+establish_dataset(Worker, SessId, FileKey, ProtectionFlags) ->
+    ?EXEC(Worker, lfm:establish_dataset(SessId, FileKey, ProtectionFlags)).
 
 -spec remove_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
 remove_dataset(Worker, SessId, DatasetId) ->
     ?EXEC(Worker, lfm:remove_dataset(SessId, DatasetId)).
 
--spec detach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
-detach_dataset(Worker, SessId, DatasetId) ->
-    ?EXEC(Worker, lfm:detach_dataset(SessId, DatasetId)).
-
--spec reattach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
-reattach_dataset(Worker, SessId, DatasetId) ->
-    ?EXEC(Worker, lfm:reattach_dataset(SessId, DatasetId)).
+-spec update_dataset(node(), session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),
+    data_access_control:bitmask()) -> ok | lfm:error_reply().
+update_dataset(Worker, SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
+    ?EXEC(Worker, lfm:update_dataset(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset)).
 
 -spec get_dataset_info(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | lfm:error_reply().
 get_dataset_info(Worker, SessId, DatasetId) ->

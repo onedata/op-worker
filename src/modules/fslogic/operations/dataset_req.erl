@@ -20,9 +20,10 @@
 
 %% API
 -export([
-    establish/2,
-    reattach/3,
-    detach/3,
+    establish/3
+    ,
+    update/6
+    ,
     remove/3,
     get_info/3,
     get_file_eff_summary/2,
@@ -35,30 +36,23 @@
 %%% API functions
 %%%===================================================================
 
--spec establish(file_ctx:ctx(), user_ctx:ctx()) -> fslogic_worker:provider_response().
-establish(FileCtx0, UserCtx) ->
-    space_logic:assert_has_eff_privilege(FileCtx0, UserCtx, ?SPACE_MANAGE_DATASETS),
+-spec establish(file_ctx:ctx(), data_access_control:bitmask(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+establish(FileCtx0, ProtectionFlags, UserCtx) ->
+    assert_has_eff_privilege(FileCtx0, UserCtx, ?SPACE_MANAGE_DATASETS),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [?TRAVERSE_ANCESTORS]
     ),
 
-    establish_insecure(FileCtx1).
+    establish_insecure(FileCtx1, ProtectionFlags).
 
 
--spec reattach(file_ctx:ctx(), dataset:id(), user_ctx:ctx()) -> fslogic_worker:provider_response().
-reattach(SpaceDirCtx, DatasetId, UserCtx) ->
+-spec update(file_ctx:ctx(), dataset:id(), dataset:state() | undefined, data_access_control:bitmask(),
+    data_access_control:bitmask(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+update(SpaceDirCtx, DatasetId, NewDatasetState, FlagsToSet, FlagsToUnset, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
 
-    ok = dataset_api:reattach(DatasetId),
-    ?PROVIDER_OK_RESP.
-
-
--spec detach(file_ctx:ctx(), dataset:id(), user_ctx:ctx()) -> fslogic_worker:provider_response().
-detach(SpaceDirCtx, DatasetId, UserCtx) ->
-    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
-
-    ok = dataset_api:detach(DatasetId),
+    ok = dataset_api:update(DatasetId, NewDatasetState, FlagsToSet, FlagsToUnset),
     ?PROVIDER_OK_RESP.
 
 
@@ -82,6 +76,7 @@ get_info(SpaceDirCtx, DatasetId, UserCtx) ->
         path = maps:get(<<"fileRootPath">>, Info),
         type = maps:get(<<"fileRootType">>, Info),
         creation_time = maps:get(<<"creationTime">>, Info),
+        protection_flags = maps:get(<<"protectionFlags">>, Info),
         parent = maps:get(<<"parentDatasetId">>, Info)
     }).
 
@@ -97,7 +92,8 @@ get_file_eff_summary(FileCtx0, UserCtx) ->
     {ok, Summary} = dataset_api:get_effective_summary(FileCtx1),
     ?PROVIDER_OK_RESP(#file_eff_dataset_summary{
         direct_dataset = maps:get(<<"directDataset">>, Summary),
-        eff_ancestor_datasets = maps:get(<<"effectiveAncestorDatasets">>, Summary)
+        eff_ancestor_datasets = maps:get(<<"effectiveAncestorDatasets">>, Summary),
+        eff_protection_flags = maps:get(<<"effectiveProtectionFlags">>, Summary)
     }).
 
 
@@ -123,9 +119,10 @@ list(SpaceDirCtx, Dataset, UserCtx, Opts) ->
 %%% Internal functions
 %%%===================================================================
 
--spec establish_insecure(file_ctx:ctx()) -> fslogic_worker:provider_response().
-establish_insecure(FileCtx) ->
-    {ok, DatasetId} = dataset_api:establish(FileCtx),
+-spec establish_insecure(file_ctx:ctx(), data_access_control:bitmask()) ->
+    fslogic_worker:provider_response().
+establish_insecure(FileCtx, ProtectionFlags) ->
+    {ok, DatasetId} = dataset_api:establish(FileCtx, ProtectionFlags),
     ?PROVIDER_OK_RESP(#dataset_established{id = DatasetId}).
 
 

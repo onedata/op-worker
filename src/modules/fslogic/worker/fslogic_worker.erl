@@ -24,8 +24,8 @@
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
 -export([
-    init_paths_caches/1,
-    init_file_protection_flags_caches/1, invalidate_file_protection_flags_caches/1,
+    init_paths_caches/1
+    ,
     init_dataset_eff_caches/1
 ]).
 -export([init/1, handle/1, cleanup/0]).
@@ -33,8 +33,8 @@
 
 % exported for RPC
 -export([
-    schedule_init_paths_caches/1,
-    schedule_init_file_protection_flags_caches/1, schedule_invalidate_file_protection_flags_caches/1,
+    schedule_init_paths_caches/1
+    ,
     schedule_init_datasets_cache/1
 ]).
 
@@ -69,13 +69,6 @@
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_PATHS_CACHES(Space), {init_paths_caches, Space}).
 -define(INIT_DATASETS_CACHE(Space), {init_datasets_cache, Space}).
-
--define(INIT_FILE_PROTECTION_FLAGS_CACHES(Space),
-    {init_file_protection_flags_caches, Space}
-).
--define(INVALIDATE_FILE_PROTECTION_FLAGS_CACHES(Space),
-    {invalidate_file_protection_flags_caches, Space}
-).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
@@ -179,18 +172,6 @@ supervisor_children_spec() ->
 init_paths_caches(Space) ->
     Nodes = consistent_hashing:get_all_nodes(),
     rpc:multicall(Nodes, ?MODULE, schedule_init_paths_caches, [Space]),
-    ok.
-
--spec init_file_protection_flags_caches(od_space:id() | all) -> ok.
-init_file_protection_flags_caches(Space) ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    rpc:multicall(Nodes, ?MODULE, schedule_init_file_protection_flags_caches, [Space]),
-    ok.
-
--spec invalidate_file_protection_flags_caches(od_space:id() | all) -> ok.
-invalidate_file_protection_flags_caches(Space) ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    rpc:multicall(Nodes, ?MODULE, schedule_invalidate_file_protection_flags_caches, [Space]),
     ok.
 
 
@@ -306,10 +287,6 @@ handle(?INIT_PATHS_CACHES(Space)) ->
     paths_cache:init(Space);
 handle(?INIT_DATASETS_CACHE(Space)) ->
     dataset_eff_cache:init(Space);
-handle(?INIT_FILE_PROTECTION_FLAGS_CACHES(Space)) ->
-    file_protection_flags_cache:init(Space);
-handle(?INVALIDATE_FILE_PROTECTION_FLAGS_CACHES(Space)) ->
-    file_protection_flags_cache:invalidate(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -378,7 +355,6 @@ init_effective_caches() ->
     paths_cache:init_group(),
     dataset_eff_cache:init_group(),
     schedule_init_paths_caches(all),
-    schedule_init_file_protection_flags_caches(all),
     schedule_init_datasets_cache(all).
 
 
@@ -581,8 +557,6 @@ handle_file_request(UserCtx, #get_child_attr{name = Name,
     attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
-handle_file_request(UserCtx, #update_protection_flags{set = FlagsToSet, unset = FlagsToUnset}, FileCtx) ->
-    attr_req:update_protection_flags(UserCtx, FileCtx, FlagsToSet, FlagsToUnset);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
     attr_req:update_times(UserCtx, FileCtx, ATime, MTime, CTime);
 handle_file_request(UserCtx, #delete_file{silent = Silent}, FileCtx) ->
@@ -778,12 +752,15 @@ handle_provider_request(UserCtx, #remove_qos_entry{id = QosEntryId}, FileCtx) ->
     qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
 handle_provider_request(UserCtx, #check_qos_status{qos_id = QosEntryId}, FileCtx) ->
     qos_req:check_status(UserCtx, FileCtx, QosEntryId);
-handle_provider_request(UserCtx, #establish_dataset{}, FileCtx) ->
-    dataset_req:establish(FileCtx, UserCtx);
-handle_provider_request(UserCtx, #detach_dataset{id = DatasetId}, SpaceDirCtx) ->
-    dataset_req:detach(SpaceDirCtx, DatasetId, UserCtx);
-handle_provider_request(UserCtx, #reattach_dataset{id = DatasetId}, SpaceDirCtx) ->
-    dataset_req:reattach(SpaceDirCtx, DatasetId, UserCtx);
+handle_provider_request(UserCtx, #establish_dataset{protection_flags = ProtectionFlags}, FileCtx) ->
+    dataset_req:establish(FileCtx, ProtectionFlags, UserCtx);
+handle_provider_request(UserCtx, #update_dataset{
+    id = DatasetId,
+    state = NewState,
+    flags_to_set = FlagsToSet,
+    flags_to_unset = FlagsToUnset
+}, SpaceDirCtx) ->
+    dataset_req:update(SpaceDirCtx, DatasetId, NewState, FlagsToSet, FlagsToUnset, UserCtx);
 handle_provider_request(UserCtx, #remove_dataset{id = DatasetId}, SpaceDirCtx) ->
     dataset_req:remove(SpaceDirCtx, DatasetId, UserCtx);
 handle_provider_request(UserCtx, #get_dataset_info{id = DatasetId}, SpaceDirCtx) ->
@@ -830,12 +807,6 @@ schedule_periodical_spaces_autocleaning_check() ->
 
 schedule_init_paths_caches(Space) ->
     schedule(?INIT_PATHS_CACHES(Space), 0).
-
-schedule_init_file_protection_flags_caches(Space) ->
-    schedule(?INIT_FILE_PROTECTION_FLAGS_CACHES(Space), 0).
-
-schedule_invalidate_file_protection_flags_caches(Space) ->
-    schedule(?INVALIDATE_FILE_PROTECTION_FLAGS_CACHES(Space), 0).
 
 schedule_init_datasets_cache(Space) ->
     schedule(?INIT_DATASETS_CACHE(Space), 0).
