@@ -63,12 +63,12 @@ handshake_attributes(_Client) ->
 %%--------------------------------------------------------------------
 -spec translate_value(gs_protocol:protocol_version(), gri:gri(),
     Value :: term()) -> no_return().
+translate_value(_, #gri{type = op_file} = GRI, Value) ->
+    file_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_provider} = GRI, Value) ->
     provider_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_space} = GRI, Value) ->
     space_gui_gs_translator:translate_value(GRI, Value);
-translate_value(_, #gri{type = op_file} = GRI, Value) ->
-    file_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_transfer} = GRI, Value) ->
     transfer_gui_gs_translator:translate_value(GRI, Value);
 translate_value(ProtocolVersion, GRI, Data) ->
@@ -90,26 +90,28 @@ translate_value(ProtocolVersion, GRI, Data) ->
 -spec translate_resource(gs_protocol:protocol_version(), gri:gri(),
     ResourceData :: term()) -> Result | fun((aai:auth()) -> Result) when
     Result :: gs_protocol:data() | errors:error() | no_return().
-translate_resource(_, #gri{type = op_provider} = GRI, Data) ->
-    provider_gui_gs_translator:translate_resource(GRI, Data);
-translate_resource(_, #gri{type = op_space} = GRI, Data) ->
-    space_gui_gs_translator:translate_resource(GRI, Data);
-translate_resource(_, #gri{type = op_user} = GRI, Data) ->
-    user_gui_gs_translator:translate_resource(GRI, Data);
-translate_resource(_, #gri{type = op_group} = GRI, Data) ->
-    group_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_dataset} = GRI, Data) ->
+    dataset_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_file} = GRI, Data) ->
     file_gui_gs_translator:translate_resource(GRI, Data);
-translate_resource(_, #gri{type = op_share} = GRI, Data) ->
-    share_gui_gs_translator:translate_resource(GRI, Data);
-translate_resource(_, #gri{type = op_transfer} = GRI, Data) ->
-    transfer_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_group} = GRI, Data) ->
+    group_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_handle} = GRI, Data) ->
     handle_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_handle_service} = GRI, Data) ->
     handle_service_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_provider} = GRI, Data) ->
+    provider_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_qos} = GRI, Data) ->
     qos_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_share} = GRI, Data) ->
+    share_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_space} = GRI, Data) ->
+    space_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_transfer} = GRI, Data) ->
+    transfer_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_user} = GRI, Data) ->
+    user_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(ProtocolVersion, GRI, Data) ->
     ?error(
         "Cannot translate graph sync get result for:~n"

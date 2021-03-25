@@ -38,7 +38,7 @@
 -export([get_active_perms_type/1, update_mode/2, update_protection_flags/3, protection_flags_to_json/1, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/6, new_doc/7, new_share_root_dir_doc/2, type/1, get_ancestors/1,
-    get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1,
+    get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1, type_to_json/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
 
@@ -552,6 +552,12 @@ get_type(#file_meta{type = Type}) ->
     Type;
 get_type(#document{value = FileMeta}) ->
     get_type(FileMeta).
+
+
+-spec type_to_json(type()) -> binary().
+type_to_json(?REGULAR_FILE_TYPE) -> <<"reg">>;
+type_to_json(?DIRECTORY_TYPE) -> <<"dir">>;
+type_to_json(?SYMLINK_TYPE) -> <<"lnk">>.
 
 
 -spec get_owner(file_meta() | doc()) -> od_user:id().
