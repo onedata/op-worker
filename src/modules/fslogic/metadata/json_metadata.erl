@@ -111,11 +111,11 @@ gather_ancestors_json_metadata(UserCtx, FileCtx0, GatheredMetadata) ->
             GatheredMetadata
     end,
 
-    case files_tree:get_parent_if_not_root_dir(FileCtx0, UserCtx) of
-        {undefined, _FileCtx1} ->
-            {ok, AllMetadata};
-        {ParentCtx, _FileCtx1} ->
-            gather_ancestors_json_metadata(UserCtx, ParentCtx, AllMetadata)
+    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
+
+    case file_ctx:equals(FileCtx1, ParentCtx) of
+        true -> {ok, AllMetadata};
+        false -> gather_ancestors_json_metadata(UserCtx, ParentCtx, AllMetadata)
     end.
 
 
