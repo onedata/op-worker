@@ -94,7 +94,7 @@
     establish_dataset/2, remove_dataset/2,
     detach_dataset/2, reattach_dataset/2,
     get_dataset_info/2, get_file_eff_dataset_summary/2,
-    list_space_datasets/4, list_nested_datasets/3
+    list_top_datasets/4, list_nested_datasets/3
 ]).
 
 %%%===================================================================
@@ -972,11 +972,11 @@ get_dataset_info(SessId, DatasetId) ->
 get_file_eff_dataset_summary(SessId, FileKey) ->
     ?run(fun() -> lfm_datasets:get_file_eff_summary(SessId, FileKey) end).
 
--spec list_space_datasets(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) -> ok | error_reply().
-list_space_datasets(SessId, SpaceId, State, Opts) ->
-    ?run(fun() -> lfm_datasets:list_space(SessId, SpaceId, State, Opts) end).
+-spec list_top_datasets(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) -> ok | error_reply().
+list_top_datasets(SessId, SpaceId, State, Opts) ->
+    ?run(fun() -> lfm_datasets:list_top_datasets(SessId, SpaceId, State, Opts) end).
 
 
 -spec list_nested_datasets(session:id(), dataset:id(), datasets_structure:opts()) -> ok | error_reply().
 list_nested_datasets(SessId, DatasetId, Opts) ->
-    ?run(fun() -> lfm_datasets:list_dataset(SessId, DatasetId, Opts) end).
+    ?run(fun() -> lfm_datasets:list_nested_datasets(SessId, DatasetId, Opts) end).

@@ -46,9 +46,6 @@
 -type summary() :: #summary{}.
 -type error() :: {error, term()}.
 
-% TODO zrobic grupę zeby ograniczas sumaryczn rozmiar?
-% TODO startowac na wszystkich node'ach?
-% TODO usunac dupliackej kodu z innymi modulami?
 
 %%%===================================================================
 %%% API functions

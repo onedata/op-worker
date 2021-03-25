@@ -780,20 +780,20 @@ handle_provider_request(UserCtx, #check_qos_status{qos_id = QosEntryId}, FileCtx
     qos_req:check_status(UserCtx, FileCtx, QosEntryId);
 handle_provider_request(UserCtx, #establish_dataset{}, FileCtx) ->
     dataset_req:establish(FileCtx, UserCtx);
-handle_provider_request(UserCtx, #detach_dataset{id = DatasetId}, _SpaceCtx) ->
-    dataset_req:detach(DatasetId, UserCtx);
-handle_provider_request(UserCtx, #reattach_dataset{id = DatasetId}, _SpaceCtx) ->
-    dataset_req:reattach(DatasetId, UserCtx);
-handle_provider_request(UserCtx, #remove_dataset{id = DatasetId}, _SpaceCtx) ->
-    dataset_req:remove(DatasetId, UserCtx);
-handle_provider_request(UserCtx, #get_dataset_info{id = DatasetId}, _SpaceCtx) ->
-    dataset_req:get_attrs(DatasetId, UserCtx);
+handle_provider_request(UserCtx, #detach_dataset{id = DatasetId}, SpaceDirCtx) ->
+    dataset_req:detach(SpaceDirCtx, DatasetId, UserCtx);
+handle_provider_request(UserCtx, #reattach_dataset{id = DatasetId}, SpaceDirCtx) ->
+    dataset_req:reattach(SpaceDirCtx, DatasetId, UserCtx);
+handle_provider_request(UserCtx, #remove_dataset{id = DatasetId}, SpaceDirCtx) ->
+    dataset_req:remove(SpaceDirCtx, DatasetId, UserCtx);
+handle_provider_request(UserCtx, #get_dataset_info{id = DatasetId}, SpaceDirCtx) ->
+    dataset_req:get_info(SpaceDirCtx, DatasetId, UserCtx);
 handle_provider_request(UserCtx, #get_file_eff_dataset_summary{}, FileCtx) ->
     dataset_req:get_file_eff_summary(FileCtx, UserCtx);
-handle_provider_request(UserCtx, #list_space_datasets{state = State, opts = Opts}, SpaceCtx) ->
-    dataset_req:list_space(file_ctx:get_space_id_const(SpaceCtx), State, UserCtx, Opts);
-handle_provider_request(UserCtx, #list_nested_datasets{id = DatasetId, opts = Opts}, _SpaceCtx) ->
-    dataset_req:list(DatasetId, UserCtx, Opts).
+handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts}, SpaceDirCtx) ->
+    dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, UserCtx, Opts);
+handle_provider_request(UserCtx, #list_nested_datasets{id = DatasetId, opts = Opts}, SpaceDirCtx) ->
+    dataset_req:list(SpaceDirCtx, DatasetId, UserCtx, Opts).
 
 
 %%--------------------------------------------------------------------

@@ -29,6 +29,10 @@
 % TODO VFS-7363 how should we handle race on creating dataset on the same file in 2 providers?
  %TODO VFS-7373 handle rename between spaces and rename which changes file-guid
 
+% TODO podpiac protection flagi
+% TODO ogarnac testy z protection flagami
+
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================

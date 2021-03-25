@@ -114,7 +114,7 @@ all() -> ?ALL([
 
 -define(assertNoTopDatasets(Node, SessionId, SpaceId, State),
     ?assertMatch({ok, [], true},
-        lfm_proxy:list_space_datasets(Node, SessionId, SpaceId, State, #{offset => 0, limit => 100}), ?ATTEMPTS)
+        lfm_proxy:list_top_datasets(Node, SessionId, SpaceId, State, #{offset => 0, limit => 100}), ?ATTEMPTS)
 ).
 
 %%%===================================================================
@@ -352,7 +352,7 @@ establish_nested_datasets_structure(_Config) ->
     GuidsAndDatasets = lists:reverse(GuidsAndDatasetsReversed),
 
     ?assertMatch({ok, [{SpaceDatasetId, SpaceName}], true},
-        lfm_proxy:list_space_datasets(P1Node, UserSessIdP1, SpaceId, attached, #{offset => 0, limit => 100})),
+        lfm_proxy:list_top_datasets(P1Node, UserSessIdP1, SpaceId, attached, #{offset => 0, limit => 100})),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, detached),
 
     lists:foldl(fun({ChildGuid, _ChildName, ChildDatasetId}, {Guid, DatasetId, ExpParentDatasetIds}) ->
@@ -389,7 +389,7 @@ establish_nested_datasets_structure_end_detach_all(_Config) ->
     GuidsAndDatasets = lists:reverse(GuidsAndDatasetsReversed),
 
     ?assertMatch({ok, [{SpaceDatasetId, SpaceName}], true},
-        lfm_proxy:list_space_datasets(P1Node, UserSessIdP1, SpaceId, detached, #{offset => 0, limit => 100})),
+        lfm_proxy:list_top_datasets(P1Node, UserSessIdP1, SpaceId, detached, #{offset => 0, limit => 100})),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
 
     lists:foldl(fun({ChildGuid, _ChildName, ChildDatasetId}, {Guid, DatasetId, ExpParentDatasetId}) ->
@@ -563,7 +563,7 @@ establish_datasets_with_the_same_names(_Config) ->
     ExpectedDatasets = [{DatasetId, DirName} || DatasetId <- DatasetIds],
 
     {ok, Datasets, true} =
-        lfm_proxy:list_space_datasets(P1Node, UserSessIdP1, SpaceId, attached, #{offset => 0, limit => 100}),
+        lfm_proxy:list_top_datasets(P1Node, UserSessIdP1, SpaceId, attached, #{offset => 0, limit => 100}),
     ?assertEqual(lists:sort(ExpectedDatasets), lists:sort(Datasets)),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, detached).
 
@@ -659,5 +659,5 @@ assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentD
             % check whether dataset is visible on space top dataset list
             SpaceId = file_id:guid_to_space_id(ExpectedRootFileGuid),
             ?assertMatch({ok, [{DatasetId, Name}], true},
-                lfm_proxy:list_space_datasets(Node, SessionId, SpaceId, ExpectedState, #{offset => 0, limit => 100}), ?ATTEMPTS)
+                lfm_proxy:list_top_datasets(Node, SessionId, SpaceId, ExpectedState, #{offset => 0, limit => 100}), ?ATTEMPTS)
     end.

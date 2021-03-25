@@ -177,7 +177,7 @@
 -record(get_file_eff_dataset_summary, {
 }).
 
--record(list_space_datasets, {
+-record(list_top_datasets, {
     state :: dataset:state(),
     opts :: datasets_structure:opts()
 }).
@@ -199,7 +199,7 @@
     #create_share{} | #remove_share{} |
     #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
     #establish_dataset{} | #detach_dataset{} | #reattach_dataset{} | #remove_dataset{} |
-    #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_space_datasets{} | #list_nested_datasets{}.
+    #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_nested_datasets{}.
 
 -record(transfer_encoding, {
     value :: binary()

@@ -20,7 +20,7 @@
     establish/2, remove/2,
     detach/2, reattach/2,
     get_info/2, get_file_eff_summary/2,
-    list_space/4, list_dataset/3
+    list_top_datasets/4, list_nested_datasets/3
 ]).
 
 -type attrs() :: #dataset_info{}.
@@ -89,20 +89,20 @@ get_file_eff_summary(SessId, FileKey) ->
     ).
 
 
--spec list_space(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
+-spec list_top_datasets(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
     ok | lfm:error_reply().
-list_space(SessId, SpaceId, State, Opts) ->
+list_top_datasets(SessId, SpaceId, State, Opts) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #list_space_datasets{state = State, opts = Opts},
+        #list_top_datasets{state = State, opts = Opts},
         fun(#nested_datasets{datasets = Datasets, is_last = IsLast}) ->
             {ok, Datasets, IsLast}
         end).
 
 
--spec list_dataset(session:id(), dataset:id(), datasets_structure:opts()) ->
+-spec list_nested_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
     ok | lfm:error_reply().
-list_dataset(SessId, DatasetId, Opts) ->
+list_nested_datasets(SessId, DatasetId, Opts) ->
     SpaceGuid = get_space_guid(DatasetId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
         #list_nested_datasets{id = DatasetId, opts = Opts},

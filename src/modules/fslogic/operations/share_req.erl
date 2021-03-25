@@ -113,7 +113,7 @@ create_share_insecure(UserCtx, FileCtx0, Name, Description) ->
         false -> file
     end,
 
-    assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
+    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case share_logic:create(SessionId, ShareId, Name, Description, SpaceId, ShareGuid, FileType) of
         {ok, _} ->
@@ -140,7 +140,7 @@ remove_share_insecure(UserCtx, FileCtx, ShareId) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
+    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case file_meta:remove_share(FileCtx, ShareId) of
         {error, not_found} ->
@@ -149,16 +149,4 @@ remove_share_insecure(UserCtx, FileCtx, ShareId) ->
             ok = share_logic:delete(SessionId, ShareId),
             ok = permissions_cache:invalidate(),
             #provider_response{status = #status{code = ?OK}}
-    end.
-
-
-%% @private
--spec assert_has_space_privilege(od_space:id(), od_user:id(),
-    privileges:space_privilege()) -> ok | no_return().
-assert_has_space_privilege(SpaceId, UserId, Privilege) ->
-    case space_logic:has_eff_privilege(SpaceId, UserId, Privilege) of
-        true ->
-            ok;
-        false ->
-            ?ERROR(?EPERM)
     end.
