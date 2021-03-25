@@ -57,7 +57,7 @@
 -spec add(file_meta:uuid(), file_ctx:ctx()) -> file_ctx:ctx().
 add(ParentUuid, FileCtx) ->
     {StorageFileBasename, FileCtx2} = storage_file_basename(FileCtx),
-    ChildUuid = file_ctx:get_uuid_const(FileCtx2),
+    ChildUuid = file_ctx:get_logical_uuid_const(FileCtx2),
     add_link(ParentUuid, StorageFileBasename, ChildUuid),
     FileCtx2.
 

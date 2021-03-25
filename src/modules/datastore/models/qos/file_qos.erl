@@ -275,7 +275,8 @@ clean_up(FileCtx, OriginalParentCtx) ->
             ?warning("Error during QoS clean up procedure:~p", [Error]),
             ok
     end,
-    Uuid = file_ctx:get_uuid_const(FileCtx1),
+    % TODO VFS-7435 - Integrate hardlinks with QoS
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx1),
     case OriginalParentCtx of
         undefined -> ok = delete(Uuid);
         _ -> ok
@@ -289,6 +290,7 @@ clean_up(FileCtx, OriginalParentCtx) ->
 %%--------------------------------------------------------------------
 -spec delete_associated_entries(key()) -> ok.
 delete_associated_entries(Uuid) ->
+    % TODO VFS-7435 - Integrate hardlinks with QoS
     case datastore_model:get(?CTX, Uuid) of
         {ok, #document{value = #file_qos{qos_entries = QosEntries}}} ->
             lists:foreach(fun(QosEntryId) ->

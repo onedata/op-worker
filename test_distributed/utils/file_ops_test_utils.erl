@@ -31,7 +31,7 @@
     file_guids
 }).
 
-% TODO VFS-7215 - merge this module with file_ops_test_utils
+% TODO VFS-7215 - merge this module with lfm_test_utils
 %%%===================================================================
 %%% API
 %%%===================================================================

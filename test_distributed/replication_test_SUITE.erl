@@ -105,7 +105,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
     ),
     ?assertMatch(
         {ok, _},
-        rpc:call(W1, times, create, [#document{
+        rpc:call(W1, times, save, [#document{
             key = FileUuid,
             value = #times{
                 atime = CTime,
@@ -155,7 +155,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     ),
     ?assertMatch(
         {ok, _},
-        rpc:call(W1, times, create, [#document{
+        rpc:call(W1, times, save, [#document{
             key = FileUuid,
             value = #times{
                 atime = CTime,
@@ -220,7 +220,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     ),
     ?assertMatch(
         {ok, _},
-        rpc:call(W1, times, create, [#document{
+        rpc:call(W1, times, save, [#document{
             key = FileUuid,
             value = #times{
                 atime = CTime,
@@ -845,7 +845,7 @@ remote_change_of_size_should_notify_clients(Config) ->
 
     % then
     TheFileCtxWithGuid = fun(FileCtx) ->
-        FileGuid =:= file_ctx:get_guid_const(FileCtx)
+        FileGuid =:= file_ctx:get_logical_guid_const(FileCtx)
     end,
     ?assert(rpc:call(W1, meck, called, [fslogic_event_emitter, emit_file_attr_changed,
         [meck:is(TheFileCtxWithGuid), []]])),

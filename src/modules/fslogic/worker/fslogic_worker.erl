@@ -548,13 +548,14 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec handle_file_request(user_ctx:ctx(), file_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus}, FileCtx) ->
-    attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus);
+handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus,
+    include_link_count = IncludeLinkCount}, FileCtx) ->
+    attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus, IncludeLinkCount);
 handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
     attr_req:get_file_details(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_child_attr{name = Name,
-    include_replication_status = IncludeReplicationStatus}, ParentFileCtx) ->
-    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus);
+    include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, ParentFileCtx) ->
+    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus, IncludeLinkCount);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
 handle_file_request(UserCtx, #update_protection_flags{set = FlagsToSet, unset = FlagsToUnset}, FileCtx) ->
@@ -580,14 +581,14 @@ handle_file_request(UserCtx, #get_file_children{
         last_name => StartId
     },
     dir_req:get_children(UserCtx, FileCtx, ListOpts);
-handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
-    size = Size, index_token = Token, include_replication_status = IncludeReplicationStatus}, FileCtx) ->
+handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset, size = Size, index_token = Token,
+    include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, FileCtx) ->
     ListOpts = #{
         offset => Offset,
         size => Size,
         token => Token
     },
-    dir_req:get_children_attrs(UserCtx, FileCtx, ListOpts, IncludeReplicationStatus);
+    dir_req:get_children_attrs(UserCtx, FileCtx, ListOpts, IncludeReplicationStatus, IncludeLinkCount);
 handle_file_request(UserCtx, #get_file_children_details{
     offset = Offset,
     size = Size,
@@ -611,6 +612,11 @@ handle_file_request(UserCtx, #storage_file_created{}, FileCtx) ->
     file_req:storage_file_created(UserCtx, FileCtx);
 handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx) ->
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
+handle_file_request(UserCtx, #make_link{target_parent_guid = TargetParentGuid, target_name = Name}, TargetFileCtx) ->
+    TargetParentFileCtx = file_ctx:new_by_guid(TargetParentGuid),
+    file_req:make_link(UserCtx, TargetFileCtx, TargetParentFileCtx, Name);
+handle_file_request(UserCtx, #make_symlink{target_name = Name, link = Link}, ParentFileCtx) ->
+    file_req:make_symlink(UserCtx, ParentFileCtx, Name, Link);
 handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->
     file_req:open_file(UserCtx, FileCtx, Flag);
 handle_file_request(UserCtx, #open_file_with_extended_info{flag = Flag}, FileCtx) ->
@@ -619,6 +625,8 @@ handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
     file_req:release(UserCtx, FileCtx, HandleId);
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
+handle_file_request(UserCtx, #read_symlink{}, FileCtx) ->
+    file_req:read_symlink(UserCtx, FileCtx);
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,

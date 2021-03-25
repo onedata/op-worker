@@ -136,7 +136,7 @@ create_handle(UserCtx, FileCtx, HandleId, Operation) ->
         Reason =:= ?EPERM;
         Reason =:= ?EROFS
     ->
-        case file_handles:get_creation_handle(file_ctx:get_uuid_const(FileCtx)) of
+        case file_handles:get_creation_handle(file_ctx:get_logical_uuid_const(FileCtx)) of
             {ok, HandleId} ->
                 % opening file with handle received from creation procedure
                 % (should open even if the user does not have permissions)

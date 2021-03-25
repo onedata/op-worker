@@ -101,7 +101,7 @@ update_mtime_ctime(FileCtx, CurrentTime) ->
 %%--------------------------------------------------------------------
 -spec update_times_and_emit(file_ctx:ctx(), times:diff()) -> ok.
 update_times_and_emit(FileCtx, TimesDiff) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
         true ->
             ok;
@@ -109,7 +109,7 @@ update_times_and_emit(FileCtx, TimesDiff) ->
             Times = prepare_times(TimesDiff),
             case times:create_or_update(#document{key = FileUuid,
                 value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesDiff) of
-                {ok, FileUuid} ->
+                {ok, _} ->
                     spawn(fun() ->
                         fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
                     end),
@@ -134,7 +134,7 @@ update_times_and_emit(FileCtx, TimesDiff) ->
 -spec calculate_atime(file_ctx:ctx(), CurrentTime :: file_meta:time()) ->
     file_meta:time() | actual.
 calculate_atime(FileCtx, CurrentTime) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     {ok, {ATime, CTime, MTime}} = times:get_or_default(FileUuid),
     case ATime of
         Outdated when Outdated =< MTime orelse Outdated =< CTime ->

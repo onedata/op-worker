@@ -1894,13 +1894,13 @@ request_synchronization(Worker, User, SessId, FileCtx, Block) ->
     ]).
 
 cancel_transfers_for_session_and_file(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session, [
         FileUuid, SessionId
     ]).
 
 cancel_transfers_for_session_and_file_sync(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session_sync, [
         FileUuid, SessionId
     ]).
@@ -1942,7 +1942,7 @@ verify_locations(W, FileUuid, SpaceId) ->
     end, 0, IDs).
 
 get_locations(W, FileUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     {LocationIds, _} = rpc:call(W, file_ctx, get_file_location_ids, [FileCtx]),
     LocationIds.
 
