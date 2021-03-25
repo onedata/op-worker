@@ -14,6 +14,7 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/file_attr.hrl").
 -include("middleware/middleware.hrl").
 -include("http/rest.hrl").
 -include("http/cdmi.hrl").
@@ -22,7 +23,6 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 
 %% API

@@ -481,7 +481,7 @@ mock_test_file_context(Config, UuidPrefix) ->
     test_utils:mock_new(Workers, file_ctx),
     test_utils:mock_expect(Workers, file_ctx, is_root_dir_const,
         fun(FileCtx) ->
-            Uuid = file_ctx:get_uuid_const(FileCtx),
+            Uuid = file_ctx:get_logical_uuid_const(FileCtx),
             case str_utils:binary_starts_with(Uuid, UuidPrefix) of
                 true -> false;
                 false -> meck:passthrough([FileCtx])
@@ -489,7 +489,7 @@ mock_test_file_context(Config, UuidPrefix) ->
         end),
     test_utils:mock_expect(Workers, file_ctx, file_exists_const,
         fun(FileCtx) ->
-            Uuid = file_ctx:get_uuid_const(FileCtx),
+            Uuid = file_ctx:get_logical_uuid_const(FileCtx),
             case str_utils:binary_starts_with(Uuid, UuidPrefix) of
                 true -> true;
                 false -> meck:passthrough([FileCtx])

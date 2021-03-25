@@ -101,7 +101,8 @@
     mkdir_removed_opened_file_test/1,
     rename_removed_opened_file_races_test/1,
     rename_removed_opened_file_races_test2/1,
-    lfm_monitored_open/1
+    lfm_monitored_open/1,
+    lfm_create_and_read_symlink/1
 ]).
 
 
@@ -182,7 +183,8 @@
     mkdir_removed_opened_file_test,
     rename_removed_opened_file_races_test,
     rename_removed_opened_file_races_test2,
-    lfm_monitored_open
+    lfm_monitored_open,
+    lfm_create_and_read_symlink
 ]).
 
 -define(SPACE_ID, <<"space1">>).
@@ -798,6 +800,47 @@ lfm_monitored_open(Config) ->
     ?assertEqual(ExpFileIds, lists:usort(GetAllDocsFun(undefined)), Attempts).
 
 
+lfm_create_and_read_symlink(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId, _UserId} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    % Prepare test dir and link data
+    TestDir = <<"/space_name1/", (generator:gen_name())/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, TestDir)),
+    Path = <<TestDir/binary, "/", (generator:gen_name())/binary>>,
+    LinkTarget = <<"test_link">>,
+    LinkSize = byte_size(LinkTarget),
+
+    % Create symlink and check its times
+    {ok, LinkAttrs} = ?assertMatch(
+        {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, fully_replicated = undefined, parent_guid = DirGuid}},
+        lfm_proxy:make_symlink(W, SessId, Path, LinkTarget)),
+    ?assert(LinkAttrs#file_attr.atime > 0),
+    ?assert(LinkAttrs#file_attr.mtime > 0),
+    ?assert(LinkAttrs#file_attr.ctime > 0),
+    ?assert(fslogic_uuid:is_symlink_uuid(file_id:guid_to_uuid(LinkAttrs#file_attr.guid))),
+
+    % Read link and check it
+    time_test_utils:simulate_seconds_passing(2), % ensure time change
+    ?assertEqual({ok, LinkTarget}, lfm_proxy:read_symlink(W, SessId, {path, Path})),
+    {ok, LinkAttrs2} = ?assertMatch(
+        {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, fully_replicated = undefined, parent_guid = DirGuid}},
+        lfm_proxy:stat(W, SessId, {path, Path})),
+    ?assert(LinkAttrs2#file_attr.atime > LinkAttrs#file_attr.atime),
+    ?assertMatch({ok, [LinkAttrs2], _}, lfm_proxy:get_children_attrs(W, SessId, {guid, DirGuid}, #{offset => 0, size => 10})),
+
+    % Unlink and check if symlink is deleted
+    ?assertEqual(ok, lfm_proxy:unlink(W, SessId, {path, Path})),
+    ?assertEqual({error, enoent}, lfm_proxy:read_symlink(W, SessId, {path, Path})),
+    ?assertMatch({ok, [], _}, lfm_proxy:get_children_attrs(W, SessId, {guid, DirGuid}, #{offset => 0, size => 10})),
+
+    % Delete test dir
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId, {guid, DirGuid})),
+    ok.
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -868,6 +911,10 @@ init_per_testcase(ShareTest, Config) when
     initializer:mock_share_logic(Config),
     init_per_testcase(?DEFAULT_CASE(ShareTest), Config);
 
+init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
@@ -935,6 +982,10 @@ end_per_testcase(Case = lfm_cp_dir, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     % set default value of ls_batch_size env
     test_utils:set_env(W, op_worker, ls_batch_size, 5000),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
+    time_test_utils:unfreeze_time(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->

@@ -173,7 +173,7 @@ create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
 
     case StorageFileCreated of
         false ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx3),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
             % TODO VFS-5270
             replica_synchronizer:apply(FileCtx, fun() ->
                 try
@@ -305,7 +305,7 @@ unlink(FileCtx, UserCtx) ->
 rmdir(DirCtx, UserCtx) ->
     DirCtx2 = share_to_standard_file_ctx(DirCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    FileUuid = file_ctx:get_uuid_const(DirCtx2),
+    FileUuid = file_ctx:get_logical_uuid_const(DirCtx2),
     case storage_driver:new_handle(SessId, DirCtx2, false) of
         {undefined, DirCtx3} ->
             {ok, DirCtx3};
@@ -336,7 +336,7 @@ rmdir(DirCtx, UserCtx) ->
 
 -spec share_to_standard_file_ctx(file_ctx:ctx()) -> file_ctx:ctx().
 share_to_standard_file_ctx(FileCtx) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
     case file_id:is_share_guid(Guid) of
         true ->
             Guid2 = file_id:share_guid_to_guid(Guid),
@@ -351,7 +351,8 @@ create_storage_file(SDHandle, FileCtx) ->
     FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx),
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     Mode = file_meta:get_mode(FileDoc),
-    case file_meta:get_type(FileDoc) of
+    case file_meta:get_effective_type(FileDoc) of
+        % ?SYMLINK_TYPE is impossible as symlinks are not created at storage
         ?REGULAR_FILE_TYPE ->
             case storage_driver:create(SDHandle, Mode) of
                 ok ->
@@ -382,7 +383,7 @@ truncate_created_file(FileCtx) ->
     catch
         Error:Reason ->
             ?warning_stacktrace("Error truncating newly created storage file ~p: ~p:~p",
-                [file_ctx:get_guid_const(FileCtx), Error, Reason]),
+                [file_ctx:get_logical_guid_const(FileCtx), Error, Reason]),
             {ok, FileCtx}
     end.
 
@@ -398,9 +399,17 @@ create_missing_parent_dirs(UserCtx, FileCtx) ->
         true ->
             FileCtx;
         false ->
-            {ParentCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
-            create_missing_parent_dirs(UserCtx, ParentCtx, []),
-            FileCtx2
+            ReferencedUuidBasedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
+            case file_ctx:equals(FileCtx, ReferencedUuidBasedFileCtx) of
+                true -> % regular file - use provided ctx
+                    {ParentCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
+                    create_missing_parent_dirs(UserCtx, ParentCtx, []),
+                    FileCtx2;
+                false -> % hardlink - use effective ctx and do not return changes on ctx
+                    {ParentCtx, _} = files_tree:get_parent(ReferencedUuidBasedFileCtx, undefined),
+                    create_missing_parent_dirs(UserCtx, ParentCtx, []),
+                    FileCtx
+            end
     end.
 
 %%-------------------------------------------------------------------
@@ -429,7 +438,7 @@ create_missing_parent_dirs(UserCtx, FileCtx, ParentCtxsToCreate) ->
         false ->
             {ParentCtx, FileCtx3} = files_tree:get_parent(FileCtx2, undefined),
             % Infinite loop possible if function is executed on space dir - this case stops such loop
-            case file_ctx:get_uuid_const(FileCtx) =:= file_ctx:get_uuid_const(ParentCtx) of
+            case file_ctx:get_logical_uuid_const(FileCtx) =:= file_ctx:get_logical_uuid_const(ParentCtx) of
                 true ->
                     {Doc, _} = file_ctx:get_file_doc(FileCtx2),
                     ?info("Infinite loop detected on parent dirs creation for file ~p", [Doc]),
@@ -467,7 +476,7 @@ create_missing_parent_dir(UserCtx, FileCtx) ->
 -spec mkdir_and_maybe_chown(user_ctx:ctx(), file_ctx:ctx(), file_meta:mode()) ->
     {ok, file_ctx:ctx()} | {error, term()}.
 mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     {ShouldChown, FileCtx2} = should_chown(UserCtx, FileCtx),
     SessId = case ShouldChown of
         true -> ?ROOT_SESS_ID;
@@ -509,7 +518,8 @@ mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
     file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 handle_eexists(VerifyDeletionLink, UserCtx, SDHandle, FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    case file_meta:get_type(FileDoc) of
+    case file_meta:get_effective_type(FileDoc) of
+        % ?SYMLINK_TYPE is impossible as symlinks are not created at storage
         ?REGULAR_FILE_TYPE -> handle_conflicting_file(VerifyDeletionLink, UserCtx, SDHandle, FileCtx);
         ?DIRECTORY_TYPE -> handle_conflicting_directory(FileCtx2)
     end.
@@ -609,12 +619,12 @@ get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, ParentCtxs) ->
 mark_parent_dirs_created_on_storage([], _StorageId, _IsImportedStorage) ->
     ok;
 mark_parent_dirs_created_on_storage([DirCtx | RestCtxs], StorageId, IsImportedStorage) ->
-    Uuid = file_ctx:get_uuid_const(DirCtx),
+    Uuid = file_ctx:get_logical_uuid_const(DirCtx),
     {StorageFileId, DirCtx2} = file_ctx:get_storage_file_id(DirCtx),
     case IsImportedStorage of
         true ->
             SpaceId = file_ctx:get_space_id_const(DirCtx2),
-            FileGuid = file_ctx:get_guid_const(DirCtx2),
+            FileGuid = file_ctx:get_logical_guid_const(DirCtx2),
             storage_sync_info:maybe_set_guid(StorageFileId, SpaceId, StorageId, FileGuid);
         false ->
             ok

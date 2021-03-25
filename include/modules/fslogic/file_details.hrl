@@ -15,7 +15,7 @@
 -ifndef(FILE_DETAILS_HRL).
 -define(FILE_DETAILS_HRL, 1).
 
--include_lib("ctool/include/posix/file_attr.hrl").
+-include("modules/fslogic/file_attr.hrl").
 
 -record(file_details, {
     file_attr :: #file_attr{},

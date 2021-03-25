@@ -521,8 +521,8 @@ race_on_remote_deletion_of_parent_and_child(Config) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
 
     % pretend that files were deleted
-    ok = rpc:call(Worker, file_meta, delete, [FileUuid]),
-    ok = rpc:call(Worker, file_meta, delete, [DirUuid]),
+    ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [FileUuid])),
+    ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [DirUuid])),
 
     % pretend that directory doc is synchronized before its child doc
     {ok, DirDoc} = rpc:call(Worker, file_meta, get_including_deleted, [DirUuid]),

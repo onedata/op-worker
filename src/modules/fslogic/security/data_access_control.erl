@@ -170,7 +170,7 @@ assert_meets_access_requirement(UserCtx, FileCtx0, Requirement) when
     Requirement == ?TRAVERSE_ANCESTORS
 ->
     UserId = user_ctx:get_user_id(UserCtx),
-    Guid = file_ctx:get_guid_const(FileCtx0),
+    Guid = file_ctx:get_logical_guid_const(FileCtx0),
     CacheKey = {Requirement, UserId, Guid},
 
     case permissions_cache:check_permission(CacheKey) of
@@ -255,7 +255,7 @@ check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
     file_ctx:ctx() | no_return().
 assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
     UserId = user_ctx:get_user_id(UserCtx),
-    Guid = file_ctx:get_guid_const(FileCtx0),
+    Guid = file_ctx:get_logical_guid_const(FileCtx0),
     % TODO VFS-6224 do not construct cache key outside of permissions_cache module
     CacheKey = {user_perms_matrix, UserId, Guid},
 

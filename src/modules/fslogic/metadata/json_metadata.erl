@@ -14,6 +14,11 @@
 %%% other xattrs)
 %%% - Filters, that is path under/from which json metadata should be
 %%% set/fetched.
+%%% Note: this module bases on custom_metadata and as effect all operations
+%%% on hardlinks are treated as operations on original file (custom_metadata
+%%% is shared between hardlinks and original file). The exception is use of
+%%% 'inherited' flag on link - it results in usage of ancestors of link,
+%%% not the original file.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(json_metadata).
@@ -44,6 +49,7 @@
 get(UserCtx, FileCtx, Query, Inherited) ->
     Result = case Inherited of
         true ->
+            % Note: in case of link, its ancestors will be used instead of original file ancestors.
             case gather_ancestors_json_metadata(UserCtx, FileCtx, []) of
                 {ok, []} ->
                     ?ERROR_NOT_FOUND;
@@ -87,7 +93,7 @@ remove(UserCtx, FileCtx) ->
         UserCtx, FileCtx,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
-    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx1),
     custom_metadata:remove_xattr(FileUuid, ?JSON_METADATA_KEY).
 
 
@@ -127,7 +133,7 @@ get_direct_json_metadata(UserCtx, FileCtx0) ->
         UserCtx, FileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
-    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx1),
     custom_metadata:get_xattr(FileUuid, ?JSON_METADATA_KEY).
 
 
@@ -141,8 +147,8 @@ get_direct_json_metadata(UserCtx, FileCtx0) ->
 ) ->
     {ok, file_meta:uuid()} | {error, term()}.
 set_insecure(FileCtx, JsonToInsert, Query, Create, Replace) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, FileObjectId} = file_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    {ok, FileObjectId} = file_id:guid_to_objectid(file_ctx:get_referenced_guid_const(FileCtx)),
     ToCreate = #document{
         key = FileUuid,
         value = #custom_metadata{

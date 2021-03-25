@@ -461,7 +461,7 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
                 NewFileCtxs = lists:filtermap(fun(O) ->
                     try
                         {ok, G} = file_id:objectid_to_guid(O),
-                        NewFileCtx0 = file_ctx:new_by_guid(G),
+                        NewFileCtx0 = file_ctx:new_by_guid(G), % TODO VFS-7443 - maybe use referenced guid?
                         case file_ctx:file_exists_const(NewFileCtx0) of
                             true ->
                                 % TODO VFS-6386 Enable and test view transfer with dirs

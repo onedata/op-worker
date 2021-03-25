@@ -157,7 +157,7 @@ transfer_regular_file(FileCtx, #transfer_params{
     supporting_provider = SupportingProvider
 }) ->
     {LocalFileLocationDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx2),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
     SpaceId = file_ctx:get_space_id_const(FileCtx2),
     {Size, _FileCtx3} = file_ctx:get_file_size(FileCtx2),
     VV = file_location:get_version_vector(LocalFileLocationDoc),

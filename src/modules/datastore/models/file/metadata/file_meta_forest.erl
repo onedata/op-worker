@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for management of file_meta links.
+%%% This module is responsible for management of file_meta datastore links.
 %%% The assumptions are as follows:
 %%%  * for each directory (identified by ParentUuid) in given scope (SpaceId)
 %%%    there is a links forest
@@ -15,7 +15,7 @@
 %%%  * provider is allowed to modify only its own tree
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_meta_links).
+-module(file_meta_forest).
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
@@ -222,7 +222,7 @@ get_trees(ParentUuid) ->
 -spec check_name_and_get_conflicting_files(forest(), link_name(), link_target(), od_provider:id()) ->
     ok | {conflicting, TaggedName :: file_meta:name(), Conflicts :: [link()]}.
 check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId) ->
-    case file_meta_links:get_all(ParentUuid, FileName) of
+    case file_meta_forest:get_all(ParentUuid, FileName) of
         {ok, [#link{target = FileUuid}]} ->
             ok;
         {ok, []} ->
