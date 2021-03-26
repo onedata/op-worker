@@ -20,10 +20,8 @@
 
 %% API
 -export([
-    establish/3
-    ,
-    update/6
-    ,
+    establish/3,
+    update/6,
     remove/3,
     get_info/3,
     get_file_eff_summary/2,
@@ -31,7 +29,7 @@
     list/4
 ]).
 
-% TODO sprawdzanie uprawnień
+% TODO sprawdzanie uprawnień traverse do establish/update/remove, o ile dataset nie jest detachowany !!!
 %%%===================================================================
 %%% API functions
 %%%===================================================================

@@ -363,7 +363,8 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
         {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_OPERATIONS}
     ]),
 
-    {ok, DatasetId} = lfm_proxy:establish_dataset(Node, ?ROOT_SESS_ID, ScenarioRootDirKey),
+    SpaceOwnerUserSessId = ?config({session_id, {SpaceOwner, ?GET_DOMAIN(Node)}}, Config),
+    {ok, DatasetId} = lfm_proxy:establish_dataset(Node, SpaceOwnerUserSessId, ScenarioRootDirKey),
 
     case ProtectionFlagsToSet > 0 of
         true ->

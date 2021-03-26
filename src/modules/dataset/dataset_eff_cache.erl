@@ -147,7 +147,7 @@ get_eff_protection_flags(FileDoc) ->
 
 -spec get(file_meta:doc()) -> {ok, entry()} | error().
 get(FileDoc = #document{key = FileUuid}) ->
-    case fslogic_uuid:is_root_dir_uuid(FileUuid) of
+    case fslogic_uuid:is_root_dir_uuid(FileUuid) orelse fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
         true ->
             {ok, #entry{eff_protection_flags = ?no_flags_mask}};
         false ->

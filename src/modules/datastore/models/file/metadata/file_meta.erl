@@ -805,7 +805,8 @@ new_share_root_dir_doc(ShareRootDirUuid, SpaceId) ->
                 {ok, _} -> false;
                 ?ERROR_NOT_FOUND -> true
             end
-        }
+        },
+        scope = SpaceId
     }.
 
 
