@@ -25,6 +25,7 @@
     translate_value/2,
     translate_resource/2,
 
+    translate_dataset_summary/1,
     translate_distribution/2
 ]).
 
@@ -135,7 +136,12 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
 translate_resource(#gri{aspect = qos_summary, scope = private}, QosSummaryResponse) ->
     maps:without([<<"status">>], QosSummaryResponse);
 
-translate_resource(#gri{aspect = dataset_summary, scope = private}, #file_eff_dataset_summary{
+translate_resource(#gri{aspect = dataset_summary, scope = private}, DatasetSummary) ->
+    translate_dataset_summary(DatasetSummary).
+
+
+-spec translate_dataset_summary(lfm_datasets:file_eff_summary()) -> map().
+translate_dataset_summary(#file_eff_dataset_summary{
     direct_dataset = DatasetId,
     eff_ancestor_datasets = EffAncestorDatasets,
     eff_protection_flags = EffProtectionFlags
@@ -198,6 +204,7 @@ translate_file_details(#file_details{
     has_eff_qos = HasEffQos,
     active_permissions_type = ActivePermissionsType,
     index_startid = StartId,
+    eff_dataset_membership = EffDatasetMembership,
     eff_protection_flags = EffFileProtectionFlags,
     file_attr = #file_attr{
         guid = FileGuid,
@@ -251,7 +258,8 @@ translate_file_details(#file_details{
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
                 <<"hasDirectQos">> => HasDirectQos,
-                <<"hasEffQos">> => HasEffQos
+                <<"hasEffQos">> => HasEffQos,
+                <<"effDatasetMembership">> => EffDatasetMembership
             }
     end.
 
