@@ -234,6 +234,7 @@ get_attrs_on_provider_not_supporting_space_test(_Config) ->
 -spec attrs_to_json(od_share:id(), #file_attr{}) -> map().
 attrs_to_json(ShareId, #file_attr{
     guid = Guid,
+    parent_guid = ParentGuid,
     name = Name,
     mode = Mode,
     uid = Uid,
@@ -263,9 +264,11 @@ attrs_to_json(ShareId, #file_attr{
     case ShareId of
         undefined ->
             {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+            {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
 
             PublicAttrs#{
                 <<"file_id">> => ObjectId,
+                <<"parent_id">> => ParentObjectId,
                 <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
                 <<"storage_user_id">> => Uid,
                 <<"storage_group_id">> => Gid,
@@ -279,6 +282,7 @@ attrs_to_json(ShareId, #file_attr{
 
             PublicAttrs#{
                 <<"file_id">> => ShareObjectId,
+                <<"parent_id">> => null,
                 <<"mode">> => <<"0", (integer_to_binary(2#111 band Mode, 8))/binary>>,
                 <<"storage_user_id">> => ?SHARE_UID,
                 <<"storage_group_id">> => ?SHARE_GID,

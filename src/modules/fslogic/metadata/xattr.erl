@@ -60,11 +60,11 @@ get(UserCtx, FileCtx0, XattrName, true = Inherited) ->
         {ok, _} = Result ->
             Result;
         ?ERROR_NOT_FOUND ->
-            case files_tree:get_parent_if_not_root_dir(FileCtx0, UserCtx) of
-                {undefined, _FileCtx1} ->
-                    ?ERROR_NOT_FOUND;
-                {ParentCtx, _FileCtx1} ->
-                    get(UserCtx, ParentCtx, XattrName, Inherited)
+            {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
+
+            case file_ctx:equals(FileCtx1, ParentCtx) of
+                true -> ?ERROR_NOT_FOUND;
+                false -> get(UserCtx, ParentCtx, XattrName, Inherited)
             end
     end.
 
@@ -169,10 +169,12 @@ list_direct_xattrs(FileCtx) ->
 -spec list_ancestor_xattrs(user_ctx:ctx(), file_ctx:ctx(), [custom_metadata:name()]) ->
     {ok, [custom_metadata:name()]} | {error, term()}.
 list_ancestor_xattrs(UserCtx, FileCtx0, GatheredXattrNames) ->
-    case files_tree:get_parent_if_not_root_dir(FileCtx0, UserCtx) of
-        {undefined, _FileCtx1} ->
+    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
+
+    case file_ctx:equals(FileCtx1, ParentCtx) of
+        true ->
             {ok, GatheredXattrNames};
-        {ParentCtx, _FileCtx1} ->
+        false ->
             AllXattrNames = case list_direct_xattrs(FileCtx0) of
                 {ok, []} ->
                     GatheredXattrNames;

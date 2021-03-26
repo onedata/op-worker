@@ -81,7 +81,7 @@
 
 %% API
 -export([
-    get_parent_guid_if_not_root_dir/2, get_parent_if_not_root_dir/2,
+    get_parent_guid_if_not_root_dir/2,
     get_original_parent/2,
     get_parent/2,
 
@@ -121,24 +121,6 @@ get_parent_guid_if_not_root_dir(FileCtx, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns 'undefined' if file is root file (either userRootDir or share root)
-%% or proper ParentCtx otherwise.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent_if_not_root_dir(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
-    {ParentFileCtx :: undefined | file_ctx:ctx(), NewFileCtx :: file_ctx:ctx()}.
-get_parent_if_not_root_dir(FileCtx0, UserCtx) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx0),
-    {ParentCtx, FileCtx1} = get_parent(FileCtx0, UserCtx),
-
-    case file_ctx:get_logical_guid_const(ParentCtx) of
-        FileGuid -> {undefined, FileCtx1};
-        _ -> {ParentCtx, FileCtx1}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% This function returns original parent of a file.
 %% It means that it checks whether file is not a child of trash.
 %% If it is, it returns ctx() of directory which was parent of the file
@@ -165,8 +147,8 @@ get_original_parent(FileCtx, OriginalParentCtx) ->
 %% Returns parent's file context. In case of user root dir and share root
 %% dir/file returns the same file_ctx. Therefore, to check if given
 %% file_ctx points to root dir (either user root dir or share root) it is
-%% enough to call this function and compare returned parent ctx's guid
-%% with its own.
+%% enough to call this function and compare returned parent ctx with its own
+%% (by using e.g. 'file_ctx:equals').
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
