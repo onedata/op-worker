@@ -37,6 +37,8 @@
     lfm_synch_stat_test/1,
     lfm_cp_file/1,
     lfm_cp_empty_dir/1,
+    lfm_cp_dir_to_itself_should_fail/1,
+    lfm_cp_dir_to_its_child_should_fail/1,
     lfm_cp_dir/1,
     lfm_truncate_test/1,
     lfm_truncate_and_write/1,
@@ -110,6 +112,8 @@
     lfm_synch_stat_test,
     lfm_cp_file,
     lfm_cp_empty_dir,
+    lfm_cp_dir_to_itself_should_fail,
+    lfm_cp_dir_to_its_child_should_fail,
     lfm_cp_dir,
     lfm_truncate_test,
     lfm_truncate_and_write,
@@ -312,6 +316,12 @@ lfm_cp_file(Config) ->
 
 lfm_cp_empty_dir(Config) ->
     lfm_files_test_base:lfm_cp_empty_dir(Config).
+
+lfm_cp_dir_to_itself_should_fail(Config) ->
+    lfm_files_test_base:lfm_cp_dir_to_itself_should_fail(Config).
+
+lfm_cp_dir_to_its_child_should_fail(Config) ->
+    lfm_files_test_base:lfm_cp_dir_to_its_child_should_fail(Config).
 
 lfm_cp_dir(Config) ->
     lfm_files_test_base:lfm_cp_dir(Config).

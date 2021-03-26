@@ -40,6 +40,8 @@
     lfm_synch_stat/1,
     lfm_cp_file/1,
     lfm_cp_empty_dir/1,
+    lfm_cp_dir_to_itself_should_fail/1,
+    lfm_cp_dir_to_its_child_should_fail/1,
     lfm_cp_dir/1,
     lfm_truncate/1,
     lfm_truncate_and_write/1,
@@ -1283,6 +1285,55 @@ lfm_cp_empty_dir(Config) ->
         lfm_proxy:get_children(W, SessId1, {guid, TargetParentGuid2}, #{offset => 0, size => 10})),
     ?assertMatch({ok, #file_attr{guid = TargetGuid2}},
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath2})).
+
+lfm_cp_dir_to_itself_should_fail(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    SpaceName = <<"space_name2">>,
+    TestCaseDir = ?FUNCTION_NAME,
+    SourceDir = <<"test_cp_source_dir">>,
+    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
+    SourceDirPath = filename:join([TestCaseDirPath, SourceDir]),
+
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId1, SourceDirPath),
+
+    % try to copy file to itself
+    ?assertMatch({error, _}, lfm_proxy:cp(W, SessId1, {guid, Guid}, {path, SourceDirPath}, SourceDir)).
+
+lfm_cp_dir_to_its_child_should_fail(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    SpaceName = <<"space_name2">>,
+    TestCaseDir = ?FUNCTION_NAME,
+    SourceDir = <<"test_cp_source_dir">>,
+    ChildDir1 = <<"test_cp_child_dir1">>,
+    ChildDir2 = <<"test_cp_child_dir2">>,
+    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
+    SourceDirPath = filename:join([TestCaseDirPath, SourceDir]),
+    ChildDirPath1 = filename:join([SourceDirPath, ChildDir1]),
+    ChildDirPath2 = filename:join([ChildDirPath1, ChildDir2]),
+
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId1, SourceDirPath),
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, ChildDirPath1),
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, ChildDirPath2),
+
+    tracer:start(W),
+    tracer:trace_calls(file_copy, copy),
+    tracer:trace_calls(file_copy, copy_dir),
+    tracer:trace_calls(file_copy, copy_file),
+    tracer:trace_calls(file_copy, copy_children),
+
+    % try to copy file to child
+    ?assertMatch({error, _}, lfm_proxy:cp(W, SessId1, {guid, Guid}, {path, ChildDirPath2}, SourceDir)).
+
 
 lfm_cp_dir(Config) ->
     % In this test, environment variable `ls_batch_size`,
