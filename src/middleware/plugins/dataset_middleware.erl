@@ -182,7 +182,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}, _) ->
-    {ok, ?check(lfm:get_dataset_info(Auth#auth.session_id, DatasetId))}.
+    ?check(lfm:get_dataset_info(Auth#auth.session_id, DatasetId)).
 
 
 %%--------------------------------------------------------------------
