@@ -205,7 +205,7 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = children}, data = D
         <<"datasets">> => lists:map(fun({DatasetId, DatasetName}) ->
             #{<<"id">> => DatasetId, <<"name">> => DatasetName}
         end, Datasets),
-        <<"IsLast">> => IsLast
+        <<"isLast">> => IsLast
     }}.
 
 
@@ -242,4 +242,7 @@ delete(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}) ->
 %% @private
 -spec sanitize_listing_opts(middleware:data()) -> datasets_structure:opts().
 sanitize_listing_opts(Data) ->
-    kv_utils:copy_found([{<<"offset">>, offset}, {<<"limit">>, limit}], Data).
+    #{
+        offset => maps:get(<<"offset">>, Data, 0),
+        limit => maps:get(<<"limit">>, Data, ?LISTING_LIMIT)
+    }.

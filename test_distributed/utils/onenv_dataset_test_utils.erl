@@ -181,24 +181,6 @@ get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, Object) ->
     onenv_file_test_utils:object()
 ) ->
     [{file_meta:name(), dataset:id(), lfm_datasets:attrs()}].
-get_exp_child_datasets_internal(_State, _ParentDirPath, _ParentDatasetId, #object{
-    type = ?REGULAR_FILE_TYPE,
-    dataset = undefined
-}) ->
-    [];
-
-get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
-    type = ?DIRECTORY_TYPE,
-    name = DirName,
-    children = Children,
-    dataset = undefined
-}) ->
-    DirPath = filename:join(["/", ParentDirPath, DirName]),
-
-    lists:map(fun(Child) ->
-        get_exp_child_datasets_internal(State, DirPath, ParentDatasetId, Child)
-    end, Children);
-
 get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
     type = ObjType,
     name = ObjName,
@@ -222,4 +204,20 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
         protection_flags = ProtectionFlags,
         parent = ParentDatasetId
     },
-    {ObjName, DatasetId, DatasetDetails}.
+    {ObjName, DatasetId, DatasetDetails};
+
+get_exp_child_datasets_internal(_State, _ParentDirPath, _ParentDatasetId, #object{
+    type = ?REGULAR_FILE_TYPE
+}) ->
+    [];
+
+get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
+    type = ?DIRECTORY_TYPE,
+    name = DirName,
+    children = Children
+}) ->
+    DirPath = filename:join(["/", ParentDirPath, DirName]),
+
+    lists:map(fun(Child) ->
+        get_exp_child_datasets_internal(State, DirPath, ParentDatasetId, Child)
+    end, Children).

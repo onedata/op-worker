@@ -83,5 +83,5 @@ get_response(#gri{aspect = dataset_summary}, #file_eff_dataset_summary{
     ?OK_REPLY(#{
         <<"directDataset">> => utils:undefined_to_null(DatasetId),
         <<"effectiveAncestorDatasets">> => EffAncestorDatasets,
-        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
+        <<"effectiveProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
     }).
