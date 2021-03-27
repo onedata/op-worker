@@ -15,6 +15,7 @@
 
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 -export([create_response/4, get_response/2]).
 
@@ -72,4 +73,15 @@ get_response(#gri{aspect = As}, EffQosResp) when
     As =:= distribution;
     As =:= qos_summary
 ->
-    ?OK_REPLY(EffQosResp).
+    ?OK_REPLY(EffQosResp);
+
+get_response(#gri{aspect = dataset_distribution}, #file_eff_dataset_summary{
+    direct_dataset = DatasetId,
+    eff_ancestor_datasets = EffAncestorDatasets,
+    eff_protection_flags = EffProtectionFlags
+}) ->
+    ?OK_REPLY(#{
+        <<"directDataset">> => utils:undefined_to_null(DatasetId),
+        <<"effectiveAncestorDatasets">> => EffAncestorDatasets,
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
+    }).

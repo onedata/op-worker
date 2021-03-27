@@ -35,7 +35,10 @@
     list_children/2, list_children_whitelisted/3
 ]).
 -export([get_name/1, set_name/2]).
--export([get_active_perms_type/1, update_mode/2, update_protection_flags/3, protection_flags_to_json/1, update_acl/2]).
+-export([
+    get_active_perms_type/1, update_mode/2,  update_acl/2,
+    update_protection_flags/3, protection_flags_to_json/1, protection_flags_from_json/1
+]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/6, new_doc/7, new_share_root_dir_doc/2, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1, type_to_json/1,
@@ -941,6 +944,13 @@ update_mode(FileUuid, NewMode) ->
     end)).
 
 
+-spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
+update_acl(FileUuid, NewAcl) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+        {ok, FileMeta#file_meta{acl = NewAcl}}
+    end)).
+
+
 -spec update_protection_flags(uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
     ok | {error, term()}.
 update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
@@ -951,9 +961,9 @@ update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
 
 
 -spec protection_flags_to_json(data_access_control:bitmask()) -> [binary()].
-protection_flags_to_json(FileFlags) ->
+protection_flags_to_json(ProtectionFlags) ->
     lists:filtermap(fun({FlagName, FlagMask}) ->
-        case ?has_all_flags(FileFlags, FlagMask) of
+        case ?has_all_flags(ProtectionFlags, FlagMask) of
             true -> {true, FlagName};
             false -> false
         end
@@ -963,11 +973,17 @@ protection_flags_to_json(FileFlags) ->
     ]).
 
 
--spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
-update_acl(FileUuid, NewAcl) ->
-    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
-        {ok, FileMeta#file_meta{acl = NewAcl}}
-    end)).
+-spec protection_flags_from_json([binary()]) -> data_access_control:bitmask().
+protection_flags_from_json(ProtectionFlagsJson) ->
+    lists:foldl(fun(ProtectionFlag, Bitmask) ->
+        ?set_flags(Bitmask, protection_flag_from_json(ProtectionFlag))
+    end, ?no_flags_mask, ProtectionFlagsJson).
+
+
+%% @private
+-spec protection_flag_from_json(binary()) -> data_access_control:bitmask().
+protection_flag_from_json(?DATA_PROTECTION_BIN) -> ?DATA_PROTECTION;
+protection_flag_from_json(?METADATA_PROTECTION_BIN) -> ?METADATA_PROTECTION.
 
 
 -spec check_name_and_get_conflicting_files(doc()) ->
