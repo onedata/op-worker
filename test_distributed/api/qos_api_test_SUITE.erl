@@ -336,7 +336,7 @@ prepare_args_fun_rest(MemRef, qos_summary) ->
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ObjectId, Data),
         #rest_args{
             method = get,
-            path = <<"data/", Id/binary, "/qos_summary">>
+            path = <<"data/", Id/binary, "/qos/summary">>
         } 
     end;
 

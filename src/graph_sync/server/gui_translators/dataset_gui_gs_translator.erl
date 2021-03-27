@@ -17,12 +17,20 @@
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API
--export([translate_resource/2]).
+-export([
+    translate_value/2, translate_resource/2,
+    translate_dataset_info/1
+]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = children, scope = private}, Children) ->
+    Children.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
@@ -31,12 +39,6 @@ translate_resource(#gri{aspect = instance, scope = private}, DatasetInfo) ->
     translate_dataset_info(DatasetInfo).
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
 -spec translate_dataset_info(lfm_datasets:attrs()) -> map().
 translate_dataset_info(#dataset_info{
     id = DatasetId,
@@ -68,7 +70,7 @@ translate_dataset_info(#dataset_info{
         }),
         <<"rootFileType">> => file_meta:type_to_json(RootFileType),
         <<"rootFilePath">> => RootFilePath,
-        <<"state">> => State,
+        <<"state">> => atom_to_binary(State, utf8),
         <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),
         <<"creationTime">> => CreationTime
     }.

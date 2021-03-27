@@ -65,4 +65,7 @@ get_response(#gri{aspect = instance}, #dataset_info{
         <<"rootFilePath">> => RootFilePath,
         <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),
         <<"creationTime">> => CreationTime
-    }).
+    });
+
+get_response(#gri{aspect = children}, Children) ->
+    ?OK_REPLY(Children).

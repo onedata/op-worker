@@ -75,7 +75,7 @@ get_response(#gri{aspect = As}, EffQosResp) when
 ->
     ?OK_REPLY(EffQosResp);
 
-get_response(#gri{aspect = dataset_distribution}, #file_eff_dataset_summary{
+get_response(#gri{aspect = dataset_summary}, #file_eff_dataset_summary{
     direct_dataset = DatasetId,
     eff_ancestor_datasets = EffAncestorDatasets,
     eff_protection_flags = EffProtectionFlags

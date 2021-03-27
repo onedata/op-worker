@@ -31,6 +31,7 @@
 -export([create/1, get/2, update/1, delete/1]).
 
 
+-define(LISTING_LIMIT, 1000).
 -define(ALL_PROTECTION_FLAGS, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]).
 
 
@@ -49,6 +50,7 @@
 operation_supported(create, instance, private) -> true;
 
 operation_supported(get, instance, private) -> true;
+operation_supported(get, children, private) -> true;
 
 operation_supported(update, instance, private) -> true;
 
@@ -77,6 +79,13 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
 
+data_spec(#op_req{operation = get, gri = #gri{aspect = children}}) -> #{
+    optional => #{
+        <<"offset">> => {integer, any},
+        <<"limit">> => {integer, {between, 1, ?LISTING_LIMIT}}
+    }
+};
+
 data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
     at_least_one => #{
         <<"state">> => {atom, [?ATTACHED_DATASET, ?DETACHED_DATASET]},
@@ -101,12 +110,13 @@ fetch_entity(#op_req{auth = ?NOBODY}) ->
 
 fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
     id = DatasetId,
-    aspect = instance,
+    aspect = As,
     scope = private
 }}) when
-    Op =:= get;
-    Op =:= update;
-    Op =:= delete
+    (Op =:= get andalso As =:= instance);
+    (Op =:= get andalso As =:= children);
+    (Op =:= update andalso As =:= instance);
+    (Op =:= delete andalso As =:= instance)
 ->
     case dataset:get(DatasetId) of
         {ok, DatasetDoc} ->
@@ -130,10 +140,11 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{aspect = instance}
     SpaceId = file_id:guid_to_space_id(RootFileGuid),
     middleware_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = instance}}, DatasetDoc) when
-    Op =:= get;
-    Op =:= update;
-    Op =:= delete
+authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = As}}, DatasetDoc) when
+    (Op =:= get andalso As =:= instance);
+    (Op =:= get andalso As =:= children);
+    (Op =:= update andalso As =:= instance);
+    (Op =:= delete andalso As =:= instance)
 ->
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     middleware_utils:is_eff_space_member(Auth, SpaceId).
@@ -150,10 +161,11 @@ validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = Data}
     SpaceId = file_id:guid_to_space_id(RootFileGuid),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = Op, gri = #gri{aspect = instance}}, DatasetDoc) when
-    Op =:= get;
-    Op =:= update;
-    Op =:= delete
+validate(#op_req{operation = Op, gri = #gri{aspect = As}}, DatasetDoc) when
+    (Op =:= get andalso As =:= instance);
+    (Op =:= get andalso As =:= children);
+    (Op =:= update andalso As =:= instance);
+    (Op =:= delete andalso As =:= instance)
 ->
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     middleware_utils:assert_space_supported_locally(SpaceId).
@@ -168,8 +180,9 @@ validate(#op_req{operation = Op, gri = #gri{aspect = instance}}, DatasetDoc) whe
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
     FileKey = {guid, maps:get(<<"rootFileId">>, Data)},
-    ProtectionFlags = protection_flags_to_bitmask(maps:get(<<"protectionFlags">>, Data, [])),
-
+    ProtectionFlags = file_meta:protection_flags_from_json(
+        maps:get(<<"protectionFlags">>, Data, [])
+    ),
     {ok, DatasetId} = ?check(lfm:establish_dataset(SessionId, FileKey, ProtectionFlags)),
     {ok, DatasetInfo} = ?check(lfm:get_dataset_info(SessionId, DatasetId)),
     {ok, resource, {GRI#gri{id = DatasetId}, DatasetInfo}}.
@@ -182,7 +195,18 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}, _) ->
-    ?check(lfm:get_dataset_info(Auth#auth.session_id, DatasetId)).
+    ?check(lfm:get_dataset_info(Auth#auth.session_id, DatasetId));
+
+get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = children}, data = Data}, _) ->
+    {ok, Datasets, IsLast} = ?check(lfm:list_nested_datasets(
+        Auth#auth.session_id, DatasetId, sanitize_listing_opts(Data)
+    )),
+    {ok, value, #{
+        <<"datasets">> => lists:map(fun({DatasetId, DatasetName}) ->
+            #{<<"id">> => DatasetId, <<"name">> => DatasetName}
+        end, Datasets),
+        <<"IsLast">> => IsLast
+    }}.
 
 
 %%--------------------------------------------------------------------
@@ -195,8 +219,8 @@ update(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}, data 
     ?check(lfm:update_dataset(
         Auth#auth.session_id, DatasetId,
         maps:get(<<"state">>, Data, undefined),
-        protection_flags_to_bitmask(maps:get(<<"setProtectionFlags">>, Data, [])),
-        protection_flags_to_bitmask(maps:get(<<"unsetProtectionFlags">>, Data, []))
+        file_meta:protection_flags_from_json(maps:get(<<"setProtectionFlags">>, Data, [])),
+        file_meta:protection_flags_from_json(maps:get(<<"unsetProtectionFlags">>, Data, []))
     )).
 
 
@@ -216,14 +240,6 @@ delete(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}) ->
 
 
 %% @private
--spec protection_flags_to_bitmask([binary()]) -> data_access_control:bitmask().
-protection_flags_to_bitmask(ProtectionFlags) ->
-    lists:foldl(fun(ProtectionFlag, Bitmask) ->
-        ?set_flags(Bitmask, protection_flag_to_bitmask(ProtectionFlag))
-    end, ?no_flags_mask, ProtectionFlags).
-
-
-%% @private
--spec protection_flag_to_bitmask(binary()) -> data_access_control:bitmask().
-protection_flag_to_bitmask(?DATA_PROTECTION_BIN) -> ?DATA_PROTECTION;
-protection_flag_to_bitmask(?METADATA_PROTECTION_BIN) -> ?METADATA_PROTECTION.
+-spec sanitize_listing_opts(middleware:data()) -> datasets_structure:opts().
+sanitize_listing_opts(Data) ->
+    kv_utils:copy_found([{<<"offset">>, offset}, {<<"limit">>, limit}], Data).
