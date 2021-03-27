@@ -80,7 +80,7 @@
 % setting some value on one node and updating it on another node.
 % Checks whether value set on one node was synced with other nodes can be
 % performed using `verify_fun` callback.
--type target_nodes() :: [node()].
+-type target_nodes() :: [node() | oct_background:entity_selector()].
 
 -type client_placeholder() :: atom().
 
@@ -816,12 +816,29 @@ get_correct_values(Key, #data_spec{correct_values = CorrectValues}) ->
 
 %% @private
 -spec prepare_suite_spec(scenario_spec() | suite_spec()) -> suite_spec().
-prepare_suite_spec(#suite_spec{client_spec = ClientSpecTemplate} = SuiteSpec) ->
+prepare_suite_spec(#suite_spec{
+    target_nodes = TargetNodes,
+    client_spec = ClientSpecTemplate
+} = SuiteSpec) ->
     SuiteSpec#suite_spec{
+        target_nodes = prepare_target_nodes(TargetNodes),
         client_spec = prepare_client_spec(ClientSpecTemplate)
     };
 prepare_suite_spec(#scenario_spec{} = ScenarioSpec) ->
     prepare_suite_spec(scenario_spec_to_suite_spec(ScenarioSpec)).
+
+
+%% @private
+-spec prepare_target_nodes(target_nodes()) -> target_nodes().
+prepare_target_nodes(TargetNodes) ->
+    lists:map(fun(NodeSelector) ->
+        case lists:member(NodeSelector, nodes(known)) of
+            true ->
+                NodeSelector;
+            false ->
+                lists_utils:random_element(oct_background:get_provider_nodes(NodeSelector))
+        end
+    end, TargetNodes).
 
 
 %% @private
