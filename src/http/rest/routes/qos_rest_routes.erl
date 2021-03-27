@@ -65,13 +65,13 @@ routes() -> [
         }
     }},
     %% Get QoS summary for file or directory
-    {<<"/data/:id/qos_summary">>, rest_handler, #rest_req{
+    {<<"/data/:id/qos/summary">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
-            aspect = qos_summary,
+            aspect = qos_summary, 
             scope = private
         }
     }},
