@@ -35,7 +35,7 @@
 
 groups() -> [
     {all_tests, [parallel], [
-%%        get_top_datasets,
+        get_top_datasets,
         get_child_datasets,
         get_file_dataset_summary
     ]}

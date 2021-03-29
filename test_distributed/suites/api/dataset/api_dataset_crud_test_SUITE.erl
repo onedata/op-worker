@@ -22,8 +22,9 @@
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -34,11 +35,17 @@
     delete_dataset_test/1
 ]).
 
+groups() -> [
+    {all_tests, [parallel], [
+        establish_dataset_test,
+        get_dataset_test,
+        update_dataset_test,
+        delete_dataset_test
+    ]}
+].
+
 all() -> [
-    establish_dataset_test,
-    get_dataset_test,
-    update_dataset_test,
-    delete_dataset_test
+    {group, all_tests}
 ].
 
 -define(ATTEMPTS, 30).
@@ -854,21 +861,29 @@ init_per_suite(Config) ->
             onenv_test_utils:set_user_privileges(
                 user4, space_krk_par, privileges:space_member() -- [?SPACE_VIEW]
             ),
-
-            % Randomly establish for space root dir
-            SpaceDirDatasetId = undefined,
-%%            SpaceDirDatasetId = case rand:uniform(2) of
-%%                1 ->
-%%                    undefined;
-%%                2 ->
-%%                    %% TODO change to cthr:pal to print only on test failure
-%%                    ct:pal("Establishing dataset for space root dir"),
-%%                    onenv_dataset_test_utils:establish_and_sync_dataset(user3, space_krk_par)
-%%            end,
-
-            [{space_dir_dataset, SpaceDirDatasetId} | NewConfig]
+            NewConfig
         end
     }).
+
+
+init_per_group(_Group, Config) ->
+    time_test_utils:freeze_time(Config),
+    NewConfig = lfm_proxy:init(Config, false),
+
+    % Randomly establish for space root dir
+    SpaceDirDatasetId = case rand:uniform(2) of
+        1 ->
+            undefined;
+        2 ->
+            ct:pal("Establishing dataset for space root dir"),
+            onenv_dataset_test_utils:establish_and_sync_dataset(user3, space_krk_par)
+    end,
+    [{space_dir_dataset, SpaceDirDatasetId} | NewConfig].
+
+
+end_per_group(_Group, Config) ->
+    lfm_proxy:teardown(Config),
+    time_test_utils:unfreeze_time(Config).
 
 
 end_per_suite(_Config) ->
@@ -877,10 +892,8 @@ end_per_suite(_Config) ->
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
-    time_test_utils:freeze_time(Config),
-    lfm_proxy:init(Config).
+    Config.
 
 
-end_per_testcase(_Case, Config) ->
-    time_test_utils:unfreeze_time(Config),
-    lfm_proxy:teardown(Config).
+end_per_testcase(_Case, _Config) ->
+    ok.
