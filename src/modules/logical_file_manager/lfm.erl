@@ -977,11 +977,13 @@ get_dataset_info(SessId, DatasetId) ->
 get_file_eff_dataset_summary(SessId, FileKey) ->
     ?run(fun() -> lfm_datasets:get_file_eff_summary(SessId, FileKey) end).
 
--spec list_top_datasets(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) -> ok | error_reply().
+-spec list_top_datasets(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | error_reply().
 list_top_datasets(SessId, SpaceId, State, Opts) ->
     ?run(fun() -> lfm_datasets:list_top_datasets(SessId, SpaceId, State, Opts) end).
 
 
--spec list_nested_datasets(session:id(), dataset:id(), datasets_structure:opts()) -> ok | error_reply().
+-spec list_nested_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | error_reply().
 list_nested_datasets(SessId, DatasetId, Opts) ->
     ?run(fun() -> lfm_datasets:list_nested_datasets(SessId, DatasetId, Opts) end).
