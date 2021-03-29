@@ -85,7 +85,7 @@ get_file_eff_summary(SessId, FileKey) ->
 
 
 -spec list_top_datasets(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
-    ok | lfm:error_reply().
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
 list_top_datasets(SessId, SpaceId, State, Opts) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
@@ -96,7 +96,7 @@ list_top_datasets(SessId, SpaceId, State, Opts) ->
 
 
 -spec list_nested_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
-    ok | lfm:error_reply().
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
 list_nested_datasets(SessId, DatasetId, Opts) ->
     SpaceGuid = get_space_guid(DatasetId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,

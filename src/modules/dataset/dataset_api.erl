@@ -37,7 +37,7 @@
 -spec establish(file_ctx:ctx(), data_access_control:bitmask()) -> {ok, dataset:id()}.
 establish(FileCtx, ProtectionFlags) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     {ok, DatasetId} = dataset:create(Uuid, SpaceId),
     {DatasetName, _FileCtx2} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
     ok = file_meta:establish_dataset(Uuid, DatasetId, ProtectionFlags),
@@ -172,7 +172,7 @@ list(DatasetId, Opts) ->
 get_associated_file_ctx(DatasetDoc) ->
     {ok, Uuid} = dataset:get_uuid(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
-    file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)).
+    file_ctx:new_by_uuid(Uuid, SpaceId).
 
 
 %%%===================================================================
