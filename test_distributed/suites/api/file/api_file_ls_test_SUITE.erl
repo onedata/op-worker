@@ -508,9 +508,8 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
         index_startid = file_id:guid_to_space_id(SpaceDirGuid),
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,
-        has_metadata = false,
-        has_direct_qos = false,
-        has_eff_qos = false
+        eff_qos_membership = ?NONE_QOS_MEMBERSHIP,
+        has_metadata = false
     }.
 
 

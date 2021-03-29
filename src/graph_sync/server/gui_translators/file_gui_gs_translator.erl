@@ -200,8 +200,7 @@ translate_distribution(FileGuid, Distribution) ->
 -spec translate_file_details(#file_details{}, gri:scope()) -> map().
 translate_file_details(#file_details{
     has_metadata = HasMetadata,
-    has_direct_qos = HasDirectQos,
-    has_eff_qos = HasEffQos,
+    eff_qos_membership = EffQosMembership,
     active_permissions_type = ActivePermissionsType,
     index_startid = StartId,
     eff_dataset_membership = EffDatasetMembership,
@@ -257,8 +256,7 @@ translate_file_details(#file_details{
                 ),
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
-                <<"hasDirectQos">> => HasDirectQos,
-                <<"hasEffQos">> => HasEffQos,
+                <<"effQosMembership">> => EffQosMembership,
                 <<"effDatasetMembership">> => EffDatasetMembership
             }
     end.
