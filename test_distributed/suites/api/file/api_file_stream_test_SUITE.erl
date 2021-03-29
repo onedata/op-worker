@@ -425,7 +425,7 @@ build_download_file_with_gui_endpoint_verify_fun(MemRef, Content, DownloadType) 
             end
     end.
 
-
+%% @TODO VFS-7475 test tarball download
 rest_download_file_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
 

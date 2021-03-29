@@ -32,9 +32,9 @@
 
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type handle() :: lfm_context:ctx().
@@ -60,6 +60,8 @@
 ]).
 %% Functions operating on files
 -export([create/2, create/3, create/4,
+    make_link/3, make_link/4,
+    make_symlink/3, make_symlink/4, read_symlink/2,
     open/3, monitored_open/3,
     get_file_location/2, fsync/1, fsync/3,
     write/3, read/3, check_size_and_read/3,
@@ -402,6 +404,29 @@ create(SessId, Path, Mode) ->
 create(SessId, ParentGuid, Name, Mode) ->
     ?run(fun() -> lfm_files:create(SessId, ParentGuid, Name, Mode) end).
 
+
+-spec make_link(session:id(), LinkPath :: file_meta:path(), FileGuid :: fslogic_worker:file_guid()) ->
+    {ok, #file_attr{}} | error_reply().
+make_link(SessId, LinkPath, FileGuid) ->
+    ?run(fun() -> lfm_files:make_link(SessId, LinkPath, FileGuid) end).
+
+-spec make_link(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    TargetParentGuid :: fslogic_worker:file_guid(), Name :: file_meta:name()) -> {ok, #file_attr{}} | error_reply().
+make_link(SessId, FileKey, TargetParentGuid, Name) ->
+    ?run(fun() -> lfm_files:make_link(SessId, FileKey, TargetParentGuid, Name) end).
+
+
+-spec make_symlink(session:id(), LinkPath :: file_meta:path(), LinkTarget :: file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(SessId, LinkPath, LinkTarget) ->
+    ?run(fun() -> lfm_files:make_symlink(SessId, LinkPath, LinkTarget) end).
+
+-spec make_symlink(session:id(), ParentKey :: fslogic_worker:file_guid_or_path(),
+    Name :: file_meta:name(), LinkTarget :: file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(SessId, ParentKey, Name, Link) ->
+    ?run(fun() -> lfm_files:make_symlink(SessId, ParentKey, Name, Link) end).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates and opens a new file
@@ -470,6 +495,11 @@ monitored_open(SessId, FileKey, OpenType) ->
     {ok, file_location:record()} | lfm:error_reply().
 get_file_location(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_file_location(SessId, FileKey) end).
+
+-spec read_symlink(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, file_meta_symlinks:symlink()} | lfm:error_reply().
+read_symlink(SessId, FileKey) ->
+    ?run(fun() -> lfm_files:read_symlink(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc

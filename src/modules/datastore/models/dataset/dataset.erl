@@ -19,7 +19,7 @@
 
 %% API
 -export([create/2, delete/1]).
--export([get_uuid/1, get_space_id/1, get_state/1, get_detached_info/1, get_creation_time/1, get/1]).
+-export([get_id/1, get_uuid/1, get_space_id/1, get_state/1, get_detached_info/1, get_creation_time/1, get/1]).
 -export([mark_detached/5, mark_reattached/1]).
 
 %% datastore_model callbacks
@@ -88,6 +88,11 @@ create(FileUuid, SpaceId) ->
 -spec delete(id()) -> ok | error().
 delete(DatasetId) ->
     datastore_model:delete(?CTX, DatasetId).
+
+
+-spec get_id(doc()) -> {ok, id()}.
+get_id(#document{key = DatasetId}) ->
+    {ok, DatasetId}.
 
 
 -spec get_space_id(doc() | dataset:id()) -> {ok, od_space:id()}.

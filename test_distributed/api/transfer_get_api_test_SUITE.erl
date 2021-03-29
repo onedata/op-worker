@@ -511,8 +511,7 @@ get_rerun_transfer_status(Config, TransferType, Env, RerunId, EffTransferId, Exp
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         lists:foreach(fun(Worker) ->
             % TODO VFS-6251
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
@@ -521,15 +520,15 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
-        end, ?config(op_worker_nodes, NewConfig2)),
+        end, ?config(op_worker_nodes, NewConfig1)),
         ssl:start(),
         hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(
-            ?TEST_FILE(NewConfig2, "env_desc.json"),
-            NewConfig2
+        NewConfig2 = initializer:create_test_users_and_spaces(
+            ?TEST_FILE(NewConfig1, "env_desc.json"),
+            NewConfig1
         ),
-        initializer:mock_auth_manager(NewConfig3, _CheckIfUserIsSupported = true),
-        NewConfig3
+        initializer:mock_auth_manager(NewConfig2, _CheckIfUserIsSupported = true),
+        NewConfig2
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, transfers_test_utils]} | Config].
 

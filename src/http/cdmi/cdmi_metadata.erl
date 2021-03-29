@@ -15,11 +15,11 @@
 -author("Malgorzata Plazek").
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 -export([get_user_metadata/2, update_user_metadata/3, update_user_metadata/4]).
 -export([prepare_metadata/4]).

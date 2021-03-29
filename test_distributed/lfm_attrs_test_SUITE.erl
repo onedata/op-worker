@@ -17,8 +17,8 @@
 -include("tree_traverse.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -770,7 +770,7 @@ create_share(Worker, ShareId, Name, SpaceId, ShareFileGuid, FileType, Handle) ->
     ?assertMatch({ok, _}, rpc:call(Worker, od_share, update_cache, [
         ShareId, fun(_) -> {ok, Record} end, Doc
     ])),
-    ?assertMatch({ok, _}, rpc:call(Worker, file_meta, add_share, [
+    ?assertMatch(ok, rpc:call(Worker, file_meta, add_share, [
         file_ctx:new_by_guid(ShareFileGuid), ShareId
     ])),
     ok.

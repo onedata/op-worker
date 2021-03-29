@@ -938,5 +938,10 @@ get_attr(<<"shares">>, #file_attr{shares = Shares}) -> Shares;
 get_attr(<<"storage_user_id">>, #file_attr{uid = Uid}) -> Uid;
 get_attr(<<"storage_group_id">>, #file_attr{gid = Gid}) -> Gid;
 get_attr(<<"file_id">>, #file_attr{guid = Guid}) ->
-    {ok, Id} = file_id:guid_to_objectid(Guid),
-    Id.
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+    FileId;
+get_attr(<<"parent_id">>, #file_attr{parent_guid = undefined}) ->
+    null;
+get_attr(<<"parent_id">>, #file_attr{parent_guid = ParentGuid}) ->
+    {ok, ParentId} = file_id:guid_to_objectid(ParentGuid),
+    ParentId.

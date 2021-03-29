@@ -63,7 +63,7 @@ save_master_job(Key, Job = #tree_traverse{
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }, Pool, TaskID, CallbackModule) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     Scope = file_ctx:get_space_id_const(FileCtx),
     Record = #tree_traverse_job{
         pool = Pool,

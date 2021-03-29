@@ -170,7 +170,7 @@ assert_meets_access_requirement(UserCtx, FileCtx0, Requirement) when
     Requirement == ?TRAVERSE_ANCESTORS
 ->
     UserId = user_ctx:get_user_id(UserCtx),
-    Guid = file_ctx:get_guid_const(FileCtx0),
+    Guid = file_ctx:get_logical_guid_const(FileCtx0),
     CacheKey = {Requirement, UserId, Guid},
 
     case permissions_cache:check_permission(CacheKey) of
@@ -236,12 +236,14 @@ check_access_requirement(UserCtx, FileCtx0, ?PUBLIC_ACCESS) ->
     end;
 
 check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
-    case files_tree:get_parent_if_not_root_dir(FileCtx0, UserCtx) of
-        {undefined, FileCtx1} ->
+    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
+
+    case file_ctx:equals(FileCtx1, ParentCtx) of
+        true ->
             {ok, FileCtx1};
-        {ParentCtx0, FileCtx1} ->
+        false ->
             ParentCtx1 = assert_operations_allowed(
-                UserCtx, ParentCtx0, ?traverse_container_mask
+                UserCtx, ParentCtx, ?traverse_container_mask
             ),
             assert_meets_access_requirement(UserCtx, ParentCtx1, ?TRAVERSE_ANCESTORS),
             {ok, FileCtx1}
@@ -253,7 +255,7 @@ check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
     file_ctx:ctx() | no_return().
 assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
     UserId = user_ctx:get_user_id(UserCtx),
-    Guid = file_ctx:get_guid_const(FileCtx0),
+    Guid = file_ctx:get_logical_guid_const(FileCtx0),
     % TODO VFS-6224 do not construct cache key outside of permissions_cache module
     CacheKey = {user_perms_matrix, UserId, Guid},
 
@@ -356,7 +358,7 @@ get_operations_blocked_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
 -spec get_operations_blocked_by_file_protection_flags(file_ctx:ctx()) ->
     {bitmask(), file_ctx:ctx()}.
 get_operations_blocked_by_file_protection_flags(FileCtx0) ->
-    {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx0),
+    {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
     {ok, Flags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
 
     DeniedOps = lists:foldl(fun({ProtectionFlag, RestrictedOps}, DeniedOpsAcc) ->

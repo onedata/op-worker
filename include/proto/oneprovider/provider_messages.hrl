@@ -16,7 +16,7 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
+-include("modules/fslogic/file_attr.hrl").
 
 -record(get_parent, {
 }).

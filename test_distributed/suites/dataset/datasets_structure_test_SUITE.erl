@@ -14,6 +14,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/onedata.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -127,7 +128,7 @@ all() -> ?ALL([
 -define(NAME(Prefix, Number), str_utils:join_binary([Prefix, integer_to_binary(Number)], <<"_">>)).
 -define(RAND_RANGE, 1000000000).
 
-% TODO VFS-7363 tests of iterating using start_index
+% TODO VFS-7510 tests of iterating using start_index
 
 %%%===================================================================
 %%% API functions
@@ -223,7 +224,26 @@ basic_sort(_Config) ->
     ?assertMatch({ok, SortedDatasetIdsAndNames, true},
         list_space(P1Node, SpaceId, #{offset => 0, limit => 100})),
     ?assertMatch({ok, SortedDatasetIdsAndNames, true},
-        list_space(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS).
+        list_space(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
+
+    % check whether datasets are visible on the list of space datasets
+    ?assertMatch({ok, SortedDatasetIdsAndNames, true},
+        list_space(P1Node, SpaceId, #{offset => 0, limit => 100})),
+
+    % request with offset greater than number of entries should return an empty list
+    ?assertMatch({ok, [], true},
+        list_space(P1Node, SpaceId, #{offset => 10, limit => 1})),
+
+    ?assertMatch({ok, [], true},
+        list_space(P1Node, SpaceId, #{offset => 1000, limit => 1})),
+
+    SortedDatasetIdsAndNamesSublist = lists:sublist(SortedDatasetIdsAndNames, 10, 1),
+    ?assertMatch({ok, SortedDatasetIdsAndNamesSublist, true},
+        list_space(P1Node, SpaceId, #{offset => 9, limit => 1})),
+
+    SortedDatasetIdsAndNamesSublist2 = lists:sublist(SortedDatasetIdsAndNames, 9, 1),
+    ?assertMatch({ok, SortedDatasetIdsAndNamesSublist2, false},
+        list_space(P1Node, SpaceId, #{offset => 8, limit => 1})).
 
 
 rename_depth1(_Config) ->
@@ -622,7 +642,7 @@ move_dataset_test_base(Depth, TargetType) ->
     TargetDatasetPath =  filename:join(TargetParentPath, TopDatasetUuid),
 
     move(P1Node, SpaceId, TopDatasetId, TopDatasetPath, TargetDatasetPath, TopDatasetTargetName),
-    
+
     case TargetType of
         dataset ->
             % check whether the highest dataset on the list of space datasets is still a target_dir dataset
@@ -710,7 +730,7 @@ move_dataset_with_many_children_test_base(ChildrenCount) ->
         list(P1Node, SpaceId, TargetParentDatasetPath, #{offset => 0, limit => 100})),
 
     % check whether nested directories are all visible in the moved dataset
-    {ok, NestedDatasets, false} = list(P1Node, SpaceId, TargetDatasetPath, #{offset => 0, limit => ChildrenCount}),
+    {ok, NestedDatasets, true} = list(P1Node, SpaceId, TargetDatasetPath, #{offset => 0, limit => ChildrenCount}),
 
     SortedExpectedDatasets = sort(ExpectedDatasets),
     ?assertEqual(NestedDatasets, SortedExpectedDatasets).
@@ -871,7 +891,7 @@ generate_nested_datasets(RootPath, Depth, GenerateEntryForRoot) ->
         DatasetPath = filename:join(ParentDatasetPath, Uuid),
         [{DatasetPath, ?DATASET_ID, ?DATASET_NAME} | Acc]
     end, [{RootPath, ?DATASET_ID, ?DATASET_NAME}], lists:seq(0, Depth - 1)),
-    
+
     case GenerateEntryForRoot of
         true -> Datasets;
         false -> lists:droplast(Datasets)

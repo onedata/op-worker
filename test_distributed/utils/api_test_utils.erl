@@ -656,7 +656,7 @@ add_file_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Extends data_spec() with file id bad values and errors for operations 
+%% Extends data_spec() with file id bad values and errors for operations
 %% not available in share mode that provide file id as parameter in data spec map.
 %% All added bad values are in cdmi form and are stored under <<"fileId">> key.
 %% @end
@@ -673,7 +673,7 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId,
 
 
 -spec add_cdmi_id_errors_for_operations_not_available_in_share_mode(
-    binary(),
+    IdKey :: binary(),
     file_id:file_guid(),
     od_space:id(),
     od_share:id(),

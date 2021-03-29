@@ -290,7 +290,7 @@ set_mimetype_insecure(_UserCtx, FileCtx, Mimetype, Create, Replace) ->
 -spec get_cdmi_metadata(file_ctx:ctx(), custom_metadata:name()) ->
     {ok, custom_metadata:value()} | {error, term()}.
 get_cdmi_metadata(FileCtx, CdmiAttrName) ->
-    custom_metadata:get_xattr(file_ctx:get_uuid_const(FileCtx), CdmiAttrName).
+    custom_metadata:get_xattr(file_ctx:get_logical_uuid_const(FileCtx), CdmiAttrName).
 
 
 %% @private
@@ -305,7 +305,7 @@ get_cdmi_metadata(FileCtx, CdmiAttrName) ->
 set_cdmi_metadata(FileCtx, CdmiAttrName, CdmiAttrValue, Create, Replace) ->
     file_ctx:assert_not_trash_dir_const(FileCtx),
     custom_metadata:set_xattr(
-        file_ctx:get_uuid_const(FileCtx),
+        file_ctx:get_logical_uuid_const(FileCtx),
         file_ctx:get_space_id_const(FileCtx),
         CdmiAttrName, CdmiAttrValue, Create, Replace
     ).

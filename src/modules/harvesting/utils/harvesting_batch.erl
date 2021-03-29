@@ -20,6 +20,8 @@
 %%%      <<"fileId">> => file_id:objectid(),
 %%%      <<"spaceId">> => od_space:id(),
 %%%      <<"fileName">> => file_meta:name(),
+%%%      <<"fileType">> => str_utils:to_binary(file_meta:type()),
+%%%      <<"datasetId">> => dataset:id(), // optional, passed only if dataset is attached
 %%%      <<"operation">> => ?SUBMIT | ?DELETE,
 %%%      <<"seq">> => couchbase_changes:seq(),
 %%%      <<"payload">> => #{    % optional, makes sense only for ?SUBMIT operation
@@ -53,6 +55,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
+-include("modules/dataset/dataset.hrl").
 
 %% API
 -export([new_accumulator/0, size/1, is_empty/1, accumulate/2, prepare_to_send/1,
@@ -224,26 +227,30 @@ submission_batch_entry(FileId, Seq,
     FileMetaDoc = #document{value = #file_meta{}},
     #document{value = #custom_metadata{value = Metadata, space_id = SpaceId}}
 ) ->
-    #{
+    Entry = #{
         <<"fileId">> => FileId,
         <<"operation">> => ?SUBMIT,
         <<"seq">> => Seq,
         <<"spaceId">> => SpaceId,
         <<"fileName">> => get_file_name(FileMetaDoc),
+        <<"fileType">> => get_file_type(FileMetaDoc),
         <<"payload">> => Metadata
-    };
+    },
+    maps_utils:put_if_defined(Entry, <<"datasetId">>, get_dataset_id_if_attached(FileMetaDoc));
 submission_batch_entry(FileId, Seq,
     FileMetaDoc = #document{value = #file_meta{}, scope = SpaceId},
     undefined
 ) ->
-    #{
+    Entry = #{
         <<"fileId">> => FileId,
         <<"operation">> => ?SUBMIT,
         <<"seq">> => Seq,
         <<"spaceId">> => SpaceId,
         <<"fileName">> => get_file_name(FileMetaDoc),
+        <<"fileType">> => get_file_type(FileMetaDoc),
         <<"payload">> => #{}
-    };
+    },
+    maps_utils:put_if_defined(Entry, <<"datasetId">>, get_dataset_id_if_attached(FileMetaDoc));
 submission_batch_entry(FileId, Seq,
     undefined,
     #document{value = #custom_metadata{value = Metadata}, scope = SpaceId}
@@ -320,5 +327,18 @@ compute_file_id(#document{key = FileUuid, scope = SpaceId}) ->
 get_file_name(#document{value = #file_meta{is_scope = true, name = SpaceId}}) ->
     {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
     SpaceName;
-get_file_name(#document{value = #file_meta{name = FileName}}) ->
-    FileName.
+get_file_name(FileDoc) ->
+    file_meta:get_name(FileDoc).
+
+
+-spec get_file_type(file_meta:doc()) -> binary().
+get_file_type(FileMetaDoc) ->
+    str_utils:to_binary((file_meta:get_type(FileMetaDoc))).
+
+
+-spec get_dataset_id_if_attached(file_meta:doc()) -> dataset:id() | undefined.
+get_dataset_id_if_attached(FileDoc) ->
+    case file_meta:is_dataset_attached(FileDoc) of
+        true -> file_meta:get_dataset(FileDoc);
+        false -> undefined
+    end.

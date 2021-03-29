@@ -608,16 +608,15 @@ check_evaluate_expression_result_storages(Node, SpaceId, Expression, Result) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
-        NewConfig3 = initializer:create_test_users_and_spaces(
-            ?TEST_FILE(NewConfig2, "env_desc.json"),
-            NewConfig2
+        NewConfig1 = initializer:setup_storage(NewConfig),
+        NewConfig2 = initializer:create_test_users_and_spaces(
+            ?TEST_FILE(NewConfig1, "env_desc.json"),
+            NewConfig1
         ),
-        initializer:mock_auth_manager(NewConfig3, _CheckIfUserIsSupported = true),
+        initializer:mock_auth_manager(NewConfig2, _CheckIfUserIsSupported = true),
         ssl:start(),
         hackney:start(),
-        NewConfig3
+        NewConfig2
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
