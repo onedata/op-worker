@@ -79,9 +79,6 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProvid
     SyncProviders = SupportingProviders -- [CreationProvider],
 
     FileTree = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc),
-    %% TODO change to cthr:pal to print only on test failure
-%%    ct:pal("Created file tree: ~s~n", [onenv_test_utils:format_record(FileTree)]),
-
     await_sync(CreationProvider, SyncProviders, UserId, FileTree),
     await_parent_links_sync(SyncProviders, UserId, ParentGuid, FileTree),
 

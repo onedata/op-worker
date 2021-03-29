@@ -143,10 +143,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_obj{
             {ok, DatasetInfo},
             lfm_proxy:get_dataset_info(SyncNode, SessId, DatasetId),
             ?ATTEMPTS
-        ),
-
-        % TODO maybe await dataset links sync ?
-        ok
+        )
     end, SyncProviders).
 
 

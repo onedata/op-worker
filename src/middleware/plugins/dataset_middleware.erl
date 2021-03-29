@@ -31,7 +31,8 @@
 -export([create/1, get/2, update/1, delete/1]).
 
 
--define(LISTING_LIMIT, 1000).
+-define(MAX_LIST_LIMIT, 1000).
+-define(DEFAULT_LIST_LIMIT, 100).
 -define(ALL_PROTECTION_FLAGS, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]).
 
 
@@ -82,7 +83,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 data_spec(#op_req{operation = get, gri = #gri{aspect = children}}) -> #{
     optional => #{
         <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, ?LISTING_LIMIT}}
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
     }
 };
 
@@ -244,5 +245,5 @@ delete(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}) ->
 sanitize_listing_opts(Data) ->
     #{
         offset => maps:get(<<"offset">>, Data, 0),
-        limit => maps:get(<<"limit">>, Data, ?LISTING_LIMIT)
+        limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT)
     }.

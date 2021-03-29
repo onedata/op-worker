@@ -35,7 +35,6 @@
 
 groups() -> [
     {all_tests, [parallel], [
-        % TODO VFS-7429 integrate after implementing dataset listing
 %%        get_top_datasets,
         get_child_datasets,
         get_file_dataset_summary
@@ -169,14 +168,19 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = [krakow, paris],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            client_spec = #client_spec{
+                correct = [user2, user3],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1],
+                forbidden_in_space = [user4]
+            },
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get top datasets using REST API">>,
                     type = rest,
                     prepare_args_fun = build_get_top_datasets_prepare_rest_args_fun(SpaceId, State),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_datasets(Response, ids, Data, TopDatasets)
+                        validate_listed_datasets(Response, Data, TopDatasets)
                     end
                 },
                 #scenario_template{
@@ -184,15 +188,7 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
                     type = gs,
                     prepare_args_fun = build_get_top_datasets_prepare_gs_args_fun(SpaceId, State),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
-                        validate_listed_datasets(Result, ids, Data, TopDatasets)
-                    end
-                },
-                #scenario_template{
-                    name = <<"GET top datasets details using GS API">>,
-                    type = gs,
-                    prepare_args_fun = build_get_top_datasets_details_prepare_gs_args_fun(SpaceId, State),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
-                        validate_listed_datasets(Result, details, Data, TopDatasets)
+                        validate_listed_datasets(Result, Data, TopDatasets)
                     end
                 }
             ],
@@ -204,8 +200,8 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
                     <<"offset">> => [1, 3, 10]
                 },
                 bad_values = [
-                    {bad_id, <<"NonExistentSpace">>, ?ERROR_NOT_FOUND},
-                    {<<"state">>, true, {gs, ?ERROR_BAD_VALUE_BINARY(<<"state">>)}},
+                    {bad_id, <<"NonExistentSpace">>, ?ERROR_FORBIDDEN},
+                    {<<"state">>, 10, {gs, ?ERROR_BAD_VALUE_BINARY(<<"state">>)}},
                     {<<"state">>, <<"active">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(
                         <<"state">>, [<<"attached">>, <<"detached">>]
                     )},
@@ -246,13 +242,6 @@ build_get_top_datasets_prepare_rest_args_fun(SpaceId, State) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_top_datasets_prepare_gs_args_fun(SpaceId, State) ->
     build_prepare_get_top_datasets_gs_args_fun(SpaceId, State, datasets).
-
-
-%% @private
--spec build_get_top_datasets_details_prepare_gs_args_fun(od_space:id(), dataset:state()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_top_datasets_details_prepare_gs_args_fun(SpaceId, State) ->
-    build_prepare_get_top_datasets_gs_args_fun(SpaceId, State, datasets_details).
 
 
 %% @private
@@ -323,21 +312,17 @@ get_child_datasets(Config) ->
     DirWithDetachedDatasetPath = filename:join([
         "/", ?SPACE_KRK_PAR, RootDirName, TestDirName, DirWithDetachedDatasetName
     ]),
-    try
-        AttachedChildDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
-            ?ATTACHED_DATASET, DirWithAttachedDatasetPath, AttachedDatasetId, DirWithAttachedDataset
-        ),
-        get_child_datasets_test_base(AttachedDatasetId, AttachedChildDatasets),
+    AttachedChildDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
+        ?ATTACHED_DATASET, DirWithAttachedDatasetPath, AttachedDatasetId, DirWithAttachedDataset
+    ),
+    get_child_datasets_test_base(AttachedDatasetId, AttachedChildDatasets),
 
-        ct:pal("Listing child datasets of detached dataset"),
+    ct:pal("Listing child datasets of detached dataset"),
 
-        DetachedChildDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
-            ?DETACHED_DATASET, DirWithDetachedDatasetPath, DetachedDatasetId, DirWithDetachedDataset
-        ),
-        get_child_datasets_test_base(DetachedDatasetId, DetachedChildDatasets)
-    catch Q:W ->
-        ct:pal("~p", [{Q, W, erlang:get_stacktrace()}])
-    end.
+    DetachedChildDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
+        ?DETACHED_DATASET, DirWithDetachedDatasetPath, DetachedDatasetId, DirWithDetachedDataset
+    ),
+    get_child_datasets_test_base(DetachedDatasetId, DetachedChildDatasets).
 
 
 %% @private
@@ -347,14 +332,14 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = [krakow, paris],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get child datasets using REST API">>,
                     type = rest,
                     prepare_args_fun = build_get_child_datasets_prepare_rest_args_fun(DatasetId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_datasets(Response, ids, Data, ChildDatasets)
+                        validate_listed_datasets(Response, Data, ChildDatasets)
                     end
                 },
                 #scenario_template{
@@ -362,18 +347,9 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
                     type = gs,
                     prepare_args_fun = build_get_child_datasets_prepare_gs_args_fun(DatasetId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
-                        validate_listed_datasets(Result, ids, Data, ChildDatasets)
+                        validate_listed_datasets(Result, Data, ChildDatasets)
                     end
                 }
-                % TODO uncomment after implementing
-%%                #scenario_template{
-%%                    name = <<"GET child datasets details using GS API">>,
-%%                    type = gs,
-%%                    prepare_args_fun = build_get_child_datasets_details_prepare_gs_args_fun(DatasetId),
-%%                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
-%%                        validate_listed_datasets(Result, details, Data, ChildDatasets)
-%%                    end
-%%                }
             ],
             randomly_select_scenarios = true,
             data_spec = #data_spec{
@@ -423,13 +399,6 @@ build_get_child_datasets_prepare_gs_args_fun(DatasetId) ->
 
 
 %% @private
--spec build_get_child_datasets_details_prepare_gs_args_fun(dataset:id()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_child_datasets_details_prepare_gs_args_fun(DatasetId) ->
-    build_prepare_get_child_datasets_gs_args_fun(DatasetId, children_details).
-
-
-%% @private
 -spec build_prepare_get_child_datasets_gs_args_fun(dataset:id(), gri:aspect()) ->
     onenv_api_test_runner:prepare_args_fun().
 build_prepare_get_child_datasets_gs_args_fun(DatasetId, Aspect) ->
@@ -452,12 +421,11 @@ build_prepare_get_child_datasets_gs_args_fun(DatasetId, Aspect) ->
 %% @private
 -spec validate_listed_datasets(
     ListedDatasets :: term(),
-    Format :: ids | details,
     Params :: map(),
     AllDatasets :: [{binary(), map()}]
 ) ->
     ok | no_return().
-validate_listed_datasets(ListingResult, Format, Params, AllDatasets) ->
+validate_listed_datasets(ListingResult, Params, AllDatasets) ->
     Limit = maps:get(<<"limit">>, Params, 1000),
     Offset = maps:get(<<"offset">>, Params, 0),
 
@@ -467,26 +435,16 @@ validate_listed_datasets(ListingResult, Format, Params, AllDatasets) ->
         false ->
             lists:sublist(AllDatasets, Offset + 1, Limit)
     end,
-
-    IsLast = length(ExpDatasets1) < Limit,
-
-    ExpDatasets2 = case Format of
-        ids ->
-            lists:map(fun({FileName, DatasetId, _Details}) ->
-                #{
-                    <<"name">> => FileName,
-                    <<"id">> => DatasetId
-                }
-            end, ExpDatasets1);
-        details ->
-            lists:map(fun({_DatasetId, Details}) ->
-                dataset_gui_gs_translator:translate_dataset_info(Details)
-            end, ExpDatasets1)
-    end,
+    ExpDatasets2 = lists:map(fun({FileName, DatasetId, _Details}) ->
+        #{
+            <<"name">> => FileName,
+            <<"id">> => DatasetId
+        }
+    end, ExpDatasets1),
 
     ExpResult = #{
         <<"datasets">> => ExpDatasets2,
-        <<"isLast">> => IsLast
+        <<"isLast">> => length(ExpDatasets2) < Limit
     },
     ?assertEqual(ExpResult, ListingResult).
 
@@ -579,7 +537,7 @@ get_file_dataset_summary_test_base(FileGuid, ExpSummary) ->
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = [krakow, paris],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get file dataset summary using REST API">>,
@@ -672,11 +630,12 @@ init_per_suite(Config) ->
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
-            User3Id = oct_background:get_user_id(user3),
-            SpaceId = oct_background:get_space_id(space_krk_par),
-            ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+            onenv_test_utils:set_user_privileges(user3, space_krk_par, [
                 ?SPACE_MANAGE_DATASETS | privileges:space_member()
             ]),
+            onenv_test_utils:set_user_privileges(
+                user4, space_krk_par, privileges:space_member() -- [?SPACE_VIEW]
+            ),
             NewConfig
         end
     }).
@@ -692,26 +651,26 @@ init_per_group(_Group, Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk_par),
 
-    SpaceDirDataset = undefined,
-    % TODO uncomment
-%%    % Randomly establish for space root dir
-%%    SpaceDirDataset = case rand:uniform(2) of
-%%        1 ->
-%%            undefined;
-%%        2 ->
-%%            ct:pal("Establishing dataset for space root dir"),
-%%
-%%            SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-%%            SpaceDirPath = filename:join(["/", ?SPACE_KRK_PAR]),
-%%            CreationTime = time_test_utils:get_frozen_time_seconds(),
-%%
-%%            Id = onenv_dataset_test_utils:establish_and_sync_dataset(user3, SpaceId),
-%%            Details = build_dataset_gs_details(
-%%                ?ATTACHED_DATASET, Id, undefined, [], CreationTime,
-%%                SpaceDirGuid, <<"dir">>, SpaceDirPath
-%%            ),
-%%            {?SPACE_KRK_PAR, Id, Details}
-%%    end,
+    SpaceDirDataset = case 2 of
+        1 ->
+            undefined;
+        2 ->
+            ct:pal("Establishing dataset for space root dir"),
+
+            DatasetId = onenv_dataset_test_utils:establish_and_sync_dataset(user3, SpaceId),
+
+            DatasetDetails = #dataset_info{
+                id = DatasetId,
+                state = ?ATTACHED_DATASET,
+                guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                path = filename:join(["/", ?SPACE_KRK_PAR]),
+                type = ?DIRECTORY_TYPE,
+                creation_time = time_test_utils:get_frozen_time_seconds(),
+                protection_flags = [],
+                parent = undefined
+            },
+            {?SPACE_KRK_PAR, DatasetId, DatasetDetails}
+    end,
     FileTree = onenv_file_test_utils:create_and_sync_file_tree(
         user3, SpaceId, ?FILE_TREE_SPEC
     ),
