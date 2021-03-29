@@ -14,6 +14,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/onedata.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -223,7 +224,26 @@ basic_sort(_Config) ->
     ?assertMatch({ok, SortedDatasetIdsAndNames, true},
         list_space(P1Node, SpaceId, #{offset => 0, limit => 100})),
     ?assertMatch({ok, SortedDatasetIdsAndNames, true},
-        list_space(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS).
+        list_space(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
+
+    % check whether datasets are visible on the list of space datasets
+    ?assertMatch({ok, SortedDatasetIdsAndNames, true},
+        list_space(P1Node, SpaceId, #{offset => 0, limit => 100})),
+
+    % request with offset greater than number of entries should return an empty list
+    ?assertMatch({ok, [], true},
+        list_space(P1Node, SpaceId, #{offset => 10, limit => 1})),
+
+    ?assertMatch({ok, [], true},
+        list_space(P1Node, SpaceId, #{offset => 1000, limit => 1})),
+
+    SortedDatasetIdsAndNamesSublist = lists:sublist(SortedDatasetIdsAndNames, 10, 1),
+    ?assertMatch({ok, SortedDatasetIdsAndNamesSublist, true},
+        list_space(P1Node, SpaceId, #{offset => 9, limit => 1})),
+
+    SortedDatasetIdsAndNamesSublist2 = lists:sublist(SortedDatasetIdsAndNames, 9, 1),
+    ?assertMatch({ok, SortedDatasetIdsAndNamesSublist2, false},
+        list_space(P1Node, SpaceId, #{offset => 8, limit => 1})).
 
 
 rename_depth1(_Config) ->
@@ -710,7 +730,7 @@ move_dataset_with_many_children_test_base(ChildrenCount) ->
         list(P1Node, SpaceId, TargetParentDatasetPath, #{offset => 0, limit => 100})),
 
     % check whether nested directories are all visible in the moved dataset
-    {ok, NestedDatasets, false} = list(P1Node, SpaceId, TargetDatasetPath, #{offset => 0, limit => ChildrenCount}),
+    {ok, NestedDatasets, true} = list(P1Node, SpaceId, TargetDatasetPath, #{offset => 0, limit => ChildrenCount}),
 
     SortedExpectedDatasets = sort(ExpectedDatasets),
     ?assertEqual(NestedDatasets, SortedExpectedDatasets).

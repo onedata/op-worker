@@ -303,7 +303,14 @@ strip(Entries, Opts) ->
     %%    StartId = maps:get(start_index, Opts, <<>>),
     Offset = maps:get(offset, Opts, 0),
     Limit = maps:get(limit, Opts),
-    {lists:sublist(Entries, max(Offset, 0) + 1, Limit), max(Offset, 0) + Limit > length(Entries)}.
+    Length = length(Entries),
+    FinalOffset = max(Offset, 0) + 1,
+    case FinalOffset > Length of
+        true ->
+            {[], true};
+        false ->
+            {lists:sublist(Entries, FinalOffset, Limit), FinalOffset + Limit > Length}
+    end.
 
 
 -spec move_all_descendants(od_space:id(), forest_type(), link_name(), link_name()) -> ok.
