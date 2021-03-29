@@ -525,12 +525,8 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     {IsStorageFileCreated, SourceFileCtx6} = file_ctx:is_storage_file_created(SourceFileCtx5),
     case StoragePathType =:= ?CANONICAL_STORAGE_PATH andalso IsStorageFileCreated of
         true ->
-            case sd_utils:rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId,
-                TargetParentCtx2, TargetFileId)
-            of
-                ok -> ok;
-                {error, ?ENOENT} -> ok
-            end;
+            ok = sd_utils:rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx2, TargetFileId),
+            dir_location:update_storage_file_id(FileUuid, TargetFileId);
         false ->
             ok
     end,
