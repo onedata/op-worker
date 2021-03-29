@@ -30,12 +30,14 @@
 -export([
     establish_dataset_test/1,
     get_dataset_test/1,
+    update_dataset_test/1,
     delete_dataset_test/1
 ]).
 
 all() -> [
     establish_dataset_test,
     get_dataset_test,
+    update_dataset_test,
     delete_dataset_test
 ].
 
@@ -244,12 +246,10 @@ build_verify_establish_dataset_fun(MemRef, Providers, SpaceId, Config) ->
             CreationTime = get_global_time(TestNode),
             ProtectionFlags = maps:get(<<"protectionFlags">>, Data, []),
 
-            lists:foreach(fun(Provider) ->
-                verify_dataset(
-                    UserId, Provider, SpaceId, DatasetId, ?ATTACHED_DATASET, SpaceDirDatasetId,
-                    ProtectionFlags, CreationTime, RootFileGuid, RootFileType, RootFilePath
-                )
-            end, Providers);
+            verify_dataset(
+                UserId, Providers, SpaceId, DatasetId, ?ATTACHED_DATASET, SpaceDirDatasetId,
+                ProtectionFlags, CreationTime, RootFileGuid, RootFileType, RootFilePath
+            );
         (expected_failure, _) ->
             ok
     end.
@@ -402,6 +402,185 @@ build_get_dataset_prepare_gs_args_fun(DatasetId) ->
             gri = #gri{type = op_dataset, id = Id, aspect = instance, scope = private},
             data = Data1
         }
+    end.
+
+
+%%%===================================================================
+%%% Update dataset test functions
+%%%===================================================================
+
+
+update_dataset_test(Config) ->
+    Providers = [krakow, paris],
+    SpaceKrkParId = oct_background:get_space_id(space_krk_par),
+
+    OriginalState = ?ATTACHED_DATASET,
+    OriginalProtectionFlags = lists_utils:random_element(?PROTECTION_FLAGS_COMBINATIONS),
+
+    #object{name = DirName, children = [#object{
+        guid = FileGuid,
+        name = FileName,
+        type = FileType,
+        dataset = #dataset_obj{id = DatasetId}
+    }]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, build_test_file_tree_spec([
+            #dataset_spec{state = OriginalState, protection_flags = OriginalProtectionFlags}
+        ])
+    ),
+    FilePath = filename:join(["/", ?SPACE_KRK_PAR, DirName, FileName]),
+
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, previous_state, OriginalState),
+    api_test_memory:set(MemRef, previous_protection_flags, OriginalProtectionFlags),
+
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
+            verify_fun = build_verify_update_dataset_fun(
+                MemRef, Providers, SpaceKrkParId,
+                DatasetId, FileGuid, FileType, FilePath, Config
+            ),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Update dataset using REST API">>,
+                    type = rest,
+                    prepare_args_fun = build_update_dataset_prepare_rest_args_fun(DatasetId),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, RespCode, _, RespBody}) ->
+                        ExpResult = case should_update_succeed(MemRef, Data) of
+                            true -> {?HTTP_204_NO_CONTENT, #{}};
+                            false -> {errors:to_http_code(?ERROR_POSIX(?EINVAL)), ?REST_ERROR(?ERROR_POSIX(?EINVAL))}
+                        end,
+                        ?assertEqual(ExpResult, {RespCode, RespBody})
+                    end
+                },
+                #scenario_template{
+                    name = <<"Update dataset using GS API">>,
+                    type = gs,
+                    prepare_args_fun = build_update_dataset_prepare_gs_args_fun(DatasetId),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, Result) ->
+                        ExpResult = case should_update_succeed(MemRef, Data) of
+                            true -> ok;
+                            false -> ?ERROR_POSIX(?EINVAL)
+                        end,
+                        ?assertEqual(ExpResult, Result)
+                    end
+                }
+            ],
+            data_spec = #data_spec{
+                at_least_one = [
+                    <<"state">>, <<"setProtectionFlags">>, <<"unsetProtectionFlags">>
+                ],
+                correct_values = #{
+                    <<"state">> => [<<"attached">>, <<"detached">>],
+                    <<"setProtectionFlags">> => ?PROTECTION_FLAGS_COMBINATIONS,
+                    <<"unsetProtectionFlags">> => ?PROTECTION_FLAGS_COMBINATIONS
+                },
+                bad_values = [
+                    {<<"state">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"state">>)},
+                    {<<"state">>, <<"dummy">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(
+                        <<"state">>, [<<"attached">>, <<"detached">>]
+                    )},
+                    {<<"setProtectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"setProtectionFlags">>)},
+                    {<<"setProtectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
+                        <<"setProtectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
+                    )},
+                    {<<"unsetProtectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"unsetProtectionFlags">>)},
+                    {<<"unsetProtectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
+                        <<"unsetProtectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
+                    )},
+                    {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND}
+                ]
+            }
+        }
+    ])).
+
+
+%% @private
+-spec build_update_dataset_prepare_rest_args_fun(dataset:id()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_update_dataset_prepare_rest_args_fun(ShareId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+
+        #rest_args{
+            method = patch,
+            path = <<"datasets/", Id/binary>>,
+            headers = #{<<"content-type">> => <<"application/json">>},
+            body = json_utils:encode(Data1)
+        }
+    end.
+
+
+%% @private
+-spec build_update_dataset_prepare_gs_args_fun(dataset:id()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_update_dataset_prepare_gs_args_fun(ShareId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+
+        #gs_args{
+            operation = update,
+            gri = #gri{type = op_dataset, id = Id, aspect = instance, scope = private},
+            data = Data1
+        }
+    end.
+
+
+%% @private
+-spec build_verify_update_dataset_fun(
+    api_test_memory:mem_ref(), [oct_background:entity_selector()], od_space:id(),
+    dataset:state(), file_id:file_guid(), file_meta:type(), file_meta:path(),
+    test_config:config()
+) ->
+    onenv_api_test_runner:verify_fun().
+build_verify_update_dataset_fun(MemRef, Providers, SpaceId, DatasetId, FileGuid, FileType, FilePath, Config) ->
+    SpaceDirDatasetId = ?config(space_dir_dataset, Config),
+
+    fun(ExpTestResult, #api_test_ctx{node = TestNode, data = Data}) ->
+        CreationTime = get_global_time(TestNode),
+
+        PrevState = api_test_memory:get(MemRef, previous_state),
+        PrevProtectionFlags = api_test_memory:get(MemRef, previous_protection_flags),
+
+        {ExpState, ExpFlags} = case ExpTestResult == expected_success andalso should_update_succeed(MemRef, Data) of
+            true ->
+                NewState = maps:get(<<"state">>, Data, atom_to_binary(PrevState, utf8)),
+                NewProtectionFlags = maps:get(<<"setProtectionFlags">>, Data, []) ++ (
+                        PrevProtectionFlags -- maps:get(<<"unSetProtectionFlags">>, Data, [])
+                ),
+                {binary_to_atom(NewState, utf8), NewProtectionFlags};
+            false ->
+                {PrevState, PrevProtectionFlags}
+        end,
+        ExpParentId = case ExpState of
+            ?ATTACHED_DATASET -> SpaceDirDatasetId;
+            ?DETACHED_DATASET -> undefined
+        end,
+        verify_dataset(
+            user2, Providers, SpaceId, DatasetId, ExpState, ExpParentId,
+            ExpFlags, CreationTime, FileGuid, FileType, FilePath
+        ),
+        api_test_memory:set(MemRef, previous_state, ExpState),
+        api_test_memory:set(MemRef, previous_protection_flags, ExpFlags)
+    end.
+
+
+%% @private
+-spec should_update_succeed(api_test_memory:mem_ref(), middleware:data()) -> boolean().
+should_update_succeed(MemRef, Data) ->
+    PrevState = api_test_memory:get(MemRef, previous_state),
+    NewState = maps:get(<<"state">>, Data, atom_to_binary(PrevState, utf8)),
+    ProtectionFlagsToSet = maps:get(<<"setProtectionFlags">>, Data, undefined),
+    ProtectionFlagsToUnset = maps:get(<<"unsetProtectionFlags">>, Data, undefined),
+
+    case {NewState, ProtectionFlagsToSet, ProtectionFlagsToUnset} of
+        {<<"attached">>, _, _} ->
+            true;
+        {<<"detached">>, undefined, undefined} ->
+            true;
+        _ ->
+            false
     end.
 
 
@@ -601,37 +780,38 @@ build_dataset_gs_instance(
 
 %% @private
 -spec verify_dataset(
-    od_user:id(), od_provider:id(), od_space:id(), dataset:id(), dataset:state(), dataset:id(),
-    [binary()], time:seconds(), file_id:file_guid(), file_meta:type(), file_meta:path()
+    od_user:id(), [oct_background:entity_selector()], od_space:id(), dataset:id(), dataset:state(),
+    dataset:id(), [binary()], time:seconds(), file_id:file_guid(), file_meta:type(), file_meta:path()
 ) ->
     ok.
 verify_dataset(
-    UserId, Provider, SpaceId, DatasetId, State, ParentId, ProtectionFlagsJson,
+    UserId, Providers, SpaceId, DatasetId, State, ParentId, ProtectionFlagsJson,
     CreationTime, RootFileGuid, RootFileType, RootFilePath
 ) ->
-    Node = ?RAND_OP_NODE(Provider),
-    UserSessId = oct_background:get_user_session_id(UserId, Provider),
-    ListOpts = #{offset => 0, limit => 1000},
+    lists:foreach(fun(Provider) ->
+        Node = ?RAND_OP_NODE(Provider),
+        UserSessId = oct_background:get_user_session_id(UserId, Provider),
+        ListOpts = #{offset => 0, limit => 1000},
 
-    GetDatasetsFun = case ParentId of
-        undefined -> fun() -> list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts) end;
-        _ -> fun() -> list_child_dataset_ids(Node, UserSessId, ParentId, ListOpts) end
-    end,
+        GetDatasetsFun = case ParentId of
+            undefined -> fun() -> list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts) end;
+            _ -> fun() -> list_child_dataset_ids(Node, UserSessId, ParentId, ListOpts) end
+        end,
 
-    ?assertEqual(true, lists:member(DatasetId, GetDatasetsFun()), ?ATTEMPTS),
+        ?assertEqual(true, lists:member(DatasetId, GetDatasetsFun()), ?ATTEMPTS),
 
-    ExpDatasetInfo = #dataset_info{
-        id = DatasetId,
-        state = State,
-        guid = RootFileGuid,
-        path = RootFilePath,
-        type = RootFileType,
-        creation_time = CreationTime,
-        protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
-        parent = ParentId
-    },
-    ?assertEqual({ok, ExpDatasetInfo}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId)),
-    ok.
+        ExpDatasetInfo = #dataset_info{
+            id = DatasetId,
+            state = State,
+            guid = RootFileGuid,
+            path = RootFilePath,
+            type = RootFileType,
+            creation_time = CreationTime,
+            protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
+            parent = ParentId
+        },
+        ?assertEqual({ok, ExpDatasetInfo}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId))
+    end, Providers).
 
 
 %% @private
