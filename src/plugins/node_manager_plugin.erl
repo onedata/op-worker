@@ -148,12 +148,6 @@ before_cluster_upgrade() ->
 %%--------------------------------------------------------------------
 -spec upgrade_cluster(node_manager:cluster_generation()) ->
     {ok, node_manager:cluster_generation()}.
-upgrade_cluster(1) ->
-    await_zone_connection_and_run(fun storage:migrate_to_zone/0),
-    {ok, 2};
-upgrade_cluster(2) ->
-    await_zone_connection_and_run(fun storage:migrate_imported_storages_to_zone/0),
-    {ok, 3};
 upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),

@@ -402,17 +402,7 @@
 
 -record(storage_config, {
     helper :: helpers:helper(),
-    luma_config :: storage:luma_config(),
-    imported_storage = false :: boolean()
-}).
-
-
-%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
--record(storage, {
-    name = <<>> :: storage_config:name(),
-    helpers = [] :: [helpers:helper()],
-    readonly = false :: boolean(),
-    luma_config = undefined :: undefined | luma_config:config()
+    luma_config :: storage:luma_config()
 }).
 
 
@@ -423,12 +413,6 @@
     feed :: luma:feed()
 }).
 
-%% Model that maps space to storage
-%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
--record(space_storage, {
-    storage_ids = [] :: [storage:id()],
-    mounted_in_root = [] :: [storage:id()]
-}).
 
 -record(space_unsupport_job, {
     stage = init :: space_unsupport:stage(),
@@ -587,7 +571,7 @@
     auto_storage_import_config :: undefined | auto_storage_import_config:config()
 }).
 
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 %% Model that stores configuration of storage import mechanism
 -record(storage_sync_config, {
     import_enabled = false :: boolean(),
@@ -596,13 +580,13 @@
     update_config = #{} :: space_strategies:update_config()
 }).
 
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 %% Model that maps space to storage strategies
 -record(space_strategies, {
     sync_configs = #{} :: space_strategies:sync_configs()
 }).
 
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 -record(storage_sync_monitoring, {
     scans = 0 :: non_neg_integer(), % overall number of finished scans,
     import_start_time :: undefined | time:seconds(),

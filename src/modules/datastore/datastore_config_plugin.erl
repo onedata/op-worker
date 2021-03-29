@@ -87,11 +87,7 @@ get_models() -> [
     tree_traverse_progress,
     dataset,
 
-    %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
-    space_storage,
-    storage,
-
-    %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+    %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,
     storage_sync_monitoring
 ].
