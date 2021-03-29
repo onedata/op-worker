@@ -128,7 +128,7 @@ all() -> ?ALL([
 -define(NAME(Prefix, Number), str_utils:join_binary([Prefix, integer_to_binary(Number)], <<"_">>)).
 -define(RAND_RANGE, 1000000000).
 
-% TODO VFS-7363 tests of iterating using start_index
+% TODO VFS-7510 tests of iterating using start_index
 
 %%%===================================================================
 %%% API functions

@@ -79,7 +79,8 @@
 
 -type opts() :: #{
     offset => offset(),
-    start_index => start_index(), % TODO VFS-7363 should it be dataset:id(), dataset:path() or dataset:name()
+    % TODO VFS-7510 should it be dataset:id(), dataset:path() or dataset:name() ?
+    % start_index => start_index(),
     limit => limit()
 }.
 
@@ -233,7 +234,6 @@ collect_children(SpaceId, ForestType, Limit, {children, ListedDatasetPath}) ->
 -spec collect_children(od_space:id(), forest_type(), link_name() | undefined, link_name() | undefined,
     link_name() | undefined, limit(), entries()) -> {ok, entries()}.
 collect_children(SpaceId, ForestType, ListedDatasetPath, LastIncludedDatasetPath0, StartIndex, Limit, FinalListReversed) ->
-    % TODO VFS-7363 refactor this function
     InternalOpts0 = #{size => Limit},
     InternalOpts = case StartIndex =:= undefined of
         true -> InternalOpts0;
@@ -285,7 +285,7 @@ collect_children(SpaceId, ForestType, ListedDatasetPath, LastIncludedDatasetPath
         true ->
             {ok, ReversedList ++ FinalListReversed};
         false ->
-            collect_children(SpaceId, ForestType, ListedDatasetPath,LastIncludedDatasetPath, LastProcessed, Limit,
+            collect_children(SpaceId, ForestType, ListedDatasetPath, LastIncludedDatasetPath, LastProcessed, Limit,
                 ReversedList ++ FinalListReversed)
     end.
 
@@ -299,7 +299,7 @@ sort(Datasets) ->
 
 -spec strip(entries(), opts()) -> {entries(), EndReached :: boolean()}.
 strip(Entries, Opts) ->
-    % TODO VFS-7363 use start_index for iterating using batches
+    % TODO VFS-7510 use start_index for iterating using batches
     %%    StartId = maps:get(start_index, Opts, <<>>),
     Offset = maps:get(offset, Opts, 0),
     Limit = maps:get(limit, Opts),

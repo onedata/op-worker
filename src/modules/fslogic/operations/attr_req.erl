@@ -157,13 +157,13 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
-            eff_protection_flags = EffProtectionFlags,
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx3),
             has_direct_qos = file_qos:has_any_qos_entry(FileDoc, direct),
             has_eff_qos = file_qos:has_any_qos_entry(FileDoc, effective),
-            eff_dataset_membership = EffectiveMembership
+            eff_dataset_membership = EffectiveMembership,
+            eff_protection_flags = EffProtectionFlags
         }
     }.
 

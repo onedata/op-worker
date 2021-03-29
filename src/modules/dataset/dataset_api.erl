@@ -21,14 +21,14 @@
 -export([establish/2, update/4, detach/1, remove/1, move_if_applicable/2]).
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/3, list/2]).
+-export([get_associated_file_ctx/1]).
 
 -type id() :: file_meta:uuid().
 -type error() :: {error, term()}.
 
 -export_type([id/0]).
 
-% TODO VFS-7363 how should we handle race on creating dataset on the same file in 2 providers?
-% TODO VFS-7373 handle rename between spaces and rename which changes file-guid
+% TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
 
 %%%===================================================================
 %%% API functions
@@ -46,10 +46,10 @@ establish(FileCtx, ProtectionFlags) ->
     {ok, DatasetId}.
 
 
--spec update(dataset:id(), undefined | dataset:state(), data_access_control:bitmask(), data_access_control:bitmask()) -> ok.
-update(DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
-    {ok, Doc} = dataset:get(DatasetId),
-    {ok, CurrentState} = dataset:get_state(Doc),
+-spec update(dataset:doc(), undefined | dataset:state(), data_access_control:bitmask(), data_access_control:bitmask()) -> ok.
+update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
+    {ok, DatasetId} = dataset:get_id(DatasetDoc),
+    {ok, CurrentState} = dataset:get_state(DatasetDoc),
     case {CurrentState, utils:ensure_defined(NewState, CurrentState)} of
         {?DETACHED_DATASET, ?ATTACHED_DATASET} ->
             reattach(DatasetId, FlagsToSet, FlagsToUnset);
@@ -83,15 +83,17 @@ detach(DatasetId) ->
     dataset_eff_cache:invalidate_on_all_nodes(SpaceId).
 
 
--spec remove(dataset:id()) -> ok.
-remove(DatasetId) ->
-    {ok, Doc} = dataset:get(DatasetId),
+-spec remove(dataset:id() | dataset:doc()) -> ok.
+remove(Doc = #document{key = DatasetId})->
     ok = remove_from_datasets_structure(Doc),
     {ok, Uuid} = dataset:get_uuid(Doc),
     {ok, SpaceId} = dataset:get_space_id(Doc),
     ok = dataset:delete(DatasetId),
     ok = file_meta:remove_dataset(Uuid),
-    dataset_eff_cache:invalidate_on_all_nodes(SpaceId).
+    dataset_eff_cache:invalidate_on_all_nodes(SpaceId);
+remove(DatasetId) when is_binary(DatasetId) ->
+    {ok, Doc} = dataset:get(DatasetId),
+    remove(Doc).
 
 
 -spec move_if_applicable(file_meta:doc(), file_meta:doc()) -> ok.
@@ -126,11 +128,12 @@ get_effective_membership_and_protection_flags(FileCtx) ->
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
     {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
     IsDirectAttached = file_meta:is_dataset_attached(FileDoc),
-    case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
-        {true, _} -> {ok, ?DIRECT_DATASET_MEMBERSHIP, EffProtectionFlags, FileCtx2};
-        {false, true} -> {ok, ?ANCESTOR_DATASET_MEMBERSHIP, EffProtectionFlags, FileCtx2};
-        {false, false} -> {ok, ?NONE_DATASET_MEMBERSHIP, EffProtectionFlags, FileCtx2}
-    end.
+    EffMembership = case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
+        {true, _} -> ?DIRECT_DATASET_MEMBERSHIP;
+        {false, true} -> ?ANCESTOR_DATASET_MEMBERSHIP;
+        {false, false} -> ?NONE_DATASET_MEMBERSHIP
+    end,
+    {ok, EffMembership, EffProtectionFlags, FileCtx2}.
 
 
 -spec get_effective_summary(file_ctx:ctx()) -> {ok, dataset:effective_summary()}.
@@ -165,6 +168,13 @@ list(DatasetId, Opts) ->
     end.
 
 
+-spec get_associated_file_ctx(dataset:doc()) -> file_ctx:ctx().
+get_associated_file_ctx(DatasetDoc) ->
+    {ok, Uuid} = dataset:get_uuid(DatasetDoc),
+    {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
+    file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -174,9 +184,9 @@ reattach(DatasetId, FlagsToSet, FlagsToUnset) ->
     {ok, Doc} = dataset:get(DatasetId),
     {ok, Uuid} = dataset:get_uuid(Doc),
     {ok, SpaceId} = dataset:get_space_id(Doc),
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
     case file_meta:reattach_dataset(Uuid, DatasetId, FlagsToSet, FlagsToUnset) of
         ok ->
+            FileCtx = get_associated_file_ctx(Doc),
             {DatasetName, _} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
             ok = dataset:mark_reattached(DatasetId),
             detached_datasets:delete(Doc),

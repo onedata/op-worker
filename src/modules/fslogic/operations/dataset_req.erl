@@ -29,7 +29,6 @@
     list/4
 ]).
 
-% TODO sprawdzanie uprawnień traverse do establish/update/remove, o ile dataset nie jest detachowany !!!
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -37,10 +36,7 @@
 -spec establish(file_ctx:ctx(), data_access_control:bitmask(), user_ctx:ctx()) -> fslogic_worker:provider_response().
 establish(FileCtx0, ProtectionFlags, UserCtx) ->
     assert_has_eff_privilege(FileCtx0, UserCtx, ?SPACE_MANAGE_DATASETS),
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS]
-    ),
+    FileCtx1 = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]),
 
     establish_insecure(FileCtx1, ProtectionFlags).
 
@@ -50,7 +46,11 @@ establish(FileCtx0, ProtectionFlags, UserCtx) ->
 update(SpaceDirCtx, DatasetId, NewDatasetState, FlagsToSet, FlagsToUnset, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
 
-    ok = dataset_api:update(DatasetId, NewDatasetState, FlagsToSet, FlagsToUnset),
+    {ok, DatasetDoc} = dataset:get(DatasetId),
+    FileCtx0 = dataset_api:get_associated_file_ctx(DatasetDoc),
+    fslogic_authz:ensure_authorized(UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]),
+
+    ok = dataset_api:update(DatasetDoc, NewDatasetState, FlagsToSet, FlagsToUnset),
     ?PROVIDER_OK_RESP.
 
 
@@ -58,7 +58,12 @@ update(SpaceDirCtx, DatasetId, NewDatasetState, FlagsToSet, FlagsToUnset, UserCt
 remove(SpaceDirCtx, DatasetId, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
 
-    ok = dataset_api:remove(DatasetId),
+    {ok, DatasetDoc} = dataset:get(DatasetId),
+    FileCtx0 = dataset_api:get_associated_file_ctx(DatasetDoc),
+    fslogic_authz:ensure_authorized(UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]),
+
+
+    ok = dataset_api:remove(DatasetDoc),
     ?PROVIDER_OK_RESP.
 
 
