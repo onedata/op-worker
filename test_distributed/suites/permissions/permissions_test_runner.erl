@@ -377,13 +377,13 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
             % With file protection set operation should fail
             ok = lfm_proxy:update_dataset(
-                Node, ?ROOT_SESS_ID, DatasetId, undefined, ProtectionFlagsToSet, ?no_flags_mask),
+                Node, SpaceOwnerUserSessId, DatasetId, undefined, ProtectionFlagsToSet, ?no_flags_mask),
             await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
             ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             % And should succeed without it
             ok = lfm_proxy:update_dataset(
-                Node, ?ROOT_SESS_ID, DatasetId, undefined, ?no_flags_mask, ProtectionFlagsToSet
+                Node, SpaceOwnerUserSessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlagsToSet
             ),
             await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
             ?assertMatch(ok, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
