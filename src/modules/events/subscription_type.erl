@@ -138,22 +138,22 @@ get_context(_) ->
 update_context(#subscription{type = Type} = Sub, Ctx) ->
     Sub#subscription{type = update_context(Type, Ctx)};
 update_context(#file_attr_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#file_attr_changed_subscription{file_guid = FileGuid};
 update_context(#replica_status_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#replica_status_changed_subscription{file_guid = FileGuid};
 update_context(#file_location_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#file_location_changed_subscription{file_guid = FileGuid};
 update_context(#file_perm_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#file_perm_changed_subscription{file_guid = FileGuid};
 update_context(#file_removed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#file_removed_subscription{file_guid = FileGuid};
 update_context(#file_renamed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#file_renamed_subscription{file_guid = FileGuid};
 update_context(Object, _Ctx) ->
     Object.

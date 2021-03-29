@@ -110,7 +110,7 @@ do_master_job(Job, MasterJobArgs) ->
 do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_id = UserId}, TaskId) ->
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
     #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttrs} = 
-        attr_req:get_file_attr(UserCtx, FileCtx, false),
+        attr_req:get_file_attr(UserCtx, FileCtx, false, false),
     Pid = get_connection_pid(TaskId),
     Pid ! {file_attrs, FileAttrs, self()},
     case slave_job_loop(Pid) of

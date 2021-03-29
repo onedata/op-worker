@@ -61,7 +61,7 @@ report_started(TraverseId, FileCtx, QosEntries) ->
 
 -spec report_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
 report_finished(TraverseId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     QosEntries = case file_qos:get_effective(FileUuid) of
         undefined -> [];
         {error, {file_meta_missing, FileUuid}} -> [];
@@ -91,7 +91,7 @@ report_file_transfer_failure(FileCtx, QosEntries) ->
             qos_status_links:add_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link)))
     end, QosEntries),
     ok = ?extract_ok(?ok_if_exists(
-        qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_uuid_const(FileCtx)))).
+        qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_logical_uuid_const(FileCtx)))).
 
 
 -spec report_file_deleted(file_ctx:ctx(), qos_entry:doc(), file_ctx:ctx() | undefined) -> ok.

@@ -16,7 +16,7 @@
 -include("modules/events/subscriptions.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/storage/luma/luma.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
@@ -375,13 +375,15 @@
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
     protection_flags = 0 :: data_access_control:bitmask(),
-    acl = [] :: acl:acl(),
-    owner :: od_user:id(),
+    acl = [] :: acl:acl(), % VFS-7437 Handle conflict resolution similarly to hardlinks
+    owner :: undefined | od_user:id(), % undefined for hardlink doc
     is_scope = false :: boolean(),
     provider_id :: undefined | oneprovider:id(), %% Id of provider that created this file
-    shares = [] :: [od_share:id()],
+    shares = [] :: [od_share:id()], % VFS-7437 Handle conflict resolution similarly to hardlinks
     deleted = false :: boolean(),
     parent_uuid :: undefined | file_meta:uuid(),
+    references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
+    symlink_value :: undefined | file_meta_symlinks:symlink(),
     dataset :: undefined | dataset:id(),
     dataset_state :: undefined | dataset:state()
 }).

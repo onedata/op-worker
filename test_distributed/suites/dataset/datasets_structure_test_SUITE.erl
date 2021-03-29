@@ -642,7 +642,7 @@ move_dataset_test_base(Depth, TargetType) ->
     TargetDatasetPath =  filename:join(TargetParentPath, TopDatasetUuid),
 
     move(P1Node, SpaceId, TopDatasetId, TopDatasetPath, TargetDatasetPath, TopDatasetTargetName),
-    
+
     case TargetType of
         dataset ->
             % check whether the highest dataset on the list of space datasets is still a target_dir dataset
@@ -891,7 +891,7 @@ generate_nested_datasets(RootPath, Depth, GenerateEntryForRoot) ->
         DatasetPath = filename:join(ParentDatasetPath, Uuid),
         [{DatasetPath, ?DATASET_ID, ?DATASET_NAME} | Acc]
     end, [{RootPath, ?DATASET_ID, ?DATASET_NAME}], lists:seq(0, Depth - 1)),
-    
+
     case GenerateEntryForRoot of
         true -> Datasets;
         false -> lists:droplast(Datasets)

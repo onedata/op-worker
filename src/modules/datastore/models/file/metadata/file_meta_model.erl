@@ -242,7 +242,10 @@ get_record_struct(11) ->
         {provider_id, string},
         {shares, [string]},
         {deleted, boolean},
-        {parent_uuid, string}
+        {parent_uuid, string},
+        % following fields have been added in this version:
+        {references, #{string => [string]}},
+        {symlink_value, string}
     ]};
 get_record_struct(12) ->
     {record, [
@@ -263,6 +266,8 @@ get_record_struct(12) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string},
+        {references, #{string => [string]}},
+        {symlink_value, string},
         % fields dataset and dataset_status has been added in this version
         {dataset, string},
         {dataset_status, atom}
@@ -337,15 +342,17 @@ upgrade_record(10, {
     ProviderId, Shares, Deleted, ParentUuid
 }) ->
     {11, {?FILE_META_MODEL, Name, Type, Mode, 0, ACL, Owner, IsScope,
-        ProviderId, Shares, Deleted, ParentUuid
+        ProviderId, Shares, Deleted, ParentUuid, #{}, undefined
     }};
 upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
-    ProviderId, Shares, Deleted, ParentUuid
+    ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue
 }) ->
     {12, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue,
         % fields dataset and dataset_status has been added in this version
-        ProviderId, Shares, Deleted, ParentUuid, undefined, undefined
+        undefined, undefined
     }}.
+
 
 
 %%--------------------------------------------------------------------
@@ -368,7 +375,7 @@ resolve_conflict(_Ctx,
     case NewName =/= PrevName of
         true ->
             spawn(fun() ->
-                FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
+                FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
                 OldParentGuid = file_id:pack_guid(PrevParentUuid, SpaceId),
                 NewParentGuid = file_id:pack_guid(NewParentUuid, SpaceId),
                 fslogic_event_emitter:emit_file_renamed_no_exclude(
@@ -378,7 +385,18 @@ resolve_conflict(_Ctx,
             ok
     end,
 
-    default.
+    case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
+        not_mutated ->
+            default;
+        {mutated, MergedReferences} ->
+            #document{revs = [NewRev | _]} = NewDoc,
+            #document{revs = [PrevlRev | _]} = PrevDoc,
+            DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevlRev) of
+                true -> NewDoc;
+                false -> PrevDoc
+            end,
+            {true, DocBase#document{value = RecordBase#file_meta{references = MergedReferences}}}
+    end.
 
 
 %%%===================================================================
@@ -411,8 +429,8 @@ invalidate_qos_bounded_cache_if_moved_to_trash(
     case PrevParentUuid =/= NewParentUuid andalso fslogic_uuid:is_trash_dir_uuid(NewParentUuid) of
         true ->
             % the file has been moved to trash
-            FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
-            PrevParentCtx = file_ctx:new_by_guid(file_id:pack_guid(PrevParentUuid, SpaceId)),
+            FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
+            PrevParentCtx = file_ctx:new_by_uuid(PrevParentUuid, SpaceId),
             file_qos:clean_up(FileCtx, PrevParentCtx),
             qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
         false ->

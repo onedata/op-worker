@@ -14,12 +14,12 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/file_attr.hrl").
 -include("middleware/middleware.hrl").
 -include("http/cdmi.hrl").
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API
 -export([get_cdmi/2, put_cdmi/2, put_binary/2, delete_cdmi/2]).
