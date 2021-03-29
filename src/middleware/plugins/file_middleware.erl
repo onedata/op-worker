@@ -68,8 +68,8 @@ operation_supported(delete, Aspect, Scope) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = create, gri = GRI}) ->
-    data_spec_create(GRI);
+data_spec(#op_req{operation = create, data = Data, gri = GRI}) ->
+    data_spec_create(GRI, Data);
 data_spec(#op_req{operation = get, gri = GRI}) ->
     data_spec_get(GRI);
 data_spec(#op_req{operation = update, gri = GRI}) ->
@@ -143,11 +143,14 @@ create_operation_supported(_, _) -> false.
 
 
 %% @private
--spec data_spec_create(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
-data_spec_create(#gri{aspect = instance}) -> #{
-    required => #{
+-spec data_spec_create(gri:gri(), middleware:data()) ->
+    undefined | middleware_sanitizer:data_spec().
+data_spec_create(#gri{aspect = instance}, Data) ->
+    AlwaysRequired = #{
         <<"name">> => {binary, non_empty},
-        <<"type">> => {binary, [<<"file">>, <<"dir">>]},
+        <<"type">> => {atom, [
+            ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?LINK_TYPE, ?SYMLINK_TYPE
+        ]},
         <<"parent">> => {binary, fun(Parent) ->
             try gri:deserialize(Parent) of
                 #gri{type = op_file, id = ParentGuid, aspect = instance} ->
@@ -159,13 +162,23 @@ data_spec_create(#gri{aspect = instance}) -> #{
             end
         end}
     },
-    optional => #{<<"createAttempts">> => {integer, {between, 1, 200}}}
-};
+    AllOptional = #{<<"createAttempts">> => {integer, {between, 1, 200}}},
 
-data_spec_create(#gri{aspect = object_id}) ->
+    AllRequired = case maps:get(<<"type">>, Data, undefined) of
+        <<"LNK">> ->
+            AlwaysRequired#{<<"targetGuid">> => {binary, guid}};
+        <<"SYMLNK">> ->
+            AlwaysRequired#{<<"targetPath">> => {binary, non_empty}};
+        _ ->
+            AlwaysRequired
+    end,
+
+    #{required => AllRequired, optional => AllOptional};
+
+data_spec_create(#gri{aspect = object_id}, _) ->
     undefined;
 
-data_spec_create(#gri{aspect = attrs}) ->
+data_spec_create(#gri{aspect = attrs}, _) ->
     ModeParam = <<"mode">>,
 
     #{
@@ -184,14 +197,14 @@ data_spec_create(#gri{aspect = attrs}) ->
         }
     };
 
-data_spec_create(#gri{aspect = xattrs}) -> #{
+data_spec_create(#gri{aspect = xattrs}, _) -> #{
     required => #{
         id => {binary, guid},
         <<"metadata">> => {json, any}
     }
 };
 
-data_spec_create(#gri{aspect = json_metadata}) -> #{
+data_spec_create(#gri{aspect = json_metadata}, _) -> #{
     required => #{
         id => {binary, guid},
         <<"metadata">> => {any, any}
@@ -202,14 +215,14 @@ data_spec_create(#gri{aspect = json_metadata}) -> #{
     }
 };
 
-data_spec_create(#gri{aspect = rdf_metadata}) -> #{
+data_spec_create(#gri{aspect = rdf_metadata}, _) -> #{
     required => #{
         id => {binary, guid},
         <<"metadata">> => {binary, any}
     }
 };
 
-data_spec_create(#gri{aspect = register_file}) -> #{
+data_spec_create(#gri{aspect = register_file}, _) -> #{
     required => #{
         <<"spaceId">> => {binary, non_empty},
         <<"storageId">> => {binary, non_empty},
@@ -291,12 +304,19 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
+    FileType = maps:get(<<"type">>, Data),
+
+    Target = case FileType of
+        ?LINK_TYPE -> maps:get(<<"targetGuid">>, Data);
+        ?SYMLINK_TYPE -> maps:get(<<"targetPath">>, Data);
+        _ -> undefined
+    end,
 
     {ok, Guid} = create_file(
         SessionId,
         maps:get(<<"parent">>, Data),
         maps:get(<<"name">>, Data),
-        binary_to_atom(maps:get(<<"type">>, Data), utf8),
+        FileType, Target,
         0,
         maps:get(<<"createAttempts">>, Data, 1)
     ),
@@ -869,34 +889,28 @@ delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) -
 
 
 %% @private
--spec create_file(session:id(), file_id:file_guid(), file_meta:name(), file | dir) ->
-    {ok, file_id:file_guid()} | {error, term()}.
-create_file(SessionId, ParentGuid, Name, file) ->
-    lfm:create(SessionId, ParentGuid, Name, undefined);
-create_file(SessionId, ParentGuid, Name, dir) ->
-    lfm:mkdir(SessionId, ParentGuid, Name, undefined).
-
-
-%% @private
 -spec create_file(
     SessionId :: session:id(),
     ParentGuid :: file_id:file_guid(),
     Name :: file_meta:name(),
-    Type :: file | dir,
+    Type :: file_meta:type(),
+    Target :: undefined | file_id:file_guid() | file_meta:path(),
     Counter :: non_neg_integer(),
     Attempts :: non_neg_integer()
 ) ->
     {ok, file_id:file_guid()} | no_return().
-create_file(_, _, _, _, Counter, Attempts) when Counter >= Attempts ->
+create_file(_, _, _, _, _, Counter, Attempts) when Counter >= Attempts ->
     throw(?ERROR_POSIX(?EEXIST));
-create_file(SessId, ParentGuid, OriginalName, Type, Counter, Attempts) ->
+create_file(SessId, ParentGuid, OriginalName, Type, Target, Counter, Attempts) ->
     Name = maybe_add_file_suffix(OriginalName, Counter),
-    case create_file(SessId, ParentGuid, Name, Type) of
+    case create_file(SessId, ParentGuid, Name, Type, Target) of
         {error, ?EEXIST} ->
             create_file(
-                SessId, ParentGuid, OriginalName, Type,
+                SessId, ParentGuid, OriginalName, Type, Target,
                 Counter + 1, Attempts
             );
+        {ok, #file_attr{guid = FileGuid}} ->
+            {ok, FileGuid};
         Result ->
             ?check(Result)
     end.
@@ -911,6 +925,25 @@ maybe_add_file_suffix(OriginalName, Counter) ->
     RootName = filename:rootname(OriginalName),
     Ext = filename:extension(OriginalName),
     str_utils:format_bin("~ts(~B)~ts", [RootName, Counter, Ext]).
+
+
+%% @private
+-spec create_file(
+    SessionId :: session:id(),
+    ParentGuid :: file_id:file_guid(),
+    Name :: file_meta:name(),
+    Type :: file_meta:type(),
+    Target :: undefined | file_id:file_guid() | file_meta:path()
+) ->
+    {ok, file_id:file_guid() | lfm_attrs:file_attributes()} | {error, term()}.
+create_file(SessionId, ParentGuid, Name, ?REGULAR_FILE_TYPE, undefined) ->
+    lfm:create(SessionId, ParentGuid, Name, undefined);
+create_file(SessionId, ParentGuid, Name, ?DIRECTORY_TYPE, undefined) ->
+    lfm:mkdir(SessionId, ParentGuid, Name, undefined);
+create_file(SessionId, ParentGuid, Name, ?LINK_TYPE, TargetGuid) ->
+    lfm:make_link(SessionId, {guid, TargetGuid}, ParentGuid, Name);
+create_file(SessionId, ParentGuid, Name, ?SYMLINK_TYPE, TargetPath) ->
+    lfm:make_symlink(SessionId, {guid, ParentGuid}, Name, TargetPath).
 
 
 %% @private

@@ -190,10 +190,9 @@ translate_file_details(#file_details{
 }, Scope) ->
     PosixPerms = list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
     {Type, Size} = case TypeAttr of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, SizeAttr}
+        ?DIRECTORY_TYPE -> {<<"DIR">>, null};
+        ?REGULAR_FILE_TYPE -> {<<"REG">>, SizeAttr};
+        ?SYMLINK_TYPE -> {<<"SYMLNK">>, SizeAttr}
     end,
     IsRootDir = case file_id:guid_to_share_id(FileGuid) of
         undefined -> fslogic_uuid:is_space_dir_guid(FileGuid);
