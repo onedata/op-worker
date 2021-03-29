@@ -361,6 +361,7 @@ resolve_conflict(_Ctx,
     NewDoc = #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
     PrevDoc = #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}
 ) ->
+    invalidate_paths_cache_if_needed(NewDoc, PrevDoc),
     invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
     spawn(fun() ->
         invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc)
@@ -415,6 +416,21 @@ invalidate_qos_bounded_cache_if_moved_to_trash(
             PrevParentCtx = file_ctx:new_by_guid(file_id:pack_guid(PrevParentUuid, SpaceId)),
             file_qos:clean_up(FileCtx, PrevParentCtx),
             qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        false ->
+            ok
+    end.
+
+
+%% @private
+-spec invalidate_paths_cache_if_needed(file_meta:doc(), file_meta:doc()) -> ok.
+invalidate_paths_cache_if_needed(
+    #document{value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
+    #document{value = #file_meta{name = OldName, parent_uuid = PrevParentUuid}}
+) ->
+    case NewName =/= OldName orelse PrevParentUuid =/= NewParentUuid of
+        true ->
+            spawn(fun() -> paths_cache:invalidate_on_all_nodes(SpaceId) end),
+            ok;
         false ->
             ok
     end.

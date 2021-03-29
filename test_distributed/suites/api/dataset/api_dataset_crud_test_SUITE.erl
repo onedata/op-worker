@@ -29,15 +29,19 @@
 
 -export([
     establish_dataset_test/1,
+    get_dataset_test/1,
     delete_dataset_test/1
 ]).
 
 all() -> [
     establish_dataset_test,
+    get_dataset_test,
     delete_dataset_test
 ].
 
 -define(ATTEMPTS, 30).
+
+-define(FMT(__FMT, __ARGS), str_utils:format(__FMT, __ARGS)).
 
 -define(PROTECTION_FLAGS_COMBINATIONS, [
     [],
@@ -252,6 +256,156 @@ build_verify_establish_dataset_fun(MemRef, Providers, SpaceId, Config) ->
 
 
 %%%===================================================================
+%%% Get dataset test functions
+%%%===================================================================
+
+
+get_dataset_test(Config) ->
+    State = random_dataset_state(),
+    ProtectionFlags = lists_utils:random_element(?PROTECTION_FLAGS_COMBINATIONS),
+
+    #object{name = DirName, children = [#object{
+        guid = FileGuid,
+        name = FileName,
+        type = FileType,
+        dataset = #dataset_obj{id = DatasetId}
+    }]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, build_test_file_tree_spec([
+            #dataset_spec{state = State, protection_flags = ProtectionFlags}
+        ])
+    ),
+    OriginalParentId = case State of
+        ?ATTACHED_DATASET -> ?config(space_dir_dataset, Config);
+        ?DETACHED_DATASET -> undefined
+    end,
+    OriginalFilePath = filename:join(["/", ?SPACE_KRK_PAR, DirName, FileName]),
+
+    case State == ?ATTACHED_DATASET andalso lists:member(?DATA_PROTECTION_BIN, ProtectionFlags) of
+        true ->
+            ct:pal(?FMT("Test get ~p dataset", [State])),
+
+            get_dataset_test_base(
+                DatasetId, OriginalParentId, State, ProtectionFlags,
+                FileGuid, FileType, OriginalFilePath
+            );
+        false ->
+            ct:pal(?FMT("Test get ~p dataset after moving root file", [State])),
+
+            NewFilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
+            onenv_file_test_utils:mv_and_sync_file(user3, FileGuid, NewFilePath),
+
+            DatasetRecordedFilePath = case State of
+                ?ATTACHED_DATASET -> NewFilePath;
+                ?DETACHED_DATASET -> OriginalFilePath
+            end,
+
+            get_dataset_test_base(
+                DatasetId, OriginalParentId, State, ProtectionFlags,
+                FileGuid, FileType, DatasetRecordedFilePath
+            ),
+
+            ct:pal(?FMT("Test get ~p dataset after removing root file", [State])),
+
+            onenv_file_test_utils:rm_and_sync_file(user3, FileGuid),
+
+            get_dataset_test_base(
+                DatasetId, undefined, detached, ProtectionFlags,
+                FileGuid, FileType, DatasetRecordedFilePath
+            )
+    end.
+
+
+%% @private
+-spec get_dataset_test_base(
+    dataset:id(), dataset:id(), dataset:state(), [binary()],
+    file_id:file_guid(), file_meta:type(), file_meta:path()
+) ->
+    map().
+get_dataset_test_base(
+    DatasetId, ParentId, State, ProtectionFlags,
+    RootFileGuid, RootFileType, RootFilePath
+) ->
+    StateBin = atom_to_binary(State, utf8),
+    {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
+    RootFileTypeBin = file_meta:type_to_json(RootFileType),
+
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = [krakow, paris],
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get dataset using REST API">>,
+                    type = rest,
+                    prepare_args_fun = build_get_dataset_prepare_rest_args_fun(DatasetId),
+                    validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
+                        CreationTime = get_global_time(TestNode),
+
+                        ExpDatasetData = #{
+                            <<"datasetId">> => DatasetId,
+                            <<"parentId">> => utils:undefined_to_null(ParentId),
+                            <<"rootFileId">> => RootFileObjectId,
+                            <<"rootFileType">> => RootFileTypeBin,
+                            <<"rootFilePath">> => RootFilePath,
+                            <<"state">> => StateBin,
+                            <<"protectionFlags">> => ProtectionFlags,
+                            <<"creationTime">> => CreationTime
+                        },
+                        ?assertEqual({?HTTP_200_OK, ExpDatasetData}, {RespCode, RespBody})
+                    end
+                },
+                #scenario_template{
+                    name = <<"Get dataset using GS API">>,
+                    type = gs,
+                    prepare_args_fun = build_get_dataset_prepare_gs_args_fun(DatasetId),
+                    validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
+                        CreationTime = get_global_time(TestNode),
+
+                        ExpDatasetData = build_dataset_gs_instance(
+                            State, DatasetId, ParentId, ProtectionFlags, CreationTime,
+                            RootFileGuid, RootFileType, RootFilePath
+                        ),
+                        ?assertEqual(ExpDatasetData, Result)
+                    end
+                }
+            ],
+            data_spec = #data_spec{
+                bad_values = [{bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND}]
+            }
+        }
+    ])).
+
+
+%% @private
+-spec build_get_dataset_prepare_rest_args_fun(dataset:id()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_dataset_prepare_rest_args_fun(DatasetId) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data),
+
+        #rest_args{
+            method = get,
+            path = <<"datasets/", Id/binary>>
+        }
+    end.
+
+
+%% @private
+-spec build_get_dataset_prepare_gs_args_fun(dataset:id()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_dataset_prepare_gs_args_fun(DatasetId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_dataset, id = Id, aspect = instance, scope = private},
+            data = Data1
+        }
+    end.
+
+
+%%%===================================================================
 %%% Delete dataset test functions
 %%%===================================================================
 
@@ -398,8 +552,8 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
 -spec random_dataset_state() -> dataset:state().
 random_dataset_state() ->
     case rand:uniform(2) of
-        1 -> attached;
-        2 -> detached
+        1 -> ?ATTACHED_DATASET;
+        2 -> ?DETACHED_DATASET
     end.
 
 

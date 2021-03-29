@@ -18,11 +18,13 @@
 -include("onenv_test_utils.hrl").
 -include("distribution_assert.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 -export([
     resolve_file/1,
-    create_and_sync_file_tree/3, create_and_sync_file_tree/4
+    create_and_sync_file_tree/3, create_and_sync_file_tree/4,
+    mv_and_sync_file/3, rm_and_sync_file/2
 ]).
 
 -type share_spec() :: #share_spec{}.
@@ -83,6 +85,42 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProvid
     await_parent_links_sync(SyncProviders, UserId, ParentGuid, FileTree),
 
     FileTree.
+
+
+-spec mv_and_sync_file(oct_background:entity_selector(), object_selector(), file_meta:path()) ->
+    ok.
+mv_and_sync_file(UserSelector, FileSelector, DstPath) ->
+    UserId = oct_background:get_user_id(UserSelector),
+    {FileGuid, SpaceId} = resolve_file(FileSelector),
+    [ProvA | RestProviders] = lists_utils:shuffle(oct_background:get_space_supporting_providers(
+        SpaceId
+    )),
+
+    mv_file(UserId, FileGuid, DstPath, ProvA),
+
+    lists:foreach(fun(Provider) ->
+        Node = ?RAND_OP_NODE(Provider),
+        UserSessId = oct_background:get_user_session_id(UserId, Provider),
+        ?assertEqual({ok, DstPath}, lfm_proxy:get_file_path(Node, UserSessId, FileGuid), ?ATTEMPTS)
+    end, RestProviders).
+
+
+-spec rm_and_sync_file(oct_background:entity_selector(), object_selector()) ->
+    ok.
+rm_and_sync_file(UserSelector, FileSelector) ->
+    UserId = oct_background:get_user_id(UserSelector),
+    {FileGuid, SpaceId} = resolve_file(FileSelector),
+    [ProvA | RestProviders] = lists_utils:shuffle(oct_background:get_space_supporting_providers(
+        SpaceId
+    )),
+
+    rm_file(UserId, FileGuid, ProvA),
+
+    lists:foreach(fun(Provider) ->
+        Node = ?RAND_OP_NODE(Provider),
+        UserSessId = oct_background:get_user_session_id(UserId, Provider),
+        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, {guid, FileGuid}), ?ATTEMPTS)
+    end, RestProviders).
 
 
 %%%===================================================================
@@ -341,3 +379,24 @@ write_file(Node, SessId, FileGuid, Content) ->
     {ok, FileHandle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {guid, FileGuid}, write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Node, FileHandle, 0, Content)),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
+
+
+%% @private
+-spec mv_file(od_user:id(), file_id:file_guid(), file_meta:path(), oct_background:entity_selector()) ->
+    ok.
+mv_file(UserId, FileGuid, DstPath, MvProvider) ->
+    MvNode = ?RAND_OP_NODE(MvProvider),
+    UserSessId = oct_background:get_user_session_id(UserId, MvProvider),
+
+    ?assertMatch({ok, _}, lfm_proxy:mv(MvNode, UserSessId, {guid, FileGuid}, DstPath)),
+    ok.
+
+
+%% @private
+-spec rm_file(od_user:id(), file_id:file_guid(), oct_background:entity_selector()) ->
+    ok.
+rm_file(UserId, FileGuid, RmProvider) ->
+    UserSessId = oct_background:get_user_session_id(UserId, RmProvider),
+    RmNode = lists_utils:random_element(oct_background:get_provider_nodes(RmProvider)),
+
+    ?assertMatch(ok, lfm_proxy:unlink(RmNode, UserSessId, {guid, FileGuid})).
