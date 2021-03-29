@@ -96,7 +96,6 @@ all() -> [
     },
     #dir_spec{
         name = <<"get_file_dataset_summary_test">>,
-        mode = 8#747,
         dataset = #dataset_spec{
             state = ?ATTACHED_DATASET,
             protection_flags = [?METADATA_PROTECTION_BIN]
@@ -429,11 +428,12 @@ validate_listed_datasets(ListingResult, Params, AllDatasets) ->
     Limit = maps:get(<<"limit">>, Params, 1000),
     Offset = maps:get(<<"offset">>, Params, 0),
 
-    ExpDatasets1 = case Offset >= length(AllDatasets) of
+    {ExpDatasets1, IsLast} = case Offset >= length(AllDatasets) of
         true ->
-            [];
+            {[], true};
         false ->
-            lists:sublist(AllDatasets, Offset + 1, Limit)
+            SubList = lists:sublist(AllDatasets, Offset + 1, Limit),
+            {SubList, lists:last(SubList) == lists:last(AllDatasets)}
     end,
     ExpDatasets2 = lists:map(fun({FileName, DatasetId, _Details}) ->
         #{
@@ -444,7 +444,7 @@ validate_listed_datasets(ListingResult, Params, AllDatasets) ->
 
     ExpResult = #{
         <<"datasets">> => ExpDatasets2,
-        <<"isLast">> => length(ExpDatasets2) < Limit
+        <<"isLast">> => IsLast
     },
     ?assertEqual(ExpResult, ListingResult).
 
