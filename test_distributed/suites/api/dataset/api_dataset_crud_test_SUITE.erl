@@ -59,6 +59,8 @@ all() -> [
     [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
 ]).
 
+-define(NON_EXISTENT_DATASET_ID, <<"NonExistentDataset">>).
+
 
 %%%===================================================================
 %%% Create dataset test functions
@@ -377,7 +379,7 @@ get_dataset_test_base(
                 }
             ],
             data_spec = #data_spec{
-                bad_values = [{bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND}]
+                bad_values = [{bad_id, ?NON_EXISTENT_DATASET_ID, ?ERROR_NOT_FOUND}]
             }
         }
     ])).
@@ -496,7 +498,7 @@ update_dataset_test(Config) ->
                     {<<"unsetProtectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
                         <<"unsetProtectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
                     )},
-                    {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND}
+                    {bad_id, ?NON_EXISTENT_DATASET_ID, ?ERROR_NOT_FOUND}
                 ]
             }
         }
@@ -653,6 +655,7 @@ build_delete_dataset_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         DatasetId = choose_dataset_to_remove(MemRef),
         {Id, _} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data),
+        api_test_memory:set(MemRef, dataset_to_remove, Id),
 
         #rest_args{
             method = delete,
@@ -668,6 +671,7 @@ build_delete_dataset_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         DatasetId = choose_dataset_to_remove(MemRef),
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+        api_test_memory:set(MemRef, dataset_to_remove, Id),
 
         #gs_args{
             operation = delete,
@@ -680,11 +684,7 @@ build_delete_dataset_prepare_gs_args_fun(MemRef) ->
 %% @private
 -spec choose_dataset_to_remove(api_test_memory:mem_ref()) -> dataset:id().
 choose_dataset_to_remove(MemRef) ->
-    Datasets = api_test_memory:get(MemRef, datasets),
-    DatasetId = lists_utils:random_element(Datasets),
-    api_test_memory:set(MemRef, dataset_to_remove, DatasetId),
-
-    DatasetId.
+    lists_utils:random_element(api_test_memory:get(MemRef, datasets)).
 
 
 %% @private
@@ -699,33 +699,42 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
     SpaceDirDatasetId = ?config(space_dir_dataset, Config),
 
     fun(ExpResult, _) ->
-        DatasetId = api_test_memory:get(MemRef, dataset_to_remove),
+        case api_test_memory:get(MemRef, dataset_to_remove) of
+            ?NON_EXISTENT_DATASET_ID ->
+                ok;
+            DatasetId ->
+                State = api_test_memory:get(MemRef, {dataset_state, DatasetId}),
 
-        lists:foreach(fun(Provider) ->
-            Node = ?RAND_OP_NODE(Provider),
-            UserSessId = oct_background:get_user_session_id(user2, Provider),
-            ListOpts = #{offset => 0, limit => 1000},
+                lists:foreach(fun(Provider) ->
+                    Node = ?RAND_OP_NODE(Provider),
+                    UserSessId = oct_background:get_user_session_id(user2, Provider),
+                    ListOpts = #{offset => 0, limit => 1000},
 
-            GetDatasetsFun = case SpaceDirDatasetId of
-                undefined ->
-                    State = api_test_memory:get(MemRef, {dataset_state, DatasetId}),
-                    fun() -> list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts) end;
-                _ ->
-                    fun() -> list_child_dataset_ids(Node, UserSessId, SpaceDirDatasetId, ListOpts) end
-            end,
+                    ListDatasetsFun = case SpaceDirDatasetId == undefined orelse State == ?DETACHED_DATASET of
+                        true ->
+                            fun() ->
+                                list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts)
+                            end;
+                        false ->
+                            fun() ->
+                                list_child_dataset_ids(Node, UserSessId, SpaceDirDatasetId, ListOpts)
+                            end
+                    end,
+                    GetDatasetInfo = fun() -> lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId) end,
 
-            case ExpResult of
-                expected_success ->
-                    ?assertEqual({error, ?ENOENT}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId), ?ATTEMPTS),
-                    ?assertEqual(false, lists:member(DatasetId, GetDatasetsFun())),
-                    api_test_memory:set(MemRef, datasets, lists:delete(
-                        DatasetId, api_test_memory:get(MemRef, datasets)
-                    ));
-                expected_failure ->
-                    ?assertMatch({ok, _}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId), ?ATTEMPTS),
-                    ?assertEqual(true, lists:member(DatasetId, GetDatasetsFun()))
-            end
-        end, Providers)
+                    case ExpResult of
+                        expected_success ->
+                            ?assertEqual({error, ?ENOENT}, GetDatasetInfo(), ?ATTEMPTS),
+                            ?assertEqual(false, lists:member(DatasetId, ListDatasetsFun())),
+                            api_test_memory:set(MemRef, datasets, lists:delete(
+                                DatasetId, api_test_memory:get(MemRef, datasets)
+                            ));
+                        expected_failure ->
+                            ?assertMatch({ok, _}, GetDatasetInfo(), ?ATTEMPTS),
+                            ?assertEqual(true, lists:member(DatasetId, ListDatasetsFun()), ?ATTEMPTS)
+                    end
+                end, Providers)
+        end
     end.
 
 
