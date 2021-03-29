@@ -651,7 +651,7 @@ init_per_group(_Group, Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk_par),
 
-    SpaceDirDataset = case 2 of
+    SpaceDirDataset = case rand:uniform(2) of
         1 ->
             undefined;
         2 ->

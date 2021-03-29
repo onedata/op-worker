@@ -28,16 +28,16 @@
 ]).
 
 -export([
-    create_dataset_test/1
+    establish_dataset_test/1,
+    delete_dataset_test/1
 ]).
 
 all() -> [
-    create_dataset_test
+    establish_dataset_test,
+    delete_dataset_test
 ].
 
 -define(ATTEMPTS, 30).
-
--define(FMT(__FMT, __ARGS), str_utils:format(__FMT, __ARGS)).
 
 -define(PROTECTION_FLAGS_COMBINATIONS, [
     [],
@@ -48,17 +48,16 @@ all() -> [
 
 
 %%%===================================================================
-%%% Test functions
+%%% Create dataset test functions
 %%%===================================================================
 
 
-create_dataset_test(Config) ->
+establish_dataset_test(Config) ->
     Providers = [krakow, paris],
     SpaceId = oct_background:get_space_id(space_krk_par),
 
     #object{children = [#object{
-        guid = FileGuid,
-        type = FileType
+        guid = FileGuid
     }]} = onenv_file_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec([#dataset_spec{}])
     ),
@@ -70,20 +69,20 @@ create_dataset_test(Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
-            setup_fun = build_create_dataset_setup_fun(MemRef, SpaceId),
-            verify_fun = build_verify_create_dataset_fun(MemRef, Providers, SpaceId, Config),
+            setup_fun = build_establish_dataset_setup_fun(MemRef, SpaceId),
+            verify_fun = build_verify_establish_dataset_fun(MemRef, Providers, SpaceId, Config),
             scenario_templates = [
                 #scenario_template{
-                    name = ?FMT("Create dataset for ~p using REST API", [FileType]),
+                    name = <<"Establish dataset using REST API">>,
                     type = rest,
-                    prepare_args_fun = build_create_dataset_prepare_rest_args_fun(MemRef),
-                    validate_result_fun = build_create_dataset_validate_rest_call_result_fun(MemRef)
+                    prepare_args_fun = build_establish_dataset_prepare_rest_args_fun(MemRef),
+                    validate_result_fun = build_establish_dataset_validate_rest_call_result_fun(MemRef)
                 },
                 #scenario_template{
-                    name = ?FMT("Create dataset for ~p using GS API", [FileType]),
+                    name = <<"Establish dataset using GS API">>,
                     type = gs,
-                    prepare_args_fun = build_create_datasets_prepare_gs_args_fun(MemRef),
-                    validate_result_fun = build_create_dataset_validate_gs_call_result_fun(MemRef, Config)
+                    prepare_args_fun = build_establish_datasets_prepare_gs_args_fun(MemRef),
+                    validate_result_fun = build_establish_dataset_validate_gs_call_result_fun(MemRef, Config)
                 }
             ],
             randomly_select_scenarios = true,
@@ -112,9 +111,9 @@ create_dataset_test(Config) ->
 
 
 %% @private
--spec build_create_dataset_setup_fun(api_test_memory:mem_ref(), od_space:id()) ->
+-spec build_establish_dataset_setup_fun(api_test_memory:mem_ref(), od_space:id()) ->
     onenv_api_test_runner:setup_fun().
-build_create_dataset_setup_fun(MemRef, SpaceId) ->
+build_establish_dataset_setup_fun(MemRef, SpaceId) ->
     fun() ->
         #object{name = DirName, children = [#object{
             guid = FileGuid,
@@ -134,9 +133,9 @@ build_create_dataset_setup_fun(MemRef, SpaceId) ->
 
 
 %% @private
--spec build_create_dataset_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
+-spec build_establish_dataset_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_create_dataset_prepare_rest_args_fun(MemRef) ->
+build_establish_dataset_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         #rest_args{
             method = post,
@@ -148,9 +147,9 @@ build_create_dataset_prepare_rest_args_fun(MemRef) ->
 
 
 %% @private
--spec build_create_datasets_prepare_gs_args_fun(api_test_memory:mem_ref()) ->
+-spec build_establish_datasets_prepare_gs_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_create_datasets_prepare_gs_args_fun(MemRef) ->
+build_establish_datasets_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}) ->
         #gs_args{
             operation = create,
@@ -172,9 +171,9 @@ substitute_root_file(MemRef, Data) ->
 
 
 %% @private
--spec build_create_dataset_validate_rest_call_result_fun(api_test_memory:mem_ref()) ->
+-spec build_establish_dataset_validate_rest_call_result_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_create_dataset_validate_rest_call_result_fun(MemRef) ->
+build_establish_dataset_validate_rest_call_result_fun(MemRef) ->
     fun(#api_test_ctx{node = TestNode}, Result) ->
         {ok, _, Headers, Body} = ?assertMatch(
             {ok, ?HTTP_201_CREATED, #{<<"Location">> := _}, #{<<"datasetId">> := _}},
@@ -189,9 +188,9 @@ build_create_dataset_validate_rest_call_result_fun(MemRef) ->
 
 
 %% @private
--spec build_create_dataset_validate_gs_call_result_fun(api_test_memory:mem_ref(), test_config:config()) ->
+-spec build_establish_dataset_validate_gs_call_result_fun(api_test_memory:mem_ref(), test_config:config()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_create_dataset_validate_gs_call_result_fun(MemRef, Config) ->
+build_establish_dataset_validate_gs_call_result_fun(MemRef, Config) ->
     SpaceDirDatasetId = ?config(space_dir_dataset, Config),
 
     fun(#api_test_ctx{node = TestNode, data = Data}, Result) ->
@@ -218,14 +217,14 @@ build_create_dataset_validate_gs_call_result_fun(MemRef, Config) ->
 
 
 %% @private
--spec build_verify_create_dataset_fun(
+-spec build_verify_establish_dataset_fun(
     api_test_memory:mem_ref(),
     [oct_background:entity_selector()],
     od_space:id(),
     test_config:config()
 ) ->
     onenv_api_test_runner:verify_fun().
-build_verify_create_dataset_fun(MemRef, Providers, SpaceId, Config) ->
+build_verify_establish_dataset_fun(MemRef, Providers, SpaceId, Config) ->
     SpaceDirDatasetId = ?config(space_dir_dataset, Config),
 
     fun
@@ -253,8 +252,155 @@ build_verify_create_dataset_fun(MemRef, Providers, SpaceId, Config) ->
 
 
 %%%===================================================================
+%%% Delete dataset test functions
+%%%===================================================================
+
+
+delete_dataset_test(Config) ->
+    Providers = [krakow, paris],
+    SpaceId = oct_background:get_space_id(space_krk_par),
+
+    #object{children = Children} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, build_test_file_tree_spec(lists:map(fun(_) ->
+            #dataset_spec{
+                state = random_dataset_state(),
+                protection_flags = lists_utils:random_element(?PROTECTION_FLAGS_COMBINATIONS)
+            }
+        end, lists:seq(1, 10)))
+    ),
+    MemRef = api_test_memory:init(),
+
+    DatasetIds = lists:map(fun(#object{dataset = #dataset_obj{id = DatasetId, state = State}}) ->
+        api_test_memory:set(MemRef, {dataset_state, DatasetId}, State),
+        DatasetId
+    end, Children),
+    api_test_memory:set(MemRef, datasets, DatasetIds),
+
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
+            verify_fun = build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Delete dataset using REST API">>,
+                    type = rest,
+                    prepare_args_fun = build_delete_dataset_prepare_rest_args_fun(MemRef),
+                    validate_result_fun = fun(_, {ok, RespCode, _, RespBody}) ->
+                        ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody})
+                    end
+                },
+                #scenario_template{
+                    name = <<"Delete dataset using GS API">>,
+                    type = gs,
+                    prepare_args_fun = build_delete_dataset_prepare_gs_args_fun(MemRef),
+                    validate_result_fun = fun(_, Result) -> ?assertEqual(ok, Result) end
+                }
+            ],
+            data_spec = #data_spec{
+                bad_values = [
+                    {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND}
+                ]
+            }
+        }
+    ])).
+
+
+%% @private
+-spec build_delete_dataset_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_delete_dataset_prepare_rest_args_fun(MemRef) ->
+    fun(#api_test_ctx{data = Data}) ->
+        DatasetId = choose_dataset_to_remove(MemRef),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data),
+
+        #rest_args{
+            method = delete,
+            path = <<"datasets/", Id/binary>>
+        }
+    end.
+
+
+%% @private
+-spec build_delete_dataset_prepare_gs_args_fun(api_test_memory:mem_ref()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_delete_dataset_prepare_gs_args_fun(MemRef) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        DatasetId = choose_dataset_to_remove(MemRef),
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
+
+        #gs_args{
+            operation = delete,
+            gri = #gri{type = op_dataset, id = Id, aspect = instance, scope = private},
+            data = Data1
+        }
+    end.
+
+
+%% @private
+-spec choose_dataset_to_remove(api_test_memory:mem_ref()) -> dataset:id().
+choose_dataset_to_remove(MemRef) ->
+    Datasets = api_test_memory:get(MemRef, datasets),
+    DatasetId = lists_utils:random_element(Datasets),
+    api_test_memory:set(MemRef, dataset_to_remove, DatasetId),
+
+    DatasetId.
+
+
+%% @private
+-spec build_verify_delete_dataset_fun(
+    api_test_memory:mem_ref(),
+    [oct_background:entity_selector()],
+    od_space:id(),
+    test_config:config()
+) ->
+    onenv_api_test_runner:verify_fun().
+build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
+    SpaceDirDatasetId = ?config(space_dir_dataset, Config),
+
+    fun(ExpResult, _) ->
+        DatasetId = api_test_memory:get(MemRef, dataset_to_remove),
+
+        lists:foreach(fun(Provider) ->
+            Node = ?RAND_OP_NODE(Provider),
+            UserSessId = oct_background:get_user_session_id(user2, Provider),
+            ListOpts = #{offset => 0, limit => 1000},
+
+            GetDatasetsFun = case SpaceDirDatasetId of
+                undefined ->
+                    State = api_test_memory:get(MemRef, {dataset_state, DatasetId}),
+                    fun() -> list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts) end;
+                _ ->
+                    fun() -> list_child_dataset_ids(Node, UserSessId, SpaceDirDatasetId, ListOpts) end
+            end,
+
+            case ExpResult of
+                expected_success ->
+                    ?assertEqual({error, ?ENOENT}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId), ?ATTEMPTS),
+                    ?assertEqual(false, lists:member(DatasetId, GetDatasetsFun())),
+                    api_test_memory:set(MemRef, datasets, lists:delete(
+                        DatasetId, api_test_memory:get(MemRef, datasets)
+                    ));
+                expected_failure ->
+                    ?assertMatch({ok, _}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId), ?ATTEMPTS),
+                    ?assertEqual(true, lists:member(DatasetId, GetDatasetsFun()))
+            end
+        end, Providers)
+    end.
+
+
+%%%===================================================================
 %%% Common dataset test utils
 %%%===================================================================
+
+
+%% @private
+-spec random_dataset_state() -> dataset:state().
+random_dataset_state() ->
+    case rand:uniform(2) of
+        1 -> attached;
+        2 -> detached
+    end.
 
 
 %% @private
@@ -309,8 +455,8 @@ verify_dataset(
     UserId, Provider, SpaceId, DatasetId, State, ParentId, ProtectionFlagsJson,
     CreationTime, RootFileGuid, RootFileType, RootFilePath
 ) ->
+    Node = ?RAND_OP_NODE(Provider),
     UserSessId = oct_background:get_user_session_id(UserId, Provider),
-    Node = lists_utils:random_element(oct_background:get_provider_nodes(Provider)),
     ListOpts = #{offset => 0, limit => 1000},
 
     GetDatasetsFun = case ParentId of
