@@ -61,6 +61,7 @@
     add_file_id_errors_for_operations_not_available_in_share_mode/3,
     add_file_id_errors_for_operations_not_available_in_share_mode/4,
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/4,
+    add_cdmi_id_errors_for_operations_not_available_in_share_mode/5,
     maybe_substitute_bad_id/2
 ]).
 
@@ -668,6 +669,18 @@ add_file_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
 ) ->
     onenv_api_test_runner:data_spec().
 add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId, ShareId, DataSpec) ->
+    add_cdmi_id_errors_for_operations_not_available_in_share_mode(<<"fileId">>, FileGuid, SpaceId, ShareId, DataSpec).
+
+
+-spec add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+    binary(),
+    file_id:file_guid(),
+    od_space:id(),
+    od_share:id(),
+    onenv_api_test_runner:data_spec()
+) ->
+    onenv_api_test_runner:data_spec().
+add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, SpaceId, ShareId, DataSpec) ->
     {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
 
     NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
@@ -686,18 +699,18 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId,
     {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
 
     BadFileIdValues = [
-        {<<"fileId">>, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
-        {<<"fileId">>, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
+        {IdKey, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
+        {IdKey, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
 
         % user has no privileges in non existent space and so he should receive ?ERROR_FORBIDDEN
-        {<<"fileId">>, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
-        {<<"fileId">>, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
+        {IdKey, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
+        {IdKey, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
 
-        {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
+        {IdKey, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
 
         % operation is not available in share mode - it should result in ?EPERM
-        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EPERM)},
-        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?EPERM)}
+        {IdKey, ShareFileObjectId, ?ERROR_POSIX(?EPERM)},
+        {IdKey, NonExistentFileShareObjectId, ?ERROR_POSIX(?EPERM)}
     ],
 
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
