@@ -49,9 +49,9 @@ get_record_def(object, N) ->
         _ -> no
     end;
 
-get_record_def(dataset_obj, N) ->
-    case record_info(size, dataset_obj) - 1 of
-        N -> record_info(fields, dataset_obj);
+get_record_def(dataset_object, N) ->
+    case record_info(size, dataset_object) - 1 of
+        N -> record_info(fields, dataset_object);
         _ -> no
     end;
 

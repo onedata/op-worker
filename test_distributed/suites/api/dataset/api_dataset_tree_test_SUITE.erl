@@ -64,7 +64,8 @@ all() -> [
         name = <<"get_child_datasets_test">>,
         dataset = #dataset_spec{
             state = ?ATTACHED_DATASET,
-            protection_flags = [?METADATA_PROTECTION_BIN]},
+            protection_flags = [?METADATA_PROTECTION_BIN]
+        },
         children = [#dir_spec{
             dataset = #dataset_spec{
                 state = ?DETACHED_DATASET,
@@ -75,22 +76,25 @@ all() -> [
                     state = ?ATTACHED_DATASET,
                     protection_flags = [?DATA_PROTECTION_BIN]
                 },
-                children = [
-                    #file_spec{dataset = #dataset_spec{
-                        state = ?ATTACHED_DATASET,
-                        protection_flags = [?DATA_PROTECTION_BIN]
-                    }},
-                    #file_spec{dataset = #dataset_spec{state = ?ATTACHED_DATASET}},
-                    #file_spec{dataset = #dataset_spec{
-                        state = ?ATTACHED_DATASET,
-                        protection_flags = [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
-                    }},
-                    #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}},
-                    #file_spec{dataset = #dataset_spec{
-                        state = ?DETACHED_DATASET,
-                        protection_flags = [?METADATA_PROTECTION_BIN]
-                    }}
-                ]
+                children = [#dir_spec{
+                    name = <<"dir_with_no_dataset_in_the_middle">>,
+                    children = [
+                        #file_spec{dataset = #dataset_spec{
+                            state = ?ATTACHED_DATASET,
+                            protection_flags = [?DATA_PROTECTION_BIN]
+                        }},
+                        #file_spec{dataset = #dataset_spec{state = ?ATTACHED_DATASET}},
+                        #file_spec{dataset = #dataset_spec{
+                            state = ?ATTACHED_DATASET,
+                            protection_flags = [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
+                        }},
+                        #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}},
+                        #file_spec{dataset = #dataset_spec{
+                            state = ?DETACHED_DATASET,
+                            protection_flags = [?METADATA_PROTECTION_BIN]
+                        }}
+                    ]
+                }]
             }]
         }]
     },
@@ -106,18 +110,21 @@ all() -> [
                 protection_flags = [?DATA_PROTECTION_BIN]
             },
             children = [#dir_spec{
-                dataset = #dataset_spec{state = ?ATTACHED_DATASET},
-                children = [#dir_spec{children = [
-                    #file_spec{dataset = #dataset_spec{
-                        state = ?ATTACHED_DATASET,
-                        protection_flags = [?DATA_PROTECTION_BIN]
-                    }},
-                    #dir_spec{dataset = #dataset_spec{
-                        state = ?DETACHED_DATASET,
-                        protection_flags = [?DATA_PROTECTION_BIN]
-                    }},
-                    #file_spec{}
-                ]}]
+                name = <<"dir_with_no_dataset_in_the_middle">>,
+                children = [#dir_spec{
+                    dataset = #dataset_spec{state = ?ATTACHED_DATASET},
+                    children = [#dir_spec{children = [
+                        #file_spec{dataset = #dataset_spec{
+                            state = ?ATTACHED_DATASET,
+                            protection_flags = [?DATA_PROTECTION_BIN]
+                        }},
+                        #dir_spec{dataset = #dataset_spec{
+                            state = ?DETACHED_DATASET,
+                            protection_flags = [?DATA_PROTECTION_BIN]
+                        }},
+                        #file_spec{}
+                    ]}]
+                }]
             }]
         }]
     }
@@ -464,30 +471,32 @@ get_file_dataset_summary_test(Config) ->
         children = [#object{
             dataset = #dataset_object{state = ?DETACHED_DATASET},
             children = [#object{
-                dataset = #dataset_object{
-                    id = AttachedDataset2,
-                    state = ?ATTACHED_DATASET,
-                    protection_flags = Flags2
-                },
-                children = [#object{children = [
-                    #object{
-                        guid = File1Guid,
-                        dataset = #dataset_object{
-                            id = AttachedDataset3,
-                            state = ?ATTACHED_DATASET,
-                            protection_flags = Flags3
-                        }
+                children = [#object{
+                    dataset = #dataset_object{
+                        id = AttachedDataset2,
+                        state = ?ATTACHED_DATASET,
+                        protection_flags = Flags2
                     },
-                    #object{
-                        guid = File2Guid,
-                        dataset = #dataset_object{
-                            id = DetachedDataset2,
-                            state = ?DETACHED_DATASET,
-                            protection_flags = _Flags4
-                        }
-                    },
-                    #object{guid = File3Guid}
-                ]}]
+                    children = [#object{children = [
+                        #object{
+                            guid = File1Guid,
+                            dataset = #dataset_object{
+                                id = AttachedDataset3,
+                                state = ?ATTACHED_DATASET,
+                                protection_flags = Flags3
+                            }
+                        },
+                        #object{
+                            guid = File2Guid,
+                            dataset = #dataset_object{
+                                id = DetachedDataset2,
+                                state = ?DETACHED_DATASET,
+                                protection_flags = _Flags4
+                            }
+                        },
+                        #object{guid = File3Guid}
+                    ]}]
+                }]
             }]
         }]
     }]} = ?config(file_tree, Config),
