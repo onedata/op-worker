@@ -73,11 +73,13 @@ copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName) ->
             {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} ->
                 copy_dir(SessId, Attr, TargetParentGuid, TargetName);
             {ok, Attr} ->
-                copy_file(SessId, Attr, TargetParentGuid, TargetName)
+                copy_file(SessId, Attr, TargetParentGuid, TargetName);
+            {error, _} = Error ->
+                Error
         end
     catch
-        _:{badmatch, Error}  ->
-            Error
+        _:{badmatch, Error2}  ->
+            Error2
     end.
 
 
@@ -86,10 +88,10 @@ copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName) ->
     TargetName :: file_meta:name()) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(), [child_entry()]}.
 copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName) ->
-    {ok, TargetGuid} = lfm:mkdir(
-        SessId, TargetParentGuid, TargetName, Mode),
+    % copy dir with default perms as it should be possible to copy its children even without the write permission
+    {ok, TargetGuid} = lfm:mkdir(SessId, TargetParentGuid, TargetName, ?DEFAULT_DIR_PERMS),
     {ok, ChildEntries} = copy_children(SessId, SourceGuid, TargetGuid),
-    ok = copy_metadata(SessId, SourceGuid, TargetGuid),
+    ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
     {ok, TargetGuid, ChildEntries}.
 
 
@@ -106,7 +108,7 @@ copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, 
         try
             {ok, _NewSourceHandle, _NewTargetHandle} =
                 copy_file_content(SourceHandle, TargetHandle, 0),
-            ok = copy_metadata(SessId, SourceGuid, TargetGuid),
+            ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
             ok = lfm:fsync(TargetHandle)
         after
             lfm:release(SourceHandle)
@@ -170,8 +172,8 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc) ->
 
 
 -spec copy_metadata(session:id(), fslogic_worker:file_guid(),
-    fslogic_worker:file_guid()) -> ok.
-copy_metadata(SessId, SourceGuid, TargetGuid) ->
+    fslogic_worker:file_guid(), file_meta:posix_permissions()) -> ok.
+copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
     {ok, Xattrs} = lfm:list_xattr(
         SessId, {guid, SourceGuid}, false, true
     ),
@@ -187,4 +189,5 @@ copy_metadata(SessId, SourceGuid, TargetGuid) ->
     end, Xattrs),
 
     {ok, Acl} = lfm:get_acl(SessId, {guid, SourceGuid}),
-    lfm:set_acl(SessId, {guid, TargetGuid}, Acl).
+    lfm:set_acl(SessId, {guid, TargetGuid}, Acl),
+    lfm:set_perms(SessId, {guid, TargetGuid}, Mode).

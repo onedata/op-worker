@@ -1371,6 +1371,9 @@ lfm_cp_dir(Config) ->
     {ok, _} = lfm_proxy:write(W, Handle2, 0, TestData),
     lfm_proxy:close(W, Handle1),
     lfm_proxy:close(W, Handle2),
+    % it should be possible to copy file with all its children, even without the write permission
+    NewMode = 8#555,
+    ok = lfm_proxy:set_perms(W, SessId1, {guid, DirGuid}, NewMode),
 
     % create target dir
     {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
@@ -1384,7 +1387,7 @@ lfm_cp_dir(Config) ->
     % verify copied dir
     ?assertMatch({ok, [{TargetGuid1, TargetDir1}], _},
         lfm_proxy:get_children(W, SessId1, {guid, TargetParentGuid1}, #{offset => 0, size => 10})),
-    ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
+    ?assertMatch({ok, #file_attr{guid = TargetGuid1, mode = NewMode}},
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath1})),
 
     % verify children of copied dir
