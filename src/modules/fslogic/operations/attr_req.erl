@@ -141,7 +141,8 @@ get_file_details(UserCtx, FileCtx0) ->
     get_file_details_insecure(UserCtx, FileCtx1, #{
         allow_deleted_files => false,
         include_size => true,
-        name_conflicts_resolution_policy => resolve_name_conflicts
+        name_conflicts_resolution_policy => resolve_name_conflicts,
+        include_link_count => true
     }).
 
 
@@ -161,6 +162,10 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
+            symlink_value = case file_meta_symlinks:readlink(FileDoc) of
+                {ok, SymlinkValue} -> SymlinkValue;
+                {error, ?EINVAL} -> undefined
+            end,
             protection_flags = EffFileProtectionFlags,
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
@@ -422,8 +427,8 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         maps:get(name_conflicts_resolution_policy, Opts, resolve_name_conflicts)
     ),
 
-    {ok, LinksCount} = case maps:get(include_link_count, Opts, false) of
-        true ->
+    {ok, LinksCount} = case {ShareId, maps:get(include_link_count, Opts, false)} of
+        {undefined, true} ->
             file_ctx:count_references_const(FileCtx7);
         _ ->
             {ok, undefined}

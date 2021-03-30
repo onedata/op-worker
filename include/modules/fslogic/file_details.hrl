@@ -19,6 +19,7 @@
 
 -record(file_details, {
     file_attr :: #file_attr{},
+    symlink_value = undefined :: undefined | file_meta_symlinks:symlink(),
     protection_flags :: data_access_control:bitmask(),
     % StartId can be used to list dir children starting from this file
     index_startid :: binary(),

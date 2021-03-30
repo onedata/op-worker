@@ -175,6 +175,7 @@ translate_file_details(#file_details{
     active_permissions_type = ActivePermissionsType,
     index_startid = StartId,
     protection_flags = EffFileProtectionFlags,
+    symlink_value = SymlinkValue,
     file_attr = #file_attr{
         guid = FileGuid,
         name = FileName,
@@ -185,7 +186,8 @@ translate_file_details(#file_details{
         size = SizeAttr,
         shares = Shares,
         provider_id = ProviderId,
-        owner_id = OwnerId
+        owner_id = OwnerId,
+        nlink = NLink
     }
 }, Scope) ->
     PosixPerms = list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
@@ -202,7 +204,7 @@ translate_file_details(#file_details{
         true -> null;
         false -> ParentGuid
     end,
-    PublicFields = #{
+    BasicPublicFields = #{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
@@ -215,11 +217,18 @@ translate_file_details(#file_details{
         <<"shares">> => Shares,
         <<"activePermissionsType">> => ActivePermissionsType
     },
+    PublicFields = case TypeAttr of
+        ?SYMLINK_TYPE ->
+            BasicPublicFields#{<<"targetPath">> => SymlinkValue};
+        _ ->
+            BasicPublicFields
+    end,
     case Scope of
         public ->
             PublicFields;
         private ->
             PublicFields#{
+                <<"referencesCount">> => utils:undefined_to_null(NLink),
                 <<"effProtectionFlags">> => file_meta:protection_flags_to_json(
                     EffFileProtectionFlags
                 ),
