@@ -409,121 +409,13 @@ sparse_files_should_be_created(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        initializer:mock_auth_manager(NewConfig),
-        NewConfig
-    end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {storage_type, s3}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
+    lfm_files_test_base:init_per_suite(Config).
 
 end_per_suite(Config) ->
-    initializer:unmock_auth_manager(Config).
+    lfm_files_test_base:end_per_suite(Config).
 
-init_per_testcase(Case, Config) when
-    Case =:= lfm_open_in_direct_mode_test orelse
-    Case =:= lfm_recreate_handle_test orelse
-    Case =:= lfm_write_after_create_no_perms_test orelse
-    Case =:= lfm_recreate_handle_after_delete_test
-->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, user_ctx, [passthrough]),
-    test_utils:mock_expect(Workers, user_ctx, is_direct_io,
-        fun(_, _) ->
-            true
-        end),
-    init_per_testcase(default, Config);
+init_per_testcase(Case, Config) ->
+    lfm_files_test_base:init_per_testcase(Case, Config).
 
-
-init_per_testcase(Case, Config) when
-    Case =:= lfm_open_failure_test orelse
-    Case =:= lfm_create_and_open_failure_test orelse
-    Case =:= lfm_mv_failure_test orelse
-    Case =:= lfm_open_multiple_times_failure_test orelse
-    Case =:= lfm_open_failure_multiple_users_test orelse
-    Case =:= lfm_open_and_create_open_failure_test orelse
-    Case =:= lfm_mv_failure_multiple_users_test
-->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, storage_driver, [passthrough]),
-    init_per_testcase(default, Config);
-
-init_per_testcase(ShareTest, Config) when
-    ShareTest =:= create_share_dir_test orelse
-    ShareTest =:= create_share_file_test orelse
-    ShareTest =:= remove_share_test orelse
-    ShareTest =:= share_getattr_test orelse
-    ShareTest =:= share_get_parent_test orelse
-    ShareTest =:= share_list_test orelse
-    ShareTest =:= share_read_test orelse
-    ShareTest =:= share_child_getattr_test orelse
-    ShareTest =:= share_child_list_test orelse
-    ShareTest =:= share_child_read_test orelse
-    ShareTest =:= share_permission_denied_test
-->
-    initializer:mock_share_logic(Config),
-    init_per_testcase(default, Config);
-
-init_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    initializer:communicator_mock(Workers),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
-
-end_per_testcase(Case, Config) when
-    Case =:= lfm_open_in_direct_mode_test orelse
-    Case =:= lfm_recreate_handle_test orelse
-    Case =:= lfm_write_after_create_no_perms_test orelse
-    Case =:= lfm_recreate_handle_after_delete_test
-->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [user_ctx]),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(Case, Config) when
-    Case =:= lfm_open_failure_test orelse
-    Case =:= lfm_create_and_open_failure_test orelse
-    Case =:= lfm_mv_failure_test orelse
-    Case =:= lfm_open_multiple_times_failure_test orelse
-    Case =:= lfm_open_failure_multiple_users_test orelse
-    Case =:= lfm_open_and_create_open_failure_test orelse
-    Case =:= lfm_mv_failure_multiple_users_test
-->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [storage_driver]),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(ShareTest, Config) when
-    ShareTest =:= create_share_dir_test orelse
-    ShareTest =:= create_share_file_test orelse
-    ShareTest =:= remove_share_test orelse
-    ShareTest =:= share_getattr_test orelse
-    ShareTest =:= share_get_parent_test orelse
-    ShareTest =:= share_list_test orelse
-    ShareTest =:= share_read_test orelse
-    ShareTest =:= share_child_getattr_test orelse
-    ShareTest =:= share_child_list_test orelse
-    ShareTest =:= share_child_read_test orelse
-    ShareTest =:= share_permission_denied_test
-->
-    initializer:unmock_share_logic(Config),
-
-    end_per_testcase(?DEFAULT_CASE(ShareTest), Config);
-
-end_per_testcase(Case, Config) when
-    Case =:= opening_file_should_increase_file_popularity;
-    Case =:= file_popularity_should_have_correct_file_size
-    ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    rpc:call(W, file_popularity_api, disable, [?SPACE_ID]),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(Case = lfm_cp_dir, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    % set default value of ls_batch_size env
-    test_utils:set_env(W, op_worker, ls_batch_size, 5000),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator]).
+end_per_testcase(Case, Config) ->
+    lfm_files_test_base:end_per_testcase(Case, Config).
