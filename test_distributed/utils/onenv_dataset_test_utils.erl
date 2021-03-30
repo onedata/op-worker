@@ -18,18 +18,18 @@
 
 
 -export([
-    establish_and_sync_dataset/2,
-    establish_and_sync_dataset/3,
-    prepare_dataset/4,
+    set_up_and_sync_dataset/2,
+    set_up_and_sync_dataset/3,
+    set_up_dataset/4,
     await_dataset_sync/4,
 
     get_exp_child_datasets/4
 ]).
 
 -type dataset_spec() :: #dataset_spec{}.
--type dataset_obj() :: #dataset_obj{}.
+-type dataset_object() :: #dataset_object{}.
 
--export_type([dataset_spec/0, dataset_obj/0]).
+-export_type([dataset_spec/0, dataset_object/0]).
 
 
 -define(ATTEMPTS, 30).
@@ -40,22 +40,22 @@
 %%%===================================================================
 
 
--spec establish_and_sync_dataset(
+-spec set_up_and_sync_dataset(
     oct_background:entity_selector(),
     onenv_file_test_utils:object_selector()
 ) ->
     dataset:id().
-establish_and_sync_dataset(UserSelector, RootFileSelector) ->
-    establish_and_sync_dataset(UserSelector, RootFileSelector, []).
+set_up_and_sync_dataset(UserSelector, RootFileSelector) ->
+    set_up_and_sync_dataset(UserSelector, RootFileSelector, []).
 
 
--spec establish_and_sync_dataset(
+-spec set_up_and_sync_dataset(
     oct_background:entity_selector(),
     onenv_file_test_utils:object_selector(),
     [binary()]
 ) ->
     dataset:id().
-establish_and_sync_dataset(UserSelector, RootFileSelector, ProtectionFlags) ->
+set_up_and_sync_dataset(UserSelector, RootFileSelector, ProtectionFlags) ->
     UserId = oct_background:get_user_id(UserSelector),
     {RootFileGuid, SpaceId} = onenv_file_test_utils:resolve_file(RootFileSelector),
 
@@ -63,28 +63,28 @@ establish_and_sync_dataset(UserSelector, RootFileSelector, ProtectionFlags) ->
         SpaceId
     )),
 
-    DatasetObj = prepare_dataset(CreationProvider, UserId, RootFileGuid, #dataset_spec{
+    DatasetObj = set_up_dataset(CreationProvider, UserId, RootFileGuid, #dataset_spec{
         protection_flags = ProtectionFlags
     }),
     await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj),
 
-    DatasetObj#dataset_obj.id.
+    DatasetObj#dataset_object.id.
 
 
--spec prepare_dataset(
+-spec set_up_dataset(
     oct_background:entity_selector(),
     od_user:id(),
     file_id:file_guid(),
     undefined | dataset_spec()
 ) ->
-    undefined | dataset_obj().
-prepare_dataset(_CreationProvider, _UserId, _FileGuid, undefined) ->
+    undefined | dataset_object().
+set_up_dataset(_CreationProvider, _UserId, _FileGuid, undefined) ->
     undefined;
-prepare_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
+set_up_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
     state = State,
     protection_flags = ProtectionFlagsJon
 }) ->
-    CreationNode = ?RAND_OP_NODE(CreationProvider),
+    CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     Flags = file_meta:protection_flags_from_json(ProtectionFlagsJon),
 
@@ -103,7 +103,7 @@ prepare_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
             ))
     end,
 
-    #dataset_obj{
+    #dataset_object{
         id = DatasetId,
         state = State,
         protection_flags = ProtectionFlagsJon
@@ -115,18 +115,18 @@ prepare_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
     oct_background:entity_selector(),
     [oct_background:entity_selector()],
     od_user:id(),
-    undefined | dataset_obj()
+    undefined | dataset_object()
 ) ->
     ok | no_return().
 await_dataset_sync(_CreationProvider, _SyncProviders, _UserId, undefined) ->
     ok;
 
-await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_obj{
+await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     id = DatasetId,
     state = State,
     protection_flags = ProtectionFlagsJon
 }) ->
-    CreationNode = ?RAND_OP_NODE(CreationProvider),
+    CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     CreationNodeSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     Flags = file_meta:protection_flags_from_json(ProtectionFlagsJon),
 
@@ -136,7 +136,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_obj{
     ),
 
     lists:foreach(fun(SyncProvider) ->
-        SyncNode = ?RAND_OP_NODE(SyncProvider),
+        SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
 
         ?assertEqual(
@@ -154,7 +154,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_obj{
     onenv_file_test_utils:object()
 ) ->
     [{file_meta:name(), dataset:id(), lfm_datasets:attrs()}].
-get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, #object{dataset = #dataset_obj{
+get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, #object{dataset = #dataset_object{
     id = ParentDatasetId
 }} = Object) ->
     get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, Object#object{dataset = undefined});
@@ -182,7 +182,7 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
     type = ObjType,
     name = ObjName,
     guid = ObjGuid,
-    dataset = #dataset_obj{
+    dataset = #dataset_object{
         id = DatasetId,
         state = State,
         protection_flags = ProtectionFlags

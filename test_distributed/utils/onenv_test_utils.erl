@@ -17,10 +17,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
--export([
-    set_user_privileges/3,
-    format_record/1
-]).
+-export([format_record/1]).
 
 
 %%%===================================================================
@@ -28,18 +25,12 @@
 %%%===================================================================
 
 
--spec set_user_privileges(
-    oct_background:entity_selector(),
-    oct_background:entity_selector(),
-    [privileges:space_privilege()]
-) ->
-    ok.
-set_user_privileges(UserSelector, SpaceSelector, Privileges) ->
-    UserId = oct_background:get_user_id(UserSelector),
-    SpaceId = oct_background:get_space_id(SpaceSelector),
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, Privileges).
-
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns string with nicely formatted record (with field names, etc.).
+%% Useful for debug.
+%% @end
+%%--------------------------------------------------------------------
 -spec format_record(term()) -> io_lib:chars().
 format_record(Record) ->
     io_lib_pretty:print(Record, fun get_record_def/2).

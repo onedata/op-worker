@@ -291,10 +291,10 @@ get_child_datasets_test(Config) ->
     #object{name = RootDirName, children = [_, #object{name = TestDirName, children = [
         DirWithDetachedDataset = #object{
             name = DirWithDetachedDatasetName,
-            dataset = #dataset_obj{id = DetachedDatasetId},
+            dataset = #dataset_object{id = DetachedDatasetId},
             children = [DirWithAttachedDataset = #object{
                 name = DirWithAttachedDatasetName,
-                dataset = #dataset_obj{id = AttachedDatasetId}
+                dataset = #dataset_object{id = AttachedDatasetId}
             }]
         }
     ]}, _]} = FileTree,
@@ -456,15 +456,15 @@ validate_listed_datasets(ListingResult, Params, AllDatasets) ->
 
 get_file_dataset_summary_test(Config) ->
     #object{children = [_, _, #object{
-        dataset = #dataset_obj{
+        dataset = #dataset_object{
             id = AttachedDataset1,
             state = ?ATTACHED_DATASET,
             protection_flags = Flags1
         },
         children = [#object{
-            dataset = #dataset_obj{state = ?DETACHED_DATASET},
+            dataset = #dataset_object{state = ?DETACHED_DATASET},
             children = [#object{
-                dataset = #dataset_obj{
+                dataset = #dataset_object{
                     id = AttachedDataset2,
                     state = ?ATTACHED_DATASET,
                     protection_flags = Flags2
@@ -472,7 +472,7 @@ get_file_dataset_summary_test(Config) ->
                 children = [#object{children = [
                     #object{
                         guid = File1Guid,
-                        dataset = #dataset_obj{
+                        dataset = #dataset_object{
                             id = AttachedDataset3,
                             state = ?ATTACHED_DATASET,
                             protection_flags = Flags3
@@ -480,7 +480,7 @@ get_file_dataset_summary_test(Config) ->
                     },
                     #object{
                         guid = File2Guid,
-                        dataset = #dataset_obj{
+                        dataset = #dataset_object{
                             id = DetachedDataset2,
                             state = ?DETACHED_DATASET,
                             protection_flags = _Flags4
@@ -630,11 +630,12 @@ init_per_suite(Config) ->
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
-            onenv_test_utils:set_user_privileges(user3, space_krk_par, [
+            SpaceId = oct_background:get_space_id(space_krk_par),
+            ozw_test_rpc:space_set_user_privileges(SpaceId, ?OCT_USER_ID(user3), [
                 ?SPACE_MANAGE_DATASETS | privileges:space_member()
             ]),
-            onenv_test_utils:set_user_privileges(
-                user4, space_krk_par, privileges:space_member() -- [?SPACE_VIEW]
+            ozw_test_rpc:space_set_user_privileges(
+                SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
             NewConfig
         end
@@ -657,7 +658,7 @@ init_per_group(_Group, Config) ->
         2 ->
             ct:pal("Establishing dataset for space root dir"),
 
-            DatasetId = onenv_dataset_test_utils:establish_and_sync_dataset(user3, SpaceId),
+            DatasetId = onenv_dataset_test_utils:set_up_and_sync_dataset(user3, SpaceId),
 
             DatasetDetails = #dataset_info{
                 id = DatasetId,

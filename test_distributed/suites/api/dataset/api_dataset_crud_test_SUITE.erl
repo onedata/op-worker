@@ -105,7 +105,7 @@ establish_dataset_test(Config) ->
                 % Operations should be rejected even before checking if share exists
                 % (in case of using share file id) so it is not necessary to use
                 % valid share id
-                <<"rootFileId">>, FileGuid, SpaceId, <<"NonExistentDataset">>, #data_spec{
+                <<"rootFileId">>, FileGuid, SpaceId, <<"NonExistentShareId">>, #data_spec{
                     required = [<<"rootFileId">>],
                     optional = [<<"protectionFlags">>],
                     correct_values = #{
@@ -277,7 +277,7 @@ get_dataset_test(Config) ->
         guid = FileGuid,
         name = FileName,
         type = FileType,
-        dataset = #dataset_obj{id = DatasetId}
+        dataset = #dataset_object{id = DatasetId}
     }]} = onenv_file_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec([
             #dataset_spec{state = State, protection_flags = ProtectionFlags}
@@ -430,7 +430,7 @@ update_dataset_test(Config) ->
         guid = FileGuid,
         name = FileName,
         type = FileType,
-        dataset = #dataset_obj{id = DatasetId}
+        dataset = #dataset_object{id = DatasetId}
     }]} = onenv_file_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, build_test_file_tree_spec([
             #dataset_spec{state = OriginalState, protection_flags = OriginalProtectionFlags}
@@ -612,7 +612,7 @@ delete_dataset_test(Config) ->
     ),
     MemRef = api_test_memory:init(),
 
-    DatasetIds = lists:map(fun(#object{dataset = #dataset_obj{id = DatasetId, state = State}}) ->
+    DatasetIds = lists:map(fun(#object{dataset = #dataset_object{id = DatasetId, state = State}}) ->
         api_test_memory:set(MemRef, {dataset_state, DatasetId}, State),
         DatasetId
     end, Children),
@@ -706,7 +706,7 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
                 State = api_test_memory:get(MemRef, {dataset_state, DatasetId}),
 
                 lists:foreach(fun(Provider) ->
-                    Node = ?RAND_OP_NODE(Provider),
+                    Node = ?OCT_RAND_OP_NODE(Provider),
                     UserSessId = oct_background:get_user_session_id(user2, Provider),
                     ListOpts = #{offset => 0, limit => 1000},
 
@@ -802,7 +802,7 @@ verify_dataset(
     CreationTime, RootFileGuid, RootFileType, RootFilePath
 ) ->
     lists:foreach(fun(Provider) ->
-        Node = ?RAND_OP_NODE(Provider),
+        Node = ?OCT_RAND_OP_NODE(Provider),
         UserSessId = oct_background:get_user_session_id(UserId, Provider),
         ListOpts = #{offset => 0, limit => 1000},
 
@@ -861,11 +861,12 @@ init_per_suite(Config) ->
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
-            onenv_test_utils:set_user_privileges(user3, space_krk_par, [
+            SpaceId = oct_background:get_space_id(space_krk_par),
+            ozw_test_rpc:space_set_user_privileges(SpaceId, ?OCT_USER_ID(user3), [
                 ?SPACE_MANAGE_DATASETS | privileges:space_member()
             ]),
-            onenv_test_utils:set_user_privileges(
-                user4, space_krk_par, privileges:space_member() -- [?SPACE_VIEW]
+            ozw_test_rpc:space_set_user_privileges(
+                SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
             NewConfig
         end
@@ -882,7 +883,7 @@ init_per_group(_Group, Config) ->
             undefined;
         2 ->
             ct:pal("Establishing dataset for space root dir"),
-            onenv_dataset_test_utils:establish_and_sync_dataset(user3, space_krk_par)
+            onenv_dataset_test_utils:set_up_and_sync_dataset(user3, space_krk_par)
     end,
     [{space_dir_dataset, SpaceDirDatasetId} | NewConfig].
 

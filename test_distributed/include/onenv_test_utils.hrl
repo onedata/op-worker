@@ -29,7 +29,7 @@
     protection_flags = [] :: [binary()]
 }).
 
--record(dataset_obj, {
+-record(dataset_object, {
     id :: dataset:id(),
     state :: dataset:state(),
     protection_flags :: [binary()]
@@ -57,14 +57,15 @@
     type :: file_meta:type(),
     mode :: file_meta:mode(),
     shares :: [od_share:id()],
-    dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_obj(),
+    dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_object(),
     content = undefined :: undefined | binary(),  % set only for files
     children = undefined :: undefined | [onenv_file_test_utils:object()]  % set only for dirs
 }).
 
 
--define(RAND_OP_NODE(__PROVIDER_SELECTOR),
-    lists_utils:random_element(oct_background:get_provider_nodes(__PROVIDER_SELECTOR))
+-define(OCT_USER_ID(__USER_SELECTOR), oct_background:get_user_id(__USER_SELECTOR)).
+-define(OCT_RAND_OP_NODE(__PROVIDER_SELECTOR),
+    oct_background:get_random_provider_node(__PROVIDER_SELECTOR)
 ).
 
 

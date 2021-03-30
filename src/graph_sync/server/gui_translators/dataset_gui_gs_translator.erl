@@ -53,7 +53,7 @@ translate_dataset_info(#dataset_info{
     #{
         <<"gri">> => gri:serialize(#gri{
             type = op_dataset, id = DatasetId,
-            aspect = instance, scope=private
+            aspect = instance, scope = private
         }),
         <<"parent">> => case ParentId of
             undefined ->
