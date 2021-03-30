@@ -119,6 +119,16 @@ translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
         throw(?ERROR_POSIX(Errno))
     end;
 
+translate_resource(#gri{aspect = references, scope = private}, References) ->
+    #{
+        <<"references">> => lists:map(fun(FileGuid) ->
+            gri:serialize(#gri{
+                type = op_file, id = FileGuid,
+                aspect = instance, scope = private
+            })
+        end, References)
+    };
+
 translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
     #{
         <<"list">> => lists:map(fun(ShareId) ->

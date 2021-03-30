@@ -410,6 +410,7 @@ get_operation_supported(transfers, private) -> true;
 get_operation_supported(file_qos_summary, private) -> true;     % REST/gs
 get_operation_supported(download_url, private) -> true;         % gs only
 get_operation_supported(download_url, public) -> true;          % gs only
+get_operation_supported(references, private) -> true;
 get_operation_supported(_, _) -> false.
 
 
@@ -473,7 +474,8 @@ data_spec_get(#gri{aspect = As}) when
     As =:= rdf_metadata;
     As =:= distribution;
     As =:= acl;
-    As =:= shares
+    As =:= shares;
+    As =:= references
 ->
     #{required => #{id => {binary, guid}}};
 
@@ -514,7 +516,8 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= rdf_metadata;
     As =:= distribution;
     As =:= acl;
-    As =:= shares
+    As =:= shares;
+    As =:= references
 ->
     middleware_utils:has_access_to_file(Auth, Guid);
 
@@ -553,7 +556,8 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= acl;
     As =:= shares;
     As =:= transfers;
-    As =:= file_qos_summary
+    As =:= file_qos_summary;
+    As =:= references
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -713,7 +717,10 @@ get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
             {ok, value, URL};
         {error, _} = Error ->
             Error
-    end.
+    end;
+
+get(#op_req{auth = ?USER(_UserId, SessId), gri = #gri{id = FileGuid, aspect = references}}, _) ->
+    ?check(lfm:get_file_references(SessId, {guid, FileGuid})).
 
 
 %%%===================================================================

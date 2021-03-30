@@ -24,7 +24,7 @@
 
 %% API
 -export([
-    stat/2, get_fs_stats/2, get_details/2,
+    stat/2, get_references/2, get_fs_stats/2, get_details/2,
     get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4,
     update_times/5
 ]).
@@ -60,6 +60,20 @@ stat(SessId, FileKey) ->
                     {ok, Attrs}
                 end)
     end.
+
+
+-spec get_references(session:id(), lfm:file_key()) ->
+    {ok, [file_id:file_guid()]} | lfm:error_reply().
+get_references(SessId, FileKey) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(
+        SessId,
+        file_request,
+        FileGuid,
+        #get_file_references{},
+        fun(References) -> {ok, References} end
+    ).
+
 
 %%--------------------------------------------------------------------
 %% @doc

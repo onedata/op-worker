@@ -26,6 +26,8 @@
 
     get_file_details/2, get_file_details_insecure/3,
 
+    get_file_references/2,
+
     get_child_attr/5, chmod/3, update_protection_flags/4, update_times/5,
     chmod_attrs_only_insecure/2,
 
@@ -173,6 +175,25 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             has_direct_qos = file_qos:has_any_qos_entry(FileDoc, direct),
             has_eff_qos = file_qos:has_any_qos_entry(FileDoc, effective)
         }
+    }.
+
+
+-spec get_file_references(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_file_references(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_attributes_mask)]
+    ),
+    FileCtx2 = file_ctx:assert_not_dir(FileCtx1),
+
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    {ok, RefUuids} = file_ctx:list_references_const(FileCtx2),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_references{references = lists:map(fun(RefUuid) ->
+            file_id:pack_guid(RefUuid, SpaceId)
+        end, RefUuids)}
     }.
 
 

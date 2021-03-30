@@ -33,6 +33,9 @@
     include_link_count :: undefined | boolean()
 }).
 
+-record(get_file_references, {
+}).
+
 -record(get_file_details, {
 }).
 
@@ -186,7 +189,8 @@
 }).
 
 -type file_request_type() ::
-    #get_file_attr{} | #get_file_children{} | #get_file_children_attrs{} |
+    #get_file_attr{} | #get_file_references{} |
+    #get_file_children{} | #get_file_children_attrs{} |
     #get_file_details{} | #get_file_children_details{} |
     #create_dir{} | #delete_file{} | #move_to_trash{} |
     #update_times{} | #change_mode{} | #update_protection_flags{} |
@@ -332,8 +336,12 @@
     storage_stats :: [#storage_stats{}]
 }).
 
+-record(file_references, {
+    references :: [file_id:file_guid()]
+}).
+
 -type fuse_response_type() ::
-    #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
+    #file_attr{} | #file_references{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
     #file_children_attrs{} | #file_location_changed{} | #file_opened_extended{} |

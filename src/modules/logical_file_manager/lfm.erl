@@ -74,7 +74,7 @@
 -export([set_perms/3, check_perms/3, update_protection_flags/4, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
 -export([
-    stat/2, get_fs_stats/2, get_details/2,
+    stat/2, get_file_references/2, get_fs_stats/2, get_details/2,
     get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
     update_times/5
 ]).
@@ -677,6 +677,13 @@ remove_acl(SessId, FileKey) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
+
+
+-spec get_file_references(session:id(), file_key()) ->
+    {ok, [file_id:file_guid()]} | error_reply().
+get_file_references(SessId, FileKey) ->
+    lfm_attrs:get_references(SessId, FileKey).
+
 
 %%--------------------------------------------------------------------
 %% @doc

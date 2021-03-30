@@ -551,6 +551,8 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus,
     include_link_count = IncludeLinkCount}, FileCtx) ->
     attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_file_references{}, FileCtx) ->
+    attr_req:get_file_references(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
     attr_req:get_file_details(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_child_attr{name = Name,
