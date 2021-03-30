@@ -60,9 +60,9 @@ run(FileAttrsList, SessionId, CowboyReq) ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_master_jobs_limit, 50),
-    SlaveJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_slave_jobs_limit, 50),
-    ParallelismLimit = application:get_env(?APP_NAME, dir_streaming_traverse_parallelism_limit, 50),
+    MasterJobsLimit = application:get_env(?APP_NAME, tarball_streaming_traverse_master_jobs_limit, 50),
+    SlaveJobsLimit = application:get_env(?APP_NAME, tarball_streaming_traverse_slave_jobs_limit, 50),
+    ParallelismLimit = application:get_env(?APP_NAME, tarball_streaming_traverse_parallelism_limit, 50),
 
     ok = tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -155,6 +155,7 @@ get_connection_pid(TaskId) ->
 %% @private
 -spec handle_multiple_files([lfm_attrs:file_attributes()], id(), user_ctx:ctx(), tar_utils:stream(), 
     cowboy_req:req()) -> tar_utils:stream().
+% @TODO VFS-7475 add symlinks and harlinks
 handle_multiple_files([], _TaskId, _UserCtx, TarStream, _CowboyReq) -> 
     TarStream;
 handle_multiple_files(
@@ -186,7 +187,26 @@ handle_multiple_files(
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
     TarStream1 = stream_file(TarStream, CowboyReq, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
-    handle_multiple_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq).
+    handle_multiple_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq);
+handle_multiple_files(
+    [#file_attr{guid = Guid, type = ?SYMLINK_TYPE} = FileAttrs | Tail],
+    TaskId, UserCtx, TarStream, CowboyReq
+) ->
+    {ok, Path} = get_file_path(Guid),
+    PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
+    UpdatedTarStream = case lfm:read_symlink(user_ctx:get_session_id(UserCtx), {guid, Guid}) of
+        {ok, LinkPath} ->
+            {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, PathPrefix, LinkPath),
+            http_streamer:send_data_chunk(Bytes, CowboyReq),
+            TarStream1;
+        {error, ?ENOENT} ->
+            TarStream;
+        {error, ?EPERM} ->
+            TarStream;
+        {error, ?EACCES} ->
+            TarStream
+    end,
+    handle_multiple_files(Tail, TaskId, UserCtx, UpdatedTarStream, CowboyReq).
 
 
 %% @private
@@ -236,6 +256,13 @@ stream_loop(TarStream, Req, SessionId, RootDirPath) ->
 -spec new_tar_file_entry(tar_utils:stream(), lfm_attrs:file_attributes(), file_meta:path()) ->
     {binary(), tar_utils:stream()}.
 new_tar_file_entry(TarStream, FileAttrs, StartingDirPath) ->
+    new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, undefined).
+
+
+%% @private
+-spec new_tar_file_entry(tar_utils:stream(), lfm_attrs:file_attributes(), file_meta:path(), 
+    file_meta_symlinks:symlink() | undefined) -> {binary(), tar_utils:stream()}.
+new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, SymlinkPath) ->
     #file_attr{mode = Mode, mtime = MTime, type = Type, size = FileSize, guid = Guid} = FileAttrs,
     FinalMode = case {file_id:is_share_guid(Guid), Type} of
         {true, ?REGULAR_FILE_TYPE} -> ?DEFAULT_FILE_PERMS;
@@ -245,8 +272,9 @@ new_tar_file_entry(TarStream, FileAttrs, StartingDirPath) ->
     {ok, Path} = get_file_path(Guid),
     FileRelPath = string:prefix(Path, StartingDirPath),
     FileType = case Type of
-        ?DIRECTORY_TYPE -> directory;
-        ?REGULAR_FILE_TYPE -> regular
+        ?DIRECTORY_TYPE -> ?DIRECTORY_TYPE;
+        ?REGULAR_FILE_TYPE -> ?REGULAR_FILE_TYPE;
+        ?SYMLINK_TYPE -> {?SYMLINK_TYPE, SymlinkPath}
     end,
     TarStream1 = tar_utils:new_file_entry(TarStream, FileRelPath, FileSize, FinalMode, MTime, FileType),
     tar_utils:flush_buffer(TarStream1).

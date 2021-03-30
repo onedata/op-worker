@@ -87,9 +87,10 @@ handle(<<"GET">>, Req) ->
 %% @private
 %% @doc
 %% Checks file permissions and syncs first file block when downloading single 
-%% regular file. In case of multi file download access test is not performed, 
-%% as inaccessible files will be ignored. Also first block sync is not needed, 
-%% because first bytes (gzip header) are sent instantly after streaming started.
+%% regular file. In case of multi file/directory download access test is not 
+%% performed, as inaccessible files will be ignored. Also first block sync is 
+%% not needed, because first bytes (gzip header) are sent instantly after 
+%% streaming started.
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_sync_first_file_block(session:id(), [fslogic_worker:file_guid()]) -> ok.

@@ -44,6 +44,18 @@ download_single_file(SessionId, FileAttrs, Req) ->
     cowboy_req:req().
 download_single_file(SessionId, #file_attr{
     guid = FileGuid,
+    type = ?SYMLINK_TYPE
+}, OnSuccessCallback, Req0) ->
+    case lfm:read_symlink(SessionId, {guid, FileGuid}) of
+        {ok, LinkPath} ->
+            case lfm:stat(SessionId, {path, LinkPath}) of
+                {ok, FileAttrs} -> download_single_file(SessionId, FileAttrs, OnSuccessCallback, Req0);
+                {error, Errno} -> http_req:send_error(?ERROR_POSIX(Errno), Req0)
+            end;
+        {error, Errno1} -> http_req:send_error(?ERROR_POSIX(Errno1), Req0)
+    end;
+download_single_file(SessionId, #file_attr{
+    guid = FileGuid,
     name = FileName,
     size = FileSize
 }, OnSuccessCallback, Req0) ->
