@@ -29,12 +29,13 @@
 
 -type share_spec() :: #share_spec{}.
 
--type object_selector() :: file_id:file_guid() | oct_background:entity_selector().
+-type space_selector() :: oct_background:entity_selector().
+-type object_selector() :: file_id:file_guid() | space_selector().
 -type object_spec() :: #file_spec{} | #dir_spec{}.
 
 -type object() :: #object{}.
 
--export_type([share_spec/0, object_selector/0, object_spec/0, object/0]).
+-export_type([share_spec/0, space_selector/0, object_selector/0, object_spec/0, object/0]).
 
 -define(LS_SIZE, 1000).
 
@@ -396,7 +397,7 @@ mv_file(UserId, FileGuid, DstPath, MvProvider) ->
 -spec rm_file(od_user:id(), file_id:file_guid(), oct_background:entity_selector()) ->
     ok.
 rm_file(UserId, FileGuid, RmProvider) ->
+    RmNode = ?RAND_OP_NODE(RmProvider),
     UserSessId = oct_background:get_user_session_id(UserId, RmProvider),
-    RmNode = lists_utils:random_element(oct_background:get_provider_nodes(RmProvider)),
 
     ?assertMatch(ok, lfm_proxy:unlink(RmNode, UserSessId, {guid, FileGuid})).

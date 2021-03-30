@@ -28,16 +28,16 @@
 ]).
 
 -export([
-    get_top_datasets/1,
-    get_child_datasets/1,
-    get_file_dataset_summary/1
+    get_top_datasets_test/1,
+    get_child_datasets_test/1,
+    get_file_dataset_summary_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
-        get_top_datasets,
-        get_child_datasets,
-        get_file_dataset_summary
+        get_top_datasets_test,
+        get_child_datasets_test,
+        get_file_dataset_summary_test
     ]}
 ].
 
@@ -133,7 +133,7 @@ all() -> [
 %%%===================================================================
 
 
-get_top_datasets(Config) ->
+get_top_datasets_test(Config) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
     SpaceDirPath = filename:join(["/", ?SPACE_KRK_PAR]),
 
@@ -221,7 +221,7 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
 build_get_top_datasets_prepare_rest_args_fun(SpaceId, State) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        Data2 = maybe_inject_state(State, Data1),
+        Data2 = inject_state_if_not_defined(State, Data1),
         {Id, Data3} = api_test_utils:maybe_substitute_bad_id(SpaceId, Data2),
 
         RestPath = <<"spaces/", Id/binary, "/datasets">>,
@@ -249,7 +249,7 @@ build_get_top_datasets_prepare_gs_args_fun(SpaceId, State) ->
 build_prepare_get_top_datasets_gs_args_fun(SpaceId, State, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        Data2 = maybe_inject_state(State, Data1),
+        Data2 = inject_state_if_not_defined(State, Data1),
         {GriId, Data3} = api_test_utils:maybe_substitute_bad_id(SpaceId, Data2),
 
         #gs_args{
@@ -261,10 +261,10 @@ build_prepare_get_top_datasets_gs_args_fun(SpaceId, State, Aspect) ->
 
 
 %% @private
--spec maybe_inject_state(dataset:state(), map()) -> map().
-maybe_inject_state(_State, #{<<"state">> := _} = Data) ->
+-spec inject_state_if_not_defined(dataset:state(), map()) -> map().
+inject_state_if_not_defined(_State, #{<<"state">> := _} = Data) ->
     Data;
-maybe_inject_state(State, Data) ->
+inject_state_if_not_defined(State, Data) ->
     case State of
         ?ATTACHED_DATASET ->
             case rand:uniform(2) of
@@ -284,7 +284,7 @@ maybe_inject_state(State, Data) ->
 %%%===================================================================
 
 
-get_child_datasets(Config) ->
+get_child_datasets_test(Config) ->
     FileTree = ?config(file_tree, Config),
 
     % See 'create_env' for how file tree looks like
@@ -454,7 +454,7 @@ validate_listed_datasets(ListingResult, Params, AllDatasets) ->
 %%%===================================================================
 
 
-get_file_dataset_summary(Config) ->
+get_file_dataset_summary_test(Config) ->
     #object{children = [_, _, #object{
         dataset = #dataset_obj{
             id = AttachedDataset1,

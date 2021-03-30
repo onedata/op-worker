@@ -746,10 +746,7 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
 %% @private
 -spec random_dataset_state() -> dataset:state().
 random_dataset_state() ->
-    case rand:uniform(2) of
-        1 -> ?ATTACHED_DATASET;
-        2 -> ?DETACHED_DATASET
-    end.
+    lists_utils:random_element([?ATTACHED_DATASET, ?DETACHED_DATASET]).
 
 
 %% @private

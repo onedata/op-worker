@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -288,6 +289,7 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,
         eff_qos_membership = ?NONE_QOS_MEMBERSHIP,
+        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
         has_metadata = false
     }.
 

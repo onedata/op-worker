@@ -14,6 +14,7 @@
 
 -include("api_test_runner.hrl").
 -include("api_file_test_utils.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
@@ -203,6 +204,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             {_, true} -> ?ANCESTOR_QOS_MEMBERSHIP;
             _ -> ?NONE_QOS_MEMBERSHIP
         end,
+        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
         has_metadata = HasMetadata
     },
 
