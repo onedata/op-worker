@@ -986,4 +986,5 @@ list_top_datasets(SessId, SpaceId, State, Opts) ->
 -spec list_nested_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
     {ok, [{dataset:id(), dataset:name()}], boolean()} | error_reply().
 list_nested_datasets(SessId, DatasetId, Opts) ->
-    ?run(fun() -> lfm_datasets:list_nested_datasets(SessId, DatasetId, Opts) end).
+    % TODO rename to list_children_datasets after merge with API
+    ?run(fun() -> lfm_datasets:list_children_datasets(SessId, DatasetId, Opts) end).

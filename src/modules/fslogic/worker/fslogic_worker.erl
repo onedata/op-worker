@@ -24,8 +24,7 @@
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
 -export([
-    init_paths_caches/1
-    ,
+    init_paths_caches/1,
     init_dataset_eff_caches/1
 ]).
 -export([init/1, handle/1, cleanup/0]).
@@ -33,8 +32,7 @@
 
 % exported for RPC
 -export([
-    schedule_init_paths_caches/1
-    ,
+    schedule_init_paths_caches/1,
     schedule_init_datasets_cache/1
 ]).
 
@@ -275,11 +273,6 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
     ?debug("proxyio_request(~p): ~p", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
     ?debug("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
-    {ok, Response};
-handle({fslogic_request, SessId, FslogicRequest}) ->
-    ?debug("fslogic_request(~p): ~p", [SessId, fslogic_log:mask_data_in_message(FslogicRequest)]),
-    Response = handle_request_and_process_response(SessId, FslogicRequest),
-    ?debug("fslogic_request: ~p", [fslogic_log:mask_data_in_message(Response)]),
     {ok, Response};
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
@@ -777,8 +770,8 @@ handle_provider_request(UserCtx, #get_file_eff_dataset_summary{}, FileCtx) ->
     dataset_req:get_file_eff_summary(FileCtx, UserCtx);
 handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts}, SpaceDirCtx) ->
     dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, UserCtx, Opts);
-handle_provider_request(UserCtx, #list_nested_datasets{id = DatasetId, opts = Opts}, SpaceDirCtx) ->
-    dataset_req:list(SpaceDirCtx, DatasetId, UserCtx, Opts).
+handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts}, SpaceDirCtx) ->
+    dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, UserCtx, Opts).
 
 
 %%--------------------------------------------------------------------

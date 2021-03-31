@@ -16,14 +16,14 @@
 %%% directory/file.
 %%% e. g.
 %%% Let's assume that there is a directory "c": /space1/a/b/c
-%%% where uuids of the files are as following:
+%%% where uuids of the directories are as following:
 %%%  * space1 - space1_uuid
 %%%  * a - a_uuid
 %%%  * b - b_uuid
 %%%  * c - c_uuid
 %%%
-%%% If a dataset is established on this file, it's path will be in format:
-%%% /space1_uuid/b_uuid/c_uuid
+%%% If a dataset is established on this directory, it's path will be in format:
+%%% /space1_uuid/a_uuid/b_uuid/c_uuid
 %%%
 %%% This format allows to easily determine parent-child relation between datasets.
 %%% e. g.
@@ -35,7 +35,6 @@
 %%% Now, if we list top datasets in the space, we expect to see only dataset "c".
 %%% If we list the dataset c though, we expect to see dataset "f" as
 %%% its direct children (as there are no other datasets established on "d" neither on "e".
-%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(datasets_structure).
@@ -48,7 +47,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add/5, get/3, delete/3, list_space/3, list/4, move/6]).
+-export([add/5, get/3, delete/3, list_top_datasets/3, list_children_datasets/4, move/6]).
 
 %% Test API
 -export([list_all_unsafe/2, delete_all_unsafe/2]).
@@ -133,13 +132,13 @@ delete(SpaceId, ForestType, DatasetPath) ->
     end.
 
 
--spec list_space(od_space:id(), forest_type(), opts()) -> {ok, entries(), IsLast :: boolean()}.
-list_space(SpaceId, ForestType, Opts) ->
+-spec list_top_datasets(od_space:id(), forest_type(), opts()) -> {ok, entries(), IsLast :: boolean()}.
+list_top_datasets(SpaceId, ForestType, Opts) ->
     list_internal(SpaceId, ForestType, top, Opts).
 
 
--spec list(od_space:id(), forest_type(), link_name(), opts()) -> {ok, entries(), IsLast :: boolean()}.
-list(SpaceId, ForestType, DatasetPath, Opts) ->
+-spec list_children_datasets(od_space:id(), forest_type(), link_name(), opts()) -> {ok, entries(), IsLast :: boolean()}.
+list_children_datasets(SpaceId, ForestType, DatasetPath, Opts) ->
     list_internal(SpaceId, ForestType, {children, DatasetPath}, Opts).
 
 
@@ -320,14 +319,14 @@ move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath) 
 
 -spec move_all_descendants(od_space:id(), forest_type(), link_name(), link_name(), start_index()) -> ok.
 move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, StartIndex) ->
-    {ok, DescendantDatasets, AllListed} = get_descendants_batch(SpaceId, ForestType, SourceDatasetPath,
+    {ok, DescendantDatasetsReversed, AllListed} = get_descendants_batch_reversed(SpaceId, ForestType, SourceDatasetPath,
         StartIndex, ?DEFAULT_BATCH_SIZE),
-    move_descendants_batch(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, DescendantDatasets),
+    move_descendants_batch(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, DescendantDatasetsReversed),
     case AllListed of
         true ->
             ok;
         false ->
-            {NextStartIndex, _} = hd(DescendantDatasets),
+            {NextStartIndex, _} = hd(DescendantDatasetsReversed),
             move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, NextStartIndex)
     end.
 
@@ -346,15 +345,15 @@ move_descendants_batch(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function returns batch of descendant datasets.
+%% This function returns batch of descendant datasets in a reverse order.
 %% Descendant means that it may not be just direct children but
 %% all datasets which paths start with prefix ParentDatasetPath.
 %% @end
 %%--------------------------------------------------------------------
--spec get_descendants_batch(od_space:id(), forest_type(), link_name(), start_index(), limit()) ->
+-spec get_descendants_batch_reversed(od_space:id(), forest_type(), link_name(), start_index(), limit()) ->
     {ok, [link()], AllListed :: boolean()}.
-get_descendants_batch(SpaceId, ForestType, ParentDatasetPath, StartIndex, Limit) ->
-    {ok, {Links, EndReached, ListedLinksCount}} = fold(SpaceId, ForestType,
+get_descendants_batch_reversed(SpaceId, ForestType, ParentDatasetPath, StartIndex, Limit) ->
+    {ok, {LinksReversed, EndReached, ListedLinksCount}} = fold(SpaceId, ForestType,
         fun(#link{name = DatasetPath, target = LinkValue}, {ListAcc, _EndReached, ListedLinksCount}) ->
             case {is_prefix(ParentDatasetPath, DatasetPath), ParentDatasetPath =/= DatasetPath} of
                 {true, true} ->  {ok, {[{DatasetPath, LinkValue} | ListAcc], false, ListedLinksCount + 1}};
@@ -363,7 +362,7 @@ get_descendants_batch(SpaceId, ForestType, ParentDatasetPath, StartIndex, Limit)
             end
         end, {[], false, 0}, #{prev_link_name => StartIndex, size => Limit}),
 
-    {ok, Links, EndReached orelse ListedLinksCount < Limit}.
+    {ok, LinksReversed, EndReached orelse ListedLinksCount < Limit}.
 
 
 -spec is_prefix(binary(), binary()) -> boolean().
@@ -379,6 +378,7 @@ fold(SpaceId, ForestType, Fun, AccIn, Opts) ->
 
 -spec sanitize_opts(opts()) -> opts().
 sanitize_opts(Opts) ->
+    % TODO VFS-7510 try to remove code duplication in this and file_meta_forest modules
     InternalOpts1 = #{limit => sanitize_limit(Opts)},
     InternalOpts2 = maps_utils:put_if_defined(InternalOpts1, offset, sanitize_offset(Opts)),
     InternalOpts3 = maps_utils:put_if_defined(InternalOpts2, start_index, sanitize_start_index(Opts)),

@@ -227,6 +227,7 @@ submission_batch_entry(FileId, Seq,
     FileMetaDoc = #document{value = #file_meta{}},
     #document{value = #custom_metadata{value = Metadata, space_id = SpaceId}}
 ) ->
+    % TODO a co jezeli doc jest hardlinku zrobimy z datasetami
     Entry = #{
         <<"fileId">> => FileId,
         <<"operation">> => ?SUBMIT,
@@ -339,6 +340,6 @@ get_file_type(FileMetaDoc) ->
 -spec get_dataset_id_if_attached(file_meta:doc()) -> dataset:id() | undefined.
 get_dataset_id_if_attached(FileDoc) ->
     case file_meta:is_dataset_attached(FileDoc) of
-        true -> file_meta:get_dataset(FileDoc);
+        true -> file_meta:get_dataset_id(FileDoc);
         false -> undefined
     end.

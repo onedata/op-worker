@@ -204,17 +204,15 @@ calculate(Doc = #document{}, #entry{
 
 -spec get_direct_dataset_if_attached(file_meta:doc()) -> dataset:id() | undefined.
 get_direct_dataset_if_attached(FileDoc) ->
-    IsDatasetAttached = file_meta:is_dataset_attached(FileDoc),
-    case IsDatasetAttached of
-        true -> file_meta:get_dataset(FileDoc);
+    case file_meta:is_dataset_attached(FileDoc) of
+        true -> file_meta:get_dataset_id(FileDoc);
         false -> undefined
     end.
 
 
 -spec get_protection_flags_if_dataset_attached(file_meta:doc()) -> data_access_control:bitmask().
 get_protection_flags_if_dataset_attached(FileDoc) ->
-    IsDatasetAttached = file_meta:is_dataset_attached(FileDoc),
-    case IsDatasetAttached of
+    case file_meta:is_dataset_attached(FileDoc) of
         true -> file_meta:get_protection_flags(FileDoc);
         false -> ?no_flags_mask
     end.

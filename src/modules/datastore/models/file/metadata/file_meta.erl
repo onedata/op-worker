@@ -28,7 +28,7 @@
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
 -export([establish_dataset/3, reattach_dataset/4, detach_dataset/1, remove_dataset/1,
-    get_dataset/1, is_dataset_attached/1, get_protection_flags/1]).
+    get_dataset_id/1, is_dataset_attached/1, get_protection_flags/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,
@@ -688,17 +688,15 @@ get_shares(#file_meta{shares = Shares}) ->
 
 -spec establish_dataset(uuid(), dataset:id(), data_access_control:bitmask()) -> ok | {error, term()}.
 establish_dataset(Uuid, DatasetId, ProtectionFlags) ->
-    ?extract_ok(update(Uuid, fun(FileMeta = #file_meta{dataset = CurrentDatasetId}) ->
-        case CurrentDatasetId =:= undefined orelse CurrentDatasetId =:= DatasetId of
-            true ->
-                {ok, FileMeta#file_meta{
-                    dataset = DatasetId,
-                    dataset_state = ?ATTACHED_DATASET,
-                    protection_flags = ProtectionFlags
-                }};
-            false ->
-                {error, already_exists}
-        end
+    ?extract_ok(update(Uuid, fun
+        (FileMeta = #file_meta{dataset = undefined}) ->
+            {ok, FileMeta#file_meta{
+                dataset = DatasetId,
+                dataset_state = ?ATTACHED_DATASET,
+                protection_flags = ProtectionFlags
+            }};
+        (_) ->
+            {error, already_exists}
     end)).
 
 
@@ -893,10 +891,10 @@ is_child_of_hidden_dir(Path) ->
     is_hidden(Parent).
 
 
--spec get_dataset(file_meta() | doc()) -> dataset:id().
-get_dataset(#document{value = FM}) ->
-    get_dataset(FM);
-get_dataset(#file_meta{dataset = DatasetId}) ->
+-spec get_dataset_id(file_meta() | doc()) -> dataset:id().
+get_dataset_id(#document{value = FM}) ->
+    get_dataset_id(FM);
+get_dataset_id(#file_meta{dataset = DatasetId}) ->
     DatasetId.
 
 

@@ -12,6 +12,7 @@
 -module(dataset_req).
 -author("Jakub Kudzia").
 
+-include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -26,7 +27,7 @@
     get_info/3,
     get_file_eff_summary/2,
     list_top_datasets/4,
-    list/4
+    list_children_datasets/4
 ]).
 
 %%%===================================================================
@@ -59,9 +60,15 @@ remove(SpaceDirCtx, DatasetId, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
 
     {ok, DatasetDoc} = dataset:get(DatasetId),
-    FileCtx0 = dataset_api:get_associated_file_ctx(DatasetDoc),
-    fslogic_authz:ensure_authorized(UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]),
+    {ok, CurrentState} = dataset:get_state(DatasetDoc),
 
+    case CurrentState =:= ?ATTACHED_DATASET of
+        true ->
+            FileCtx0 = dataset_api:get_associated_file_ctx(DatasetDoc),
+            fslogic_authz:ensure_authorized(UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]);
+        false ->
+            ok
+    end,
 
     ok = dataset_api:remove(DatasetDoc),
     ?PROVIDER_OK_RESP.
@@ -110,12 +117,12 @@ list_top_datasets(SpaceId, State, UserCtx, Opts) ->
     ?PROVIDER_OK_RESP(#nested_datasets{datasets = Datasets, is_last = IsLast}).
 
 
--spec list(file_ctx:ctx(), dataset:id(), user_ctx:ctx(), datasets_structure:opts()) ->
+-spec list_children_datasets(file_ctx:ctx(), dataset:id(), user_ctx:ctx(), datasets_structure:opts()) ->
     fslogic_worker:provider_response().
-list(SpaceDirCtx, Dataset, UserCtx, Opts) ->
+list_children_datasets(SpaceDirCtx, Dataset, UserCtx, Opts) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW),
 
-    {ok, Datasets, IsLast} = dataset_api:list(Dataset, Opts),
+    {ok, Datasets, IsLast} = dataset_api:list_children_datasets(Dataset, Opts),
     ?PROVIDER_OK_RESP(#nested_datasets{datasets = Datasets, is_last = IsLast}).
 
 %%%===================================================================

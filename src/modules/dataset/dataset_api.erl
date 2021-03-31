@@ -14,13 +14,14 @@
 
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([establish/2, update/4, detach/1, remove/1, move_if_applicable/2]).
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
--export([list_top_datasets/3, list/2]).
+-export([list_top_datasets/3, list_children_datasets/2]).
 -export([get_associated_file_ctx/1]).
 
 -type id() :: file_meta:uuid().
@@ -54,7 +55,11 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
         {?DETACHED_DATASET, ?ATTACHED_DATASET} ->
             reattach(DatasetId, FlagsToSet, FlagsToUnset);
         {?ATTACHED_DATASET, ?DETACHED_DATASET} ->
-            detach(DatasetId);
+            % it's forbidden to change flags while detaching dataset
+            case FlagsToSet == ?no_flags_mask andalso FlagsToUnset == ?no_flags_mask of
+                true -> detach(DatasetId);
+                false -> throw(?EINVAL)
+            end;
         {?ATTACHED_DATASET, ?ATTACHED_DATASET} ->
             update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset);
         {?DETACHED_DATASET, ?DETACHED_DATASET} ->
@@ -102,7 +107,7 @@ move_if_applicable(SourceDoc, TargetDoc) ->
         false ->
             ok;
         true ->
-            DatasetId = file_meta:get_dataset(TargetDoc),
+            DatasetId = file_meta:get_dataset_id(TargetDoc),
             {ok, SpaceId} = file_meta:get_scope_id(SourceDoc),
             {ok, Uuid} = file_meta:get_uuid(SourceDoc),
             {ok, SourceParentUuid} = file_meta:get_parent_uuid(SourceDoc),
@@ -143,7 +148,7 @@ get_effective_summary(FileCtx) ->
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
     {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
     {ok, #{
-        <<"directDataset">> => file_meta:get_dataset(FileDoc),
+        <<"directDataset">> => file_meta:get_dataset_id(FileDoc),
         <<"effectiveAncestorDatasets">> => EffAncestorDatasets,
         <<"effectiveProtectionFlags">> =>  EffProtectionFlags
     }}.
@@ -157,13 +162,13 @@ list_top_datasets(SpaceId, ?DETACHED_DATASET, Opts) ->
     detached_datasets:list_top_datasets(SpaceId, Opts).
 
 
--spec list(dataset:id(), datasets_structure:opts()) ->
+-spec list_children_datasets(dataset:id(), datasets_structure:opts()) ->
     {ok, datasets_structure:entries(), boolean()}.
-list(DatasetId, Opts) ->
+list_children_datasets(DatasetId, Opts) ->
     {ok, Doc} = dataset:get(DatasetId),
     {ok, State} = dataset:get_state(Doc),
     case State of
-        ?ATTACHED_DATASET -> attached_datasets:list(Doc, Opts);
+        ?ATTACHED_DATASET -> attached_datasets:list_children_datasets(Doc, Opts);
         ?DETACHED_DATASET -> detached_datasets:list(Doc, Opts)
     end.
 

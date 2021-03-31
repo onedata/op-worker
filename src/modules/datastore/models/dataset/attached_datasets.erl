@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add/4, delete/1, delete/2, list_top_datasets/2, list/2, move/6]).
+-export([add/4, delete/1, delete/2, list_top_datasets/2, list_children_datasets/2, move/6]).
 
 -define(FOREST_TYPE, <<"ATTACHED">>).
 
@@ -49,15 +49,15 @@ delete(SpaceId, DatasetPath) ->
 
 -spec list_top_datasets(od_space:id(), datasets_structure:opts()) -> {ok, datasets_structure:entries(), boolean()}.
 list_top_datasets(SpaceId, Opts) ->
-    datasets_structure:list_space(SpaceId, ?FOREST_TYPE, Opts).
+    datasets_structure:list_top_datasets(SpaceId, ?FOREST_TYPE, Opts).
 
 
--spec list(dataset:doc(), datasets_structure:opts()) -> {ok, datasets_structure:entries(), boolean()}.
-list(DatasetDoc, Opts) ->
+-spec list_children_datasets(dataset:doc(), datasets_structure:opts()) -> {ok, datasets_structure:entries(), boolean()}.
+list_children_datasets(DatasetDoc, Opts) ->
     {ok, Uuid} = dataset:get_uuid(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     {ok, DatasetPath} = dataset_path:get(SpaceId, Uuid),
-    datasets_structure:list(SpaceId, ?FOREST_TYPE, DatasetPath, Opts).
+    datasets_structure:list_children_datasets(SpaceId, ?FOREST_TYPE, DatasetPath, Opts).
 
 
 -spec move(od_space:id(), dataset:id(), file_meta:uuid(), file_meta:uuid(), file_meta:uuid(), dataset:name()) -> ok.

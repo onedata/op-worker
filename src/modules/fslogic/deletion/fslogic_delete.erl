@@ -367,7 +367,7 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS), Stora
     % get StorageFileId before location is deleted as it's stored in file_location doc
     {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
     FileCtx4 = delete_location(FileCtx3),
-    FileCtx5 = detach_dataset_if_applicable(FileCtx4),
+    FileCtx5 = detach_dataset(FileCtx4),
     FileCtx6 = delete_file_meta(FileCtx5),
     remove_associated_documents(FileCtx6, StorageFileDeleted, StorageFileId),
     FileCtx7 = remove_deletion_marker(FileCtx6, UserCtx, StorageFileId),
@@ -498,12 +498,12 @@ delete_referenced_file_meta(FileCtx) ->
     delete_file_meta(file_ctx:ensure_based_on_referenced_guid(FileCtx)).
 
 
--spec detach_dataset_if_applicable(file_ctx:ctx()) -> file_ctx:ctx().
-detach_dataset_if_applicable(FileCtx) ->
+-spec detach_dataset(file_ctx:ctx()) -> file_ctx:ctx().
+detach_dataset(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case file_meta:is_dataset_attached(FileDoc) of
         true ->
-            DatasetId = file_meta:get_dataset(FileDoc),
+            DatasetId = file_meta:get_dataset_id(FileDoc),
             dataset_api:detach(DatasetId);
         false ->
             ok

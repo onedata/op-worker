@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% This module performs dataset-related operations of lfm_submodules.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_datasets).
@@ -19,7 +19,7 @@
 -export([
     establish/3, remove/2, update/5,
     get_info/2, get_file_eff_summary/2,
-    list_top_datasets/4, list_nested_datasets/3
+    list_top_datasets/4, list_children_datasets/3
 ]).
 
 -type attrs() :: #dataset_info{}.
@@ -95,12 +95,12 @@ list_top_datasets(SessId, SpaceId, State, Opts) ->
         end).
 
 
--spec list_nested_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
+-spec list_children_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
     {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
-list_nested_datasets(SessId, DatasetId, Opts) ->
+list_children_datasets(SessId, DatasetId, Opts) ->
     SpaceGuid = get_space_guid(DatasetId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #list_nested_datasets{id = DatasetId, opts = Opts},
+        #list_children_datasets{id = DatasetId, opts = Opts},
         fun(#nested_datasets{datasets = Datasets, is_last = IsLast}) ->
             {ok, Datasets, IsLast}
         end).

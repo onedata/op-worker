@@ -44,7 +44,7 @@ delete(DatasetDoc) ->
 
 -spec list_top_datasets(od_space:id(), datasets_structure:opts()) -> {ok, datasets_structure:entries(), boolean()}.
 list_top_datasets(SpaceId, Opts) ->
-    datasets_structure:list_space(SpaceId, ?FOREST_TYPE, Opts).
+    datasets_structure:list_top_datasets(SpaceId, ?FOREST_TYPE, Opts).
 
 
 -spec list(dataset:doc(), datasets_structure:opts()) -> {ok, datasets_structure:entries(), boolean()}.
@@ -52,7 +52,7 @@ list(DatasetDoc, Opts) ->
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     {ok, DetachedDatasetInfo} = dataset:get_detached_info(DatasetDoc),
     DetachedDatasetPath = detached_dataset_info:get_path(DetachedDatasetInfo),
-    datasets_structure:list(SpaceId, ?FOREST_TYPE, DetachedDatasetPath, Opts).
+    datasets_structure:list_children_datasets(SpaceId, ?FOREST_TYPE, DetachedDatasetPath, Opts).
 
 
 -spec get_parent(od_space:id(), dataset:path()) -> dataset:id() | undefined.
