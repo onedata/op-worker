@@ -71,7 +71,7 @@
     is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, count_references_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
-    is_share_root_dir_const/1, is_special_const/1,
+    is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
     is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1,
     assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
@@ -1035,6 +1035,11 @@ is_trash_dir_const(ParentCtx, Name) ->
 -spec is_share_root_dir_const(ctx()) -> boolean().
 is_share_root_dir_const(#file_ctx{guid = Guid}) ->
     fslogic_uuid:is_share_root_dir_guid(Guid).
+
+
+-spec is_symlink_const(ctx()) -> boolean().
+is_symlink_const(FileCtx) ->
+    fslogic_uuid:is_symlink_uuid(get_logical_uuid_const(FileCtx)).
 
 
 -spec is_special_const(ctx()) -> boolean().

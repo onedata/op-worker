@@ -165,7 +165,7 @@ get_parent(FileCtx, UserCtx) ->
 -spec get_child(file_ctx:ctx(), file_meta:name(), user_ctx:ctx()) ->
     {ChildCtx :: file_ctx:ctx(), file_ctx:ctx()} | no_return().
 get_child(FileCtx, Name, UserCtx) ->
-    case file_ctx:is_root_dir_const(FileCtx) of
+    {ChildCtx, NewFileCtx} = case file_ctx:is_root_dir_const(FileCtx) of
         true ->
             get_user_root_dir_child(UserCtx, FileCtx, Name);
         false ->
@@ -177,10 +177,11 @@ get_child(FileCtx, Name, UserCtx) ->
                         true ->
                             get_space_share_child(FileCtx, Name, UserCtx);
                         false ->
-                            get_file_child(FileCtx, Name)
+                            get_dir_child(FileCtx, Name)
                     end
             end
-    end.
+    end,
+    {file_ctx:cache_parent(NewFileCtx, ChildCtx), NewFileCtx}.
 
 
 -spec get_children(file_ctx:ctx(), user_ctx:ctx(), file_meta:list_opts()) ->
@@ -463,18 +464,23 @@ get_share_root_file(UserCtx, ShareId) ->
 
 
 %% @private
--spec get_file_child(file_ctx:ctx(), file_meta:name()) ->
+-spec get_dir_child(file_ctx:ctx(), file_meta:name()) ->
     {ChildCtx :: file_ctx:ctx(), file_ctx:ctx()} | no_return().
-get_file_child(FileCtx, Name) ->
+get_dir_child(FileCtx, Name) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
 
-    case canonical_path:resolve(FileDoc, <<"/", Name/binary>>) of
-        {ok, ChildDoc} ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            ShareId = file_ctx:get_share_id_const(FileCtx),
-            {file_ctx:new_by_doc(ChildDoc, SpaceId, ShareId), FileCtx2};
-        {error, not_found} ->
-            throw(?ENOENT)
+    case file_meta:get_type(FileDoc) of
+        ?DIRECTORY_TYPE ->
+            case canonical_path:resolve(FileDoc, <<"/", Name/binary>>) of
+                {ok, ChildDoc} ->
+                    SpaceId = file_ctx:get_space_id_const(FileCtx),
+                    ShareId = file_ctx:get_share_id_const(FileCtx),
+                    {file_ctx:new_by_doc(ChildDoc, SpaceId, ShareId), FileCtx2};
+                {error, not_found} ->
+                    throw(?ENOENT)
+            end;
+        _ ->
+            throw(?ENOTDIR)
     end.
 
 

@@ -129,6 +129,9 @@ translate_resource(#gri{aspect = references, scope = private}, References) ->
         end, References)
     };
 
+translate_resource(#gri{aspect = symlink_target, scope = Scope}, FileDetails) ->
+    translate_file_details(FileDetails, Scope);
+
 translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
     #{
         <<"list">> => lists:map(fun(ShareId) ->

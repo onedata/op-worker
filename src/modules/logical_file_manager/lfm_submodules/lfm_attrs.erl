@@ -24,7 +24,7 @@
 
 %% API
 -export([
-    stat/2, get_references/2, get_fs_stats/2, get_details/2,
+    stat/2, get_references/2, resolve_symlink/2, get_fs_stats/2, get_details/2,
     get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4,
     update_times/5
 ]).
@@ -71,7 +71,20 @@ get_references(SessId, FileKey) ->
         file_request,
         FileGuid,
         #get_file_references{},
-        fun(References) -> {ok, References} end
+        fun(#file_references{references = References}) -> {ok, References} end
+    ).
+
+
+-spec resolve_symlink(session:id(), lfm:file_key()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
+resolve_symlink(SessId, FileKey) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(
+        SessId,
+        file_request,
+        FileGuid,
+        #resolve_symlink{},
+        fun(#guid{guid = TargetGuid}) -> {ok, TargetGuid} end
     ).
 
 

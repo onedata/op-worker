@@ -188,6 +188,8 @@
 -record(storage_file_created, {
 }).
 
+-record(resolve_symlink, {}).
+
 -type file_request_type() ::
     #get_file_attr{} | #get_file_references{} |
     #get_file_children{} | #get_file_children_attrs{} |
@@ -200,7 +202,7 @@
     #synchronize_block_and_compute_checksum{} | #block_synchronization_request{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
     #list_xattr{} | #fsync{} |
-    #storage_file_created{} | #open_file_with_extended_info{}.
+    #storage_file_created{} | #open_file_with_extended_info{} | #resolve_symlink{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
