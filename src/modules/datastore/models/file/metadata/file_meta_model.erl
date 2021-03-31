@@ -297,7 +297,7 @@ resolve_conflict(_Ctx,
     spawn(fun() ->
         invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc)
     end),
-    case NewName =/= PrevName of
+    case (NewName =/= PrevName) orelse (NewParentUuid =/= PrevParentUuid) of
         true ->
             spawn(fun() ->
                 FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),

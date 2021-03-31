@@ -76,8 +76,12 @@ move_to_trash(FileCtx, UserCtx) ->
     % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
     file_qos:clean_up(FileCtx5),
     ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    file_meta:rename(FileDoc, ParentUuid, TrashUuid, ?NAME_IN_TRASH(Name, Uuid)),
+    NameInTrash = ?NAME_IN_TRASH(Name, Uuid),
+    file_meta:rename(FileDoc, ParentUuid, TrashUuid, NameInTrash),
     ok = paths_cache:invalidate_caches_on_all_nodes(SpaceId),
+    TrashGuid = file_id:pack_guid(TrashUuid, SpaceId),
+    fslogic_event_emitter:emit_file_renamed_no_exclude(
+        FileCtx5, ParentGuid, TrashGuid, NameInTrash, Name),
     FileCtx5.
 
 
