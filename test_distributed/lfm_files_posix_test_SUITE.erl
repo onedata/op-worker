@@ -102,8 +102,7 @@
     rename_removed_opened_file_races_test/1,
     rename_removed_opened_file_races_test2/1,
     lfm_monitored_open/1,
-    lfm_create_and_read_symlink/1,
-    resolve_symlink/1
+    lfm_create_and_read_symlink/1
 ]).
 
 
@@ -185,8 +184,7 @@
     rename_removed_opened_file_races_test,
     rename_removed_opened_file_races_test2,
     lfm_monitored_open,
-    lfm_create_and_read_symlink,
-    resolve_symlink
+    lfm_create_and_read_symlink
 ]).
 
 -define(SPACE_ID, <<"space1">>).
@@ -841,52 +839,6 @@ lfm_create_and_read_symlink(Config) ->
     % Delete test dir
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId, {guid, DirGuid})),
     ok.
-
-
-resolve_symlink(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-
-    {SessId, _UserId} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-
-    % Prepare test dir and link data
-    DirName = generator:gen_name(),
-    DirPath = <<"/space_name1/", DirName/binary>>,
-    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, DirPath)),
-    FileName = generator:gen_name(),
-    FilePath = <<DirPath/binary, "/", FileName/binary>>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, FilePath)),
-
-    % Check relative symlink
-    Link1Path = <<"/space_name1/", (generator:gen_name())/binary>>,
-    {ok, #file_attr{guid = Symlink1Guid}} = ?assertMatch(
-        {ok, #file_attr{type = ?SYMLINK_TYPE}},
-        lfm_proxy:make_symlink(W, SessId, Link1Path, <<DirName/binary, "/", FileName/binary>>)
-    ),
-    ?assert(fslogic_uuid:is_symlink_uuid(file_id:guid_to_uuid(Symlink1Guid))),
-
-    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink1Guid})),
-
-    % Check absolute symlink
-    Link2Path = <<"/space_name1/", (generator:gen_name())/binary>>,
-    AbsPath = <<"<__onedata_space_id:space_id1>/", DirName/binary, "/", FileName/binary>>,
-    {ok, #file_attr{guid = Symlink2Guid}} = ?assertMatch(
-        {ok, #file_attr{type = ?SYMLINK_TYPE}},
-        lfm_proxy:make_symlink(W, SessId, Link2Path, AbsPath)
-    ),
-    ?assert(fslogic_uuid:is_symlink_uuid(file_id:guid_to_uuid(Symlink2Guid))),
-
-    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink2Guid})),
-
-    % Check rubbish
-    Link3Path = <<"/space_name1/", (generator:gen_name())/binary>>,
-    {ok, #file_attr{guid = Symlink3Guid}} = ?assertMatch(
-        {ok, #file_attr{type = ?SYMLINK_TYPE}},
-        lfm_proxy:make_symlink(W, SessId, Link3Path, <<"rubbish">>)
-    ),
-    ?assert(fslogic_uuid:is_symlink_uuid(file_id:guid_to_uuid(Symlink2Guid))),
-
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink3Guid})).
 
 
 %%%===================================================================
