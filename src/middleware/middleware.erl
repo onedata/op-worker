@@ -362,8 +362,9 @@ process_request(#req_ctx{
     versioned_entity = {Entity, Rev}
 }) ->
     case Plugin:get(Req, Entity) of
-        {ok, Data} -> {ok, {Data, Rev}};
         {ok, value, _} = Res -> Res;
+        {ok, ResultGri, Data} -> {ok, ResultGri, {Data, Rev}};
+        {ok, Data} -> {ok, {Data, Rev}};
         {error, _} = Error -> Error
     end;
 

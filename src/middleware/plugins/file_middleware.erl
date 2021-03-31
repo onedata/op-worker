@@ -728,11 +728,17 @@ get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
 get(#op_req{auth = ?USER(_UserId, SessId), gri = #gri{id = FileGuid, aspect = references}}, _) ->
     ?check(lfm:get_file_references(SessId, {guid, FileGuid}));
 
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target}}, _) ->
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scope = Scope}}, _) ->
     SessionId = Auth#auth.session_id,
 
-    {ok, TargetGuid} = ?check(lfm:resolve_symlink(SessionId, {guid, FileGuid})),
-    ?check(lfm:get_details(SessionId, {guid, TargetGuid})).
+    {ok, TargetFileGuid} = ?check(lfm:resolve_symlink(SessionId, {guid, FileGuid})),
+    {ok, TargetFileDetails} = ?check(lfm:get_details(SessionId, {guid, TargetFileGuid})),
+
+    TargetFileGri = #gri{
+        type = op_file, id = TargetFileGuid,
+        aspect = instance, scope = Scope
+    },
+    {ok, TargetFileGri, TargetFileDetails}.
 
 
 %%%===================================================================
