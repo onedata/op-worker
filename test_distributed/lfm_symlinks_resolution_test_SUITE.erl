@@ -30,7 +30,8 @@
     non_existent_path_resolution_should_fail_test/1,
     absolute_path_resolution_should_fail_test/1,
     space_prefixed_absolute_path_resolution_should_succeed_test/1,
-    relative_path_resolution_should_succeed_test/1
+    relative_path_resolution_should_succeed_test/1,
+    symlink_to_itself_resolution_should_fail_test/1
 ]).
 
 all() -> [
@@ -38,7 +39,8 @@ all() -> [
     non_existent_path_resolution_should_fail_test,
     absolute_path_resolution_should_fail_test,
     space_prefixed_absolute_path_resolution_should_succeed_test,
-    relative_path_resolution_should_succeed_test
+    relative_path_resolution_should_succeed_test,
+    symlink_to_itself_resolution_should_fail_test
 ].
 
 
@@ -122,6 +124,17 @@ relative_path_resolution_should_succeed_test(Config) ->
     SymlinkGuid = create_symlink(W, SessId, SymlinkPath, FileName),
 
     ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid})).
+
+
+symlink_to_itself_resolution_should_fail_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    SymlinkName = str_utils:rand_hex(10),
+    SymlinkPath = filename:join(["/", ?SPACE_NAME, SymlinkName]),
+    SymlinkGuid = create_symlink(W, SessId, SymlinkPath, SymlinkName),
+
+    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid})).
 
 
 %%%===================================================================
