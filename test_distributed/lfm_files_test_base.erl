@@ -12,17 +12,23 @@
 -module(lfm_files_test_base).
 -author("Rafal Slota").
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("lfm_files_test_base.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/privileges.hrl").
 -include("modules/auth/acl.hrl").
+-include_lib("ctool/include/privileges.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+
+-export([
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 -export([
     fslogic_new_file/1,
@@ -40,6 +46,8 @@
     lfm_synch_stat/1,
     lfm_cp_file/1,
     lfm_cp_empty_dir/1,
+    lfm_cp_dir_to_itself_should_fail/1,
+    lfm_cp_dir_to_its_child_should_fail/1,
     lfm_cp_dir/1,
     lfm_truncate/1,
     lfm_truncate_and_write/1,
@@ -857,9 +865,10 @@ fslogic_new_file(Config) ->
     ?assertNotMatch(undefined, FileId11),
     ?assertNotMatch(undefined, FileId21),
 
-    TestStorageId = initializer:get_storage_id(Worker),
-    ?assertMatch(TestStorageId, StorageId11),
-    ?assertMatch(TestStorageId, StorageId21),
+    TestStorageId1 = initializer:get_supporting_storage_id(Worker, ?SPACE_ID1),
+    TestStorageId2 = initializer:get_supporting_storage_id(Worker, ?SPACE_ID2),
+    ?assertMatch(TestStorageId1, StorageId11),
+    ?assertMatch(TestStorageId2, StorageId21),
 
     TestProviderId = rpc:call(Worker, oneprovider, get_id, []),
     ?assertMatch(TestProviderId, ProviderId11),
@@ -1284,6 +1293,49 @@ lfm_cp_empty_dir(Config) ->
     ?assertMatch({ok, #file_attr{guid = TargetGuid2}},
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath2})).
 
+lfm_cp_dir_to_itself_should_fail(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    SpaceName = <<"space_name2">>,
+    TestCaseDir = ?FUNCTION_NAME,
+    SourceDir = <<"test_cp_source_dir">>,
+    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
+    SourceDirPath = filename:join([TestCaseDirPath, SourceDir]),
+
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId1, SourceDirPath),
+
+    % try to copy file to itself
+    ?assertMatch({error, ?EINVAL}, lfm_proxy:cp(W, SessId1, {guid, Guid}, {path, SourceDirPath}, SourceDir)).
+
+lfm_cp_dir_to_its_child_should_fail(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    SpaceName = <<"space_name2">>,
+    TestCaseDir = ?FUNCTION_NAME,
+    SourceDir = <<"test_cp_source_dir">>,
+    ChildDir1 = <<"test_cp_child_dir1">>,
+    ChildDir2 = <<"test_cp_child_dir2">>,
+    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
+    SourceDirPath = filename:join([TestCaseDirPath, SourceDir]),
+    ChildDirPath1 = filename:join([SourceDirPath, ChildDir1]),
+    ChildDirPath2 = filename:join([ChildDirPath1, ChildDir2]),
+
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId1, SourceDirPath),
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, ChildDirPath1),
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, ChildDirPath2),
+
+    % try to copy file to child
+    ?assertMatch({error, ?EINVAL}, lfm_proxy:cp(W, SessId1, {guid, Guid}, {path, ChildDirPath2}, SourceDir)).
+
+
 lfm_cp_dir(Config) ->
     % In this test, environment variable `ls_batch_size`,
     % which is responsible for size of children batches used when listing a directory,
@@ -1319,6 +1371,9 @@ lfm_cp_dir(Config) ->
     {ok, _} = lfm_proxy:write(W, Handle2, 0, TestData),
     lfm_proxy:close(W, Handle1),
     lfm_proxy:close(W, Handle2),
+    % it should be possible to copy file with all its children, even without the write permission
+    NewMode = 8#555,
+    ok = lfm_proxy:set_perms(W, SessId1, {guid, DirGuid}, NewMode),
 
     % create target dir
     {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
@@ -1332,7 +1387,7 @@ lfm_cp_dir(Config) ->
     % verify copied dir
     ?assertMatch({ok, [{TargetGuid1, TargetDir1}], _},
         lfm_proxy:get_children(W, SessId1, {guid, TargetParentGuid1}, #{offset => 0, size => 10})),
-    ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
+    ?assertMatch({ok, #file_attr{guid = TargetGuid1, mode = NewMode}},
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath1})),
 
     % verify children of copied dir
@@ -1890,7 +1945,7 @@ deferred_creation_should_not_prevent_truncate(Config) ->
     ProviderId = rpc:call(W, oneprovider, get_id, []),
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_truncate">>),
 
-    % move empty file
+    % truncate file not existing on storage
     ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, {guid, FileGuid}, 10)),
     ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, {guid, FileGuid}, ProviderId)),
 
@@ -2308,13 +2363,7 @@ verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Li
 
 verify_file_content(Config, Handle, FileContent) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-
-    case ?config(storage_type, Config) of
-        posix -> ?assertEqual({ok, FileContent},
-            lfm_proxy:read(Worker, Handle, 0, 100));
-        _ -> ?assertEqual({ok, FileContent},
-            lfm_proxy:read(Worker, Handle, 0, size(FileContent)))
-    end.
+    ?assertEqual({ok, FileContent}, lfm_proxy:read(Worker, Handle, 0, size(FileContent))).
 
 verify_file_content(Config, Handle, FileContent, From, To) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -2323,3 +2372,136 @@ verify_file_content(Config, Handle, FileContent, From, To) ->
 produce_truncate_event(Worker, SessId, FileKey, Size) ->
     {guid, FileGuid} = rpc:call(Worker, guid_utils, ensure_guid, [SessId, FileKey]),
     ok = rpc:call(Worker, lfm_event_emitter, emit_file_truncated, [FileGuid, Size, SessId]).
+
+
+%%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
+
+init_per_suite(Config) ->
+    Posthook = fun(NewConfig) ->
+        initializer:mock_auth_manager(NewConfig),
+        initializer:setup_storage(NewConfig)
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils, ?MODULE]} | Config].
+
+
+end_per_suite(Config) ->
+    initializer:teardown_storage(Config),
+    initializer:unmock_auth_manager(Config).
+
+
+init_per_testcase(Case, Config) when
+    Case =:= lfm_open_in_direct_mode_test;
+    Case =:= lfm_recreate_handle_test;
+    Case =:= lfm_write_after_create_no_perms_test;
+    Case =:= lfm_recreate_handle_after_delete_test
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, user_ctx, [passthrough]),
+    test_utils:mock_expect(Workers, user_ctx, is_direct_io,
+        fun(_, _) ->
+            true
+        end),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+
+init_per_testcase(Case, Config) when
+    Case =:= lfm_open_failure_test;
+    Case =:= lfm_create_and_open_failure_test;
+    Case =:= lfm_mv_failure_test;
+    Case =:= lfm_open_multiple_times_failure_test;
+    Case =:= lfm_open_failure_multiple_users_test;
+    Case =:= lfm_open_and_create_open_failure_test;
+    Case =:= lfm_mv_failure_multiple_users_test
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, storage_driver, [passthrough]),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+init_per_testcase(ShareTest, Config) when
+    ShareTest =:= create_share_dir_test;
+    ShareTest =:= create_share_file_test;
+    ShareTest =:= remove_share_test;
+    ShareTest =:= share_getattr_test;
+    ShareTest =:= share_get_parent_test;
+    ShareTest =:= share_list_test;
+    ShareTest =:= share_read_test;
+    ShareTest =:= share_child_getattr_test;
+    ShareTest =:= share_child_list_test;
+    ShareTest =:= share_child_read_test;
+    ShareTest =:= share_permission_denied_test
+    ->
+    initializer:mock_share_logic(Config),
+    init_per_testcase(?DEFAULT_CASE(ShareTest), Config);
+
+init_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    initializer:communicator_mock(Workers),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    lfm_proxy:init(ConfigWithSessionInfo).
+
+
+end_per_testcase(Case, Config) when
+    Case =:= lfm_open_in_direct_mode_test;
+    Case =:= lfm_recreate_handle_test;
+    Case =:= lfm_write_after_create_no_perms_test;
+    Case =:= lfm_recreate_handle_after_delete_test
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [user_ctx]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case, Config) when
+    Case =:= lfm_open_failure_test;
+    Case =:= lfm_create_and_open_failure_test;
+    Case =:= lfm_mv_failure_test;
+    Case =:= lfm_open_multiple_times_failure_test;
+    Case =:= lfm_open_failure_multiple_users_test;
+    Case =:= lfm_open_and_create_open_failure_test;
+    Case =:= lfm_mv_failure_multiple_users_test
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [storage_driver]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(ShareTest, Config) when
+    ShareTest =:= create_share_dir_test;
+    ShareTest =:= create_share_file_test;
+    ShareTest =:= remove_share_test;
+    ShareTest =:= share_getattr_test;
+    ShareTest =:= share_get_parent_test;
+    ShareTest =:= share_list_test;
+    ShareTest =:= share_read_test;
+    ShareTest =:= share_child_getattr_test;
+    ShareTest =:= share_child_list_test;
+    ShareTest =:= share_child_read_test;
+    ShareTest =:= share_permission_denied_test
+    ->
+    initializer:unmock_share_logic(Config),
+
+    end_per_testcase(?DEFAULT_CASE(ShareTest), Config);
+
+end_per_testcase(Case, Config) when
+    Case =:= opening_file_should_increase_file_popularity;
+    Case =:= file_popularity_should_have_correct_file_size
+    ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    rpc:call(W, file_popularity_api, disable, [?SPACE_ID1]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case = lfm_cp_dir, Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    % set default value of ls_batch_size env
+    test_utils:set_env(W, op_worker, ls_batch_size, 5000),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lfm_test_utils:clean_space(Workers, ?SPACE_ID1, 30),
+    lfm_test_utils:clean_space(Workers, ?SPACE_ID2, 30),
+    lfm_test_utils:clean_space(Workers, ?SPACE_ID3, 30),
+    lfm_test_utils:clean_space(Workers, ?SPACE_ID4, 30),
+    lfm_proxy:teardown(Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    test_utils:mock_validate_and_unload(Workers, [communicator]).

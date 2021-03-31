@@ -329,11 +329,18 @@ move_dir_test(Config) ->
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle3)),
 
+    %% move directory one more time as there has been a bug which occurred in an error after 2nd move
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/target_dir/moved_dir1_target2"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, Dir1Guid}, filename(1, TestDir, "/target_dir/moved_dir1_target2"))),
+    {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/target_dir/moved_dir1_target2/inner_file1")}, read)),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle4, 0, 10)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle4)),
+
     %% without overwrite
     ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, Dir2Guid}, filename(1, TestDir, "/target_dir/moved_dir2_target"))),
-    {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/target_dir/moved_dir2_target/inner_file2")}, read)),
-    ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
-    ?assertEqual(ok, lfm_proxy:close(W, Handle4)),
+    {_, Handle5} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/target_dir/moved_dir2_target/inner_file2")}, read)),
+    ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle5, 0, 10)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle5)),
 
     %% with illegal overwrite
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/target_dir/moved_dir3_target"))),

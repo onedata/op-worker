@@ -42,30 +42,54 @@
     TargetName :: file_meta:name()) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(),
         [child_entry()]} | {error, term()}.
+copy(_SessId, SourceGuid, SourceGuid, _TargetName) ->
+    % attempt to copy file to itself
+    {error, ?EINVAL};
 copy(SessId, SourceGuid, TargetParentGuid, TargetName) ->
-    try
-        case lfm:stat(SessId, {guid, SourceGuid}) of
-            {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} ->
-                copy_dir(SessId, Attr, TargetParentGuid, TargetName);
-            {ok, Attr} ->
-                copy_file(SessId, Attr, TargetParentGuid, TargetName)
-        end
-    catch
-        _:{badmatch, Error}  ->
-            Error
+    {ok, SourcePath} = lfm:get_file_path(SessId, SourceGuid),
+    {ok, TargetParentPath} = lfm:get_file_path(SessId, TargetParentGuid),
+    SourcePathTokens = filepath_utils:split(SourcePath),
+    TargetParentPathTokens = filepath_utils:split(TargetParentPath),
+    case SourcePathTokens -- TargetParentPathTokens of
+        [] ->
+            % attempt to copy file to itself
+            {error, ?EINVAL};
+        _ ->
+        copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName)
     end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+-spec copy_internal(session:id(), SourceGuid :: fslogic_worker:file_guid(),
+    TargetParentGuid :: fslogic_worker:file_guid(),
+    TargetName :: file_meta:name()) ->
+    {ok, NewFileGuid :: fslogic_worker:file_guid(),
+        [child_entry()]} | {error, term()}.
+copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName) ->
+    try
+        case lfm:stat(SessId, {guid, SourceGuid}) of
+            {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} ->
+                copy_dir(SessId, Attr, TargetParentGuid, TargetName);
+            {ok, Attr} ->
+                copy_file(SessId, Attr, TargetParentGuid, TargetName);
+            {error, _} = Error ->
+                Error
+        end
+    catch
+        _:{badmatch, Error2}  ->
+            Error2
+    end.
+
+
 -spec copy_dir(session:id(), #file_attr{},
     TargetParentGuid :: fslogic_worker:file_guid(),
     TargetName :: file_meta:name()) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(), [child_entry()]}.
 copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName) ->
-    {ok, TargetGuid} = lfm:mkdir(
-        SessId, TargetParentGuid, TargetName, undefined),
+    % copy dir with default perms as it should be possible to copy its children even without the write permission
+    {ok, TargetGuid} = lfm:mkdir(SessId, TargetParentGuid, TargetName, ?DEFAULT_DIR_PERMS),
     {ok, ChildEntries} = copy_children(SessId, SourceGuid, TargetGuid),
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
     {ok, TargetGuid, ChildEntries}.
@@ -128,7 +152,7 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc) ->
             % collision suffix which normally shouldn't be there
             ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
                 {ok, NewChildGuid, NewChildrenEntries} =
-                    copy(SessId, ChildGuid, TargetParentGuid, ChildName),
+                    copy_internal(SessId, ChildGuid, TargetParentGuid, ChildName),
                 [
                     {ChildGuid, NewChildGuid, TargetParentGuid, ChildName} |
                         NewChildrenEntries ++ ChildrenEntries
