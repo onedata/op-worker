@@ -26,7 +26,7 @@
 -type share_spec() :: #share_spec{}.
 
 -type object_selector() :: file_id:file_guid() | oct_background:entity_selector().
--type object_spec() :: #file_spec{} | #dir_spec{}.
+-type object_spec() :: #file_spec{} | #dir_spec{} | #symlink_spec{}.
 
 -type object() :: #object{}.
 
@@ -108,6 +108,28 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
         children = undefined
     };
 
+create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
+    name = NameOrUndefined,
+    shares = ShareSpecs,
+    link_path = LinkPath
+}) ->
+    FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
+    UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
+    CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
+    
+    {ok, #file_attr{guid = SymlinkGuid}} = create_symlink(CreationNode, UserSessId, ParentGuid, FileName, LinkPath),
+    
+    #object{
+        guid = SymlinkGuid,
+        name = FileName,
+        type = ?SYMLINK_TYPE,
+        shares = create_shares(CreationProvider, UserSessId, SymlinkGuid, ShareSpecs),
+        children = undefined,
+        content = undefined,
+        mode = 8#777,
+        link_path = LinkPath
+    };
+
 create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     name = NameOrUndefined,
     mode = DirMode,
@@ -154,6 +176,9 @@ await_sync(CreationProvider, SyncProviders, UserId, #object{type = ?REGULAR_FILE
     await_file_attr_sync(SyncProviders, UserId, Object),
     await_file_distribution_sync(CreationProvider, SyncProviders, UserId, Object);
 
+await_sync(_CreationProvider, SyncProviders, UserId, #object{type = ?SYMLINK_TYPE} = Object) ->
+    await_file_attr_sync(SyncProviders, UserId, Object);
+
 await_sync(CreationProvider, SyncProviders, UserId, #object{
     guid = DirGuid,
     type = ?DIRECTORY_TYPE,
@@ -176,7 +201,7 @@ await_file_attr_sync(SyncProviders, UserId, #object{guid = Guid} = Object) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
-        ObjectAttributes = Object#object{content = undefined, children = undefined},
+        ObjectAttributes = Object#object{content = undefined, children = undefined, link_path = undefined},
         ?assertEqual({ok, ObjectAttributes}, get_object_attributes(SyncNode, SessId, Guid), ?ATTEMPTS)
     end, SyncProviders).
 
@@ -293,6 +318,13 @@ create_file(Node, SessId, ParentGuid, FileName, FileMode) ->
     {ok, file_id:file_guid()} | no_return().
 create_dir(Node, SessId, ParentGuid, FileName, FileMode) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, SessId, ParentGuid, FileName, FileMode)).
+
+
+%% @private
+-spec create_symlink(node(), session:id(), file_id:file_guid(), file_meta:name(), file_meta_symlinks:symlink()) ->
+    {ok, file_id:file_guid()} | no_return().
+create_symlink(Node, SessId, ParentGuid, FileName, LinkPath) ->
+    ?assertMatch({ok, _}, lfm_proxy:make_symlink(Node, SessId, {guid, ParentGuid}, FileName, LinkPath)).
 
 
 %% @private

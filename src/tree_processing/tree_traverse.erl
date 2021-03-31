@@ -403,7 +403,7 @@ generate_children_jobs(MasterJob = #tree_traverse{child_dirs_job_generation_poli
                         generate_master_jobs ->
                             {SlavesAcc, [ChildMasterJob | MastersAcc]}
                     end;
-                ?REGULAR_FILE_TYPE ->
+                _ ->
                     {[get_child_slave_job(MasterJob, ChildCtx2) | SlavesAcc], MastersAcc}
             end
         catch

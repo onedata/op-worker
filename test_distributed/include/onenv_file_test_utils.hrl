@@ -37,6 +37,12 @@
     children = [] :: [#dir_spec{} | #file_spec{}]
 }).
 
+-record(symlink_spec, {
+    name = undefined :: undefined | binary(),
+    shares = [] :: [onenv_file_test_utils:share_spec()],
+    link_path :: binary()
+}).
+
 -record(object, {
     guid :: file_id:file_guid(),
     name :: binary(),
@@ -44,7 +50,8 @@
     mode :: file_meta:mode(),
     shares :: [od_share:id()],
     content = undefined :: undefined | binary(),  % set only for files
-    children = undefined :: undefined | [onenv_file_test_utils:object()]  % set only for dirs
+    children = undefined :: undefined | [onenv_file_test_utils:object()],  % set only for dirs
+    link_path = undefined :: undefined | file_meta_symlinks:symlink()  % set only for symlinks
 }).
 
 
