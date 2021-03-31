@@ -605,21 +605,22 @@ get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_display_credentials(ctx()) -> {luma:display_credentials(), ctx()}.
 get_display_credentials(FileCtx = #file_ctx{display_credentials = undefined}) ->
-    SpaceId = get_space_id_const(FileCtx),
-    {FileMetaDoc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
+    ReferencedFileCtx = ensure_based_on_referenced_guid(FileCtx),
+    SpaceId = get_space_id_const(ReferencedFileCtx),
+    {FileMetaDoc, ReferencedFileCtx2} = get_file_doc_including_deleted(ReferencedFileCtx),
     OwnerId = file_meta:get_owner(FileMetaDoc),
-    {Storage, FileCtx3} = get_storage(FileCtx2),
+    {Storage, ReferencedFileCtx3} = get_storage(ReferencedFileCtx2),
     case luma:map_to_display_credentials(OwnerId, SpaceId, Storage) of
         {ok, DisplayCredentials = {Uid, Gid}} ->
             case Storage =:= undefined of
                 true ->
-                    {DisplayCredentials, FileCtx3#file_ctx{display_credentials = DisplayCredentials}};
+                    {DisplayCredentials, FileCtx#file_ctx{display_credentials = DisplayCredentials}};
                 false ->
-                    {SyncedGid, FileCtx4} = get_synced_gid(FileCtx3),
+                    {SyncedGid, _ReferencedFileCtx4} = get_synced_gid(ReferencedFileCtx3),
                     % if SyncedGid =/= undefined override display Gid
                     FinalGid = utils:ensure_defined(SyncedGid, Gid),
                     FinalDisplayCredentials = {Uid, FinalGid},
-                    {FinalDisplayCredentials, FileCtx4#file_ctx{display_credentials = FinalDisplayCredentials}}
+                    {FinalDisplayCredentials, FileCtx#file_ctx{display_credentials = FinalDisplayCredentials}}
             end;
         {error, not_found} ->
             {error, ?EACCES}
