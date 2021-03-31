@@ -41,6 +41,8 @@
 -export([
     harvest_space_doc_and_do_not_harvest_trash_doc/1,
     create_file/1,
+    create_file_and_hardlink/1,
+    create_dir_and_symlink/1,
     create_file_with_dataset/1,
     rename_file/1,
     delete_file/1,
@@ -73,6 +75,8 @@ all() ->
     ?ALL([
         harvest_space_doc_and_do_not_harvest_trash_doc,
         create_file,
+        create_file_and_hardlink,
+        create_dir_and_symlink,
         create_file_with_dataset,
         rename_file,
         delete_file,
@@ -426,6 +430,112 @@ create_file_with_dataset(Config) ->
         <<"payload">> => #{}
     }], ProviderId).
 
+
+create_file_and_hardlink(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+    FileName = ?FILE_NAME,
+    HardlinkName = <<"hardlink">>,
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
+    {ok, #file_attr{guid = HardlinkGuid}} =
+        lfm_proxy:make_link(Worker, SessId, ?PATH(HardlinkName, ?SPACE_ID1), Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+    {ok, LinkFileId} = file_id:guid_to_objectid(HardlinkGuid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => HardlinkName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2),
+
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => HardlinkName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2).
+
+create_dir_and_symlink(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+    FileName = ?FILE_NAME,
+    SymlinkName = <<"symlink">>,
+
+    {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
+    {ok, #file_attr{guid = SymlinkGuid}} =
+        lfm_proxy:make_symlink(Worker, SessId, ?PATH(SymlinkName, ?SPACE_ID1), Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+    {ok, LinkFileId} = file_id:guid_to_objectid(SymlinkGuid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => SymlinkName,
+        <<"fileType">> => str_utils:to_binary(?SYMLINK_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2),
+
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => SymlinkName,
+        <<"fileType">> => str_utils:to_binary(?SYMLINK_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2).
 
 rename_file(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

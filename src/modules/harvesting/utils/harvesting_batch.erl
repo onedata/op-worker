@@ -333,7 +333,7 @@ get_file_name(FileDoc) ->
 
 -spec get_file_type(file_meta:doc()) -> binary().
 get_file_type(FileMetaDoc) ->
-    str_utils:to_binary((file_meta:get_type(FileMetaDoc))).
+    str_utils:to_binary((file_meta:get_effective_type(FileMetaDoc))).
 
 
 -spec get_dataset_id_if_attached(file_meta:doc()) -> dataset:id() | undefined.
