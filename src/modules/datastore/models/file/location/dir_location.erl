@@ -18,6 +18,7 @@
 -export([mark_dir_created_on_storage/2,
     mark_dir_synced_from_storage/3,
     mark_deleted_from_storage/1,
+    update_storage_file_id/2,
     is_storage_file_created/1, get_synced_gid/1, get/1,
     delete/1, get_storage_file_id/1]).
 
@@ -65,6 +66,13 @@ mark_dir_synced_from_storage(FileUuid, StorageFileId, SyncedGid) ->
 mark_deleted_from_storage(FileUuid) ->
     ?extract_ok(datastore_model:update(?CTX, FileUuid, fun(DirLocation) ->
         {ok, DirLocation#dir_location{storage_file_created = false}}
+    end)).
+
+
+-spec update_storage_file_id(key(), helpers:file_id()) -> ok.
+update_storage_file_id(FileUuid, NewStorageFileId) ->
+    ?extract_ok(datastore_model:update(?CTX, FileUuid, fun(DirLocation) ->
+        {ok, DirLocation#dir_location{storage_file_id = NewStorageFileId}}
     end)).
 
 
