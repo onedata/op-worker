@@ -146,7 +146,6 @@ add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos_insecure(file_ctx:ctx()) -> fslogic_worker:provider_response().
 get_effective_file_qos_insecure(FileCtx) ->
-    % TODO VFS-7435 - Integrate hardlinks with QoS
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case file_qos:get_effective(FileUuid) of
         {ok, EffQos} ->
@@ -251,16 +250,16 @@ check_status_insecure(FileCtx, QosEntryId) ->
 -spec add_possible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type(), [storage:id()]) -> fslogic_worker:provider_response().
 add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    AllTraverseReqs = qos_traverse_req:build_traverse_reqs(FileUuid, Storages),
+    AllTraverseReqs = qos_traverse_req:build_traverse_reqs(InodeUuid, Storages),
 
     case qos_entry:create(
-        SpaceId, FileUuid, QosExpression, ReplicasNum, EntryType, true, AllTraverseReqs
+        SpaceId, InodeUuid, QosExpression, ReplicasNum, EntryType, true, AllTraverseReqs
     ) of
         {ok, QosEntryId} ->
-            file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
+            file_qos:add_qos_entry_id(SpaceId, InodeUuid, QosEntryId),
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs),
             #provider_response{
                 status = #status{code = ?OK},
@@ -280,12 +279,12 @@ add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
 -spec add_impossible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
 add_impossible_qos(FileCtx, QosExpression, ReplicasNum, EntryType) ->
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    case qos_entry:create(SpaceId, FileUuid, QosExpression, ReplicasNum, EntryType) of
+    case qos_entry:create(SpaceId, InodeUuid, QosExpression, ReplicasNum, EntryType) of
         {ok, QosEntryId} ->
-            ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
+            ok = file_qos:add_qos_entry_id(SpaceId, InodeUuid, QosEntryId),
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #qos_entry_id{id = QosEntryId}

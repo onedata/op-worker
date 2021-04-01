@@ -315,7 +315,7 @@ mock_transfers(Workers) ->
     TestPid = self(),
     ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
         fun(_, FileCtx, _, _, _, _) ->
-            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+            FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
             TestPid ! {qos_slave_job, self(), FileGuid},
             receive {completed, FileGuid} -> {ok, FileGuid} end
         end).

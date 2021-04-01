@@ -656,7 +656,7 @@ remove_synced_associated_documents(FileCtx) ->
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
     ok = transferred_file:clean_up(FileGuid),
-    ok = file_qos:delete_associated_entries(FileUuid).
+    ok = file_qos:delete_associated_entries(FileCtx).
 
 
 -spec remove_local_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id()) -> ok.

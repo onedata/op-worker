@@ -102,16 +102,16 @@ reconcile_qos(FileUuid, SpaceId) ->
     when Option :: ignore_missing_files.
 reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
     {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx1), % TODO VFS-7435 - Integrate hardlinks with QoS
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx1),
     SpaceId = file_ctx:get_space_id_const(FileCtx1),
-    case file_qos:get_effective(FileUuid) of
+    case file_qos:get_effective(InodeUuid) of
         {error, {file_meta_missing, MissingUuid}} ->
             % new file_ctx will be generated when file_meta_posthook
             % will be executed (see function reconcile_qos/2).
             lists:member(ignore_missing_files, Options) orelse 
                 file_meta_posthooks:add_hook(
-                    MissingUuid, <<"check_qos_", FileUuid/binary>>,
-                    ?MODULE, reconcile_qos, [FileUuid, SpaceId]),
+                    MissingUuid, <<"check_qos_", InodeUuid/binary>>,
+                    ?MODULE, reconcile_qos, [InodeUuid, SpaceId]),
             ok;
         {ok, EffFileQos} ->
             case file_qos:is_in_trash(EffFileQos) of

@@ -36,6 +36,8 @@
 
 -type id() :: qos_traverse_req:id().
 
+-export_type([id/0]).
+
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
 
@@ -57,7 +59,7 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
         additional_data => #{
             <<"qos_entry_id">> => QosEntryId,
             <<"space_id">> => file_ctx:get_space_id_const(FileCtx),
-            <<"uuid">> => file_ctx:get_logical_uuid_const(FileCtx),
+            <<"uuid">> => file_ctx:get_referenced_uuid_const(FileCtx),
             <<"task_type">> => <<"traverse">>
         }
     },
@@ -78,7 +80,7 @@ reconcile_file_for_qos_entries(_FileCtx, []) ->
 reconcile_file_for_qos_entries(FileCtx, QosEntries) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     TaskId = datastore_key:new(),
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx), % TODO VFS-7435 - Integrate hardlinks with QoS
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     Options = #{
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
@@ -194,45 +196,51 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_i
 do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
     % TODO VFS-6137: add space check and optionally choose other storage
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
 
-    {ok, #{
-        <<"task_type">> := TaskType
-    } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    {ok, #{<<"task_type">> := TaskType} = AdditionalData} = 
+        traverse_task:get_additional_data(?POOL_NAME, TaskId),
     
-    % start transfer only for existing entries
-    QosEntries = case TaskType of
-        <<"traverse">> -> 
-            #{<<"qos_entry_id">> := QosEntryId} = AdditionalData,
-            case qos_entry:get(QosEntryId) of
-                {ok, _} -> [QosEntryId];
-                ?ERROR_NOT_FOUND -> []
-            end;
-        <<"reconcile">> ->
-            {ok, EffectiveFileQos} = file_qos:get_effective(FileDoc),
-            case file_qos:is_in_trash(EffectiveFileQos) of
-                true ->
-                    [];
-                false ->
-                    {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
-                    file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
-            end
-    end,
-    ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries),
-
     case TaskType of
-        <<"traverse">> ->
-            {ParentFileCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
-            ok = qos_status:report_traverse_finished_for_file(TaskId, FileCtx2, ParentFileCtx);
+        <<"traverse">> -> 
+            slave_job_traverse(TaskId, UserCtx, FileCtx, AdditionalData);
         <<"reconcile">> ->
-            ok
+            slave_job_reconcile(TaskId, UserCtx, FileCtx)
     end.
-
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec slave_job_traverse(id(), user_ctx:ctx(), file_ctx:ctx(), traverse:additional_data()) -> ok.
+slave_job_traverse(TaskId, UserCtx, FileCtx, AdditionalData) ->
+    #{<<"qos_entry_id">> := QosEntryId} = AdditionalData,
+    % start transfer only for existing entries
+    QosEntries = case qos_entry:get(QosEntryId) of
+        {ok, _} -> [QosEntryId];
+        ?ERROR_NOT_FOUND -> []
+    end,
+    ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries),
+    {ParentFileCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
+    ok = qos_status:report_traverse_finished_for_file(TaskId, FileCtx2, ParentFileCtx).
+
+
+%% @private
+-spec slave_job_reconcile(id(), user_ctx:ctx(), file_ctx:ctx()) -> ok.
+slave_job_reconcile(TaskId, UserCtx, FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
+    {ok, EffectiveFileQos} = file_qos:get_effective(FileDoc),
+    % start transfer only for existing entries
+    QosEntries = case file_qos:is_in_trash(EffectiveFileQos) of
+        true ->
+            [];
+        false ->
+            {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
+            file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
+    end,
+    ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx1, QosEntries).
+
 
 %% @private
 -spec synchronize_file_for_entries(id(), user_ctx:ctx(), file_ctx:ctx(), [qos_entry:id()]) -> 
@@ -244,18 +252,23 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
     FileBlock = #file_block{offset = 0, size = Size},
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     TransferId = datastore_key:new_from_digest([TaskId, Uuid]),
+    IsSymlink = fslogic_uuid:is_symlink_uuid(Uuid),
     
     lists:foreach(fun(QosEntry) -> 
         qos_entry:add_transfer_to_list(QosEntry, TransferId) 
     end, QosEntries),
-    SyncResult = replica_synchronizer:synchronize(
-        UserCtx, FileCtx2, FileBlock, false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY
-    ),
+    SyncResult = case IsSymlink of
+        true -> ok;
+        false ->
+            replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, 
+                false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY)
+    end,
     lists:foreach(fun(QosEntry) ->
         qos_entry:remove_transfer_from_list(QosEntry, TransferId)
     end, QosEntries),
     
     case SyncResult of
+        ok -> ok;
         {ok, _} -> ok;
         {error, cancelled} -> 
             ?debug("QoS file synchronization failed due to cancellation");

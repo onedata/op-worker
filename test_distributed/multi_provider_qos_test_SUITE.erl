@@ -54,8 +54,8 @@
     effective_qos_for_file_in_nested_directories/1,
     effective_qos_for_files_in_different_directories_of_tree_structure/1,
 
-    qos_restoration_file_test/1,
-    qos_restoration_dir_test/1,
+    qos_reconciliation_file_test/1,
+    qos_reconciliation_dir_test/1,
     reconcile_qos_using_file_meta_posthooks_test/1,
     
     qos_status_during_traverse_test/1,
@@ -74,7 +74,13 @@
     reevaluate_impossible_qos_race_test/1,
     reevaluate_impossible_qos_conflict_test/1,
     
-    qos_traverse_cancellation_test/1
+    qos_traverse_cancellation_test/1,
+    
+    qos_on_hardlink_test/1,
+    effective_qos_with_hardlinks_test/1,
+    qos_with_hardlink_deletion_test/1,
+    qos_on_symlink_test/1,
+    effective_qos_with_symlink_test/1
 ]).
 
 all() -> [
@@ -102,8 +108,8 @@ all() -> [
     effective_qos_for_file_in_nested_directories,
     effective_qos_for_files_in_different_directories_of_tree_structure,
 
-    qos_restoration_file_test,
-    qos_restoration_dir_test,
+    qos_reconciliation_file_test,
+    qos_reconciliation_dir_test,
     reconcile_qos_using_file_meta_posthooks_test,
 
     qos_status_during_traverse_test,
@@ -121,8 +127,14 @@ all() -> [
     reevaluate_impossible_qos_test,
     reevaluate_impossible_qos_race_test,
     reevaluate_impossible_qos_conflict_test,
+
+    qos_traverse_cancellation_test,
     
-    qos_traverse_cancellation_test
+    qos_on_hardlink_test,
+    effective_qos_with_hardlinks_test,
+    qos_with_hardlink_deletion_test,
+    qos_on_symlink_test,
+    effective_qos_with_symlink_test
 ].
 
 
@@ -624,10 +636,10 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
 %%% QoS restoration tests
 %%%===================================================================
 
-qos_restoration_file_test(Config) ->
+qos_reconciliation_file_test(Config) ->
     basic_qos_restoration_test_base(Config, simple).
 
-qos_restoration_dir_test(Config) ->
+qos_reconciliation_dir_test(Config) ->
     basic_qos_restoration_test_base(Config, nested).
 
 
@@ -999,6 +1011,26 @@ qos_traverse_cancellation_test(Config) ->
     
     % finish transfers to unlock waiting slave job processes
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)] ++ [FileGuid]).
+
+
+%%%===================================================================
+%%% QoS with hardlinks tests
+%%%===================================================================
+
+qos_on_hardlink_test(Config) ->
+    qos_test_base:qos_on_hardlink_test_base(Config, ?SPACE_ID).
+
+effective_qos_with_hardlinks_test(Config) ->
+    qos_test_base:effective_qos_with_hardlinks_test_base(Config, ?SPACE_ID).
+
+qos_with_hardlink_deletion_test(Config) ->
+    qos_test_base:qos_with_hardlink_deletion_test_base(Config, ?SPACE_ID).
+
+qos_on_symlink_test(Config) ->
+    qos_test_base:qos_on_symlink_test_base(Config, ?SPACE_ID).
+
+effective_qos_with_symlink_test(Config) ->
+    qos_test_base:effective_qos_with_symlink_test_base(Config, ?SPACE_ID).
     
 
 %%%===================================================================
