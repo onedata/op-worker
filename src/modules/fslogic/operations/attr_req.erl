@@ -292,8 +292,8 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
     fslogic_worker:fuse_response().
 chmod_insecure(UserCtx, FileCtx, Mode) ->
     sd_utils:chmod(UserCtx, FileCtx, Mode),
-    chmod_attrs_only_insecure(FileCtx, Mode),
-    fslogic_times:update_ctime(FileCtx),
+    FileCtx2 = chmod_attrs_only_insecure(FileCtx, Mode),
+    fslogic_times:update_ctime(FileCtx2),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -304,13 +304,17 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod_attrs_only_insecure(file_ctx:ctx(),
-    fslogic_worker:posix_permissions()) -> ok | {error, term()}.
+    fslogic_worker:posix_permissions()) -> file_ctx:ctx().
 chmod_attrs_only_insecure(FileCtx, Mode) ->
+    % TODO VFS-7524 - verify if file_meta doc updates invalidate cached docs in file_ctx everywhere
+    % TODO VFS-7525 - Protect races on events production after parallel file_meta updates
     FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
-    ok = file_meta:update_mode(FileUuid, Mode),
+    {ok, NewDoc} = file_meta:update_mode(FileUuid, Mode),
     ok = permissions_cache:invalidate(),
-    fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx),
-    fslogic_event_emitter:emit_file_perm_changed(FileCtx).
+    FileCtx2 = file_ctx:set_file_doc(FileCtx, NewDoc),
+    fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx2),
+    fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
+    FileCtx2.
 
 
 %% @private

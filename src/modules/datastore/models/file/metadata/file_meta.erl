@@ -852,11 +852,11 @@ get_active_perms_type(FileUuid) ->
     end.
 
 
--spec update_mode(uuid(), posix_permissions()) -> ok | {error, term()}.
+-spec update_mode(uuid(), posix_permissions()) -> {ok, doc} | {error, term()}.
 update_mode(FileUuid, NewMode) ->
-    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+    update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
         {ok, FileMeta#file_meta{mode = NewMode}}
-    end)).
+    end).
 
 
 -spec update_protection_flags(uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
