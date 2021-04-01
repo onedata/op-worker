@@ -227,7 +227,6 @@ submission_batch_entry(FileId, Seq,
     FileMetaDoc = #document{value = #file_meta{}},
     #document{value = #custom_metadata{value = Metadata, space_id = SpaceId}}
 ) ->
-    % TODO a co jezeli doc jest hardlinku zrobimy z datasetami
     Entry = #{
         <<"fileId">> => FileId,
         <<"operation">> => ?SUBMIT,
@@ -237,6 +236,7 @@ submission_batch_entry(FileId, Seq,
         <<"fileType">> => get_file_type(FileMetaDoc),
         <<"payload">> => Metadata
     },
+    % TODO VFS-7526 handle hardlink's dataset
     maps_utils:put_if_defined(Entry, <<"datasetId">>, get_dataset_id_if_attached(FileMetaDoc));
 submission_batch_entry(FileId, Seq,
     FileMetaDoc = #document{value = #file_meta{}, scope = SpaceId},
@@ -251,6 +251,7 @@ submission_batch_entry(FileId, Seq,
         <<"fileType">> => get_file_type(FileMetaDoc),
         <<"payload">> => #{}
     },
+    % TODO VFS-7526 handle hardlink's dataset
     maps_utils:put_if_defined(Entry, <<"datasetId">>, get_dataset_id_if_attached(FileMetaDoc));
 submission_batch_entry(FileId, Seq,
     undefined,

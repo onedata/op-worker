@@ -19,6 +19,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/onedata.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -199,68 +200,84 @@ detach_and_reattach_dataset(_Config) ->
 remove_attached_dataset(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    User2SessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserId2 = oct_background:get_user_id(user2),
+    SpaceId = oct_background:get_space_id(space1),
+    % assign user2 privilege to manage datasets
+    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, [?SPACE_MANAGE_DATASETS | privileges:space_member()]),
+
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     ParentDirName = ?DIR_NAME(),
     DirName = ?DIR_NAME(),
     ProtectionFlags = ?RAND_PROTECTION_FLAGS(),
-    {ok, ParentGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, ParentDirName, ?DEFAULT_DIR_PERMS),
-    {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ParentGuid, DirName, ?DEFAULT_DIR_PERMS),
-    {ok, DatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, {guid, Guid}, ProtectionFlags)),
+    {ok, ParentGuid} = lfm_proxy:mkdir(P1Node, User2SessIdP1, SpaceGuid, ParentDirName, ?DEFAULT_DIR_PERMS),
+    {ok, Guid} = lfm_proxy:mkdir(P1Node, User2SessIdP1, ParentGuid, DirName, ?DEFAULT_DIR_PERMS),
 
-    ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
-    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
+    {ok, DatasetId} = ?assertMatch({ok, _},
+        lfm_proxy:establish_dataset(P1Node, User2SessIdP1, {guid, Guid}, ProtectionFlags), ?ATTEMPTS),
+
+    ?assertAttachedDataset(P1Node, User2SessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
+    ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     % traverse permission to file is required to remove attached dataset
     ok = lfm_proxy:set_perms(P1Node, UserSessIdP1, {guid, ParentGuid}, 8#444),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:remove_dataset(P1Node, UserSessIdP1, DatasetId)),
+    % user2 should not be able to remove the dataset
+    ?assertMatch({error, ?EACCES}, lfm_proxy:remove_dataset(P1Node, User2SessIdP1, DatasetId)),
 
     % revert permissions
     ok = lfm_proxy:set_perms(P1Node, UserSessIdP1, {guid, ParentGuid}, ?DEFAULT_DIR_PERMS),
-    ?assertMatch(ok, lfm_proxy:remove_dataset(P1Node, UserSessIdP1, DatasetId)),
+    % now user2 should be able to remove the dataset
+    ?assertMatch(ok, lfm_proxy:remove_dataset(P1Node, User2SessIdP1, DatasetId)),
 
-    ?assertNoDataset(P1Node, UserSessIdP1, DatasetId),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
-    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, undefined, [], ?no_flags_mask),
-    ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
-    ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, detached).
+    ?assertNoDataset(P1Node, User2SessIdP1, DatasetId),
+    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
+    ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, undefined, [], ?no_flags_mask),
+    ?assertNoTopDatasets(P1Node, User2SessIdP1, SpaceId, attached),
+    ?assertNoTopDatasets(P1Node, User2SessIdP1, SpaceId, detached).
 
 
 remove_detached_dataset(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    User2SessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserId2 = oct_background:get_user_id(user2),
+    % assign user2 privilege to manage datasets
     SpaceId = oct_background:get_space_id(space1),
+    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, [?SPACE_MANAGE_DATASETS | privileges:space_member()]),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
     ParentDirName = ?DIR_NAME(),
     ProtectionFlags = ?RAND_PROTECTION_FLAGS(),
-    {ok, ParentGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, ParentDirName, ?DEFAULT_DIR_PERMS),
-    {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ParentGuid, DirName, ?DEFAULT_DIR_PERMS),
-    {ok, Path} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
-    {ok, DatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, {guid, Guid}, ProtectionFlags)),
-    ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
-    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
+    {ok, ParentGuid} = lfm_proxy:mkdir(P1Node, User2SessIdP1, SpaceGuid, ParentDirName, ?DEFAULT_DIR_PERMS),
+    {ok, Guid} = lfm_proxy:mkdir(P1Node, User2SessIdP1, ParentGuid, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, Path} = lfm_proxy:get_file_path(P1Node, User2SessIdP1, Guid),
+    {ok, DatasetId} = ?assertMatch({ok, _},
+        lfm_proxy:establish_dataset(P1Node, User2SessIdP1, {guid, Guid}, ProtectionFlags), ?ATTEMPTS),
+    ?assertAttachedDataset(P1Node, User2SessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
+    ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
-    ok = detach(P1Node, UserSessIdP1, DatasetId),
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
-    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask),
+    ok = detach(P1Node, User2SessIdP1, DatasetId),
+    ?assertDetachedDataset(P1Node, User2SessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
+    ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, DatasetId, [], ?no_flags_mask),
 
     % traverse permission to file is NOT required to remove detached dataset
     ok = lfm_proxy:set_perms(P1Node, UserSessIdP1, {guid, ParentGuid}, 8#444),
-    ?assertMatch(ok, lfm_proxy:remove_dataset(P1Node, UserSessIdP1, DatasetId)),
+    % user2 should be able to remove the dataset
+    ?assertMatch(ok, lfm_proxy:remove_dataset(P1Node, User2SessIdP1, DatasetId)),
 
-    ?assertNoDataset(P1Node, UserSessIdP1, DatasetId),
+    ?assertNoDataset(P1Node, User2SessIdP1, DatasetId),
 
     % revert perms to perform operations on file
     ok = lfm_proxy:set_perms(P1Node, UserSessIdP1, {guid, ParentGuid}, ?DEFAULT_DIR_PERMS),
 
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
-    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, undefined, [], ?no_flags_mask),
-    ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
-    ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, detached).
+    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
+    ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, undefined, [], ?no_flags_mask),
+    ?assertNoTopDatasets(P1Node, User2SessIdP1, SpaceId, attached),
+    ?assertNoTopDatasets(P1Node, User2SessIdP1, SpaceId, detached).
 
 remove_file_should_detach_dataset(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -268,7 +285,7 @@ remove_file_should_detach_dataset(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
-    ProtectionFlags = ?RAND_PROTECTION_FLAGS(),
+    ProtectionFlags = ?METADATA_PROTECTION,
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, Path} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
     {ok, DatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, {guid, Guid}, ProtectionFlags)),
@@ -316,7 +333,7 @@ remove_detached_dataset_if_root_file_has_already_been_deleted(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
-    ProtectionFlags = ?RAND_PROTECTION_FLAGS(),
+    ProtectionFlags = ?METADATA_PROTECTION,
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, Path} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
     {ok, DatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, {guid, Guid}, ProtectionFlags)),

@@ -29,8 +29,8 @@
 %%% e. g.
 %%% Let's assume that there is a file f created under the following path: /space1/a/b/c/d/e/f
 %%% If we establish a dataset also on this file, we will have 2 links:
-%%% * /space1_uuid/b_uuid/c_uuid
-%%% * /space1_uuid/b_uuid/c_uuid/d_uuid/e_uuid/f_uuid
+%%% * /space1_uuid/a_uuid/b_uuid/c_uuid
+%%% * /space1_uuid/a_uuid/b_uuid/c_uuid/d_uuid/e_uuid/f_uuid
 %%%
 %%% Now, if we list top datasets in the space, we expect to see only dataset "c".
 %%% If we list the dataset c though, we expect to see dataset "f" as

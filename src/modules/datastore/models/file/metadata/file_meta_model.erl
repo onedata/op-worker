@@ -418,6 +418,7 @@ invalidate_dataset_eff_cache_if_needed(
         dataset_state = OldDatasetState
     }}
 ) ->
+    % TODO VFS-7518 resolve conflicts on creating datasets
     case OldFlags =/= NewFlags
         orelse PrevParentUuid =/= NewParentUuid
         orelse NewDatasetState =/= OldDatasetState
@@ -437,7 +438,6 @@ invalidate_dataset_eff_cache_if_needed(
 invalidate_qos_bounded_cache_if_moved_to_trash(
     #document{key = Uuid, value = #file_meta{parent_uuid = NewParentUuid}, scope = SpaceId}, #document{value = #file_meta{parent_uuid = PrevParentUuid}
 }) ->
-    % TODO VFS-7518 resolve conflicts on creating datasets
     case PrevParentUuid =/= NewParentUuid andalso fslogic_uuid:is_trash_dir_uuid(NewParentUuid) of
         true ->
             % the file has been moved to trash
