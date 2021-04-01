@@ -22,6 +22,7 @@
 
 
 -export([create_and_sync_file_tree/3, create_and_sync_file_tree/4]).
+-export([get_object_attributes/3]).
 
 -type share_spec() :: #share_spec{}.
 
@@ -72,6 +73,21 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProvid
     FileInfo.
 
 
+-spec get_object_attributes(oct_background:entity_selector(), session:id(), file_id:file_guid()) ->
+    {ok, object()} | {error, term()}.
+get_object_attributes(Node, SessId, Guid) ->
+    case file_test_utils:get_attrs(Node, SessId, Guid) of
+        {ok, #file_attr{guid = Guid, name = Name, type = Type, mode = Mode, shares = Shares}} ->
+            {ok, #object{
+                guid = Guid, name = Name,
+                type = Type, mode = Mode,
+                shares = lists:sort(Shares)
+            }};
+        {error, _} = Error ->
+            Error
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -111,7 +127,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
 create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
     name = NameOrUndefined,
     shares = ShareSpecs,
-    link_path = LinkPath
+    symlink_value = LinkPath
 }) ->
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
@@ -177,6 +193,7 @@ await_sync(CreationProvider, SyncProviders, UserId, #object{type = ?REGULAR_FILE
     await_file_distribution_sync(CreationProvider, SyncProviders, UserId, Object);
 
 await_sync(_CreationProvider, SyncProviders, UserId, #object{type = ?SYMLINK_TYPE} = Object) ->
+    % file_attr construction uses file_meta document, so this checks symlink value synchronization
     await_file_attr_sync(SyncProviders, UserId, Object);
 
 await_sync(CreationProvider, SyncProviders, UserId, #object{
@@ -224,22 +241,6 @@ await_file_distribution_sync(CreationProvider, SyncProviders, UserId, #object{
         SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
         ?assertDistribution(SyncNode, SessId, ?DIST(CreationProvider, byte_size(Content)), Guid, ?ATTEMPTS)
     end, SyncProviders).
-
-
-%% @private
--spec get_object_attributes(oct_background:entity_selector(), session:id(), file_id:file_guid()) ->
-    {ok, object()} | {error, term()}.
-get_object_attributes(Node, SessId, Guid) ->
-    case file_test_utils:get_attrs(Node, SessId, Guid) of
-        {ok, #file_attr{guid = Guid, name = Name, type = Type, mode = Mode, shares = Shares}} ->
-            {ok, #object{
-                guid = Guid, name = Name,
-                type = Type, mode = Mode,
-                shares = lists:sort(Shares)
-            }};
-        {error, _} = Error ->
-            Error
-    end.
 
 
 %% @private

@@ -103,6 +103,7 @@ init(Config, Link) ->
 
 -spec init(Config :: list(), boolean(), [node()]) -> list().
 init(Config, Link, Workers) ->
+    teardown(Config),
     Host = self(),
     ServerFun = fun() ->
         register(lfm_proxy_server, self()),

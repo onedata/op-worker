@@ -96,7 +96,7 @@ handle(<<"GET">>, Req) ->
 -spec maybe_sync_first_file_block(session:id(), [fslogic_worker:file_guid()]) -> ok.
 maybe_sync_first_file_block(SessionId, [FileGuid]) ->
     case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
-        {ok, #file_attr{type = Type}} when Type == ?REGULAR_FILE_TYPE orelse Type == ?SYMLINK_TYPE ->
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
             {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, read)),
             ReadBlockSize = http_streamer:get_read_block_size(FileHandle),
             case lfm:read(FileHandle, 0, ReadBlockSize) of
@@ -139,7 +139,7 @@ handle_http_download(SessionId, FileGuids, OnSuccessCallback, Req0) ->
             file_download_utils:download_tarball(
                 SessionId, FileAttrsList, OnSuccessCallback, Req1
             );
-        [#file_attr{name = FileName} = Attr] ->
+        [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
             Req1 = set_content_disposition_header(normalize_filename(FileName), Req0),
             file_download_utils:download_single_file(
                 SessionId, Attr, OnSuccessCallback, Req1

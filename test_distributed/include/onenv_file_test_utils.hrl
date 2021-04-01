@@ -40,7 +40,7 @@
 -record(symlink_spec, {
     name = undefined :: undefined | binary(),
     shares = [] :: [onenv_file_test_utils:share_spec()],
-    link_path :: binary()
+    symlink_value :: binary()
 }).
 
 -record(object, {

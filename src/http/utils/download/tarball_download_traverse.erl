@@ -155,7 +155,6 @@ get_connection_pid(TaskId) ->
 %% @private
 -spec handle_multiple_files([lfm_attrs:file_attributes()], id(), user_ctx:ctx(), tar_utils:stream(), 
     cowboy_req:req()) -> tar_utils:stream().
-% @TODO VFS-7475 add symlinks and harlinks
 handle_multiple_files([], _TaskId, _UserCtx, TarStream, _CowboyReq) -> 
     TarStream;
 handle_multiple_files(
@@ -194,19 +193,8 @@ handle_multiple_files(
 ) ->
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
-    UpdatedTarStream = case lfm:read_symlink(user_ctx:get_session_id(UserCtx), {guid, Guid}) of
-        {ok, LinkPath} ->
-            {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, PathPrefix, LinkPath),
-            http_streamer:send_data_chunk(Bytes, CowboyReq),
-            TarStream1;
-        {error, ?ENOENT} ->
-            TarStream;
-        {error, ?EPERM} ->
-            TarStream;
-        {error, ?EACCES} ->
-            TarStream
-    end,
-    handle_multiple_files(Tail, TaskId, UserCtx, UpdatedTarStream, CowboyReq).
+    TarStream1 = stream_symlink(TarStream, CowboyReq, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
+    handle_multiple_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq).
 
 
 %% @private
@@ -214,7 +202,7 @@ handle_multiple_files(
     file_meta:path()) -> tar_utils:stream().
 stream_file(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
     #file_attr{size = FileSize, guid = Guid} = FileAttrs,
-    case lfm:monitored_open(SessionId, {guid, Guid}, read) of
+    case check_read_result(lfm:monitored_open(SessionId, {guid, Guid}, read)) of
         {ok, FileHandle} ->
             {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, StartingDirPath),
             http_streamer:send_data_chunk(Bytes, Req),
@@ -224,11 +212,22 @@ stream_file(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
                 FileHandle, FileSize, Range, Req, fun(D) -> D end, ReadBlockSize, TarStream1),
             lfm:monitored_release(FileHandle),
             TarStream2;
-        {error, ?ENOENT} ->
-            TarStream;
-        {error, ?EPERM} ->
-            TarStream;
-        {error, ?EACCES} ->
+        ignored ->
+            TarStream
+    end.
+
+
+%% @private
+-spec stream_symlink(tar_utils:stream(), cowboy_req:req(), session:id(), lfm_attrs:file_attributes(),
+    file_meta:path()) -> tar_utils:stream().
+stream_symlink(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
+    #file_attr{guid = Guid} = FileAttrs,
+    case check_read_result(lfm:read_symlink(SessionId, {guid, Guid})) of
+        {ok, LinkPath} ->
+            {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, LinkPath),
+            http_streamer:send_data_chunk(Bytes, Req),
+            TarStream1;
+        ignored ->
             TarStream
     end.
 
@@ -240,6 +239,10 @@ stream_loop(TarStream, Req, SessionId, RootDirPath) ->
     receive
         {file_attrs, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs, Pid} ->
             TarStream2 = stream_file(TarStream, Req, SessionId, FileAttrs, RootDirPath),
+            Pid ! done,
+            stream_loop(TarStream2, Req, SessionId, RootDirPath);
+        {file_attrs, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs, Pid} ->
+            TarStream2 = stream_symlink(TarStream, Req, SessionId, FileAttrs, RootDirPath),
             Pid ! done,
             stream_loop(TarStream2, Req, SessionId, RootDirPath);
         {file_attrs, #file_attr{type = ?DIRECTORY_TYPE} = FileAttrs, Pid} ->
@@ -267,7 +270,7 @@ new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, SymlinkPath) ->
     FinalMode = case {file_id:is_share_guid(Guid), Type} of
         {true, ?REGULAR_FILE_TYPE} -> ?DEFAULT_FILE_PERMS;
         {true, ?DIRECTORY_TYPE} -> ?DEFAULT_DIR_PERMS;
-        {false, _} -> Mode
+        {_, _} -> Mode
     end,
     {ok, Path} = get_file_path(Guid),
     FileRelPath = string:prefix(Path, StartingDirPath),
@@ -287,4 +290,12 @@ get_file_path(ShareGuid) ->
     {Uuid, SpaceId, _} = file_id:unpack_share_guid(ShareGuid),
     Guid = file_id:pack_guid(Uuid, SpaceId),
     lfm:get_file_path(?ROOT_SESS_ID, Guid).
-    
+
+
+%% @private
+-spec check_read_result({ok, term()} | {error, term()}) -> {ok, term()} | {error, term()} | ignored.
+check_read_result({ok, _} = Result) -> Result;
+check_read_result({error, ?ENOENT}) -> ignored;
+check_read_result({error, ?EPERM}) -> ignored;
+check_read_result({error, ?EACCES}) -> ignored;
+check_read_result({error, _} = Error) -> Error.
