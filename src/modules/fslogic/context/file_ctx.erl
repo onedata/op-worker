@@ -63,7 +63,7 @@
     new_by_uuid/2, new_by_uuid/3, new_by_uuid/4,
     new_by_doc/2, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, set_file_location/2, set_file_id/2,
-    set_is_dir/2, ensure_based_on_referenced_guid/1]).
+    set_file_doc/2, set_is_dir/2, ensure_based_on_referenced_guid/1]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
@@ -85,7 +85,7 @@
 %% Functions modifying context
 -export([
     get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1,
-    get_file_doc_including_deleted/1,
+    get_file_doc_including_deleted/1, get_and_cache_file_doc_including_deleted/1,
     get_cached_parent_const/1, cache_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
@@ -98,7 +98,7 @@
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
-    get_local_storage_file_size/1, get_and_cache_file_doc_including_deleted/1
+    get_local_storage_file_size/1
 ]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
 -export([assert_not_readonly_storage/1, assert_file_exists/1, assert_smaller_than_provider_support_size/2]).
@@ -353,6 +353,10 @@ get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
     {FileDoc, FileCtx#file_ctx{file_doc = FileDoc}};
 get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
+
+-spec set_file_doc(ctx(), file_meta:doc()) -> ctx().
+set_file_doc(FileCtx, NewDoc) ->
+    FileCtx#file_ctx{file_doc = NewDoc}.
 
 -spec list_references_const(ctx()) -> {ok, [file_meta:uuid()]} | {error, term()}.
 list_references_const(FileCtx) ->
