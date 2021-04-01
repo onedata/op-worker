@@ -166,7 +166,7 @@
   0},
  {<<"rtransfer_link">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/rtransfer_link.git",
-       {ref,"e2ad6f9ca8c7d2429489e342915d95117311bbc0"}},
+       {ref,"c2adcc5481f21bff1ba7c8908771f81078c7997f"}},
   0},
  {<<"setup">>,
   {git,"git://github.com/uwiger/setup.git",
