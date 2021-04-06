@@ -759,15 +759,15 @@ remove_share(SessId, ShareID) ->
 
 -spec schedule_file_transfer(
     session:id(),
-    file_id:file_guid(),
+    lfm:file_key(),
     ReplicatingProviderId :: undefined | od_provider:id(),
     EvictingProviderId :: undefined | od_provider:id(),
     transfer:callback()
 ) ->
     {ok, transfer:id()} | lfm:error_reply().
-schedule_file_transfer(SessId, FileGuid, ReplicatingProviderId, EvictingProviderId, Callback) ->
+schedule_file_transfer(SessId, FileKey, ReplicatingProviderId, EvictingProviderId, Callback) ->
     ?run(lfm_files:schedule_file_transfer(
-        SessId, FileGuid, ReplicatingProviderId, EvictingProviderId, Callback
+        SessId, FileKey, ReplicatingProviderId, EvictingProviderId, Callback
     )).
 
 

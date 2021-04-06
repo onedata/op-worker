@@ -174,13 +174,15 @@ is_dir(SessId, FileKey) ->
 
 -spec schedule_file_transfer(
     session:id(),
-    file_id:file_guid(),
+    lfm:file_key(),
     ReplicatingProviderId :: undefined | od_provider:id(),
     EvictingProviderId :: undefined | od_provider:id(),
     transfer:callback()
 ) ->
     {ok, transfer:id()} | lfm:error_reply().
-schedule_file_transfer(SessId, FileGuid, ReplicatingProviderId, EvictingProviderId, Callback) ->
+schedule_file_transfer(SessId, FileKey, ReplicatingProviderId, EvictingProviderId, Callback) ->
+    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #schedule_file_transfer{
             replicating_provider_id = ReplicatingProviderId,

@@ -201,6 +201,9 @@ data_spec_create(#gri{aspect = xattrs}, _) -> #{
     required => #{
         id => {binary, guid},
         <<"metadata">> => {json, any}
+    },
+    optional => #{
+        <<"resolve_symlink">> => {boolean, any}
     }
 };
 
@@ -211,7 +214,8 @@ data_spec_create(#gri{aspect = json_metadata}, _) -> #{
     },
     optional => #{
         <<"filter_type">> => {binary, [<<"keypath">>]},
-        <<"filter">> => {binary, any}
+        <<"filter">> => {binary, any},
+        <<"resolve_symlink">> => {boolean, any}
     }
 };
 
@@ -219,6 +223,9 @@ data_spec_create(#gri{aspect = rdf_metadata}, _) -> #{
     required => #{
         id => {binary, guid},
         <<"metadata">> => {binary, any}
+    },
+    optional => #{
+        <<"resolve_symlink">> => {boolean, any}
     }
 };
 
@@ -335,7 +342,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = attrs}})
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
     lists:foreach(fun({XattrName, XattrValue}) ->
         ?check(lfm:set_xattr(
-            Auth#auth.session_id, {guid, Guid},
+            Auth#auth.session_id, build_precise_file_key(Guid, Data, true),
             #xattr{name = XattrName, value = XattrValue},
             false, false
         ))
@@ -354,13 +361,13 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_met
             binary:split(Filter, <<".">>, [global])
     end,
     ?check(lfm:set_metadata(
-        Auth#auth.session_id, {guid, Guid},
+        Auth#auth.session_id, build_precise_file_key(Guid, Data, true),
         json, JSON, FilterList
     ));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
     Rdf = maps:get(<<"metadata">>, Data),
-    ?check(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, rdf, Rdf, []));
+    ?check(lfm:set_metadata(Auth#auth.session_id, build_precise_file_key(Guid, Data, true), rdf, Rdf, []));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
@@ -459,7 +466,8 @@ data_spec_get(#gri{aspect = xattrs}) -> #{
     optional => #{
         <<"attribute">> => {binary, non_empty},
         <<"inherited">> => {boolean, any},
-        <<"show_internal">> => {boolean, any}
+        <<"show_internal">> => {boolean, any},
+        <<"resolve_symlink">> => {boolean, any}
     }
 };
 
@@ -468,12 +476,17 @@ data_spec_get(#gri{aspect = json_metadata}) -> #{
     optional => #{
         <<"filter_type">> => {binary, [<<"keypath">>]},
         <<"filter">> => {binary, any},
-        <<"inherited">> => {boolean, any}
+        <<"inherited">> => {boolean, any},
+        <<"resolve_symlink">> => {boolean, any}
     }
 };
 
+data_spec_get(#gri{aspect = rdf_metadata}) -> #{
+    required => #{id => {binary, guid}},
+    optional => #{<<"resolve_symlink">> => {boolean, any}}
+};
+
 data_spec_get(#gri{aspect = As}) when
-    As =:= rdf_metadata;
     As =:= distribution;
     As =:= acl;
     As =:= shares;
@@ -628,24 +641,22 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}
     SessionId = Auth#auth.session_id,
     Inherited = maps:get(<<"inherited">>, Data, false),
     ShowInternal = maps:get(<<"show_internal">>, Data, false),
+    FileKey = build_precise_file_key(FileGuid, Data, true),
 
     case maps:get(<<"attribute">>, Data, undefined) of
         undefined ->
             {ok, Xattrs} = ?check(lfm:list_xattr(
-                SessionId, {guid, FileGuid}, Inherited, ShowInternal
+                SessionId, FileKey, Inherited, ShowInternal
             )),
             {ok, value, lists:foldl(fun(XattrName, Acc) ->
                 {ok, #xattr{value = Value}} = ?check(lfm:get_xattr(
-                    SessionId,
-                    {guid, FileGuid},
-                    XattrName,
-                    Inherited
+                    SessionId, FileKey, XattrName, Inherited
                 )),
                 Acc#{XattrName => Value}
             end, #{}, Xattrs)};
         XattrName ->
             {ok, #xattr{value = Val}} = ?check(lfm:get_xattr(
-                SessionId, {guid, FileGuid}, XattrName, Inherited
+                SessionId, FileKey, XattrName, Inherited
             )),
             {ok, value, #{XattrName => Val}}
     end;
@@ -667,14 +678,14 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
     end,
 
     {ok, Result} = ?check(lfm:get_metadata(
-        SessionId, {guid, FileGuid},
+        SessionId, build_precise_file_key(FileGuid, Data, true),
         json, FilterList, Inherited
     )),
     {ok, value, Result};
 
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
     {ok, Result} = ?check(lfm:get_metadata(
-        Auth#auth.session_id, {guid, FileGuid},
+        Auth#auth.session_id, build_precise_file_key(FileGuid, Data, true),
         rdf, [], false
     )),
     {ok, value, Result};
@@ -843,17 +854,25 @@ delete_operation_supported(_, _) -> false.
 
 %% @private
 -spec data_spec_delete(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
+data_spec_delete(#gri{aspect = instance}) ->
+    #{required => #{id => {binary, guid}}};
+
 data_spec_delete(#gri{aspect = As}) when
-    As =:= instance;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    #{required => #{id => {binary, guid}}};
+    #{
+        required => #{id => {binary, guid}},
+        optional => #{<<"resolve_symlink">> => {boolean, any}}
+    };
 
 data_spec_delete(#gri{aspect = xattrs}) -> #{
     required => #{
         id => {binary, guid},
         <<"keys">> => {list_of_binaries, any}
+    },
+    optional => #{
+        <<"resolve_symlink">> => {boolean, any}
     }
 }.
 
@@ -897,20 +916,34 @@ delete(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{id = FileGuid, aspec
     end;
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
+    FileKey = build_precise_file_key(FileGuid, Data, true),
+
     lists:foreach(fun(XattrName) ->
-        ?check(lfm:remove_xattr(Auth#auth.session_id, {guid, FileGuid}, XattrName))
+        ?check(lfm:remove_xattr(Auth#auth.session_id, FileKey, XattrName))
     end, maps:get(<<"keys">>, Data));
 
-delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
-    ?check(lfm:remove_metadata(Auth#auth.session_id, {guid, FileGuid}, json));
+delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
+    FileKey = build_precise_file_key(FileGuid, Data, true),
+    ?check(lfm:remove_metadata(Auth#auth.session_id, FileKey, json));
 
-delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
-    ?check(lfm:remove_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf)).
+delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
+    FileKey = build_precise_file_key(FileGuid, Data, true),
+    ?check(lfm:remove_metadata(Auth#auth.session_id, FileKey, rdf)).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec build_precise_file_key(file_id:file_guid(), middleware:data(), boolean()) ->
+    lfm:file_key().
+build_precise_file_key(FileGuid, Data, ResolveSymlinkByDefault) ->
+    case maps:get(<<"resolve_symlink">>, Data, ResolveSymlinkByDefault) of
+        true -> ?INDIRECT_GUID_KEY(FileGuid);
+        false -> ?DIRECT_GUID_KEY(FileGuid)
+    end.
 
 
 %% @private
@@ -982,9 +1015,7 @@ get_attr(<<"ctime">>, #file_attr{ctime = CTime}) -> CTime;
 get_attr(<<"mtime">>, #file_attr{mtime = MTime}) -> MTime;
 get_attr(<<"owner_id">>, #file_attr{owner_id = OwnerId}) -> OwnerId;
 get_attr(<<"provider_id">>, #file_attr{provider_id = ProviderId}) -> ProviderId;
-get_attr(<<"type">>, #file_attr{type = ?REGULAR_FILE_TYPE}) -> <<"reg">>;
-get_attr(<<"type">>, #file_attr{type = ?DIRECTORY_TYPE}) -> <<"dir">>;
-get_attr(<<"type">>, #file_attr{type = ?SYMLINK_TYPE}) -> <<"lnk">>;
+get_attr(<<"type">>, #file_attr{type = Type}) -> utils:to_binary(Type);
 get_attr(<<"shares">>, #file_attr{shares = Shares}) -> Shares;
 get_attr(<<"storage_user_id">>, #file_attr{uid = Uid}) -> Uid;
 get_attr(<<"storage_group_id">>, #file_attr{gid = Gid}) -> Gid;
