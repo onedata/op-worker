@@ -45,7 +45,7 @@
 
 -type doc() :: datastore_doc:doc(file_meta()).
 -type diff() :: datastore_doc:diff(file_meta()).
--type uuid() :: binary().
+-type uuid() :: datastore:key().
 -type path() :: binary().
 -type uuid_based_path() :: binary(). % similar to canonical, but path elements are uuids instead of filenames/dirnames
 -type name() :: binary().

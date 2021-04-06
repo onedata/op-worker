@@ -532,18 +532,14 @@ get_new_storage_file_id(FileCtx) ->
         ?FLAT_STORAGE_PATH ->
             FileUuid = file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx2),
             StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
-            case equals(ReferencedUuidBasedFileCtx2, FileCtx) of
-                true -> {StorageFileId, ReferencedUuidBasedFileCtx2#file_ctx{storage_file_id = StorageFileId}};
-                false -> {StorageFileId, FileCtx#file_ctx{storage_file_id = StorageFileId}}
-            end;
+            FinalCtx = check_if_equals_and_return_newer(ReferencedUuidBasedFileCtx2, FileCtx),
+            {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}};
         ?CANONICAL_STORAGE_PATH ->
             {CanonicalPath, ReferencedUuidBasedFileCtx3} = file_ctx:get_canonical_path(ReferencedUuidBasedFileCtx2),
             StorageId = storage:get_id(Storage),
             StorageFileId = storage_file_id:canonical(CanonicalPath, SpaceId, StorageId),
-            case equals(ReferencedUuidBasedFileCtx3, FileCtx) of
-                true -> {StorageFileId, ReferencedUuidBasedFileCtx3#file_ctx{storage_file_id = StorageFileId}};
-                false -> {StorageFileId, FileCtx#file_ctx{storage_file_id = StorageFileId}}
-            end
+            FinalCtx = check_if_equals_and_return_newer(ReferencedUuidBasedFileCtx3, FileCtx),
+            {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}}
     end.
 
 %%--------------------------------------------------------------------
@@ -614,13 +610,15 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = undefined}) ->
         {ok, DisplayCredentials = {Uid, Gid}} ->
             case Storage =:= undefined of
                 true ->
-                    {DisplayCredentials, FileCtx#file_ctx{display_credentials = DisplayCredentials}};
+                    FinalCtx = check_if_equals_and_return_newer(ReferencedFileCtx3, FileCtx),
+                    {DisplayCredentials, FinalCtx#file_ctx{display_credentials = DisplayCredentials}};
                 false ->
-                    {SyncedGid, _ReferencedFileCtx4} = get_synced_gid(ReferencedFileCtx3),
+                    {SyncedGid, ReferencedFileCtx4} = get_synced_gid(ReferencedFileCtx3),
                     % if SyncedGid =/= undefined override display Gid
                     FinalGid = utils:ensure_defined(SyncedGid, Gid),
                     FinalDisplayCredentials = {Uid, FinalGid},
-                    {FinalDisplayCredentials, FileCtx#file_ctx{display_credentials = FinalDisplayCredentials}}
+                    FinalCtx = check_if_equals_and_return_newer(ReferencedFileCtx4, FileCtx),
+                    {FinalDisplayCredentials, FinalCtx#file_ctx{display_credentials = FinalDisplayCredentials}}
             end;
         {error, not_found} ->
             {error, ?EACCES}
@@ -1162,6 +1160,21 @@ is_in_user_space_const(FileCtx, UserCtx) ->
 -spec equals(ctx(), ctx()) -> boolean().
 equals(FileCtx1, FileCtx2) ->
     get_logical_guid_const(FileCtx1) =:= get_logical_guid_const(FileCtx2).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether passed contexts are associated with the same file.
+%% If true, returns NewerFileCtx else returns DefaultFileCtx.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_if_equals_and_return_newer(ctx(), ctx()) -> ctx().
+check_if_equals_and_return_newer(NewerFileCtx, DefaultFileCtx) ->
+    case equals(NewerFileCtx, DefaultFileCtx) of
+        true -> NewerFileCtx;
+        false -> DefaultFileCtx
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
