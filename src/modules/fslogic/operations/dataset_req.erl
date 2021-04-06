@@ -79,16 +79,7 @@ get_info(SpaceDirCtx, DatasetId, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW),
 
     {ok, Info} = dataset_api:get_info(DatasetId),
-    ?PROVIDER_OK_RESP(#dataset_info{
-        id = DatasetId,
-        state = maps:get(<<"state">>, Info),
-        guid = maps:get(<<"fileRootGuid">>, Info),
-        path = maps:get(<<"fileRootPath">>, Info),
-        type = maps:get(<<"fileRootType">>, Info),
-        creation_time = maps:get(<<"creationTime">>, Info),
-        protection_flags = maps:get(<<"protectionFlags">>, Info),
-        parent = maps:get(<<"parentDatasetId">>, Info)
-    }).
+    ?PROVIDER_OK_RESP(Info).
 
 
 -spec get_file_eff_summary(file_ctx:ctx(), user_ctx:ctx()) -> fslogic_worker:provider_response().
@@ -100,11 +91,7 @@ get_file_eff_summary(FileCtx0, UserCtx) ->
     ),
 
     {ok, Summary} = dataset_api:get_effective_summary(FileCtx1),
-    ?PROVIDER_OK_RESP(#file_eff_dataset_summary{
-        direct_dataset = maps:get(<<"directDataset">>, Summary),
-        eff_ancestor_datasets = maps:get(<<"effectiveAncestorDatasets">>, Summary),
-        eff_protection_flags = maps:get(<<"effectiveProtectionFlags">>, Summary)
-    }).
+    ?PROVIDER_OK_RESP(Summary).
 
 
 -spec list_top_datasets(od_space:id(), dataset:state(), user_ctx:ctx(), datasets_structure:opts()) ->

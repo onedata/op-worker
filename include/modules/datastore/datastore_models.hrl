@@ -384,18 +384,18 @@
     parent_uuid :: undefined | file_meta:uuid(),
     references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
     symlink_value :: undefined | file_meta_symlinks:symlink(),
-    dataset :: undefined | dataset:id(),
     dataset_state :: undefined | dataset:state()
 }).
 
-
+% Model used for storing information associated with dataset.
+% One document is stored for one dataset.
+% Key of the document is file_meta:uuid().
 -record(dataset, {
-    % uuid of file to which given dataset is attached
-    uuid :: file_meta:uuid(),
     creation_time :: time:seconds(),
     state :: dataset:state(),
     detached_info :: undefined | dataset:detached_info()
 }).
+
 
 % An empty model used for creating deletion_markers
 % For more information see deletion_marker.erl

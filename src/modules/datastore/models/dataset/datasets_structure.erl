@@ -9,7 +9,7 @@
 %%% Module which implements generic datasets structure using datastore links.
 %%% Each link is associated with exactly one dataset.
 %%%
-%%% Link values store dataset's name and id.
+%%% Link value store dataset's name.
 %%%
 %%% Link names are of type dataset:path() which means that is a slash separated
 %%% path to root file of a dataset, where each element is uuid of corresponding
@@ -47,14 +47,14 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add/5, get/3, delete/3, list_top_datasets/3, list_children_datasets/4, move/6]).
+-export([add/4, get/3, delete/3, list_top_datasets/3, list_children_datasets/4, move/5]).
 
 %% Test API
 -export([list_all_unsafe/2, delete_all_unsafe/2]).
 
 
 -type link_name() :: dataset:path().
--type link_value() :: binary().
+-type link_value() :: dataset:name().
 -type link() :: {link_name(), link_value()}.
 -type internal_link() :: datastore_links:link().
 -type link_revision() :: datastore_links:link_rev().
@@ -92,7 +92,8 @@
 -define(CTX(Scope), ?CTX#{scope => Scope}).
 -define(FOREST(Type, SpaceId), str_utils:join_binary([<<"DATASETS">>, Type, SpaceId], ?FOREST_SEP)).
 -define(LOCAL_TREE_ID, oneprovider:get_id()).
--define(LINK(Name, Value), {Name, Value}).
+-define(LINK(LinkName, LinkValue), {LinkName, LinkValue}).
+-define(ENTRY(DatasetPath, DatasetName), {dataset_path:to_id(DatasetPath), DatasetName}).
 -define(DEFAULT_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
 
 
@@ -103,8 +104,13 @@
 %%% API functions
 %%%===================================================================
 
-add(SpaceId, ForestType, DatasetPath, DatasetId, DatasetName) ->
-    add(SpaceId, ForestType, DatasetPath, encode_entry(DatasetId, DatasetName)).
+-spec add(od_space:id(), forest_type(), link_name(), link_value()) -> ok.
+add(SpaceId, ForestType, DatasetPath, DatasetName) ->
+    Link = ?LINK(DatasetPath, DatasetName),
+    case datastore_model:add_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), ?LOCAL_TREE_ID, Link) of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end.
 
 
 -spec get(od_space:id(), forest_type(), link_name()) ->
@@ -112,7 +118,7 @@ add(SpaceId, ForestType, DatasetPath, DatasetId, DatasetName) ->
 get(SpaceId, ForestType, DatasetPath) ->
     case datastore_model:get_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), all, DatasetPath) of
         {ok, [#link{target = LinkValue}]} ->
-            {ok, decode_entry(LinkValue)};
+            {ok, ?ENTRY(DatasetPath, LinkValue)};
         Error = {error, _} ->
             Error
     end.
@@ -142,15 +148,15 @@ list_children_datasets(SpaceId, ForestType, DatasetPath, Opts) ->
     list_internal(SpaceId, ForestType, {children, DatasetPath}, Opts).
 
 
--spec move(od_space:id(), forest_type(), dataset:id(), link_name(), link_name(), dataset:name()) -> ok.
-move(SpaceId, ForestType, DatasetId, SourceDatasetPath, SourceDatasetPath, TargetName) ->
+-spec move(od_space:id(), forest_type(), link_name(), link_name(), dataset:name()) -> ok.
+move(SpaceId, ForestType, SourceDatasetPath, SourceDatasetPath, TargetName) ->
     % dataset path has not changed, only its name has been changed
     delete(SpaceId, ForestType, SourceDatasetPath),
-    add(SpaceId, ForestType, SourceDatasetPath, DatasetId, TargetName);
-move(SpaceId, ForestType, DatasetId, SourceDatasetPath, TargetDatasetPath, TargetName) ->
+    add(SpaceId, ForestType, SourceDatasetPath, TargetName);
+move(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, TargetName) ->
     % move link to moved dataset
+    add(SpaceId, ForestType, TargetDatasetPath, TargetName),
     delete(SpaceId, ForestType, SourceDatasetPath),
-    add(SpaceId, ForestType, TargetDatasetPath, DatasetId, TargetName),
 
     % move links to nested datasets of the moved dataset
     move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath).
@@ -186,21 +192,12 @@ delete_all_unsafe(SpaceId, ForestType) ->
 -spec list_all_unsafe(od_space:id(), forest_type()) -> {ok, [{link_name(), entry()}]}.
 list_all_unsafe(SpaceId, ForestType) ->
     fold(SpaceId, ForestType, fun(#link{name = LinkName, target = LinkValue}, Acc) ->
-        {ok, [{LinkName, decode_entry(LinkValue)} | Acc]}
+        {ok, [{LinkName, ?ENTRY(LinkName, LinkValue)} | Acc]}
     end, [], #{}).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec add(od_space:id(), forest_type(), link_name(), link_value()) -> ok.
-add(SpaceId, ForestType, DatasetPath, LinkValue) ->
-    Link = ?LINK(DatasetPath, LinkValue),
-    case datastore_model:add_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), ?LOCAL_TREE_ID, Link) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end.
-
 
 -spec delete_local(od_space:id(), forest_type(), link_name(), link_revision()) -> ok.
 delete_local(SpaceId, ForestType, LinkName, Revision) ->
@@ -266,7 +263,7 @@ collect_children(SpaceId, ForestType, ListedDatasetPath, LastIncludedDatasetPath
                                         true -> stop;
                                         false -> ok
                                     end,
-                                    {OkOrStop, {[decode_entry(LinkValue) | CollectedAcc], DatasetPath, DatasetPath,
+                                    {OkOrStop, {[?ENTRY(DatasetPath, LinkValue) | CollectedAcc], DatasetPath, DatasetPath,
                                         SpaceDatasetListed}}
 
                             end
@@ -334,11 +331,11 @@ move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, 
 -spec move_descendants_batch(od_space:id(), forest_type(), dataset:path(), dataset:path(), [link()]) -> ok.
 move_descendants_batch(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, DescendantDatasets) ->
     PrefixLen = byte_size(SourceDatasetPath) + 1, % +1 is for slash
-    lists:foreach(fun({DatasetPath, LinkValue}) ->
-        delete(SpaceId, ForestType, DatasetPath),
+    lists:foreach(fun({DatasetPath, DatasetName}) ->
         Suffix = binary:part(DatasetPath, PrefixLen, byte_size(DatasetPath) - PrefixLen),
         NewDatasetPath = filename:join(TargetDatasetPath, Suffix),
-        add(SpaceId, ForestType, NewDatasetPath, LinkValue)
+        add(SpaceId, ForestType, NewDatasetPath, DatasetName),
+        delete(SpaceId, ForestType, DatasetPath)
     end, DescendantDatasets).
 
 
@@ -354,9 +351,9 @@ move_descendants_batch(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath
     {ok, [link()], AllListed :: boolean()}.
 get_descendants_batch_reversed(SpaceId, ForestType, ParentDatasetPath, StartIndex, Limit) ->
     {ok, {LinksReversed, EndReached, ListedLinksCount}} = fold(SpaceId, ForestType,
-        fun(#link{name = DatasetPath, target = LinkValue}, {ListAcc, _EndReached, ListedLinksCount}) ->
+        fun(#link{name = DatasetPath, target = DatasetName}, {ListAcc, _EndReached, ListedLinksCount}) ->
             case {is_prefix(ParentDatasetPath, DatasetPath), ParentDatasetPath =/= DatasetPath} of
-                {true, true} ->  {ok, {[{DatasetPath, LinkValue} | ListAcc], false, ListedLinksCount + 1}};
+                {true, true} ->  {ok, {[{DatasetPath, DatasetName} | ListAcc], false, ListedLinksCount + 1}};
                 {true, false} ->  {ok, {ListAcc, false, ListedLinksCount + 1}};
                 {false, _} -> {stop, {ListAcc, true, ListedLinksCount + 1}}
             end
@@ -455,14 +452,3 @@ sanitize_start_index(Opts) ->
             %% throw(?ERROR_BAD_VALUE_BINARY(start_index))
             throw(?EINVAL)
     end.
-
-
--spec encode_entry(dataset:id(), dataset:name()) -> link_value().
-encode_entry(DatasetId, DatasetName) ->
-    str_utils:join_binary([DatasetId, DatasetName], ?VALUE_SEP).
-
-
--spec decode_entry(link_value()) -> entry().
-decode_entry(LinkValue) ->
-    [DatasetId, DatasetName] = binary:split(LinkValue, ?VALUE_SEP),
-    {DatasetId, DatasetName}.

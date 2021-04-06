@@ -268,8 +268,7 @@ get_record_struct(12) ->
         {parent_uuid, string},
         {references, #{string => [string]}},
         {symlink_value, string},
-        % fields dataset and dataset_status has been added in this version
-        {dataset, string},
+        % field dataset_status has been added in this version
         {dataset_status, atom}
     ]}.
 
@@ -349,8 +348,8 @@ upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Ow
 }) ->
     {12, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue,
-        % fields dataset and dataset_status has been added in this version
-        undefined, undefined
+        % field dataset_status has been added in this version
+        undefined
     }}.
 
 

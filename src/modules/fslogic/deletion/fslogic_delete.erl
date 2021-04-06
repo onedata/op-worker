@@ -501,10 +501,9 @@ delete_referenced_file_meta(FileCtx) ->
 -spec detach_dataset(file_ctx:ctx()) -> file_ctx:ctx().
 detach_dataset(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    case file_meta:is_dataset_attached(FileDoc) of
+    case file_meta_dataset:is_attached(FileDoc) of
         true ->
-            DatasetId = file_meta:get_dataset_id(FileDoc),
-            dataset_api:detach(DatasetId);
+            dataset_api:detach(file_ctx:get_logical_uuid_const(FileCtx2));
         false ->
             ok
     end,

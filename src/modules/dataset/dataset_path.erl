@@ -17,7 +17,7 @@
 -author("Jakub Kudzia").
 
 %% API
--export([get/2, get_space_path/1]).
+-export([get/2, get_space_path/1, to_id/1]).
 
 -compile({no_auto_import,[get/1]}).
 
@@ -36,3 +36,7 @@ get(SpaceId, Uuid) ->
 get_space_path(SpaceId) ->
     get(SpaceId, fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
 
+
+-spec to_id(dataset:path()) -> dataset:id().
+to_id(DatasetPath) ->
+    lists:last(filepath_utils:split(DatasetPath)).

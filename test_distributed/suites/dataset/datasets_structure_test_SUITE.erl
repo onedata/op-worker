@@ -118,8 +118,7 @@ all() -> ?ALL([
 
 -define(DATASET_NAME(N), ?NAME(<<"dataset_name">>, N)).
 -define(DATASET_NAME, ?RAND_NAME(<<"dataset_name">>)).
--define(DATASET_ID(N), ?NAME(<<"dataset_id">>, N)).
--define(DATASET_ID, ?RAND_NAME(<<"dataset_id">>)).
+-define(DATASET_ID(DatasetPath), lists:last(filepath_utils:split(DatasetPath))).
 -define(UUID, ?RAND_NAME(<<"uuid">>)).
 
 -define(RAND_NAME(Prefix), ?NAME(Prefix, rand:uniform(?RAND_RANGE))).
@@ -179,13 +178,13 @@ nested_dirs_visible_on_space_dataset_list(_Config) ->
     % create dataset entries
     DatasetsReversed = lists:foldl(fun(I, Acc) ->
         DatasetPath = generate_dataset_path(SpaceDatasetPath, I),
-        [{DatasetPath, ?DATASET_ID} | Acc]
+        [{DatasetPath, ?DATASET_ID(DatasetPath)} | Acc]
     end, [], lists:seq(1, N)),
 
     % create dataset entries for all deepest directories
     DatasetIdsAndNames = lists:map(fun({DatasetPath, DatasetId}) ->
         DatasetName = ?DATASET_NAME,
-        ok = add(P1Node, SpaceId, DatasetPath, DatasetId, DatasetName),
+        ok = add(P1Node, SpaceId, DatasetPath, DatasetName),
         {DatasetId, DatasetName}
     end, DatasetsReversed),
     DatasetIdsAndNamesSorted = sort(DatasetIdsAndNames),
@@ -212,7 +211,7 @@ basic_sort(_Config) ->
     % create dataset entries for all directories
     DatasetIdsAndNames = lists:map(fun({DatasetPath, DatasetId}) ->
         DatasetName = ?DATASET_NAME,
-        ok = add(P1Node, SpaceId, DatasetPath, DatasetId, DatasetName),
+        ok = add(P1Node, SpaceId, DatasetPath, DatasetName),
         {DatasetId, DatasetName}
     end, DatasetPathsAndIds),
 
@@ -298,15 +297,15 @@ mixed_test(_Config) ->
 
     DatasetPaths = [Dataset1Path, Dataset12Path, Dataset2Path, Dataset3Path, Dataset34Path],
     DatasetNames = [Dir1, Dir12, Dir2, Dir3, Dir34],
-    DatasetIds = [?DATASET_ID || _ <- lists:seq(1, length(DatasetNames))],
+    DatasetIds = [?DATASET_ID(DatasetPath) || DatasetPath <- DatasetPaths],
     [DatasetId1, DatasetId12, DatasetId2, DatasetId3, DatasetId34] = DatasetIds,
 
     % create entries for datasets
-    lists:foreach(fun(Dataset = {DatasetPath, DatasetName, DatasetId}) ->
+    lists:foreach(fun(Dataset = {DatasetPath, DatasetName, _DatasetId}) ->
         % at the beginning, Dir3 is not a dataset
         case DatasetPath =:= Dataset3Path of
             true -> ok;
-            false -> ok = add(P1Node, SpaceId, DatasetPath, DatasetId, DatasetName)
+            false -> ok = add(P1Node, SpaceId, DatasetPath, DatasetName)
         end,
         Dataset
     end, lists:zip3(DatasetPaths, DatasetNames, DatasetIds)),
@@ -326,7 +325,7 @@ mixed_test(_Config) ->
         list_children_datasets(P2Node, SpaceId, Dataset1Path, #{offset => 0, limit => 100}), ?ATTEMPTS),
 
     % make Dir3 a dataset too
-    add(P1Node, SpaceId, Dataset3Path, DatasetId3, Dir3),
+    add(P1Node, SpaceId, Dataset3Path, Dir3),
 
     % Dataset34 should no longer be visible on the highest level
     ?assertMatch({ok, [{DatasetId1, Dir1}, {DatasetId2, Dir2}, {DatasetId3, Dir3}], true},
@@ -419,11 +418,11 @@ basic_crud_test_base(Depth) ->
 
     % generate nested dataset path
     DatasetPath = generate_dataset_path(SpaceDatasetPath, Depth),
-    DatasetId = ?DATASET_ID,
+    DatasetId = ?DATASET_ID(DatasetPath),
     DatasetName = ?DATASET_NAME,
 
     % add dataset entry
-    ok = add(P1Node, SpaceId, DatasetPath, DatasetId, DatasetName),
+    ok = add(P1Node, SpaceId, DatasetPath, DatasetName),
 
     ?assertMatch({ok, {DatasetId, DatasetName}}, get(P1Node, SpaceId, DatasetPath)),
     ?assertMatch({ok, {DatasetId, DatasetName}}, get(P2Node, SpaceId, DatasetPath), ?ATTEMPTS),
@@ -466,8 +465,8 @@ nested_datasets_test_base(Depth) ->
     % generate nested dataset paths and ids
     DatasetsReversed = generate_nested_datasets(SpaceDatasetPath, Depth, true),
 
-    lists:foreach(fun({DatasetPath, DatasetId, DatasetName}) ->
-        add(P1Node, SpaceId, DatasetPath, DatasetId, DatasetName)
+    lists:foreach(fun({DatasetPath, _DatasetId, DatasetName}) ->
+        add(P1Node, SpaceId, DatasetPath, DatasetName)
     end, DatasetsReversed),
 
     {DeepestDatasetPath, _DeepestDatasetId, _DeepestDatasetName} = hd(DatasetsReversed),
@@ -508,7 +507,7 @@ mark_parent_as_dataset_test_base(Depth) ->
 
     % add entry for the deepest dataset to the datasets structure
     {DeepestDatasetPath, DeepestDatasetId, DeepestDatasetName} = hd(DatasetsReversed),
-    ok = add(P1Node, SpaceId, DeepestDatasetPath, DeepestDatasetId, DeepestDatasetName),
+    ok = add(P1Node, SpaceId, DeepestDatasetPath, DeepestDatasetName),
 
     % check whether it's on visible the list of space datasets
     ?assertMatch({ok, [{DeepestDatasetId, DeepestDatasetName}], true},
@@ -521,7 +520,7 @@ mark_parent_as_dataset_test_base(Depth) ->
         fun({DatasetPath, DatasetId, DatasetName}, {ChildDatasetId, ChildDatasetName}) ->
 
             % add dataset entry
-            ok = add(P1Node, SpaceId, DatasetPath, DatasetId, DatasetName),
+            ok = add(P1Node, SpaceId, DatasetPath, DatasetName),
 
             % check whether it's the only visible dataset the list of space datasets
             ?assertMatch({ok, [{DatasetId, DatasetName}], true},
@@ -562,14 +561,14 @@ rename_dataset_test_base(Depth) ->
     DatasetsReversed = generate_nested_datasets(SpaceDatasetPath, Depth, false),
 
     % create dataset entries
-    lists:foreach(fun({DatasetPath, DatasetId, DatasetName}) ->
-        ok = add(P1Node, SpaceId, DatasetPath, DatasetId, DatasetName)
+    lists:foreach(fun({DatasetPath, _DatasetId, DatasetName}) ->
+        ok = add(P1Node, SpaceId, DatasetPath, DatasetName)
     end, DatasetsReversed),
     Datasets = lists:reverse(DatasetsReversed),
     {TopDatasetPath, TopDatasetId, _TopDatasetName} = hd(Datasets),
 
     % rename highest dataset
-    ok = move(P1Node, SpaceId, TopDatasetId, TopDatasetPath, TopDatasetPath, TopDatasetTargetName),
+    ok = move(P1Node, SpaceId, TopDatasetPath, TopDatasetPath, TopDatasetTargetName),
 
     % check whether the highest dataset is visible on the list of space datasets with a new name
     ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName}], true},
@@ -600,17 +599,17 @@ move_dataset_test_base(Depth, TargetType) ->
 
     DatasetsReversed = generate_nested_datasets(SpaceDatasetPath, Depth, false),
     TargetParentPath = filename:join(SpaceDatasetPath, TargetParentUuid),
-    TargetDatasetId = ?DATASET_ID,
+    TargetDatasetId = ?DATASET_ID(TargetParentPath),
 
     % add dataset entries
-    lists:foreach(fun({DatasetPath, DatasetId, DatasetName}) ->
-        ok = add(P1Node, SpaceId, DatasetPath, DatasetId, DatasetName)
+    lists:foreach(fun({DatasetPath, _DatasetId, DatasetName}) ->
+        ok = add(P1Node, SpaceId, DatasetPath, DatasetName)
     end, DatasetsReversed),
     Datasets = lists:reverse(DatasetsReversed),
 
     case TargetType of
         dataset ->
-            add(P1Node, SpaceId, TargetParentPath, TargetDatasetId, TargetParentName);
+            add(P1Node, SpaceId, TargetParentPath, TargetParentName);
         normal_dir ->
             ok
     end,
@@ -620,7 +619,7 @@ move_dataset_test_base(Depth, TargetType) ->
     TopDatasetUuid = lists:last(filename:split(TopDatasetPath)),
     TargetDatasetPath =  filename:join(TargetParentPath, TopDatasetUuid),
 
-    move(P1Node, SpaceId, TopDatasetId, TopDatasetPath, TargetDatasetPath, TopDatasetTargetName),
+    move(P1Node, SpaceId, TopDatasetPath, TargetDatasetPath, TopDatasetTargetName),
 
     case TargetType of
         dataset ->
@@ -669,31 +668,31 @@ move_dataset_with_many_children_test_base(ChildrenCount) ->
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
 
     TopDatasetUuid = ?UUID,
-    TopDatasetId = ?DATASET_ID,
+    TopDatasetPath = filename:join([?DIRECTORY_SEPARATOR_BIN, SpaceUuid, TopDatasetUuid]),
+    TopDatasetId = ?DATASET_ID(TopDatasetPath),
     TopDatasetName = ?DATASET_NAME,
     TopDatasetNewName = <<"after rename">>,
-    TopDatasetPath = filename:join([?DIRECTORY_SEPARATOR_BIN, SpaceUuid, TopDatasetUuid]),
 
     TargetParentUuid = ?UUID,
-    TargetParentDatasetId = ?DATASET_ID,
-    TargetParentName = ?DATASET_NAME,
     TargetParentDatasetPath = filename:join([?DIRECTORY_SEPARATOR_BIN, SpaceUuid, TargetParentUuid]),
+    TargetParentDatasetId = ?DATASET_ID(TargetParentDatasetPath),
+    TargetParentName = ?DATASET_NAME,
 
     Datasets = generate_dataset_paths_and_ids(TopDatasetPath, 1, ChildrenCount),
 
-    ok = add(P1Node, SpaceId, TopDatasetPath, TopDatasetId, TopDatasetName),
-    ok = add(P1Node, SpaceId, TargetParentDatasetPath, TargetParentDatasetId, TargetParentName),
+    ok = add(P1Node, SpaceId, TopDatasetPath, TopDatasetName),
+    ok = add(P1Node, SpaceId, TargetParentDatasetPath, TargetParentName),
 
     % add dataset entries
     ExpectedDatasets = lists:map(fun({DatasetPath, DatasetId}) ->
         DatasetName = ?DATASET_NAME,
-        ok = add(P1Node, SpaceId, DatasetPath, DatasetId, DatasetName),
+        ok = add(P1Node, SpaceId, DatasetPath, DatasetName),
         {DatasetId, DatasetName}
     end, Datasets),
 
     % move highest dataset
     TargetDatasetPath =  filename:join(TargetParentDatasetPath, TopDatasetUuid),
-    move(P1Node, SpaceId, TopDatasetId, TopDatasetPath, TargetDatasetPath, TopDatasetNewName),
+    move(P1Node, SpaceId, TopDatasetPath, TargetDatasetPath, TopDatasetNewName),
 
     % check whether the highest dataset on the list of space datasets is still a target_dir dataset
     ?assertMatch({ok, [{TargetParentDatasetId, TargetParentName}], _},
@@ -738,16 +737,15 @@ iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, Mode, ListingMode) 
         top_datasets ->
             ok;
         children_datasets ->
-            SpaceDatasetId = ?DATASET_ID,
             SpaceDatasetName = ?DATASET_NAME,
-            ok = add(P1Node, SpaceId, SpaceDatasetPath, SpaceDatasetId, SpaceDatasetName)
+            ok = add(P1Node, SpaceId, SpaceDatasetPath, SpaceDatasetName)
     end,
 
     ExpectedDirectChildrenDatasets = lists:map(fun(_) ->
         DatasetsReversed = generate_nested_datasets(SpaceDatasetPath, Depth, false),
         % generate nested datasets
-        lists:foreach(fun({DatasetPath, DatasetId, DatasetName}) ->
-            add(P1Node, SpaceId, DatasetPath, DatasetId, DatasetName)
+        lists:foreach(fun({DatasetPath, _DatasetId, DatasetName}) ->
+            add(P1Node, SpaceId, DatasetPath, DatasetName)
         end, DatasetsReversed),
         % get top dataset
         {_TopDatasetPath, TopDatasetId, TopDatasetName} = lists:last(DatasetsReversed),
@@ -818,8 +816,8 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-add(Node, SpaceId, DatasetPath, DatasetId, DatasetName) ->
-    ok = rpc:call(Node, datasets_structure, add, [SpaceId, ?TEST_FOREST_TYPE, DatasetPath, DatasetId, DatasetName]).
+add(Node, SpaceId, DatasetPath, DatasetName) ->
+    ok = rpc:call(Node, datasets_structure, add, [SpaceId, ?TEST_FOREST_TYPE, DatasetPath, DatasetName]).
 
 get(Node, SpaceId, DatasetPath) ->
     rpc:call(Node, datasets_structure, get, [SpaceId, ?TEST_FOREST_TYPE, DatasetPath]).
@@ -833,9 +831,9 @@ list_top_datasets(Node, SpaceId, Opts) ->
 list_children_datasets(Node, SpaceId, DatasetPath, Opts) ->
     rpc:call(Node, datasets_structure, list_children_datasets, [SpaceId, ?TEST_FOREST_TYPE, DatasetPath, Opts]).
 
-move(Node, SpaceId, DatasetId, SourceDatasetPath, TargetDatasetPath, TargetName) ->
+move(Node, SpaceId, SourceDatasetPath, TargetDatasetPath, TargetName) ->
     ok = rpc:call(Node, datasets_structure, move,
-        [SpaceId, ?TEST_FOREST_TYPE, DatasetId, SourceDatasetPath, TargetDatasetPath, TargetName]).
+        [SpaceId, ?TEST_FOREST_TYPE, SourceDatasetPath, TargetDatasetPath, TargetName]).
 
 
 delete_all(Node, SpaceId) ->
@@ -849,7 +847,10 @@ assert_all_dataset_entries_are_deleted(Nodes, SpaceId) ->
 
 
 generate_dataset_paths_and_ids(ParentDatasetPath, Depth, Count) ->
-    [{generate_dataset_path(ParentDatasetPath, Depth), ?DATASET_ID} || _ <- lists:seq(1, Count)].
+    lists:map(fun(_) ->
+        DatasetPath = generate_dataset_path(ParentDatasetPath, Depth),
+        {DatasetPath, ?DATASET_ID(DatasetPath)}
+    end, lists:seq(1, Count)).
 
 
 generate_dataset_path(ParentDatasetPath, Depth) ->
@@ -863,8 +864,8 @@ generate_nested_datasets(RootPath, Depth, GenerateEntryForRoot) ->
     Datasets = lists:foldl(fun(_Depth, Acc = [{ParentDatasetPath, _ParentId, _ParentName} | _]) ->
         Uuid = ?UUID,
         DatasetPath = filename:join(ParentDatasetPath, Uuid),
-        [{DatasetPath, ?DATASET_ID, ?DATASET_NAME} | Acc]
-    end, [{RootPath, ?DATASET_ID, ?DATASET_NAME}], lists:seq(0, Depth - 1)),
+        [{DatasetPath, ?DATASET_ID(DatasetPath), ?DATASET_NAME} | Acc]
+    end, [{RootPath, ?DATASET_ID(RootPath), ?DATASET_NAME}], lists:seq(0, Depth - 1)),
 
     case GenerateEntryForRoot of
         true -> Datasets;

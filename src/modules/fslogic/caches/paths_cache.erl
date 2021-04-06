@@ -102,11 +102,6 @@ get_uuid_based(SpaceId, UuidOrDoc) ->
 
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc(), path_type()) ->
     {ok, file_meta:path() | file_meta:?UUID_BASED_PATH()} | {error, term()}.
-get(SpaceId, Uuid, PathType) when is_binary(Uuid) ->
-    case file_meta:get_including_deleted(Uuid) of
-        {ok, Doc} -> get(SpaceId, Doc, PathType);
-        {error, _} = Error -> Error
-    end;
 get(SpaceId, Doc = #document{value = #file_meta{}}, PathType) ->
     CacheName = path_type_to_cache_name(SpaceId, PathType),
     case effective_value:get_or_calculate(CacheName, Doc, calculate_path_tokens_callback(PathType)) of
@@ -114,6 +109,11 @@ get(SpaceId, Doc = #document{value = #file_meta{}}, PathType) ->
             {ok, filename:join(Path)};
         {error, {file_meta_missing, _}} ->
             ?ERROR_NOT_FOUND
+    end;
+get(SpaceId, Uuid, PathType) ->
+    case file_meta:get_including_deleted(Uuid) of
+        {ok, Doc} -> get(SpaceId, Doc, PathType);
+        {error, _} = Error -> Error
     end.
 
 

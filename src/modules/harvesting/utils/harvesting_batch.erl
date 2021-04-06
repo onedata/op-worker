@@ -237,7 +237,7 @@ submission_batch_entry(FileId, Seq,
         <<"payload">> => Metadata
     },
     % TODO VFS-7526 handle hardlink's dataset
-    maps_utils:put_if_defined(Entry, <<"datasetId">>, get_dataset_id_if_attached(FileMetaDoc));
+    maps_utils:put_if_defined(Entry, <<"datasetId">>, file_meta_dataset:get_id_if_attached(FileMetaDoc));
 submission_batch_entry(FileId, Seq,
     FileMetaDoc = #document{value = #file_meta{}, scope = SpaceId},
     undefined
@@ -252,7 +252,7 @@ submission_batch_entry(FileId, Seq,
         <<"payload">> => #{}
     },
     % TODO VFS-7526 handle hardlink's dataset
-    maps_utils:put_if_defined(Entry, <<"datasetId">>, get_dataset_id_if_attached(FileMetaDoc));
+    maps_utils:put_if_defined(Entry, <<"datasetId">>, file_meta_dataset:get_id_if_attached(FileMetaDoc));
 submission_batch_entry(FileId, Seq,
     undefined,
     #document{value = #custom_metadata{value = Metadata}, scope = SpaceId}
@@ -336,11 +336,3 @@ get_file_name(FileDoc) ->
 -spec get_file_type(file_meta:doc()) -> binary().
 get_file_type(FileMetaDoc) ->
     str_utils:to_binary((file_meta:get_effective_type(FileMetaDoc))).
-
-
--spec get_dataset_id_if_attached(file_meta:doc()) -> dataset:id() | undefined.
-get_dataset_id_if_attached(FileDoc) ->
-    case file_meta:is_dataset_attached(FileDoc) of
-        true -> file_meta:get_dataset_id(FileDoc);
-        false -> undefined
-    end.

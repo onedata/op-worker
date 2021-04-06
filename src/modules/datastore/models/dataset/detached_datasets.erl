@@ -19,7 +19,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([add/4, delete/1, list_top_datasets/2, list/2, get_parent/2]).
+-export([add/3, delete/1, list_top_datasets/2, list_children_datasets/2, get_parent/2]).
 
 -type error() :: {error, term()}.
 
@@ -29,9 +29,9 @@
 %%% API functions
 %%%===================================================================
 
--spec add(od_space:id(), dataset:path(), file_meta:uuid(), dataset:name()) -> ok | error().
-add(SpaceId, DatasetPath, DatasetId, DatasetName) ->
-    datasets_structure:add(SpaceId, ?FOREST_TYPE, DatasetPath, DatasetId, DatasetName).
+-spec add(od_space:id(), dataset:path(), dataset:name()) -> ok | error().
+add(SpaceId, DatasetPath, DatasetName) ->
+    datasets_structure:add(SpaceId, ?FOREST_TYPE, DatasetPath, DatasetName).
 
 
 -spec delete(dataset:doc()) -> ok.
@@ -47,8 +47,8 @@ list_top_datasets(SpaceId, Opts) ->
     datasets_structure:list_top_datasets(SpaceId, ?FOREST_TYPE, Opts).
 
 
--spec list(dataset:doc(), datasets_structure:opts()) -> {ok, datasets_structure:entries(), boolean()}.
-list(DatasetDoc, Opts) ->
+-spec list_children_datasets(dataset:doc(), datasets_structure:opts()) -> {ok, datasets_structure:entries(), boolean()}.
+list_children_datasets(DatasetDoc, Opts) ->
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     {ok, DetachedDatasetInfo} = dataset:get_detached_info(DatasetDoc),
     DetachedDatasetPath = detached_dataset_info:get_path(DetachedDatasetInfo),

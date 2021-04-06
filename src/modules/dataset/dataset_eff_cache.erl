@@ -181,7 +181,7 @@ invalidate(SpaceId) ->
 calculate(Doc = #document{}, undefined) ->
     % space dir as parent entry is undefined
     #entry{
-        direct_attached_dataset = get_direct_dataset_if_attached(Doc),
+        direct_attached_dataset = file_meta_dataset:get_id_if_attached(Doc),
         eff_ancestor_datasets = [],
         eff_protection_flags = get_protection_flags_if_dataset_attached(Doc)
     };
@@ -196,23 +196,15 @@ calculate(Doc = #document{}, #entry{
     end,
     ProtectionFlags = get_protection_flags_if_dataset_attached(Doc),
     #entry{
-        direct_attached_dataset = get_direct_dataset_if_attached(Doc),
+        direct_attached_dataset = file_meta_dataset:get_id_if_attached(Doc),
         eff_ancestor_datasets = EffAncestorDatasets,
         eff_protection_flags = ?set_flags(ParentEffProtectionFlags, ProtectionFlags)
     }.
 
 
--spec get_direct_dataset_if_attached(file_meta:doc()) -> dataset:id() | undefined.
-get_direct_dataset_if_attached(FileDoc) ->
-    case file_meta:is_dataset_attached(FileDoc) of
-        true -> file_meta:get_dataset_id(FileDoc);
-        false -> undefined
-    end.
-
-
 -spec get_protection_flags_if_dataset_attached(file_meta:doc()) -> data_access_control:bitmask().
 get_protection_flags_if_dataset_attached(FileDoc) ->
-    case file_meta:is_dataset_attached(FileDoc) of
+    case file_meta_dataset:is_attached(FileDoc) of
         true -> file_meta:get_protection_flags(FileDoc);
         false -> ?no_flags_mask
     end.

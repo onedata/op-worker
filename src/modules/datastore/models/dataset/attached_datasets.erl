@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add/4, delete/1, delete/2, list_top_datasets/2, list_children_datasets/2, move/6]).
+-export([add/3, delete/1, delete/2, list_top_datasets/2, list_children_datasets/2, move/5]).
 
 -define(FOREST_TYPE, <<"ATTACHED">>).
 
@@ -28,15 +28,15 @@
 %%% API functions
 %%%===================================================================
 
--spec add(od_space:id(), dataset:id(), file_meta:uuid(), dataset:name()) -> ok | error().
-add(SpaceId, DatasetId, Uuid, DatasetName) ->
+-spec add(od_space:id(), file_meta:uuid(), dataset:name()) -> ok | error().
+add(SpaceId, Uuid, DatasetName) ->
     {ok, DatasetPath} = dataset_path:get(SpaceId, Uuid),
-    datasets_structure:add(SpaceId, ?FOREST_TYPE, DatasetPath, DatasetId, DatasetName).
+    datasets_structure:add(SpaceId, ?FOREST_TYPE, DatasetPath, DatasetName).
 
 
 -spec delete(dataset:doc()) -> ok.
 delete(DatasetDoc) ->
-    {ok, Uuid} = dataset:get_uuid(DatasetDoc),
+    {ok, Uuid} = dataset:get_id(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     {ok, DatasetPath} = dataset_path:get(SpaceId, Uuid),
     delete(SpaceId, DatasetPath).
@@ -54,17 +54,17 @@ list_top_datasets(SpaceId, Opts) ->
 
 -spec list_children_datasets(dataset:doc(), datasets_structure:opts()) -> {ok, datasets_structure:entries(), boolean()}.
 list_children_datasets(DatasetDoc, Opts) ->
-    {ok, Uuid} = dataset:get_uuid(DatasetDoc),
+    {ok, Uuid} = dataset:get_id(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     {ok, DatasetPath} = dataset_path:get(SpaceId, Uuid),
     datasets_structure:list_children_datasets(SpaceId, ?FOREST_TYPE, DatasetPath, Opts).
 
 
--spec move(od_space:id(), dataset:id(), file_meta:uuid(), file_meta:uuid(), file_meta:uuid(), dataset:name()) -> ok.
-move(SpaceId, DatasetId, Uuid, SourceParentUuid, TargetParentUuid, TargetName) ->
+-spec move(od_space:id(), file_meta:uuid(), file_meta:uuid(), file_meta:uuid(), dataset:name()) -> ok.
+move(SpaceId, Uuid, SourceParentUuid, TargetParentUuid, TargetName) ->
     {ok, SourceParentDatasetPath} = dataset_path:get(SpaceId, SourceParentUuid),
     {ok, TargetParentDatasetPath} = dataset_path:get(SpaceId, TargetParentUuid),
     SourceDatasetPath = filename:join([SourceParentDatasetPath, Uuid]),
     TargetDatasetPath = filename:join([TargetParentDatasetPath, Uuid]),
-    datasets_structure:move(SpaceId, ?FOREST_TYPE, DatasetId, SourceDatasetPath, TargetDatasetPath, TargetName).
+    datasets_structure:move(SpaceId, ?FOREST_TYPE, SourceDatasetPath, TargetDatasetPath, TargetName).
 

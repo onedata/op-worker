@@ -7,6 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Model for storing information about datasets.
+%%% Id of a dataset is a file_meta:uuid() of file on which dataset is
+%%% established.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dataset).
@@ -16,10 +18,12 @@
 -include("modules/dataset/dataset.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/errors.hrl").
+
 
 %% API
 -export([create/2, delete/1]).
--export([get_id/1, get_uuid/1, get_space_id/1, get_state/1, get_detached_info/1, get_creation_time/1, get/1]).
+-export([get_id/1, get_space_id/1, get_state/1, get_detached_info/1, get_creation_time/1, get/1]).
 -export([mark_detached/5, mark_reattached/1]).
 
 %% datastore_model callbacks
@@ -27,7 +31,7 @@
 
 -compile([{no_auto_import, [get/1]}]).
 
--type id() :: datastore:key().
+-type id() :: file_meta:uuid().
 -type state() :: ?ATTACHED_DATASET | ?DETACHED_DATASET.
 -type diff() :: datastore_doc:diff(record()).
 -type record() :: #dataset{}.
@@ -38,24 +42,7 @@
 -type detached_info() :: detached_dataset_info:info().
 -type membership() :: ?NONE_DATASET_MEMBERSHIP | ?DIRECT_DATASET_MEMBERSHIP | ?ANCESTOR_DATASET_MEMBERSHIP.
 
--type info() :: json_utils:json_map().
-%% dataset:info() is represented as a map:
-%% #{
-%%      <<"state">> => dataset:state()
-%%      <<"fileRootGuid">> => file_id:file_guid(),
-%%      <<"fileRootPath">> => file_meta:path(),
-%%      <<"fileRootType">> => file_meta:type(),
-%%      <<"parentDatasetId">> => dataset:id() | undefined,
-%%      <<"creationTime">> => time:seconds()
-%% }
-
--type effective_summary() :: json_utils:json_map().
-%% dataset:effective_summary() is represented as a map:
-%% #{
-%%      <<"directDataset">> => dataset:id() | undefined,
-%%      <<"effectiveAncestorDatasets">> => [dataset:id()]
-%% }
--export_type([id/0, doc/0, name/0, state/0, path/0, detached_info/0, membership/0, info/0, effective_summary/0]).
+-export_type([id/0, doc/0, name/0, state/0, path/0, detached_info/0, membership/0]).
 
 
 % @formatter:on
@@ -73,11 +60,11 @@
 %%% API functions
 %%%===================================================================
 
--spec create(file_meta:uuid(), od_space:id()) -> {ok, id()} | error().
+-spec create(file_meta:uuid(), od_space:id()) -> ok | error().
 create(FileUuid, SpaceId) ->
-  ?extract_key(datastore_model:create(?CTX, #document{
+  ?extract_ok(datastore_model:create(?CTX, #document{
+      key = FileUuid,
       value = #dataset{
-          uuid = FileUuid,
           creation_time = global_clock:timestamp_seconds(),
           state = ?ATTACHED_DATASET
       },
@@ -101,16 +88,6 @@ get_space_id(#document{scope = SpaceId}) ->
 get_space_id(DatasetId) ->
     case get(DatasetId) of
         {ok, Doc} -> get_space_id(Doc);
-        {error, _} = Error -> Error
-    end.
-
-
--spec get_uuid(id() | doc()) -> {ok, file_meta:uuid()} | error().
-get_uuid(#document{value = #dataset{uuid = Uuid}}) ->
-    {ok, Uuid};
-get_uuid(DatasetId) ->
-    case get(DatasetId) of
-        {ok, Doc} -> get_uuid(Doc);
         {error, _} = Error -> Error
     end.
 
@@ -152,21 +129,27 @@ get(DatasetId) ->
 
 -spec mark_detached(id(), path(), file_meta:path(), file_meta:type(), data_access_control:bitmask()) -> ok | error().
 mark_detached(DatasetId, DatasetPath, FileRootPath, FileRootType, ProtectionFlags) ->
-    update(DatasetId, fun(Dataset) ->
-        {ok, Dataset#dataset{
-            state = ?DETACHED_DATASET,
-            detached_info = detached_dataset_info:create_info(DatasetPath, FileRootPath, FileRootType, ProtectionFlags)
-        }}
+    update(DatasetId, fun
+        (Dataset = #dataset{state = ?ATTACHED_DATASET}) ->
+            {ok, Dataset#dataset{
+                state = ?DETACHED_DATASET,
+                detached_info = detached_dataset_info:create_info(DatasetPath, FileRootPath, FileRootType, ProtectionFlags)
+            }};
+        (#dataset{state = ?DETACHED_DATASET}) ->
+            ?ERROR_ALREADY_EXISTS
     end).
 
 
--spec mark_reattached(id()) -> ok | {error, term()}.
+-spec mark_reattached(id()) -> ok | error().
 mark_reattached(DatasetId) ->
-    update(DatasetId, fun(Dataset) ->
-        {ok, Dataset#dataset{
-            state = ?ATTACHED_DATASET,
-            detached_info = undefined
-        }}
+    update(DatasetId, fun
+        (Dataset = #dataset{state = ?DETACHED_DATASET}) ->
+            {ok, Dataset#dataset{
+                state = ?ATTACHED_DATASET,
+                detached_info = undefined
+            }};
+        (#dataset{state = ?ATTACHED_DATASET}) ->
+            ?ERROR_ALREADY_EXISTS
     end).
 
 %%%===================================================================
@@ -198,7 +181,6 @@ get_ctx() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {uuid, string},
         {creation_time, integer},
         {state, atom},
         {detached_info, {record, [
