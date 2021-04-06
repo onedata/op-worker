@@ -253,11 +253,7 @@ attrs_to_json(ShareId, #file_attr{
         <<"atime">> => ATime,
         <<"mtime">> => MTime,
         <<"ctime">> => CTime,
-        <<"type">> => case Type of
-            ?REGULAR_FILE_TYPE -> <<"reg">>;
-            ?DIRECTORY_TYPE -> <<"dir">>;
-            ?SYMLINK_TYPE -> <<"lnk">>
-        end,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => Size
     },
 

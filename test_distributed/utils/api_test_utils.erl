@@ -442,11 +442,9 @@ file_details_to_gs_json(undefined, #file_details{
     has_direct_qos = HasDirectQos,
     has_eff_qos = HasEffQos
 }) ->
-    {DisplayedType, DisplayedSize} = case Type of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, Size}
+    DisplayedSize = case Type of
+        ?DIRECTORY_TYPE -> null;
+        _ -> Size
     end,
 
     #{
@@ -463,7 +461,7 @@ file_details_to_gs_json(undefined, #file_details{
             false -> ParentGuid
         end,
         <<"mtime">> => MTime,
-        <<"type">> => DisplayedType,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => DisplayedSize,
         <<"shares">> => Shares,
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
@@ -487,11 +485,9 @@ file_details_to_gs_json(ShareId, #file_details{
     active_permissions_type = ActivePermissionsType,
     has_metadata = HasMetadata
 }) ->
-    {DisplayedType, DisplayedSize} = case Type of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, Size}
+    DisplayedSize = case Type of
+        ?DIRECTORY_TYPE -> null;
+        _ -> Size
     end,
     IsShareRoot = lists:member(ShareId, Shares),
 
@@ -506,7 +502,7 @@ file_details_to_gs_json(ShareId, #file_details{
             false -> file_id:guid_to_share_guid(ParentGuid, ShareId)
         end,
         <<"mtime">> => MTime,
-        <<"type">> => DisplayedType,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => DisplayedSize,
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];
