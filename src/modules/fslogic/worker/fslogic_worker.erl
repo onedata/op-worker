@@ -111,6 +111,7 @@
     get_parent,
     % TODO VFS-6057 resolve share path up to share not user root dir
     %%    get_file_path,
+    resolve_symlink,
 
     list_xattr,
     get_xattr,

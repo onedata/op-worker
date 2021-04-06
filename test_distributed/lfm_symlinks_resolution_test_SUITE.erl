@@ -36,7 +36,8 @@
     symlink_to_itself_test/1,
     symlink_loop_test/1,
     symlink_hops_limit_test/1,
-    symlink_chain_test/1
+    symlink_chain_test/1,
+    symlink_in_share_test/1
 ]).
 
 all() -> [
@@ -50,7 +51,8 @@ all() -> [
     symlink_to_itself_test,
     symlink_loop_test,
     symlink_hops_limit_test,
-    symlink_chain_test
+    symlink_chain_test,
+    symlink_in_share_test
 ].
 
 
@@ -269,6 +271,49 @@ symlink_chain_test(Config) ->
     ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink2Guid})).
 
 
+symlink_in_share_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    File1Name = str_utils:rand_hex(10),
+    File1Path = filename:join(["/", ?SPACE_NAME, File1Name]),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, File1Path)),
+
+    DirName = str_utils:rand_hex(10),
+    DirPath = filename:join(["/", ?SPACE_NAME, DirName]),
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, DirPath)),
+    {ok, DirShareId} = lfm_proxy:create_share(W, SessId, {guid, DirGuid}, <<"share">>),
+
+    File2Name = str_utils:rand_hex(10),
+    File2Path = filename:join([DirPath, File2Name]),
+    {ok, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, File2Path)),
+    File2ShareGuid = file_id:guid_to_share_guid(File2Guid, DirShareId),
+
+    % Space absolute path pointing to file in share
+    Symlink1Path = filename:join([DirPath, str_utils:rand_hex(10)]),
+    Symlink1Target = filename:join([?SPACE_ID_PATH_PREFIX, DirName, File2Name]),
+    Symlink1Guid = create_symlink(W, SessId, Symlink1Path, Symlink1Target),
+    Symlink1ShareGuid = file_id:guid_to_share_guid(Symlink1Guid, DirShareId),
+
+    ?assertMatch({ok, File2ShareGuid}, lfm_proxy:resolve_symlink(W, ?GUEST_SESS_ID, {guid, Symlink1ShareGuid})),
+
+    % Space absolute path pointing to file outside share
+    Symlink2Path = filename:join([DirPath, str_utils:rand_hex(10)]),
+    Symlink2Target = filename:join([?SPACE_ID_PATH_PREFIX, File1Name]),
+    Symlink2Guid = create_symlink(W, SessId, Symlink2Path, Symlink2Target),
+    Symlink2ShareGuid = file_id:guid_to_share_guid(Symlink2Guid, DirShareId),
+
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:resolve_symlink(W, ?GUEST_SESS_ID, {guid, Symlink2ShareGuid})),
+
+    % Relative path (can't traverse outside of share)
+    Symlink3Path = filename:join([DirPath, str_utils:rand_hex(10)]),
+    Symlink3Target = filename:join(["..", "..", "..", "..", File2Name]),
+    Symlink3Guid = create_symlink(W, SessId, Symlink3Path, Symlink3Target),
+    Symlink3ShareGuid = file_id:guid_to_share_guid(Symlink3Guid, DirShareId),
+
+    ?assertMatch({ok, File2ShareGuid}, lfm_proxy:resolve_symlink(W, ?GUEST_SESS_ID, {guid, Symlink3ShareGuid})).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -295,6 +340,7 @@ create_symlink(Node, SessionId, SymlinkPath, SymlinkValue) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         initializer:mock_auth_manager(NewConfig),
+        initializer:mock_share_logic(NewConfig),
         initializer:setup_storage(NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
@@ -302,6 +348,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
+    initializer:unmock_share_logic(Config),
     initializer:unmock_auth_manager(Config).
 
 

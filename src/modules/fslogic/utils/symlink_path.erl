@@ -72,8 +72,10 @@ resolve_symlink(SymlinkFileCtx, #resolution_ctx{
             throw(?ENOENT);
         [<<?SPACE_ID_PREFIX, SpaceId:SpaceIdSize/binary, ?SPACE_ID_SUFFIX>> | RestTokens] ->
             % absolute path with space id prefix (start at space dir)
+            ShareId = file_ctx:get_share_id_const(SymlinkFileCtx),
             SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-            SpaceDirCtx = file_ctx:new_by_guid(SpaceDirGuid),
+            SpaceDirShareGuid = file_id:guid_to_share_guid(SpaceDirGuid, ShareId),
+            SpaceDirCtx = file_ctx:new_by_guid(SpaceDirShareGuid),
             resolve_symlink_path(RestTokens, SpaceDirCtx, NewResolutionCtx);
         PathTokens ->
             % relative path
