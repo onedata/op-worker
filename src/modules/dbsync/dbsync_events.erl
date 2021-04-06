@@ -119,11 +119,17 @@ file_meta_change_replicated(SpaceId, #document{
     key = FileUuid,
     value = #file_meta{deleted = Del1, type = ?LINK_TYPE},
     deleted = Del2
-} = FileDoc) when Del1 or Del2 ->
+} = LinkDoc) when Del1 or Del2 ->
     ?debug("file_meta_change_replicated: deleted hardlink file_meta ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    fslogic_delete:handle_remotely_deleted_file(FileCtx),
-    ok;
+    case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(FileUuid)) of
+        {ok, ReferencedDoc} ->
+            FileCtx = file_ctx:new_by_doc(file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc), SpaceId),
+            fslogic_delete:handle_remotely_deleted_file(FileCtx);
+        Error ->
+            % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
+            ?warning("file_meta_change_replicated: deleted hardlink file_meta ~p - posthook failed with error ~p",
+                [FileUuid, Error])
+    end;
 file_meta_change_replicated(SpaceId, #document{
     key = FileUuid,
     value = #file_meta{mode = CurrentMode, deleted = Del1},
@@ -147,10 +153,17 @@ file_meta_change_replicated(SpaceId, #document{
     key = FileUuid,
     deleted = false,
     value = #file_meta{type = ?LINK_TYPE}
-} = FileDoc) ->
+} = LinkDoc) ->
     ?debug("file_meta_change_replicated: changed hardlink file_meta ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
+    case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(FileUuid)) of
+        {ok, ReferencedDoc} ->
+            FileCtx = file_ctx:new_by_doc(file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc), SpaceId),
+            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
+        Error ->
+            % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
+            ?warning("file_meta_change_replicated: deleted hardlink file_meta ~p - posthook failed with error ~p",
+                [FileUuid, Error])
+    end;
 file_meta_change_replicated(SpaceId, #document{
     key = FileUuid,
     deleted = false,
