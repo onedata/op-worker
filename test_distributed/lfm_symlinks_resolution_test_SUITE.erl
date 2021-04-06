@@ -35,7 +35,8 @@
     path_with_dots_test/1,
     symlink_to_itself_test/1,
     symlink_loop_test/1,
-    symlink_hops_limit_test/1
+    symlink_hops_limit_test/1,
+    symlink_chain_test/1
 ]).
 
 all() -> [
@@ -48,7 +49,8 @@ all() -> [
     path_with_dots_test,
     symlink_to_itself_test,
     symlink_loop_test,
-    symlink_hops_limit_test
+    symlink_hops_limit_test,
+    symlink_chain_test
 ].
 
 
@@ -235,6 +237,36 @@ symlink_hops_limit_test(Config) ->
     lists:foreach(fun(SymlinkGuid) ->
         ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid}))
     end, ValidSymlinks).
+
+
+symlink_chain_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    Dir1Name = str_utils:rand_hex(10),
+    Dir1Path = filename:join(["/", ?SPACE_NAME, Dir1Name]),
+    {ok, Dir1Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, Dir1Path)),
+
+    FileName = str_utils:rand_hex(10),
+    FilePath = filename:join([Dir1Path, FileName]),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, FilePath)),
+
+    Dir2Name = str_utils:rand_hex(10),
+    Dir2Path = filename:join([Dir1Path, Dir2Name]),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, Dir2Path)),
+
+    Symlink1Name = str_utils:rand_hex(10),
+    Symlink1Path = filename:join([Dir2Path, Symlink1Name]),
+    Symlink1Target = <<"./..">>,
+    Symlink1Guid = create_symlink(W, SessId, Symlink1Path, Symlink1Target),
+
+    Symlink2Name = str_utils:rand_hex(10),
+    Symlink2Path = filename:join(["/", ?SPACE_NAME, Symlink2Name]),
+    Symlink2Target = filename:join([Dir1Name, Dir2Name, Symlink1Name, FileName]),
+    Symlink2Guid = create_symlink(W, SessId, Symlink2Path, Symlink2Target),
+
+    ?assertMatch({ok, Dir1Guid}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink1Guid})),
+    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink2Guid})).
 
 
 %%%===================================================================
