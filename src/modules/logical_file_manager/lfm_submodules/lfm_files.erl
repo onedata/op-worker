@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module performs file-related operations of lfm_submodules.
+%%% @doc
+%%% This module performs file-related operations of lfm_submodules.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_files).
@@ -23,14 +24,13 @@
     mv/3, mv/4, cp/3, cp/4,
     get_parent/2, get_file_path/2, get_file_guid/2,
     schedule_file_transfer/5, schedule_view_transfer/7,
-    schedule_file_replication/4, schedule_replica_eviction/4,
-    schedule_replication_by_view/6, schedule_replica_eviction_by_view/6,
     is_dir/2
 ]).
 %% Functions operating on files
 -export([
     create/2, create/3, create/4, make_link/3, make_link/4, make_symlink/3, make_symlink/4,
     open/3, create_and_open/3, create_and_open/4, create_and_open/5,
+    monitored_open/3, monitored_release/1,
     get_file_location/2, read_symlink/2, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read/4, check_size_and_read/3, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
@@ -39,12 +39,11 @@
 
 -compile({no_auto_import, [unlink/1]}).
 
--define(DEFAULT_SYNC_PRIORITY,
-    application:get_env(?APP_NAME, default_sync_priority, 32)).
--define(SYNC_MAX_RETRIES, application:get_env(?APP_NAME, lfm_sync_max_retries, 5)).
--define(SYNC_MIN_BACKOFF, application:get_env(?APP_NAME, lfm_sync_min_backoff, timer:seconds(1))).
--define(SYNC_BACKOFF_RATE, application:get_env(?APP_NAME, lfm_sync_backoff_rate, 2)).
--define(SYNC_MAX_BACKOFF, application:get_env(?APP_NAME, lfm_sync_max_backoff, timer:minutes(1))).
+-define(DEFAULT_SYNC_PRIORITY, op_worker:get_env(default_sync_priority, 32)).
+-define(SYNC_MAX_RETRIES, op_worker:get_env(lfm_sync_max_retries, 5)).
+-define(SYNC_MIN_BACKOFF, op_worker:get_env(lfm_sync_min_backoff, timer:seconds(1))).
+-define(SYNC_BACKOFF_RATE, op_worker:get_env(lfm_sync_backoff_rate, 2)).
+-define(SYNC_MAX_BACKOFF, op_worker:get_env(lfm_sync_max_backoff, timer:minutes(1))).
 
 -type sync_options() :: {priority, non_neg_integer()} | off.
 -type check_size_option() :: verify_size | ignore_size.
@@ -53,18 +52,23 @@
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes a file or an empty directory.
 %% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(session:id(), fslogic_worker:ext_file(), boolean()) ->
+-spec unlink(session:id(), lfm:file_key(), boolean()) ->
     ok | lfm:error_reply().
-unlink(SessId, FileEntry, Silent) ->
-    {guid, Guid} = guid_utils:ensure_guid(SessId, FileEntry),
-    remote_utils:call_fslogic(SessId, file_request, Guid, #delete_file{silent = Silent},
-        fun(_) -> ok end).
+unlink(SessId, FileKey, Silent) ->
+    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+
+    remote_utils:call_fslogic(
+        SessId, file_request, FileGuid,
+        #delete_file{silent = Silent},
+        fun(_) -> ok end
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -74,10 +78,11 @@ unlink(SessId, FileEntry, Silent) ->
 %% Directory will be moved to trash.
 %% @end
 %%--------------------------------------------------------------------
--spec rm_recursive(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec rm_recursive(session:id(), lfm:file_key()) ->
     ok | lfm:error_reply().
 rm_recursive(SessId, FileKey) ->
-    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
+    Guid = guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+
     case is_dir(SessId, FileKey) of
         true ->
             rm_using_trash(SessId, {guid, Guid});
@@ -90,60 +95,39 @@ rm_recursive(SessId, FileKey) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Moves a file or directory to a new location.
-%% @end
-%%--------------------------------------------------------------------
--spec mv(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    TargetPath :: file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+-spec mv(session:id(), lfm:file_key(), file_meta:path()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
 mv(SessId, FileKey, TargetPath) ->
     {TargetName, TargetDir} = filepath_utils:basename_and_parent_dir(TargetPath),
     mv(SessId, FileKey, {path, TargetDir}, TargetName).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Moves a file or directory to a new location.
-%% @end
-%%--------------------------------------------------------------------
--spec mv(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    TargetParentKey :: fslogic_worker:file_guid_or_path(),
-    TargetName :: file_meta:name()) ->
-    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+
+-spec mv(session:id(), lfm:file_key(), lfm:file_key(), file_meta:name()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
 mv(SessId, FileKey, TargetParentKey, TargetName) ->
-    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
-    {guid, TargetDirGuid} = guid_utils:ensure_guid(SessId, TargetParentKey),
+    Guid = guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    TargetDirGuid = guid_utils:resolve_file_key(SessId, TargetParentKey, do_not_resolve_symlink),
+
     remote_utils:call_fslogic(SessId, file_request, Guid,
         #rename{target_parent_guid = TargetDirGuid, target_name = TargetName},
         fun(#file_renamed{new_guid = NewGuid}) ->
             {ok, NewGuid}
         end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Copies a file or directory to given location.
-%% @end
-%%--------------------------------------------------------------------
--spec cp(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    TargetPath :: file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+
+-spec cp(session:id(), lfm:file_key(), file_meta:path()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
 cp(SessId, FileKey, TargetPath) ->
     {TargetName, TargetParentPath} = filepath_utils:basename_and_parent_dir(TargetPath),
     cp(SessId, FileKey, {path, TargetParentPath}, TargetName).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Copies a file or directory to given location.
-%% @end
-%%--------------------------------------------------------------------
--spec cp(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    TargetParentKey :: fslogic_worker:file_guid_or_path(),
-    TargetName :: file_meta:name()) ->
-    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+
+-spec cp(session:id(), lfm:file_key(), lfm:file_key(), file_meta:name()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
 cp(SessId, FileKey, TargetParentKey, TargetName) ->
-    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
-    {guid, TargetParentGuid} = guid_utils:ensure_guid(SessId, TargetParentKey),
+    Guid = guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    TargetParentGuid = guid_utils:resolve_file_key(SessId, TargetParentKey, do_not_resolve_symlink),
+
     case file_copy:copy(SessId, Guid, TargetParentGuid, TargetName) of
         {ok, NewGuid, _} ->
             {ok, NewGuid};
@@ -151,53 +135,34 @@ cp(SessId, FileKey, TargetParentKey, TargetName) ->
             Error
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns uuid of parent for given file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+
+-spec get_parent(session:id(), lfm:file_key()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
 get_parent(SessId, FileKey) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_parent{},
-        fun(#dir{guid = ParentGuid}) ->
-            {ok, ParentGuid}
-        end).
+        fun(#dir{guid = ParentGuid}) -> {ok, ParentGuid} end
+    ).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns full path of file
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_path(session:id(), FileGuid :: fslogic_worker:file_guid()) ->
+
+-spec get_file_path(session:id(), file_id:file_guid()) ->
     {ok, file_meta:path()}.
 get_file_path(SessId, FileGuid) ->
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_file_path{},
-        fun(#file_path{value = Path}) ->
-            {ok, Path}
-        end).
+        fun(#file_path{value = Path}) -> {ok, Path} end
+    ).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns guid of file
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_guid(session:id(), FileKey :: file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()}.
+
+-spec get_file_guid(session:id(), file_meta:path()) ->
+    {ok, file_id:file_guid()}.
 get_file_guid(SessId, FilePath) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, {path, FilePath}),
-    {ok, FileGuid}.
+    {ok, _} = guid_utils:ensure_guid(SessId, {path, FilePath}).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if a file is directory.
-%% @end
-%%--------------------------------------------------------------------
--spec is_dir(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec is_dir(session:id(), lfm:file_key()) ->
     true | false | lfm:error_reply().
 is_dir(SessId, FileKey) ->
     case lfm_attrs:stat(SessId, FileKey) of
@@ -207,11 +172,6 @@ is_dir(SessId, FileKey) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules file transfer and returns its ID.
-%% @end
-%%--------------------------------------------------------------------
 -spec schedule_file_transfer(
     session:id(),
     file_id:file_guid(),
@@ -231,11 +191,7 @@ schedule_file_transfer(SessId, FileGuid, ReplicatingProviderId, EvictingProvider
             {ok, TransferId}
         end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules transfer by view and returns its ID.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec schedule_view_transfer(
     session:id(),
     od_space:id(),
@@ -262,124 +218,39 @@ schedule_view_transfer(
             {ok, TransferId}
         end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules replication transfer and returns its ID.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
-    ProviderId :: oneprovider:id(), transfer:callback()) ->
-    {ok, transfer:id()} | lfm:error_reply().
-schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #schedule_file_replication{
-            target_provider_id = TargetProviderId,
-            callback = Callback
-        },
-        fun(#scheduled_transfer{transfer_id = TransferId}) ->
-            {ok, TransferId}
-        end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules replication transfer by view and returns its ID.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_replication_by_view(session:id(), ProviderId :: oneprovider:id(),
-    transfer:callback(), od_space:id(), transfer:view_name(),
-    transfer:query_view_params()) -> {ok, transfer:id()} | lfm:error_reply().
-schedule_replication_by_view(SessId, TargetProviderId, Callback, SpaceId, ViewName, QueryParams) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #schedule_file_replication{
-            target_provider_id = TargetProviderId,
-            callback = Callback,
-            view_name = ViewName,
-            query_view_params = QueryParams
-        },
-        fun(#scheduled_transfer{transfer_id = TransferId}) ->
-            {ok, TransferId}
-        end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules replica_eviction transfer on given provider,
-%% migrates unique data to provider given as MigrateProviderId.
-%% Returns ID of scheduled transfer.
-%% TODO VFS-6365 remove deprecated replicas endpoints
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_replica_eviction(session:id(), fslogic_worker:file_guid_or_path(),
-    ProviderId :: oneprovider:id(), MigrationProviderId :: undefined | oneprovider:id()) ->
-    {ok, transfer:id()} | lfm:error_reply().
-schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #schedule_replica_invalidation{
-            source_provider_id = ProviderId,
-            target_provider_id = MigrationProviderId
-        },
-        fun(#scheduled_transfer{transfer_id = TransferId}) ->
-            {ok, TransferId}
-        end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules replica_eviction transfer by view on given provider,
-%% migrates unique data to provider given as MigrateProviderId.
-%% Returns ID of scheduled transfer.
-%% TODO VFS-6365 remove deprecated replicas endpoints
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_replica_eviction_by_view(session:id(), ProviderId :: oneprovider:id(),
-    MigrationProviderId :: undefined | oneprovider:id(), od_space:id(),
-    transfer:view_name(), transfer:query_view_params()) ->
-    {ok, transfer:id()} | lfm:error_reply().
-schedule_replica_eviction_by_view(SessId, ProviderId, MigrationProviderId,
-    SpaceId, ViewName, QueryViewParams
-) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #schedule_replica_invalidation{
-            source_provider_id = ProviderId,
-            target_provider_id = MigrationProviderId,
-            view_name = ViewName,
-            query_view_params = QueryViewParams
-        },
-        fun(#scheduled_transfer{transfer_id = TransferId}) ->
-            {ok, TransferId}
-        end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a new file.
-%% @end
-%%--------------------------------------------------------------------
--spec create(session:id(), Path :: file_meta:path()) ->
+-spec create(session:id(), file_meta:path()) ->
     {ok, file_meta:uuid()} | lfm:error_reply().
 create(SessId, Path) ->
     create(SessId, Path, undefined).
 
--spec create(session:id(), Path :: file_meta:path(),
-    Mode :: file_meta:posix_permissions() | undefined) ->
-    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+
+-spec create(session:id(), file_meta:path(), undefined | file_meta:posix_permissions()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
 create(SessId, Path, Mode) ->
     {Name, ParentPath} = filepath_utils:basename_and_parent_dir(Path),
+
     remote_utils:call_fslogic(SessId, fuse_request,
         #resolve_guid{path = ParentPath},
         fun(#guid{guid = ParentGuid}) ->
             lfm_files:create(SessId, ParentGuid, Name, Mode)
         end).
 
--spec create(session:id(), ParentGuid :: fslogic_worker:file_guid(),
-    Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions()) ->
-    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+
+-spec create(
+    session:id(),
+    file_id:file_guid(),
+    file_meta:name(),
+    undefined | file_meta:posix_permissions()
+) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
 create(SessId, ParentGuid, Name, undefined) ->
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     create(SessId, ParentGuid, Name, DefaultMode);
-create(SessId, ParentGuid, Name, Mode) ->
-    remote_utils:call_fslogic(SessId, file_request, ParentGuid,
+create(SessId, ParentGuid0, Name, Mode) ->
+    {ok, ParentGuid1} = guid_utils:resolve_if_symlink(SessId, ParentGuid0),
+
+    remote_utils:call_fslogic(SessId, file_request, ParentGuid1,
         #make_file{name = Name, mode = Mode},
         fun(#file_attr{guid = Guid}) ->
             {ok, Guid}
@@ -387,7 +258,7 @@ create(SessId, ParentGuid, Name, Mode) ->
     ).
 
 
--spec make_link(session:id(), LinkPath :: file_meta:path(), FileGuid :: fslogic_worker:file_guid()) ->
+-spec make_link(session:id(), file_meta:path(), file_id:file_guid()) ->
     {ok, #file_attr{}} | lfm:error_reply().
 make_link(SessId, LinkPath, TargetGuid) ->
     {Name, ParentPath} = filepath_utils:basename_and_parent_dir(LinkPath),
@@ -397,11 +268,12 @@ make_link(SessId, LinkPath, TargetGuid) ->
             lfm_files:make_link(SessId, {guid, TargetGuid}, TargetParentGuid, Name)
         end).
 
--spec make_link(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    TargetParentGuid :: fslogic_worker:file_guid(), Name :: file_meta:name()) ->
+
+-spec make_link(session:id(), lfm:file_key(), file_id:file_guid(), file_meta:name()) ->
     {ok, #file_attr{}} | lfm:error_reply().
 make_link(SessId, FileKey, TargetParentGuid, Name) ->
-    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
+    {ok, Guid} = guid_utils:ensure_guid(SessId, FileKey),
+
     remote_utils:call_fslogic(SessId, file_request, Guid,
         #make_link{target_parent_guid = TargetParentGuid, target_name = Name},
         fun(#file_attr{} = FileAttr) ->
@@ -410,7 +282,7 @@ make_link(SessId, FileKey, TargetParentGuid, Name) ->
     ).
 
 
--spec make_symlink(session:id(), LinkPath :: file_meta:path(), LinkTarget :: file_meta_symlinks:symlink()) ->
+-spec make_symlink(session:id(), file_meta:path(), file_meta_symlinks:symlink()) ->
     {ok, #file_attr{}} | lfm:error_reply().
 make_symlink(SessId, LinkPath, LinkTarget) ->
     {Name, ParentPath} = filepath_utils:basename_and_parent_dir(LinkPath),
@@ -420,11 +292,11 @@ make_symlink(SessId, LinkPath, LinkTarget) ->
             lfm_files:make_symlink(SessId, {guid, ParentGuid}, Name, LinkTarget)
         end).
 
--spec make_symlink(session:id(), ParentKey :: fslogic_worker:file_guid_or_path(),
-    Name :: file_meta:name(), LinkTarget :: file_meta_symlinks:symlink()) ->
+
+-spec make_symlink(session:id(), lfm:file_key(), file_meta:name(), file_meta_symlinks:symlink()) ->
     {ok, #file_attr{}} | lfm:error_reply().
 make_symlink(SessId, ParentKey, Name, LinkTarget) ->
-    {guid, Guid} = guid_utils:ensure_guid(SessId, ParentKey),
+    {ok, Guid} = guid_utils:ensure_guid(SessId, ParentKey),
     remote_utils:call_fslogic(SessId, file_request, Guid,
         #make_symlink{target_name = Name, link = LinkTarget},
         fun(#file_attr{} = FileAttr) ->
@@ -433,39 +305,44 @@ make_symlink(SessId, ParentKey, Name, LinkTarget) ->
     ).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a new file and opens it
-%% @end
-%%--------------------------------------------------------------------
--spec create_and_open(session:id(), Path :: file_meta:path(), fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), lfm:handle()}}
-    | lfm:error_reply().
+-spec create_and_open(session:id(), file_meta:path(), fslogic_worker:open_flag()) ->
+    {ok, {file_id:file_guid(), lfm:handle()}} | lfm:error_reply().
 create_and_open(SessId, Path, OpenFlag) ->
     create_and_open(SessId, Path, undefined, OpenFlag).
 
--spec create_and_open(session:id(), Path :: file_meta:path(),
-    Mode :: undefined | file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), lfm:handle()}}
-    | lfm:error_reply().
+
+-spec create_and_open(
+    session:id(),
+    file_meta:path(),
+    undefined | file_meta:posix_permissions(),
+    fslogic_worker:open_flag()
+) ->
+    {ok, {file_id:file_guid(), lfm:handle()}} | lfm:error_reply().
 create_and_open(SessId, Path, Mode, OpenFlag) ->
     {Name, ParentPath} = filepath_utils:basename_and_parent_dir(Path),
+
     remote_utils:call_fslogic(SessId, fuse_request,
         #resolve_guid{path = ParentPath},
         fun(#guid{guid = ParentGuid}) ->
             lfm_files:create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag)
         end).
 
--spec create_and_open(session:id(), ParentGuid :: fslogic_worker:file_guid(),
-    Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions(),
-    fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), lfm:handle()}}
-    | lfm:error_reply().
+
+-spec create_and_open(
+    session:id(),
+    file_id:file_guid(),
+    file_meta:name(),
+    undefined | file_meta:posix_permissions(),
+    fslogic_worker:open_flag()
+) ->
+    {ok, {file_id:file_guid(), lfm:handle()}} | lfm:error_reply().
 create_and_open(SessId, ParentGuid, Name, undefined, OpenFlag) ->
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     create_and_open(SessId, ParentGuid, Name, DefaultMode, OpenFlag);
-create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) ->
-    remote_utils:call_fslogic(SessId, file_request, ParentGuid,
+create_and_open(SessId, ParentGuid0, Name, Mode, OpenFlag) ->
+    {ok, ParentGuid1} = guid_utils:resolve_if_symlink(SessId, ParentGuid0),
+
+    remote_utils:call_fslogic(SessId, file_request, ParentGuid1,
         #create_file{name = Name, mode = Mode, flag = OpenFlag},
         fun(#file_created{
             file_attr = #file_attr{
@@ -491,16 +368,12 @@ create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) ->
         end
     ).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Opens a file in selected mode and returns a file handle used to read or write.
-%% @end
-%%--------------------------------------------------------------------
--spec open(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    Flag :: fslogic_worker:open_flag()) ->
+
+-spec open(session:id(), lfm:file_key(), fslogic_worker:open_flag()) ->
     {ok, lfm:handle()} | lfm:error_reply().
 open(SessId, FileKey, Flag) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
+
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #open_file_with_extended_info{flag = Flag},
         fun(#file_opened_extended{handle_id = HandleId,
@@ -517,11 +390,7 @@ open(SessId, FileKey, Flag) ->
             )}
         end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Releases previously opened  file.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec release(lfm:handle()) ->
     ok | lfm:error_reply().
 release(Handle) ->
@@ -536,33 +405,69 @@ release(Handle) ->
                 fun(_) -> ok end)
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Opens a file in selected mode. The state of process opening file using this function
+%% is monitored so that all opened handles can be closed when it unexpectedly dies
+%% (e.g. client abruptly closes connection).
+%% @end
+%%--------------------------------------------------------------------
+-spec monitored_open(session:id(), lfm:file_key(), helpers:open_flag()) ->
+    {ok, lfm:handle()} | lfm:error_reply().
+monitored_open(SessId, FileKey, OpenType) ->
+    {ok, FileHandle} = lfm_files:open(SessId, FileKey, OpenType),
+    case process_handles:add(FileHandle) of
+        ok ->
+            {ok, FileHandle};
+        {error, _} = Error ->
+            ?error("Failed to perform 'monitored_open' due to ~p", [Error]),
+            monitored_release(FileHandle),
+            {error, ?EAGAIN}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Releases previously opened file. If it is the last handle opened by this process
+%% using `monitored_open` then the state of process will no longer be monitored
+%% (even if process unexpectedly dies there are no handles to release).
+%% @end
+%%--------------------------------------------------------------------
+-spec monitored_release(lfm:handle()) -> ok | lfm:error_reply().
+monitored_release(FileHandle) ->
+    Result = release(FileHandle),
+    process_handles:remove(FileHandle),
+    Result.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns location to file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec get_file_location(session:id(), lfm:file_key()) ->
     {ok, file_location:record()} | lfm:error_reply().
 get_file_location(SessId, FileKey) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #get_file_location{}, fun(#file_location{} = FL) -> {ok, FL} end).
+        #get_file_location{},
+        fun(#file_location{} = FL) -> {ok, FL} end
+    ).
 
 
--spec read_symlink(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec read_symlink(session:id(), lfm:file_key()) ->
     {ok, file_meta_symlinks:symlink()} | lfm:error_reply().
 read_symlink(SessId, FileKey) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    {ok, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #read_symlink{}, fun(#symlink{link = Link}) -> {ok, Link} end).
+        #read_symlink{},
+        fun(#symlink{link = Link}) -> {ok, Link} end
+    ).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets necessary data from handle and executes fsync/3
-%% @end
-%%--------------------------------------------------------------------
--spec fsync(FileHandle :: lfm:handle()) ->
+-spec fsync(lfm:handle()) ->
     ok | lfm:error_reply().
 fsync(Handle) ->
     SessionId = lfm_context:get_session_id(Handle),
@@ -570,15 +475,11 @@ fsync(Handle) ->
     ProviderId = lfm_context:get_provider_id(Handle),
     fsync(SessionId, {guid, FileGuid}, ProviderId).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Flushes waiting events for session connected with handler.
-%% @end
-%%--------------------------------------------------------------------
--spec fsync(session:id(), fslogic_worker:file_guid_or_path(), oneprovider:id()) ->
+
+-spec fsync(session:id(), lfm:file_key(), oneprovider:id()) ->
     ok | lfm:error_reply().
 fsync(SessId, FileKey, ProviderId) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
     case oneprovider:is_self(ProviderId) of
         true ->
             ok; % flush also flushes events for provider
@@ -586,8 +487,10 @@ fsync(SessId, FileKey, ProviderId) ->
             lfm_event_controller:flush_event_queue(SessId, ProviderId,
                 file_id:guid_to_uuid(FileGuid))
     end,
-    remote_utils:call_fslogic(SessId, file_request,
-        FileGuid, #fsync{data_only = false}, fun(_) -> ok end).
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+        #fsync{data_only = false}, fun(_) -> ok end
+    ).
+
 
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, true)
@@ -599,6 +502,7 @@ fsync(SessId, FileKey, ProviderId) ->
 write(FileHandle, Offset, Buffer) ->
     write(FileHandle, Offset, Buffer, true).
 
+
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, false)
 %%--------------------------------------------------------------------
@@ -608,6 +512,7 @@ write(FileHandle, Offset, Buffer) ->
     lfm:error_reply().
 write_without_events(FileHandle, Offset, Buffer) ->
     write(FileHandle, Offset, Buffer, false).
+
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, true, true,
@@ -621,6 +526,7 @@ read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, true, true,
         {priority, ?DEFAULT_SYNC_PRIORITY}, ignore_size).
 
+
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, true, true, SyncOptions, ignore_size)
 %%--------------------------------------------------------------------
@@ -630,6 +536,7 @@ read(FileHandle, Offset, MaxSize) ->
     lfm:error_reply().
 read(FileHandle, Offset, MaxSize, SyncOptions) ->
     read(FileHandle, Offset, MaxSize, true, true, SyncOptions, ignore_size).
+
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, true, true,
@@ -643,6 +550,7 @@ check_size_and_read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, true, true,
         {priority, ?DEFAULT_SYNC_PRIORITY}, verify_size).
 
+
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, true,
 %% {priority, ?DEFAULT_SYNC_PRIORITY), ignore_size}
@@ -655,6 +563,7 @@ read_without_events(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, true,
         {priority, ?DEFAULT_SYNC_PRIORITY}, ignore_size).
 
+
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, true, SyncOptions, ignore_size)
 %%--------------------------------------------------------------------
@@ -664,6 +573,7 @@ read_without_events(FileHandle, Offset, MaxSize) ->
     lfm:error_reply().
 read_without_events(FileHandle, Offset, MaxSize, SyncOptions) ->
     read(FileHandle, Offset, MaxSize, false, true, SyncOptions, ignore_size).
+
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, false,
@@ -677,6 +587,7 @@ silent_read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, false,
         {priority, ?DEFAULT_SYNC_PRIORITY}, ignore_size).
 
+
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, false, SyncOptions, ignore_size)
 %%--------------------------------------------------------------------
@@ -687,16 +598,12 @@ silent_read(FileHandle, Offset, MaxSize) ->
 silent_read(FileHandle, Offset, MaxSize, SyncOptions) ->
     read(FileHandle, Offset, MaxSize, false, false, SyncOptions, ignore_size).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Truncates a file.
-%% @end
-%%--------------------------------------------------------------------
--spec truncate(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    Size :: non_neg_integer()) ->
+
+-spec truncate(session:id(), lfm:file_key(), non_neg_integer()) ->
     ok | lfm:error_reply().
 truncate(SessId, FileKey, Size) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
+
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #truncate{size = Size},
         fun(_) ->
@@ -708,10 +615,11 @@ truncate(SessId, FileKey, Size) ->
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_distribution(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec get_file_distribution(session:id(), lfm:file_key()) ->
     {ok, Blocks :: [[non_neg_integer()]]} | lfm:error_reply().
 get_file_distribution(SessId, FileKey) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_file_distribution{},
         fun(#file_distribution{provider_file_distributions = Distributions}) ->
@@ -727,9 +635,11 @@ get_file_distribution(SessId, FileKey) ->
             end, Distributions)}
         end).
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -889,7 +799,7 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions
     end.
 
 %% @private
--spec sync_block(SessId :: session:id(), FileGuid :: fslogic_worker:file_guid(), Block :: fslogic_blocks:block(),
+-spec sync_block(SessId :: session:id(), FileGuid :: file_id:file_guid(), Block :: fslogic_blocks:block(),
     PrefetchData :: boolean(), Priority :: non_neg_integer(), RetryNum :: non_neg_integer()) -> ok | no_return().
 sync_block(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum) ->
     case remote_utils:call_fslogic(SessId, file_request, FileGuid,
@@ -902,7 +812,7 @@ sync_block(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum) ->
     end.
 
 %% @private
--spec maybe_retry_sync(SessId :: session:id(), FileGuid :: fslogic_worker:file_guid(), Block :: fslogic_blocks:block(),
+-spec maybe_retry_sync(SessId :: session:id(), FileGuid :: file_id:file_guid(), Block :: fslogic_blocks:block(),
     PrefetchData :: boolean(), Priority :: non_neg_integer(), RetryNum :: non_neg_integer(), Error :: code()) ->
     ok | no_return().
 maybe_retry_sync(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum, Error) ->
@@ -923,10 +833,10 @@ maybe_retry_sync(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum, Erro
 %% Deletes directory and all its children by moving it to trash.
 %% @end
 %%--------------------------------------------------------------------
--spec rm_using_trash(session:id(), fslogic_worker:ext_file()) ->
+-spec rm_using_trash(session:id(), lfm:file_key()) ->
     ok | lfm:error_reply().
-rm_using_trash(SessId, FileEntry) ->
-    {guid, Guid} = guid_utils:ensure_guid(SessId, FileEntry),
+rm_using_trash(SessId, FileKey) ->
+    Guid = guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
     remote_utils:call_fslogic(SessId, file_request, Guid, #move_to_trash{},
         fun(_) -> ok end
     ).

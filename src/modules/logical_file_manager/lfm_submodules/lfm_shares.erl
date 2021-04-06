@@ -10,40 +10,32 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_shares).
+-author("Lukasz Opiola").
 
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/datastore/datastore_models.hrl").
 
 %% API
 -export([create_share/4, remove_share/2]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a share for given file.
-%% @end
-%%--------------------------------------------------------------------
--spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name(), od_share:description()) ->
+
+-spec create_share(session:id(), lfm:file_key(), od_share:name(), od_share:description()) ->
     {ok, od_share:id()} | lfm:error_reply().
 create_share(SessId, FileKey, Name, Description) ->
-    {guid, GUID} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, GUID,
+    remote_utils:call_fslogic(
+        SessId,
+        provider_request,
+        guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
         #create_share{name = Name, description = Description},
-        fun(#share{share_id = ShareId}) ->
-            {ok, ShareId}
-        end
+        fun(#share{share_id = ShareId}) -> {ok, ShareId} end
     ).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file share by ShareID.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_share(session:id(), od_share:id()) ->
-    ok | lfm:error_reply().
+
+-spec remove_share(session:id(), od_share:id()) -> ok | lfm:error_reply().
 remove_share(SessId, ShareId) ->
     case share_logic:get(SessId, ShareId) of
         {ok, #document{value = #od_share{root_file = ShareGuid}}} ->

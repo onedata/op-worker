@@ -29,4 +29,12 @@
     <<"type">>, <<"size">>, <<"shares">>
 ]).
 
+-define(GUID_KEY(__GUID), {guid, __GUID}).
+-define(DIRECT_GUID_KEY(__GUID), {direct_guid, __GUID}).
+-define(INDIRECT_GUID_KEY(__GUID), {indirect_guid, __GUID}).
+
+-define(PATH_KEY(__PATH), {path, __PATH}).
+-define(DIRECT_PATH_KEY(__PATH), {direct_path, __PATH}).
+-define(INDIRECT_PATH_KEY(__PATH), {indirect_path, __PATH}).
+
 -endif.
