@@ -139,10 +139,10 @@ gui_large_dir_download_test(Config) ->
         F(0) -> [];
         F(Depth) -> 
             Children = F(Depth - 1),
-            [#dir_spec{children = Children}, #dir_spec{children = Children}, #file_spec{content = ?RAND_CONTENT()}]
+            [#dir_spec{children = Children}, #dir_spec{children = Children}, #file_spec{content = ?RAND_CONTENT(100)}]
     end,
     DirSpec = #dir_spec{mode = 8#705, shares = [#share_spec{}], children = ChildrenSpecGen(8)},
-    gui_download_test_base(Config, DirSpec, ClientSpec, <<"Large file">>).
+    gui_download_test_base(Config, DirSpec, ClientSpec, <<"Large dir">>).
 
 
 gui_download_files_between_spaces_test(_Config) ->
