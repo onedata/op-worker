@@ -213,6 +213,9 @@ stream_file(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
             lfm:monitored_release(FileHandle),
             TarStream2;
         ignored ->
+            TarStream;
+        {error, _} = Error ->
+            ?warning("Unexpected error during tarball download: ~p. File ~p will be ignored", [Error, Guid]),
             TarStream
     end.
 
@@ -228,6 +231,9 @@ stream_symlink(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
             http_streamer:send_data_chunk(Bytes, Req),
             TarStream1;
         ignored ->
+            TarStream;
+        {error, _} = Error ->
+            ?warning("Unexpected error during tarball download: ~p. File ~p will be ignored", [Error, Guid]),
             TarStream
     end.
 
