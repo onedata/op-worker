@@ -479,7 +479,7 @@ rename_file_should_rename_attached_dataset(_Config) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
     NewDirName = ?DIR_NAME(),
-    ProtectionFlags = ?RAND_PROTECTION_FLAGS(),
+    ProtectionFlags = ?METADATA_PROTECTION,
 
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, {guid, Guid}, ProtectionFlags)),
