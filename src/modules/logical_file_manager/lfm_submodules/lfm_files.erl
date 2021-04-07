@@ -273,11 +273,12 @@ make_link(SessId, LinkPath, TargetGuid) ->
 
 -spec make_link(session:id(), lfm:file_key(), file_id:file_guid(), file_meta:name()) ->
     {ok, #file_attr{}} | lfm:error_reply().
-make_link(SessId, FileKey, TargetParentGuid, Name) ->
+make_link(SessId, FileKey, TargetParentGuid0, Name) ->
     {ok, Guid} = guid_utils:ensure_guid(SessId, FileKey),
+    {ok, TargetParentGuid1} = guid_utils:resolve_if_symlink(SessId, TargetParentGuid0),
 
     remote_utils:call_fslogic(SessId, file_request, Guid,
-        #make_link{target_parent_guid = TargetParentGuid, target_name = Name},
+        #make_link{target_parent_guid = TargetParentGuid1, target_name = Name},
         fun(#file_attr{} = FileAttr) ->
             {ok, FileAttr}
         end
@@ -298,7 +299,8 @@ make_symlink(SessId, LinkPath, LinkTarget) ->
 -spec make_symlink(session:id(), lfm:file_key(), file_meta:name(), file_meta_symlinks:symlink()) ->
     {ok, #file_attr{}} | lfm:error_reply().
 make_symlink(SessId, ParentKey, Name, LinkTarget) ->
-    {ok, Guid} = guid_utils:ensure_guid(SessId, ParentKey),
+    Guid = guid_utils:resolve_file_key(SessId, ParentKey, resolve_symlink),
+
     remote_utils:call_fslogic(SessId, file_request, Guid,
         #make_symlink{target_name = Name, link = LinkTarget},
         fun(#file_attr{} = FileAttr) ->
