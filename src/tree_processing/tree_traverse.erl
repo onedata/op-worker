@@ -84,8 +84,8 @@
     traverse_info => traverse_info(),
     % Provider which should execute task
     target_provider_id => oneprovider:id(),
-    % Only one master job is performed in parallel for each task
-    single_master_job_mode => boolean()
+    % if set to 'single', only one master job is performed in parallel for each task - see master_job_mode type definition
+    master_job_mode => traverse:master_job_mode()
 }.
 
 

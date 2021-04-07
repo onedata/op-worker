@@ -173,7 +173,7 @@ handle_multiple_files(
         children_master_jobs_mode => sync,
         child_dirs_job_generation_policy => generate_slave_and_master_jobs,
         additional_data => #{<<"connection_pid">> => transfer_utils:encode_pid(self())},
-        single_master_job_mode => true
+        master_job_mode => single
     },
     {ok, _} = tree_traverse:run(
         ?POOL_NAME, file_ctx:new_by_guid(Guid), user_ctx:get_user_id(UserCtx), Options),
