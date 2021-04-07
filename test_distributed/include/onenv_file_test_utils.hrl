@@ -51,7 +51,7 @@
     shares :: [od_share:id()],
     content = undefined :: undefined | binary(),  % set only for files
     children = undefined :: undefined | [onenv_file_test_utils:object()],  % set only for dirs
-    link_path = undefined :: undefined | file_meta_symlinks:symlink()  % set only for symlinks
+    symlink_value = undefined :: undefined | file_meta_symlinks:symlink()  % set only for symlinks
 }).
 
 

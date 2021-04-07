@@ -35,10 +35,10 @@
     gui_download_different_filetypes_test/1,
     gui_large_dir_download_test/1,
     gui_download_files_between_spaces_test/1,
-    rest_download_file_test/1,
-    rest_download_dir_test/1,
     gui_download_incorrect_uuid_test/1,
-    gui_download_tarball_with_hardlinks_test/1
+    gui_download_tarball_with_hardlinks_test/1,
+    rest_download_file_test/1,
+    rest_download_dir_test/1
 ]).
 
 groups() -> [
@@ -49,10 +49,10 @@ groups() -> [
         gui_download_different_filetypes_test,
         gui_large_dir_download_test,
         gui_download_files_between_spaces_test,
-        rest_download_file_test,
-        rest_download_dir_test,
         gui_download_incorrect_uuid_test,
-        gui_download_tarball_with_hardlinks_test
+        gui_download_tarball_with_hardlinks_test,
+        rest_download_file_test,
+        rest_download_dir_test
     ]}
 ].
 
@@ -207,6 +207,7 @@ gui_download_incorrect_uuid_test(Config) ->
             name = <<"Download tarball with incorrent uuid using gui endpoint and gs private api">>,
             type = gs,
             target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?TARBALL_DOWNLOAD_CLIENT_SPEC,
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, normal_mode, private),
             validate_result_fun = ValidateCallResultFun,
             data_spec = DataSpec
@@ -674,9 +675,10 @@ rest_download_file_test(Config) ->
 rest_download_dir_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
     
-    {_FileType, _DirPath, DirGuid, DirShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(
-        <<"dir">>, 8#704
-    ),
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    #object{guid = DirGuid, shares = [DirShareId]} =
+        onenv_file_test_utils:create_and_sync_file_tree(
+            user3, SpaceId, #dir_spec{shares = [#share_spec{}]}, krakow),
     
     MemRef = api_test_memory:init(),
     
@@ -701,15 +703,7 @@ rest_download_dir_test(Config) ->
             name = <<"Download dir using rest endpoint">>,
             type = rest,
             target_nodes = Providers,
-            client_spec = #client_spec{
-                correct = [
-                    user2,  % space owner - doesn't need any perms
-                    user3,  % files owner
-                    user4   % forbidden user in space is allowed to download an empty tarball - files without access are ignored
-                ],
-                unauthorized = [nobody],
-                forbidden_not_in_space = [user1]
-            },
+            client_spec = ?TARBALL_DOWNLOAD_CLIENT_SPEC,
             
             setup_fun = SetupFun,
             prepare_args_fun = build_rest_download_prepare_args_fun(MemRef, normal_mode),
@@ -970,10 +964,10 @@ check_extracted_tarball_structure(#object{type = ?REGULAR_FILE_TYPE} = Object, c
     #object{name = Filename, content = ExpContent} = Object,
     ?assertEqual({ok, ExpContent}, file:read_file(filename:join(CurrentPath, Filename)));
 check_extracted_tarball_structure(#object{type = ?SYMLINK_TYPE} = Object, check_files_content, CurrentPath, _) ->
-    #object{name = Filename, link_path = LinkPath} = Object,
+    #object{name = Filename, symlink_value = LinkPath} = Object,
     ?assertEqual({ok, binary_to_list(LinkPath)}, file:read_link(filename:join(CurrentPath, Filename)));
 check_extracted_tarball_structure(#object{type = ?SYMLINK_TYPE} = Object, _, CurrentPath, root_dir) ->
-    #object{name = Filename, link_path = LinkPath} = Object,
+    #object{name = Filename, symlink_value = LinkPath} = Object,
     ?assertEqual({ok, binary_to_list(LinkPath)}, file:read_link(filename:join(CurrentPath, Filename)));
 check_extracted_tarball_structure(#object{name = Filename}, no_files, CurrentPath, _ParentDirType) ->
     {ok, TmpDirContentAfter} = file:list_dir(CurrentPath),
@@ -1079,7 +1073,7 @@ init_per_testcase(gui_download_file_test = Case, Config) ->
     rpc:multicall(Providers, file_middleware, operation_supported, [get, download_url, private]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 20}),
+    ct:timetrap({minutes, 30}),
     Config.
 
 end_per_testcase(_Case, _Config) ->

@@ -142,8 +142,8 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
         shares = create_shares(CreationProvider, UserSessId, SymlinkGuid, ShareSpecs),
         children = undefined,
         content = undefined,
-        mode = 8#777,
-        link_path = LinkPath
+        mode = ?DEFAULT_SYMLINK_PERMS,
+        symlink_value = LinkPath
     };
 
 create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
@@ -218,7 +218,7 @@ await_file_attr_sync(SyncProviders, UserId, #object{guid = Guid} = Object) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = lists_utils:random_element(oct_background:get_provider_nodes(SyncProvider)),
-        ObjectAttributes = Object#object{content = undefined, children = undefined, link_path = undefined},
+        ObjectAttributes = Object#object{content = undefined, children = undefined, symlink_value = undefined},
         ?assertEqual({ok, ObjectAttributes}, get_object_attributes(SyncNode, SessId, Guid), ?ATTEMPTS)
     end, SyncProviders).
 

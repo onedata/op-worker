@@ -60,9 +60,9 @@ run(FileAttrsList, SessionId, CowboyReq) ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, tarball_streaming_traverse_master_jobs_limit, 50),
-    SlaveJobsLimit = application:get_env(?APP_NAME, tarball_streaming_traverse_slave_jobs_limit, 50),
-    ParallelismLimit = application:get_env(?APP_NAME, tarball_streaming_traverse_parallelism_limit, 50),
+    MasterJobsLimit = op_worker:get_env(tarball_streaming_traverse_master_jobs_limit, 50),
+    SlaveJobsLimit = op_worker:get_env(tarball_streaming_traverse_slave_jobs_limit, 50),
+    ParallelismLimit = op_worker:get_env(tarball_streaming_traverse_parallelism_limit, 50),
 
     ok = tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -274,12 +274,12 @@ new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, SymlinkPath) ->
     end,
     {ok, Path} = get_file_path(Guid),
     FileRelPath = string:prefix(Path, StartingDirPath),
-    FileType = case Type of
+    TypeSpec = case Type of
         ?DIRECTORY_TYPE -> ?DIRECTORY_TYPE;
         ?REGULAR_FILE_TYPE -> ?REGULAR_FILE_TYPE;
         ?SYMLINK_TYPE -> {?SYMLINK_TYPE, SymlinkPath}
     end,
-    TarStream1 = tar_utils:new_file_entry(TarStream, FileRelPath, FileSize, FinalMode, MTime, FileType),
+    TarStream1 = tar_utils:new_file_entry(TarStream, FileRelPath, FileSize, FinalMode, MTime, TypeSpec),
     tar_utils:flush_buffer(TarStream1).
 
 
