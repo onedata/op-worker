@@ -246,7 +246,8 @@ attrs_to_json(ShareId, #file_attr{
     size = Size,
     shares = Shares,
     provider_id = ProviderId,
-    owner_id = OwnerId
+    owner_id = OwnerId,
+    nlink = LinksCount
 }) ->
     PublicAttrs = #{
         <<"name">> => Name,
@@ -270,7 +271,8 @@ attrs_to_json(ShareId, #file_attr{
                 <<"storage_group_id">> => Gid,
                 <<"shares">> => Shares,
                 <<"provider_id">> => ProviderId,
-                <<"owner_id">> => OwnerId
+                <<"owner_id">> => OwnerId,
+                <<"links_count">> => utils:undefined_to_null(LinksCount)
             };
         _ ->
             ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),

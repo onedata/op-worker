@@ -21,7 +21,7 @@
     <<"storage_user_id">>, <<"storage_group_id">>,
     <<"atime">>, <<"mtime">>, <<"ctime">>,
     <<"type">>, <<"size">>, <<"shares">>,
-    <<"provider_id">>, <<"owner_id">>
+    <<"provider_id">>, <<"owner_id">>, <<"links_count">>
 ]).
 -define(PUBLIC_BASIC_ATTRIBUTES, [
     <<"file_id">>, <<"parent_id">>, <<"name">>, <<"mode">>,

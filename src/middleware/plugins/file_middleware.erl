@@ -1019,6 +1019,8 @@ get_attr(<<"type">>, #file_attr{type = Type}) -> str_utils:to_binary(Type);
 get_attr(<<"shares">>, #file_attr{shares = Shares}) -> Shares;
 get_attr(<<"storage_user_id">>, #file_attr{uid = Uid}) -> Uid;
 get_attr(<<"storage_group_id">>, #file_attr{gid = Gid}) -> Gid;
+get_attr(<<"links_count">>, #file_attr{nlink = LinksCount}) ->
+    utils:undefined_to_null(LinksCount);
 get_attr(<<"file_id">>, #file_attr{guid = Guid}) ->
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     FileId;

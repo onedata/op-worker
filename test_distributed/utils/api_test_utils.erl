@@ -433,7 +433,8 @@ file_details_to_gs_json(undefined, #file_details{
         mtime = MTime,
         shares = Shares,
         owner_id = OwnerId,
-        provider_id = ProviderId
+        provider_id = ProviderId,
+        nlink = LinksCount
     },
     index_startid = IndexStartId,
     active_permissions_type = ActivePermissionsType,
@@ -468,7 +469,8 @@ file_details_to_gs_json(undefined, #file_details{
         <<"providerId">> => ProviderId,
         <<"ownerId">> => OwnerId,
         <<"hasDirectQos">> => HasDirectQos,
-        <<"hasEffQos">> => HasEffQos
+        <<"hasEffQos">> => HasEffQos,
+        <<"referencesCount">> => utils:undefined_to_null(LinksCount)
     };
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{

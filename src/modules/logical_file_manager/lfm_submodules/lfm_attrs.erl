@@ -71,7 +71,7 @@ stat(SessId, FileKey) ->
     FileGuid = guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
 
     remote_utils:call_fslogic(
-        SessId, file_request, FileGuid, #get_file_attr{},
+        SessId, file_request, FileGuid, #get_file_attr{include_link_count = true},
         fun(#file_attr{} = Attrs) -> {ok, Attrs} end
     ).
 
