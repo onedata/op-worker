@@ -532,13 +532,13 @@ get_new_storage_file_id(FileCtx) ->
         ?FLAT_STORAGE_PATH ->
             FileUuid = file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx2),
             StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
-            FinalCtx = check_if_equals_and_return_newer(ReferencedUuidBasedFileCtx2, FileCtx),
+            FinalCtx = return_newer_if_equals(ReferencedUuidBasedFileCtx2, FileCtx),
             {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}};
         ?CANONICAL_STORAGE_PATH ->
             {CanonicalPath, ReferencedUuidBasedFileCtx3} = file_ctx:get_canonical_path(ReferencedUuidBasedFileCtx2),
             StorageId = storage:get_id(Storage),
             StorageFileId = storage_file_id:canonical(CanonicalPath, SpaceId, StorageId),
-            FinalCtx = check_if_equals_and_return_newer(ReferencedUuidBasedFileCtx3, FileCtx),
+            FinalCtx = return_newer_if_equals(ReferencedUuidBasedFileCtx3, FileCtx),
             {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}}
     end.
 
@@ -610,14 +610,14 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = undefined}) ->
         {ok, DisplayCredentials = {Uid, Gid}} ->
             case Storage =:= undefined of
                 true ->
-                    FinalCtx = check_if_equals_and_return_newer(ReferencedFileCtx3, FileCtx),
+                    FinalCtx = return_newer_if_equals(ReferencedFileCtx3, FileCtx),
                     {DisplayCredentials, FinalCtx#file_ctx{display_credentials = DisplayCredentials}};
                 false ->
                     {SyncedGid, ReferencedFileCtx4} = get_synced_gid(ReferencedFileCtx3),
                     % if SyncedGid =/= undefined override display Gid
                     FinalGid = utils:ensure_defined(SyncedGid, Gid),
                     FinalDisplayCredentials = {Uid, FinalGid},
-                    FinalCtx = check_if_equals_and_return_newer(ReferencedFileCtx4, FileCtx),
+                    FinalCtx = return_newer_if_equals(ReferencedFileCtx4, FileCtx),
                     {FinalDisplayCredentials, FinalCtx#file_ctx{display_credentials = FinalDisplayCredentials}}
             end;
         {error, not_found} ->
@@ -1168,8 +1168,8 @@ equals(FileCtx1, FileCtx2) ->
 %% If true, returns NewerFileCtx else returns DefaultFileCtx.
 %% @end
 %%--------------------------------------------------------------------
--spec check_if_equals_and_return_newer(ctx(), ctx()) -> ctx().
-check_if_equals_and_return_newer(NewerFileCtx, DefaultFileCtx) ->
+-spec return_newer_if_equals(ctx(), ctx()) -> ctx().
+return_newer_if_equals(NewerFileCtx, DefaultFileCtx) ->
     case equals(NewerFileCtx, DefaultFileCtx) of
         true -> NewerFileCtx;
         false -> DefaultFileCtx
