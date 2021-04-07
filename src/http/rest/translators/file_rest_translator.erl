@@ -49,6 +49,21 @@ get_response(#gri{aspect = As}, Result) when
 ->
     ?OK_REPLY(Result);
 
+get_response(#gri{aspect = As}, RdfMetadata) when
+    As =:= rdf_metadata;
+    As =:= symlink_value
+->
+    ?OK_REPLY({binary, RdfMetadata});
+
+get_response(#gri{aspect = As}, Metadata) when
+    As =:= attrs;
+    As =:= distribution;
+    As =:= file_qos_summary;
+    As =:= xattrs;
+    As =:= json_metadata
+->
+    ?OK_REPLY(Metadata);
+
 get_response(#gri{aspect = children}, {Children, IsLast}) ->
     ?OK_REPLY(#{
         <<"children">> => lists:map(fun({Guid, Name}) ->
@@ -61,21 +76,8 @@ get_response(#gri{aspect = children}, {Children, IsLast}) ->
         <<"isLast">> => IsLast
     });
 
-get_response(#gri{aspect = As}, Metadata) when
-    As =:= attrs;
-    As =:= xattrs;
-    As =:= json_metadata
-->
-    ?OK_REPLY(Metadata);
-
-get_response(#gri{aspect = As}, RdfMetadata) when
-    As =:= rdf_metadata;
-    As =:= symlink_value
-->
-    ?OK_REPLY({binary, RdfMetadata});
-
-get_response(#gri{aspect = As}, EffQosResp) when
-    As =:= distribution;
-    As =:= file_qos_summary
-->
-    ?OK_REPLY(EffQosResp).
+get_response(#gri{aspect = references}, Hardlinks) ->
+    ?OK_REPLY(lists:map(fun(FileGuid) ->
+        {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+        ObjectId
+    end, Hardlinks)).
