@@ -111,7 +111,8 @@ get_children_attrs(SessId, FileKey, ListOpts) ->
         #get_file_children_attrs{
             offset = maps:get(offset, ListOpts, undefined),
             size = maps:get(size, ListOpts, undefined),
-            index_token = maps:get(token, ListOpts, undefined)
+            index_token = maps:get(token, ListOpts, undefined),
+            include_link_count = true
         },
         fun(#file_children_attrs{
             child_attrs = Attrs,

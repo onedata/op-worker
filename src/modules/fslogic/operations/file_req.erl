@@ -398,6 +398,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
                     include_size => true,
+                    include_link_count => true,
                     include_replication_status => true,
                     name_conflicts_resolution_policy => allow_name_conflicts
                 }),
