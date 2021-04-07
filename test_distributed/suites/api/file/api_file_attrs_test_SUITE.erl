@@ -272,7 +272,7 @@ attrs_to_json(ShareId, #file_attr{
                 <<"shares">> => Shares,
                 <<"provider_id">> => ProviderId,
                 <<"owner_id">> => OwnerId,
-                <<"links_count">> => utils:undefined_to_null(LinksCount)
+                <<"hardlinks_count">> => utils:undefined_to_null(LinksCount)
             };
         _ ->
             ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),

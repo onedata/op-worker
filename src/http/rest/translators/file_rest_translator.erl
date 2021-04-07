@@ -76,7 +76,7 @@ get_response(#gri{aspect = children}, {Children, IsLast}) ->
         <<"isLast">> => IsLast
     });
 
-get_response(#gri{aspect = references}, Hardlinks) ->
+get_response(#gri{aspect = hardlinks}, Hardlinks) ->
     ?OK_REPLY(lists:map(fun(FileGuid) ->
         {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
         ObjectId

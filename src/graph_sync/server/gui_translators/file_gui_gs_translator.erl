@@ -119,9 +119,9 @@ translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
         throw(?ERROR_POSIX(Errno))
     end;
 
-translate_resource(#gri{aspect = references, scope = private}, References) ->
+translate_resource(#gri{aspect = hardlinks, scope = private}, References) ->
     #{
-        <<"references">> => lists:map(fun(FileGuid) ->
+        <<"hardlinks">> => lists:map(fun(FileGuid) ->
             gri:serialize(#gri{
                 type = op_file, id = FileGuid,
                 aspect = instance, scope = private
@@ -241,7 +241,7 @@ translate_file_details(#file_details{
             PublicFields;
         private ->
             PublicFields#{
-                <<"referencesCount">> => utils:undefined_to_null(NLink),
+                <<"hardlinksCount">> => utils:undefined_to_null(NLink),
                 <<"effProtectionFlags">> => file_meta:protection_flags_to_json(
                     EffFileProtectionFlags
                 ),

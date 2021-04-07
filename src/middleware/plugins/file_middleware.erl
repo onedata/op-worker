@@ -417,11 +417,11 @@ get_operation_supported(transfers, private) -> true;
 get_operation_supported(file_qos_summary, private) -> true;     % REST/gs
 get_operation_supported(download_url, private) -> true;         % gs only
 get_operation_supported(download_url, public) -> true;          % gs only
-get_operation_supported(references, private) -> true;
-get_operation_supported(symlink_target, public) -> true;
-get_operation_supported(symlink_target, private) -> true;
+get_operation_supported(hardlinks, private) -> true;
 get_operation_supported(symlink_value, public) -> true;
 get_operation_supported(symlink_value, private) -> true;
+get_operation_supported(symlink_target, public) -> true;
+get_operation_supported(symlink_target, private) -> true;
 get_operation_supported(_, _) -> false.
 
 
@@ -492,9 +492,9 @@ data_spec_get(#gri{aspect = As}) when
     As =:= distribution;
     As =:= acl;
     As =:= shares;
-    As =:= references;
-    As =:= symlink_target;
-    As =:= symlink_value
+    As =:= hardlinks;
+    As =:= symlink_value;
+    As =:= symlink_target
 ->
     #{required => #{id => {binary, guid}}};
 
@@ -522,8 +522,8 @@ authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
-    As =:= symlink_target;
-    As =:= symlink_value
+    As =:= symlink_value;
+    As =:= symlink_target
 ->
     file_id:is_share_guid(FileGuid);
 
@@ -538,9 +538,9 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= distribution;
     As =:= acl;
     As =:= shares;
-    As =:= references;
-    As =:= symlink_target;
-    As =:= symlink_value
+    As =:= hardlinks;
+    As =:= symlink_value;
+    As =:= symlink_target
 ->
     middleware_utils:has_access_to_file(Auth, Guid);
 
@@ -580,9 +580,9 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= shares;
     As =:= transfers;
     As =:= file_qos_summary;
-    As =:= references;
-    As =:= symlink_target;
-    As =:= symlink_value
+    As =:= hardlinks;
+    As =:= symlink_value;
+    As =:= symlink_target
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -742,8 +742,11 @@ get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
             Error
     end;
 
-get(#op_req{auth = ?USER(_UserId, SessId), gri = #gri{id = FileGuid, aspect = references}}, _) ->
+get(#op_req{auth = ?USER(_UserId, SessId), gri = #gri{id = FileGuid, aspect = hardlinks}}, _) ->
     ?check(lfm:get_file_references(SessId, {guid, FileGuid}));
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_value}}, _) ->
+    ?check(lfm:read_symlink(Auth#auth.session_id, {guid, FileGuid}));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scope = Scope}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -755,10 +758,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
         type = op_file, id = TargetFileGuid,
         aspect = instance, scope = Scope
     },
-    {ok, TargetFileGri, TargetFileDetails};
-
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_value}}, _) ->
-    ?check(lfm:read_symlink(Auth#auth.session_id, {guid, FileGuid})).
+    {ok, TargetFileGri, TargetFileDetails}.
 
 
 %%%===================================================================
@@ -1028,7 +1028,7 @@ get_attr(<<"type">>, #file_attr{type = Type}) -> str_utils:to_binary(Type);
 get_attr(<<"shares">>, #file_attr{shares = Shares}) -> Shares;
 get_attr(<<"storage_user_id">>, #file_attr{uid = Uid}) -> Uid;
 get_attr(<<"storage_group_id">>, #file_attr{gid = Gid}) -> Gid;
-get_attr(<<"links_count">>, #file_attr{nlink = LinksCount}) ->
+get_attr(<<"hardlinks_count">>, #file_attr{nlink = LinksCount}) ->
     utils:undefined_to_null(LinksCount);
 get_attr(<<"file_id">>, #file_attr{guid = Guid}) ->
     {ok, FileId} = file_id:guid_to_objectid(Guid),

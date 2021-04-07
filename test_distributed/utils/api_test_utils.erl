@@ -470,7 +470,7 @@ file_details_to_gs_json(undefined, #file_details{
         <<"ownerId">> => OwnerId,
         <<"hasDirectQos">> => HasDirectQos,
         <<"hasEffQos">> => HasEffQos,
-        <<"referencesCount">> => utils:undefined_to_null(LinksCount)
+        <<"hardlinksCount">> => utils:undefined_to_null(LinksCount)
     };
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{
