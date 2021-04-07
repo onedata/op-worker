@@ -123,7 +123,8 @@ file_meta_change_replicated(SpaceId, #document{
     ?debug("file_meta_change_replicated: deleted hardlink file_meta ~p", [FileUuid]),
     case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(FileUuid)) of
         {ok, ReferencedDoc} ->
-            FileCtx = file_ctx:new_by_doc(file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc), SpaceId),
+            {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
+            FileCtx = file_ctx:new_by_doc(MergedDoc, SpaceId),
             fslogic_delete:handle_remotely_deleted_file(FileCtx);
         Error ->
             % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
@@ -157,7 +158,8 @@ file_meta_change_replicated(SpaceId, #document{
     ?debug("file_meta_change_replicated: changed hardlink file_meta ~p", [FileUuid]),
     case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(FileUuid)) of
         {ok, ReferencedDoc} ->
-            FileCtx = file_ctx:new_by_doc(file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc), SpaceId),
+            {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
+            FileCtx = file_ctx:new_by_doc(MergedDoc, SpaceId),
             ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
         Error ->
             % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
