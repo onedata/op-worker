@@ -420,6 +420,8 @@ get_operation_supported(download_url, public) -> true;          % gs only
 get_operation_supported(references, private) -> true;
 get_operation_supported(symlink_target, public) -> true;
 get_operation_supported(symlink_target, private) -> true;
+get_operation_supported(symlink_value, public) -> true;
+get_operation_supported(symlink_value, private) -> true;
 get_operation_supported(_, _) -> false.
 
 
@@ -491,7 +493,8 @@ data_spec_get(#gri{aspect = As}) when
     As =:= acl;
     As =:= shares;
     As =:= references;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= symlink_value
 ->
     #{required => #{id => {binary, guid}}};
 
@@ -519,7 +522,8 @@ authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= symlink_value
 ->
     file_id:is_share_guid(FileGuid);
 
@@ -535,7 +539,8 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= acl;
     As =:= shares;
     As =:= references;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= symlink_value
 ->
     middleware_utils:has_access_to_file(Auth, Guid);
 
@@ -576,7 +581,8 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= transfers;
     As =:= file_qos_summary;
     As =:= references;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= symlink_value
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -749,7 +755,10 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
         type = op_file, id = TargetFileGuid,
         aspect = instance, scope = Scope
     },
-    {ok, TargetFileGri, TargetFileDetails}.
+    {ok, TargetFileGri, TargetFileDetails};
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_value}}, _) ->
+    ?check(lfm:read_symlink(Auth#auth.session_id, {guid, FileGuid})).
 
 
 %%%===================================================================

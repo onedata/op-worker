@@ -48,6 +48,7 @@ get_response(#gri{aspect = As}, Result) when
     As =:= object_id
 ->
     ?OK_REPLY(Result);
+
 get_response(#gri{aspect = children}, {Children, IsLast}) ->
     ?OK_REPLY(#{
         <<"children">> => lists:map(fun({Guid, Name}) ->
@@ -59,13 +60,18 @@ get_response(#gri{aspect = children}, {Children, IsLast}) ->
         end, Children),
         <<"isLast">> => IsLast
     });
+
 get_response(#gri{aspect = As}, Metadata) when
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata
 ->
     ?OK_REPLY(Metadata);
-get_response(#gri{aspect = rdf_metadata}, RdfMetadata) ->
+
+get_response(#gri{aspect = As}, RdfMetadata) when
+    As =:= rdf_metadata;
+    As =:= symlink_value
+->
     ?OK_REPLY({binary, RdfMetadata});
 
 get_response(#gri{aspect = As}, EffQosResp) when
