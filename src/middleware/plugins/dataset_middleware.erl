@@ -199,7 +199,7 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}, _) ->
     ?check(lfm:get_dataset_info(Auth#auth.session_id, DatasetId));
 
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = children}, data = Data}, _) ->
-    {ok, Datasets, IsLast} = ?check(lfm:list_nested_datasets(
+    {ok, Datasets, IsLast} = ?check(lfm:list_children_datasets(
         Auth#auth.session_id, DatasetId, sanitize_listing_opts(Data)
     )),
     {ok, value, #{
@@ -217,12 +217,17 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = children}, data = D
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}, data = Data}) ->
-    ?check(lfm:update_dataset(
+    Result = lfm:update_dataset(
         Auth#auth.session_id, DatasetId,
         maps:get(<<"state">>, Data, undefined),
         file_meta:protection_flags_from_json(maps:get(<<"setProtectionFlags">>, Data, [])),
         file_meta:protection_flags_from_json(maps:get(<<"unsetProtectionFlags">>, Data, []))
-    )).
+    ),
+    ?check(case Result of
+        {error, ?ENOENT} -> throw(?ERROR_NOT_FOUND);
+        {error, ?EEXIST} -> throw(?ERROR_ALREADY_EXISTS);
+        Other -> Other
+    end).
 
 
 %%--------------------------------------------------------------------

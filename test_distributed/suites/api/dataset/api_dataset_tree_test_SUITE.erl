@@ -672,9 +672,9 @@ init_per_group(_Group, Config) ->
             DatasetDetails = #dataset_info{
                 id = DatasetId,
                 state = ?ATTACHED_DATASET,
-                guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-                path = filename:join(["/", ?SPACE_KRK_PAR]),
-                type = ?DIRECTORY_TYPE,
+                root_file_guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                root_file_path = filename:join(["/", ?SPACE_KRK_PAR]),
+                root_file_type = ?DIRECTORY_TYPE,
                 creation_time = time_test_utils:get_frozen_time_seconds(),
                 protection_flags = [],
                 parent = undefined
@@ -688,6 +688,7 @@ init_per_group(_Group, Config) ->
 
 
 end_per_group(_Group, Config) ->
+    onenv_dataset_test_utils:cleanup_all_datasets(space_krk_par),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 

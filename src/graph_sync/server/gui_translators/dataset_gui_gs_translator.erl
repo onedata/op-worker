@@ -43,9 +43,9 @@ translate_resource(#gri{aspect = instance, scope = private}, DatasetInfo) ->
 translate_dataset_info(#dataset_info{
     id = DatasetId,
     state = State,
-    guid = RootFileGuid,
-    path = RootFilePath,
-    type = RootFileType,
+    root_file_guid = RootFileGuid,
+    root_file_path = RootFilePath,
+    root_file_type = RootFileType,
     creation_time = CreationTime,
     protection_flags = ProtectionFlags,
     parent = ParentId

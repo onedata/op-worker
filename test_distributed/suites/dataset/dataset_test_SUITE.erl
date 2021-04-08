@@ -654,8 +654,7 @@ end_per_testcase(_Case, Config) ->
     PNodes = oct_background:get_all_providers_nodes(),
     SpaceId = oct_background:get_space_id(space1),
     test_utils:mock_unload(PNodes, [file_meta]),
-    cleanup_attached_datasets(P1Node, SpaceId),
-    cleanup_detached_datasets(P1Node, SpaceId),
+    onenv_dataset_test_utils:cleanup_all_datasets(krakow, space1),
     lfm_test_utils:clean_space(P1Node, PNodes, SpaceId, ?ATTEMPTS),
     lfm_proxy:teardown(Config).
 
@@ -668,27 +667,6 @@ detach(Node, SessionId, DatasetId) ->
 
 reattach(Node, SessionId, DatasetId) ->
     lfm_proxy:update_dataset(Node, SessionId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
-
-cleanup_attached_datasets(Node, SpaceId) ->
-    cleanup_and_verify_datasets(Node, SpaceId, <<"ATTACHED">>).
-
-cleanup_detached_datasets(Node, SpaceId) ->
-    cleanup_and_verify_datasets(Node, SpaceId, <<"DETACHED">>).
-
-cleanup_and_verify_datasets(Node, SpaceId, ForestType) ->
-    cleanup_datasets(Node, SpaceId, ForestType),
-    assert_all_dataset_entries_are_deleted(SpaceId, ForestType).
-
-cleanup_datasets(Node, SpaceId, ForestType) ->
-    {ok, Datasets} = rpc:call(Node, datasets_structure, list_all_unsafe, [SpaceId, ForestType]),
-    lists:foreach(fun({_DatasetPath, {DatasetId, _DatasetName}}) ->
-        ok = rpc:call(Node, dataset_api, remove, [DatasetId])
-    end, Datasets).
-
-assert_all_dataset_entries_are_deleted(SpaceId, ForestType) ->
-    lists:foreach(fun(N) ->
-        ?assertMatch({ok, []}, rpc:call(N, datasets_structure, list_all_unsafe, [SpaceId, ForestType]), ?ATTEMPTS)
-    end, oct_background:get_all_providers_nodes()).
 
 assert_attached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedProtectionFlags) ->
     {ok, #file_attr{type = ExpectedRootFileType}} = lfm_proxy:stat(Node, SessionId, {guid, ExpectedRootFileGuid}),

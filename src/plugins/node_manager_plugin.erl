@@ -47,7 +47,7 @@
     {3, ?LINE_20_02(<<"1">>)},
     {4, op_worker:get_release_version()}
 ]).
--define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 1).
+-define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
 
 %%%===================================================================

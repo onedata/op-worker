@@ -20,7 +20,7 @@
 %% API
 -export([add/3, delete/1, delete/2, list_top_datasets/2, list_children_datasets/2, move/5]).
 
--define(FOREST_TYPE, <<"ATTACHED">>).
+-define(FOREST_TYPE, ?ATTACHED_DATASETS_STRUCTURE).
 
 -type error() :: {error, term()}.
 

@@ -33,7 +33,6 @@
 % TODO VFS-7510 browsing dataset structures using index
 % TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
 % TODO VFS-7526 handle hardlink's dataset
-% TODO OBSŁUŻYĆ KONKRETNE BŁĘDY W MIDDLEWARE (EEXIST I ENOENT)
 
 -define(CRITICAL_SECTION(DatasetId, Function), critical_section:run({dataset, DatasetId}, Function)).
 

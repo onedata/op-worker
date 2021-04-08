@@ -781,9 +781,9 @@ build_dataset_gs_instance(
     BasicInfo = dataset_gui_gs_translator:translate_dataset_info(#dataset_info{
         id = DatasetId,
         state = State,
-        guid = RootFileGuid,
-        path = RootFilePath,
-        type = RootFileType,
+        root_file_guid = RootFileGuid,
+        root_file_path = RootFilePath,
+        root_file_type = RootFileType,
         creation_time = CreationTime,
         protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
         parent = ParentId
@@ -816,9 +816,9 @@ verify_dataset(
         ExpDatasetInfo = #dataset_info{
             id = DatasetId,
             state = State,
-            guid = RootFileGuid,
-            path = RootFilePath,
-            type = RootFileType,
+            root_file_guid = RootFileGuid,
+            root_file_path = RootFilePath,
+            root_file_type = RootFileType,
             creation_time = CreationTime,
             protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
             parent = ParentId
@@ -841,7 +841,7 @@ list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts) ->
 -spec list_child_dataset_ids(node(), session:id(), dataset:id(), datasets_structure:opts()) ->
     [dataset:id()].
 list_child_dataset_ids(Node, UserSessId, ParentId, ListOpts) ->
-    {ok, Datasets, _} = lfm_proxy:list_nested_datasets(Node, UserSessId, ParentId, ListOpts),
+    {ok, Datasets, _} = lfm_proxy:list_children_datasets(Node, UserSessId, ParentId, ListOpts),
     lists:map(fun({DatasetId, _}) -> DatasetId end, Datasets).
 
 
@@ -889,6 +889,7 @@ init_per_group(_Group, Config) ->
 
 
 end_per_group(_Group, Config) ->
+    onenv_dataset_test_utils:cleanup_all_datasets(space_krk_par),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 

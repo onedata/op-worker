@@ -23,7 +23,7 @@
 
 -type error() :: {error, term()}.
 
--define(FOREST_TYPE, <<"DETACHED">>).
+-define(FOREST_TYPE, ?DETACHED_DATASETS_STRUCTURE).
 
 %%%===================================================================
 %%% API functions

@@ -47,9 +47,9 @@ create_response(#gri{aspect = instance}, _, resource, {#gri{id = DatasetId}, _})
 get_response(#gri{aspect = instance}, #dataset_info{
     id = DatasetId,
     state = State,
-    guid = RootFileGuid,
-    path = RootFilePath,
-    type = RootFileType,
+    root_file_guid = RootFileGuid,
+    root_file_path = RootFilePath,
+    root_file_type = RootFileType,
     creation_time = CreationTime,
     protection_flags = ProtectionFlags,
     parent = ParentId

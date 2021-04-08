@@ -95,7 +95,7 @@
 -export([
     establish_dataset/3, remove_dataset/2, update_dataset/5,
     get_dataset_info/2, get_file_eff_dataset_summary/2,
-    list_top_datasets/4, list_nested_datasets/3
+    list_top_datasets/4, list_children_datasets/3
 ]).
 
 %%%===================================================================
@@ -983,8 +983,7 @@ list_top_datasets(SessId, SpaceId, State, Opts) ->
     ?run(fun() -> lfm_datasets:list_top_datasets(SessId, SpaceId, State, Opts) end).
 
 
--spec list_nested_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
+-spec list_children_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
     {ok, [{dataset:id(), dataset:name()}], boolean()} | error_reply().
-list_nested_datasets(SessId, DatasetId, Opts) ->
-    % TODO rename to list_children_datasets after merge with API
+list_children_datasets(SessId, DatasetId, Opts) ->
     ?run(fun() -> lfm_datasets:list_children_datasets(SessId, DatasetId, Opts) end).

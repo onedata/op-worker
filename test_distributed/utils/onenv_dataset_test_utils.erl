@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("onenv_test_utils.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -23,7 +24,10 @@
     set_up_dataset/4,
     await_dataset_sync/4,
 
-    get_exp_child_datasets/4
+    get_exp_child_datasets/4,
+
+    cleanup_all_datasets/1,
+    cleanup_all_datasets/2
 ]).
 
 -type dataset_spec() :: #dataset_spec{}.
@@ -164,6 +168,17 @@ get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, Object) ->
         State, ParentDirPath, ParentDatasetId, Object
     ))).
 
+-spec cleanup_all_datasets(oct_background:entity_selector()) -> ok.
+cleanup_all_datasets(SpaceSelector) ->
+    Provider = lists_utils:random_element(oct_background:get_space_supporting_providers(SpaceSelector)),
+    cleanup_all_datasets(Provider, SpaceSelector).
+
+-spec cleanup_all_datasets(oct_background:entity_selector(), oct_background:entity_selector()) -> ok.
+cleanup_all_datasets(ProviderSelector, SpaceSelector) ->
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    cleanup_and_verify_datasets(Node, SpaceId, ?ATTACHED_DATASETS_STRUCTURE),
+    cleanup_and_verify_datasets(Node, SpaceId, ?DETACHED_DATASETS_STRUCTURE).
 
 %%%===================================================================
 %%% Internal functions
@@ -194,9 +209,9 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
     DatasetDetails = #dataset_info{
         id = DatasetId,
         state = State,
-        guid = ObjGuid,
-        path = ObjPath,
-        type = ObjType,
+        root_file_guid = ObjGuid,
+        root_file_path = ObjPath,
+        root_file_type = ObjType,
         creation_time = CreationTime,
         protection_flags = ProtectionFlags,
         parent = ParentDatasetId
@@ -218,3 +233,27 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
     lists:map(fun(Child) ->
         get_exp_child_datasets_internal(State, DirPath, ParentDatasetId, Child)
     end, Children).
+
+
+%% @private
+-spec cleanup_and_verify_datasets(node(), od_space:id(), datasets_structure:forest_type()) -> ok.
+cleanup_and_verify_datasets(Node, SpaceId, ForestType) ->
+    cleanup_datasets(Node, SpaceId, ForestType),
+    assert_all_dataset_entries_are_deleted(SpaceId, ForestType).
+
+
+%% @private
+-spec cleanup_datasets(node(), od_space:id(), datasets_structure:forest_type()) -> ok.
+cleanup_datasets(Node, SpaceId, ForestType) ->
+    {ok, Datasets} = rpc:call(Node, datasets_structure, list_all_unsafe, [SpaceId, ForestType]),
+    lists:foreach(fun({_DatasetPath, {DatasetId, _DatasetName}}) ->
+        ok = rpc:call(Node, dataset_api, remove, [DatasetId])
+    end, Datasets).
+
+
+%% @private
+-spec assert_all_dataset_entries_are_deleted(od_space:id(), datasets_structure:forest_type()) -> ok.
+assert_all_dataset_entries_are_deleted(SpaceId, ForestType) ->
+    lists:foreach(fun(N) ->
+        ?assertMatch({ok, []}, rpc:call(N, datasets_structure, list_all_unsafe, [SpaceId, ForestType]), ?ATTEMPTS)
+    end, oct_background:get_all_providers_nodes()).

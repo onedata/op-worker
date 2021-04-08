@@ -864,7 +864,7 @@ list_top_datasets(Worker, SessId, SpaceId, State, Opts) ->
 -spec list_children_datasets(node(), session:id(), dataset:id(), datasets_structure:opts()) ->
     {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
 list_children_datasets(Worker, SessId, DatasetId, Opts) ->
-    ?EXEC(Worker, lfm:list_nested_datasets(SessId, DatasetId, Opts)).
+    ?EXEC(Worker, lfm:list_children_datasets(SessId, DatasetId, Opts)).
 
 
 %%%===================================================================
