@@ -385,6 +385,7 @@
     references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
     symlink_value :: undefined | file_meta_symlinks:symlink(),
     % this field is used to cache value from #dataset.state field
+    % TODO VFS-7533 handle conflict on file_meta with remote provider
     dataset_state :: undefined | dataset:state()
 }).
 

@@ -23,7 +23,7 @@
     root_file_path :: file_meta:path(),
     % type of a root file
     root_file_type :: file_meta:type(),
-    % flags are stored so that they can be reset when dataset is reattached
+    % flags are stored so that they can be restored when dataset is reattached
     protection_flags :: data_access_control:bitmask()
 }).
 
