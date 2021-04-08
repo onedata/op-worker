@@ -536,18 +536,14 @@ get_new_storage_file_id(FileCtx) ->
         ?FLAT_STORAGE_PATH ->
             FileUuid = file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx2),
             StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
-            case equals(ReferencedUuidBasedFileCtx2, FileCtx) of
-                true -> {StorageFileId, ReferencedUuidBasedFileCtx2#file_ctx{storage_file_id = StorageFileId}};
-                false -> {StorageFileId, FileCtx#file_ctx{storage_file_id = StorageFileId}}
-            end;
+            FinalCtx = return_newer_if_equals(ReferencedUuidBasedFileCtx2, FileCtx),
+            {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}};
         ?CANONICAL_STORAGE_PATH ->
             {CanonicalPath, ReferencedUuidBasedFileCtx3} = file_ctx:get_canonical_path(ReferencedUuidBasedFileCtx2),
             StorageId = storage:get_id(Storage),
             StorageFileId = storage_file_id:canonical(CanonicalPath, SpaceId, StorageId),
-            case equals(ReferencedUuidBasedFileCtx3, FileCtx) of
-                true -> {StorageFileId, ReferencedUuidBasedFileCtx3#file_ctx{storage_file_id = StorageFileId}};
-                false -> {StorageFileId, FileCtx#file_ctx{storage_file_id = StorageFileId}}
-            end
+            FinalCtx = return_newer_if_equals(ReferencedUuidBasedFileCtx3, FileCtx),
+            {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}}
     end.
 
 %%--------------------------------------------------------------------
@@ -609,21 +605,24 @@ get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_display_credentials(ctx()) -> {luma:display_credentials(), ctx()}.
 get_display_credentials(FileCtx = #file_ctx{display_credentials = undefined}) ->
-    SpaceId = get_space_id_const(FileCtx),
-    {FileMetaDoc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
+    ReferencedFileCtx = ensure_based_on_referenced_guid(FileCtx),
+    SpaceId = get_space_id_const(ReferencedFileCtx),
+    {FileMetaDoc, ReferencedFileCtx2} = get_file_doc_including_deleted(ReferencedFileCtx),
     OwnerId = file_meta:get_owner(FileMetaDoc),
-    {Storage, FileCtx3} = get_storage(FileCtx2),
+    {Storage, ReferencedFileCtx3} = get_storage(ReferencedFileCtx2),
     case luma:map_to_display_credentials(OwnerId, SpaceId, Storage) of
         {ok, DisplayCredentials = {Uid, Gid}} ->
             case Storage =:= undefined of
                 true ->
-                    {DisplayCredentials, FileCtx3#file_ctx{display_credentials = DisplayCredentials}};
+                    FinalCtx = return_newer_if_equals(ReferencedFileCtx3, FileCtx),
+                    {DisplayCredentials, FinalCtx#file_ctx{display_credentials = DisplayCredentials}};
                 false ->
-                    {SyncedGid, FileCtx4} = get_synced_gid(FileCtx3),
+                    {SyncedGid, ReferencedFileCtx4} = get_synced_gid(ReferencedFileCtx3),
                     % if SyncedGid =/= undefined override display Gid
                     FinalGid = utils:ensure_defined(SyncedGid, Gid),
                     FinalDisplayCredentials = {Uid, FinalGid},
-                    {FinalDisplayCredentials, FileCtx4#file_ctx{display_credentials = FinalDisplayCredentials}}
+                    FinalCtx = return_newer_if_equals(ReferencedFileCtx4, FileCtx),
+                    {FinalDisplayCredentials, FinalCtx#file_ctx{display_credentials = FinalDisplayCredentials}}
             end;
         {error, not_found} ->
             {error, ?EACCES}
@@ -1165,6 +1164,21 @@ is_in_user_space_const(FileCtx, UserCtx) ->
 -spec equals(ctx(), ctx()) -> boolean().
 equals(FileCtx1, FileCtx2) ->
     get_logical_guid_const(FileCtx1) =:= get_logical_guid_const(FileCtx2).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether passed contexts are associated with the same file.
+%% If true, returns NewerFileCtx else returns DefaultFileCtx.
+%% @end
+%%--------------------------------------------------------------------
+-spec return_newer_if_equals(ctx(), ctx()) -> ctx().
+return_newer_if_equals(NewerFileCtx, DefaultFileCtx) ->
+    case equals(NewerFileCtx, DefaultFileCtx) of
+        true -> NewerFileCtx;
+        false -> DefaultFileCtx
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
