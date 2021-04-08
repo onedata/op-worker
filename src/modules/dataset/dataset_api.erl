@@ -212,10 +212,10 @@ detach_internal(DatasetId) ->
     CurrProtectionFlags = file_meta:get_protection_flags(FileDoc),
     {ok, DatasetPath} = dataset_path:get(SpaceId, DatasetId),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    {FileRootPath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-    FileRootType = file_meta:get_type(FileDoc),
-    DatasetName = filename:basename(FileRootPath),
-    ok = dataset:mark_detached(DatasetId, DatasetPath, FileRootPath, FileRootType, CurrProtectionFlags),
+    {RootFilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+    RootFileType = file_meta:get_type(FileDoc),
+    DatasetName = filename:basename(RootFilePath),
+    ok = dataset:mark_detached(DatasetId, DatasetPath, RootFilePath, RootFileType, CurrProtectionFlags),
     detached_datasets:add(SpaceId, DatasetPath, DatasetName),
     attached_datasets:delete(SpaceId, DatasetPath),
     case file_meta_dataset:detach(DatasetId) of
@@ -262,11 +262,11 @@ collect_attached_info(DatasetDoc) ->
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(FileDoc),
     #dataset_info{
         id = Uuid,
-        guid = file_ctx:get_logical_guid_const(FileCtx),
+        root_file_guid = file_ctx:get_logical_guid_const(FileCtx),
         creation_time = CreationTime,
         state = ?ATTACHED_DATASET,
-        path = FileRootPath,
-        type = FileRootType,
+        root_file_path = FileRootPath,
+        root_file_type = FileRootType,
         protection_flags = file_meta:get_protection_flags(FileDoc),
         parent = case length(EffAncestorDatasets) == 0 of
             true -> undefined;
@@ -281,17 +281,17 @@ collect_detached_info(DatasetDoc) ->
     {ok, CreationTime} = dataset:get_creation_time(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     {ok, DetachedInfo} = dataset:get_detached_info(DatasetDoc),
-    FileRootPath = detached_dataset_info:get_file_root_path(DetachedInfo),
-    FileRootType = detached_dataset_info:get_file_root_type(DetachedInfo),
+    RootFilePath = detached_dataset_info:get_root_file_path(DetachedInfo),
+    RootFileType = detached_dataset_info:get_root_file_type(DetachedInfo),
     DetachedDatasetPath = detached_dataset_info:get_path(DetachedInfo),
     ProtectionFlags = detached_dataset_info:get_protection_flags(DetachedInfo),
     #dataset_info{
         id = Uuid,
-        guid = file_id:pack_guid(Uuid, SpaceId),
+        root_file_guid = file_id:pack_guid(Uuid, SpaceId),
         creation_time = CreationTime,
         state = ?DETACHED_DATASET,
-        path = FileRootPath,
-        type = FileRootType,
+        root_file_path = RootFilePath,
+        root_file_type = RootFileType,
         protection_flags = ProtectionFlags,
         parent = detached_datasets:get_parent(SpaceId, DetachedDatasetPath)
     }.

@@ -128,12 +128,12 @@ get(DatasetId) ->
 
 
 -spec mark_detached(id(), path(), file_meta:path(), file_meta:type(), data_access_control:bitmask()) -> ok | error().
-mark_detached(DatasetId, DatasetPath, FileRootPath, FileRootType, ProtectionFlags) ->
+mark_detached(DatasetId, DatasetPath, RootFilePath, RootFileType, ProtectionFlags) ->
     update(DatasetId, fun
         (Dataset = #dataset{state = ?ATTACHED_DATASET}) ->
             {ok, Dataset#dataset{
                 state = ?DETACHED_DATASET,
-                detached_info = detached_dataset_info:create_info(DatasetPath, FileRootPath, FileRootType, ProtectionFlags)
+                detached_info = detached_dataset_info:create_info(DatasetPath, RootFilePath, RootFileType, ProtectionFlags)
             }};
         (#dataset{state = ?DETACHED_DATASET}) ->
             ?ERROR_ALREADY_EXISTS
@@ -185,8 +185,8 @@ get_record_struct(1) ->
         {state, atom},
         {detached_info, {record, [
             {dataset_path, string},
-            {file_root_path, string},
-            {file_root_type, atom},
+            {root_file_path, string},
+            {root_file_type, atom},
             {protection_flags, integer}
         ]}}
     ]}.

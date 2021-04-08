@@ -15,12 +15,15 @@
 -author("Jakub Kudzia").
 
 %% API
--export([create_info/4, get_path/1, get_file_root_path/1, get_file_root_type/1, get_protection_flags/1]).
+-export([create_info/4, get_path/1, get_root_file_path/1, get_root_file_type/1, get_protection_flags/1]).
 
 -record(info, {
     dataset_path :: dataset:path(),
-    file_root_path :: file_meta:path(),
-    file_root_type :: file_meta:type(),
+    % path to file which is a root of a dataset (a file to which dataset is attached)
+    root_file_path :: file_meta:path(),
+    % type of a root file
+    root_file_type :: file_meta:type(),
+    % flags are stored so that they can be reset when dataset is reattached
     protection_flags :: data_access_control:bitmask()
 }).
 
@@ -32,11 +35,11 @@
 %%%===================================================================
 
 -spec create_info(dataset:path(), file_meta:path(), file_meta:type(), data_access_control:bitmask()) -> info().
-create_info(DatasetPath, FileRootPath, FileRootType, ProtectionFlags) ->
+create_info(DatasetPath, RootFilePath, RootFileType, ProtectionFlags) ->
     #info{
         dataset_path = DatasetPath,
-        file_root_path = FileRootPath,
-        file_root_type = FileRootType,
+        root_file_path = RootFilePath,
+        root_file_type = RootFileType,
         protection_flags = ProtectionFlags
     }.
 
@@ -46,14 +49,14 @@ get_path(#info{dataset_path = DatasetPath}) ->
     DatasetPath.
 
 
--spec get_file_root_path(info()) -> file_meta:path().
-get_file_root_path(#info{file_root_path = FileRootPath}) ->
-    FileRootPath.
+-spec get_root_file_path(info()) -> file_meta:path().
+get_root_file_path(#info{root_file_path = RootFilePath}) ->
+    RootFilePath.
 
 
--spec get_file_root_type(info()) -> file_meta:type().
-get_file_root_type(#info{file_root_type = FileRootType}) ->
-    FileRootType.
+-spec get_root_file_type(info()) -> file_meta:type().
+get_root_file_type(#info{root_file_type = RootFileType}) ->
+    RootFileType.
 
 
 -spec get_protection_flags(info()) -> data_access_control:bitmask().

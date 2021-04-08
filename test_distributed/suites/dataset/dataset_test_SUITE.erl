@@ -711,9 +711,9 @@ assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentD
     ?assertMatch({ok, #dataset_info{
         id = DatasetId,
         state = ExpectedState,
-        guid = ExpectedRootFileGuid,
-        path = ExpectedRootFilePath,
-        type = ExpectedRootFileType,
+        root_file_guid = ExpectedRootFileGuid,
+        root_file_path = ExpectedRootFilePath,
+        root_file_type = ExpectedRootFileType,
         parent = ExpectedParentDatasetId,
         protection_flags = ExpectedProtectionFlags
     }}, lfm_proxy:get_dataset_info(Node, SessionId, DatasetId), ?ATTEMPTS),

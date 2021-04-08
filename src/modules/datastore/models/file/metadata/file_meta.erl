@@ -27,8 +27,7 @@
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
--export([
-    get_protection_flags/1]).
+-export([get_protection_flags/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,

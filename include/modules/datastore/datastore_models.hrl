@@ -384,6 +384,7 @@
     parent_uuid :: undefined | file_meta:uuid(),
     references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
     symlink_value :: undefined | file_meta_symlinks:symlink(),
+    % this field is used to cache value from #dataset.state field
     dataset_state :: undefined | dataset:state()
 }).
 
