@@ -657,6 +657,8 @@ end_per_suite(_Config) ->
 
 init_per_group(_Group, Config) ->
     time_test_utils:freeze_time(Config),
+    time_test_utils:set_current_time_seconds(1600000000),
+
     NewConfig = lfm_proxy:init(Config, false),
 
     SpaceId = oct_background:get_space_id(space_krk_par),

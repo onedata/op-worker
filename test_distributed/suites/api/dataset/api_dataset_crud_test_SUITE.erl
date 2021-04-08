@@ -456,9 +456,11 @@ update_dataset_test(Config) ->
                     type = rest,
                     prepare_args_fun = build_update_dataset_prepare_rest_args_fun(DatasetId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, RespCode, _, RespBody}) ->
-                        ExpResult = case should_update_succeed(MemRef, Data) of
-                            true -> {?HTTP_204_NO_CONTENT, #{}};
-                            false -> {errors:to_http_code(?ERROR_POSIX(?EINVAL)), ?REST_ERROR(?ERROR_POSIX(?EINVAL))}
+                        ExpResult = case get_exp_update_result(MemRef, Data) of
+                            ok ->
+                                {?HTTP_204_NO_CONTENT, #{}};
+                            {error, _} = Error ->
+                                {errors:to_http_code(Error), ?REST_ERROR(Error)}
                         end,
                         ?assertEqual(ExpResult, {RespCode, RespBody})
                     end
@@ -468,10 +470,7 @@ update_dataset_test(Config) ->
                     type = gs,
                     prepare_args_fun = build_update_dataset_prepare_gs_args_fun(DatasetId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, Result) ->
-                        ExpResult = case should_update_succeed(MemRef, Data) of
-                            true -> ok;
-                            false -> ?ERROR_POSIX(?EINVAL)
-                        end,
+                        ExpResult = get_exp_update_result(MemRef, Data),
                         ?assertEqual(ExpResult, Result)
                     end
                 }
@@ -552,7 +551,7 @@ build_verify_update_dataset_fun(MemRef, Providers, SpaceId, DatasetId, FileGuid,
         PrevState = api_test_memory:get(MemRef, previous_state),
         PrevProtectionFlags = api_test_memory:get(MemRef, previous_protection_flags),
 
-        {ExpState, ExpFlags} = case ExpTestResult == expected_success andalso should_update_succeed(MemRef, Data) of
+        {ExpState, ExpFlags} = case ExpTestResult == expected_success andalso ok == get_exp_update_result(MemRef, Data) of
             true ->
                 NewState = maps:get(<<"state">>, Data, atom_to_binary(PrevState, utf8)),
                 NewProtectionFlags = maps:get(<<"setProtectionFlags">>, Data, []) ++ (
@@ -576,20 +575,30 @@ build_verify_update_dataset_fun(MemRef, Providers, SpaceId, DatasetId, FileGuid,
 
 
 %% @private
--spec should_update_succeed(api_test_memory:mem_ref(), middleware:data()) -> boolean().
-should_update_succeed(MemRef, Data) ->
-    PrevState = api_test_memory:get(MemRef, previous_state),
-    NewState = maps:get(<<"state">>, Data, atom_to_binary(PrevState, utf8)),
-    ProtectionFlagsToSet = maps:get(<<"setProtectionFlags">>, Data, undefined),
-    ProtectionFlagsToUnset = maps:get(<<"unsetProtectionFlags">>, Data, undefined),
+-spec get_exp_update_result(api_test_memory:mem_ref(), middleware:data()) ->
+    ok | errors:error().
+get_exp_update_result(MemRef, Data) ->
+    PrevState = str_utils:to_binary(api_test_memory:get(MemRef, previous_state)),
+    NewState = maps:get(<<"state">>, Data, undefined),
+    ProtectionFlagsToSet = maps:get(<<"setProtectionFlags">>, Data, []),
+    ProtectionFlagsToUnset = maps:get(<<"unsetProtectionFlags">>, Data, []),
 
-    case {NewState, ProtectionFlagsToSet, ProtectionFlagsToUnset} of
-        {<<"attached">>, _, _} ->
-            true;
-        {<<"detached">>, undefined, undefined} ->
-            true;
+    % TODO rm after debug
+    ct:pal("~p", [{PrevState, NewState, ProtectionFlagsToSet, ProtectionFlagsToUnset}]),
+
+    case {PrevState, NewState, ProtectionFlagsToSet, ProtectionFlagsToUnset} of
+        {_, undefined, [], []} ->
+            ok;
+        {SameState, SameState, _, _} ->
+            ?ERROR_ALREADY_EXISTS;
+        {<<"attached">>, <<"detach">>, [], []} ->
+            ok;
+        {<<"attached">>, <<"detach">>, _, _} ->
+            ?ERROR_POSIX(?EINVAL);
+        {<<"detached">>, undefined, _, _} ->
+            ?ERROR_POSIX(?EINVAL);
         _ ->
-            false
+            ok
     end.
 
 
@@ -875,6 +884,8 @@ init_per_suite(Config) ->
 
 init_per_group(_Group, Config) ->
     time_test_utils:freeze_time(Config),
+    time_test_utils:set_current_time_seconds(1600000000),
+
     NewConfig = lfm_proxy:init(Config, false),
 
     % Randomly establish for space root dir
