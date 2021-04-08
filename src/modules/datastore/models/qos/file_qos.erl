@@ -45,7 +45,8 @@
     get_effective/1, 
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
-    has_any_qos_entry/2, clean_up/1, clean_up/2, delete_associated_entries/1
+    qos_membership/1, has_any_qos_entry/2, clean_up/1, clean_up/2,
+    delete_associated_entries/1
 ]).
 
 %% higher-level functions operating on effective_file_qos record.
@@ -65,8 +66,9 @@
 -type pred() :: datastore_doc:pred(record()).
 -type effective_file_qos() :: #effective_file_qos{}.
 -type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
+-type membership() :: ?NONE_QOS_MEMBERSHIP | ?DIRECT_QOS_MEMBERSHIP | ?ANCESTOR_QOS_MEMBERSHIP.
 
--export_type([assigned_entries/0]).
+-export_type([assigned_entries/0, membership/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -234,6 +236,19 @@ is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
             lists:member(QosEntryId, get_qos_entries(EffectiveFileQos))
                 andalso not is_in_trash(EffectiveFileQos);
         {error, _} = Error -> Error
+    end.
+
+
+-spec qos_membership(file_meta:uuid() | file_meta:doc()) -> membership().
+qos_membership(FileUuidOrDoc) ->
+    case has_any_qos_entry(FileUuidOrDoc, direct) of
+        true ->
+            ?DIRECT_QOS_MEMBERSHIP;
+        false ->
+            case has_any_qos_entry(FileUuidOrDoc, effective) of
+                true -> ?ANCESTOR_QOS_MEMBERSHIP;
+                false -> ?NONE_QOS_MEMBERSHIP
+            end
     end.
 
 

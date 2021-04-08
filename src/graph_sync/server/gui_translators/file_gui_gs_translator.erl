@@ -17,6 +17,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -24,6 +25,7 @@
     translate_value/2,
     translate_resource/2,
 
+    translate_dataset_summary/1,
     translate_distribution/2
 ]).
 
@@ -131,8 +133,36 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
         end, ShareIds)
     };
 
-translate_resource(#gri{aspect = file_qos_summary, scope = private}, QosSummaryResponse) ->
-    maps:without([<<"status">>], QosSummaryResponse).
+translate_resource(#gri{aspect = qos_summary, scope = private}, QosSummaryResponse) ->
+    maps:without([<<"status">>], QosSummaryResponse);
+
+translate_resource(#gri{aspect = dataset_summary, scope = private}, DatasetSummary) ->
+    translate_dataset_summary(DatasetSummary).
+
+
+-spec translate_dataset_summary(lfm_datasets:file_eff_summary()) -> map().
+translate_dataset_summary(#file_eff_dataset_summary{
+    direct_dataset = DatasetId,
+    eff_ancestor_datasets = EffAncestorDatasets,
+    eff_protection_flags = EffProtectionFlags
+}) ->
+    #{
+        <<"directDataset">> => case DatasetId of
+            undefined ->
+                null;
+            _ ->
+                gri:serialize(#gri{
+                    type = op_dataset, id = DatasetId,
+                    aspect = instance, scope = private
+                })
+        end,
+        <<"effAncestorDatasets">> => lists:map(fun(AncestorId) ->
+            gri:serialize(#gri{
+                type = op_dataset, id = AncestorId, aspect = instance, scope = private
+            })
+        end, EffAncestorDatasets),
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
+    }.
 
 
 -spec translate_distribution(file_id:file_guid(), Distribution :: [file_distribution()]) ->
@@ -170,10 +200,10 @@ translate_distribution(FileGuid, Distribution) ->
 -spec translate_file_details(#file_details{}, gri:scope()) -> map().
 translate_file_details(#file_details{
     has_metadata = HasMetadata,
-    has_direct_qos = HasDirectQos,
-    has_eff_qos = HasEffQos,
+    eff_qos_membership = EffQosMembership,
     active_permissions_type = ActivePermissionsType,
     index_startid = StartId,
+    eff_dataset_membership = EffDatasetMembership,
     eff_protection_flags = EffFileProtectionFlags,
     file_attr = #file_attr{
         guid = FileGuid,
@@ -226,8 +256,8 @@ translate_file_details(#file_details{
                 ),
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
-                <<"hasDirectQos">> => HasDirectQos,
-                <<"hasEffQos">> => HasEffQos
+                <<"effQosMembership">> => EffQosMembership,
+                <<"effDatasetMembership">> => EffDatasetMembership
             }
     end.
 

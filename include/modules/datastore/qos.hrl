@@ -27,6 +27,10 @@
 
 -define(QOS_ANY_STORAGE, "anyStorage").
 
+-define(NONE_QOS_MEMBERSHIP, none).
+-define(DIRECT_QOS_MEMBERSHIP, direct).
+-define(ANCESTOR_QOS_MEMBERSHIP, ancestor).
+
 % macros used for operations on QoS bounded cache
 -define(CACHE_TABLE_NAME(SpaceId),
     binary_to_atom(<<SpaceId/binary, "_qos_bounded_cache_table">>, utf8)).

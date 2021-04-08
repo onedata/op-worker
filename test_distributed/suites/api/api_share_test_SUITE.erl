@@ -14,7 +14,7 @@
 
 -include("api_file_test_utils.hrl").
 -include("api_test_runner.hrl").
--include("onenv_file_test_utils.hrl").
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/privileges.hrl").

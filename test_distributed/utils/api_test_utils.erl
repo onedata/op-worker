@@ -14,6 +14,7 @@
 
 -include("api_test_runner.hrl").
 -include("api_file_test_utils.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
@@ -198,9 +199,13 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             false -> posix
         end,
         eff_protection_flags = ?no_flags_mask,
-        has_metadata = HasMetadata,
-        has_direct_qos = HasDirectQos,
-        has_eff_qos = HasParentQos orelse HasDirectQos
+        eff_qos_membership = case {HasDirectQos, HasParentQos} of
+            {true, _} -> ?DIRECT_QOS_MEMBERSHIP;
+            {_, true} -> ?ANCESTOR_QOS_MEMBERSHIP;
+            _ -> ?NONE_QOS_MEMBERSHIP
+        end,
+        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
+        has_metadata = HasMetadata
     },
 
     {FileType, FilePath, FileGuid, FileDetails}.
@@ -438,9 +443,9 @@ file_details_to_gs_json(undefined, #file_details{
     index_startid = IndexStartId,
     active_permissions_type = ActivePermissionsType,
     eff_protection_flags = EffFileProtectionFlags,
-    has_metadata = HasMetadata,
-    has_direct_qos = HasDirectQos,
-    has_eff_qos = HasEffQos
+    eff_qos_membership = EffQosMembership,
+    eff_dataset_membership = EffDatasetMembership,
+    has_metadata = HasMetadata
 }) ->
     {DisplayedType, DisplayedSize} = case Type of
         ?DIRECTORY_TYPE ->
@@ -469,8 +474,8 @@ file_details_to_gs_json(undefined, #file_details{
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
         <<"providerId">> => ProviderId,
         <<"ownerId">> => OwnerId,
-        <<"hasDirectQos">> => HasDirectQos,
-        <<"hasEffQos">> => HasEffQos
+        <<"effQosMembership">> => atom_to_binary(EffQosMembership, utf8),
+        <<"effDatasetMembership">> => atom_to_binary(EffDatasetMembership, utf8)
     };
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{
