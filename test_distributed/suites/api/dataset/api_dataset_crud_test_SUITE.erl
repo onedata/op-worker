@@ -583,9 +583,6 @@ get_exp_update_result(MemRef, Data) ->
     ProtectionFlagsToSet = maps:get(<<"setProtectionFlags">>, Data, []),
     ProtectionFlagsToUnset = maps:get(<<"unsetProtectionFlags">>, Data, []),
 
-    % TODO rm after debug
-    ct:pal("~p", [{PrevState, NewState, ProtectionFlagsToSet, ProtectionFlagsToUnset}]),
-
     case {PrevState, NewState, ProtectionFlagsToSet, ProtectionFlagsToUnset} of
         {_, undefined, [], []} ->
             ok;

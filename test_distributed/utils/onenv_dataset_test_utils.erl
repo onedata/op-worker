@@ -170,15 +170,18 @@ get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, Object) ->
 
 -spec cleanup_all_datasets(oct_background:entity_selector()) -> ok.
 cleanup_all_datasets(SpaceSelector) ->
-    Provider = lists_utils:random_element(oct_background:get_space_supporting_providers(SpaceSelector)),
-    cleanup_all_datasets(Provider, SpaceSelector).
+    Providers = oct_background:get_space_supporting_providers(SpaceSelector),
+    cleanup_all_datasets(Providers, SpaceSelector).
 
--spec cleanup_all_datasets(oct_background:entity_selector(), oct_background:entity_selector()) -> ok.
-cleanup_all_datasets(ProviderSelector, SpaceSelector) ->
-    Node = oct_background:get_random_provider_node(ProviderSelector),
+
+-spec cleanup_all_datasets(oct_background:entity_selector() | [oct_background:entity_selector()],
+    oct_background:entity_selector()) -> ok.
+cleanup_all_datasets(ProviderSelectors, SpaceSelector) ->
+    ProviderSelectors2 = utils:ensure_list(ProviderSelectors),
+    ProviderNodes = [oct_background:get_random_provider_node(ProviderSelector) || ProviderSelector <- ProviderSelectors2],
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    cleanup_and_verify_datasets(Node, SpaceId, ?ATTACHED_DATASETS_STRUCTURE),
-    cleanup_and_verify_datasets(Node, SpaceId, ?DETACHED_DATASETS_STRUCTURE).
+    cleanup_and_verify_datasets(ProviderNodes, SpaceId, ?ATTACHED_DATASETS_STRUCTURE),
+    cleanup_and_verify_datasets(ProviderNodes, SpaceId, ?DETACHED_DATASETS_STRUCTURE).
 
 %%%===================================================================
 %%% Internal functions
@@ -236,10 +239,12 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
 
 
 %% @private
--spec cleanup_and_verify_datasets(node(), od_space:id(), datasets_structure:forest_type()) -> ok.
-cleanup_and_verify_datasets(Node, SpaceId, ForestType) ->
-    cleanup_datasets(Node, SpaceId, ForestType),
-    assert_all_dataset_entries_are_deleted(SpaceId, ForestType).
+-spec cleanup_and_verify_datasets([node()], od_space:id(), datasets_structure:forest_type()) -> ok.
+cleanup_and_verify_datasets(Nodes, SpaceId, ForestType) ->
+    lists:foreach(fun(Node)->
+        cleanup_datasets(Node, SpaceId, ForestType)
+    end, Nodes),
+    assert_all_dataset_entries_are_deleted_on_all_nodes(SpaceId, ForestType).
 
 
 %% @private
@@ -252,8 +257,8 @@ cleanup_datasets(Node, SpaceId, ForestType) ->
 
 
 %% @private
--spec assert_all_dataset_entries_are_deleted(od_space:id(), datasets_structure:forest_type()) -> ok.
-assert_all_dataset_entries_are_deleted(SpaceId, ForestType) ->
+-spec assert_all_dataset_entries_are_deleted_on_all_nodes(od_space:id(), datasets_structure:forest_type()) -> ok.
+assert_all_dataset_entries_are_deleted_on_all_nodes(SpaceId, ForestType) ->
     lists:foreach(fun(N) ->
         ?assertMatch({ok, []}, rpc:call(N, datasets_structure, list_all_unsafe, [SpaceId, ForestType]), ?ATTEMPTS)
     end, oct_background:get_all_providers_nodes()).

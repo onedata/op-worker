@@ -90,7 +90,7 @@ list_top_datasets(SessId, SpaceId, State, Opts) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
         #list_top_datasets{state = State, opts = Opts},
-        fun(#nested_datasets{datasets = Datasets, is_last = IsLast}) ->
+        fun(#datasets{datasets = Datasets, is_last = IsLast}) ->
             {ok, Datasets, IsLast}
         end).
 
@@ -101,7 +101,7 @@ list_children_datasets(SessId, DatasetId, Opts) ->
     SpaceGuid = get_space_guid(DatasetId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
         #list_children_datasets{id = DatasetId, opts = Opts},
-        fun(#nested_datasets{datasets = Datasets, is_last = IsLast}) ->
+        fun(#datasets{datasets = Datasets, is_last = IsLast}) ->
             {ok, Datasets, IsLast}
         end).
 

@@ -101,7 +101,7 @@ list_top_datasets(SpaceId, State, UserCtx, Opts) ->
     space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW),
 
     {ok, Datasets, IsLast} = dataset_api:list_top_datasets(SpaceId, State, Opts),
-    ?PROVIDER_OK_RESP(#nested_datasets{datasets = Datasets, is_last = IsLast}).
+    ?PROVIDER_OK_RESP(#datasets{datasets = Datasets, is_last = IsLast}).
 
 
 -spec list_children_datasets(file_ctx:ctx(), dataset:id(), user_ctx:ctx(), datasets_structure:opts()) ->
@@ -110,7 +110,7 @@ list_children_datasets(SpaceDirCtx, Dataset, UserCtx, Opts) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW),
 
     {ok, Datasets, IsLast} = dataset_api:list_children_datasets(Dataset, Opts),
-    ?PROVIDER_OK_RESP(#nested_datasets{datasets = Datasets, is_last = IsLast}).
+    ?PROVIDER_OK_RESP(#datasets{datasets = Datasets, is_last = IsLast}).
 
 %%%===================================================================
 %%% Internal functions

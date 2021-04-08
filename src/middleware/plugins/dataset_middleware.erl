@@ -223,11 +223,11 @@ update(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}, data 
         file_meta:protection_flags_from_json(maps:get(<<"setProtectionFlags">>, Data, [])),
         file_meta:protection_flags_from_json(maps:get(<<"unsetProtectionFlags">>, Data, []))
     ),
-    ?check(case Result of
+    case Result of
         {error, ?ENOENT} -> throw(?ERROR_NOT_FOUND);
         {error, ?EEXIST} -> throw(?ERROR_ALREADY_EXISTS);
-        Other -> Other
-    end).
+        Other -> ?check(Other)
+    end.
 
 
 %%--------------------------------------------------------------------

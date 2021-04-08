@@ -273,7 +273,7 @@
     eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask()
 }).
 
--record(nested_datasets, {
+-record(datasets, {
    datasets = [] :: [{dataset:id(), dataset:name()}],
    is_last :: boolean()
 }).
@@ -283,7 +283,7 @@
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
     #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} |
     #qos_status_response{} | #dataset_established{} | #dataset_info{} | #file_eff_dataset_summary{} |
-    #nested_datasets{} | undefined.
+    #datasets{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

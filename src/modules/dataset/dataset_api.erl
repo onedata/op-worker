@@ -61,19 +61,22 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
     ?CRITICAL_SECTION(DatasetId, fun() ->
         {ok, DatasetId} = dataset:get_id(DatasetDoc),
         {ok, CurrentState} = dataset:get_state(DatasetDoc),
-        case {CurrentState, utils:ensure_defined(NewState, CurrentState)} of
-            {?DETACHED_DATASET, ?ATTACHED_DATASET} ->
+        case {CurrentState, NewState, FlagsToSet, FlagsToUnset} of
+            {_, undefined, ?no_flags_mask, ?no_flags_mask} ->
+                ok;
+            {SameState, SameState, _, _} ->
+                ?ERROR_ALREADY_EXISTS;
+            {?DETACHED_DATASET, ?ATTACHED_DATASET, _, _} ->
                 reattach(DatasetId, FlagsToSet, FlagsToUnset);
-            {?ATTACHED_DATASET, ?DETACHED_DATASET} ->
+            {?ATTACHED_DATASET, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask} ->
                 % it's forbidden to change flags while detaching dataset
-                case FlagsToSet == ?no_flags_mask andalso FlagsToUnset == ?no_flags_mask of
-                    true -> detach(DatasetId);
-                    false -> throw(?EINVAL)
-                end;
-            {?ATTACHED_DATASET, ?ATTACHED_DATASET} ->
+                detach(DatasetId);
+            {?ATTACHED_DATASET, ?DETACHED_DATASET, _, _} ->
+                {error, ?EINVAL};
+            {?ATTACHED_DATASET, undefined, _, _} ->
                 update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset);
-            {?DETACHED_DATASET, ?DETACHED_DATASET} ->
-                throw(?EINVAL)
+            {?DETACHED_DATASET, undefined, _, _} ->
+                {error, ?EINVAL}
                 %% TODO VFS-7208 uncomment after introducing API errors to fslogic
                 % throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>))
         end
