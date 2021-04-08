@@ -48,7 +48,7 @@
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
 
--type doc() :: datastore:doc().
+-type doc() :: datastore_doc:doc(file_meta()).
 -type diff() :: datastore_doc:diff(file_meta()).
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -513,7 +513,7 @@ get_parent(Entry) ->
 %% Returns file's parent uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent_uuid(entry()) -> {ok, datastore:key()} | {error, term()}.
+-spec get_parent_uuid(entry()) -> {ok, uuid()} | {error, term()}.
 get_parent_uuid(Entry) ->
     ?run(begin
         {ok, #document{value = #file_meta{parent_uuid = ParentUuid}}} =
@@ -529,15 +529,14 @@ get_parent_uuid(Entry) ->
 %%--------------------------------------------------------------------
 -spec get_ancestors(uuid()) -> {ok, [uuid()]} | {error, term()}.
 get_ancestors(FileUuid) ->
-    ?run(begin
-        {ok, #document{key = Key}} = file_meta:get(FileUuid),
-        {ok, get_ancestors2(Key, [])}
-    end).
-get_ancestors2(?GLOBAL_ROOT_DIR_UUID, Acc) ->
-    Acc;
-get_ancestors2(FileUuid, Acc) ->
+    ?run(begin get_ancestors(FileUuid, []) end).
+
+-spec get_ancestors(uuid(), [uuid()]) -> {ok, [uuid()]} | {error, term()}.
+get_ancestors(?GLOBAL_ROOT_DIR_UUID, Acc) ->
+    {ok, Acc};
+get_ancestors(FileUuid, Acc) ->
     {ok, ParentUuid} = get_parent_uuid({uuid, FileUuid}),
-    get_ancestors2(ParentUuid, [ParentUuid | Acc]).
+    get_ancestors(ParentUuid, [ParentUuid | Acc]).
 
 
 %%--------------------------------------------------------------------
@@ -699,7 +698,7 @@ get_shares(#file_meta{shares = Shares}) ->
 %% Creates file meta entry for space if not exists
 %% @end
 %%--------------------------------------------------------------------
--spec make_space_exist(SpaceId :: datastore:key()) -> ok | no_return().
+-spec make_space_exist(SpaceId :: od_space:id()) -> ok | no_return().
 make_space_exist(SpaceId) ->
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileDoc = #document{
@@ -876,11 +875,11 @@ get_active_perms_type(FileUuid) ->
     end.
 
 
--spec update_mode(uuid(), posix_permissions()) -> ok | {error, term()}.
+-spec update_mode(uuid(), posix_permissions()) -> {ok, doc} | {error, term()}.
 update_mode(FileUuid, NewMode) ->
-    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+    update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
         {ok, FileMeta#file_meta{mode = NewMode}}
-    end)).
+    end).
 
 
 -spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
@@ -1064,7 +1063,7 @@ get_child_uuid_and_tree_id(ParentUuid, TreeIds, Name) ->
 %% Sends event about space dir creation
 %% @end
 %%--------------------------------------------------------------------
--spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: datastore:key()) -> ok | no_return().
+-spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: od_space:id()) -> ok | no_return().
 emit_space_dir_created(DirUuid, SpaceId) ->
     FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
     #fuse_response{fuse_response = FileAttr} =

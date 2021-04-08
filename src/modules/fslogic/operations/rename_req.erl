@@ -522,23 +522,20 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
             ok
     end,
 
-    {Storage, SourceFileCtx5} = file_ctx:get_storage(SourceFileCtx3),
+    {Storage, SourceFileCtx4} = file_ctx:get_storage(SourceFileCtx3),
     Helper = storage:get_helper(Storage),
     StoragePathType = helper:get_storage_path_type(Helper),
     StorageId = storage:get_id(Storage),
-    {IsStorageFileCreated, SourceFileCtx6} = file_ctx:is_storage_file_created(SourceFileCtx5),
+    {IsStorageFileCreated, SourceFileCtx5} = file_ctx:is_storage_file_created(SourceFileCtx4),
+    {IsDir, SourceFileCtx6} = file_ctx:is_dir(SourceFileCtx5),
     case StoragePathType =:= ?CANONICAL_STORAGE_PATH andalso IsStorageFileCreated of
         true ->
-            case sd_utils:rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId,
-                TargetParentCtx2, TargetFileId)
-            of
-                ok -> ok;
-                {error, ?ENOENT} -> ok
-            end;
+            ok = sd_utils:rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx2, TargetFileId),
+            IsDir andalso (ok = dir_location:update_storage_file_id(FileUuid, TargetFileId));
         false ->
             ok
     end,
-    on_successful_rename(UserCtx, SourceFileCtx3, SourceParentFileCtx2, TargetParentCtx2, TargetName),
+    on_successful_rename(UserCtx, SourceFileCtx6, SourceParentFileCtx2, TargetParentCtx2, TargetName),
     {SourceFileCtx6, TargetFileId}.
 
 %%--------------------------------------------------------------------

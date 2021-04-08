@@ -336,7 +336,9 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     try
         {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
         {IsStorageFileCreated, FileCtx3} = file_ctx:is_storage_file_created(FileCtx2),
-        case IsStorageFileCreated and not storage_driver:exists(SDHandle) of
+        Uuid = file_ctx:get_logical_uuid_const(FileCtx3),
+        IsNotSymlink = not fslogic_uuid:is_symlink_uuid(Uuid),
+        case IsNotSymlink andalso IsStorageFileCreated and (not storage_driver:exists(SDHandle)) of
             true ->
                 % file is still missing on storage we can delete it from db
                delete_file_and_update_counters(FileCtx3, SpaceId, StorageId);

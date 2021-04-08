@@ -381,7 +381,7 @@
     provider_id :: undefined | oneprovider:id(), %% Id of provider that created this file
     shares = [] :: [od_share:id()], % VFS-7437 Handle conflict resolution similarly to hardlinks
     deleted = false :: boolean(),
-    parent_uuid :: undefined | file_meta:uuid(),
+    parent_uuid :: file_meta:uuid(),
     references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
     symlink_value :: undefined | file_meta_symlinks:symlink(),
     % this field is used to cache value from #dataset.state field

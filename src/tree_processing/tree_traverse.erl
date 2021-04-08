@@ -83,7 +83,9 @@
     batch_size => batch_size(),
     traverse_info => traverse_info(),
     % Provider which should execute task
-    target_provider_id => oneprovider:id()
+    target_provider_id => oneprovider:id(),
+    % if set to 'single', only one master job is performed in parallel for each task - see master_job_mode type definition
+    master_job_mode => traverse:master_job_mode()
 }.
 
 
