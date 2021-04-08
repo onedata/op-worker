@@ -68,17 +68,17 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
                 ?ERROR_ALREADY_EXISTS;
             {?DETACHED_DATASET, ?ATTACHED_DATASET, _, _} ->
                 reattach(DatasetId, FlagsToSet, FlagsToUnset);
+            {?DETACHED_DATASET, undefined, _, _} ->
+                {error, ?EINVAL};
+                %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+                % throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>));
             {?ATTACHED_DATASET, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask} ->
                 % it's forbidden to change flags while detaching dataset
                 detach(DatasetId);
             {?ATTACHED_DATASET, ?DETACHED_DATASET, _, _} ->
                 {error, ?EINVAL};
             {?ATTACHED_DATASET, undefined, _, _} ->
-                update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset);
-            {?DETACHED_DATASET, undefined, _, _} ->
-                {error, ?EINVAL}
-                %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-                % throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>))
+                update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset)
         end
     end).
 

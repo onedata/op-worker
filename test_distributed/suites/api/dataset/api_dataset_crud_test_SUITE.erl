@@ -829,7 +829,7 @@ verify_dataset(
             protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
             parent = ParentId
         },
-        ?assertEqual({ok, ExpDatasetInfo}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId))
+        ?assertEqual({ok, ExpDatasetInfo}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId), ?ATTEMPTS)
     end, Providers).
 
 
