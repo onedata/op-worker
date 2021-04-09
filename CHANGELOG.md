@@ -4,6 +4,11 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 20.02.8
+
+-   **VFS-7517** Several bug fixes related to edge-cases when moving or
+    deleting files.
+
 ### 20.02.7
 
 -   **VFS-7294** Added publicly available REST endpoints for fetching
