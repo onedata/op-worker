@@ -71,7 +71,7 @@
     create_and_open/3, create_and_open/4, create_and_open/5
 ]).
 %% Functions concerning file permissions
--export([set_perms/3, check_perms/3, update_protection_flags/4, set_acl/3, get_acl/2, remove_acl/2]).
+-export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
 -export([
     stat/2, get_fs_stats/2, get_details/2,
@@ -91,6 +91,12 @@
 -export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2,
     get_effective_file_qos/2, check_qos_status/2, check_qos_status/3]).
 
+%% Functions concerning datasets
+-export([
+    establish_dataset/3, remove_dataset/2, update_dataset/5,
+    get_dataset_info/2, get_file_eff_dataset_summary/2,
+    list_top_datasets/4, list_children_datasets/3
+]).
 
 %%%===================================================================
 %%% API
@@ -621,23 +627,6 @@ set_perms(SessId, FileKey, NewPerms) ->
 check_perms(SessId, FileKey, PermType) ->
     ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
 
--spec update_protection_flags(
-    session:id(),
-    file_key(),
-    data_access_control:bitmask(),
-    data_access_control:bitmask()
-) ->
-    ok | error_reply().
-update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToUnset) ->
-    % TODO VFS-7363 assert file is dataset and user has needed space privileges
-    ?run(fun() ->
-        {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
-        remote_utils:call_fslogic(SessId, file_request, Guid,
-            #update_protection_flags{set = FlagsToSet, unset = FlagsToUnset},
-            fun(_) -> ok end
-        )
-    end).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's Access Control List.
@@ -961,3 +950,40 @@ check_qos_status(SessId, QosEntryId) ->
     {ok, qos_status:summary()} | error_reply().
 check_qos_status(SessId, QosEntryId, FileKey) ->
     ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId, FileKey) end).
+
+%%%===================================================================
+%%% Datasets functions
+%%%===================================================================
+
+
+-spec establish_dataset(session:id(), file_key(), data_access_control:bitmask()) -> {ok, dataset:id()} | error_reply().
+establish_dataset(SessId, FileKey, ProtectionFlags) ->
+    ?run(fun() -> lfm_datasets:establish(SessId, FileKey, ProtectionFlags) end).
+
+-spec remove_dataset(session:id(), dataset:id()) -> ok | error_reply().
+remove_dataset(SessId, DatasetId) ->
+    ?run(fun() -> lfm_datasets:remove(SessId, DatasetId) end).
+
+-spec update_dataset(session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),
+    data_access_control:bitmask()) -> ok | lfm:error_reply().
+update_dataset(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
+    ?run(fun() -> lfm_datasets:update(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) end).
+
+-spec get_dataset_info(session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | error_reply().
+get_dataset_info(SessId, DatasetId) ->
+    ?run(fun() -> lfm_datasets:get_info(SessId, DatasetId) end).
+
+-spec get_file_eff_dataset_summary(session:id(), file_key()) -> {ok, lfm_datasets:file_eff_summary()} | error_reply().
+get_file_eff_dataset_summary(SessId, FileKey) ->
+    ?run(fun() -> lfm_datasets:get_file_eff_summary(SessId, FileKey) end).
+
+-spec list_top_datasets(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | error_reply().
+list_top_datasets(SessId, SpaceId, State, Opts) ->
+    ?run(fun() -> lfm_datasets:list_top_datasets(SessId, SpaceId, State, Opts) end).
+
+
+-spec list_children_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | error_reply().
+list_children_datasets(SessId, DatasetId, Opts) ->
+    ?run(fun() -> lfm_datasets:list_children_datasets(SessId, DatasetId, Opts) end).

@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
--include("onenv_file_test_utils.hrl").
+-include("onenv_test_utils.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/privileges.hrl").

@@ -14,18 +14,22 @@
 -author("Michał Stanisz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_group/0, init_caches/1, invalidate_caches_on_all_nodes/1]).
--export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1]).
+-export([init_group/0, init/1, invalidate_on_all_nodes/1]).
+-export([get/3, get_canonical/2, get_uuid_based/2]).
 %% RPC API
--export([invalidate_caches/1]).
+-export([invalidate/1]).
 
 -define(PATH_CACHE_GROUP, <<"paths_cache_group">>).
 -define(CANONICAL_PATHS_CACHE_NAME(SpaceId), binary_to_atom(<<"canonical_paths_cache_", SpaceId/binary>>, utf8)).
 -define(UUID_BASED_PATHS_CACHE_NAME(SpaceId), binary_to_atom(<<"uuid_paths_cache_", SpaceId/binary>>, utf8)).
+
+-type cache() :: atom().
+-type path_type() :: file_meta:path_type().
 
 %%%===================================================================
 %%% API functions
@@ -35,37 +39,37 @@
 init_group() ->
     CheckFrequency = application:get_env(?APP_NAME, canonical_paths_cache_frequency, 30000),
     Size = application:get_env(?APP_NAME, canonical_paths_cache_size, 20000),
-    ok = bounded_cache:init_group(?PATH_CACHE_GROUP, #{
+    ok = effective_value:init_group(?PATH_CACHE_GROUP, #{
         check_frequency => CheckFrequency,
         size => Size,
         worker => true
     }).
 
 
--spec init_caches(od_space:id() | all) -> ok.
-init_caches(all) ->
+-spec init(od_space:id() | all) -> ok.
+init(all) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            lists:foreach(fun init_caches/1, SpaceIds);
+            lists:foreach(fun init/1, SpaceIds);
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+            ?debug("Unable to initialize paths caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
+            ?debug("Unable to initialize paths caches due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
-            ?critical("Unable to initialize paths bounded caches due to: ~p", [Error])
+            ?critical("Unable to initialize paths caches due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize paths bounded caches due to: ~p", [{Error2, Reason}])
+            ?critical_stacktrace("Unable to initialize paths caches due to: ~p", [{Error2, Reason}])
     end;
-init_caches(Space) ->
-    ok = init(Space, get_canonical_paths_cache_name(Space)),
-    ok = init(Space, get_uuid_based_paths_cache_name(Space)).
+init(SpaceId) ->
+    ok = init(SpaceId, ?CANONICAL_PATHS_CACHE_NAME(SpaceId)),
+    ok = init(SpaceId, ?UUID_BASED_PATHS_CACHE_NAME(SpaceId)).
 
 
--spec invalidate_caches_on_all_nodes(od_space:id()) -> ok.
-invalidate_caches_on_all_nodes(SpaceId) ->
+-spec invalidate_on_all_nodes(od_space:id()) -> ok.
+invalidate_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, invalidate_caches, [SpaceId]),
+    {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, invalidate, [SpaceId]),
 
     case BadNodes of
         [] ->
@@ -84,54 +88,100 @@ invalidate_caches_on_all_nodes(SpaceId) ->
     end, Res).
 
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Gets name of cache for particular space.
-%% @end
-%%-------------------------------------------------------------------
--spec get_canonical_paths_cache_name(od_space:id()) -> atom().
-get_canonical_paths_cache_name(Space) ->
-    ?CANONICAL_PATHS_CACHE_NAME(Space).
+-spec get_canonical(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
+    {ok, file_meta:path()} | {error, term()}.
+get_canonical(SpaceId, UuidOrDoc) ->
+    get(SpaceId, UuidOrDoc, ?CANONICAL_PATH).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Gets name of cache for particular space.
-%% @end
-%%-------------------------------------------------------------------
--spec get_uuid_based_paths_cache_name(od_space:id()) -> atom().
-get_uuid_based_paths_cache_name(Space) ->
-    ?UUID_BASED_PATHS_CACHE_NAME(Space).
+
+-spec get_uuid_based(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
+    {ok, file_meta:path()} | {error, term()}.
+get_uuid_based(SpaceId, UuidOrDoc) ->
+    get(SpaceId, UuidOrDoc, ?UUID_BASED_PATH).
+
+
+-spec get(od_space:id(), file_meta:uuid() | file_meta:doc(), path_type()) ->
+    {ok, file_meta:path() | file_meta:?UUID_BASED_PATH()} | {error, term()}.
+get(SpaceId, Doc = #document{value = #file_meta{}}, PathType) ->
+    CacheName = path_type_to_cache_name(SpaceId, PathType),
+    case effective_value:get_or_calculate(CacheName, Doc, calculate_path_tokens_callback(PathType)) of
+        {ok, Path, _} ->
+            {ok, filename:join(Path)};
+        {error, {file_meta_missing, _}} ->
+            ?ERROR_NOT_FOUND
+    end;
+get(SpaceId, Uuid, PathType) ->
+    case file_meta:get_including_deleted(Uuid) of
+        {ok, Doc} -> get(SpaceId, Doc, PathType);
+        {error, _} = Error -> Error
+    end.
+
 
 %%%===================================================================
 %%% RPC API functions
 %%%===================================================================
 
--spec invalidate_caches(od_space:id()) -> ok.
-invalidate_caches(Space) ->
-    ok = bounded_cache:invalidate(get_canonical_paths_cache_name(Space)),
-    ok = bounded_cache:invalidate(get_uuid_based_paths_cache_name(Space)).
+-spec invalidate(od_space:id()) -> ok.
+invalidate(SpaceId) ->
+    ok = effective_value:invalidate(?CANONICAL_PATHS_CACHE_NAME(SpaceId)),
+    ok = effective_value:invalidate(?UUID_BASED_PATHS_CACHE_NAME(SpaceId)).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec init(od_space:id(), bounded_cache:cache()) -> ok.
+-spec init(od_space:id(), effective_value:cache()) -> ok.
 init(Space, Name) ->
     try
-        case bounded_cache:cache_exists(Name) of
+        case effective_value:cache_exists(Name) of
             true ->
                 ok;
             _ ->
-                case bounded_cache:init_cache(Name, #{group => ?PATH_CACHE_GROUP}) of
+                case effective_value:init_cache(Name, #{group => ?PATH_CACHE_GROUP}) of
                     ok ->
                         ok;
                     Error = {error, _} ->
-                        ?critical("Unable to initialize paths bounded cache for space ~p due to: ~p",
+                        ?critical("Unable to initialize paths cache for space ~p due to: ~p",
                             [Space, Error])
                 end
         end
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize paths bounded cache for space ~p due to: ~p",
+            ?critical_stacktrace("Unable to initialize paths cache for space ~p due to: ~p",
                 [Space, {Error2, Reason}])
+    end.
+
+
+-spec path_type_to_cache_name(od_space:id(), path_type()) -> cache().
+path_type_to_cache_name(SpaceId, ?CANONICAL_PATH) ->
+    ?CANONICAL_PATHS_CACHE_NAME(SpaceId);
+path_type_to_cache_name(SpaceId, ?UUID_BASED_PATH) ->
+    ?UUID_BASED_PATHS_CACHE_NAME(SpaceId).
+
+
+-spec calculate_path_tokens_callback(path_type()) -> fun().
+calculate_path_tokens_callback(PathType) ->
+    fun([
+        #document{
+            key = Uuid,
+            value = #file_meta{name = Name},
+            scope = SpaceId
+        },
+        ParentValue, CalculationInfo
+    ]) ->
+        case fslogic_uuid:is_root_dir_uuid(Uuid) of
+            true ->
+                {ok, [<<"/">>], CalculationInfo};
+            false ->
+                case fslogic_uuid:is_space_dir_uuid(Uuid) of
+                    true ->
+                        {ok, [<<"/">>, SpaceId], CalculationInfo};
+                    false ->
+                        NameOrUuid = case PathType of
+                            ?UUID_BASED_PATH -> Uuid;
+                            ?CANONICAL_PATH -> Name
+                        end,
+                        {ok, ParentValue ++ [NameOrUuid], CalculationInfo}
+                end
+        end
     end.

@@ -30,7 +30,7 @@
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    11.
+    12.
 
 
 %%--------------------------------------------------------------------
@@ -246,6 +246,30 @@ get_record_struct(11) ->
         % following fields have been added in this version:
         {references, #{string => [string]}},
         {symlink_value, string}
+    ]};
+get_record_struct(12) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {protection_flags, integer},
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        {is_scope, boolean},
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string},
+        {references, #{string => [string]}},
+        {symlink_value, string},
+        % field dataset_status has been added in this version
+        {dataset_status, atom}
     ]}.
 
 
@@ -318,7 +342,16 @@ upgrade_record(10, {
 }) ->
     {11, {?FILE_META_MODEL, Name, Type, Mode, 0, ACL, Owner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid, #{}, undefined
+    }};
+upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+    ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue
+}) ->
+    {12, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue,
+        % field dataset_status has been added in this version
+        undefined
     }}.
+
 
 
 %%--------------------------------------------------------------------
@@ -334,7 +367,8 @@ resolve_conflict(_Ctx,
     NewDoc = #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
     PrevDoc = #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}
 ) ->
-    invalidate_file_protection_flags_cache_if_needed(NewDoc, PrevDoc),
+    invalidate_paths_cache_if_needed(NewDoc, PrevDoc),
+    invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
     spawn(fun() ->
         invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc)
     end),
@@ -371,15 +405,27 @@ resolve_conflict(_Ctx,
 
 
 %% @private
--spec invalidate_file_protection_flags_cache_if_needed(file_meta:doc(), file_meta:doc()) -> ok.
-invalidate_file_protection_flags_cache_if_needed(
-    #document{value = #file_meta{protection_flags = NewFlags, parent_uuid = NewParentUuid}, scope = SpaceId},
-    #document{value = #file_meta{protection_flags = OldFlags, parent_uuid = PrevParentUuid}}
+-spec invalidate_dataset_eff_cache_if_needed(file_meta:doc(), file_meta:doc()) -> ok.
+invalidate_dataset_eff_cache_if_needed(
+    #document{value = #file_meta{
+        protection_flags = NewFlags,
+        parent_uuid = NewParentUuid,
+        dataset_state = NewDatasetState
+    }, scope = SpaceId},
+    #document{value = #file_meta{
+        protection_flags = OldFlags,
+        parent_uuid = PrevParentUuid,
+        dataset_state = OldDatasetState
+    }}
 ) ->
-    case OldFlags =/= NewFlags orelse PrevParentUuid =/= NewParentUuid of
+    % TODO VFS-7518 resolve conflicts on creating datasets
+    case OldFlags =/= NewFlags
+        orelse PrevParentUuid =/= NewParentUuid
+        orelse NewDatasetState =/= OldDatasetState
+    of
         true ->
             spawn(fun() ->
-                fslogic_worker:invalidate_file_protection_flags_caches(SpaceId)
+                dataset_eff_cache:invalidate_on_all_nodes(SpaceId)
             end),
             ok;
         false ->
@@ -399,6 +445,21 @@ invalidate_qos_bounded_cache_if_moved_to_trash(
             PrevParentCtx = file_ctx:new_by_uuid(PrevParentUuid, SpaceId),
             file_qos:clean_up(FileCtx, PrevParentCtx),
             qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        false ->
+            ok
+    end.
+
+
+%% @private
+-spec invalidate_paths_cache_if_needed(file_meta:doc(), file_meta:doc()) -> ok.
+invalidate_paths_cache_if_needed(
+    #document{value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
+    #document{value = #file_meta{name = OldName, parent_uuid = PrevParentUuid}}
+) ->
+    case NewName =/= OldName orelse PrevParentUuid =/= NewParentUuid of
+        true ->
+            spawn(fun() -> paths_cache:invalidate_on_all_nodes(SpaceId) end),
+            ok;
         false ->
             ok
     end.

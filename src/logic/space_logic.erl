@@ -30,6 +30,7 @@
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3, get_eff_privileges/2]).
+-export([assert_has_eff_privilege/3]).
 -export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
     get_local_supporting_storage/1, get_storages_by_provider/2,
@@ -158,6 +159,17 @@ get_eff_privileges(SpaceId, UserId) ->
             get_eff_privileges(SpaceDoc, UserId);
         {error, _} = Error ->
             Error
+    end.
+
+
+-spec assert_has_eff_privilege(od_space:id(), od_user:id(), privileges:space_privilege()) -> ok.
+assert_has_eff_privilege(SpaceId, UserId, Privilege) ->
+    % call by module to mock in tests
+    case space_logic:has_eff_privilege(SpaceId, UserId, Privilege) of
+        true ->
+            ok;
+        false ->
+            throw({error, ?EPERM})
     end.
 
 

@@ -304,8 +304,7 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            {Path, FileCtx2} = resolve_canonical_path_tokens(FileCtx),
-            CanonicalPath = filename:join(Path),
+            {CanonicalPath, FileCtx2} = resolve_and_cache_path(FileCtx, ?CANONICAL_PATH),
             {CanonicalPath, FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
@@ -314,9 +313,8 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
 
 -spec get_uuid_based_path(ctx()) -> {file_meta:uuid_based_path(), ctx()}.
 get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = undefined}) ->
-    {UuidPathTokens, FileCtx2} = resolve_uuid_based_path_tokens(FileCtx),
-    UuidPath = filename:join(UuidPathTokens),
-    {UuidPath, FileCtx2#file_ctx{uuid_based_path = UuidPath}};
+    {UuidBasedPath, FileCtx2} = resolve_and_cache_path(FileCtx, ?UUID_BASED_PATH),
+    {UuidBasedPath, FileCtx2#file_ctx{uuid_based_path = UuidBasedPath}};
 get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = UuidPath}) ->
     {UuidPath, FileCtx}.
 
@@ -1252,55 +1250,36 @@ assert_file_exists(FileCtx0) ->
 %%% Internal functions
 %%%===================================================================
 
--spec resolve_canonical_path_tokens(ctx()) -> {[file_meta:name()], ctx()}.
-resolve_canonical_path_tokens(FileCtx) ->
-    resolve_and_cache_path(FileCtx, name).
+-spec resolve_and_cache_path(ctx(), file_meta:path_type()) -> {file_meta:uuid() | file_meta:name(), ctx()}.
+resolve_and_cache_path(FileCtx, PathType) ->
+    {#document{
+        key = Uuid,
+        value = #file_meta{
+            type = FileType,
+            name = Filename
+        },
+        scope = SpaceId
+    } = Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
 
--spec resolve_uuid_based_path_tokens(ctx()) -> {[file_meta:uuid()], ctx()}.
-resolve_uuid_based_path_tokens(FileCtx) ->
-    resolve_and_cache_path(FileCtx, uuid).
-
--spec resolve_and_cache_path(ctx(), name | uuid) -> {[file_meta:uuid() | file_meta:name()], ctx()}.
-resolve_and_cache_path(FileCtx, Type) ->
-    Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}, scope = SpaceId}, ParentValue, CalculationInfo]) ->
-        case fslogic_uuid:is_root_dir_uuid(Uuid) of
-            true ->
-                {ok, [<<"/">>], CalculationInfo};
-            false ->
-                case fslogic_uuid:is_space_dir_uuid(Uuid) of
-                    true ->
-                        {ok, [<<"/">>, SpaceId], CalculationInfo};
-                    false ->
-                        NameOrUuid = case Type of
-                            uuid -> Uuid;
-                            name -> Name
-                        end,
-                        {ok, ParentValue ++ [NameOrUuid], CalculationInfo}
-                end
-        end
-    end,
-
-    {#document{key = Uuid, value = #file_meta{type = FileType, name = Filename}, scope = SpaceId} = Doc, FileCtx2} =
-        get_file_doc_including_deleted(FileCtx),
-    {FilenameOrUuid, CacheName} = case Type of
-        name -> {Filename, paths_cache:get_canonical_paths_cache_name(SpaceId)};
-        uuid -> {Uuid, paths_cache:get_uuid_based_paths_cache_name(SpaceId)}
-    end,
     case FileType of
         ?DIRECTORY_TYPE ->
-            case effective_value:get_or_calculate(CacheName, Doc, Callback) of
-                {ok, Path, _} ->
+            case paths_cache:get(SpaceId, Doc, PathType) of
+                {ok, Path} ->
                     {Path, FileCtx2};
-                {error, {file_meta_missing, _}} ->
+                ?ERROR_NOT_FOUND ->
                     throw(?ERROR_NOT_FOUND)
             end;
         _ ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
             {ok, ParentDoc} = file_meta:get_including_deleted(ParentUuid),
-            case effective_value:get_or_calculate(CacheName, ParentDoc, Callback) of
-                {ok, Path, _} ->
-                    {Path ++ [FilenameOrUuid], FileCtx2};
-                {error, {file_meta_missing, _}} ->
+            case paths_cache:get(SpaceId, ParentDoc, PathType) of
+                {ok, Path} ->
+                    FilenameOrUuid = case PathType of
+                        ?CANONICAL_PATH -> Filename;
+                        ?UUID_BASED_PATH -> Uuid
+                    end,
+                    {filename:join(Path, FilenameOrUuid), FileCtx2};
+                ?ERROR_NOT_FOUND ->
                     throw(?ERROR_NOT_FOUND)
             end
     end.

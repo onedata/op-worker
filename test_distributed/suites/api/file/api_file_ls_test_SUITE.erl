@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -507,10 +508,10 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
         file_attr = SpaceAttrs#file_attr{name = SpaceName},
         index_startid = file_id:guid_to_space_id(SpaceDirGuid),
         active_permissions_type = posix,
-        protection_flags = ?no_flags_mask,
-        has_metadata = false,
-        has_direct_qos = false,
-        has_eff_qos = false
+        eff_protection_flags = ?no_flags_mask,
+        eff_qos_membership = ?NONE_QOS_MEMBERSHIP,
+        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
+        has_metadata = false
     }.
 
 

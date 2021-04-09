@@ -333,6 +333,16 @@ check_value(_, {between, Low, High}, Param, Value) ->
             throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(Param, Low, High))
     end;
 
+check_value(_, AllowedValues, Param, Values) when is_list(AllowedValues) andalso is_list(Values) ->
+    lists:foreach(fun(Val) ->
+        case lists:member(Val, AllowedValues) of
+            true ->
+                ok;
+            _ ->
+                throw(?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(Param, AllowedValues))
+        end
+    end, Values);
+
 check_value(_, AllowedValues, Param, Val) when is_list(AllowedValues) ->
     case lists:member(Val, AllowedValues) of
         true ->
