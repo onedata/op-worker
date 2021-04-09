@@ -303,11 +303,10 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker, MockError, Flu
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         application:start(ssl),
         hackney:start(),
-        FinalConfig = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        FinalConfig = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1),
         timer:sleep(2000), % Time to process events connected with initialization and connect providers
         FinalConfig
     end,

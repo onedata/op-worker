@@ -1104,7 +1104,8 @@ update_mode(FileCtx, NewMode) ->
         true ->
             ok;
         _ ->
-            ok = attr_req:chmod_attrs_only_insecure(FileCtx, NewMode)
+            attr_req:chmod_attrs_only_insecure(FileCtx, NewMode),
+            ok
     end.
 
 -spec maybe_update_times(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->

@@ -81,7 +81,6 @@
 -export([
     set_perms/3,
     check_perms/3,
-    update_protection_flags/4,
     set_acl/3,
     get_acl/2,
     remove_acl/2
@@ -125,6 +124,12 @@
     get_qos_entry/2,
     remove_qos_entry/2,
     check_qos_status/2, check_qos_status/3
+]).
+%% Dataset related operations
+-export([
+    establish_dataset/3, remove_dataset/2, update_dataset/5,
+    get_dataset_info/2, get_file_eff_dataset_summary/2,
+    list_top_datasets/4, list_children_datasets/3
 ]).
 %% Utility functions
 -export([check_result/1]).
@@ -592,17 +597,6 @@ check_perms(SessId, FileKey, PermType) ->
     ?run(lfm_perms:check_perms(SessId, FileKey, PermType)).
 
 
--spec update_protection_flags(
-    session:id(),
-    file_key(),
-    data_access_control:bitmask(),
-    data_access_control:bitmask()
-) ->
-    ok | error_reply().
-update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToUnset) ->
-    ?run(lfm_perms:update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToUnset)).
-
-
 -spec set_acl(session:id(), file_key(), acl:acl()) ->
     ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
@@ -853,6 +847,58 @@ check_qos_status(SessId, QosEntryId) ->
     {ok, qos_status:summary()} | error_reply().
 check_qos_status(SessId, QosEntryId, FileKey) ->
     ?run(lfm_qos:check_qos_status(SessId, QosEntryId, FileKey)).
+
+
+%%%===================================================================
+%%% Datasets related operations
+%%%===================================================================
+
+
+-spec establish_dataset(session:id(), file_key(), data_access_control:bitmask()) ->
+    {ok, dataset:id()} | error_reply().
+establish_dataset(SessId, FileKey, ProtectionFlags) ->
+    ?run(lfm_datasets:establish(SessId, FileKey, ProtectionFlags)).
+
+
+-spec remove_dataset(session:id(), dataset:id()) -> ok | error_reply().
+remove_dataset(SessId, DatasetId) ->
+    ?run(lfm_datasets:remove(SessId, DatasetId)).
+
+
+-spec update_dataset(
+    session:id(),
+    dataset:id(),
+    undefined | dataset:state(),
+    data_access_control:bitmask(),
+    data_access_control:bitmask()
+) ->
+    ok | lfm:error_reply().
+update_dataset(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
+    ?run(lfm_datasets:update(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset)).
+
+
+-spec get_dataset_info(session:id(), dataset:id()) ->
+    {ok, lfm_datasets:attrs()} | error_reply().
+get_dataset_info(SessId, DatasetId) ->
+    ?run(lfm_datasets:get_info(SessId, DatasetId)).
+
+
+-spec get_file_eff_dataset_summary(session:id(), file_key()) ->
+    {ok, lfm_datasets:file_eff_summary()} | error_reply().
+get_file_eff_dataset_summary(SessId, FileKey) ->
+    ?run(lfm_datasets:get_file_eff_summary(SessId, FileKey)).
+
+
+-spec list_top_datasets(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | error_reply().
+list_top_datasets(SessId, SpaceId, State, Opts) ->
+    ?run(lfm_datasets:list_top_datasets(SessId, SpaceId, State, Opts)).
+
+
+-spec list_children_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | error_reply().
+list_children_datasets(SessId, DatasetId, Opts) ->
+    ?run(lfm_datasets:list_children_datasets(SessId, DatasetId, Opts)).
 
 
 %%%===================================================================

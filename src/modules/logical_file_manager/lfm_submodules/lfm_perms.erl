@@ -18,7 +18,6 @@
 -export([
     set_perms/3,
     check_perms/3,
-    update_protection_flags/4,
     set_acl/3,
     get_acl/2,
     remove_acl/2
@@ -53,22 +52,6 @@ check_perms(SessId, FileKey, Flag) ->
 
     remote_utils:call_fslogic(SessId, provider_request, Guid,
         #check_perms{flag = Flag}, fun(_) -> ok end
-    ).
-
-
--spec update_protection_flags(
-    session:id(),
-    lfm:file_key(),
-    data_access_control:bitmask(),
-    data_access_control:bitmask()
-) ->
-    ok | lfm:error_reply().
-update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToUnset) ->
-    Guid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
-
-    remote_utils:call_fslogic(SessId, file_request, Guid,
-        #update_protection_flags{set = FlagsToSet, unset = FlagsToUnset},
-        fun(_) -> ok end
     ).
 
 

@@ -770,7 +770,7 @@ create_share(Worker, ShareId, Name, SpaceId, ShareFileGuid, FileType, Handle) ->
     ?assertMatch({ok, _}, rpc:call(Worker, od_share, update_cache, [
         ShareId, fun(_) -> {ok, Record} end, Doc
     ])),
-    ?assertMatch({ok, _}, rpc:call(Worker, file_meta, add_share, [
+    ?assertMatch(ok, rpc:call(Worker, file_meta, add_share, [
         file_ctx:new_by_guid(ShareFileGuid), ShareId
     ])),
     ok.

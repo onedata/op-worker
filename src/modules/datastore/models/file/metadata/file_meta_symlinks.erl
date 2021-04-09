@@ -21,8 +21,6 @@
 -type symlink() :: file_meta:path().
 -export_type([symlink/0]).
 
-% POSIX defines that symlinks have 777 permission by default
--define(MODE, 8#777).
 
 %%%===================================================================
 %%% API
@@ -35,7 +33,7 @@ new_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
         value = #file_meta{
             name = Name,
             type = ?SYMLINK_TYPE,
-            mode = ?MODE,
+            mode = ?DEFAULT_SYMLINK_PERMS,
             owner = Owner,
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id(),

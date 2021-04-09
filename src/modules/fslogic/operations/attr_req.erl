@@ -28,7 +28,7 @@
 
     get_file_references/2,
 
-    get_child_attr/5, chmod/3, update_protection_flags/4, update_times/5,
+    get_child_attr/5, chmod/3, update_times/5,
     chmod_attrs_only_insecure/2,
 
     get_fs_stats/2
@@ -157,8 +157,9 @@ get_file_details(UserCtx, FileCtx0) ->
     fslogic_worker:fuse_response().
 get_file_details_insecure(UserCtx, FileCtx, Opts) ->
     {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
-    {EffFileProtectionFlags, FileCtx3} = file_protection_flags_cache:get_effective_flags(FileCtx2),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
+    {ok, EffectiveMembership, EffProtectionFlags, FileCtx3} =
+        dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
 
     #fuse_response{
         status = #status{code = ?OK},
@@ -171,12 +172,12 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
                 false ->
                     undefined
             end,
-            protection_flags = EffFileProtectionFlags,
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx3),
-            has_direct_qos = file_qos:has_any_qos_entry(FileDoc, direct),
-            has_eff_qos = file_qos:has_any_qos_entry(FileDoc, effective)
+            eff_qos_membership = file_qos:qos_membership(FileDoc),
+            eff_dataset_membership = EffectiveMembership,
+            eff_protection_flags = EffProtectionFlags
         }
     }.
 
@@ -227,21 +228,6 @@ chmod(UserCtx, FileCtx0, Mode) ->
         [?TRAVERSE_ANCESTORS, ?OWNERSHIP]
     ),
     chmod_insecure(UserCtx, FileCtx1, Mode).
-
-
--spec update_protection_flags(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    data_access_control:bitmask(),
-    data_access_control:bitmask()
-) ->
-    fslogic_worker:fuse_response().
-update_protection_flags(UserCtx, FileCtx0, FlagsToSet, FlagsToUnset) ->
-    file_ctx:assert_not_special_const(FileCtx0),
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors, ?OPERATIONS(?write_attributes_mask)]
-    ),
-    update_protection_flags_insecure(FileCtx1, FlagsToSet, FlagsToUnset).
 
 
 %%--------------------------------------------------------------------
@@ -321,8 +307,8 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
     fslogic_worker:fuse_response().
 chmod_insecure(UserCtx, FileCtx, Mode) ->
     sd_utils:chmod(UserCtx, FileCtx, Mode),
-    chmod_attrs_only_insecure(FileCtx, Mode),
-    fslogic_times:update_ctime(FileCtx),
+    FileCtx2 = chmod_attrs_only_insecure(FileCtx, Mode),
+    fslogic_times:update_ctime(FileCtx2),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -333,30 +319,17 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod_attrs_only_insecure(file_ctx:ctx(),
-    fslogic_worker:posix_permissions()) -> ok | {error, term()}.
+    fslogic_worker:posix_permissions()) -> file_ctx:ctx().
 chmod_attrs_only_insecure(FileCtx, Mode) ->
+    % TODO VFS-7524 - verify if file_meta doc updates invalidate cached docs in file_ctx everywhere
+    % TODO VFS-7525 - Protect races on events production after parallel file_meta updates
     FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
-    ok = file_meta:update_mode(FileUuid, Mode),
+    {ok, NewDoc} = file_meta:update_mode(FileUuid, Mode),
     ok = permissions_cache:invalidate(),
-    fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx),
-    fslogic_event_emitter:emit_file_perm_changed(FileCtx).
-
-
-%% @private
--spec update_protection_flags_insecure(
-    file_ctx:ctx(),
-    data_access_control:bitmask(),
-    data_access_control:bitmask()
-) ->
-    fslogic_worker:fuse_response().
-update_protection_flags_insecure(FileCtx, FlagsToSet, FlagsToUnset) ->
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    ok = file_meta:update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset),
-
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    ok = fslogic_worker:invalidate_file_protection_flags_caches(SpaceId),
-
-    #fuse_response{status = #status{code = ?OK}}.
+    FileCtx2 = file_ctx:set_file_doc(FileCtx, NewDoc),
+    fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx2),
+    fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
+    FileCtx2.
 
 
 %%--------------------------------------------------------------------

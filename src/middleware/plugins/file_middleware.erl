@@ -414,7 +414,8 @@ get_operation_supported(distribution, private) -> true;         % REST/gs
 get_operation_supported(acl, private) -> true;
 get_operation_supported(shares, private) -> true;               % gs only
 get_operation_supported(transfers, private) -> true;
-get_operation_supported(file_qos_summary, private) -> true;     % REST/gs
+get_operation_supported(qos_summary, private) -> true;          % REST/gs
+get_operation_supported(dataset_summary, private) -> true;
 get_operation_supported(download_url, private) -> true;         % gs only
 get_operation_supported(download_url, public) -> true;          % gs only
 get_operation_supported(hardlinks, private) -> true;
@@ -492,18 +493,26 @@ data_spec_get(#gri{aspect = As}) when
     As =:= distribution;
     As =:= acl;
     As =:= shares;
-    As =:= hardlinks;
     As =:= symlink_value;
     As =:= symlink_target
 ->
     #{required => #{id => {binary, guid}}};
+
+data_spec_get(#gri{aspect = hardlinks}) ->
+    #{
+        required => #{id => {binary, guid}},
+        optional => #{<<"limit">> => {integer, {between, 1, 100}}}
+    };
 
 data_spec_get(#gri{aspect = transfers}) -> #{
     required => #{id => {binary, guid}},
     optional => #{<<"include_ended_ids">> => {boolean, any}}
 };
 
-data_spec_get(#gri{aspect = file_qos_summary}) -> #{
+data_spec_get(#gri{aspect = As}) when
+    As =:= qos_summary;
+    As =:= dataset_summary
+-> #{
     required => #{id => {binary, guid}}
 };
 
@@ -538,6 +547,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= distribution;
     As =:= acl;
     As =:= shares;
+    As =:= dataset_summary;
     As =:= hardlinks;
     As =:= symlink_value;
     As =:= symlink_target
@@ -548,7 +558,7 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = trans
     SpaceId = file_id:guid_to_space_id(Guid),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
-authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = file_qos_summary}}, _) ->
+authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = qos_summary}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
 
@@ -579,7 +589,8 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= acl;
     As =:= shares;
     As =:= transfers;
-    As =:= file_qos_summary;
+    As =:= qos_summary;
+    As =:= dataset_summary;
     As =:= hardlinks;
     As =:= symlink_value;
     As =:= symlink_target
@@ -723,7 +734,7 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
             {ok, value, Transfers}
     end;
 
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, _) ->
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = qos_summary}}, _) ->
     {ok, {QosEntriesWithStatus, _AssignedEntries}} = ?check(lfm:get_effective_file_qos(
         Auth#auth.session_id, {guid, FileGuid}
     )),
@@ -731,6 +742,9 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, 
         <<"requirements">> => QosEntriesWithStatus,
         <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))
     }};
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = dataset_summary}}, _) ->
+    ?check(lfm:get_file_eff_dataset_summary(Auth#auth.session_id, {guid, FileGuid}));
 
 get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,
@@ -742,8 +756,16 @@ get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
             Error
     end;
 
-get(#op_req{auth = ?USER(_UserId, SessId), gri = #gri{id = FileGuid, aspect = hardlinks}}, _) ->
-    ?check(lfm:get_file_references(SessId, {guid, FileGuid}));
+get(#op_req{auth = ?USER(_UserId, SessId), data = Data, gri = #gri{id = FileGuid, aspect = hardlinks}}, _) ->
+    {ok, Hardlinks} = Result = ?check(lfm:get_file_references(
+        SessId, {guid, FileGuid}
+    )),
+    case maps:get(<<"limit">>, Data, undefined) of
+        undefined ->
+            Result;
+        Limit ->
+            {ok, lists:sublist(Hardlinks, Limit)}
+    end;
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_value}}, _) ->
     ?check(lfm:read_symlink(Auth#auth.session_id, {guid, FileGuid}));

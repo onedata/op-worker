@@ -60,9 +60,9 @@ run(FileAttrsList, SessionId, CowboyReq) ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_master_jobs_limit, 50),
-    SlaveJobsLimit = application:get_env(?APP_NAME, dir_streaming_traverse_slave_jobs_limit, 50),
-    ParallelismLimit = application:get_env(?APP_NAME, dir_streaming_traverse_parallelism_limit, 50),
+    MasterJobsLimit = op_worker:get_env(tarball_streaming_traverse_master_jobs_limit, 50),
+    SlaveJobsLimit = op_worker:get_env(tarball_streaming_traverse_slave_jobs_limit, 50),
+    ParallelismLimit = op_worker:get_env(tarball_streaming_traverse_parallelism_limit, 50),
 
     ok = tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -172,7 +172,8 @@ handle_multiple_files(
         batch_size => 1,
         children_master_jobs_mode => sync,
         child_dirs_job_generation_policy => generate_slave_and_master_jobs,
-        additional_data => #{<<"connection_pid">> => transfer_utils:encode_pid(self())}
+        additional_data => #{<<"connection_pid">> => transfer_utils:encode_pid(self())},
+        master_job_mode => single
     },
     {ok, _} = tree_traverse:run(
         ?POOL_NAME, file_ctx:new_by_guid(Guid), user_ctx:get_user_id(UserCtx), Options),
@@ -185,6 +186,14 @@ handle_multiple_files(
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
     TarStream1 = stream_file(TarStream, CowboyReq, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
+    handle_multiple_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq);
+handle_multiple_files(
+    [#file_attr{guid = Guid, type = ?SYMLINK_TYPE} = FileAttrs | Tail],
+    TaskId, UserCtx, TarStream, CowboyReq
+) ->
+    {ok, Path} = get_file_path(Guid),
+    PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
+    TarStream1 = stream_symlink(TarStream, CowboyReq, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
     handle_multiple_files(Tail, TaskId, UserCtx, TarStream1, CowboyReq).
 
 
@@ -193,7 +202,7 @@ handle_multiple_files(
     file_meta:path()) -> tar_utils:stream().
 stream_file(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
     #file_attr{size = FileSize, guid = Guid} = FileAttrs,
-    case lfm:monitored_open(SessionId, {guid, Guid}, read) of
+    case check_read_result(lfm:monitored_open(SessionId, {guid, Guid}, read)) of
         {ok, FileHandle} ->
             {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, StartingDirPath),
             http_streamer:send_data_chunk(Bytes, Req),
@@ -203,11 +212,28 @@ stream_file(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
                 FileHandle, FileSize, Range, Req, fun(D) -> D end, ReadBlockSize, TarStream1),
             lfm:monitored_release(FileHandle),
             TarStream2;
-        {error, ?ENOENT} ->
+        ignored ->
             TarStream;
-        {error, ?EPERM} ->
+        {error, _} = Error ->
+            ?warning("Unexpected error during tarball download: ~p. File ~p will be ignored", [Error, Guid]),
+            TarStream
+    end.
+
+
+%% @private
+-spec stream_symlink(tar_utils:stream(), cowboy_req:req(), session:id(), lfm_attrs:file_attributes(),
+    file_meta:path()) -> tar_utils:stream().
+stream_symlink(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
+    #file_attr{guid = Guid} = FileAttrs,
+    case check_read_result(lfm:read_symlink(SessionId, {guid, Guid})) of
+        {ok, LinkPath} ->
+            {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, LinkPath),
+            http_streamer:send_data_chunk(Bytes, Req),
+            TarStream1;
+        ignored ->
             TarStream;
-        {error, ?EACCES} ->
+        {error, _} = Error ->
+            ?warning("Unexpected error during tarball download: ~p. File ~p will be ignored", [Error, Guid]),
             TarStream
     end.
 
@@ -219,6 +245,10 @@ stream_loop(TarStream, Req, SessionId, RootDirPath) ->
     receive
         {file_attrs, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs, Pid} ->
             TarStream2 = stream_file(TarStream, Req, SessionId, FileAttrs, RootDirPath),
+            Pid ! done,
+            stream_loop(TarStream2, Req, SessionId, RootDirPath);
+        {file_attrs, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs, Pid} ->
+            TarStream2 = stream_symlink(TarStream, Req, SessionId, FileAttrs, RootDirPath),
             Pid ! done,
             stream_loop(TarStream2, Req, SessionId, RootDirPath);
         {file_attrs, #file_attr{type = ?DIRECTORY_TYPE} = FileAttrs, Pid} ->
@@ -235,19 +265,27 @@ stream_loop(TarStream, Req, SessionId, RootDirPath) ->
 -spec new_tar_file_entry(tar_utils:stream(), lfm_attrs:file_attributes(), file_meta:path()) ->
     {binary(), tar_utils:stream()}.
 new_tar_file_entry(TarStream, FileAttrs, StartingDirPath) ->
+    new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, undefined).
+
+
+%% @private
+-spec new_tar_file_entry(tar_utils:stream(), lfm_attrs:file_attributes(), file_meta:path(), 
+    file_meta_symlinks:symlink() | undefined) -> {binary(), tar_utils:stream()}.
+new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, SymlinkPath) ->
     #file_attr{mode = Mode, mtime = MTime, type = Type, size = FileSize, guid = Guid} = FileAttrs,
     FinalMode = case {file_id:is_share_guid(Guid), Type} of
         {true, ?REGULAR_FILE_TYPE} -> ?DEFAULT_FILE_PERMS;
         {true, ?DIRECTORY_TYPE} -> ?DEFAULT_DIR_PERMS;
-        {false, _} -> Mode
+        {_, _} -> Mode
     end,
     {ok, Path} = get_file_path(Guid),
     FileRelPath = string:prefix(Path, StartingDirPath),
-    FileType = case Type of
-        ?DIRECTORY_TYPE -> directory;
-        ?REGULAR_FILE_TYPE -> regular
+    TypeSpec = case Type of
+        ?DIRECTORY_TYPE -> ?DIRECTORY_TYPE;
+        ?REGULAR_FILE_TYPE -> ?REGULAR_FILE_TYPE;
+        ?SYMLINK_TYPE -> {?SYMLINK_TYPE, SymlinkPath}
     end,
-    TarStream1 = tar_utils:new_file_entry(TarStream, FileRelPath, FileSize, FinalMode, MTime, FileType),
+    TarStream1 = tar_utils:new_file_entry(TarStream, FileRelPath, FileSize, FinalMode, MTime, TypeSpec),
     tar_utils:flush_buffer(TarStream1).
 
 
@@ -258,4 +296,12 @@ get_file_path(ShareGuid) ->
     {Uuid, SpaceId, _} = file_id:unpack_share_guid(ShareGuid),
     Guid = file_id:pack_guid(Uuid, SpaceId),
     lfm:get_file_path(?ROOT_SESS_ID, Guid).
-    
+
+
+%% @private
+-spec check_read_result({ok, term()} | {error, term()}) -> {ok, term()} | {error, term()} | ignored.
+check_read_result({ok, _} = Result) -> Result;
+check_read_result({error, ?ENOENT}) -> ignored;
+check_read_result({error, ?EPERM}) -> ignored;
+check_read_result({error, ?EACCES}) -> ignored;
+check_read_result({error, _} = Error) -> Error.

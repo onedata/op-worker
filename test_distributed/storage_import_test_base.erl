@@ -109,6 +109,17 @@
     delete_many_subfiles_test/1,
     create_delete_race_test/2,
     create_list_race_test/1,
+    properly_handle_hardlink_when_file_and_hardlink_are_not_deleted/2,
+    properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_not_deleted/2,
+    properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_not_deleted/2,
+    properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted_when_opened/2,
+    properly_handle_hardlink_when_file_and_hardlink_are_deleted_when_opened/2,
+    properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_deleted_when_opened/2,
+    properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted/2,
+    properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_deleted/2,
+    properly_handle_hardlink_when_file_and_hardlink_are_deleted/2,
+    symlink_is_ignored_by_initial_scan/1,
+    symlink_is_ignored_by_continuous_scan/2,
 
     append_file_update_test/1,
     append_file_not_changing_mtime_update_test/1,
@@ -152,6 +163,10 @@
         ?POSIX_HELPER_NAME -> Function();
         ?S3_HELPER_NAME -> ok
     end).
+
+-define(NO_DELETE_MODE, no_delete).
+-define(DELETE_OPENED_MODE, delete_opened).
+-define(DELETE_MODE, delete).
 
 %%%===================================================================
 %%% Tests of import
@@ -3636,6 +3651,149 @@ create_list_race_test(Config) ->
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, Handle4, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle4).
 
+properly_handle_hardlink_when_file_and_hardlink_are_not_deleted(Config, StorageType) ->
+    properly_handle_hardlink_test_base(Config, StorageType, ?NO_DELETE_MODE, ?NO_DELETE_MODE).
+
+properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_not_deleted(Config, StorageType) ->
+    properly_handle_hardlink_test_base(Config, StorageType, ?DELETE_OPENED_MODE, ?NO_DELETE_MODE).
+
+properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_not_deleted(Config, StorageType) ->
+    properly_handle_hardlink_test_base(Config, StorageType, ?DELETE_MODE, ?NO_DELETE_MODE).
+
+properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted_when_opened(Config, StorageType) ->
+    properly_handle_hardlink_test_base(Config, StorageType, ?NO_DELETE_MODE, ?DELETE_OPENED_MODE).
+
+properly_handle_hardlink_when_file_and_hardlink_are_deleted_when_opened(Config, StorageType) ->
+    properly_handle_hardlink_test_base(Config, StorageType, ?DELETE_OPENED_MODE, ?DELETE_OPENED_MODE).
+
+properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_deleted_when_opened(Config, StorageType) ->
+    properly_handle_hardlink_test_base(Config, StorageType, ?DELETE_MODE, ?DELETE_OPENED_MODE).
+
+properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted(Config, StorageType) ->
+    properly_handle_hardlink_test_base(Config, StorageType, ?NO_DELETE_MODE, ?DELETE_MODE).
+
+properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_deleted(Config, StorageType) ->
+    properly_handle_hardlink_test_base(Config, StorageType, ?DELETE_OPENED_MODE, ?DELETE_MODE).
+
+properly_handle_hardlink_when_file_and_hardlink_are_deleted(Config, StorageType) ->
+    properly_handle_hardlink_test_base(Config, StorageType, ?DELETE_MODE, ?DELETE_MODE).
+
+properly_handle_hardlink_test_base(Config, StorageType, DeletionMode, LinkDeletionMode) ->
+    % DeletionMode: no_delete, delete_opened, delete
+    % DeletionMode: no_delete, delete_opened, delete
+    [W1, _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    HardLinkName = <<"hardlink">>,
+    HardLinkPath = ?SPACE_TEST_FILE_PATH(HardLinkName),
+    RDWRStorage = get_rdwr_storage(Config, W1),
+
+    {ok, Guid} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1),
+    {ok, Handle1} = lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, write),
+    {ok, _} = lfm_proxy:write(W1, Handle1, 0, ?TEST_DATA),
+    ok = lfm_proxy:fsync(W1, Handle1),
+
+    enable_initial_scan(Config, ?SPACE_ID),
+    assertInitialScanFinished(W1, ?SPACE_ID),
+
+    % create hardlink to file
+    {ok, #file_attr{guid = HardLinkGuid}} = lfm_proxy:make_link(W1, SessId, HardLinkPath, Guid),
+
+    {ok, Handle2} = lfm_proxy:open(W1, SessId, {path, HardLinkPath}, read),
+    {ok, ?TEST_DATA} = lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA)),
+
+    close_if_applicable(W1, Handle1, DeletionMode),
+    close_if_applicable(W1, Handle2, LinkDeletionMode),
+    unlink_if_applicable(W1, SessId, {guid, Guid}, DeletionMode),
+    unlink_if_applicable(W1, SessId, {guid, HardLinkGuid}, LinkDeletionMode),
+
+    timer:sleep(timer:seconds(1)),
+    ?EXEC_ON_POSIX_ONLY(fun() ->
+        % touch space dir to ensure that storage import will try to detect deletions
+        RDWRStorageMountPoint = get_mount_point(RDWRStorage),
+        ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
+        touch(W1, ContainerStorageSpacePath)
+    end, StorageType),
+
+    enable_continuous_scans(Config, ?SPACE_ID),
+    assertSecondScanFinished(W1, ?SPACE_ID),
+    disable_continuous_scan(Config),
+
+    case {DeletionMode, LinkDeletionMode} of
+        {?NO_DELETE_MODE, ?NO_DELETE_MODE} ->
+            ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+            ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, HardLinkPath}), ?ATTEMPTS);
+        {?NO_DELETE_MODE, _} ->
+            ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+            ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, HardLinkPath}), ?ATTEMPTS);
+        {_, ?NO_DELETE_MODE} ->
+            ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+            ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, HardLinkPath}), ?ATTEMPTS);
+        {_, _} ->
+            ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+            ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, HardLinkPath}), ?ATTEMPTS)
+    end,
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"createdMinHist">> => 0,
+        <<"createdHourHist">> => 0,
+        <<"createdDayHist">> => 0,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
+    }, ?SPACE_ID).
+
+
+symlink_is_ignored_by_initial_scan(Config) ->
+    [W1, _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SymlinkName = <<"symlink">>,
+    SymlinkPath = ?SPACE_TEST_FILE_PATH(SymlinkName),
+
+    % create symlink to file
+    {ok, _} = lfm_proxy:make_symlink(W1, SessId, SymlinkPath, <<"dummy symlink value">>),
+
+    enable_initial_scan(Config, ?SPACE_ID),
+    assertInitialScanFinished(W1, ?SPACE_ID),
+
+    % check whether symlink was not deleted
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, SymlinkPath}), ?ATTEMPTS).
+
+
+symlink_is_ignored_by_continuous_scan(Config, StorageType) ->
+    [W1, _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SymlinkName = <<"symlink">>,
+    SymlinkPath = ?SPACE_TEST_FILE_PATH(SymlinkName),
+    RDWRStorage = get_rdwr_storage(Config, W1),
+
+    % create symlink to file
+    {ok, _} = lfm_proxy:make_symlink(W1, SessId, SymlinkPath, <<"dummy symlink value">>),
+
+    enable_initial_scan(Config, ?SPACE_ID),
+    assertInitialScanFinished(W1, ?SPACE_ID),
+
+    timer:sleep(timer:seconds(1)),
+    ?EXEC_ON_POSIX_ONLY(fun() ->
+        % touch space dir to ensure that storage import will try to detect deletions
+        RDWRStorageMountPoint = get_mount_point(RDWRStorage),
+        ContainerStorageSpacePath = host_storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>),
+        touch(W1, ContainerStorageSpacePath)
+    end, StorageType),
+
+    enable_continuous_scans(Config, ?SPACE_ID),
+    assertSecondScanFinished(W1, ?SPACE_ID),
+    disable_continuous_scan(Config),
+
+    % check whether symlink was not deleted
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, SymlinkPath}), ?ATTEMPTS).
+
 append_file_update_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -6207,6 +6365,16 @@ await_syncing_process() ->
 release_syncing_process(SyncingProcess) ->
     SyncingProcess ! continue.
 
+unlink_if_applicable(_Node, _SessId, _FileKey, ?NO_DELETE_MODE) ->
+    ok;
+unlink_if_applicable(Node, SessId, FileKey, _) ->
+    ok = lfm_proxy:unlink(Node, SessId, FileKey).
+
+close_if_applicable(_Node, _Handle, ?DELETE_OPENED_MODE) ->
+    ok;
+close_if_applicable(Node, Handle, _) ->
+    ok = lfm_proxy:close(Node, Handle).
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -6284,6 +6452,17 @@ init_per_testcase(Case, Config)
     when Case =:= delete_empty_directory_update_test
     orelse Case =:= delete_non_empty_directory_update_test
     orelse Case =:= delete_file_update_test
+    orelse Case =:= properly_handle_hardlink_when_file_and_hardlink_are_not_deleted
+    orelse Case =:= properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_not_deleted
+    orelse Case =:= properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_not_deleted
+    orelse Case =:= properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted_when_opened
+    orelse Case =:= properly_handle_hardlink_when_file_and_hardlink_are_deleted_when_opened
+    orelse Case =:= properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_deleted_when_opened
+    orelse Case =:= properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted
+    orelse Case =:= properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_deleted
+    orelse Case =:= properly_handle_hardlink_when_file_and_hardlink_are_deleted
+    orelse Case =:= symlink_is_ignored_by_initial_scan
+    orelse Case =:= symlink_is_ignored_by_continuous_scan
     orelse Case =:= delete_file_in_dir_update_test
     orelse Case =:= delete_many_subfiles_test
     orelse Case =:= move_file_update_test

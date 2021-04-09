@@ -15,6 +15,7 @@
 
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 -export([create_response/4, get_response/2]).
 
@@ -58,11 +59,22 @@ get_response(#gri{aspect = As}, RdfMetadata) when
 get_response(#gri{aspect = As}, Metadata) when
     As =:= attrs;
     As =:= distribution;
-    As =:= file_qos_summary;
+    As =:= qos_summary;
     As =:= xattrs;
     As =:= json_metadata
 ->
     ?OK_REPLY(Metadata);
+
+get_response(#gri{aspect = dataset_summary}, #file_eff_dataset_summary{
+    direct_dataset = DatasetId,
+    eff_ancestor_datasets = EffAncestorDatasets,
+    eff_protection_flags = EffProtectionFlags
+}) ->
+    ?OK_REPLY(#{
+        <<"directDataset">> => utils:undefined_to_null(DatasetId),
+        <<"effectiveAncestorDatasets">> => EffAncestorDatasets,
+        <<"effectiveProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
+    });
 
 get_response(#gri{aspect = children}, {Children, IsLast}) ->
     ?OK_REPLY(#{

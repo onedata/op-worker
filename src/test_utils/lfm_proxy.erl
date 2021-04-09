@@ -23,7 +23,6 @@
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
-    update_protection_flags/5,
     set_perms/4,
     update_times/6,
     unlink/3, rm_recursive/3,
@@ -71,7 +70,11 @@
 
     get_effective_file_qos/3,
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
-    check_qos_status/3, check_qos_status/4
+    check_qos_status/3, check_qos_status/4,
+
+    establish_dataset/3, establish_dataset/4, remove_dataset/3, update_dataset/6,
+    get_dataset_info/3, get_file_eff_dataset_summary/3,
+    list_top_datasets/5, list_children_datasets/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -103,6 +106,7 @@ init(Config, Link) ->
 
 -spec init(Config :: list(), boolean(), [node()]) -> list().
 init(Config, Link, Workers) ->
+    teardown(Config),
     Host = self(),
     ServerFun = fun() ->
         register(lfm_proxy_server, self()),
@@ -195,18 +199,6 @@ get_parent(Worker, SessId, FileKey) ->
     ok | {error, term()}.
 check_perms(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker, lfm:check_perms(SessId, FileKey, OpenFlag)).
-
-
--spec update_protection_flags(
-    node(),
-    session:id(),
-    lfm:file_key(),
-    data_access_control:bitmask(),
-    data_access_control:bitmask()
-) ->
-    ok | {error, term()}.
-update_protection_flags(Worker, SessId, FileKey, FlagsToSet, FlagsToUnset) ->
-    ?EXEC(Worker, lfm:update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToUnset)).
 
 
 -spec set_perms(node(), session:id(), lfm:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->
@@ -843,6 +835,48 @@ check_qos_status(Worker, SessId, QosEntryId) ->
     {ok, qos_status:summary()} | lfm:error_reply().
 check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
     ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId, FileKey)).
+
+
+%%%===================================================================
+%%% Datasets functions
+%%%===================================================================
+
+-spec establish_dataset(node(), session:id(), lfm:file_key()) ->
+    {ok, dataset:id()} | lfm:error_reply().
+establish_dataset(Worker, SessId, FileKey) ->
+    establish_dataset(Worker, SessId, FileKey, 0).
+
+-spec establish_dataset(node(), session:id(), lfm:file_key(), data_access_control:bitmask()) ->
+    {ok, dataset:id()} | lfm:error_reply().
+establish_dataset(Worker, SessId, FileKey, ProtectionFlags) ->
+    ?EXEC(Worker, lfm:establish_dataset(SessId, FileKey, ProtectionFlags)).
+
+-spec remove_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+remove_dataset(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:remove_dataset(SessId, DatasetId)).
+
+-spec update_dataset(node(), session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),
+    data_access_control:bitmask()) -> ok | lfm:error_reply().
+update_dataset(Worker, SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
+    ?EXEC(Worker, lfm:update_dataset(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset)).
+
+-spec get_dataset_info(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | lfm:error_reply().
+get_dataset_info(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:get_dataset_info(SessId, DatasetId)).
+
+-spec get_file_eff_dataset_summary(node(), session:id(), lfm:file_key()) -> {ok, lfm_datasets:file_eff_summary()} | lfm:error_reply().
+get_file_eff_dataset_summary(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_file_eff_dataset_summary(SessId, FileKey)).
+
+-spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
+list_top_datasets(Worker, SessId, SpaceId, State, Opts) ->
+    ?EXEC(Worker, lfm:list_top_datasets(SessId, SpaceId, State, Opts)).
+
+-spec list_children_datasets(node(), session:id(), dataset:id(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
+list_children_datasets(Worker, SessId, DatasetId, Opts) ->
+    ?EXEC(Worker, lfm:list_children_datasets(SessId, DatasetId, Opts)).
 
 
 %%%===================================================================
