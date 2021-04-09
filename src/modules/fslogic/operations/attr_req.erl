@@ -165,7 +165,7 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
-            symlink_value = case fslogic_uuid:is_symlink_uuid(file_ctx:get_logical_guid_const(FileCtx)) of
+            symlink_value = case fslogic_uuid:is_symlink_uuid(file_ctx:get_logical_uuid_const(FileCtx)) of
                 true ->
                     {ok, SymlinkValue} = file_meta_symlinks:readlink(FileDoc),
                     SymlinkValue;
