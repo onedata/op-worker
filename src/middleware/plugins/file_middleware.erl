@@ -501,7 +501,7 @@ data_spec_get(#gri{aspect = As}) when
 data_spec_get(#gri{aspect = hardlinks}) ->
     #{
         required => #{id => {binary, guid}},
-        optional => #{<<"limit">> => {integer, {between, 1, 100}}}
+        optional => #{<<"limit">> => {integer, {not_lower_than, 1}}}
     };
 
 data_spec_get(#gri{aspect = transfers}) -> #{

@@ -120,7 +120,7 @@ rest_create_file_test(_Config) ->
                     optional = [<<"type">>, <<"mode">>, <<"offset">>, body],
                     correct_values = #{
                         <<"name">> => [name_placeholder],
-                        <<"type">> => [<<"reg">>, <<"dir">>],
+                        <<"type">> => [<<"REG">>, <<"REG">>],
                         <<"mode">> => [<<"0544">>, <<"0707">>],
                         <<"offset">> => [
                             0,
@@ -134,8 +134,8 @@ rest_create_file_test(_Config) ->
                             client = ?USER(UserId),
                             data = Data
                         }) ->
-                            case {UserId, maps:get(<<"type">>, Data, <<"reg">>)} of
-                                {User3Id, <<"dir">>} ->
+                            case {UserId, maps:get(<<"type">>, Data, <<"REG">>)} of
+                                {User3Id, <<"DIR">>} ->
                                     % User3 gets ?EACCES because operation fails on permissions
                                     % checks (file has 8#777 mode but this doesn't give anyone
                                     % ?add_subcontainer perm) rather than file type check which
@@ -148,7 +148,9 @@ rest_create_file_test(_Config) ->
 
                         {<<"name">>, UsedFileName, ?ERROR_POSIX(?EEXIST)},
 
-                        {<<"type">>, <<"file">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [<<"reg">>, <<"dir">>])},
+                        {<<"type">>, <<"file">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [
+                            <<"REG">>, <<"DIR">>, <<"LNK">>, <<"SYMLNK">>
+                        ])},
 
                         {<<"mode">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
                         {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
@@ -203,11 +205,11 @@ build_rest_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
         Offset = maps:get(<<"offset">>, Data, 0),
         ShouldResultInWrite = Offset > 0 orelse byte_size(DataSent) > 0,
 
-        Type = maps:get(<<"type">>, Data, <<"reg">>),
+        Type = maps:get(<<"type">>, Data, <<"REG">>),
         Mode = maps:get(<<"mode">>, Data, undefined),
 
         case {Type, Mode, ShouldResultInWrite, UserId == SpaceOwnerId} of
-            {<<"reg">>, <<"0544">>, true, false} ->
+            {<<"REG">>, <<"0544">>, true, false} ->
                 % It is possible to create file but setting perms forbidding write access
                 % and uploading some data at the same time should result in error for any
                 % user not being space owner
@@ -249,8 +251,8 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
                     api_test_memory:set(MemRef, files, AllFilesInDir),
 
                     ExpName = api_test_memory:get(MemRef, name),
-                    {ExpType, DefaultMode} = case maps:get(<<"type">>, Data, <<"reg">>) of
-                        <<"reg">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
+                    {ExpType, DefaultMode} = case maps:get(<<"type">>, Data, <<"REG">>) of
+                        <<"REG">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
                         <<"dir">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
                     end,
                     ExpMode = case maps:get(<<"mode">>, Data, undefined) of
