@@ -164,7 +164,7 @@ refill_sync_links_children(CurrentChildren, StorageFileCtx, Token) ->
 refill_file_meta_children(CurrentChildren, FileCtx, Token) ->
     case length(CurrentChildren) < ?BATCH_SIZE of
         true ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             ToFetch = ?BATCH_SIZE - length(CurrentChildren),
             case file_meta:list_children({uuid, FileUuid}, #{
                 offset => 0,
@@ -289,7 +289,7 @@ new_slave_job(#storage_traverse_master{storage_file_ctx = StorageFileCtx}, Child
     #storage_traverse_slave{
         info = #{
             deletion_job => true,
-            file_ctx => file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId)),
+            file_ctx => file_ctx:new_by_uuid(ChildUuid, SpaceId),
             storage_id => StorageId
         }}.
 
@@ -318,7 +318,7 @@ new_flat_iterator_child_master_job(Job = #storage_traverse_master{
         storage_file_ctx = ChildCtx,
         info = #{
             iterator_type => IteratorType,
-            file_ctx => file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId))}
+            file_ctx => file_ctx:new_by_uuid(ChildUuid, SpaceId)}
     },
     get_master_job(ChildMasterJob).
 
@@ -336,7 +336,9 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     try
         {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
         {IsStorageFileCreated, FileCtx3} = file_ctx:is_storage_file_created(FileCtx2),
-        case IsStorageFileCreated and not storage_driver:exists(SDHandle) of
+        Uuid = file_ctx:get_logical_uuid_const(FileCtx3),
+        IsNotSymlink = not fslogic_uuid:is_symlink_uuid(Uuid),
+        case IsNotSymlink andalso IsStorageFileCreated and (not storage_driver:exists(SDHandle)) of
             true ->
                 % file is still missing on storage we can delete it from db
                delete_file_and_update_counters(FileCtx3, SpaceId, StorageId);
@@ -371,7 +373,7 @@ delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
 delete_dir_recursive_and_update_counters(FileCtx, SpaceId, StorageId) ->
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
-    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
     delete_dir_recursive(FileCtx3, SpaceId, StorageId),
     storage_import_logger:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
     storage_import_monitoring:mark_deleted_file(SpaceId).
@@ -385,7 +387,7 @@ delete_dir_recursive_and_update_counters(FileCtx, SpaceId, StorageId) ->
 delete_regular_file_and_update_counters(FileCtx, SpaceId) ->
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
-    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
     delete_file(FileCtx3),
     storage_import_logger:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
     storage_import_monitoring:mark_deleted_file(SpaceId).
@@ -415,8 +417,9 @@ delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
     od_space:id(), storage:id()) -> {ok, file_ctx:ctx()}.
 delete_children(FileCtx, UserCtx, ListOpts, SpaceId, StorageId) ->
     try
-        {ChildrenCtxs, #{is_last := IsLast, token := Token2}, FileCtx2} =
-            file_ctx:get_file_children(FileCtx, UserCtx, ListOpts),
+        {ChildrenCtxs, #{is_last := IsLast, token := Token2}, FileCtx2} = files_tree:get_children(
+            FileCtx, UserCtx, ListOpts
+        ),
         storage_import_monitoring:increment_queue_length_histograms(SpaceId, length(ChildrenCtxs)),
         lists:foreach(fun(ChildCtx) ->
             delete_file_and_update_counters(ChildCtx, SpaceId, StorageId)
@@ -469,7 +472,7 @@ finish_callback(#storage_traverse_master{
     end,
     ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-        Guid = file_ctx:get_guid_const(FileCtx),
+        Guid = file_ctx:get_logical_guid_const(FileCtx),
         case Depth =:= MaxDepth of
             true -> storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, undefined);
             false -> storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, MTime)

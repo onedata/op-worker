@@ -14,14 +14,15 @@
 
 -include("api_file_test_utils.hrl").
 -include("api_test_runner.hrl").
--include("onenv_file_test_utils.hrl").
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -32,12 +33,19 @@
     delete_share_test/1
 ]).
 
-all() -> [
-    create_share_test,
-    get_share_test,
-    update_share_test,
-    delete_share_test
+groups() -> [
+    {all_tests, [parallel], [
+        create_share_test,
+        get_share_test,
+        update_share_test,
+        delete_share_test
+    ]}
 ].
+
+all() -> [
+    {group, all_tests}
+].
+
 
 -define(ATTEMPTS, 30).
 
@@ -48,10 +56,7 @@ all() -> [
 
 
 create_share_test(_Config) ->
-    Providers = lists:flatten([
-        oct_background:get_provider_nodes(krakow),
-        oct_background:get_provider_nodes(paris)
-    ]),
+    Providers = [krakow, paris],
     SpaceId = oct_background:get_space_id(space_krk_par),
 
     {FileType, FileSpec} = generate_random_file_spec(),
@@ -64,7 +69,7 @@ create_share_test(_Config) ->
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
             verify_fun = build_verify_file_shares_fun(MemRef, Providers, user3, FileGuid),
             scenario_templates = [
                 #scenario_template{
@@ -89,13 +94,15 @@ create_share_test(_Config) ->
                 % Operations should be rejected even before checking if share exists
                 % (in case of using share file id) so it is not necessary to use
                 % valid share id
-                FileGuid, SpaceId, <<"NonExistentShare">>, #data_spec{
-                    required = [<<"name">>, <<"fileId">>],
+                <<"rootFileId">>, FileGuid, SpaceId, <<"NonExistentShare">>, #data_spec{
+                    required = [<<"name">>],
+                    at_least_one = [<<"fileId">>, <<"rootFileId">>],
                     optional = [<<"description">>],
                     correct_values = #{
                         <<"name">> => [<<"share1">>, <<"share2">>],
                         <<"description">> => [<<"">>, <<"# Some description">>],
-                        <<"fileId">> => [FileObjectId]
+                        <<"fileId">> => [FileObjectId],
+                        <<"rootFileId">> => [FileObjectId]
                     },
                     bad_values = [
                         {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)},
@@ -132,16 +139,19 @@ create_share_prepare_gs_args_fun(#api_test_ctx{data = Data}) ->
 
 %% @private
 -spec build_create_share_validate_rest_call_result_fun(
-    api_test_memory:mem_ref(), [node()], api_test_utils:file_type(), od_space:id()
+    api_test_memory:mem_ref(),
+    [oct_background:entity_selector()],
+    api_test_utils:file_type(),
+    od_space:id()
 ) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_create_share_validate_rest_call_result_fun(MemRef, Providers, FileType, SpaceId) ->
     fun(#api_test_ctx{
         node = TestNode,
         client = ?USER(UserId),
-        data = Data = #{<<"name">> := ShareName, <<"fileId">> := FileObjectId}
+        data = Data = #{<<"name">> := ShareName}
     }, Result) ->
-        {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
+        {ok, FileGuid} = file_id:objectid_to_guid(get_root_file_id(Data)),
         Description = maps:get(<<"description">>, Data, <<"">>),
 
         {ok, _, Headers, Body} = ?assertMatch(
@@ -164,15 +174,18 @@ build_create_share_validate_rest_call_result_fun(MemRef, Providers, FileType, Sp
 
 %% @private
 -spec build_create_share_validate_gs_call_result_fun(
-    api_test_memory:mem_ref(), [node()], api_test_utils:file_type(), od_space:id()
+    api_test_memory:mem_ref(),
+    [oct_background:entity_selector()],
+    api_test_utils:file_type(),
+    od_space:id()
 ) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, SpaceId) ->
     fun(#api_test_ctx{
         client = ?USER(UserId),
-        data = Data = #{<<"name">> := ShareName, <<"fileId">> := FileObjectId}
+        data = Data = #{<<"name">> := ShareName}
     }, Result) ->
-        {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
+        {ok, FileGuid} = file_id:objectid_to_guid(get_root_file_id(Data)),
         Description = maps:get(<<"description">>, Data, <<"">>),
 
         {ok, #{<<"gri">> := ShareGri} = ShareData} = ?assertMatch({ok, _}, Result),
@@ -192,11 +205,17 @@ build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, Spac
     end.
 
 
+%% @private
+-spec get_root_file_id(middleware:data()) -> file_id:file_guid().
+get_root_file_id(Data) ->
+    case maps:get(<<"rootFileId">>, Data, undefined) of
+        undefined -> maps:get(<<"fileId">>, Data);
+        RootFileGuid -> RootFileGuid
+    end.
+
+
 get_share_test(_Config) ->
-    Providers = lists:flatten([
-        oct_background:get_provider_nodes(krakow),
-        oct_background:get_provider_nodes(paris)
-    ]),
+    Providers = [krakow, paris],
     SpaceId = oct_background:get_space_id(space_krk_par),
 
     ShareName = <<"share">>,
@@ -301,10 +320,7 @@ build_get_share_prepare_gs_args_fun(ShareId, Scope) ->
 
 
 update_share_test(_Config) ->
-    Providers = lists:flatten([
-        oct_background:get_provider_nodes(krakow),
-        oct_background:get_provider_nodes(paris)
-    ]),
+    Providers = [krakow, paris],
     SpaceKrkParId = oct_background:get_space_id(space_krk_par),
     User3Id = oct_background:get_user_id(user3),
 
@@ -423,10 +439,7 @@ build_update_share_prepare_gs_args_fun(ShareId) ->
 
 
 delete_share_test(_Config) ->
-    Providers = lists:flatten([
-        oct_background:get_provider_nodes(krakow),
-        oct_background:get_provider_nodes(paris)
-    ]),
+    Providers = [krakow, paris],
     SpaceId = oct_background:get_space_id(space_krk_par),
 
     {FileType, FileSpec} = generate_random_file_spec([#share_spec{} || _ <- lists:seq(1, 4)]),
@@ -440,7 +453,7 @@ delete_share_test(_Config) ->
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
             verify_fun = build_verify_file_shares_fun(MemRef, Providers, user3, FileGuid),
             scenario_templates = [
                 #scenario_template{
@@ -507,7 +520,10 @@ choose_share_to_remove(MemRef) ->
 
 
 %% @private
--spec build_delete_share_validate_rest_call_result_fun(api_test_memory:mem_ref(), [node()]) ->
+-spec build_delete_share_validate_rest_call_result_fun(
+    api_test_memory:mem_ref(),
+    [oct_background:entity_selector()]
+) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_delete_share_validate_rest_call_result_fun(MemRef, Providers) ->
     fun(#api_test_ctx{client = ?USER(UserId)}, {ok, RespCode, _, RespBody}) ->
@@ -517,7 +533,10 @@ build_delete_share_validate_rest_call_result_fun(MemRef, Providers) ->
 
 
 %% @private
--spec build_delete_share_validate_gs_call_result_fun(api_test_memory:mem_ref(), [node()]) ->
+-spec build_delete_share_validate_gs_call_result_fun(
+    api_test_memory:mem_ref(),
+    [oct_background:entity_selector()]
+) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_delete_share_validate_gs_call_result_fun(MemRef, Providers) ->
     fun(#api_test_ctx{client = ?USER(UserId)}, Result) ->
@@ -527,13 +546,17 @@ build_delete_share_validate_gs_call_result_fun(MemRef, Providers) ->
 
 
 %% @private
--spec validate_delete_share_result(api_test_memory:mem_ref(), od_user:id(), [node()]) ->
+-spec validate_delete_share_result(
+    api_test_memory:mem_ref(),
+    od_user:id(),
+    [oct_background:entity_selector()]
+) ->
     ok.
 validate_delete_share_result(MemRef, UserId, Providers) ->
     ShareId = api_test_memory:get(MemRef, share_to_remove),
 
-    lists:foreach(fun(Node) ->
-        ?assertEqual(?ERROR_NOT_FOUND, get_share_doc(Node, UserId, ShareId), ?ATTEMPTS)
+    lists:foreach(fun(Provider) ->
+        ?assertEqual(?ERROR_NOT_FOUND, get_share_doc(Provider, UserId, ShareId), ?ATTEMPTS)
     end, Providers),
 
     api_test_memory:set(MemRef, shares, lists:delete(ShareId, api_test_memory:get(MemRef, shares))).
@@ -565,7 +588,7 @@ generate_random_file_spec(ShareSpecs) ->
 
 %% @private
 -spec verify_share_doc(
-    [node()], od_share:id(), od_share:name(), od_share:description(),
+    [oct_background:entity_selector()], od_share:id(), od_share:name(), od_share:description(),
     od_space:id(), file_id:file_guid(), api_test_utils:file_type(), od_user:id()
 ) ->
     ok.
@@ -575,7 +598,7 @@ verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, 
     ExpFileType = binary_to_atom(FileType, utf8),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
-    lists:foreach(fun(Node) ->
+    lists:foreach(fun(Provider) ->
         ?assertMatch(
             {ok, #document{key = ShareId, value = #od_share{
                 name = ShareName,
@@ -587,16 +610,18 @@ verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, 
                 file_type = ExpFileType,
                 handle = undefined
             }}},
-            get_share_doc(Node, UserId, ShareId),
+            get_share_doc(Provider, UserId, ShareId),
             ?ATTEMPTS
         )
     end, Providers).
 
 
 %% @private
--spec get_share_doc(node(), od_user:id(), od_share:id()) -> od_share:doc().
-get_share_doc(Node, UserId, ShareId) ->
-    ProviderId = opw_test_rpc:get_provider_id(Node),
+-spec get_share_doc(oct_background:entity_selector(), od_user:id(), od_share:id()) ->
+    od_share:doc().
+get_share_doc(ProviderSelector, UserId, ShareId) ->
+    Node = get_random_op_node(ProviderSelector),
+    ProviderId = oct_background:get_provider_id(ProviderSelector),
     UserSessId = oct_background:get_user_session_id(UserId, ProviderId),
 
     rpc:call(Node, share_logic, get, [UserSessId, ShareId]).
@@ -649,7 +674,7 @@ assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileG
 %% @private
 -spec build_verify_file_shares_fun(
     api_test_memory:mem_ref(),
-    [node()],
+    [oct_background:entity_selector()],
     oct_background:entity_selector(),
     file_id:file_guid()
 ) ->
@@ -658,17 +683,22 @@ build_verify_file_shares_fun(MemRef, Providers, UserSelector, FileGuid) ->
     fun(_, _) ->
         ExpShares = lists:sort(api_test_memory:get(MemRef, shares, [])),
 
-        lists:foreach(fun(Node) ->
-            ?assertEqual(ExpShares, get_file_shares(Node, UserSelector, FileGuid), ?ATTEMPTS)
+        lists:foreach(fun(Provider) ->
+            ?assertEqual(ExpShares, get_file_shares(Provider, UserSelector, FileGuid), ?ATTEMPTS)
         end, Providers)
     end.
 
 
 %% @private
--spec get_file_shares(node(), oct_background:entity_selector(), file_id:file_guid()) ->
+-spec get_file_shares(
+    oct_background:entity_selector(),
+    oct_background:entity_selector(),
+    file_id:file_guid()
+) ->
     [od_share:id()].
-get_file_shares(Node, UserSelector, FileGuid) ->
-    ProviderId = opw_test_rpc:get_provider_id(Node),
+get_file_shares(ProviderSelector, UserSelector, FileGuid) ->
+    Node = get_random_op_node(ProviderSelector),
+    ProviderId = oct_background:get_provider_id(ProviderSelector),
     UserSessId = oct_background:get_user_session_id(UserSelector, ProviderId),
 
     {ok, #file_attr{shares = FileShares}} = ?assertMatch(
@@ -676,6 +706,12 @@ get_file_shares(Node, UserSelector, FileGuid) ->
         lfm_proxy:stat(Node, UserSessId, {guid, FileGuid})
     ),
     lists:sort(FileShares).
+
+
+%% @private
+-spec get_random_op_node(oct_background:entity_selector()) -> node().
+get_random_op_node(ProviderSelector) ->
+    lists_utils:random_element(oct_background:get_provider_nodes(ProviderSelector)).
 
 
 %% @private
@@ -716,19 +752,18 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(get_shared_file_or_directory_data_test = Case, Config) ->
-    % time must be frozen because the test checks if endpoints returning file
-    % attributes give the same results, but each request bumps the atime of the
-    % file, which causes different results
-    time_test_utils:freeze_time(Config),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_group(_Group, Config) ->
+    lfm_proxy:init(Config, false).
+
+
+end_per_group(_Group, Config) ->
+    lfm_proxy:teardown(Config).
+
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
-    lfm_proxy:init(Config).
+    Config.
 
 
-end_per_testcase(get_shared_file_or_directory_data_test = Case, Config) ->
-    time_test_utils:unfreeze_time(Config),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config).
+end_per_testcase(_Case, _Config) ->
+    ok.

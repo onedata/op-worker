@@ -13,6 +13,8 @@
 -author("Michal Cwiertnia").
 
 -include("modules/datastore/qos.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -41,7 +43,7 @@ add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
     file_ctx:assert_not_trash_dir_const(FileCtx),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx,
-        [traverse_ancestors, ?write_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
     add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum, EntryType).
 
@@ -55,7 +57,7 @@ add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
 get_effective_file_qos(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
     get_effective_file_qos_insecure(FileCtx1).
 
@@ -69,7 +71,7 @@ get_effective_file_qos(UserCtx, FileCtx0) ->
 get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
     fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
     get_qos_entry_insecure(QosEntryId).
 
@@ -83,7 +85,7 @@ get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
     fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
     remove_qos_entry_insecure(UserCtx, QosEntryId).
 
@@ -97,7 +99,7 @@ remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 check_status(UserCtx, FileCtx0, QosEntryId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
     check_status_insecure(FileCtx1, QosEntryId).
 
@@ -144,7 +146,8 @@ add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos_insecure(file_ctx:ctx()) -> fslogic_worker:provider_response().
 get_effective_file_qos_insecure(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    % TODO VFS-7435 - Integrate hardlinks with QoS
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case file_qos:get_effective(FileUuid) of
         {ok, EffQos} ->
             case file_qos:is_in_trash(EffQos) of
@@ -248,7 +251,7 @@ check_status_insecure(FileCtx, QosEntryId) ->
 -spec add_possible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type(), [storage:id()]) -> fslogic_worker:provider_response().
 add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     AllTraverseReqs = qos_traverse_req:build_traverse_reqs(FileUuid, Storages),
@@ -277,7 +280,7 @@ add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
 -spec add_impossible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
 add_impossible_qos(FileCtx, QosExpression, ReplicasNum, EntryType) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     case qos_entry:create(SpaceId, FileUuid, QosExpression, ReplicasNum, EntryType) of

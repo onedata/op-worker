@@ -15,6 +15,7 @@
 
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 -export([create_response/4, get_response/2]).
 
@@ -45,8 +46,7 @@ create_response(#gri{aspect = register_file}, _, value, ObjectId) ->
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(#gri{aspect = As}, Result) when
-    As =:= object_id;
-    As =:= list
+    As =:= object_id
 ->
     ?OK_REPLY(Result);
 get_response(#gri{aspect = children}, {Children, IsLast}) ->
@@ -71,6 +71,17 @@ get_response(#gri{aspect = rdf_metadata}, RdfMetadata) ->
 
 get_response(#gri{aspect = As}, EffQosResp) when
     As =:= distribution;
-    As =:= file_qos_summary
+    As =:= qos_summary
 ->
-    ?OK_REPLY(EffQosResp).
+    ?OK_REPLY(EffQosResp);
+
+get_response(#gri{aspect = dataset_summary}, #file_eff_dataset_summary{
+    direct_dataset = DatasetId,
+    eff_ancestor_datasets = EffAncestorDatasets,
+    eff_protection_flags = EffProtectionFlags
+}) ->
+    ?OK_REPLY(#{
+        <<"directDataset">> => utils:undefined_to_null(DatasetId),
+        <<"effectiveAncestorDatasets">> => EffAncestorDatasets,
+        <<"effectiveProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
+    }).

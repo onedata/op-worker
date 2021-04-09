@@ -93,7 +93,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     IsManualImport = maps:get(manual, Info, false),
     case file_ctx:is_root_dir_const(ParentCtx) of
         true ->
@@ -170,8 +170,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                     FileUuid2 = utils:ensure_defined(FileUuid, ResolvedUuid),
                     case deletion_marker:check(ParentUuid, FileName) of
                         {error, not_found} ->
-                            FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
-                            FileCtx = file_ctx:new_by_guid(FileGuid),
+                            FileCtx = file_ctx:new_by_uuid(FileUuid2, SpaceId),
                             storage_import_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
                         {ok, _} ->
                             {?FILE_UNMODIFIED, undefined, StorageFileCtx}
@@ -260,7 +259,7 @@ ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info,
     end;
 ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info, true) ->
     ParentCtx = maps:get(parent_ctx, Info),
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     ?CREATE_MISSING_PARENT_CRITICAL_SECTION(ParentUuid, MissingParentName, fun() ->
         % check whether directory was not created by other process before entering critical section
         case get_child_safe(ParentCtx, MissingParentName) of
@@ -283,7 +282,7 @@ ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info,
 
 -spec ensure_missing_parent_exist(file_meta:name(), storage_file_ctx:ctx(), info()) -> file_ctx:ctx() | undefined.
 ensure_missing_parent_exist(MissingParentName, MissingParentStorageCtx, Info = #{parent_ctx := ParentCtx}) ->
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     % TODO VFS-5881 get rid of this critical section
     % this critical section is to avoid race on creating missing parent by call to import_file function
     % in case of simultaneous creation of missing parent file_meta, one of syncing processes
@@ -306,7 +305,7 @@ ensure_missing_parent_exist(MissingParentName, MissingParentStorageCtx, Info = #
 -spec get_child_safe(file_ctx:ctx(), file_meta:name()) -> {ok, file_ctx:ctx()} | {error, term()}.
 get_child_safe(FileCtx, ChildName) ->
     try
-        {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, user_ctx:new(?ROOT_SESS_ID)),
+        {ChildCtx, _} = files_tree:get_child(FileCtx, ChildName, user_ctx:new(?ROOT_SESS_ID)),
         {ok, ChildCtx}
     catch
         error:{badmatch,{error,not_found}} ->
@@ -591,15 +590,15 @@ rollback_file_creation(ParentCtx, StorageFileCtx) ->
 try_to_delete_file(ParentCtx, ChildName) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        {FileCtx, _} = file_ctx:get_child(ParentCtx, ChildName, UserCtx),
+        {FileCtx, _} = files_tree:get_child(ParentCtx, ChildName, UserCtx),
         fslogic_delete:handle_file_deleted_on_imported_storage(FileCtx)
     catch
         throw:?ENOENT ->
-            ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+            ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
             SpaceId = file_ctx:get_space_id_const(ParentCtx),
             case canonical_path:to_uuid(ParentUuid, ChildName) of
                 {ok, FileUuid} ->
-                    file_meta_links:delete(ParentUuid, SpaceId, ChildName, FileUuid);
+                    file_meta_forest:delete(ParentUuid, SpaceId, ChildName, FileUuid);
                 {error, not_found} ->
                     ok
             end
@@ -610,7 +609,7 @@ try_to_delete_file(ParentCtx, ChildName) ->
 import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {OwnerId, StorageFileCtx2} = get_owner_id(StorageFileCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
     {ok, StorageFileCtx3} = create_location(FileUuid, StorageFileCtx2, OwnerId),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
@@ -716,7 +715,7 @@ get_attr_including_deleted(FileCtx) ->
     catch
         _:Reason ->
             #status{code = Error} = fslogic_errors:gen_status_message(Reason),
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             ?debug_stacktrace(
                 "Error {error, ~p} occured when getting attr of file: ~p during auto storage import procedure in space: ~p.",
@@ -758,7 +757,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
                             ?warning(
                                 "Stalled file_meta link ~p from parent ~p pointing to uuid ~p detected. "
                                 "The link will be deleted", [FileName, ParentUuid, FileUuid2]),
-                            ok = file_meta_links:delete(ParentUuid, SpaceId, FileName, FileUuid2),
+                            ok = file_meta_forest:delete(ParentUuid, SpaceId, FileName, FileUuid2),
                             stalled_link;
                         false ->
                             % FileUuid2 was found in a remote links tree.
@@ -949,7 +948,7 @@ maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
             SpaceId = file_ctx:get_space_id_const(FileCtx2),
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx2),
             {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
-            FileUuid = file_ctx:get_uuid_const(FileCtx3),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
             storage_import_logger:log_modification(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
             fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
             {?FILE_MODIFIED, FileCtx3, StorageFileCtx2}
@@ -1077,7 +1076,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
                     false
             end
     end,
-    Guid = file_ctx:get_guid_const(FileCtx4),
+    Guid = file_ctx:get_logical_guid_const(FileCtx4),
     storage_sync_info:update_mtime(StorageFileId, SpaceId, Guid, StMtime, NewLastStat),
     {Result2, FileCtx4, StorageFileCtx2, ?FILE_LOCATION_ATTR_NAME}.
 
@@ -1105,7 +1104,8 @@ update_mode(FileCtx, NewMode) ->
         true ->
             ok;
         _ ->
-            ok = attr_req:chmod_attrs_only_insecure(FileCtx, NewMode)
+            attr_req:chmod_attrs_only_insecure(FileCtx, NewMode),
+            ok
     end.
 
 -spec maybe_update_times(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
@@ -1156,7 +1156,7 @@ maybe_update_owner(StorageFileCtx, #file_attr{owner_id = OldOwnerId}, FileCtx, _
 
 -spec update_owner(file_ctx:ctx(), od_user:id()) -> ok.
 update_owner(FileCtx, NewOwnerId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     ok = ?extract_ok(file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{owner = NewOwnerId}}
     end)).

@@ -15,13 +15,13 @@
 -include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("proto/common/credentials.hrl").
@@ -758,7 +758,6 @@ write_to_file(Worker, SessionId, FileKey, Offset, Data) ->
     {ok, FileHandle} = open_file(Worker, SessionId, FileKey, write),
     Result = lfm_proxy:write(Worker, FileHandle, Offset, Data),
     lfm_proxy:fsync(Worker, FileHandle),
-    timer:sleep(500), %% @todo: remove after fixing fsync
     lfm_proxy:close(Worker, FileHandle),
     Result.
 
@@ -777,7 +776,6 @@ truncate(Worker, SessionId, FileKey, Size) ->
     {ok, FileHandle} = open_file(Worker, SessionId, FileKey, write),
     Result = lfm_proxy:truncate(Worker, SessionId, FileKey, Size),
     lfm_proxy:fsync(Worker, FileHandle),
-    timer:sleep(500), %% @todo: remove after fixing fsync
     lfm_proxy:close(Worker, FileHandle),
     Result.
 

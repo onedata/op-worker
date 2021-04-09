@@ -61,9 +61,15 @@ operation_supported(_, _, _) -> false.
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
-        <<"name">> => {binary, non_empty},
-        <<"fileId">> => {binary,
-            fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)} end}
+        <<"name">> => {binary, non_empty}
+    },
+    at_least_one => #{
+        <<"fileId">> => {binary, fun(ObjectId) ->
+            {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)}
+        end},
+        <<"rootFileId">> => {binary, fun(ObjectId) ->
+            {true, middleware_utils:decode_object_id(ObjectId, <<"rootFileId">>)}
+        end}
     },
     optional => #{
         <<"description">> => {binary, any}
@@ -132,10 +138,9 @@ fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId, SessionId), gri = #gr
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
-authorize(#op_req{operation = create, auth = Auth, gri = #gri{aspect = instance}, data = #{
-    <<"fileId">> := FileGuid
-}}, _) ->
-    SpaceId = file_id:guid_to_space_id(FileGuid),
+authorize(#op_req{operation = create, auth = Auth, gri = #gri{aspect = instance}, data = Data}, _) ->
+    RootFileGuid = get_root_file_guid(Data),
+    SpaceId = file_id:guid_to_space_id(RootFileGuid),
     middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = public}}, _) ->
@@ -157,10 +162,9 @@ authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = instance}},
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = #{
-    <<"fileId">> := FileGuid
-}}, _) ->
-    SpaceId = file_id:guid_to_space_id(FileGuid),
+validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = Data}, _) ->
+    RootFileGuid = get_root_file_guid(Data),
+    SpaceId = file_id:guid_to_space_id(RootFileGuid),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{aspect = instance, scope = public}}, _) ->
@@ -182,9 +186,9 @@ validate(#op_req{operation = Op, gri = #gri{aspect = instance}},
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
-create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI} = Req) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
-    FileKey = {guid, maps:get(<<"fileId">>, Req#op_req.data)},
+    FileKey = {guid, get_root_file_guid(Data)},
 
     Name = maps:get(<<"name">>, Data),
     Description = maps:get(<<"description">>, Data, <<"">>),
@@ -233,6 +237,15 @@ delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec get_root_file_guid(middleware:data()) -> file_id:file_guid().
+get_root_file_guid(Data) ->
+    case maps:get(<<"rootFileId">>, Data, undefined) of
+        undefined -> maps:get(<<"fileId">>, Data);
+        RootFileGuid -> RootFileGuid
+    end.
 
 
 %% @private

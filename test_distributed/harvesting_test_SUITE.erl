@@ -19,11 +19,13 @@
 -module(harvesting_test_SUITE).
 -author("Jakub Kudzia").
 
+-include("modules/dataset/dataset.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/harvesting/harvesting.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -39,6 +41,9 @@
 -export([
     harvest_space_doc_and_do_not_harvest_trash_doc/1,
     create_file/1,
+    create_file_and_hardlink/1,
+    create_dir_and_symlink/1,
+    create_file_with_dataset/1,
     rename_file/1,
     delete_file/1,
     set_json_metadata/1,
@@ -70,6 +75,9 @@ all() ->
     ?ALL([
         harvest_space_doc_and_do_not_harvest_trash_doc,
         create_file,
+        create_file_and_hardlink,
+        create_dir_and_symlink,
+        create_file_with_dataset,
         rename_file,
         delete_file,
         set_json_metadata,
@@ -274,6 +282,7 @@ harvest_space_doc_and_do_not_harvest_trash_doc(Config) ->
         <<"fileId">> => SpaceFileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => ?SPACE_NAME1,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
@@ -283,6 +292,7 @@ harvest_space_doc_and_do_not_harvest_trash_doc(Config) ->
         <<"fileId">> => TrashFileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => ?TRASH_DIR_NAME,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
@@ -292,6 +302,7 @@ harvest_space_doc_and_do_not_harvest_trash_doc(Config) ->
         <<"fileId">> => SpaceFileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => ?SPACE_NAME1,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId2).
@@ -312,6 +323,7 @@ create_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
@@ -321,6 +333,206 @@ create_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2).
+
+
+create_file_with_dataset(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+    FileName = ?FILE_NAME,
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
+    {ok, DatasetId} = lfm_proxy:establish_dataset(Worker, SessId, {guid, Guid}),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{},
+        <<"datasetId">> => DatasetId
+    }], ProviderId),
+
+    % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{},
+        <<"datasetId">> => DatasetId
+    }], ProviderId2),
+
+    ok = lfm_proxy:update_dataset(Worker, SessId, DatasetId, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask),
+
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{},
+        <<"datasetId">> => DatasetId
+    }], ProviderId),
+
+    % detaching dataset should result in entry without datasetId
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    % reattach dataset
+    ok = lfm_proxy:update_dataset(Worker, SessId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{},
+        <<"datasetId">> => DatasetId
+    }], ProviderId),
+
+    % remove dataset
+    ok = lfm_proxy:remove_dataset(Worker, SessId, DatasetId),
+
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{},
+        <<"datasetId">> => DatasetId
+    }], ProviderId),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId).
+
+
+create_file_and_hardlink(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+    FileName = ?FILE_NAME,
+    HardlinkName = <<"hardlink">>,
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
+    {ok, #file_attr{guid = HardlinkGuid}} =
+        lfm_proxy:make_link(Worker, SessId, ?PATH(HardlinkName, ?SPACE_ID1), Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+    {ok, LinkFileId} = file_id:guid_to_objectid(HardlinkGuid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => HardlinkName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2),
+
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => HardlinkName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2).
+
+create_dir_and_symlink(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+    FileName = ?FILE_NAME,
+    SymlinkName = <<"symlink">>,
+
+    {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
+    {ok, #file_attr{guid = SymlinkGuid}} =
+        lfm_proxy:make_symlink(Worker, SessId, ?PATH(SymlinkName, ?SPACE_ID1), Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+    {ok, LinkFileId} = file_id:guid_to_objectid(SymlinkGuid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => SymlinkName,
+        <<"fileType">> => str_utils:to_binary(?SYMLINK_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2),
+
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => SymlinkName,
+        <<"fileType">> => str_utils:to_binary(?SYMLINK_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId2).
@@ -341,6 +553,7 @@ rename_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
@@ -352,6 +565,7 @@ rename_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId).
@@ -372,6 +586,7 @@ delete_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
@@ -406,6 +621,7 @@ set_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
@@ -417,6 +633,7 @@ set_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
@@ -441,6 +658,7 @@ modify_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
@@ -454,6 +672,7 @@ modify_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -478,6 +697,7 @@ delete_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
@@ -490,6 +710,7 @@ delete_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId).
@@ -512,6 +733,7 @@ delete_file_with_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
@@ -547,6 +769,7 @@ modify_json_many_times(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => ExpectedFinalJSON
@@ -571,6 +794,7 @@ set_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF
@@ -582,6 +806,7 @@ set_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => RDF
@@ -605,6 +830,7 @@ modify_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF
@@ -618,6 +844,7 @@ modify_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF2
@@ -642,6 +869,7 @@ delete_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF
@@ -654,6 +882,7 @@ delete_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId).
@@ -676,6 +905,7 @@ delete_file_with_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF
@@ -709,6 +939,7 @@ modify_rdf_many_times(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => ExpectedFinalRDF
@@ -735,6 +966,7 @@ set_xattr_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => #{
@@ -748,6 +980,7 @@ set_xattr_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => #{
@@ -781,6 +1014,7 @@ cdmi_xattr_should_not_be_harvested(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
@@ -790,6 +1024,7 @@ cdmi_xattr_should_not_be_harvested(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId2).
@@ -814,6 +1049,7 @@ modify_xattr_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => #{
@@ -832,6 +1068,7 @@ modify_xattr_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => #{
@@ -860,6 +1097,7 @@ delete_xattr_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => #{
@@ -874,6 +1112,7 @@ delete_xattr_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId).
@@ -898,6 +1137,7 @@ delete_file_with_xattr_metadata(Config) ->
         <<"operation">> => <<"submit">>,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"payload">> => #{
             <<"xattrs">> => #{
                 XattrName => XattrValue
@@ -934,6 +1174,7 @@ modify_xattr_many_times(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => ExpectedFinalXattrs
@@ -959,6 +1200,7 @@ modify_metadata_and_rename_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
@@ -974,6 +1216,7 @@ modify_metadata_and_rename_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1003,6 +1246,7 @@ changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_spa
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID2,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1035,6 +1279,7 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID3,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1045,6 +1290,7 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID4,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1082,6 +1328,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1092,6 +1339,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1102,6 +1350,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1112,6 +1361,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1149,6 +1399,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1159,6 +1410,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1169,6 +1421,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1179,6 +1432,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1229,6 +1483,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1251,6 +1506,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1259,6 +1515,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON3
@@ -1275,6 +1532,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1283,6 +1541,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON3
@@ -1294,6 +1553,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1320,6 +1580,7 @@ delete_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1352,6 +1613,7 @@ delete_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1471,20 +1733,17 @@ subtract_sorted_batches(B1, [], UnexpectedReversed) ->
     {B1, lists:reverse(UnexpectedReversed)};
 subtract_sorted_batches([], B2, RestReversed) ->
     {[], lists:reverse(RestReversed) ++ B2};
-subtract_sorted_batches([#{
-    <<"fileId">> := FileId,
-    <<"operation">> := <<"submit">>,
-    <<"payload">> := Payload,
-    <<"spaceId">> := SpaceId,
-    <<"fileName">> := FileName
-    } | T], [#{
-    <<"fileId">> := FileId,
-    <<"operation">> := <<"submit">>,
-    <<"payload">> := Payload,
-    <<"spaceId">> := SpaceId,
-    <<"fileName">> := FileName
-} | T2], UnexpectedReversed) ->
-    subtract_sorted_batches(T, T2, UnexpectedReversed);
+subtract_sorted_batches(
+    B1 = [ExpectedEntry = #{<<"operation">> := <<"submit">>} | T],
+    [ReceivedEntry = #{<<"operation">> := <<"submit">>} | T2],
+    UnexpectedReversed
+) ->
+    case are_submit_entries_equal(ExpectedEntry, ReceivedEntry) of
+        true ->
+            subtract_sorted_batches(T, T2, UnexpectedReversed);
+        false ->
+            subtract_sorted_batches(B1, T2, [ReceivedEntry | UnexpectedReversed])
+    end;
 subtract_sorted_batches([#{
     <<"fileId">> := FileId,
     <<"operation">> := <<"delete">>
@@ -1495,3 +1754,21 @@ subtract_sorted_batches([#{
     subtract_sorted_batches(T, T2, UnexpectedReversed);
 subtract_sorted_batches(B1, [H | T2], UnexpectedReversed) ->
     subtract_sorted_batches(B1, T2, [H | UnexpectedReversed]).
+
+
+are_submit_entries_equal(ExpectedEntry = #{
+    <<"fileId">> := FileId,
+    <<"operation">> := <<"submit">>,
+    <<"payload">> := Payload,
+    <<"spaceId">> := SpaceId,
+    <<"fileName">> := FileName,
+    <<"fileType">> := FileType
+}, ReceivedEntry) ->
+    % mandatory fields
+    (FileId == maps:get(<<"fileId">>, ReceivedEntry)) andalso
+    (Payload == maps:get(<<"payload">>, ReceivedEntry)) andalso
+    (SpaceId == maps:get(<<"spaceId">>, ReceivedEntry)) andalso
+    (FileName == maps:get(<<"fileName">>, ReceivedEntry)) andalso
+    (FileType == maps:get(<<"fileType">>, ReceivedEntry)) andalso
+    % optional fields
+    (maps:get(<<"datasetId">>, ExpectedEntry, undefined) == maps:get(<<"datasetId">>, ReceivedEntry, undefined)).

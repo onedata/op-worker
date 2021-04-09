@@ -87,7 +87,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv handle(OpReq, undefined).
+%% @equiv handle(OpReq, {undefined, 1}).
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(req()) -> result().
@@ -171,6 +171,7 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 
 %% @private
 -spec get_plugin(gri:entity_type()) -> module() | no_return().
+get_plugin(op_dataset) -> dataset_middleware;
 get_plugin(op_file) -> file_middleware;
 get_plugin(op_group) -> group_middleware;
 get_plugin(op_handle) -> handle_middleware;
@@ -178,7 +179,6 @@ get_plugin(op_handle_service) -> handle_service_middleware;
 get_plugin(op_metrics) -> metrics_middleware;
 get_plugin(op_provider) -> provider_middleware;
 get_plugin(op_qos) -> qos_middleware;
-get_plugin(op_replica) -> replica_middleware;
 get_plugin(op_share) -> share_middleware;
 get_plugin(op_space) -> space_middleware;
 get_plugin(op_transfer) -> transfer_middleware;
@@ -351,7 +351,7 @@ process_request(#req_ctx{
 
     case {Result, RR} of
         {{ok, resource, {ResultGri, ResultData}}, true} ->
-            % TODO rm hack after implementing subscriptions
+            % TODO VFS-7344 use proper model/record revision number instead of 1 after implementing subscriptions
             {ok, resource, {ResultGri, {ResultData, 1}}};
         _ ->
             Result

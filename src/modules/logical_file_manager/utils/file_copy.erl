@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/metadata.hrl").

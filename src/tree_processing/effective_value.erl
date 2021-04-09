@@ -6,10 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides ets cache for effective values. It is based on bounded_cache mechanism (see bounded_cache.erl
-%%% in cluster_worker). Cache is cleaned automatically when defined size is exceeded (size is checked periodically).
-%%% It allows calculation of value recursively (from file/dir to space) caching final and intermediate results for
-%%% better performance.
+%%% This module provides ets cache for effective values.
+%%% It is based on bounded_cache mechanism (see bounded_cache.erl
+%%% in cluster_worker). Cache is cleaned automatically when defined size
+%%% is exceeded (size is checked periodically).
+%%% It allows calculation of value recursively (from file/dir to space)
+%%% caching final and intermediate results for better performance.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(effective_value).
@@ -20,9 +22,18 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_or_calculate/3, get_or_calculate/4, get_or_calculate/5, get_or_calculate/6,
-    get_or_calculate/7, invalidate/1]).
+-export([init_cache/2, cache_exists/1, invalidate/1]).
+-export([init_group/2]).
+-export([
+    get_or_calculate/3, get_or_calculate/4,
+    get_or_calculate/5, get_or_calculate/6,
+    get_or_calculate/7
+]).
 
+-type cache() :: bounded_cache:cache().
+-type cache_options() :: bounded_cache:cache_options().
+-type group() :: bounded_cache:group().
+-type group_options() :: bounded_cache:group_options().
 -type initial_calculation_info() :: term(). % Function that calculates value returns additional information
                                             % (CalculationInfo) that can be useful for further work
                                             % (e.g., calculating function can include datastore documents getting and
@@ -34,11 +45,32 @@
 -type args() :: list().
 -type in_critical_section() :: boolean() | parent. % parent = use section starting from parent directory
 
+-export_type([cache/0, cache_options/0]).
 -define(CRITICAL_SECTION(Cache, Key), {effective_value_insert, Cache, Key}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+-spec init_cache(cache(), cache_options()) -> ok | {error, term()}.
+init_cache(Cache, CacheOptions) ->
+    bounded_cache:init_cache(Cache, CacheOptions).
+
+
+-spec init_group(group(), group_options()) -> ok | {error, term()}.
+init_group(Group, Options) ->
+    bounded_cache:init_group(Group, Options).
+
+
+-spec cache_exists(cache()) -> boolean().
+cache_exists(Cache) ->
+    bounded_cache:cache_exists(Cache).
+
+
+-spec invalidate(bounded_cache:cache()) -> ok.
+invalidate(Cache) ->
+    bounded_cache:invalidate(Cache).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -146,12 +178,3 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCa
                         [Doc, undefined, InitialCalculationInfo | Args], Timestamp)
             end
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv bounded_cache:invalidate(Cache)
-%% @end
-%%--------------------------------------------------------------------
--spec invalidate(bounded_cache:cache()) -> ok.
-invalidate(Cache) ->
-    bounded_cache:invalidate(Cache).

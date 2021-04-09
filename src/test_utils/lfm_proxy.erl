@@ -32,6 +32,8 @@
 
     get_file_location/3,
     create/3, create/4, create/5,
+    make_link/4, make_link/5,
+    make_symlink/4, make_symlink/5, read_symlink/3,
     create_and_open/3, create_and_open/4, create_and_open/5,
     open/4,
     close/2, close_all/1,
@@ -68,7 +70,11 @@
 
     get_effective_file_qos/3,
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
-    check_qos_status/3, check_qos_status/4
+    check_qos_status/3, check_qos_status/4,
+
+    establish_dataset/3, establish_dataset/4, remove_dataset/3, update_dataset/6,
+    get_dataset_info/3, get_file_eff_dataset_summary/3,
+    list_top_datasets/5, list_children_datasets/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -100,6 +106,7 @@ init(Config, Link) ->
 
 -spec init(Config :: list(), boolean(), [node()]) -> list().
 init(Config, Link, Workers) ->
+    teardown(Config),
     Host = self(),
     ServerFun = fun() ->
         register(lfm_proxy_server, self()),
@@ -130,11 +137,12 @@ init(Config, Link, Workers) ->
 
 -spec teardown(Config :: list()) -> ok.
 teardown(Config) ->
-    lists:foreach(
-        fun(Worker) ->
-            Pid = rpc:call(Worker, erlang, whereis, [lfm_proxy_server]),
-            Pid ! exit
-        end, ?config(op_worker_nodes, Config)).
+    lists:foreach(fun(Worker) ->
+        case rpc:call(Worker, erlang, whereis, [lfm_proxy_server]) of
+            undefined -> ok;
+            Pid -> Pid ! exit
+        end
+    end, ?config(op_worker_nodes, Config)).
 
 
 %%%===================================================================
@@ -253,6 +261,12 @@ get_file_location(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_location(SessId, uuid_to_guid(Worker, FileKey))).
 
 
+-spec read_symlink(node(), session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, file_meta_symlinks:symlink()} | lfm:error_reply().
+read_symlink(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:read_symlink(SessId, uuid_to_guid(Worker, FileKey))).
+
+
 -spec create(node(), session:id(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(Worker, SessId, FilePath) ->
@@ -270,6 +284,29 @@ create(Worker, SessId, FilePath, Mode) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 create(Worker, SessId, ParentGuid, Name, Mode) ->
     ?EXEC(Worker, lfm:create(SessId, ParentGuid, Name, Mode)).
+
+
+-spec make_link(node(), session:id(), file_meta:path(), fslogic_worker:file_guid()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_link(Worker, SessId, LinkPath, FileGuid) ->
+    ?EXEC(Worker, lfm:make_link(SessId, LinkPath, FileGuid)).
+
+-spec make_link(node(), session:id(), fslogic_worker:file_guid_or_path(),
+    fslogic_worker:file_guid(), file_meta:name()) -> {ok, #file_attr{}} | lfm:error_reply().
+make_link(Worker, SessId, FileKey, TargetParentGuid, Name) ->
+    ?EXEC(Worker, lfm:make_link(SessId, FileKey, TargetParentGuid, Name)).
+
+
+-spec make_symlink(node(), session:id(), LinkPath :: file_meta:path(), LinkTarget :: file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(Worker, SessId, LinkPath, LinkTarget) ->
+    ?EXEC(Worker, lfm:make_symlink(SessId, LinkPath, LinkTarget)).
+
+-spec make_symlink(node(), session:id(), ParentKey :: fslogic_worker:file_guid_or_path(),
+    Name :: file_meta:name(), LinkTarget :: file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(Worker, SessId, ParentKey, Name, Link) ->
+    ?EXEC(Worker, lfm:make_symlink(SessId, ParentKey, Name, Link)).
 
 
 -spec create_and_open(node(), session:id(), file_meta:path()) ->
@@ -787,6 +824,48 @@ check_qos_status(Worker, SessId, QosEntryId) ->
     {ok, qos_status:summary()} | lfm:error_reply().
 check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
     ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId, FileKey)).
+
+
+%%%===================================================================
+%%% Datasets functions
+%%%===================================================================
+
+-spec establish_dataset(node(), session:id(), lfm:file_key()) ->
+    {ok, dataset:id()} | lfm:error_reply().
+establish_dataset(Worker, SessId, FileKey) ->
+    establish_dataset(Worker, SessId, FileKey, 0).
+
+-spec establish_dataset(node(), session:id(), lfm:file_key(), data_access_control:bitmask()) ->
+    {ok, dataset:id()} | lfm:error_reply().
+establish_dataset(Worker, SessId, FileKey, ProtectionFlags) ->
+    ?EXEC(Worker, lfm:establish_dataset(SessId, FileKey, ProtectionFlags)).
+
+-spec remove_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+remove_dataset(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:remove_dataset(SessId, DatasetId)).
+
+-spec update_dataset(node(), session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),
+    data_access_control:bitmask()) -> ok | lfm:error_reply().
+update_dataset(Worker, SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
+    ?EXEC(Worker, lfm:update_dataset(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset)).
+
+-spec get_dataset_info(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | lfm:error_reply().
+get_dataset_info(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:get_dataset_info(SessId, DatasetId)).
+
+-spec get_file_eff_dataset_summary(node(), session:id(), lfm:file_key()) -> {ok, lfm_datasets:file_eff_summary()} | lfm:error_reply().
+get_file_eff_dataset_summary(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_file_eff_dataset_summary(SessId, FileKey)).
+
+-spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
+list_top_datasets(Worker, SessId, SpaceId, State, Opts) ->
+    ?EXEC(Worker, lfm:list_top_datasets(SessId, SpaceId, State, Opts)).
+
+-spec list_children_datasets(node(), session:id(), dataset:id(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
+list_children_datasets(Worker, SessId, DatasetId, Opts) ->
+    ?EXEC(Worker, lfm:list_children_datasets(SessId, DatasetId, Opts)).
 
 
 %%%===================================================================

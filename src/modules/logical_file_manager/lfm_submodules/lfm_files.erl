@@ -29,9 +29,9 @@
 ]).
 %% Functions operating on files
 -export([
-    create/2, create/3, create/4, open/3,
-    create_and_open/3, create_and_open/4, create_and_open/5,
-    get_file_location/2, fsync/1, fsync/3, write/3,
+    create/2, create/3, create/4, make_link/3, make_link/4, make_symlink/3, make_symlink/4,
+    open/3, create_and_open/3, create_and_open/4, create_and_open/5,
+    get_file_location/2, read_symlink/2, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read/4, check_size_and_read/3, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
     truncate/3, release/1, get_file_distribution/2
@@ -382,7 +382,53 @@ create(SessId, ParentGuid, Name, Mode) ->
     remote_utils:call_fslogic(SessId, file_request, ParentGuid,
         #make_file{name = Name, mode = Mode},
         fun(#file_attr{guid = Guid}) ->
-            {ok, Guid}  %todo consider returning file_attr
+            {ok, Guid}
+        end
+    ).
+
+
+-spec make_link(session:id(), LinkPath :: file_meta:path(), FileGuid :: fslogic_worker:file_guid()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_link(SessId, LinkPath, TargetGuid) ->
+    {Name, ParentPath} = filepath_utils:basename_and_parent_dir(LinkPath),
+    remote_utils:call_fslogic(SessId, fuse_request,
+        #resolve_guid{path = ParentPath},
+        fun(#guid{guid = TargetParentGuid}) ->
+            lfm_files:make_link(SessId, {guid, TargetGuid}, TargetParentGuid, Name)
+        end).
+
+-spec make_link(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    TargetParentGuid :: fslogic_worker:file_guid(), Name :: file_meta:name()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_link(SessId, FileKey, TargetParentGuid, Name) ->
+    {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(SessId, file_request, Guid,
+        #make_link{target_parent_guid = TargetParentGuid, target_name = Name},
+        fun(#file_attr{} = FileAttr) ->
+            {ok, FileAttr}
+        end
+    ).
+
+
+-spec make_symlink(session:id(), LinkPath :: file_meta:path(), LinkTarget :: file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(SessId, LinkPath, LinkTarget) ->
+    {Name, ParentPath} = filepath_utils:basename_and_parent_dir(LinkPath),
+    remote_utils:call_fslogic(SessId, fuse_request,
+        #resolve_guid{path = ParentPath},
+        fun(#guid{guid = ParentGuid}) ->
+            lfm_files:make_symlink(SessId, {guid, ParentGuid}, Name, LinkTarget)
+        end).
+
+-spec make_symlink(session:id(), ParentKey :: fslogic_worker:file_guid_or_path(),
+    Name :: file_meta:name(), LinkTarget :: file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(SessId, ParentKey, Name, LinkTarget) ->
+    {guid, Guid} = guid_utils:ensure_guid(SessId, ParentKey),
+    remote_utils:call_fslogic(SessId, file_request, Guid,
+        #make_symlink{target_name = Name, link = LinkTarget},
+        fun(#file_attr{} = FileAttr) ->
+            {ok, FileAttr}
         end
     ).
 
@@ -501,6 +547,15 @@ get_file_location(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_location{}, fun(#file_location{} = FL) -> {ok, FL} end).
+
+
+-spec read_symlink(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, file_meta_symlinks:symlink()} | lfm:error_reply().
+read_symlink(SessId, FileKey) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+        #read_symlink{}, fun(#symlink{link = Link}) -> {ok, Link} end).
+
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -19,7 +19,8 @@
     client_tokens :: auth_manager:client_tokens(),
     nonce :: binary(),
     version :: binary(),
-    compatible_oneprovider_versions :: [binary()]
+    compatible_oneprovider_versions :: [binary()],
+    session_mode :: session:mode()
 }).
 
 -record(provider_handshake_request, {

@@ -37,7 +37,7 @@
     scenario_root_dir_path :: file_meta:path(),
     files_owner_session_id :: session:id(),
     executioner_session_id :: session:id(),
-    required_space_privs = [] :: owner | [privileges:space_privilege()],
+    required_space_privs = [] :: {file_owner, [privileges:space_privilege()]} | [privileges:space_privilege()],
     required_perms_per_file = #{} :: perms_per_file(),
     extra_data = #{} :: map()
 }).
@@ -91,8 +91,10 @@ run_scenarios(TestSpec, Config) ->
 
     run_space_owner_test_scenarios(ScenariosRootDirPath, TestSpec, Config),
     run_space_privs_scenarios(ScenariosRootDirPath, TestSpec, Config),
+    run_file_protection_scenarios(ScenariosRootDirPath, TestSpec, Config),
     run_data_access_caveats_scenarios(ScenariosRootDirPath, TestSpec, Config),
     run_share_test_scenarios(ScenariosRootDirPath, TestSpec, Config),
+    run_open_handle_mode_scenarios(ScenariosRootDirPath, TestSpec, Config),
     run_posix_perms_scenarios(ScenariosRootDirPath, TestSpec, Config),
     run_acl_perms_scenarios(ScenariosRootDirPath, TestSpec, Config).
 
@@ -154,7 +156,7 @@ run_space_owner_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
                 }
             ),
 
-            % Operation should succeed for file owner even with all file permissions denied
+            % Operation should succeed for space owner even with all file permissions denied
             deny_full_perms(ScenarioType, Node, maps:keys(PermsPerFile)),
             ?assertMatch(ok, Operation(SpaceOwnerSessId, TestCaseRootDirPath, ExtraData)),
 
@@ -241,7 +243,8 @@ run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
             erlang:error(space_privs_test_failed)
         after
             mock_space_user_privileges([Node], SpaceId, FileOwner, privileges:space_admin()),
-            mock_space_user_privileges([Node], SpaceId, SpaceUserId, privileges:space_admin())
+            mock_space_user_privileges([Node], SpaceId, SpaceUserId, privileges:space_admin()),
+            invalidate_perms_cache(Node)
         end
     end, [
         {posix, PosixSpacePrivs},
@@ -262,17 +265,17 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     scenario_root_dir_path = ScenarioRootDirPath,
     files_owner_session_id = FileOwnerSessId,
     executioner_session_id = UserSessId,
-    required_space_privs = owner,
+    required_space_privs = {file_owner, RequiredSpacePrivs},
     extra_data = ExtraData
 }) ->
-    % Operation doesn't require any space privileges but can be performed only
-    % by file owner and should fail for any other
     mock_space_user_privileges([Node], SpaceId, UserId, privileges:space_admin()),
     ?assertMatch({error, ?EACCES}, Operation(UserSessId, ScenarioRootDirPath, ExtraData)),
 
     mock_space_user_privileges([Node], SpaceId, FileOwnerId, []),
-    ?assertMatch(ok, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
+    ?assertMatch({error, ?EPERM}, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
 
+    mock_space_user_privileges([Node], SpaceId, FileOwnerId, RequiredSpacePrivs),
+    ?assertMatch(ok, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
     run_final_ownership_check(ScenarioCtx#scenario_ctx{executioner_session_id = FileOwnerSessId});
 
 space_privs_test(ScenarioCtx = #scenario_ctx{
@@ -292,7 +295,7 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     % Operation should fail if user doesn't have all of the required space privileges
     lists:foreach(fun(SomeOfRequiredPrivs) ->
         mock_space_user_privileges([Node], SpaceId, UserId, AllSpacePrivs -- SomeOfRequiredPrivs),
-        ?assertMatch({error, ?EACCES}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData))
+        ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData))
     end, combinations(RequiredPrivs) -- [[]]),
 
     % And should succeed if he has only required ones
@@ -300,6 +303,132 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     ?assertMatch(ok, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
     run_final_ownership_check(ScenarioCtx).
+
+
+%%%===================================================================
+%%% FILE PROTECTION TESTS SCENARIOS MECHANISM
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tests file protection blocking #perms_test_spec.operation.
+%% It will setup environment, add full posix or acl permissions and
+%% assert that with file protection flags operation cannot be performed
+%% (even though full posix/acl perms are set).
+%% @end
+%%--------------------------------------------------------------------
+-spec run_file_protection_scenarios(file_meta:path(), perms_test_spec(), ct_config()) ->
+    ok | no_return().
+run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
+    test_node = Node,
+    space_owner = SpaceOwner,
+    owner_user = FileOwner,
+    space_user = SpaceUser,
+    requires_traverse_ancestors = RequiresTraverseAncestors,
+    space_id = SpaceId,
+    operation = Operation,
+    files = Files
+} = TestSpec, Config) ->
+    FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
+
+    ScenarioName = <<"file_protection">>,
+    ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
+
+    % Create necessary file hierarchy
+    {PermsPerFile, ExtraData} = create_files(
+        Node, FileOwnerUserSessId, ScenariosRootDirPath, #dir{
+            name = ScenarioName,
+            perms = scenarios_root_dir_permissions(RequiresTraverseAncestors),
+            children = Files
+        }
+    ),
+    ScenarioRootDirKey = maps:get(ScenarioRootDirPath, ExtraData),
+
+    % Assert that even with all perms set operation cannot be performed
+    % with file protection flags set
+    set_full_perms(acl, Node, maps:keys(PermsPerFile)),
+
+    AllNeededPerms = lists:usort(lists:flatten(maps:values(PermsPerFile))),
+    AllNeededPermsBitmask = permissions_test_utils:perms_to_bitmask(AllNeededPerms),
+
+    ProtectionFlagsToSet = lists:foldl(fun({ProtectionFlag, BlockedPerms}, Acc) ->
+        case ?has_any_flags(AllNeededPermsBitmask, BlockedPerms) of
+            true -> ?set_flags(Acc, ProtectionFlag);
+            false -> Acc
+        end
+    end, ?no_flags_mask, [
+        {?DATA_PROTECTION, ?DATA_PROTECTION_BLOCKED_OPERATIONS},
+        {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_OPERATIONS}
+    ]),
+
+    SpaceOwnerUserSessId = ?config({session_id, {SpaceOwner, ?GET_DOMAIN(Node)}}, Config),
+    {ok, DatasetId} = lfm_proxy:establish_dataset(Node, SpaceOwnerUserSessId, ScenarioRootDirKey),
+
+    case ProtectionFlagsToSet > 0 of
+        true ->
+            Executioner = case rand:uniform(3) of
+                1 -> FileOwner;
+                2 -> SpaceOwner;
+                3 -> SpaceUser
+            end,
+            ExecutionerSessId = ?config({session_id, {Executioner, ?GET_DOMAIN(Node)}}, Config),
+
+            % With file protection set operation should fail
+            ok = lfm_proxy:update_dataset(
+                Node, SpaceOwnerUserSessId, DatasetId, undefined, ProtectionFlagsToSet, ?no_flags_mask),
+            await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
+            ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
+
+            % And should succeed without it
+            ok = lfm_proxy:update_dataset(
+                Node, SpaceOwnerUserSessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlagsToSet
+            ),
+            await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
+            ?assertMatch(ok, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
+
+            run_final_ownership_check(#scenario_ctx{
+                meta_spec = TestSpec,
+                scenario_name = ScenarioName,
+                scenario_root_dir_path = ScenarioRootDirPath,
+                files_owner_session_id = FileOwnerUserSessId,
+                executioner_session_id = ExecutionerSessId
+            });
+        false ->
+            ok
+    end.
+
+
+%% @private
+-spec await_caches_clearing(node(), od_space:id(), od_user:id(), map()) -> ok.
+await_caches_clearing(Node, SpaceId, UserId, ExtraData) ->
+    Attempts = 30,
+    Interval = 100,
+    ProtectionFlagsCache = binary_to_atom(<<"dataset_effective_cache_", SpaceId/binary>>, utf8),
+
+    AreProtectionFlagsCached = fun(FileUuid) ->
+        case rpc:call(Node, bounded_cache, get, [ProtectionFlagsCache, FileUuid]) of
+            {ok, _} -> true;
+            ?ERROR_NOT_FOUND -> false
+        end
+    end,
+
+    IsPermEntryCached = fun(Entry) ->
+        case rpc:call(Node, permissions_cache, check_permission, [Entry]) of
+            {ok, _} -> true;
+            calculate -> false
+        end
+    end,
+
+    lists:foreach(fun
+        ({guid, FileGuid}) ->
+            FileUuid = file_id:guid_to_uuid(FileGuid),
+            ?assertMatch(false, AreProtectionFlagsCached(FileUuid), Attempts, Interval),
+            ?assertMatch(false, IsPermEntryCached({{user_perms_matrix, UserId, FileGuid}}), Attempts, Interval);
+        (_) ->
+            ok
+    end, maps:values(ExtraData)).
 
 
 %%%===================================================================
@@ -539,7 +668,7 @@ run_share_test_scenario(#scenario_ctx{
 
     % Even with all perms set operation should fail
     ?assertMatchWithPerms(
-        {error, ?EACCES},
+        {error, ?EPERM},
         Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
         ScenarioName, Node, FilesOwnerSessId,
         maps:map(fun(_, _) -> <<"all">> end, PermsPerFile)
@@ -554,6 +683,100 @@ run_share_test_scenario(ScenarioCtx = #scenario_ctx{required_perms_per_file = Pe
 run_share_test_scenario(ScenarioCtx, {acl, AllowOrDeny}) ->
     Principal = lists_utils:random_element([?everyone, ?anonymous]),
     run_acl_perms_scenario(ScenarioCtx, AllowOrDeny, Principal, ?no_flags_mask).
+
+
+%%%===================================================================
+%%% OPEN_HANDLE MODE TESTS SCENARIOS MECHANISM
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tests open data session mode. For that it will setup environment,
+%% add full acl permissions and assert that even with full other/anonymous
+%% perms set only operations also available in share mode can be performed.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_open_handle_mode_scenarios(file_meta:path(), perms_test_spec(), ct_config()) ->
+    ok | no_return().
+run_open_handle_mode_scenarios(ScenariosRootDirPath, #perms_test_spec{
+    test_node = Node,
+    space_id = SpaceId,
+    owner_user = FileOwner,
+    space_user = SpaceUser,
+    space_owner = SpaceOwner,
+    requires_traverse_ancestors = RequiresTraverseAncestors,
+    available_in_share_mode = AvailableInShareMode,
+    operation = Operation,
+    files = Files
+} = TestSpec, Config) ->
+    mock_space_user_privileges([Node], SpaceId, SpaceUser, privileges:space_admin()),
+
+    FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
+
+    ScenarioName =  <<"open_handle_mode_scenario">>,
+    ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
+
+    % Create necessary file hierarchy
+    {PermsPerFile, ExtraData} = create_files(
+        Node, FileOwnerUserSessId, ScenariosRootDirPath, #dir{
+            name = ScenarioName,
+            perms = scenarios_root_dir_permissions(RequiresTraverseAncestors),
+            children = Files
+        }
+    ),
+    AllFiles = maps:keys(PermsPerFile),
+
+    PermsType = case rand:uniform(2) of
+        1 -> acl;
+        2 -> posix
+    end,
+
+    Executioner = case rand:uniform(3) of
+        1 -> FileOwner;
+        2 -> SpaceOwner;
+        3 -> SpaceUser
+    end,
+    ExecutionerToken = initializer:create_access_token(Executioner),
+    ExecutionerSessId = permissions_test_utils:create_session(
+        Node, Executioner, ExecutionerToken, open_handle
+    ),
+
+    case AvailableInShareMode of
+        true ->
+            % Operation is available in share/public mode but access is still controlled
+            % (even for space owner) by posix mode (other bits) or acl
+            deny_full_perms(PermsType, Node, AllFiles),
+            ?assertMatch({error, ?EACCES}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
+
+            case PermsType of
+                posix ->
+                    AllPosixPermsPerFile = lists:foldl(fun(Guid, Acc) ->
+                        Acc#{Guid => 8#007}
+                    end, #{}, AllFiles),
+                    permissions_test_utils:set_modes(Node, AllPosixPermsPerFile);
+                acl ->
+                    AllAclPermsPerFile = lists:foldl(fun(Guid, Acc) ->
+                        Acc#{Guid => permissions_test_utils:all_perms(Node, Guid)}
+                    end, #{}, AllFiles),
+                    permissions_test_utils:set_acls(Node, AllAclPermsPerFile, #{}, ?anonymous, ?no_flags_mask)
+            end,
+            ?assertMatch(ok, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
+
+            run_final_ownership_check(#scenario_ctx{
+                meta_spec = TestSpec,
+                scenario_name = ScenarioName,
+                scenario_root_dir_path = ScenarioRootDirPath,
+                files_owner_session_id = FileOwnerUserSessId,
+                executioner_session_id = ExecutionerSessId
+            });
+        _ ->
+            % If operation is not available in share/public mode then operation
+            % should be rejected even if all permissions are granted
+            set_full_perms(PermsType, Node, AllFiles),
+            ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData))
+    end.
 
 
 %%%===================================================================
@@ -892,7 +1115,7 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
     scenario_ctx(),
     Type :: allow | deny,
     AceWho :: binary(),
-    AceFlags :: ace:bitmask()
+    AceFlags :: data_access_control:bitmask()
 ) ->
     ok | no_return().
 run_acl_perms_scenario(ScenarioCtx = #scenario_ctx{

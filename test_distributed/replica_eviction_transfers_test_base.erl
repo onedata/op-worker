@@ -12,12 +12,12 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/errors.hrl").
--include("modules/auth/acl.hrl").
 
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
@@ -1647,18 +1647,17 @@ remove_file_during_eviction(Config, Type, FileKeyType) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
-        end, ?config(op_worker_nodes, NewConfig2)),
+        end, ?config(op_worker_nodes, NewConfig1)),
 
         application:start(ssl),
         hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
-        NewConfig3
+        NewConfig2 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1),
+        NewConfig2
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},

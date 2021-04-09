@@ -12,8 +12,8 @@
 %%%-------------------------------------------------------------------
 -module(storage_driver).
 
--include("modules/auth/acl.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
@@ -64,7 +64,7 @@ new_handle(SessionId, FileCtx) ->
     {handle() | undefined, file_ctx:ctx()}.
 new_handle(SessionId, FileCtx, Generate) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx), % TODO VFS-7447 - should we use referenced uuid?
     {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
     case file_ctx:get_storage_file_id(FileCtx2, Generate) of
         {undefined, FileCtx3} ->
@@ -94,7 +94,7 @@ new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId) ->
 new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId, ShareId) ->
     #sd_handle{
         file = StorageFileId,
-        file_uuid = FileUuid,
+        file_uuid = FileUuid, % TODO VFS-7447 - should we use referenced uuid?
         session_id = SessionId,
         space_id = SpaceId,
         storage_id = StorageId,
@@ -215,7 +215,7 @@ mkdir(Handle, Mode) ->
     ok | error_reply().
 mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
     run_with_helper_handle(retry_as_root_and_chown, SDHandle, fun(HelperHandle) ->
-        Noop = fun(_) -> ok end,
+        fun(_) -> ok end,
         case helpers:mkdir(HelperHandle, FileId, Mode) of
             ok ->
                 ok;
@@ -234,13 +234,7 @@ mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
                                 throw(ParentError)
                         end
                 end,
-                R = case mkdir(SDHandle, Mode, false) of
-                    ok ->
-                        chmod(SDHandle, Mode); %% @todo: find out why umask(0) in helpers_nif.cc doesn't work
-                    E -> E
-                end,
-                Noop(HelperHandle), %% @todo: check why NIF crashes when this term is destroyed before recursive call
-                R;
+                mkdir(SDHandle, Mode, false);
             {error, Reason} ->
                 {error, Reason}
         end
@@ -574,7 +568,7 @@ read_internal(SDHandle, Offset, MaxSize) ->
 open_for_read(SDHandle) ->
     open_with_permissions_check(
         SDHandle#sd_handle{session_id = ?ROOT_SESS_ID},
-        [?read_object], read
+        [?OPERATIONS(?read_object_mask)], read
     ).
 
 
@@ -588,7 +582,7 @@ open_for_read(SDHandle) ->
 open_for_write(SDHandle) ->
     open_with_permissions_check(
         SDHandle#sd_handle{session_id = ?ROOT_SESS_ID},
-        [?write_object], write
+        [?OPERATIONS(?write_object_mask)], write
     ).
 
 
@@ -602,7 +596,7 @@ open_for_write(SDHandle) ->
 open_for_rdwr(SDHandle) ->
     open_with_permissions_check(
         SDHandle#sd_handle{session_id = ?ROOT_SESS_ID},
-        [?read_object, ?write_object], rdwr
+        [?OPERATIONS(?read_object_mask, ?write_object_mask)], rdwr
     ).
 
 
@@ -611,7 +605,7 @@ open_for_rdwr(SDHandle) ->
 %% @equiv open/2, but with permission control
 %% @end
 %%--------------------------------------------------------------------
--spec open_with_permissions_check(handle(), [data_access_rights:requirement()],
+-spec open_with_permissions_check(handle(), [data_access_control:requirement()],
     helpers:open_flag()) -> {ok, handle()} | error_reply().
 open_with_permissions_check(#sd_handle{
     session_id = SessionId,
@@ -619,8 +613,7 @@ open_with_permissions_check(#sd_handle{
     file_uuid = FileUuid,
     share_id = ShareId
 } = SDHandle, AccessRequirements, OpenFlag) ->
-    FileGuid = file_id:pack_share_guid(FileUuid, SpaceId, ShareId),
-    FileCtx = file_ctx:new_by_guid(FileGuid),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId, ShareId),
     UserCtx = user_ctx:new(SessionId),
 
     % TODO VFS-5917
@@ -714,8 +707,7 @@ run_with_helper_handle(FallbackStrategy, #sd_handle{
                         retry_as_root ->
                             ok;
                         retry_as_root_and_chown ->
-                            FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-                            FileCtx = file_ctx:new_by_guid(FileGuid),
+                            FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
                             files_to_chown:chown_or_defer(FileCtx)
                     end,
                     FallbackResult;

@@ -23,12 +23,18 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
--export([init_paths_caches/1]).
+-export([
+    init_paths_caches/1,
+    init_dataset_eff_caches/1
+]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
 % exported for RPC
--export([schedule_init_paths_caches/1]).
+-export([
+    schedule_init_paths_caches/1,
+    schedule_init_datasets_cache/1
+]).
 
 %%%===================================================================
 %%% Types
@@ -60,6 +66,7 @@
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_PATHS_CACHES(Space), {init_paths_caches, Space}).
+-define(INIT_DATASETS_CACHE(Space), {init_datasets_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
@@ -92,7 +99,8 @@
 % This macro is used to disable automatic restart of autocleaning runs in tests
 -define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
 
--define(AVAILABLE_SHARE_OPERATIONS, [
+-define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
+    % Checking perms for operations other than 'read' should result in immediate ?EACCES
     check_perms,
     get_parent,
     % TODO VFS-6057 resolve share path up to share not user root dir
@@ -102,12 +110,15 @@
     get_xattr,
     get_metadata,
 
+    % Opening file is available but only in 'read' mode
     open_file,
     open_file_with_extended_info,
     synchronize_block,
     remote_read,
     fsync,
     release,
+    
+    read_symlink,
 
     get_file_attr,
     get_file_details,
@@ -115,6 +126,14 @@
     get_child_attr,
     get_file_children_attrs,
     get_file_children_details
+]).
+-define(AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE, [
+    % Necessary operations for direct-io to work (contains private information
+    % like storage id, etc.)
+    get_file_location,
+    get_helper_params
+
+    | ?OPERATIONS_AVAILABLE_IN_SHARE_MODE
 ]).
 
 %%%===================================================================
@@ -151,8 +170,15 @@ supervisor_children_spec() ->
 %%--------------------------------------------------------------------
 -spec init_paths_caches(od_space:id() | all) -> ok.
 init_paths_caches(Space) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    rpc:multicall(Nodes, ?MODULE, schedule_init_paths_caches, [Space]),
+    ok.
+
+
+-spec init_dataset_eff_caches(od_space:id() | all) -> ok.
+init_dataset_eff_caches(Space) ->
     lists:foreach(fun(Node) ->
-        rpc:call(Node, ?MODULE, schedule_init_paths_caches, [Space])
+        rpc:call(Node, ?MODULE, schedule_init_datasets_cache, [Space])
     end, consistent_hashing:get_all_nodes()).
 
 %%%===================================================================
@@ -167,14 +193,13 @@ init_paths_caches(Space) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    paths_cache:init_group(),
-    schedule_init_paths_caches(all),
-
+    init_effective_caches(),
     transfer:init(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
     tree_deletion_traverse:init_pool(),
+    tarball_download_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
 
     schedule_invalidate_permissions_cache(),
@@ -254,7 +279,9 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
 handle(?INIT_PATHS_CACHES(Space)) ->
-    paths_cache:init_caches(Space);
+    paths_cache:init(Space);
+handle(?INIT_DATASETS_CACHE(Space)) ->
+    dataset_eff_cache:init(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -273,6 +300,7 @@ cleanup() ->
     file_registration:stop_pool(),
     replica_deletion_master:stop_workers_pool(),
     tree_deletion_traverse:stop_pool(),
+    tarball_download_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
     ok.
 
@@ -316,6 +344,15 @@ init_report() ->
 %%% Internal functions
 %%%===================================================================
 
+-spec init_effective_caches() -> ok.
+init_effective_caches() ->
+    % TODO VFS-7412 refactor effective_value cache
+    paths_cache:init_group(),
+    dataset_eff_cache:init_group(),
+    schedule_init_paths_caches(all),
+    schedule_init_datasets_cache(all).
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -358,19 +395,23 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             {FileCtx0, file_ctx:get_share_id_const(FileCtx0)}
     end,
     try
-        UserCtx1 = case ShareId of
-            undefined ->
+        UserCtx1 = case {user_ctx:is_in_open_handle_mode(UserCtx0), ShareId} of
+            {false, undefined} ->
                 UserCtx0;
-            _ ->
-                Operation = get_operation(Request),
-                case lists:member(Operation, ?AVAILABLE_SHARE_OPERATIONS) of
+            {IsInOpenHandleMode, _} ->
+                case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
                     true -> ok;
-                    false -> throw(?EACCES)
+                    false -> throw(?EPERM)
                 end,
-                % Operations concerning shares must be carried with GUEST auth
-                case user_ctx:is_guest(UserCtx0) of
-                    true -> UserCtx0;
-                    false -> user_ctx:new(?GUEST_SESS_ID)
+                case IsInOpenHandleMode of
+                    true ->
+                        UserCtx0;
+                    false ->
+                        % Operations concerning shares must be carried with GUEST auth
+                        case user_ctx:is_guest(UserCtx0) of
+                            true -> UserCtx0;
+                            false -> user_ctx:new(?GUEST_SESS_ID)
+                        end
                 end
         end,
         handle_request_locally(UserCtx1, Request, FileCtx1)
@@ -379,7 +420,30 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             fslogic_errors:handle_error(Request, Type, Error)
     end.
 
+
 %% @private
+-spec is_operation_available_in_share_mode(request(), IsInOpenHandleMode :: boolean()) ->
+    boolean().
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file{flag = Flag}
+}}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file_with_extended_info{flag = Flag}
+}}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(#provider_request{
+    provider_request = #check_perms{flag = Flag}
+}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(Request, true) ->
+    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE);
+is_operation_available_in_share_mode(Request, false) ->
+    lists:member(get_operation(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
+
+
+%% @private
+-spec get_operation(request()) -> atom().
 get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
     element(1, Req);
 get_operation(#fuse_request{fuse_request = Req}) ->
@@ -388,6 +452,7 @@ get_operation(#provider_request{provider_request = Req}) ->
     element(1, Req);
 get_operation(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -478,13 +543,14 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec handle_file_request(user_ctx:ctx(), file_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus}, FileCtx) ->
-    attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus);
+handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus,
+    include_link_count = IncludeLinkCount}, FileCtx) ->
+    attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus, IncludeLinkCount);
 handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
     attr_req:get_file_details(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_child_attr{name = Name,
-    include_replication_status = IncludeReplicationStatus}, ParentFileCtx) ->
-    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus);
+    include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, ParentFileCtx) ->
+    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus, IncludeLinkCount);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
@@ -508,14 +574,14 @@ handle_file_request(UserCtx, #get_file_children{
         last_name => StartId
     },
     dir_req:get_children(UserCtx, FileCtx, ListOpts);
-handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
-    size = Size, index_token = Token, include_replication_status = IncludeReplicationStatus}, FileCtx) ->
+handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset, size = Size, index_token = Token,
+    include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, FileCtx) ->
     ListOpts = #{
         offset => Offset,
         size => Size,
         token => Token
     },
-    dir_req:get_children_attrs(UserCtx, FileCtx, ListOpts, IncludeReplicationStatus);
+    dir_req:get_children_attrs(UserCtx, FileCtx, ListOpts, IncludeReplicationStatus, IncludeLinkCount);
 handle_file_request(UserCtx, #get_file_children_details{
     offset = Offset,
     size = Size,
@@ -539,6 +605,11 @@ handle_file_request(UserCtx, #storage_file_created{}, FileCtx) ->
     file_req:storage_file_created(UserCtx, FileCtx);
 handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx) ->
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
+handle_file_request(UserCtx, #make_link{target_parent_guid = TargetParentGuid, target_name = Name}, TargetFileCtx) ->
+    TargetParentFileCtx = file_ctx:new_by_guid(TargetParentGuid),
+    file_req:make_link(UserCtx, TargetFileCtx, TargetParentFileCtx, Name);
+handle_file_request(UserCtx, #make_symlink{target_name = Name, link = Link}, ParentFileCtx) ->
+    file_req:make_symlink(UserCtx, ParentFileCtx, Name, Link);
 handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->
     file_req:open_file(UserCtx, FileCtx, Flag);
 handle_file_request(UserCtx, #open_file_with_extended_info{flag = Flag}, FileCtx) ->
@@ -547,6 +618,8 @@ handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
     file_req:release(UserCtx, FileCtx, HandleId);
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
+handle_file_request(UserCtx, #read_symlink{}, FileCtx) ->
+    file_req:read_symlink(UserCtx, FileCtx);
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,
@@ -681,7 +754,27 @@ handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->
 handle_provider_request(UserCtx, #remove_qos_entry{id = QosEntryId}, FileCtx) ->
     qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
 handle_provider_request(UserCtx, #check_qos_status{qos_id = QosEntryId}, FileCtx) ->
-    qos_req:check_status(UserCtx, FileCtx, QosEntryId).
+    qos_req:check_status(UserCtx, FileCtx, QosEntryId);
+handle_provider_request(UserCtx, #establish_dataset{protection_flags = ProtectionFlags}, FileCtx) ->
+    dataset_req:establish(FileCtx, ProtectionFlags, UserCtx);
+handle_provider_request(UserCtx, #update_dataset{
+    id = DatasetId,
+    state = NewState,
+    flags_to_set = FlagsToSet,
+    flags_to_unset = FlagsToUnset
+}, SpaceDirCtx) ->
+    dataset_req:update(SpaceDirCtx, DatasetId, NewState, FlagsToSet, FlagsToUnset, UserCtx);
+handle_provider_request(UserCtx, #remove_dataset{id = DatasetId}, SpaceDirCtx) ->
+    dataset_req:remove(SpaceDirCtx, DatasetId, UserCtx);
+handle_provider_request(UserCtx, #get_dataset_info{id = DatasetId}, SpaceDirCtx) ->
+    dataset_req:get_info(SpaceDirCtx, DatasetId, UserCtx);
+handle_provider_request(UserCtx, #get_file_eff_dataset_summary{}, FileCtx) ->
+    dataset_req:get_file_eff_summary(FileCtx, UserCtx);
+handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts}, SpaceDirCtx) ->
+    dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, UserCtx, Opts);
+handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts}, SpaceDirCtx) ->
+    dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, UserCtx, Opts).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -717,6 +810,9 @@ schedule_periodical_spaces_autocleaning_check() ->
 
 schedule_init_paths_caches(Space) ->
     schedule(?INIT_PATHS_CACHES(Space), 0).
+
+schedule_init_datasets_cache(Space) ->
+    schedule(?INIT_DATASETS_CACHE(Space), 0).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->

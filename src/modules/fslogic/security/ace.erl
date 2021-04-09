@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -15,20 +15,18 @@
 -module(ace).
 -author("Bartosz Walkowicz").
 
--include("modules/auth/acl.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -type ace() :: #access_control_entity{}.
--type bitmask() :: non_neg_integer().
 
--export_type([ace/0, bitmask/0]).
+-export_type([ace/0]).
 
 %% API
 -export([
     is_applicable/3,
-    check_against/2,
+    check_against/3,
 
     from_json/2, to_json/2,
     validate/2
@@ -75,7 +73,7 @@ is_applicable(#document{key = ?GUEST_USER_ID}, FileCtx, #access_control_entity{
 is_applicable(#document{value = User}, FileCtx, #access_control_entity{
     identifier = GroupId,
     aceflags = AceFlagsBitmask
-}) when ?has_flag(AceFlagsBitmask, ?identifier_group_mask) ->
+}) when ?has_all_flags(AceFlagsBitmask, ?identifier_group_mask) ->
     {lists:member(GroupId, User#od_user.eff_groups), FileCtx};
 
 is_applicable(#document{key = UserId}, FileCtx, #access_control_entity{
@@ -90,32 +88,61 @@ is_applicable(_, FileCtx, _) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if given ace permits or denies (depending on ace type) specified
-%% operations.
-%% In case of 'allow' ace it returns `allowed` when all operations are
-%% explicitly permitted or `{inconclusive, OperationsToBeAllowed}` for
-%% operations which can't be authoritatively allowed by this ace.
-%% In case of 'deny' ace it returns `denied` if even one operation is
-%% forbidden or `{inconclusive, Operations}` if none of operations can
-%% be authoritatively denied.
+%% operations. The result can be either:
+%% - 'allowed' meaning that all permissions have been granted,
+%% - 'denied' meaning that at least one permission has been denied,
+%% - 'inconclusive' meaning that some permissions may have been granted
+%%    but not all of them (leftover permissions to be granted or denied are
+%%    returned).
 %% @end
 %%--------------------------------------------------------------------
--spec check_against(bitmask(), ace()) ->
-    allowed | {inconclusive, bitmask()} | denied.
-check_against(Operations, #access_control_entity{
-    acetype = ?allow_mask,
-    acemask = AceMask
-}) ->
-    case (Operations band AceMask) of
-        Operations -> allowed;
-        AllowedOperations -> {inconclusive, Operations bxor AllowedOperations}
+-spec check_against(
+    data_access_control:bitmask(),
+    ace(),
+    data_access_control:user_access_check_progress()
+) ->
+    {
+        allowed | denied | {inconclusive, LeftoverRequiredOps :: data_access_control:bitmask()},
+        data_access_control:user_access_check_progress()
+    }.
+check_against(
+    RequiredOps,
+    #access_control_entity{acetype = ?allow_mask, acemask = AceMask},
+    #user_access_check_progress{
+        finished_step = ?ACL_CHECK(AceNo),
+        allowed = PrevAllowedOps,
+        denied = PrevDeniedOps
+    } = UserAccessCheckProgress
+) ->
+    NewUserAccessCheckProgress = UserAccessCheckProgress#user_access_check_progress{
+        finished_step = ?ACL_CHECK(AceNo + 1),
+        allowed = ?set_flags(PrevAllowedOps, ?reset_flags(AceMask, PrevDeniedOps))
+    },
+    case ?reset_flags(RequiredOps, AceMask) of
+        ?no_flags_mask ->
+            {allowed, NewUserAccessCheckProgress};
+        LeftoverRequiredOps ->
+            {{inconclusive, LeftoverRequiredOps}, NewUserAccessCheckProgress}
     end;
-check_against(Operations, #access_control_entity{
-    acetype = ?deny_mask,
-    acemask = AceMask
-}) ->
-    case (Operations band AceMask) of
-        ?no_flags_mask -> {inconclusive, Operations};
-        _ -> denied
+
+check_against(
+    RequiredOps,
+    #access_control_entity{acetype = ?deny_mask, acemask = AceMask},
+    #user_access_check_progress{
+        finished_step = ?ACL_CHECK(AceNo),
+        allowed = PrevGrantedOps,
+        denied = PrevDeniedOps
+    } = UserAccessCheckProgress
+) ->
+    NewUserAccessCheckProgress = UserAccessCheckProgress#user_access_check_progress{
+        finished_step = ?ACL_CHECK(AceNo + 1),
+        denied = ?set_flags(PrevDeniedOps, ?reset_flags(AceMask, PrevGrantedOps))
+    },
+    case ?common_flags(RequiredOps, AceMask) of
+        ?no_flags_mask ->
+            {{inconclusive, RequiredOps}, NewUserAccessCheckProgress};
+        _ ->
+            {denied, NewUserAccessCheckProgress}
     end.
 
 
@@ -192,10 +219,10 @@ validate(#access_control_entity{
     acemask = Mask
 }, FileType) ->
     ValidType = lists:member(Type, [?allow_mask, ?deny_mask]),
-    ValidFlags = ?has_flag(?ALL_FLAGS_BITMASK, Flags),
+    ValidFlags = ?has_all_flags(?ALL_FLAGS_BITMASK, Flags),
     ValidMask = case FileType of
-        file -> ?has_flag(?all_object_perms_mask, Mask);
-        dir -> ?has_flag(?all_container_perms_mask, Mask)
+        file -> ?has_all_flags(?all_object_perms_mask, Mask);
+        dir -> ?has_all_flags(?all_container_perms_mask, Mask)
     end,
 
     case ValidType andalso ValidFlags andalso ValidMask of
@@ -210,7 +237,7 @@ validate(#access_control_entity{
 
 
 %% @private
--spec cdmi_acetype_to_bitmask(binary()) -> bitmask().
+-spec cdmi_acetype_to_bitmask(binary()) -> data_access_control:bitmask().
 cdmi_acetype_to_bitmask(<<"0x", _/binary>> = AceType) ->
     binary_to_bitmask(AceType);
 cdmi_acetype_to_bitmask(?allow) -> ?allow_mask;
@@ -218,7 +245,7 @@ cdmi_acetype_to_bitmask(?deny) -> ?deny_mask.
 
 
 %% @private
--spec cdmi_aceflags_to_bitmask(binary() | [binary()]) -> bitmask().
+-spec cdmi_aceflags_to_bitmask(binary() | [binary()]) -> data_access_control:bitmask().
 cdmi_aceflags_to_bitmask(<<"0x", _/binary>> = AceFlags) ->
     binary_to_bitmask(AceFlags);
 cdmi_aceflags_to_bitmask(AceFlagsBin) when is_binary(AceFlagsBin) ->
@@ -227,51 +254,51 @@ cdmi_aceflags_to_bitmask(AceFlagsList) ->
     lists:foldl(
         fun
             (?no_flags, Bitmask) -> Bitmask;
-            (?identifier_group, BitMask) -> BitMask bor ?identifier_group_mask
+            (?identifier_group, BitMask) -> ?set_flags(BitMask, ?identifier_group_mask)
         end,
         0,
         AceFlagsList
     ).
 
 
--spec cdmi_acemask_to_bitmask(binary() | [binary()]) -> bitmask().
+-spec cdmi_acemask_to_bitmask(binary() | [binary()]) -> data_access_control:bitmask().
 cdmi_acemask_to_bitmask(<<"0x", _/binary>> = AceMask) ->
     binary_to_bitmask(AceMask);
-cdmi_acemask_to_bitmask(PermsBin) when is_binary(PermsBin) ->
-    cdmi_acemask_to_bitmask(parse_csv(PermsBin));
-cdmi_acemask_to_bitmask(PermsList) ->
+cdmi_acemask_to_bitmask(OpsBin) when is_binary(OpsBin) ->
+    cdmi_acemask_to_bitmask(parse_csv(OpsBin));
+cdmi_acemask_to_bitmask(OpsList) ->
     % op doesn't differentiate between ?delete_object and ?delete_subcontainer
     % so they must be either specified both or none of them.
-    HasDeleteObject = lists:member(?delete_object, PermsList),
-    HasDeleteSubcontainer = lists:member(?delete_subcontainer, PermsList),
-    case {HasDeleteObject, HasDeleteSubcontainer} of
+    HasDeleteObject = lists:member(?delete_object, OpsList),
+    HasDeleteSubContainer = lists:member(?delete_subcontainer, OpsList),
+    case {HasDeleteObject, HasDeleteSubContainer} of
         {false, false} -> ok;
         {true, true} -> ok;
         _ -> throw({error, ?EINVAL})
     end,
 
     lists:foldl(fun(Perm, Bitmask) ->
-        Bitmask bor permission_to_bitmask(Perm)
-    end, 0, PermsList).
+        ?set_flags(Bitmask, operation_to_bitmask(Perm))
+    end, 0, OpsList).
 
 
 %% @private
--spec permission_to_bitmask(binary()) -> bitmask().
-permission_to_bitmask(?list_container) -> ?list_container_mask;
-permission_to_bitmask(?read_object) -> ?read_object_mask;
-permission_to_bitmask(?write_object) -> ?write_object_mask;
-permission_to_bitmask(?add_object) -> ?add_object_mask;
-permission_to_bitmask(?add_subcontainer) -> ?add_subcontainer_mask;
-permission_to_bitmask(?read_metadata) -> ?read_metadata_mask;
-permission_to_bitmask(?write_metadata) -> ?write_metadata_mask;
-permission_to_bitmask(?traverse_container) -> ?traverse_container_mask;
-permission_to_bitmask(?delete) -> ?delete_mask;
-permission_to_bitmask(?delete_object) -> ?delete_child_mask;
-permission_to_bitmask(?delete_subcontainer) -> ?delete_child_mask;
-permission_to_bitmask(?read_attributes) -> ?read_attributes_mask;
-permission_to_bitmask(?write_attributes) -> ?write_attributes_mask;
-permission_to_bitmask(?read_acl) -> ?read_acl_mask;
-permission_to_bitmask(?write_acl) -> ?write_acl_mask.
+-spec operation_to_bitmask(binary()) -> data_access_control:bitmask().
+operation_to_bitmask(?list_container) -> ?list_container_mask;
+operation_to_bitmask(?read_object) -> ?read_object_mask;
+operation_to_bitmask(?write_object) -> ?write_object_mask;
+operation_to_bitmask(?add_object) -> ?add_object_mask;
+operation_to_bitmask(?add_subcontainer) -> ?add_subcontainer_mask;
+operation_to_bitmask(?read_metadata) -> ?read_metadata_mask;
+operation_to_bitmask(?write_metadata) -> ?write_metadata_mask;
+operation_to_bitmask(?traverse_container) -> ?traverse_container_mask;
+operation_to_bitmask(?delete) -> ?delete_mask;
+operation_to_bitmask(?delete_object) -> ?delete_child_mask;
+operation_to_bitmask(?delete_subcontainer) -> ?delete_child_mask;
+operation_to_bitmask(?read_attributes) -> ?read_attributes_mask;
+operation_to_bitmask(?write_attributes) -> ?write_attributes_mask;
+operation_to_bitmask(?read_acl) -> ?read_acl_mask;
+operation_to_bitmask(?write_acl) -> ?write_acl_mask.
 
 
 %% @private
@@ -292,12 +319,12 @@ decode_cdmi_identifier(CdmiIdentifier) ->
 
 
 %% @private
--spec bitmask_to_binary(bitmask()) -> binary().
+-spec bitmask_to_binary(data_access_control:bitmask()) -> binary().
 bitmask_to_binary(Mask) -> <<"0x", (integer_to_binary(Mask, 16))/binary>>.
 
 
 %% @private
--spec binary_to_bitmask(binary()) -> bitmask().
+-spec binary_to_bitmask(binary()) -> data_access_control:bitmask().
 binary_to_bitmask(<<"0x", Mask/binary>>) -> binary_to_integer(Mask, 16).
 
 

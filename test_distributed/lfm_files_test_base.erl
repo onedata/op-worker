@@ -13,14 +13,10 @@
 -author("Rafal Slota").
 
 -include("lfm_files_test_base.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/auth/acl.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -1565,14 +1561,14 @@ rm_recursive(Config) ->
     {ok, DirAGuid} = lfm_proxy:mkdir(W, SessId, DirA, 8#700),
     {ok, DirBGuid} = lfm_proxy:mkdir(W, SessId, DirB, 8#300), % B won't be deleted as user doesn't have permissions to list it
     {ok, DirCGuid} = lfm_proxy:mkdir(W, SessId, DirC, 8#700),
-    {ok, DirDGuid} = lfm_proxy:mkdir(W, SessId, DirD, 8#700),
-    {ok, DirEGuid} = lfm_proxy:mkdir(W, SessId, DirE, 8#000), % E won't be deleted as user doesn't have permissions to list it
+    {ok, _DirDGuid} = lfm_proxy:mkdir(W, SessId, DirD, 8#700),
+    {ok, _DirEGuid} = lfm_proxy:mkdir(W, SessId, DirE, 8#000), % E won't be deleted as user doesn't have permissions to list it
     {ok, DirXGuid} = lfm_proxy:mkdir(W, SessId, DirX, 8#700),
     {ok, FileFGuid} = lfm_proxy:create(W, SessId, FileF, 8#000),
     {ok, FileGGuid} = lfm_proxy:create(W, SessId, FileG, 8#000),
     {ok, FileHGuid} = lfm_proxy:create(W, SessId, FileH, 8#000),
     {ok, FileIGuid} = lfm_proxy:create(W, SessId, FileI, 8#000),
-    {ok, FileJGuid} = lfm_proxy:create(W, SessId, FileJ, 8#000),
+    {ok, _FileJGuid} = lfm_proxy:create(W, SessId, FileJ, 8#000),
     ok = lfm_proxy:set_perms(W, SessId, {guid, DirXGuid}, 8#500), % X won't be deleted as user doesn't have permissions to remove it's children
 
     % when
@@ -1636,7 +1632,7 @@ create_share_dir(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
+    ?assertMatch({error, ?EPERM}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1644,7 +1640,7 @@ create_share_dir(Config) ->
 
     % User root dir can not be shared
     ?assertMatch(
-        {error, ?EACCES},
+        {error, ?EPERM},
         lfm_proxy:create_share(W, SessId, {guid, fslogic_uuid:user_root_dir_guid(UserId)}, <<"share_name">>)
     ),
     % But space dir can
@@ -1676,7 +1672,7 @@ create_share_file(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
+    ?assertMatch({error, ?EPERM}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1705,7 +1701,7 @@ remove_share(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:remove_share(W, SessId, ShareId1)),
+    ?assertMatch({error, ?EPERM}, lfm_proxy:remove_share(W, SessId, ShareId1)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1993,7 +1989,7 @@ new_file_should_have_zero_popularity(Config) ->
                 mth_mov_avg = 0.0
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid(FileUuid, SpaceId)])
     ).
 
 opening_file_should_increase_file_popularity(Config) ->
@@ -2022,7 +2018,7 @@ opening_file_should_increase_file_popularity(Config) ->
                 mth_hist = [1 | _]
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid(FileUuid, SpaceId)])
     ),
     ?assert(TimeBeforeFirstOpen =< Doc#document.value#file_popularity.last_open),
 
@@ -2043,7 +2039,7 @@ opening_file_should_increase_file_popularity(Config) ->
                 mth_mov_avg = 2.0
             }
         }},
-        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))])
+        rpc:call(W, file_popularity, get_or_default, [file_ctx:new_by_uuid(FileUuid, SpaceId)])
     ),
     ?assert(TimeBeforeSecondOpen =< Doc2#document.value#file_popularity.last_open),
     [FirstHour, SecondHour | _] = Doc2#document.value#file_popularity.hr_hist,

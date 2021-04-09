@@ -288,7 +288,7 @@ get_provider(Request, Manager) ->
         undefined ->
             self;
         {file, FileCtx} ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
+            FileGuid = file_ctx:get_logical_guid_const(FileCtx), % TODO VFS-7448 - test production of events for hardlinks
             case get_from_memory(Manager, guid_to_provider, FileGuid) of
                 {ok, ID} ->
                     ID;
@@ -479,13 +479,16 @@ handle_in_process(Request, _State) ->
     session:id()) -> ok.
 handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
     #flush_events{context = Context, notify = Notify} = Request,
-    {ok, Credentials} = session:get_credentials(SessId),
+    {ok, SessDoc} = session:get(SessId),
+    Credentials = session:get_credentials(SessDoc),
+    {ok, SessMode} = session:get_mode(SessDoc),
     StreamId = sequencer:term_to_stream_id(Context),
     ClientMsg = #client_message{
         message_stream = #message_stream{stream_id = StreamId},
         message_body = Request,
         effective_session_id = SessId,
-        effective_client_tokens = auth_manager:get_client_tokens(Credentials)
+        effective_client_tokens = auth_manager:get_client_tokens(Credentials),
+        effective_session_mode = SessMode
     },
     Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
@@ -506,13 +509,16 @@ handle_remotely(#event{} = Evt, ProviderId, SessId) ->
 handle_remotely(Request, ProviderId, SessId) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
-    {ok, Credentials} = session:get_credentials(SessId),
+    {ok, SessDoc} = session:get(SessId),
+    Credentials = session:get_credentials(SessDoc),
+    {ok, SessMode} = session:get_mode(SessDoc),
     communicator:stream_to_provider(
         session_utils:get_provider_session_id(outgoing, ProviderId),
         #client_message{
             message_body = Request,
             effective_session_id = SessId,
-            effective_client_tokens = auth_manager:get_client_tokens(Credentials)
+            effective_client_tokens = auth_manager:get_client_tokens(Credentials),
+            effective_session_mode = SessMode
         },
         StreamId, undefined
     ),
@@ -531,7 +537,7 @@ cache_provider(#subscription{id = Id} = Sub, Provider) ->
         undefined ->
             ok;
         {file, FileCtx} ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
+            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
             add_to_memory(guid_to_provider, FileGuid, Provider),
             add_to_memory(sub_to_guid, Id, FileGuid)
     end.

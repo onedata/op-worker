@@ -83,7 +83,7 @@ register(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
 -spec create_missing_directory(file_ctx:ctx(), file_meta:name(), od_user:id()) -> {ok, file_ctx:ctx()}.
 create_missing_directory(ParentCtx, DirName, UserId) ->
     SpaceId = file_ctx:get_space_id_const(ParentCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
     {ParentStorageFileId, _} = file_ctx:get_storage_file_id(ParentCtx),
     ok = dir_location:mark_dir_synced_from_storage(FileUuid, filepath_utils:join([ParentStorageFileId, DirName]), undefined),
@@ -138,7 +138,7 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
                 maybe_set_xattrs(UserCtx, FileCtx, maps:get(<<"xattrs">>, Spec, #{})),
                 maybe_set_json_metadata(UserCtx, FileCtx, maps:get(<<"json">>, Spec, #{})),
                 maybe_set_rdf_metadata(UserCtx, FileCtx, maps:get(<<"rdf">>, Spec, <<>>)),
-                {ok, file_ctx:get_guid_const(FileCtx)};
+                {ok, file_ctx:get_logical_guid_const(FileCtx)};
             false ->
                 % TODO VFS-6508 find better error
                 % this can happen if sync mechanisms decide not to synchronize file
@@ -255,10 +255,10 @@ create_missing_directories(ParentCtx, [DirectChildPartialCtx | Rest], UserId) ->
 %%--------------------------------------------------------------------
 -spec create_missing_directory_secure(file_ctx:ctx(), file_meta:name(), od_user:id()) -> {ok, file_ctx:ctx()}.
 create_missing_directory_secure(ParentCtx, DirName, UserId) ->
-    critical_section:run({create_missing_directory, file_ctx:get_uuid_const(ParentCtx), DirName, UserId}, fun() ->
+    critical_section:run({create_missing_directory, file_ctx:get_logical_uuid_const(ParentCtx), DirName, UserId}, fun() ->
         try
             % ensure whether directory is still missing as it might have been created by other registering process
-            {DirCtx, _} = file_ctx:get_child(ParentCtx, DirName, user_ctx:new(?ROOT_SESS_ID)),
+            {DirCtx, _} = files_tree:get_child(ParentCtx, DirName, user_ctx:new(?ROOT_SESS_ID)),
             {ok, DirCtx}
         catch
             error:{badmatch,{error,not_found}} ->

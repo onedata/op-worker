@@ -53,8 +53,12 @@
 -define(DEFAULT_FILE_PERMS, 8#664).
 -define(DEFAULT_FILE_MODE, ?DEFAULT_FILE_PERMS bor 8#100000).
 
+% POSIX defines that symlinks have 777 permission by default
+-define(DEFAULT_SYMLINK_PERMS, 8#777).
+
 %% Default permissions for directories
 -define(DEFAULT_DIR_PERMS, 8#775).
+-define(DEFAULT_SHARE_ROOT_DIR_PERMS, 8#555).
 -define(DEFAULT_DIR_MODE, ?DEFAULT_DIR_PERMS bor 8#40000).
 
 %% Mode of deleted opened files directory
@@ -82,5 +86,11 @@
 
 % Token that should be passed as initial token to start listing using tokens.
 -define(INITIAL_LS_TOKEN, <<>>).
+
+-define(STICKY_BIT, 2#1000000000).
+
+% Path types
+-define(CANONICAL_PATH, canonical_path).
+-define(UUID_BASED_PATH, uuid_based_path).
 
 -endif.

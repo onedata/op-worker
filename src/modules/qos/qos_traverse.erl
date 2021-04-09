@@ -20,11 +20,10 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
--include("modules/datastore/datastore_runner.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include("tree_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% API
@@ -58,7 +57,7 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
         additional_data => #{
             <<"qos_entry_id">> => QosEntryId,
             <<"space_id">> => file_ctx:get_space_id_const(FileCtx),
-            <<"uuid">> => file_ctx:get_uuid_const(FileCtx),
+            <<"uuid">> => file_ctx:get_logical_uuid_const(FileCtx),
             <<"task_type">> => <<"traverse">>
         }
     },
@@ -79,7 +78,7 @@ reconcile_file_for_qos_entries(_FileCtx, []) ->
 reconcile_file_for_qos_entries(FileCtx, QosEntries) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     TaskId = datastore_key:new(),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx), % TODO VFS-7435 - Integrate hardlinks with QoS
     Options = #{
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
@@ -138,13 +137,14 @@ task_finished(TaskId, _PoolName) ->
         <<"uuid">> := FileUuid,
         <<"task_type">> := TaskType
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     case TaskType of
         <<"traverse">> ->
             #{<<"qos_entry_id">> := QosEntryId} = AdditionalData,
             ok = qos_entry:remove_traverse_req(QosEntryId, TaskId),
-            ok = qos_status:report_traverse_finished(SpaceId, TaskId, FileUuid);
+            ok = qos_status:report_traverse_finished(TaskId, FileCtx);
         <<"reconcile">> ->
-            ok = qos_status:report_reconciliation_finished(SpaceId, TaskId, FileUuid)
+            ok = qos_status:report_reconciliation_finished(TaskId, FileCtx)
     end.
 
 -spec task_canceled(id(), traverse:pool()) -> ok.
@@ -164,20 +164,18 @@ do_master_job(Job = #tree_traverse_slave{}, #{task_id := TaskId}) ->
 do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_id := TaskId}) ->
     BatchProcessingPrehook = fun(SlaveJobs, MasterJobs, ListExtendedInfo, _SubtreeProcessingStatus) ->
         ChildrenFiles = lists:map(fun(#tree_traverse_slave{file_ctx = ChildFileCtx}) ->
-            file_ctx:get_uuid_const(ChildFileCtx)
+            file_ctx:get_logical_uuid_const(ChildFileCtx)
         end, SlaveJobs),
         ChildrenDirs = lists:map(fun(#tree_traverse{file_ctx = ChildDirCtx}) ->
-            file_ctx:get_uuid_const(ChildDirCtx)
+            file_ctx:get_logical_uuid_const(ChildDirCtx)
         end, MasterJobs),
         BatchLastFilename = maps:get(last_name, ListExtendedInfo, undefined),
-        Uuid = file_ctx:get_uuid_const(FileCtx),
-        SpaceId = file_ctx:get_space_id_const(FileCtx),
         ok = qos_status:report_next_traverse_batch(
-            SpaceId, TaskId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastFilename),
+            TaskId, FileCtx, ChildrenDirs, ChildrenFiles, BatchLastFilename),
 
         case maps:get(is_last, ListExtendedInfo) of
             true ->
-                ok = qos_status:report_traverse_finished_for_dir(FileCtx, TaskId);
+                ok = qos_status:report_traverse_finished_for_dir(TaskId, FileCtx);
             false ->
                 ok
         end
@@ -225,7 +223,7 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
 
     case TaskType of
         <<"traverse">> ->
-            {ParentFileCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+            {ParentFileCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
             ok = qos_status:report_traverse_finished_for_file(TaskId, FileCtx2, ParentFileCtx);
         <<"reconcile">> ->
             ok
@@ -244,7 +242,7 @@ synchronize_file_for_entries(_TaskId, _UserCtx, _FileCtx, []) ->
 synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
     {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
     FileBlock = #file_block{offset = 0, size = Size},
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     TransferId = datastore_key:new_from_digest([TaskId, Uuid]),
     
     lists:foreach(fun(QosEntry) -> 

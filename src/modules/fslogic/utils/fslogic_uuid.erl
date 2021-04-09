@@ -6,7 +6,9 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Conversions between paths and uuids.
+%%% Conversions between paths and uuids and operations on referenced uuids.
+%%% Referenced uuid is term connected with links. It is uuid of file on
+%%% which link points (or simply file uuid for regular file).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_uuid).
@@ -19,17 +21,28 @@
 -export([root_dir_guid/0, user_root_dir_uuid/1, user_root_dir_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, spaceid_to_space_dir_guid/1, space_dir_uuid_to_spaceid/1]).
 -export([spaceid_to_trash_dir_uuid/1, spaceid_to_trash_dir_guid/1]).
+-export([shareid_to_share_root_dir_uuid/1, shareid_to_share_root_dir_guid/2, share_root_dir_uuid_to_shareid/1]).
 -export([is_special_uuid/1, is_special_guid/1]).
 -export([is_root_dir_guid/1, is_root_dir_uuid/1, is_user_root_dir_uuid/1]).
 -export([is_space_dir_uuid/1, is_space_dir_guid/1]).
 -export([is_trash_dir_uuid/1, is_trash_dir_guid/1]).
+-export([is_share_root_dir_uuid/1, is_share_root_dir_guid/1]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
+-export([gen_link_uuid/1, is_link_uuid/1, ensure_referenced_uuid/1]).
+-export([gen_symlink_uuid/0, is_symlink_uuid/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
 -define(ROOT_DIR_VIRTUAL_SPACE_ID, <<"rootDirVirtualSpaceId">>).
 -define(TRASH_DIR_UUID_PREFIX, "trash_").
+-define(SHARE_ROOT_DIR_UUID_PREFIX, "share_").
+% Macros for hard links (link is equal to hardlink - see file_meta_hardlinks.erl)
+-define(LINK_UUID_PREFIX, "link_").
+-define(LINK_UUID_SEPARATOR, "_file_").
+-define(LINK_UUID_RAND_PART_BYTES, 4).
+% Macro for symlinks
+-define(SYMLINK_UUID_PREFIX, "smlnk_").
 
 %%%===================================================================
 %%% API
@@ -86,11 +99,27 @@ spaceid_to_trash_dir_guid(SpaceId) ->
     file_id:pack_guid(spaceid_to_trash_dir_uuid(SpaceId), SpaceId).
 
 
+-spec shareid_to_share_root_dir_uuid(od_share:id()) -> file_meta:uuid().
+shareid_to_share_root_dir_uuid(ShareId) ->
+    <<?SHARE_ROOT_DIR_UUID_PREFIX, ShareId/binary>>.
+
+
+-spec shareid_to_share_root_dir_guid(od_share:id(), od_space:id()) -> file_id:file_guid().
+shareid_to_share_root_dir_guid(ShareId, SpaceId) ->
+    file_id:pack_share_guid(shareid_to_share_root_dir_uuid(ShareId), SpaceId, ShareId).
+
+
+-spec share_root_dir_uuid_to_shareid(file_meta:uuid()) -> od_share:id().
+share_root_dir_uuid_to_shareid(<<?SHARE_ROOT_DIR_UUID_PREFIX, ShareId/binary>>) ->
+    ShareId.
+
+
 -spec is_special_uuid(file_meta:uuid()) -> boolean().
 is_special_uuid(FileUuid) ->
     is_root_dir_uuid(FileUuid)
         orelse is_space_dir_uuid(FileUuid)
-        orelse is_trash_dir_uuid(FileUuid).
+        orelse is_trash_dir_uuid(FileUuid)
+        orelse is_share_root_dir_uuid(FileUuid).
 
 
 -spec is_special_guid(file_id:file_guid()) -> boolean().
@@ -140,6 +169,16 @@ is_trash_dir_guid(FileGuid) ->
     is_trash_dir_uuid(file_id:guid_to_uuid(FileGuid)).
 
 
+-spec is_share_root_dir_uuid(file_meta:uuid()) -> boolean().
+is_share_root_dir_uuid(<<?SHARE_ROOT_DIR_UUID_PREFIX, _ShareId/binary>>) -> true;
+is_share_root_dir_uuid(_) -> false.
+
+
+-spec is_share_root_dir_guid(file_id:file_guid()) -> boolean().
+is_share_root_dir_guid(FileGuid) ->
+    is_share_root_dir_uuid(file_id:guid_to_uuid(FileGuid)).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets full file path.
@@ -180,6 +219,37 @@ unpack_space_owner(<<?SPACE_OWNER_PREFIX_STR, SpaceId/binary>>) ->
 unpack_space_owner(_) ->
     {error, not_space_owner}.
 
+
+-spec gen_link_uuid(file_meta:uuid()) -> file_meta_hardlinks:link().
+gen_link_uuid(FileUuid) ->
+    RandPart = str_utils:rand_hex(?LINK_UUID_RAND_PART_BYTES),
+    <<?LINK_UUID_PREFIX, RandPart/binary, ?LINK_UUID_SEPARATOR, FileUuid/binary>>.
+
+-spec is_link_uuid(file_meta:uuid() | file_meta_hardlinks:link()) -> boolean().
+is_link_uuid(<<?LINK_UUID_PREFIX, _/binary>>) -> true;
+is_link_uuid(_) -> false.
+
+%%--------------------------------------------------------------------
+%% @doc Returns referenced uuid
+%% (file uuid for regular file or uuid of file on which link points).
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_referenced_uuid(file_meta:uuid() | file_meta_hardlinks:link()) -> file_meta:uuid().
+ensure_referenced_uuid(<<?LINK_UUID_PREFIX, UuidTail/binary>>) ->
+    [_, FileUuid] = binary:split(UuidTail, <<?LINK_UUID_SEPARATOR>>),
+    FileUuid;
+ensure_referenced_uuid(Uuid) ->
+    Uuid.
+
+
+-spec gen_symlink_uuid() -> file_meta:uuid().
+gen_symlink_uuid() ->
+    RandPart = datastore_key:new(),
+    <<?SYMLINK_UUID_PREFIX, RandPart/binary>>.
+
+-spec is_symlink_uuid(file_meta:uuid()) -> boolean().
+is_symlink_uuid(<<?SYMLINK_UUID_PREFIX, _/binary>>) -> true;
+is_symlink_uuid(_) -> false.
 
 %%%===================================================================
 %%% Internal functions

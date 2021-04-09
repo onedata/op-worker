@@ -676,7 +676,7 @@ remove_file_on_remote_provider_ceph(Config0) ->
 evict_on_ceph(Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
     Type = rest,
-    FileKeyType = path,
+    FileKeyType = guid,
     [Worker1 | _] = ?config(workers1, Config),
     [Worker2 | _] = ?config(workers_not1, Config),
     Size = 100,
@@ -1119,7 +1119,7 @@ rtransfer_config_fetch_mock(Request, NotifyFun, CompleteFun, _, _, _) ->
     {ok, Ref}.
 
 cancel_transfers_for_session_and_file(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session, [
         FileUuid, SessionId
     ]).

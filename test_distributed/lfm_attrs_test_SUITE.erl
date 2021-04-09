@@ -17,8 +17,8 @@
 -include("tree_traverse.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -50,7 +50,8 @@
     effective_value_test/1,
     traverse_test/1,
     file_traverse_job_test/1,
-    do_not_overwrite_space_dir_attrs_on_make_space_exist_test/1
+    do_not_overwrite_space_dir_attrs_on_make_space_exist_test/1,
+    listing_file_attrs_should_work_properly_in_open_handle_mode/1
 ]).
 
 %% Pool callbacks
@@ -77,7 +78,8 @@ all() ->
         effective_value_test,
         traverse_test,
         file_traverse_job_test,
-        do_not_overwrite_space_dir_attrs_on_make_space_exist_test
+        do_not_overwrite_space_dir_attrs_on_make_space_exist_test,
+        listing_file_attrs_should_work_properly_in_open_handle_mode
     ]).
 
 -define(CACHE, test_cache).
@@ -611,6 +613,177 @@ do_not_overwrite_space_dir_attrs_on_make_space_exist_test(Config) ->
         ?assertMatch({ok, SpaceAttrs}, lfm_proxy:stat(Worker, SessId, {guid, SpaceGuid}))
     end, lists:seq(1, 10)).
 
+
+listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    User = <<"user1">>,
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+
+    NormalSessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
+
+    ClientAccessToken = tokens:confine(
+        initializer:create_access_token(User),
+        #cv_interface{interface = oneclient}
+    ),
+    OpenHandleSessId = permissions_test_utils:create_session(
+        Worker, User, ClientAccessToken, open_handle
+    ),
+
+    {ok, File1Guid} = lfm_proxy:create(Worker, NormalSessId, <<"/", SpaceName/binary, "/file1">>),
+    {ok, File2Guid} = lfm_proxy:create(Worker, NormalSessId, <<"/", SpaceName/binary, "/file2">>),
+    {ok, File3Guid} = lfm_proxy:create(Worker, NormalSessId, <<"/", SpaceName/binary, "/file3">>),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, NormalSessId, <<"/", SpaceName/binary, "/dir">>, 8#770),
+    {ok, File4Guid} = lfm_proxy:create(Worker, NormalSessId, <<"/", SpaceName/binary, "/dir/file4">>),
+    mock_space_get_shares(Worker, []),
+
+    Content = <<"content">>,
+    ContentSize = size(Content),
+    {ok, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, NormalSessId, {guid, File4Guid}, write)),
+    ?assertMatch({ok, ContentSize}, lfm_proxy:write(Worker, Handle1, 0, Content)),
+    ?assertMatch(ok, lfm_proxy:close(Worker, Handle1)),
+
+    % Assert that when listing in normal mode all space files are returned
+    ?assertMatch(
+        {ok, [{DirGuid, _}, {File1Guid, _}, {File2Guid, _}, {File3Guid, _}]},
+        lfm_proxy:get_children(Worker, NormalSessId, {guid, SpaceGuid}, 0, 100)
+    ),
+
+    % Assert that listing in open_handle mode should return nothing as there are no shares with open handle
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:get_children(Worker, OpenHandleSessId, {guid, SpaceGuid}, 0, 100)
+    ),
+
+    BuildShareRootDirFun = fun(ShareId) ->
+        file_id:pack_share_guid(fslogic_uuid:shareid_to_share_root_dir_uuid(ShareId), SpaceId, ShareId)
+    end,
+
+    SpaceShareId = <<"spaceshare">>,
+    SpaceShareRootDirGuid = BuildShareRootDirFun(SpaceShareId),
+    SpaceShareGuid = file_id:guid_to_share_guid(SpaceGuid, SpaceShareId),
+    create_share(Worker, SpaceShareId, <<"szer">>, SpaceId, SpaceShareGuid, ?DIRECTORY_TYPE, <<"handle">>),
+
+    Share1Id = <<"share1">>,
+    Share1RootDirGuid = BuildShareRootDirFun(Share1Id),
+    File1ShareGuid = file_id:guid_to_share_guid(File1Guid, Share1Id),
+    create_share(Worker, Share1Id, <<"szer">>, SpaceId, File1ShareGuid, ?REGULAR_FILE_TYPE, <<"handle">>),
+
+    Share3Id = <<"share3">>,
+    File3ShareGuid = file_id:guid_to_share_guid(File3Guid, Share3Id),
+    create_share(Worker, Share3Id, <<"szer">>, SpaceId, File3ShareGuid, ?REGULAR_FILE_TYPE, undefined),
+
+    DirShareId = <<"dirshare">>,
+    DirShareRootDirGuid = BuildShareRootDirFun(DirShareId),
+    DirShareGuid = file_id:guid_to_share_guid(DirGuid, DirShareId),
+    create_share(Worker, DirShareId, <<"szer">>, SpaceId, DirShareGuid, ?DIRECTORY_TYPE, <<"handle">>),
+
+    Share4Id = <<"share4">>,
+    Share4RootDirGuid = BuildShareRootDirFun(Share4Id),
+    File4ShareGuid = file_id:guid_to_share_guid(File4Guid, Share4Id),
+    create_share(Worker, Share4Id, <<"szer">>, SpaceId, File4ShareGuid, ?REGULAR_FILE_TYPE, <<"handle">>),
+
+    mock_space_get_shares(Worker, [Share1Id, Share3Id, Share4Id, DirShareId, SpaceShareId]),
+
+    % Assert proper virtual share root dirs attrs (for all shares with open handle existing in space
+    % - file3 share has no handle so it shouldn't be listed) when listing space in 'open_handle' mode
+    ?assertMatch(
+        {ok, [
+            #file_attr{
+                guid = DirShareRootDirGuid, name = DirShareId, mode = 8#005, parent_guid = SpaceGuid,
+                uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = 0,
+                shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
+            },
+            #file_attr{
+                guid = Share1RootDirGuid, name = Share1Id, mode = 8#005, parent_guid = SpaceGuid,
+                uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = 0,
+                shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
+            },
+            #file_attr{
+                guid = Share4RootDirGuid, name = Share4Id, mode = 8#005, parent_guid = SpaceGuid,
+                uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = 0,
+                shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
+            },
+            #file_attr{
+                guid = SpaceShareRootDirGuid, name = SpaceShareId, mode = 8#005, parent_guid = SpaceGuid,
+                uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = 0,
+                shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
+            }
+        ], #{is_last := true}},
+        lfm_proxy:get_children_attrs(Worker, OpenHandleSessId, {guid, SpaceGuid},  #{offset => 0, size => 100})
+    ),
+
+    % Assert listing virtual share root dir returns only share root file
+    lists:foreach(fun({ShareRootFileGuid, ShareRootFileName, ShareRootDirGuid}) ->
+        ?assertMatch(
+            {ok, [{ShareRootFileGuid, ShareRootFileName}]},
+            lfm_proxy:get_children(Worker, OpenHandleSessId, {guid, ShareRootDirGuid}, 0, 100)
+        )
+    end, [
+        {DirShareGuid, <<"dir">>, DirShareRootDirGuid},
+        {File1ShareGuid, <<"file1">>, Share1RootDirGuid},
+        {File4ShareGuid, <<"file4">>, Share4RootDirGuid},
+        {SpaceShareGuid, SpaceName, SpaceShareRootDirGuid}
+    ]),
+
+    % Assert listing space using space share guid returns all space files
+    % (but with share guids containing space share id)
+    File1SpaceShareGuid = file_id:guid_to_share_guid(File1Guid, SpaceShareId),
+    File2SpaceShareGuid = file_id:guid_to_share_guid(File2Guid, SpaceShareId),
+    File3SpaceShareGuid = file_id:guid_to_share_guid(File3Guid, SpaceShareId),
+    DirSpaceShareGuid = file_id:guid_to_share_guid(DirGuid, SpaceShareId),
+
+    ?assertMatch(
+        {ok, [{DirSpaceShareGuid, _}, {File1SpaceShareGuid, _}, {File2SpaceShareGuid, _}, {File3SpaceShareGuid, _}]},
+        lfm_proxy:get_children(Worker, OpenHandleSessId, {guid, SpaceShareGuid}, 0, 100)
+    ),
+
+    % Assert it is possible to operate on file4 using Share4Id (direct share of file4)
+    % but is not possible via space/dir share (those are shares created on parents so
+    % permissions check must assert traverse ancestors for them too - dir has 8#770 perms
+    % and in 'open_handle' mode 'other' bits are checked so permissions will be denied)
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, OpenHandleSessId, {guid, File4ShareGuid}, read)),
+    ?assertMatch({ok, Content}, lfm_proxy:read(Worker, Handle2, 0, 100)),
+    ?assertMatch(ok, lfm_proxy:close(Worker, Handle2)),
+
+    File4DirShareGuid = file_id:guid_to_share_guid(File4Guid, DirShareId),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, OpenHandleSessId, {guid, File4DirShareGuid}, read)),
+
+    File4SpaceShareGuid = file_id:guid_to_share_guid(File4Guid, SpaceShareId),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, OpenHandleSessId, {guid, File4SpaceShareGuid}, read)),
+
+    ok.
+
+
+%% @private
+create_share(Worker, ShareId, Name, SpaceId, ShareFileGuid, FileType, Handle) ->
+    Doc = #document{key = ShareId, value = Record = #od_share{
+        name = Name,
+        description = <<>>,
+        space = SpaceId,
+        root_file = ShareFileGuid,
+        public_url = <<ShareId/binary, "_public_url">>,
+        file_type = FileType,
+        handle = Handle
+    }},
+    ?assertMatch({ok, _}, rpc:call(Worker, od_share, update_cache, [
+        ShareId, fun(_) -> {ok, Record} end, Doc
+    ])),
+    ?assertMatch(ok, rpc:call(Worker, file_meta, add_share, [
+        file_ctx:new_by_guid(ShareFileGuid), ShareId
+    ])),
+    ok.
+
+
+%% @private
+mock_space_get_shares(Workers, ShareList) ->
+    test_utils:mock_expect(Workers, space_logic, get_shares, fun(_, _) ->
+        {ok, ShareList}
+    end),
+    ok.
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -631,7 +804,10 @@ init_per_testcase(effective_value_test = Case, Config) ->
     CachePid = spawn(Worker, fun() -> cache_proc(
         #{check_frequency => timer:minutes(5), size => 100}) end),
     init_per_testcase(?DEFAULT_CASE(Case), [{cache_pid, CachePid} | Config]);
-init_per_testcase(do_not_overwrite_space_dir_attrs_on_make_space_exist_test = Case, Config) ->
+init_per_testcase(Case, Config) when
+    Case == do_not_overwrite_space_dir_attrs_on_make_space_exist_test;
+    Case == listing_file_attrs_should_work_properly_in_open_handle_mode
+->
     initializer:mock_share_logic(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->

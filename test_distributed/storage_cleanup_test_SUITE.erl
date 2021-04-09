@@ -521,8 +521,8 @@ race_on_remote_deletion_of_parent_and_child(Config) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
 
     % pretend that files were deleted
-    ok = rpc:call(Worker, file_meta, delete, [FileUuid]),
-    ok = rpc:call(Worker, file_meta, delete, [DirUuid]),
+    ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [FileUuid])),
+    ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [DirUuid])),
 
     % pretend that directory doc is synchronized before its child doc
     {ok, DirDoc} = rpc:call(Worker, file_meta, get_including_deleted, [DirUuid]),
@@ -783,11 +783,10 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
-        initializer:mock_provider_ids(NewConfig2),
-        initializer:mock_auth_manager(NewConfig2),
-        multi_provider_file_ops_test_base:init_env(NewConfig2)
+        NewConfig1 = initializer:setup_storage(NewConfig),
+        initializer:mock_provider_ids(NewConfig1),
+        initializer:mock_auth_manager(NewConfig1),
+        multi_provider_file_ops_test_base:init_env(NewConfig1)
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},

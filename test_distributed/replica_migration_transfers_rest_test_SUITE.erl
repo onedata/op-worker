@@ -12,21 +12,20 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/errors.hrl").
--include("modules/auth/acl.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([
-    migrate_empty_dir_by_guid/1, migrate_empty_dir_by_path/1,
-    migrate_tree_of_empty_dirs_by_guid/1, migrate_tree_of_empty_dirs_by_path/1,
-    migrate_regular_file_replica_by_guid/1, migrate_regular_file_replica_by_path/1,
+    migrate_empty_dir_by_guid/1,
+    migrate_tree_of_empty_dirs_by_guid/1,
+    migrate_regular_file_replica_by_guid/1,
     migrate_regular_file_replica_in_directory_by_guid/1,
-    migrate_regular_file_replica_in_directory_by_path/1,
     migrate_big_file_replica/1,
     migrate_100_files_in_one_request/1,
     migrate_100_files_each_file_separately/1,
@@ -49,13 +48,9 @@
 
 all() -> [
     migrate_empty_dir_by_guid,
-    migrate_empty_dir_by_path,
     migrate_tree_of_empty_dirs_by_guid,
-    migrate_tree_of_empty_dirs_by_path,
     migrate_regular_file_replica_by_guid,
-    migrate_regular_file_replica_by_path,
     migrate_regular_file_replica_in_directory_by_guid,
-    migrate_regular_file_replica_in_directory_by_path,
     migrate_big_file_replica,
     migrate_100_files_in_one_request,
     migrate_100_files_each_file_separately,
@@ -83,38 +78,26 @@ all() -> [
 migrate_empty_dir_by_guid(Config) ->
     replica_migration_transfers_test_base:migrate_empty_dir(Config, rest, guid).
 
-migrate_empty_dir_by_path(Config) ->
-    replica_migration_transfers_test_base:migrate_empty_dir(Config, rest, path).
-
 migrate_tree_of_empty_dirs_by_guid(Config) ->
     replica_migration_transfers_test_base:migrate_tree_of_empty_dirs(Config, rest, guid).
-
-migrate_tree_of_empty_dirs_by_path(Config) ->
-    replica_migration_transfers_test_base:migrate_tree_of_empty_dirs(Config, rest, path).
 
 migrate_regular_file_replica_by_guid(Config) ->
     replica_migration_transfers_test_base:migrate_regular_file_replica(Config, rest, guid).
 
-migrate_regular_file_replica_by_path(Config) ->
-    replica_migration_transfers_test_base:migrate_regular_file_replica(Config, rest, path).
-
 migrate_regular_file_replica_in_directory_by_guid(Config) ->
     replica_migration_transfers_test_base:migrate_regular_file_replica_in_directory(Config, rest, guid).
-
-migrate_regular_file_replica_in_directory_by_path(Config) ->
-    replica_migration_transfers_test_base:migrate_regular_file_replica_in_directory(Config, rest, path).
 
 migrate_big_file_replica(Config) ->
     replica_migration_transfers_test_base:migrate_big_file_replica(Config, rest, guid).
 
 migrate_100_files_in_one_request(Config) ->
-    replica_migration_transfers_test_base:migrate_100_files_in_one_request(Config, rest, path).
+    replica_migration_transfers_test_base:migrate_100_files_in_one_request(Config, rest, guid).
 
 migrate_100_files_each_file_separately(Config) ->
-    replica_migration_transfers_test_base:migrate_100_files_each_file_separately(Config, rest, path).
+    replica_migration_transfers_test_base:migrate_100_files_each_file_separately(Config, rest, guid).
 
 fail_to_migrate_file_replica_without_permissions(Config) ->
-    replica_migration_transfers_test_base:fail_to_migrate_file_replica_without_permissions(Config, rest, path).
+    replica_migration_transfers_test_base:fail_to_migrate_file_replica_without_permissions(Config, rest, guid).
 
 schedule_migration_by_view(Config) ->
     replica_migration_transfers_test_base:schedule_migration_by_view(Config, rest).

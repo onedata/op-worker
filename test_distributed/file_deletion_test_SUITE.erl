@@ -227,7 +227,7 @@ open_file_deletion_request_test_base(Config, DeferredFileCreation) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     FileGuid = create_test_file(Config, Worker, SessId, DeferredFileCreation),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    UserCtx = rpc:call(Worker, user_ctx, new, [<<"user1">>]),
+    UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
     FileCtx2 = rpc:call(Worker, fslogic_delete, delete_parent_link, [FileCtx, UserCtx]),
 
     ?assertEqual(ok, rpc:call(Worker, fslogic_delete, handle_release_of_deleted_file, [FileCtx2, ?LOCAL_REMOVE])),
@@ -253,9 +253,13 @@ deletion_of_not_open_file_test_base(Config, DeferredFileCreation) ->
     FileGuid = create_test_file(Config, Worker, SessId, DeferredFileCreation),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     FileCtx = file_ctx:new_by_guid(FileGuid),
+    ProviderId = rpc:call(Worker, oneprovider, get_id, []),
+    % Mark file as deleted in record (it does not delete document)
+    ?assertMatch({ok, _}, rpc:call(Worker, file_meta, update,
+        [FileUuid, fun(Record) -> {ok, Record#file_meta{deleted = true}} end])),
 
     ?assertEqual(false, rpc:call(Worker, file_handles, is_file_opened, [FileUuid])),
-    ?assertEqual(ok, rpc:call(Worker, fslogic_delete, delete_file_locally, [UserCtx, FileCtx, false])),
+    ?assertEqual(ok, rpc:call(Worker, fslogic_delete, delete_file_locally, [UserCtx, FileCtx, ProviderId, false])),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
@@ -456,7 +460,7 @@ init_per_testcase(Case, Config) when
     test_utils:mock_expect(Worker, fslogic_delete, handle_release_of_deleted_file,
         fun(FileCtx, _RemovalStatus) ->
             true = file_ctx:is_file_ctx_const(FileCtx),
-            ?FILE_UUID = file_ctx:get_uuid_const(FileCtx),
+            ?FILE_UUID = file_ctx:get_logical_uuid_const(FileCtx),
             ok
         end),
 
