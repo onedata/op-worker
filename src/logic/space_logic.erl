@@ -60,6 +60,10 @@
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_space:id()) ->
     {ok, od_space:doc()} | errors:error().
+get(?GUEST_SESS_ID, SpaceId) ->    
+    % Guest session is a virtual session fully managed by provider, and it needs
+    % access to space info to serve public data such as shares.
+    get(?ROOT_SESS_ID, SpaceId);
 get(SessionId, SpaceId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,

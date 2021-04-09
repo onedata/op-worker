@@ -53,6 +53,9 @@
 -define(DEFAULT_FILE_PERMS, 8#664).
 -define(DEFAULT_FILE_MODE, ?DEFAULT_FILE_PERMS bor 8#100000).
 
+% POSIX defines that symlinks have 777 permission by default
+-define(DEFAULT_SYMLINK_PERMS, 8#777).
+
 %% Default permissions for directories
 -define(DEFAULT_DIR_PERMS, 8#775).
 -define(DEFAULT_SHARE_ROOT_DIR_PERMS, 8#555).

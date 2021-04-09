@@ -117,6 +117,8 @@
     remote_read,
     fsync,
     release,
+    
+    read_symlink,
 
     get_file_attr,
     get_file_details,

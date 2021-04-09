@@ -26,12 +26,13 @@
     create_and_sync_file_tree/3, create_and_sync_file_tree/4,
     mv_and_sync_file/3, rm_and_sync_file/2
 ]).
+-export([get_object_attributes/3]).
 
 -type share_spec() :: #share_spec{}.
 
 -type space_selector() :: oct_background:entity_selector().
 -type object_selector() :: file_id:file_guid() | space_selector().
--type object_spec() :: #file_spec{} | #dir_spec{}.
+-type object_spec() :: #file_spec{} | #dir_spec{} | #symlink_spec{}.
 
 -type object() :: #object{}.
 
@@ -124,6 +125,21 @@ rm_and_sync_file(UserSelector, FileSelector) ->
     end, RestProviders).
 
 
+-spec get_object_attributes(oct_background:entity_selector(), session:id(), file_id:file_guid()) ->
+    {ok, object()} | {error, term()}.
+get_object_attributes(Node, SessId, Guid) ->
+    case file_test_utils:get_attrs(Node, SessId, Guid) of
+        {ok, #file_attr{guid = Guid, name = Name, type = Type, mode = Mode, shares = Shares}} ->
+            {ok, #object{
+                guid = Guid, name = Name,
+                type = Type, mode = Mode,
+                shares = lists:sort(Shares)
+            }};
+        {error, _} = Error ->
+            Error
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -164,6 +180,28 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
         dataset = DatasetObj,
         content = Content,
         children = undefined
+    };
+
+create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
+    name = NameOrUndefined,
+    shares = ShareSpecs,
+    symlink_value = LinkPath
+}) ->
+    FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
+    UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
+    CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
+
+    {ok, #file_attr{guid = SymlinkGuid}} = create_symlink(CreationNode, UserSessId, ParentGuid, FileName, LinkPath),
+
+    #object{
+        guid = SymlinkGuid,
+        name = FileName,
+        type = ?SYMLINK_TYPE,
+        shares = create_shares(CreationProvider, UserSessId, SymlinkGuid, ShareSpecs),
+        children = undefined,
+        content = undefined,
+        mode = ?DEFAULT_SYMLINK_PERMS,
+        symlink_value = LinkPath
     };
 
 create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
@@ -224,6 +262,10 @@ await_sync(CreationProvider, SyncProviders, UserId, #object{
     onenv_dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj),
     await_file_distribution_sync(CreationProvider, SyncProviders, UserId, Object);
 
+await_sync(_CreationProvider, SyncProviders, UserId, #object{type = ?SYMLINK_TYPE} = Object) ->
+    % file_attr construction uses file_meta document, so this checks symlink value synchronization
+    await_file_attr_sync(SyncProviders, UserId, Object);
+
 await_sync(CreationProvider, SyncProviders, UserId, #object{
     guid = DirGuid,
     type = ?DIRECTORY_TYPE,
@@ -248,7 +290,7 @@ await_file_attr_sync(SyncProviders, UserId, #object{guid = Guid} = Object) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
-        ExpObjectAttrs = Object#object{dataset = undefined, content = undefined, children = undefined},
+        ExpObjectAttrs = Object#object{dataset = undefined, content = undefined, children = undefined, symlink_value = undefined},
         ?assertEqual({ok, ExpObjectAttrs}, get_object_attributes(SyncNode, SessId, Guid), ?ATTEMPTS)
     end, SyncProviders).
 
@@ -271,22 +313,6 @@ await_file_distribution_sync(CreationProvider, SyncProviders, UserId, #object{
         SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
         ?assertDistribution(SyncNode, SessId, ?DIST(CreationProvider, byte_size(Content)), Guid, ?ATTEMPTS)
     end, SyncProviders).
-
-
-%% @private
--spec get_object_attributes(oct_background:entity_selector(), session:id(), file_id:file_guid()) ->
-    {ok, object()} | {error, term()}.
-get_object_attributes(Node, SessId, Guid) ->
-    case file_test_utils:get_attrs(Node, SessId, Guid) of
-        {ok, #file_attr{guid = Guid, name = Name, type = Type, mode = Mode, shares = Shares}} ->
-            {ok, #object{
-                guid = Guid, name = Name,
-                type = Type, mode = Mode,
-                shares = lists:sort(Shares)
-            }};
-        {error, _} = Error ->
-            Error
-    end.
 
 
 %% @private
@@ -371,6 +397,13 @@ create_file(Node, SessId, ParentGuid, FileName, FileMode) ->
     {ok, file_id:file_guid()} | no_return().
 create_dir(Node, SessId, ParentGuid, FileName, FileMode) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, SessId, ParentGuid, FileName, FileMode)).
+
+
+%% @private
+-spec create_symlink(node(), session:id(), file_id:file_guid(), file_meta:name(), file_meta_symlinks:symlink()) ->
+    {ok, file_id:file_guid()} | no_return().
+create_symlink(Node, SessId, ParentGuid, FileName, LinkPath) ->
+    ?assertMatch({ok, _}, lfm_proxy:make_symlink(Node, SessId, {guid, ParentGuid}, FileName, LinkPath)).
 
 
 %% @private
