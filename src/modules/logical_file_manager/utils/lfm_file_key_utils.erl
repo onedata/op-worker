@@ -6,12 +6,13 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Function for converting paths to guids.
+%%% Utility functions for handling lfm:file_key().
 %%% @end
 %%%--------------------------------------------------------------------
--module(guid_utils).
+-module(lfm_file_key_utils).
 -author("Tomasz Lichon").
 
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -19,7 +20,7 @@
 -export([
     resolve_file_key/3,
     ensure_guid/2,
-    resolve_if_symlink/2
+    resolve_guid_if_symlink/2
 ]).
 
 %%%===================================================================
@@ -35,7 +36,7 @@ resolve_file_key(SessionId, {KeyType, _} = FileKey, DefaultSymlinkResolutionPoli
 
     case ShouldResolveSymlink of
         true ->
-            {ok, TargetGuid} = resolve_if_symlink(SessionId, Guid),
+            {ok, TargetGuid} = resolve_guid_if_symlink(SessionId, Guid),
             TargetGuid;
         false ->
             Guid
@@ -59,9 +60,9 @@ ensure_guid(_, {_, Guid}) ->
     {ok, Guid}.
 
 
--spec resolve_if_symlink(session:id(), file_id:file_guid()) ->
+-spec resolve_guid_if_symlink(session:id(), file_id:file_guid()) ->
     {ok, file_id:file_guid()} | {error, term()}.
-resolve_if_symlink(SessionId, FileGuid) ->
+resolve_guid_if_symlink(SessionId, FileGuid) ->
     case fslogic_uuid:is_symlink_guid(FileGuid) of
         true ->
             remote_utils:call_fslogic(

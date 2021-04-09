@@ -629,7 +629,9 @@ handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
 handle_file_request(UserCtx, #read_symlink{}, FileCtx) ->
-    file_req:read_symlink(UserCtx, FileCtx);
+    symlink_req:read(UserCtx, FileCtx);
+handle_file_request(UserCtx, #resolve_symlink{}, FileCtx) ->
+    symlink_req:resolve(UserCtx, FileCtx);
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,
@@ -663,14 +665,7 @@ handle_file_request(UserCtx, #fsync{
     data_only = DataOnly,
     handle_id = HandleId
 }, FileCtx) ->
-    file_req:fsync(UserCtx, FileCtx, DataOnly, HandleId);
-handle_file_request(UserCtx, #resolve_symlink{}, FileCtx) ->
-    TargetFileCtx = symlink_path:resolve(UserCtx, FileCtx),
-
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #guid{guid = file_ctx:get_logical_guid_const(TargetFileCtx)}
-    }.
+    file_req:fsync(UserCtx, FileCtx, DataOnly, HandleId).
 
 %%--------------------------------------------------------------------
 %% @private

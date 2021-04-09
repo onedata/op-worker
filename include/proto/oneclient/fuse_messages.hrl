@@ -131,8 +131,12 @@
 -record(get_file_location, {
 }).
 
+% Operation that returns symlink value as it is
 -record(read_symlink, {
 }).
+
+% Operation that returns target file (file pointed by path stored in symlink) guid
+-record(resolve_symlink, {}).
 
 -record(release, {
     handle_id :: binary()
@@ -188,8 +192,6 @@
 -record(storage_file_created, {
 }).
 
--record(resolve_symlink, {}).
-
 -type file_request_type() ::
     #get_file_attr{} | #get_file_references{} |
     #get_file_children{} | #get_file_children_attrs{} |
@@ -197,12 +199,13 @@
     #create_dir{} | #delete_file{} | #move_to_trash{} |
     #update_times{} | #change_mode{} | #update_protection_flags{} |
     #rename{} | #create_file{} | #make_file{} |
-    #make_link{} | #make_symlink{} | #open_file{} | #get_file_location{} | #read_symlink{} |
+    #make_link{} | #make_symlink{} | #open_file{} | #get_file_location{} |
+    #read_symlink{} | #resolve_symlink{} |
     #release{} | #truncate{} | #synchronize_block{} |
     #synchronize_block_and_compute_checksum{} | #block_synchronization_request{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
     #list_xattr{} | #fsync{} |
-    #storage_file_created{} | #open_file_with_extended_info{} | #resolve_symlink{}.
+    #storage_file_created{} | #open_file_with_extended_info{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),

@@ -29,7 +29,7 @@ create_share(SessId, FileKey, Name, Description) ->
     remote_utils:call_fslogic(
         SessId,
         provider_request,
-        guid_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+        lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
         #create_share{name = Name, description = Description},
         fun(#share{share_id = ShareId}) -> {ok, ShareId} end
     ).

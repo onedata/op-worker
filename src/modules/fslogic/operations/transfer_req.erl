@@ -39,7 +39,7 @@ schedule_file_transfer(
     Callback
 ) ->
     data_constraints:assert_not_readonly_mode(UserCtx),
-    FileCtx1 = assert_possible_if_replication(ReplicatingProviderId, FileCtx0),
+    FileCtx1 = assert_replication_possible(ReplicatingProviderId, FileCtx0),
 
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1, [?TRAVERSE_ANCESTORS]
@@ -67,7 +67,7 @@ schedule_view_transfer(
     Callback
 ) ->
     data_constraints:assert_not_readonly_mode(UserCtx),
-    SpaceDirCtx1 = assert_possible_if_replication(ReplicatingProviderId, SpaceDirCtx0),
+    SpaceDirCtx1 = assert_replication_possible(ReplicatingProviderId, SpaceDirCtx0),
 
     SpaceDirCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, SpaceDirCtx1, [?TRAVERSE_ANCESTORS]
@@ -113,12 +113,12 @@ schedule_transfer_insecure(
 
 
 %% @private
--spec assert_possible_if_replication(undefined | od_provider:id(), file_ctx:ctx()) ->
+-spec assert_replication_possible(undefined | od_provider:id(), file_ctx:ctx()) ->
     file_ctx:ctx().
-assert_possible_if_replication(undefined, FileCtx0) ->
+assert_replication_possible(undefined, FileCtx0) ->
     % if ReplicatingProvider is undefined the transfer is a eviction
     FileCtx0;
-assert_possible_if_replication(ReplicatingProviderId, FileCtx0) ->
+assert_replication_possible(ReplicatingProviderId, FileCtx0) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     file_ctx:assert_not_readonly_target_storage_const(FileCtx0, ReplicatingProviderId),
     file_ctx:assert_smaller_than_provider_support_size(FileCtx0, ReplicatingProviderId).

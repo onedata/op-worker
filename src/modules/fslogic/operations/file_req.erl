@@ -19,7 +19,7 @@
 
 %% API
 -export([create_file/5, storage_file_created/2, make_file/4, make_link/4, make_symlink/4,
-    read_symlink/2, get_file_location/2, open_file/3, open_file/4, open_file_insecure/4,
+    get_file_location/2, open_file/3, open_file/4, open_file_insecure/4,
     open_file_with_extended_info/3, storage_file_created_insecure/2,
     fsync/4, release/3, flush_event_queue/2]).
 
@@ -123,15 +123,6 @@ make_symlink(UserCtx, ParentFileCtx0, Name, Link) ->
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     make_symlink_insecure(UserCtx, ParentFileCtx1, Name, Link).
-
-
--spec read_symlink(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:fuse_response().
-read_symlink(UserCtx, FileCtx0) ->
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS]
-    ),
-    read_symlink_insecure(UserCtx, FileCtx1).
 
 
 %%--------------------------------------------------------------------
@@ -450,19 +441,6 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
         {false, _} ->
             throw(?ENOTDIR)
     end.
-
-
-%% @private
--spec read_symlink_insecure(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:fuse_response().
-read_symlink_insecure(_UserCtx, FileCtx) ->
-    {Doc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    {ok, Link} = file_meta_symlinks:readlink(Doc),
-    fslogic_times:update_atime(FileCtx2),
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #symlink{link = Link}
-    }.
-
 
 
 %%--------------------------------------------------------------------

@@ -9,14 +9,14 @@
 %%% This module provides set of symlink path processing methods.
 %%% @end
 %%%-------------------------------------------------------------------
--module(symlink_path).
+-module(symlink_req).
 -author("Bartosz Walkowicz").
 
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([resolve/2]).
+-export([read/2, resolve/2]).
 
 
 -record(resolution_ctx, {
@@ -38,21 +38,48 @@
 %%%===================================================================
 
 
--spec resolve(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx() | no_return().
+-spec read(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:fuse_response().
+read(UserCtx, FileCtx0) ->
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #symlink{link = read_symlink(UserCtx, FileCtx0)}
+    }.
+
+
+-spec resolve(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:fuse_response().
 resolve(UserCtx, SymlinkFileCtx) ->
     ResolutionCtx = #resolution_ctx{
         user_ctx = UserCtx,
         space_id = file_ctx:get_space_id_const(SymlinkFileCtx),
         symlinks_encountered = ordsets:new()
     },
-    {TargetFileCtx, _} = resolve_symlink(SymlinkFileCtx, ResolutionCtx),
 
-    fslogic_authz:ensure_authorized(UserCtx, TargetFileCtx, [?TRAVERSE_ANCESTORS]).
+    {TargetFileCtx, _} = resolve_symlink(SymlinkFileCtx, ResolutionCtx),
+    fslogic_authz:ensure_authorized(UserCtx, TargetFileCtx, [?TRAVERSE_ANCESTORS]),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #guid{guid = file_ctx:get_logical_guid_const(TargetFileCtx)}
+    }.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec read_symlink(user_ctx:ctx(), file_ctx:ctx()) -> file_meta_symlinks:symlink().
+read_symlink(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]
+    ),
+
+    {Doc, FileCtx2} = file_ctx:get_file_doc(FileCtx1),
+    {ok, SymlinkValue} = file_meta_symlinks:readlink(Doc),
+    fslogic_times:update_atime(FileCtx2),
+
+    SymlinkValue.
 
 
 %% @private
@@ -102,16 +129,6 @@ assert_hops_limit_not_reached(SymlinkFileCtx, #resolution_ctx{
                 symlinks_encountered = ordsets:add_element(SymlinkGuid, Symlinks)
             }
     end.
-
-
-%% @private
--spec read_symlink(user_ctx:ctx(), file_ctx:ctx()) -> file_meta_symlinks:symlink().
-read_symlink(UserCtx, SymlinkFileCtx) ->
-    #fuse_response{status = #status{code = ?OK}, fuse_response = #symlink{
-        link = SymlinkValue
-    }} = file_req:read_symlink(UserCtx, SymlinkFileCtx),
-
-    SymlinkValue.
 
 
 %% @private

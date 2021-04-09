@@ -58,7 +58,7 @@ mkdir(SessId, ParentGuid, Name, undefined) ->
     {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
     mkdir(SessId, ParentGuid, Name, Mode);
 mkdir(SessId, ParentGuid0, Name, Mode) ->
-    {ok, ParentGuid1} = guid_utils:resolve_if_symlink(SessId, ParentGuid0),
+    {ok, ParentGuid1} = lfm_file_key_utils:resolve_guid_if_symlink(SessId, ParentGuid0),
 
     remote_utils:call_fslogic(SessId, file_request, ParentGuid1,
         #create_dir{name = Name, mode = Mode},
@@ -76,7 +76,7 @@ mkdir(SessId, ParentGuid0, Name, Mode) ->
 -spec get_children(session:id(), lfm:file_key(), file_meta:list_opts()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | lfm:error_reply().
 get_children(SessId, FileKey, ListOpts) ->
-    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
+    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children{
@@ -105,7 +105,7 @@ get_children(SessId, FileKey, ListOpts) ->
 -spec get_children_attrs(session:id(), lfm:file_key(), file_meta:list_opts()) ->
     {ok, [#file_attr{}], file_meta:list_extended_info()} | lfm:error_reply().
 get_children_attrs(SessId, FileKey, ListOpts) ->
-    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
+    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children_attrs{
@@ -128,7 +128,7 @@ get_children_attrs(SessId, FileKey, ListOpts) ->
 -spec get_child_attr(session:id(), file_id:file_guid(), file_meta:name()) ->
     {ok, #file_attr{}} | lfm:error_reply().
 get_child_attr(SessId, ParentGuid0, ChildName)  ->
-    {ok, ParentGuid1} = guid_utils:resolve_if_symlink(SessId, ParentGuid0),
+    {ok, ParentGuid1} = lfm_file_key_utils:resolve_guid_if_symlink(SessId, ParentGuid0),
 
     remote_utils:call_fslogic(SessId, file_request, ParentGuid1,
         #get_child_attr{name = ChildName},
@@ -146,7 +146,7 @@ get_child_attr(SessId, ParentGuid0, ChildName)  ->
 -spec get_children_details(session:id(), lfm:file_key(), file_meta:list_opts()) ->
     {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | lfm:error_reply().
 get_children_details(SessId, FileKey, ListOpts) ->
-    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
+    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children_details{
@@ -165,7 +165,7 @@ get_children_details(SessId, FileKey, ListOpts) ->
 -spec get_children_count(session:id(), lfm:file_key()) ->
     {ok, non_neg_integer()} | lfm:error_reply().
 get_children_count(SessId, FileKey) ->
-    FileGuid = guid_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
+    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     case count_children(SessId, FileGuid) of
         {ok, ChildrenNum} -> {ok, ChildrenNum};

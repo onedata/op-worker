@@ -108,8 +108,10 @@ sanitize_params(#op_req{
                 ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
                     {true, ValidMode};
                 _ ->
+                    % TODO VFS-7536 add basis of number system to ?ERROR_BAD_VALUE_NOT_IN_RANGE
                     throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777))
             catch _:_ ->
+                % TODO VFS-7536 add basis of number system to ?ERROR_BAD_VALUE_NOT_IN_RANGE
                 throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
             end
         end},

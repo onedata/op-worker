@@ -19,6 +19,7 @@
 -module(lfm).
 -author("Lukasz Opiola").
 
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
@@ -133,6 +134,13 @@
     path | direct_path | indirect_path |
     guid | direct_guid | indirect_guid.
 
+% Reference to specific file. Following types are supported:
+% - guid/path - in case of symlink resolution may happen depending on operation
+%               (behaviour similar to UNIX)
+% - direct_guid/path - this specific file will be used in operation
+%                      (no symlink resolution will happen).
+% - indirect_guid/path - if this points to symlink it will be resolved
+%                        and target file will be used in operation.
 -type file_key() ::
     {path | direct_path | indirect_path, file_meta:path()} |
     {guid | direct_guid | indirect_guid, file_id:file_guid()}.
