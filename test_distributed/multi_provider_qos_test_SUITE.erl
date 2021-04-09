@@ -129,7 +129,7 @@ all() -> [
     reevaluate_impossible_qos_conflict_test,
 
     qos_traverse_cancellation_test,
-    
+
     qos_on_hardlink_test,
     effective_qos_with_hardlinks_test,
     qos_with_hardlink_deletion_test,

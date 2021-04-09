@@ -22,6 +22,8 @@
 %%% requires calculating effective_file_qos as file_qos is inherited from all
 %%% parents.
 %%%
+%%% Only one file_qos document exists per inode i.e when QoS entry is added to 
+%%% hardlink it is saved in inode file_qos document.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_qos).
@@ -296,7 +298,7 @@ clean_up(FileCtx, OriginalParentCtx) ->
             ok
     end,
     Uuid = file_ctx:get_logical_uuid_const(FileCtx1),
-    case {OriginalParentCtx, file_ctx:count_references_const(FileCtx)} of
+    case {OriginalParentCtx, file_meta_hardlinks:count_references(FileDoc)} of
         {undefined, {ok, 0}} -> ok = delete(Uuid);
         _ -> ok
     end.
@@ -455,8 +457,9 @@ merge_file_qos(FirstEffQos, FileQos = #file_qos{}) ->
     merge_file_qos(FirstEffQos, file_qos_to_eff_file_qos(FileQos));
 merge_file_qos(undefined, SecondEffQos) ->
     SecondEffQos;
+merge_file_qos(FirstEffQos, undefined) ->
+    FirstEffQos;
 merge_file_qos(FirstEffQos, SecondEffQos) ->
-    ?notice("~p, ~p", [FirstEffQos, SecondEffQos]),
     #effective_file_qos{
         qos_entries = lists:usort(
             FirstEffQos#effective_file_qos.qos_entries ++ SecondEffQos#effective_file_qos.qos_entries

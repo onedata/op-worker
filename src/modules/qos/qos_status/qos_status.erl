@@ -58,6 +58,9 @@
 %%% To check if there is any reconcile job in subtree of a directory simply check if there is any 
 %%% reconcile_link with its prefix being this directory uuid based path.
 %%% 
+%%% When file has many references (i.e some hardlinks were created), status links consisting of 
+%%% uuid_based_path are added for each file reference. 
+%%% 
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_status).

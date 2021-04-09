@@ -258,7 +258,8 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
         qos_entry:add_transfer_to_list(QosEntry, TransferId) 
     end, QosEntries),
     SyncResult = case IsSymlink of
-        true -> ok;
+        true -> 
+            ok;
         false ->
             replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, 
                 false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY)

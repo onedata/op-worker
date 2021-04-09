@@ -50,9 +50,7 @@ check(FileCtx, #document{key = QosEntryId}) ->
     ok | {error, term()}.
 report_started(TraverseId, FileCtx, QosEntries) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {ok, References} = file_ctx:list_references_const(FileCtx),
-    lists:foreach(fun(FileUuid) ->
-        InternalFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
+    lists:foreach(fun(InternalFileCtx) ->
         {UuidBasedPath, _} = file_ctx:get_uuid_based_path(InternalFileCtx),
         Link = {?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId), TraverseId},
         lists:foreach(fun(QosEntryId) ->
@@ -60,7 +58,7 @@ report_started(TraverseId, FileCtx, QosEntries) ->
             ok = qos_status_links:delete_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId),
                 ?FAILED_TRANSFER_LINK_NAME(UuidBasedPath))
         end, QosEntries)
-    end, References).
+    end, get_references(FileCtx)).
 
 
 -spec report_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
@@ -94,11 +92,9 @@ report_file_transfer_failure(FileCtx, QosEntries) ->
         {UuidBasedPath, _} = file_ctx:get_uuid_based_path(InternalFileCtx),
         Link = {?FAILED_TRANSFER_LINK_NAME(UuidBasedPath), <<"failed_transfer">>},
         lists:foreach(fun(QosEntryId) ->
-            ok = ?extract_ok(?ok_if_exists(
-                qos_status_links:add_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link)))
+            {ok, _} = qos_status_links:add_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link)
         end, QosEntries),
-        ok = ?extract_ok(?ok_if_exists(
-            qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_logical_uuid_const(InternalFileCtx))))
+        ok = qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_logical_uuid_const(InternalFileCtx))
     end, get_references(FileCtx)).
 
 
@@ -145,6 +141,6 @@ get_references(FileCtx) ->
     LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
     lists:map(
         fun (FileUuid) when FileUuid == LogicalUuid -> FileCtx;
-            (FileUuid) -> file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))
+            (FileUuid) -> file_ctx:new_by_uuid(FileUuid, SpaceId)
         end,
     References).
