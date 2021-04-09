@@ -105,6 +105,7 @@
     get_parent,
     % TODO VFS-6057 resolve share path up to share not user root dir
     %%    get_file_path,
+    resolve_symlink,
 
     list_xattr,
     get_xattr,
@@ -546,6 +547,8 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus,
     include_link_count = IncludeLinkCount}, FileCtx) ->
     attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_file_references{}, FileCtx) ->
+    attr_req:get_file_references(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
     attr_req:get_file_details(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_child_attr{name = Name,
@@ -619,7 +622,9 @@ handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
 handle_file_request(UserCtx, #read_symlink{}, FileCtx) ->
-    file_req:read_symlink(UserCtx, FileCtx);
+    symlink_req:read(UserCtx, FileCtx);
+handle_file_request(UserCtx, #resolve_symlink{}, FileCtx) ->
+    symlink_req:resolve(UserCtx, FileCtx);
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,

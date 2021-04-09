@@ -34,7 +34,7 @@
 -spec establish(session:id(), lfm:file_key(), data_access_control:bitmask()) ->
     {ok, dataset:id()} | lfm:error_reply().
 establish(SessId, FileKey, ProtectionFlags) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid, #establish_dataset{protection_flags = ProtectionFlags},
         fun(#dataset_established{id = DatasetId}) ->
             {ok, DatasetId}
@@ -76,7 +76,7 @@ get_info(SessId, DatasetId) ->
 -spec get_file_eff_summary(session:id(), lfm:file_key()) ->
     {ok, file_eff_summary()} | lfm:error_reply().
 get_file_eff_summary(SessId, FileKey) ->
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid, #get_file_eff_dataset_summary{},
         fun(EffSummary = #file_eff_dataset_summary{}) ->
             {ok, EffSummary}

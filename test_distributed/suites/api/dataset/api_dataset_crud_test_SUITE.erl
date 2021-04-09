@@ -336,7 +336,7 @@ get_dataset_test_base(
 ) ->
     StateBin = atom_to_binary(State, utf8),
     {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
-    RootFileTypeBin = file_meta:type_to_json(RootFileType),
+    RootFileTypeBin = str_utils:to_binary(RootFileType),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{

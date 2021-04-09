@@ -68,7 +68,7 @@ translate_dataset_info(#dataset_info{
             type = op_file, id = RootFileGuid,
             aspect = instance, scope = private
         }),
-        <<"rootFileType">> => file_meta:type_to_json(RootFileType),
+        <<"rootFileType">> => str_utils:to_binary(RootFileType),
         <<"rootFilePath">> => RootFilePath,
         <<"state">> => atom_to_binary(State, utf8),
         <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),

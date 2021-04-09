@@ -2366,7 +2366,7 @@ verify_file_content(Config, Handle, FileContent, From, To) ->
     ?assertEqual({ok, FileContent}, lfm_proxy:read(Worker, Handle, From, To)).
 
 produce_truncate_event(Worker, SessId, FileKey, Size) ->
-    {guid, FileGuid} = rpc:call(Worker, guid_utils, ensure_guid, [SessId, FileKey]),
+    {ok, FileGuid} = rpc:call(Worker, lfm_file_key_utils, ensure_guid, [SessId, FileKey]),
     ok = rpc:call(Worker, lfm_event_emitter, emit_file_truncated, [FileGuid, Size, SessId]).
 
 

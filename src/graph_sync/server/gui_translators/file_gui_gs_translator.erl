@@ -121,6 +121,19 @@ translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
         throw(?ERROR_POSIX(Errno))
     end;
 
+translate_resource(#gri{aspect = hardlinks, scope = private}, References) ->
+    #{
+        <<"hardlinks">> => lists:map(fun(FileGuid) ->
+            gri:serialize(#gri{
+                type = op_file, id = FileGuid,
+                aspect = instance, scope = private
+            })
+        end, References)
+    };
+
+translate_resource(#gri{aspect = symlink_target, scope = Scope}, FileDetails) ->
+    translate_file_details(FileDetails, Scope);
+
 translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
     #{
         <<"list">> => lists:map(fun(ShareId) ->
@@ -205,6 +218,7 @@ translate_file_details(#file_details{
     index_startid = StartId,
     eff_dataset_membership = EffDatasetMembership,
     eff_protection_flags = EffFileProtectionFlags,
+    symlink_value = SymlinkValue,
     file_attr = #file_attr{
         guid = FileGuid,
         name = FileName,
@@ -215,15 +229,15 @@ translate_file_details(#file_details{
         size = SizeAttr,
         shares = Shares,
         provider_id = ProviderId,
-        owner_id = OwnerId
+        owner_id = OwnerId,
+        nlink = NLink
     }
 }, Scope) ->
     PosixPerms = list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
     {Type, Size} = case TypeAttr of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, SizeAttr}
+        ?DIRECTORY_TYPE -> {<<"DIR">>, null};
+        ?REGULAR_FILE_TYPE -> {<<"REG">>, SizeAttr};
+        ?SYMLINK_TYPE -> {<<"SYMLNK">>, SizeAttr}
     end,
     IsRootDir = case file_id:guid_to_share_id(FileGuid) of
         undefined -> fslogic_uuid:is_space_dir_guid(FileGuid);
@@ -233,7 +247,7 @@ translate_file_details(#file_details{
         true -> null;
         false -> ParentGuid
     end,
-    PublicFields = #{
+    BasicPublicFields = #{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
@@ -246,11 +260,18 @@ translate_file_details(#file_details{
         <<"shares">> => Shares,
         <<"activePermissionsType">> => ActivePermissionsType
     },
+    PublicFields = case TypeAttr of
+        ?SYMLINK_TYPE ->
+            BasicPublicFields#{<<"targetPath">> => SymlinkValue};
+        _ ->
+            BasicPublicFields
+    end,
     case Scope of
         public ->
             PublicFields;
         private ->
             PublicFields#{
+                <<"hardlinksCount">> => utils:undefined_to_null(NLink),
                 <<"effProtectionFlags">> => file_meta:protection_flags_to_json(
                     EffFileProtectionFlags
                 ),

@@ -19,7 +19,7 @@
 %% API
 -export([init/1, init/2, init/3, teardown/1]).
 -export([
-    stat/3, get_fs_stats/3, get_details/3,
+    stat/3, resolve_symlink/3, get_fs_stats/3, get_details/3,
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
@@ -156,6 +156,12 @@ stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_guid(Worker, FileKey))).
 
 
+-spec resolve_symlink(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
+resolve_symlink(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:resolve_symlink(SessId, uuid_to_guid(Worker, FileKey))).
+
+
 -spec get_fs_stats(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, lfm_attrs:fs_stats()} | lfm:error_reply().
 get_fs_stats(Worker, SessId, FileKey) ->
@@ -199,6 +205,7 @@ check_perms(Worker, SessId, FileKey, OpenFlag) ->
     ok | lfm:error_reply().
 set_perms(Worker, SessId, FileKey, NewPerms) ->
     ?EXEC(Worker, lfm:set_perms(SessId, uuid_to_guid(Worker, FileKey), NewPerms)).
+
 
 -spec update_times(node(), session:id(), lfm:file_key(),
     file_meta:time(), file_meta:time(), file_meta:time()) ->
@@ -247,7 +254,6 @@ cp(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
     ok | lfm:error_reply().
 is_dir(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:is_dir(SessId, uuid_to_guid(Worker, FileKey))).
-
 
 
 %%%===================================================================
@@ -729,7 +735,9 @@ remove_share(Worker, SessId, FileKey) ->
 -spec schedule_file_replication(node(), session:id(), lfm:file_key(),
     ProviderId :: oneprovider:id()) -> {ok, transfer:id()} | {error, term()}.
 schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
-    ?EXEC(Worker, lfm:schedule_file_replication(SessId, FileKey, ProviderId, undefined)).
+    ?EXEC(Worker, lfm:schedule_file_transfer(
+        SessId, FileKey, ProviderId, undefined, undefined
+    )).
 
 
 -spec schedule_replication_by_view(
@@ -742,8 +750,9 @@ schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
 ) ->
     {ok, transfer:id()} | {error, term()}.
 schedule_replication_by_view(Worker, SessId, ProviderId, SpaceId, ViewName, QueryViewParams) ->
-    ?EXEC(Worker, lfm:schedule_replication_by_view(
-        SessId, ProviderId, undefined, SpaceId, ViewName, QueryViewParams
+    ?EXEC(Worker, lfm:schedule_view_transfer(
+        SessId, SpaceId, ViewName, QueryViewParams,
+        ProviderId, undefined, undefined
     )).
 
 
@@ -756,7 +765,9 @@ schedule_replication_by_view(Worker, SessId, ProviderId, SpaceId, ViewName, Quer
 ) ->
     {ok, transfer:id()} | {error, term()}.
 schedule_file_replica_eviction(Worker, SessId, FileKey, ProviderId, MigrationProviderId) ->
-    ?EXEC(Worker, lfm:schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId)).
+    ?EXEC(Worker, lfm:schedule_file_transfer(
+        SessId, FileKey, MigrationProviderId, ProviderId, undefined
+    )).
 
 
 -spec schedule_replica_eviction_by_view(
@@ -773,9 +784,9 @@ schedule_replica_eviction_by_view(
     Worker, SessId, ProviderId, MigrationProviderId,
     SpaceId, ViewName, QueryViewParams
 ) ->
-    ?EXEC(Worker, lfm:schedule_replica_eviction_by_view(
-        SessId, ProviderId, MigrationProviderId, SpaceId,
-        ViewName, QueryViewParams
+    ?EXEC(Worker, lfm:schedule_view_transfer(
+        SessId, SpaceId, ViewName, QueryViewParams,
+        MigrationProviderId, ProviderId, undefined
     )).
 
 

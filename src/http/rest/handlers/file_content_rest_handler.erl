@@ -85,26 +85,41 @@ sanitize_params(#op_req{
     data = RawParams,
     gri = #gri{aspect = child}
 } = OpReq) ->
-    ModeParam = <<"mode">>,
-
+    AlwaysRequiredParams = #{
+        <<"name">> => {binary, non_empty}
+    },
+    ParamsRequiredDependingOnType = case maps:get(<<"type">>, RawParams, undefined) of
+        <<"LNK">> ->
+            AlwaysRequiredParams#{<<"target_file_id">> => {binary, fun(ObjectId) ->
+                {true, middleware_utils:decode_object_id(ObjectId, <<"target_file_id">>)}
+            end}};
+        <<"SYMLNK">> ->
+            AlwaysRequiredParams#{<<"target_file_path">> => {binary, non_empty}};
+        _ ->
+            % Do not do anything - exception will be raised by middleware_sanitizer
+            AlwaysRequiredParams
+    end,
+    OptionalParams = #{
+        <<"type">> => {atom, [
+            ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?LINK_TYPE, ?SYMLINK_TYPE
+        ]},
+        <<"mode">> => {binary, fun(Mode) ->
+            try binary_to_integer(Mode, 8) of
+                ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
+                    {true, ValidMode};
+                _ ->
+                    % TODO VFS-7536 add basis of number system to ?ERROR_BAD_VALUE_NOT_IN_RANGE
+                    throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777))
+            catch _:_ ->
+                % TODO VFS-7536 add basis of number system to ?ERROR_BAD_VALUE_NOT_IN_RANGE
+                throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
+            end
+        end},
+        <<"offset">> => {integer, {not_lower_than, 0}}
+    },
     OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
-        required => #{
-            <<"name">> => {binary, non_empty}
-        },
-        optional => #{
-            <<"type">> => {binary, [<<"reg">>, <<"dir">>]},
-            ModeParam => {binary, fun(Mode) ->
-                try binary_to_integer(Mode, 8) of
-                    ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
-                        {true, ValidMode};
-                    _ ->
-                        throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(ModeParam, 0, 8#1777))
-                catch _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(ModeParam))
-                end
-            end},
-            <<"offset">> => {integer, {not_lower_than, 0}}
-        }
+        required => ParamsRequiredDependingOnType,
+        optional => OptionalParams
     })}.
 
 
@@ -126,7 +141,7 @@ process_request(#op_req{
     auth = #auth{session_id = SessionId},
     gri = #gri{id = FileGuid, aspect = content}
 }, Req) ->
-    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
+    case ?check(lfm:stat(SessionId, ?INDIRECT_GUID_KEY(FileGuid))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{} = FileAttrs} ->
@@ -163,8 +178,11 @@ process_request(#op_req{
     Name = maps:get(<<"name">>, Params),
     Mode = maps:get(<<"mode">>, Params, undefined),
 
-    {Guid, Req3} = case maps:get(<<"type">>, Params, <<"reg">>) of
-        <<"reg">> ->
+    {Guid, Req3} = case maps:get(<<"type">>, Params, ?REGULAR_FILE_TYPE) of
+        ?DIRECTORY_TYPE ->
+            {ok, DirGuid} = ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),
+            {DirGuid, Req};
+        ?REGULAR_FILE_TYPE ->
             {ok, FileGuid} = ?check(lfm:create(SessionId, ParentGuid, Name, Mode)),
 
             case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
@@ -179,9 +197,20 @@ process_request(#op_req{
                         erlang:Type(Reason)
                     end
             end;
-        <<"dir">> ->
-            {ok, DirGuid} = ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),
-            {DirGuid, Req}
+        ?LINK_TYPE ->
+            TargetFileGuid = maps:get(<<"target_file_id">>, Params),
+
+            {ok, #file_attr{guid = LinkGuid}} = ?check(lfm:make_link(
+                SessionId, ?GUID_KEY(TargetFileGuid), ParentGuid, Name
+            )),
+            {LinkGuid, Req};
+        ?SYMLINK_TYPE ->
+            TargetFilePath = maps:get(<<"target_file_path">>, Params),
+
+            {ok, #file_attr{guid = SymlinkGuid}} = ?check(lfm:make_symlink(
+                SessionId, ?GUID_KEY(ParentGuid), Name, TargetFilePath
+            )),
+            {SymlinkGuid, Req}
     end,
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
 
