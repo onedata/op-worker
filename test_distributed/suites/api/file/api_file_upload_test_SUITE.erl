@@ -120,7 +120,7 @@ rest_create_file_test(_Config) ->
                     optional = [<<"type">>, <<"mode">>, <<"offset">>, body],
                     correct_values = #{
                         <<"name">> => [name_placeholder],
-                        <<"type">> => [<<"REG">>, <<"REG">>],
+                        <<"type">> => [<<"REG">>, <<"DIR">>],
                         <<"mode">> => [<<"0544">>, <<"0707">>],
                         <<"offset">> => [
                             0,
@@ -253,7 +253,7 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
                     ExpName = api_test_memory:get(MemRef, name),
                     {ExpType, DefaultMode} = case maps:get(<<"type">>, Data, <<"REG">>) of
                         <<"REG">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
-                        <<"dir">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
+                        <<"DIR">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
                     end,
                     ExpMode = case maps:get(<<"mode">>, Data, undefined) of
                         undefined -> DefaultMode;
