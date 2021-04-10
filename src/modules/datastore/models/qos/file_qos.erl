@@ -380,14 +380,14 @@ get_effective(#document{key = FileUuid} = FileDoc, OriginalParentDoc) ->
     ReferencesDocs = map_references_to_docs(References -- [FileUuid]),
     % file_qos for all references is stored only in one doc (under InodeUuid), 
     % so ensure it is taken into account when original file was deleted
-    InitialAcc = ensure_inode_effective_qos(FileUuid),
+    InitialAcc = get_inode_effective_qos(FileUuid),
     merge_eff_qos_for_files([OriginalParentDoc, FileDoc | ReferencesDocs], Callback, InitialAcc).
 
 
 %% @private
--spec ensure_inode_effective_qos(file_meta:uuid()) -> 
+-spec get_inode_effective_qos(file_meta:uuid()) -> 
     undefined | effective_file_qos().
-ensure_inode_effective_qos(FileUuid) ->
+get_inode_effective_qos(FileUuid) ->
     InodeUuid = fslogic_uuid:ensure_referenced_uuid(FileUuid),
     case get(InodeUuid) of
         {ok, #document{value = Value}} ->  file_qos_to_eff_file_qos(Value);
@@ -481,6 +481,7 @@ merge_file_qos(FirstEffQos, SecondEffQos) ->
 merge_assigned_entries(FirstAssignedEntries, SecondAssignedEntries) ->
     maps:fold(fun(StorageId, StorageQosEntries, Acc) ->
         maps:update_with(StorageId, fun(ParentStorageQosEntries) ->
+            % usort to remove duplicated entries
             lists:usort(ParentStorageQosEntries ++ StorageQosEntries)
         end, StorageQosEntries, Acc)
     end, FirstAssignedEntries, SecondAssignedEntries).

@@ -1505,12 +1505,12 @@ qos_status_during_traverse_with_hardlinks_test_base(Config, SpaceId) ->
     ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, FileGuid2})),
     ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, LinkGuid})),
     
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?PENDING), 15),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?PENDING), ?ATTEMPTS),
     qos_tests_utils:finish_all_transfers([FileGuid1]),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, LinkGuid], [QosEntryId], ?FULFILLED), 15),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid2], [QosEntryId], ?PENDING), 15),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, LinkGuid], [QosEntryId], ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid2], [QosEntryId], ?PENDING), ?ATTEMPTS),
     qos_tests_utils:finish_all_transfers([FileGuid2]),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?FULFILLED), 15).
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?FULFILLED), ?ATTEMPTS).
     
 
 

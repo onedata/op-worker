@@ -162,16 +162,17 @@ is_traverse_finished_for_file(TraverseId, FileCtx, QosEntryDoc) ->
             (FileUuid) -> file_ctx:new_by_uuid(FileUuid, SpaceId)
         end,
     References),
-    lists:all(fun(InternalFileCtx) ->
+    ReferencesInQosSubtree = lists:filtermap(fun(InternalFileCtx) ->
         {FileUuidPath, InternalFileCtx1} = file_ctx:get_uuid_based_path(InternalFileCtx),
         case string:prefix(FileUuidPath, QosRootFileUuidPath) of
-            nomatch ->
-                % file reference is not in subtree of given QoS entry
-                true;
-            _ ->
-                is_traverse_finished_for_file_in_qos_subtree(TraverseId, InternalFileCtx1, QosRootFileUuid, IsDir)
+            nomatch -> false;
+            _ -> {true, InternalFileCtx1}
         end
-    end, ReferencesFileCtx).
+    end, ReferencesFileCtx),
+        
+    lists:any(fun(InternalFileCtx) ->
+            is_traverse_finished_for_file_in_qos_subtree(TraverseId, InternalFileCtx, QosRootFileUuid, IsDir)
+    end, ReferencesInQosSubtree).
 
 
 %% @private
