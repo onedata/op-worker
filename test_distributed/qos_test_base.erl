@@ -58,7 +58,15 @@
     qos_status_during_reconciliation_with_dir_deletion_test_base/2,
     qos_status_after_failed_transfer/3,
     qos_status_after_failed_transfer_deleted_file/3,
-    qos_status_after_failed_transfer_deleted_entry/3
+    qos_status_after_failed_transfer_deleted_entry/3,
+    
+    % QoS with hardlinks test bases
+    qos_on_hardlink_test_base/2,
+    effective_qos_with_hardlinks_test_base/2,
+    qos_with_hardlink_deletion_test_base/2,
+    qos_status_during_traverse_with_hardlinks_test_base/2,
+    qos_on_symlink_test_base/2,
+    effective_qos_with_symlink_test_base/2
 ]).
 
 -define(ATTEMPTS, 120).
@@ -1088,7 +1096,7 @@ qos_status_during_traverse_test_base(Config, SpaceId, NumberOfFilesInDir) ->
 
 
 qos_status_during_traverse_with_file_deletion_test_base(Config, SpaceId, NumberOfFilesInDir) ->
-    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     Name = generator:gen_name(),
     DirStructure =
@@ -1396,6 +1404,203 @@ qos_status_after_failed_transfer_deleted_entry(Config, SpaceId, TargetWorker) ->
         Config, DirStructure(lists:usort([?GET_DOMAIN_BIN(Worker1), ?GET_DOMAIN_BIN(TargetWorker)])), GuidsAndPaths)),
     % check that failed files list is empty 
     ?assert(is_failed_files_list_empty(Workers, file_id:guid_to_space_id(FileGuid))).
+
+
+%%%===================================================================
+%%% QoS with links test bases
+%%%===================================================================
+%% @TODO VFS-7550 tests of status when deleting link during reconciliation/traverse
+%% @TODO VFS-7550 generalize these tests
+
+qos_on_hardlink_test_base(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    
+    {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), {guid, FileGuid}, SpaceGuid, generator:gen_name()),
+    
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, FileGuid}), ?ATTEMPTS),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, LinkGuid}), ?ATTEMPTS)
+    end, Workers),
+        
+    QosList = lists:map(fun(GuidToAddQos) ->
+        {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), {guid, GuidToAddQos}, <<"country=FR">>, 1),
+        ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, FileGuid})),
+        ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, LinkGuid})),
+        QosEntryId
+    end, [FileGuid, LinkGuid]),
+    
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS), 
+    
+    qos_tests_utils:mock_transfers(Workers),
+    lists:foreach(fun(GuidToWrite) ->
+        {ok, Handle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, GuidToWrite}, write),
+        {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(123)),
+        ok = lfm_proxy:close(Worker1, Handle),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?PENDING), ?ATTEMPTS),
+        
+        qos_tests_utils:finish_all_transfers([FileGuid]),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS)
+    end, [FileGuid, LinkGuid]).
+
+
+effective_qos_with_hardlinks_test_base(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    {ok, Dir1Guid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    {ok, Dir2Guid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    
+    {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), {guid, FileGuid}, Dir2Guid, generator:gen_name()),
+    
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, FileGuid}), ?ATTEMPTS),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, LinkGuid}), ?ATTEMPTS)
+    end, Workers),
+    
+    QosList = lists:map(fun(GuidToAddQos) ->
+        {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), {guid, GuidToAddQos}, <<"country=FR">>, 1),
+        ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, FileGuid})),
+        ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, LinkGuid})),
+        QosEntryId
+    end, [Dir1Guid, Dir2Guid]),
+    
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    
+    qos_tests_utils:mock_transfers(Workers),
+    lists:foreach(fun(GuidToWrite) ->
+        {ok, Handle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, GuidToWrite}, write),
+        {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(123)),
+        ok = lfm_proxy:close(Worker1, Handle),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?PENDING), ?ATTEMPTS),
+        
+        qos_tests_utils:finish_all_transfers([FileGuid]),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS)
+    end, [FileGuid, LinkGuid]).
+
+
+qos_status_during_traverse_with_hardlinks_test_base(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    {ok, Dir1Guid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    {ok, Dir2Guid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    
+    {ok, FileGuid1} = lfm_proxy:create(Worker1, SessId(Worker1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    {ok, FileGuid2} = lfm_proxy:create(Worker1, SessId(Worker1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), {guid, FileGuid1}, Dir2Guid, generator:gen_name()),
+    
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, FileGuid1}), ?ATTEMPTS),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, FileGuid2}), ?ATTEMPTS),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, LinkGuid}), ?ATTEMPTS)
+    end, Workers),
+    qos_tests_utils:mock_transfers(Workers),
+    
+    {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), {guid, Dir1Guid}, <<"country=FR">>, 1),
+    ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, FileGuid1})),
+    ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, FileGuid2})),
+    ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, LinkGuid})),
+    
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?PENDING), ?ATTEMPTS),
+    qos_tests_utils:finish_all_transfers([FileGuid1]),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, LinkGuid], [QosEntryId], ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid2], [QosEntryId], ?PENDING), ?ATTEMPTS),
+    qos_tests_utils:finish_all_transfers([FileGuid2]),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?FULFILLED), ?ATTEMPTS).
+    
+
+
+qos_with_hardlink_deletion_test_base(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    
+    {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    {ok, #file_attr{guid = LinkGuid1}} = lfm_proxy:make_link(Worker1, SessId(Worker1), {guid, FileGuid}, SpaceGuid, generator:gen_name()),
+    
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, FileGuid}), ?ATTEMPTS),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, LinkGuid1}), ?ATTEMPTS)
+    end, Workers),
+    
+    {ok, QosEntryId1} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), {guid, LinkGuid1}, <<"country=FR">>, 1),
+    ?assertMatch({ok, {#{QosEntryId1 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, FileGuid})),
+    ?assertMatch({ok, {#{QosEntryId1 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, LinkGuid1})),
+    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, LinkGuid1}),
+    ?assertMatch({ok, {#{QosEntryId1 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, FileGuid})),
+    
+    {ok, #file_attr{guid = LinkGuid2}} = lfm_proxy:make_link(Worker1, SessId(Worker1), {guid, FileGuid}, SpaceGuid, generator:gen_name()),
+    
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, LinkGuid2}), ?ATTEMPTS)
+    end, Workers),
+    {ok, QosEntryId2} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), {guid, FileGuid}, <<"country=FR">>, 1),
+    ?assertMatch({ok, {#{QosEntryId2 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, FileGuid})),
+    ?assertMatch({ok, {#{QosEntryId2 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, LinkGuid2})),
+    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, FileGuid}),
+    ?assertMatch({ok, {#{QosEntryId2 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, LinkGuid2})).
+
+
+effective_qos_with_symlink_test_base(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    {ok, Dir1Guid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    {ok, Dir2Guid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    
+    {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    {ok, FilePath} = lfm_proxy:get_file_path(Worker1, SessId(Worker1), FileGuid),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(Worker1, SessId(Worker1), {guid, Dir2Guid}, generator:gen_name(), FilePath),
+    
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, FileGuid}), ?ATTEMPTS),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, LinkGuid}), ?ATTEMPTS)
+    end, Workers),
+    
+    {ok, QosEntryId1} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), {guid, Dir1Guid}, <<"country=FR">>, 1),
+    ?assertMatch({ok, {#{QosEntryId1 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, FileGuid})),
+    ?assertNotMatch({ok, {#{QosEntryId1 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, LinkGuid})),
+    
+    {ok, QosEntryId2} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), {guid, Dir2Guid}, <<"country=FR">>, 1),
+    ?assertMatch({ok, {#{QosEntryId2 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, LinkGuid})),
+    ?assertNotMatch({ok, {#{QosEntryId2 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, FileGuid})),
+    
+    QosList = [QosEntryId1, QosEntryId2],
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    
+    qos_tests_utils:mock_transfers(Workers),
+    {ok, Handle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(123)),
+    ok = lfm_proxy:close(Worker1, Handle),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosList, ?PENDING), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    
+    qos_tests_utils:finish_all_transfers([FileGuid]),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS).
+
+
+qos_on_symlink_test_base(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    
+    {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    {ok, FilePath} = lfm_proxy:get_file_path(Worker1, SessId(Worker1), FileGuid),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(Worker1, SessId(Worker1), {guid, SpaceGuid}, generator:gen_name(), FilePath),
+    
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, FileGuid}), ?ATTEMPTS),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), {guid, LinkGuid}), ?ATTEMPTS)
+    end, Workers),
+    
+    {ok, QosEntryId1} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), {guid, LinkGuid}, <<"country=FR">>, 1),
+    ?assertMatch({ok, {#{QosEntryId1 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, LinkGuid})),
+    
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosEntryId1, ?FULFILLED), ?ATTEMPTS).
 
 
 %% @private
