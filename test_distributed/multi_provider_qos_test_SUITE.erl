@@ -57,7 +57,7 @@
     qos_reconciliation_file_test/1,
     qos_reconciliation_dir_test/1,
     reconcile_qos_using_file_meta_posthooks_test/1,
-    
+
     qos_status_during_traverse_test/1,
     qos_status_during_traverse_with_file_deletion_test/1,
     qos_status_during_traverse_with_dir_deletion_test/1,
@@ -73,12 +73,13 @@
     reevaluate_impossible_qos_test/1,
     reevaluate_impossible_qos_race_test/1,
     reevaluate_impossible_qos_conflict_test/1,
-    
+
     qos_traverse_cancellation_test/1,
     
     qos_on_hardlink_test/1,
     effective_qos_with_hardlinks_test/1,
     qos_with_hardlink_deletion_test/1,
+    qos_status_during_traverse_with_hardlinks_test/1,
     qos_on_symlink_test/1,
     effective_qos_with_symlink_test/1
 ]).
@@ -132,6 +133,7 @@ all() -> [
 
     qos_on_hardlink_test,
     effective_qos_with_hardlinks_test,
+    qos_status_during_traverse_with_hardlinks_test,
     qos_with_hardlink_deletion_test,
     qos_on_symlink_test,
     effective_qos_with_symlink_test
@@ -1025,6 +1027,9 @@ effective_qos_with_hardlinks_test(Config) ->
 
 qos_with_hardlink_deletion_test(Config) ->
     qos_test_base:qos_with_hardlink_deletion_test_base(Config, ?SPACE_ID).
+
+qos_status_during_traverse_with_hardlinks_test(Config) ->
+    qos_test_base:qos_status_during_traverse_with_hardlinks_test_base(Config, ?SPACE_ID).
 
 qos_on_symlink_test(Config) ->
     qos_test_base:qos_on_symlink_test_base(Config, ?SPACE_ID).

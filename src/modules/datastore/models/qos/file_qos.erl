@@ -47,8 +47,9 @@
     get_effective/1, 
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
-    qos_membership/1, has_any_qos_entry/2, clean_up/1, clean_up/2,
-    delete_associated_entries/1
+    qos_membership/1, has_any_qos_entry/2, 
+    clean_up_on_no_reference/1, clean_up_on_no_reference/2,
+    delete_associated_entries_on_no_references/1
 ]).
 
 %% higher-level functions operating on effective_file_qos record.
@@ -270,16 +271,17 @@ has_any_qos_entry(UuidOrDoc, effective) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes documents created to maintain QoS for given file.
+%% Deletes documents created to maintain QoS for given reference. 
+%% If there are no more references all documents to maintain file are deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec clean_up(file_ctx:ctx()) -> ok.
-clean_up(FileCtx) ->
-  clean_up(FileCtx, undefined).
+-spec clean_up_on_no_reference(file_ctx:ctx()) -> ok.
+clean_up_on_no_reference(FileCtx) ->
+  clean_up_on_no_reference(FileCtx, undefined).
 
 
--spec clean_up(file_ctx:ctx(), file_ctx:ctx() | undefined) -> ok.
-clean_up(FileCtx, OriginalParentCtx) ->
+-spec clean_up_on_no_reference(file_ctx:ctx(), file_ctx:ctx() | undefined) -> ok.
+clean_up_on_no_reference(FileCtx, OriginalParentCtx) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
     %% This is used when directory is being moved to trash. In such case, to 
     %% calculate effective QoS before deletion, QoS for given directory needs to be 
@@ -297,23 +299,23 @@ clean_up(FileCtx, OriginalParentCtx) ->
             ?warning("Error during QoS clean up procedure:~p", [Error]),
             ok
     end,
-    Uuid = file_ctx:get_logical_uuid_const(FileCtx1),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx1),
     case {OriginalParentCtx, file_meta_hardlinks:count_references(FileDoc)} of
-        {undefined, {ok, 0}} -> ok = delete(Uuid);
+        {undefined, {ok, 0}} -> ok = delete(InodeUuid);
         _ -> ok
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes all QoS entries added to given file.
+%% Deletes all QoS entries added to given file if all references were deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_associated_entries(file_ctx:ctx()) -> ok.
-delete_associated_entries(FileCtx) ->
+-spec delete_associated_entries_on_no_references(file_ctx:ctx()) -> ok.
+delete_associated_entries_on_no_references(FileCtx) ->
     {ok, ReferencesCount} = file_ctx:count_references_const(FileCtx),
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
-    case {datastore_model:get(?CTX, InodeUuid), ReferencesCount} of
+    case {get(InodeUuid), ReferencesCount} of
         {{ok, #document{value = #file_qos{qos_entries = QosEntries}}}, 0} ->
             lists:foreach(fun(QosEntryId) ->
                 ok = qos_hooks:handle_entry_delete(QosEntryId),
@@ -361,7 +363,7 @@ get_effective(#document{key = FileUuid} = FileDoc, OriginalParentDoc) ->
                 % qos cannot be set on trash directory
                 {ok, #effective_file_qos{in_trash = true}, CalculationInfo};
             false ->
-                case datastore_model:get(?CTX, Uuid) of
+                case get(Uuid) of
                     ?ERROR_NOT_FOUND ->
                         {ok, ParentEffQos, CalculationInfo};
                     {ok, #document{value = FileQos}} ->
@@ -370,36 +372,34 @@ get_effective(#document{key = FileUuid} = FileDoc, OriginalParentDoc) ->
                 end
         end
     end,
-    {References, ReferencesDocs} = get_references(FileDoc),
-    InodeUuid = fslogic_uuid:ensure_referenced_uuid(FileUuid),
-    InitialAcc = case lists:member(InodeUuid, References) of
-        true -> undefined;
-        false -> 
-            case get(InodeUuid) of
-                {ok, #document{value = Value}} ->  file_qos_to_eff_file_qos(Value);
-                _ -> undefined
-            end
-    end,
-    merge_eff_qos_for_files([OriginalParentDoc | ReferencesDocs], Callback, InitialAcc).
+    {ok, References} = file_meta_hardlinks:list_references(FileDoc),
+    ReferencesDocs = map_references_to_docs(References -- [FileUuid]),
+    % file_qos for all references is stored only in one doc (under InodeUuid), 
+    % so ensure it is taken into account when original file was deleted
+    InitialAcc = ensure_inode_effective_qos(FileUuid),
+    merge_eff_qos_for_files([OriginalParentDoc, FileDoc | ReferencesDocs], Callback, InitialAcc).
 
 
 %% @private
--spec get_references(file_meta:doc()) -> {[file_meta:uuid()], [file_meta:doc()]}.
-get_references(#document{key = FileUuid} = FileDoc) ->
-    {ok, References} = case fslogic_uuid:ensure_referenced_uuid(FileUuid) of
-        FileUuid -> file_meta_hardlinks:list_references(FileDoc);
-        ReferencedUuid -> file_meta_hardlinks:list_references(ReferencedUuid)
-    end,
-    {References, lists:filtermap(
-        fun (Uuid) when Uuid == FileUuid ->
-            % FileDoc is already fetched
-            false;
-            (LogicalUuid) ->
-                case file_meta:get(LogicalUuid) of
-                    {ok, Doc} -> {true, Doc};
-                    ?ERROR_NOT_FOUND -> false
-                end
-        end, References) ++ [FileDoc]}.
+-spec ensure_inode_effective_qos(file_meta:uuid()) -> 
+    undefined | effective_file_qos().
+ensure_inode_effective_qos(FileUuid) ->
+    InodeUuid = fslogic_uuid:ensure_referenced_uuid(FileUuid),
+    case get(InodeUuid) of
+        {ok, #document{value = Value}} ->  file_qos_to_eff_file_qos(Value);
+        _ -> undefined
+    end.
+
+
+%% @private
+-spec map_references_to_docs([file_meta:uuid()]) -> [file_meta:doc()].
+map_references_to_docs(References) ->
+    lists:filtermap( fun (LogicalUuid) ->
+        case file_meta:get(LogicalUuid) of
+            {ok, Doc} -> {true, Doc};
+            ?ERROR_NOT_FOUND -> false
+        end
+    end, References).
 
 
 %% @private
@@ -421,7 +421,7 @@ merge_eff_qos_for_files(FileDocs, Callback, InitialAcc) ->
 
 %% @private
 -spec get_effective_qos_for_single_file(undefined | file_meta:doc(), bounded_cache:callback()) -> 
-    effective_file_qos().
+    effective_file_qos() | undefined.
 get_effective_qos_for_single_file(undefined, _Callback) -> {ok, undefined};
 get_effective_qos_for_single_file(#document{scope = SpaceId} = FileDoc, Callback) ->
     case effective_value:get_or_calculate(?CACHE_TABLE_NAME(SpaceId), FileDoc, Callback) of

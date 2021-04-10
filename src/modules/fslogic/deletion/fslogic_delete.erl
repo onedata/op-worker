@@ -656,7 +656,7 @@ remove_synced_associated_documents(FileCtx) ->
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
     ok = transferred_file:clean_up(FileGuid),
-    ok = file_qos:delete_associated_entries(FileCtx).
+    ok = file_qos:delete_associated_entries_on_no_references(FileCtx).
 
 
 -spec remove_local_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id()) -> ok.
@@ -664,7 +664,7 @@ remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
-    ok = file_qos:clean_up(FileCtx),
+    ok = file_qos:clean_up_on_no_reference(FileCtx),
     ok = file_meta_posthooks:delete(FileUuid),
     ok = file_popularity:delete(FileUuid).
 

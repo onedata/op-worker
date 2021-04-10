@@ -132,7 +132,7 @@ list_references(Doc = #document{key = TargetKey, value = #file_meta{references =
     ReferencesList = references_to_list(References),
     case file_meta:is_deleted(Doc) of
         true -> {ok, ReferencesList};
-        false -> {ok, [TargetKey | ReferencesList]}
+        false -> {ok, [fslogic_uuid:ensure_referenced_uuid(TargetKey) | ReferencesList]}
     end;
 list_references(Key) ->
     case file_meta:get_including_deleted(Key) of
