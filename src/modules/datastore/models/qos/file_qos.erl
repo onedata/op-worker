@@ -372,7 +372,11 @@ get_effective(#document{key = FileUuid} = FileDoc, OriginalParentDoc) ->
                 end
         end
     end,
-    {ok, References} = file_meta_hardlinks:list_references(FileDoc),
+    %% @TODO VFS-7555 Use FileDoc for listing references after it is allowed
+    {ok, References} = case fslogic_uuid:ensure_referenced_uuid(FileUuid) of
+        FileUuid -> file_meta_hardlinks:list_references(FileDoc);
+        ReferencedUuid -> file_meta_hardlinks:list_references(ReferencedUuid)
+    end,
     ReferencesDocs = map_references_to_docs(References -- [FileUuid]),
     % file_qos for all references is stored only in one doc (under InodeUuid), 
     % so ensure it is taken into account when original file was deleted
