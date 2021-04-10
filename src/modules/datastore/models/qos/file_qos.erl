@@ -472,7 +472,7 @@ merge_file_qos(FirstEffQos, SecondEffQos) ->
             FirstEffQos#effective_file_qos.assigned_entries,
             SecondEffQos#effective_file_qos.assigned_entries
         ),
-        in_trash = FirstEffQos#effective_file_qos.in_trash
+        in_trash = FirstEffQos#effective_file_qos.in_trash orelse SecondEffQos#effective_file_qos.in_trash
     }.
 
 
