@@ -425,7 +425,7 @@ merge_eff_qos_for_files(FileDocs, Callback, InitialAcc) ->
 
 %% @private
 -spec get_effective_qos_for_single_file(undefined | file_meta:doc(), bounded_cache:callback()) -> 
-    effective_file_qos() | undefined.
+    effective_file_qos() | undefined | {error, term()}.
 get_effective_qos_for_single_file(undefined, _Callback) -> {ok, undefined};
 get_effective_qos_for_single_file(#document{scope = SpaceId} = FileDoc, Callback) ->
     case effective_value:get_or_calculate(?CACHE_TABLE_NAME(SpaceId), FileDoc, Callback) of

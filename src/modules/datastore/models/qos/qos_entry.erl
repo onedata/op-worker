@@ -318,7 +318,7 @@ apply_to_all_impossible_in_space(SpaceId, Fun) ->
 
 -spec add_transfer_to_list(id(), qos_transfer_id()) -> ok | {error, term()}.
 add_transfer_to_list(QosEntryId, TransferId) ->
-    add_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), {TransferId, TransferId}).
+    ?extract_ok(add_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), {TransferId, TransferId})).
 
 -spec remove_transfer_from_list(id(), qos_transfer_id()) -> ok | {error, term()}.
 remove_transfer_from_list(QosEntryId, TransferId)  ->
@@ -331,7 +331,7 @@ apply_to_all_transfers(QosEntryId, Fun) ->
 
 -spec add_to_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
 add_to_failed_files_list(SpaceId, FileUuid) ->
-    add_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), {FileUuid, FileUuid}).
+    ?extract_ok(add_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), {FileUuid, FileUuid})).
 
 -spec remove_from_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
 remove_from_failed_files_list(SpaceId, FileUuid)  ->

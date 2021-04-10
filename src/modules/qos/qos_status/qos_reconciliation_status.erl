@@ -77,7 +77,7 @@ report_finished(TraverseId, FileCtx) ->
         {UuidBasedPath, _} = file_ctx:get_uuid_based_path(InternalFileCtx),
         lists:foreach(fun(QosEntryId) ->
             ok = qos_status_links:delete_link(
-                file_ctx:get_space_id_const(InternalFileCtx), 
+                file_ctx:get_space_id_const(InternalFileCtx),
                 ?RECONCILE_LINKS_KEY(QosEntryId),
                 ?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId))
         end, QosEntries)
