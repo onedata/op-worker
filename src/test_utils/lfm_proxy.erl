@@ -20,7 +20,7 @@
 %% API
 -export([init/1, init/2, init/3, teardown/1]).
 -export([
-    stat/3, resolve_symlink/3, get_fs_stats/3, get_details/3,
+    stat/3, stat/4, resolve_symlink/3, get_fs_stats/3, get_details/3,
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
@@ -155,6 +155,12 @@ teardown(Config) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
 stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey))).
+
+
+-spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid(), boolean()) ->
+    {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
+stat(Worker, SessId, FileKey, IncludeLinksCount) ->
+    ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey), IncludeLinksCount)).
 
 
 -spec resolve_symlink(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->

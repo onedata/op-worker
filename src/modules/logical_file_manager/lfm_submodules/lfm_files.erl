@@ -166,7 +166,7 @@ get_file_guid(SessId, FilePath) ->
 -spec is_dir(session:id(), lfm:file_key()) ->
     true | false | lfm:error_reply().
 is_dir(SessId, FileKey) ->
-    case lfm_attrs:stat(SessId, FileKey) of
+    case lfm:stat(SessId, FileKey) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
         {ok, _} -> false;
         Error -> Error
@@ -764,7 +764,7 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions
                 false ->
                     {ok, #file_attr{
                         size = RemoteSize
-                    }} = lfm_attrs:stat(SessId, ?FILE_REF(FileGuid)),
+                    }} = lfm:stat(SessId, ?FILE_REF(FileGuid)),
 
                     RemoteSize
             end;

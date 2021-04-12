@@ -651,7 +651,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, 
         Attr ->
             [Attr]
     end,
-    {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid))),
+    {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), true)),
 
     {ok, value, lists:foldl(fun(RequestedAttr, Acc) ->
         Acc#{RequestedAttr => get_attr(RequestedAttr, FileAttrs)}

@@ -32,7 +32,7 @@
 -export([
     get_fs_stats/2,
 
-    stat/2,
+    stat/2, stat/3,
     get_details/2,
     get_file_references/2,
 
@@ -182,7 +182,18 @@ get_fs_stats(SessId, FileKey) ->
 -spec stat(session:id(), file_key()) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
-    ?run(lfm_attrs:stat(SessId, FileKey)).
+    stat(SessId, FileKey, false).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file attributes (see file_attr.hrl).
+%% @end
+%%--------------------------------------------------------------------
+-spec stat(session:id(), file_key(), boolean()) ->
+    {ok, lfm_attrs:file_attributes()} | error_reply().
+stat(SessId, FileKey, IncludeLinksCount) ->
+    ?run(lfm_attrs:stat(SessId, FileKey, IncludeLinksCount)).
 
 
 %%--------------------------------------------------------------------

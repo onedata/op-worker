@@ -24,7 +24,7 @@
 
 %% API
 -export([
-    stat/2,
+    stat/3,
     get_details/2,
     get_fs_stats/2,
     get_references/2,
@@ -65,13 +65,13 @@
 %% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
--spec stat(SessId :: session:id(), lfm:file_key()) ->
+-spec stat(SessId :: session:id(), lfm:file_key(), boolean()) ->
     {ok, file_attributes()} | lfm:error_reply().
-stat(SessId, FileKey) ->
+stat(SessId, FileKey, IncludeLinksCount) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
 
     remote_utils:call_fslogic(
-        SessId, file_request, FileGuid, #get_file_attr{include_link_count = true},
+        SessId, file_request, FileGuid, #get_file_attr{include_link_count = IncludeLinksCount},
         fun(#file_attr{} = Attrs) -> {ok, Attrs} end
     ).
 
