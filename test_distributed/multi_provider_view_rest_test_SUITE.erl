@@ -18,6 +18,7 @@
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("rest_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -759,9 +760,9 @@ query_spatial_view(Config) ->
     {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1),
     {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2),
     {ok, Guid3} = lfm_proxy:create(WorkerP1, SessionId, Path3),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid2}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0, 0]}, [<<"loc">>]),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid3}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10, 5]}, [<<"loc">>]),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid1), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid2), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0, 0]}, [<<"loc">>]),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid3), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10, 5]}, [<<"loc">>]),
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,
@@ -790,7 +791,7 @@ querying_spatial_view_with_wrong_function_should_fail(Config) ->
 
     Path1 = filename:join(["/", SpaceName, "file1"]),
     {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid1), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,
@@ -1330,13 +1331,13 @@ create_files_with_xattrs(Node, SessionId, SpaceName, Prefix, Num, XattrName) ->
     lists:map(fun(X) ->
         Path = filename:join(["/", SpaceName, Prefix ++ integer_to_list(X)]),
         {ok, Guid} = lfm_proxy:create(Node, SessionId, Path),
-        ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(XattrName, X)),
+        ok = lfm_proxy:set_xattr(Node, SessionId, ?FILE_REF(Guid), ?XATTR(XattrName, X)),
         Guid
     end, lists:seq(1, Num)).
 
 remove_files(Node, SessionId, Guids) ->
     lists:foreach(fun(G) ->
-        ok = lfm_proxy:unlink(Node, SessionId, {guid, G})
+        ok = lfm_proxy:unlink(Node, SessionId, ?FILE_REF(G))
     end, Guids).
 
 sort_workers(Config) ->

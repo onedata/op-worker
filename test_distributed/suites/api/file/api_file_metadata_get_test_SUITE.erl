@@ -14,6 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
@@ -152,7 +153,7 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
     SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
-    lfm_proxy:set_metadata(P1Node, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
+    lfm_proxy:set_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), rdf, ?RDF_METADATA_1, []),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
 
@@ -405,7 +406,7 @@ get_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
     SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
-    lfm_proxy:set_metadata(P1Node, SessIdP1, {guid, FileGuid}, json, ?JSON_METADATA_2, []),
+    lfm_proxy:set_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), json, ?JSON_METADATA_2, []),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
 
@@ -717,7 +718,7 @@ get_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
     SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
-    ?assertMatch(ok, lfm_proxy:set_xattr(P1Node, SessIdP1, {guid, FileGuid}, ?XATTR_1)),
+    ?assertMatch(ok, lfm_proxy:set_xattr(P1Node, SessIdP1, ?FILE_REF(FileGuid), ?XATTR_1)),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
 

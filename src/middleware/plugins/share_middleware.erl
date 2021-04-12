@@ -188,7 +188,7 @@ validate(#op_req{operation = Op, gri = #gri{aspect = instance}},
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
-    FileKey = {guid, get_root_file_guid(Data)},
+    FileKey = ?FILE_REF(get_root_file_guid(Data)),
 
     Name = maps:get(<<"name">>, Data),
     Description = maps:get(<<"description">>, Data, <<"">>),

@@ -68,7 +68,7 @@
 -spec stat(SessId :: session:id(), lfm:file_key()) ->
     {ok, file_attributes()} | lfm:error_reply().
 stat(SessId, FileKey) ->
-    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
 
     remote_utils:call_fslogic(
         SessId, file_request, FileGuid, #get_file_attr{include_link_count = true},
@@ -84,7 +84,7 @@ stat(SessId, FileKey) ->
 -spec get_details(session:id(), lfm:file_key()) ->
     {ok, file_details()} | lfm:error_reply().
 get_details(SessId, FileKey) ->
-    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
 
     remote_utils:call_fslogic(
         SessId, file_request, FileGuid, #get_file_details{},
@@ -100,7 +100,7 @@ get_details(SessId, FileKey) ->
 -spec get_fs_stats(session:id(), lfm:file_key()) ->
     {ok, fs_stats()} | lfm:error_reply().
 get_fs_stats(SessId, FileKey) ->
-    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
 
     remote_utils:call_fslogic(
         SessId,
@@ -113,7 +113,7 @@ get_fs_stats(SessId, FileKey) ->
 -spec get_references(session:id(), lfm:file_key()) ->
     {ok, [file_id:file_guid()]} | lfm:error_reply().
 get_references(SessId, FileKey) ->
-    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
 
     remote_utils:call_fslogic(
         SessId, file_request, FileGuid, #get_file_references{},
@@ -124,7 +124,7 @@ get_references(SessId, FileKey) ->
 -spec resolve_symlink(session:id(), lfm:file_key()) ->
     {ok, file_id:file_guid()} | lfm:error_reply().
 resolve_symlink(SessId, FileKey) ->
-    {ok, FileGuid} = lfm_file_key_utils:ensure_guid(SessId, FileKey),
+    {ok, FileGuid} = lfm_file_key:ensure_guid(SessId, FileKey),
 
     remote_utils:call_fslogic(
         SessId,
@@ -144,7 +144,7 @@ resolve_symlink(SessId, FileKey) ->
 ) ->
     ok | lfm:error_reply().
 update_times(SessId, FileKey, ATime, MTime, CTime) ->
-    FileGuid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
+    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     remote_utils:call_fslogic(
         SessId, file_request, FileGuid,
@@ -337,7 +337,7 @@ remove_metadata(SessId, FileKey, Type) ->
 -spec call_xattr(session:id(), lfm:file_key(), file_request_type(), success_callback()) ->
     term().
 call_xattr(SessId, FileKey, Request, SuccessCallback) ->
-    Guid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
+    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     remote_utils:call_fslogic(SessId, file_request, Guid, Request, SuccessCallback).
 
 
@@ -345,7 +345,7 @@ call_xattr(SessId, FileKey, Request, SuccessCallback) ->
 -spec call_cdmi(session:id(), lfm:file_key(), provider_request_type(), success_callback()) ->
     term().
 call_cdmi(SessId, FileKey, Request, SuccessCallback) ->
-    Guid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
+    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     remote_utils:call_fslogic(SessId, provider_request, Guid, Request, SuccessCallback).
 
 
@@ -353,5 +353,5 @@ call_cdmi(SessId, FileKey, Request, SuccessCallback) ->
 -spec call_custom_metadata(session:id(), lfm:file_key(), provider_request_type(), success_callback()) ->
     term().
 call_custom_metadata(SessId, FileKey, Request, SuccessCallback) ->
-    Guid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, resolve_symlink),
+    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     remote_utils:call_fslogic(SessId, provider_request, Guid, Request, SuccessCallback).

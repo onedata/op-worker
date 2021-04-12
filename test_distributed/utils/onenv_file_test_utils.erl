@@ -17,6 +17,7 @@
 
 -include("onenv_test_utils.hrl").
 -include("distribution_assert.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -121,7 +122,7 @@ rm_and_sync_file(UserSelector, FileSelector) ->
     lists:foreach(fun(Provider) ->
         Node = ?OCT_RAND_OP_NODE(Provider),
         UserSessId = oct_background:get_user_session_id(UserId, Provider),
-        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, {guid, FileGuid}), ?ATTEMPTS)
+        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS)
     end, RestProviders).
 
 
@@ -244,7 +245,7 @@ create_shares(CreationProvider, SessId, FileGuid, ShareSpecs) ->
     lists:sort(lists:map(fun(#share_spec{name = Name, description = Description}) ->
         {ok, ShareId} = ?assertMatch(
             {ok, _},
-            lfm_proxy:create_share(CreationNode, SessId, {guid, FileGuid}, Name, Description),
+            lfm_proxy:create_share(CreationNode, SessId, ?FILE_REF(FileGuid), Name, Description),
             ?ATTEMPTS
         ),
         ShareId
@@ -348,7 +349,7 @@ ls(Node, SessId, Guid) ->
 ) ->
     {ok, [{file_meta:name(), file_id:file_guid()}]} | {error, term()}.
 ls(Node, SessId, Guid, Token, ChildEntriesAcc) ->
-    case lfm_proxy:get_children(Node, SessId, {guid, Guid}, #{token => Token, size => ?LS_SIZE}) of
+    case lfm_proxy:get_children(Node, SessId, ?FILE_REF(Guid), #{token => Token, size => ?LS_SIZE}) of
         {ok, Children, ListExtendedInfo} ->
             AllChildEntries = ChildEntriesAcc ++ Children,
 
@@ -403,14 +404,14 @@ create_dir(Node, SessId, ParentGuid, FileName, FileMode) ->
 -spec create_symlink(node(), session:id(), file_id:file_guid(), file_meta:name(), file_meta_symlinks:symlink()) ->
     {ok, file_id:file_guid()} | no_return().
 create_symlink(Node, SessId, ParentGuid, FileName, LinkPath) ->
-    ?assertMatch({ok, _}, lfm_proxy:make_symlink(Node, SessId, {guid, ParentGuid}, FileName, LinkPath)).
+    ?assertMatch({ok, _}, lfm_proxy:make_symlink(Node, SessId, ?FILE_REF(ParentGuid), FileName, LinkPath)).
 
 
 %% @private
 -spec write_file(node(), session:id(), file_id:file_guid(), binary()) ->
     ok | no_return().
 write_file(Node, SessId, FileGuid, Content) ->
-    {ok, FileHandle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {guid, FileGuid}, write)),
+    {ok, FileHandle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Node, FileHandle, 0, Content)),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
 
@@ -422,7 +423,7 @@ mv_file(UserId, FileGuid, DstPath, MvProvider) ->
     MvNode = ?OCT_RAND_OP_NODE(MvProvider),
     UserSessId = oct_background:get_user_session_id(UserId, MvProvider),
 
-    ?assertMatch({ok, _}, lfm_proxy:mv(MvNode, UserSessId, {guid, FileGuid}, DstPath)),
+    ?assertMatch({ok, _}, lfm_proxy:mv(MvNode, UserSessId, ?FILE_REF(FileGuid), DstPath)),
     ok.
 
 
@@ -433,4 +434,4 @@ rm_file(UserId, FileGuid, RmProvider) ->
     RmNode = ?OCT_RAND_OP_NODE(RmProvider),
     UserSessId = oct_background:get_user_session_id(UserId, RmProvider),
 
-    ?assertMatch(ok, lfm_proxy:unlink(RmNode, UserSessId, {guid, FileGuid})).
+    ?assertMatch(ok, lfm_proxy:unlink(RmNode, UserSessId, ?FILE_REF(FileGuid))).

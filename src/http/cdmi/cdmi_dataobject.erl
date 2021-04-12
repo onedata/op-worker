@@ -14,11 +14,11 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("modules/fslogic/file_attr.hrl").
--include("middleware/middleware.hrl").
+-include("global_definitions.hrl").
 -include("http/rest.hrl").
 -include("http/cdmi.hrl").
--include("global_definitions.hrl").
+-include("middleware/middleware.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -69,7 +69,7 @@ get_binary(Req, #cdmi_req{
     file_attrs = FileAttrs = #file_attr{guid = FileGuid}
 } = CdmiReq) ->
     % prepare response
-    MimeType = cdmi_metadata:get_mimetype(SessionId, {guid, FileGuid}),
+    MimeType = cdmi_metadata:get_mimetype(SessionId, ?FILE_REF(FileGuid)),
     Req1 = cowboy_req:set_resp_header(?HDR_CONTENT_TYPE, MimeType, Req),
     Req2 = file_download_utils:download_single_file(SessionId, FileAttrs, Req1),
     {stop, Req2, CdmiReq}.
@@ -92,7 +92,7 @@ get_cdmi(Req, #cdmi_req{
 
     case maps:take(<<"value">>, FileInfo) of
         {{range, Range}, FileInfo2} ->
-            Encoding = cdmi_metadata:get_encoding(SessionId, {guid, FileGuid}),
+            Encoding = cdmi_metadata:get_encoding(SessionId, ?FILE_REF(FileGuid)),
             DataPrefix = case map_size(FileInfo2) of
                 0 ->
                     <<"{\"value\":\"">>;
@@ -152,7 +152,7 @@ put_binary(Req, #cdmi_req{
             end
     end,
 
-    FileKey = {guid, FileGuid},
+    FileKey = ?FILE_REF(FileGuid),
     cdmi_metadata:update_mimetype(SessionId, FileKey, MimeType),
     cdmi_metadata:update_encoding(SessionId, FileKey, Encoding),
     Req2 = write_req_body_to_file(
@@ -200,7 +200,7 @@ put_cdmi(Req, #cdmi_req{
             {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
             {ok, NewGuid} = cdmi_lfm:create_file(SessionId, Path, DefaultMode),
             write_binary_to_file(
-                SessionId, {guid, NewGuid},
+                SessionId, ?FILE_REF(NewGuid),
                 false, 0, RawValue,
                 CdmiPartialFlag
             ),
@@ -216,7 +216,7 @@ put_cdmi(Req, #cdmi_req{
     end,
 
     % update value and metadata depending on creation type
-    FileKey = {guid, Guid},
+    FileKey = ?FILE_REF(Guid),
     case OperationPerformed of
         created ->
             cdmi_metadata:update_encoding(SessionId, FileKey, utils:ensure_defined(
@@ -260,7 +260,7 @@ delete_cdmi(Req, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = Guid}
 } = CdmiReq) ->
-    ?check(lfm:unlink(SessionId, {guid, Guid}, false)),
+    ?check(lfm:unlink(SessionId, ?FILE_REF(Guid), false)),
     {true, Req, CdmiReq}.
 
 
@@ -294,6 +294,8 @@ get_file_info(RequestedInfo, #cdmi_req{
         size = FileSize
     } = Attrs
 }) ->
+    FileKey = ?FILE_REF(Guid),
+
     lists:foldl(fun
         (<<"objectType">>, Acc) ->
             Acc#{<<"objectType">> => <<"application/cdmi-object">>};
@@ -320,24 +322,24 @@ get_file_info(RequestedInfo, #cdmi_req{
             Acc#{<<"capabilitiesURI">> => <<?DATAOBJECT_CAPABILITY_PATH>>};
         (<<"completionStatus">>, Acc) ->
             CompletionStatus = cdmi_metadata:get_cdmi_completion_status(
-                SessionId, {guid, Guid}
+                SessionId, FileKey
             ),
             Acc#{<<"completionStatus">> => CompletionStatus};
         (<<"mimetype">>, Acc) ->
-            MimeType = cdmi_metadata:get_mimetype(SessionId, {guid, Guid}),
+            MimeType = cdmi_metadata:get_mimetype(SessionId, FileKey),
             Acc#{<<"mimetype">> => MimeType};
         (<<"metadata">>, Acc) ->
             Metadata = cdmi_metadata:prepare_metadata(
-                SessionId, {guid, Guid}, <<>>, Attrs
+                SessionId, FileKey, <<>>, Attrs
             ),
             Acc#{<<"metadata">> => Metadata};
         ({<<"metadata">>, Prefix}, Acc) ->
             Metadata = cdmi_metadata:prepare_metadata(
-                SessionId, {guid, Guid}, Prefix, Attrs
+                SessionId, FileKey, Prefix, Attrs
             ),
             Acc#{<<"metadata">> => Metadata};
         (<<"valuetransferencoding">>, Acc) ->
-            Encoding = cdmi_metadata:get_encoding(SessionId, {guid, Guid}),
+            Encoding = cdmi_metadata:get_encoding(SessionId, FileKey),
             Acc#{<<"valuetransferencoding">> => Encoding};
         (<<"value">>, Acc) ->
             Acc#{<<"value">> => {range, default}};

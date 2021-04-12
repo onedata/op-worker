@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -76,7 +77,7 @@ rubbish_path_test(Config) ->
     SymlinkPath = filename:join(["/", ?SPACE_NAME, str_utils:rand_hex(10)]),
     SymlinkGuid = create_symlink(W, SessId, SymlinkPath, <<"rubbish<>!@#xd">>),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid})).
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(SymlinkGuid))).
 
 
 non_existent_path_test(Config) ->
@@ -86,7 +87,7 @@ non_existent_path_test(Config) ->
     SymlinkPath = filename:join(["/", ?SPACE_NAME, str_utils:rand_hex(10)]),
     SymlinkGuid = create_symlink(W, SessId, SymlinkPath, <<"a/b">>),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid})).
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(SymlinkGuid))).
 
 
 path_with_file_in_the_middle_test(Config) ->
@@ -103,7 +104,7 @@ path_with_file_in_the_middle_test(Config) ->
     SymlinkPath = filename:join(["/", ?SPACE_NAME, str_utils:rand_hex(10)]),
     SymlinkGuid = create_symlink(W, SessId, SymlinkPath, filename:join([DirName, FileName, "file2"])),
 
-    ?assertMatch({error, ?ENOTDIR}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid})).
+    ?assertMatch({error, ?ENOTDIR}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(SymlinkGuid))).
 
 
 user_root_absolute_path_test(Config) ->
@@ -118,7 +119,7 @@ user_root_absolute_path_test(Config) ->
     SymlinkPath = filename:join(["/", ?SPACE_NAME, str_utils:rand_hex(10)]),
     SymlinkGuid = create_symlink(W, SessId, SymlinkPath, FilePath),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid})).
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(SymlinkGuid))).
 
 
 space_absolute_path_test(Config) ->
@@ -136,7 +137,7 @@ space_absolute_path_test(Config) ->
     SymlinkTarget = filename:join([?SPACE_ID_PATH_PREFIX, DirName, FileName]),
     SymlinkGuid = create_symlink(W, SessId, SymlinkPath, SymlinkTarget),
 
-    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid})).
+    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(SymlinkGuid))).
 
 
 relative_path_test(Config) ->
@@ -152,7 +153,7 @@ relative_path_test(Config) ->
     SymlinkPath = filename:join([DirPath, str_utils:rand_hex(10)]),
     SymlinkGuid = create_symlink(W, SessId, SymlinkPath, FileName),
 
-    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid})).
+    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(SymlinkGuid))).
 
 
 path_with_dots_test(Config) ->
@@ -174,13 +175,13 @@ path_with_dots_test(Config) ->
     Symlink1Target = filename:join(["..", FileName]),
     Symlink1Guid = create_symlink(W, SessId, Symlink1Path, Symlink1Target),
 
-    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink1Guid})),
+    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(Symlink1Guid))),
 
     Symlink2Path = filename:join([Dir2Path, str_utils:rand_hex(10)]),
     Symlink2Target = filename:join([".", "..", "..", ".", "..", "..", "..", DirName, FileName]),
     Symlink2Guid = create_symlink(W, SessId, Symlink2Path, Symlink2Target),
 
-    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink2Guid})).
+    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(Symlink2Guid))).
 
 
 symlink_to_itself_test(Config) ->
@@ -191,7 +192,7 @@ symlink_to_itself_test(Config) ->
     SymlinkPath = filename:join(["/", ?SPACE_NAME, SymlinkName]),
     SymlinkGuid = create_symlink(W, SessId, SymlinkPath, SymlinkName),
 
-    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid})).
+    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(SymlinkGuid))).
 
 
 symlink_loop_test(Config) ->
@@ -206,9 +207,9 @@ symlink_loop_test(Config) ->
     Symlink2Guid = create_symlink(W, SessId, filename:join(["/", ?SPACE_NAME, Symlink2Name]), Symlink3Name),
     Symlink3Guid = create_symlink(W, SessId, filename:join(["/", ?SPACE_NAME, Symlink3Name]), Symlink1Name),
 
-    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink1Guid})),
-    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink2Guid})),
-    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink3Guid})).
+    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(Symlink1Guid))),
+    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(Symlink2Guid))),
+    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(Symlink3Guid))).
 
 
 symlink_hops_limit_test(Config) ->
@@ -234,10 +235,10 @@ symlink_hops_limit_test(Config) ->
         {SymlinkName, [SymlinkGuid | Symlinks]}
     end, {Symlink1Name, [Symlink1Guid]}, lists:seq(1, 40)),
 
-    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, {guid, InvalidSymlink})),
+    ?assertMatch({error, ?ELOOP}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(InvalidSymlink))),
 
     lists:foreach(fun(SymlinkGuid) ->
-        ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, SymlinkGuid}))
+        ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(SymlinkGuid)))
     end, ValidSymlinks).
 
 
@@ -267,8 +268,8 @@ symlink_chain_test(Config) ->
     Symlink2Target = filename:join([Dir1Name, Dir2Name, Symlink1Name, FileName]),
     Symlink2Guid = create_symlink(W, SessId, Symlink2Path, Symlink2Target),
 
-    ?assertMatch({ok, Dir1Guid}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink1Guid})),
-    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, {guid, Symlink2Guid})).
+    ?assertMatch({ok, Dir1Guid}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(Symlink1Guid))),
+    ?assertMatch({ok, FileGuid}, lfm_proxy:resolve_symlink(W, SessId, ?FILE_REF(Symlink2Guid))).
 
 
 symlink_in_share_test(Config) ->
@@ -282,7 +283,7 @@ symlink_in_share_test(Config) ->
     DirName = str_utils:rand_hex(10),
     DirPath = filename:join(["/", ?SPACE_NAME, DirName]),
     {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, DirPath)),
-    {ok, DirShareId} = lfm_proxy:create_share(W, SessId, {guid, DirGuid}, <<"share">>),
+    {ok, DirShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(DirGuid), <<"share">>),
 
     File2Name = str_utils:rand_hex(10),
     File2Path = filename:join([DirPath, File2Name]),
@@ -295,7 +296,7 @@ symlink_in_share_test(Config) ->
     Symlink1Guid = create_symlink(W, SessId, Symlink1Path, Symlink1Target),
     Symlink1ShareGuid = file_id:guid_to_share_guid(Symlink1Guid, DirShareId),
 
-    ?assertMatch({ok, File2ShareGuid}, lfm_proxy:resolve_symlink(W, ?GUEST_SESS_ID, {guid, Symlink1ShareGuid})),
+    ?assertMatch({ok, File2ShareGuid}, lfm_proxy:resolve_symlink(W, ?GUEST_SESS_ID, ?FILE_REF(Symlink1ShareGuid))),
 
     % Space absolute path pointing to file outside share
     Symlink2Path = filename:join([DirPath, str_utils:rand_hex(10)]),
@@ -303,7 +304,7 @@ symlink_in_share_test(Config) ->
     Symlink2Guid = create_symlink(W, SessId, Symlink2Path, Symlink2Target),
     Symlink2ShareGuid = file_id:guid_to_share_guid(Symlink2Guid, DirShareId),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:resolve_symlink(W, ?GUEST_SESS_ID, {guid, Symlink2ShareGuid})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:resolve_symlink(W, ?GUEST_SESS_ID, ?FILE_REF(Symlink2ShareGuid))),
 
     % Relative path (can't traverse outside of share)
     Symlink3Path = filename:join([DirPath, str_utils:rand_hex(10)]),
@@ -311,7 +312,7 @@ symlink_in_share_test(Config) ->
     Symlink3Guid = create_symlink(W, SessId, Symlink3Path, Symlink3Target),
     Symlink3ShareGuid = file_id:guid_to_share_guid(Symlink3Guid, DirShareId),
 
-    ?assertMatch({ok, File2ShareGuid}, lfm_proxy:resolve_symlink(W, ?GUEST_SESS_ID, {guid, Symlink3ShareGuid})).
+    ?assertMatch({ok, File2ShareGuid}, lfm_proxy:resolve_symlink(W, ?GUEST_SESS_ID, ?FILE_REF(Symlink3ShareGuid))).
 
 
 %%%===================================================================

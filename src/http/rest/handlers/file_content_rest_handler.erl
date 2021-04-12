@@ -141,7 +141,7 @@ process_request(#op_req{
     auth = #auth{session_id = SessionId},
     gri = #gri{id = FileGuid, aspect = content}
 }, Req) ->
-    case ?check(lfm:stat(SessionId, ?INDIRECT_GUID_KEY(FileGuid))) of
+    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, true))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{} = FileAttrs} ->
@@ -154,7 +154,7 @@ process_request(#op_req{
     gri = #gri{id = FileGuid, aspect = content},
     data = Params
 }, Req) ->
-    FileKey = {guid, FileGuid},
+    FileKey = ?FILE_REF(FileGuid),
 
     Offset = case maps:get(<<"offset">>, Params, undefined) of
         undefined ->
@@ -184,16 +184,17 @@ process_request(#op_req{
             {DirGuid, Req};
         ?REGULAR_FILE_TYPE ->
             {ok, FileGuid} = ?check(lfm:create(SessionId, ParentGuid, Name, Mode)),
+            FileKey = ?FILE_REF(FileGuid),
 
             case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
                 {0, false} ->
                     {FileGuid, Req};
                 {Offset, _} ->
                     try
-                        Req2 = write_req_body_to_file(SessionId, {guid, FileGuid}, Offset, Req),
+                        Req2 = write_req_body_to_file(SessionId, FileKey, Offset, Req),
                         {FileGuid, Req2}
                     catch Type:Reason ->
-                        lfm:unlink(SessionId, {guid, FileGuid}, false),
+                        lfm:unlink(SessionId, FileKey, false),
                         erlang:Type(Reason)
                     end
             end;
@@ -201,14 +202,14 @@ process_request(#op_req{
             TargetFileGuid = maps:get(<<"target_file_id">>, Params),
 
             {ok, #file_attr{guid = LinkGuid}} = ?check(lfm:make_link(
-                SessionId, ?GUID_KEY(TargetFileGuid), ParentGuid, Name
+                SessionId, ?FILE_REF(TargetFileGuid), ParentGuid, Name
             )),
             {LinkGuid, Req};
         ?SYMLINK_TYPE ->
             TargetFilePath = maps:get(<<"target_file_path">>, Params),
 
             {ok, #file_attr{guid = SymlinkGuid}} = ?check(lfm:make_symlink(
-                SessionId, ?GUID_KEY(ParentGuid), Name, TargetFilePath
+                SessionId, ?FILE_REF(ParentGuid), Name, TargetFilePath
             )),
             {SymlinkGuid, Req}
     end,

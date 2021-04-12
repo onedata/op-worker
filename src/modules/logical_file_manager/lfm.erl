@@ -135,30 +135,13 @@
 -export([check_result/1]).
 
 
--type file_key_type() ::
-    path | direct_path | indirect_path |
-    guid | direct_guid | indirect_guid.
-
-% Reference to specific file. Following types are supported:
-% - guid/path - in case of symlink resolution may happen depending on operation
-%               (behaviour similar to UNIX)
-% - direct_guid/path - this specific file will be used in operation
-%                      (no symlink resolution will happen).
-% - indirect_guid/path - if this points to symlink it will be resolved
-%                        and target file will be used in operation.
--type file_key() ::
-    {path | direct_path | indirect_path, file_meta:path()} |
-    {guid | direct_guid | indirect_guid, file_id:file_guid()}.
-
--type symlink_resolution_policy() :: resolve_symlink | do_not_resolve_symlink.
+-type file_ref() :: #file_ref{}.
+-type file_key() :: {path, file_meta:path()} | file_ref().
 
 -type handle() :: lfm_context:ctx().
 -type error_reply() :: {error, term()}.
 
--export_type([
-    handle/0, file_key_type/0, file_key/0, error_reply/0,
-    symlink_resolution_policy/0
-]).
+-export_type([handle/0, file_ref/0, file_key/0, error_reply/0]).
 
 
 -define(run(Expr),

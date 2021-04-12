@@ -328,7 +328,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
         maps:get(<<"createAttempts">>, Data, 1)
     ),
 
-    {ok, FileDetails} = ?check(lfm:get_details(SessionId, {guid, Guid})),
+    {ok, FileDetails} = ?check(lfm:get_details(SessionId, ?FILE_REF(Guid))),
     {ok, resource, {GRI#gri{id = Guid}, FileDetails}};
 
 create(#op_req{gri = #gri{id = FileGuid, aspect = object_id}}) ->
@@ -337,18 +337,21 @@ create(#op_req{gri = #gri{id = FileGuid, aspect = object_id}}) ->
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
     Mode = maps:get(<<"mode">>, Data),
-    ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, Mode));
+    ?check(lfm:set_perms(Auth#auth.session_id, ?FILE_REF(Guid), Mode));
 
-create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
+    SessionId = Auth#auth.session_id,
+    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+
     lists:foreach(fun({XattrName, XattrValue}) ->
-        ?check(lfm:set_xattr(
-            Auth#auth.session_id, build_precise_file_key(Guid, Data, true),
-            #xattr{name = XattrName, value = XattrValue},
-            false, false
-        ))
+        Xattr = #xattr{name = XattrName, value = XattrValue},
+        ?check(lfm:set_xattr(SessionId, FileKey, Xattr, false, false))
     end, maps:to_list(maps:get(<<"metadata">>, Data)));
 
-create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_metadata}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
+    SessionId = Auth#auth.session_id,
+    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+
     JSON = maps:get(<<"metadata">>, Data),
     Filter = maps:get(<<"filter">>, Data, undefined),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
@@ -360,14 +363,16 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_met
         {<<"keypath">>, _} ->
             binary:split(Filter, <<".">>, [global])
     end,
-    ?check(lfm:set_metadata(
-        Auth#auth.session_id, build_precise_file_key(Guid, Data, true),
-        json, JSON, FilterList
-    ));
 
-create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
+    ?check(lfm:set_metadata(SessionId, FileKey, json, JSON, FilterList));
+
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
+    SessionId = Auth#auth.session_id,
+    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+
     Rdf = maps:get(<<"metadata">>, Data),
-    ?check(lfm:set_metadata(Auth#auth.session_id, build_precise_file_key(Guid, Data, true), rdf, Rdf, []));
+
+    ?check(lfm:set_metadata(SessionId, FileKey, rdf, Rdf, []));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
@@ -611,30 +616,28 @@ validate_get(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
-    ?check(lfm:get_details(Auth#auth.session_id, {guid, FileGuid}));
+    ?check(lfm:get_details(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-    StartId = maps:get(<<"index">>, Data, undefined),
-    Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
     {ok, Children, #{is_last := IsLast}} = ?check(lfm:get_children(
-        SessionId, {guid, FileGuid}, #{
-            offset => Offset,
-            size => Limit,
-            last_name => StartId
+        SessionId, ?FILE_REF(FileGuid), #{
+            offset => maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
+            size => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
+            last_name => maps:get(<<"index">>, Data, undefined)
     })),
     {ok, value, {Children, IsLast}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
     SessionId = Auth#auth.session_id,
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-    StartId = maps:get(<<"index">>, Data, undefined),
-    Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
     {ok, ChildrenDetails, #{is_last := IsLast}} = ?check(lfm:get_children_details(
-        SessionId, {guid, FileGuid}, #{offset => Offset, size => Limit, last_name => StartId}
+        SessionId, ?FILE_REF(FileGuid), #{
+            offset => maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
+            size => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
+            last_name => maps:get(<<"index">>, Data, undefined)
+        }
     )),
     {ok, value, {ChildrenDetails, IsLast}};
 
@@ -648,7 +651,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, 
         Attr ->
             [Attr]
     end,
-    {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, {guid, FileGuid})),
+    {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid))),
 
     {ok, value, lists:foldl(fun(RequestedAttr, Acc) ->
         Acc#{RequestedAttr => get_attr(RequestedAttr, FileAttrs)}
@@ -656,9 +659,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, 
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
     SessionId = Auth#auth.session_id,
+    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+
     Inherited = maps:get(<<"inherited">>, Data, false),
     ShowInternal = maps:get(<<"show_internal">>, Data, false),
-    FileKey = build_precise_file_key(FileGuid, Data, true),
 
     case maps:get(<<"attribute">>, Data, undefined) of
         undefined ->
@@ -680,6 +684,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}, _) ->
     SessionId = Auth#auth.session_id,
+    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
     Inherited = maps:get(<<"inherited">>, Data, false),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
@@ -694,27 +699,23 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
             binary:split(Filter, <<".">>, [global])
     end,
 
-    {ok, Result} = ?check(lfm:get_metadata(
-        SessionId, build_precise_file_key(FileGuid, Data, true),
-        json, FilterList, Inherited
-    )),
+    {ok, Result} = ?check(lfm:get_metadata(SessionId, FileKey, json, FilterList, Inherited)),
     {ok, value, Result};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
-    {ok, Result} = ?check(lfm:get_metadata(
-        Auth#auth.session_id, build_precise_file_key(FileGuid, Data, true),
-        rdf, [], false
-    )),
+    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+
+    {ok, Result} = ?check(lfm:get_metadata(Auth#auth.session_id, FileKey, rdf, [], false)),
     {ok, value, Result};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
-    ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}));
+    ?check(lfm:get_acl(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
-    ?check(lfm:get_file_distribution(Auth#auth.session_id, {guid, FileGuid}));
+    ?check(lfm:get_file_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
-    {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, {guid, FileGuid})),
+    {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid))),
     {ok, FileAttrs#file_attr.shares};
 
 get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
@@ -736,7 +737,7 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = qos_summary}}, _) ->
     {ok, {QosEntriesWithStatus, _AssignedEntries}} = ?check(lfm:get_effective_file_qos(
-        Auth#auth.session_id, {guid, FileGuid}
+        Auth#auth.session_id, ?FILE_REF(FileGuid)
     )),
     {ok, #{
         <<"requirements">> => QosEntriesWithStatus,
@@ -744,7 +745,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = qos_summary}}, _) ->
     }};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = dataset_summary}}, _) ->
-    ?check(lfm:get_file_eff_dataset_summary(Auth#auth.session_id, {guid, FileGuid}));
+    ?check(lfm:get_file_eff_dataset_summary(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
 get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,
@@ -758,7 +759,7 @@ get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
 
 get(#op_req{auth = ?USER(_UserId, SessId), data = Data, gri = #gri{id = FileGuid, aspect = hardlinks}}, _) ->
     {ok, Hardlinks} = Result = ?check(lfm:get_file_references(
-        SessId, {guid, FileGuid}
+        SessId, ?FILE_REF(FileGuid)
     )),
     case maps:get(<<"limit">>, Data, undefined) of
         undefined ->
@@ -768,13 +769,13 @@ get(#op_req{auth = ?USER(_UserId, SessId), data = Data, gri = #gri{id = FileGuid
     end;
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_value}}, _) ->
-    ?check(lfm:read_symlink(Auth#auth.session_id, {guid, FileGuid}));
+    ?check(lfm:read_symlink(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scope = Scope}}, _) ->
     SessionId = Auth#auth.session_id,
 
-    {ok, TargetFileGuid} = ?check(lfm:resolve_symlink(SessionId, {guid, FileGuid})),
-    {ok, TargetFileDetails} = ?check(lfm:get_details(SessionId, {guid, TargetFileGuid})),
+    {ok, TargetFileGuid} = ?check(lfm:resolve_symlink(SessionId, ?FILE_REF(FileGuid))),
+    {ok, TargetFileDetails} = ?check(lfm:get_details(SessionId, ?FILE_REF(TargetFileGuid))),
 
     TargetFileGri = #gri{
         type = op_file, id = TargetFileGuid,
@@ -858,12 +859,12 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = instance
         undefined ->
             ok;
         PosixPerms ->
-            ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, PosixPerms))
+            ?check(lfm:set_perms(Auth#auth.session_id, ?FILE_REF(Guid), PosixPerms))
     end;
 update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) ->
     ?check(lfm:set_acl(
         Auth#auth.session_id,
-        {guid, Guid},
+        ?FILE_REF(Guid),
         maps:get(<<"list">>, Data)
     )).
 
@@ -937,9 +938,9 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{id = FileGuid, aspect = instance}}) ->
-    FileKey = {guid, FileGuid},
+    FileKey = ?FILE_REF(FileGuid),
 
-    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
+    case ?check(lfm:stat(SessionId, FileKey)) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             ?check(lfm:rm_recursive(SessionId, FileKey));
         {ok, _} ->
@@ -947,34 +948,24 @@ delete(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{id = FileGuid, aspec
     end;
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
-    FileKey = build_precise_file_key(FileGuid, Data, true),
+    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
     lists:foreach(fun(XattrName) ->
         ?check(lfm:remove_xattr(Auth#auth.session_id, FileKey, XattrName))
     end, maps:get(<<"keys">>, Data));
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
-    FileKey = build_precise_file_key(FileGuid, Data, true),
+    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
     ?check(lfm:remove_metadata(Auth#auth.session_id, FileKey, json));
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
-    FileKey = build_precise_file_key(FileGuid, Data, true),
+    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
     ?check(lfm:remove_metadata(Auth#auth.session_id, FileKey, rdf)).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec build_precise_file_key(file_id:file_guid(), middleware:data(), boolean()) ->
-    lfm:file_key().
-build_precise_file_key(FileGuid, Data, ResolveSymlinkByDefault) ->
-    case maps:get(<<"resolve_symlink">>, Data, ResolveSymlinkByDefault) of
-        true -> ?INDIRECT_GUID_KEY(FileGuid);
-        false -> ?DIRECT_GUID_KEY(FileGuid)
-    end.
 
 
 %% @private
@@ -1030,9 +1021,9 @@ create_file(SessionId, ParentGuid, Name, ?REGULAR_FILE_TYPE, undefined) ->
 create_file(SessionId, ParentGuid, Name, ?DIRECTORY_TYPE, undefined) ->
     lfm:mkdir(SessionId, ParentGuid, Name, undefined);
 create_file(SessionId, ParentGuid, Name, ?LINK_TYPE, TargetGuid) ->
-    lfm:make_link(SessionId, {guid, TargetGuid}, ParentGuid, Name);
+    lfm:make_link(SessionId, ?FILE_REF(TargetGuid), ParentGuid, Name);
 create_file(SessionId, ParentGuid, Name, ?SYMLINK_TYPE, TargetPath) ->
-    lfm:make_symlink(SessionId, {guid, ParentGuid}, Name, TargetPath).
+    lfm:make_symlink(SessionId, ?FILE_REF(ParentGuid), Name, TargetPath).
 
 
 %% @private
