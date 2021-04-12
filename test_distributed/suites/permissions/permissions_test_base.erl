@@ -1942,12 +1942,7 @@ add_qos_entry_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
-            name = <<"file1">>,
-            perms = [?write_metadata]
-        }],
-        posix_requires_space_privs = [?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
@@ -1969,7 +1964,6 @@ get_qos_entry_test(Config) ->
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
-            perms = [?read_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, QosEntryId} = lfm_proxy:add_qos_entry(
                     W, FileOwnerSessId, ?FILE_REF(Guid), <<"country=FR">>, 1
@@ -1977,8 +1971,6 @@ get_qos_entry_test(Config) ->
                 QosEntryId
             end 
         }],
-        posix_requires_space_privs = [?SPACE_READ_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
@@ -2000,7 +1992,6 @@ remove_qos_entry_test(Config) ->
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
-            perms = [?write_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, QosEntryId} = lfm_proxy:add_qos_entry(
                     W, FileOwnerSessId, ?FILE_REF(Guid), <<"country=FR">>, 1
@@ -2008,8 +1999,6 @@ remove_qos_entry_test(Config) ->
                 QosEntryId
             end
         }],
-        posix_requires_space_privs = [?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = inapplicable,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
@@ -2031,7 +2020,6 @@ get_effective_file_qos_test(Config) ->
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
-            perms = [?read_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, _QosEntryId} = lfm_proxy:add_qos_entry(
                     W, FileOwnerSessId, ?FILE_REF(Guid), <<"country=FR">>, 1
@@ -2039,8 +2027,6 @@ get_effective_file_qos_test(Config) ->
                 ?FILE_REF(Guid)
             end
         }],
-        posix_requires_space_privs = [?SPACE_READ_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
@@ -2062,7 +2048,6 @@ check_qos_fulfillment_test(Config) ->
         root_dir_name = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
-            perms = [?read_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, QosEntryId} = lfm_proxy:add_qos_entry(
                     W, FileOwnerSessId, ?FILE_REF(Guid), <<"country=FR">>, 1
@@ -2070,8 +2055,6 @@ check_qos_fulfillment_test(Config) ->
                 QosEntryId
             end
         }],
-        posix_requires_space_privs = [?SPACE_READ_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
