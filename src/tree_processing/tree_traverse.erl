@@ -261,8 +261,6 @@ do_master_job(Job = #tree_traverse{
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     Job2 = Job#tree_traverse{file_ctx = FileCtx2},
     case file_meta:get_effective_type(FileDoc) of
-        ?REGULAR_FILE_TYPE ->
-            {ok, #{slave_jobs => [get_child_slave_job(Job2, FileCtx2)]}};
         ?DIRECTORY_TYPE ->
             case list_children(Job2, MasterJobArgs) of
                 {error, ?EACCES} ->
@@ -292,7 +290,9 @@ do_master_job(Job = #tree_traverse{
                         async -> async_master_jobs
                     end,
                     {ok, #{slave_jobs => SlaveJobs, ChildrenMasterJobsKey => FinalMasterJobs}}
-            end
+            end;
+        _ ->
+            {ok, #{slave_jobs => [get_child_slave_job(Job2, FileCtx2)]}}
         end.
 
 

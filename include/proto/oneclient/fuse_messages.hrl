@@ -33,6 +33,9 @@
     include_link_count :: undefined | boolean()
 }).
 
+-record(get_file_references, {
+}).
+
 -record(get_file_details, {
 }).
 
@@ -86,11 +89,6 @@
     mode :: file_meta:mode()
 }).
 
--record(update_protection_flags, {
-    set :: data_access_control:bitmask(),
-    unset :: data_access_control:bitmask()
-}).
-
 -record(rename, {
     target_parent_guid :: fslogic_worker:file_guid(),
     target_name :: file_meta:name()
@@ -128,8 +126,12 @@
 -record(get_file_location, {
 }).
 
+% Operation that returns symlink value as it is
 -record(read_symlink, {
 }).
+
+% Operation that returns target file (file pointed by path stored in symlink) guid
+-record(resolve_symlink, {}).
 
 -record(release, {
     handle_id :: binary()
@@ -186,12 +188,14 @@
 }).
 
 -type file_request_type() ::
-    #get_file_attr{} | #get_file_children{} | #get_file_children_attrs{} |
+    #get_file_attr{} | #get_file_references{} |
+    #get_file_children{} | #get_file_children_attrs{} |
     #get_file_details{} | #get_file_children_details{} |
     #create_dir{} | #delete_file{} | #move_to_trash{} |
-    #update_times{} | #change_mode{} | #update_protection_flags{} |
+    #update_times{} | #change_mode{} |
     #rename{} | #create_file{} | #make_file{} |
-    #make_link{} | #make_symlink{} | #open_file{} | #get_file_location{} | #read_symlink{} |
+    #make_link{} | #make_symlink{} | #open_file{} | #get_file_location{} |
+    #read_symlink{} | #resolve_symlink{} |
     #release{} | #truncate{} | #synchronize_block{} |
     #synchronize_block_and_compute_checksum{} | #block_synchronization_request{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
@@ -332,8 +336,12 @@
     storage_stats :: [#storage_stats{}]
 }).
 
+-record(file_references, {
+    references :: [file_id:file_guid()]
+}).
+
 -type fuse_response_type() ::
-    #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
+    #file_attr{} | #file_references{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
     #file_children_attrs{} | #file_location_changed{} | #file_opened_extended{} |

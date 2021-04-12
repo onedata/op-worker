@@ -268,6 +268,9 @@ share_to_json(ShareId, #od_share{
         <<"publicUrl">> => PublicUrl,
         <<"publicRestUrl">> => PublicRestUrl,
         <<"rootFileId">> => RootFileGuid,
-        <<"fileType">> => FileType,
+        <<"rootFileType">> => case FileType of
+            file -> <<"REG">>;
+            dir -> <<"DIR">>
+        end,
         <<"handleId">> => utils:undefined_to_null(Handle)
     }.

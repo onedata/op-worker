@@ -250,10 +250,6 @@
     next_renewal_backoff :: time:seconds()
 }).
 
--record(file_force_proxy, {
-    provider_id :: undefined | oneprovider:id()
-}).
-
 %% User session
 -record(session, {
     status :: undefined | session:status(),
@@ -382,12 +378,24 @@
     acl = [] :: acl:acl(), % VFS-7437 Handle conflict resolution similarly to hardlinks
     owner :: undefined | od_user:id(), % undefined for hardlink doc
     is_scope = false :: boolean(),
-    provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
+    provider_id :: undefined | oneprovider:id(), %% Id of provider that created this file
     shares = [] :: [od_share:id()], % VFS-7437 Handle conflict resolution similarly to hardlinks
     deleted = false :: boolean(),
     parent_uuid :: file_meta:uuid(),
     references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
-    symlink_value :: undefined | file_meta_symlinks:symlink()
+    symlink_value :: undefined | file_meta_symlinks:symlink(),
+    % this field is used to cache value from #dataset.state field
+    % TODO VFS-7533 handle conflict on file_meta with remote provider
+    dataset_state :: undefined | dataset:state()
+}).
+
+% Model used for storing information associated with dataset.
+% One document is stored for one dataset.
+% Key of the document is file_meta:uuid().
+-record(dataset, {
+    creation_time :: time:seconds(),
+    state :: dataset:state(),
+    detached_info :: undefined | dataset:detached_info()
 }).
 
 
@@ -398,17 +406,7 @@
 
 -record(storage_config, {
     helper :: helpers:helper(),
-    luma_config :: storage:luma_config(),
-    imported_storage = false :: boolean()
-}).
-
-
-%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
--record(storage, {
-    name = <<>> :: storage_config:name(),
-    helpers = [] :: [helpers:helper()],
-    readonly = false :: boolean(),
-    luma_config = undefined :: undefined | luma_config:config()
+    luma_config :: storage:luma_config()
 }).
 
 
@@ -419,12 +417,6 @@
     feed :: luma:feed()
 }).
 
-%% Model that maps space to storage
-%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
--record(space_storage, {
-    storage_ids = [] :: [storage:id()],
-    mounted_in_root = [] :: [storage:id()]
-}).
 
 -record(space_unsupport_job, {
     stage = init :: space_unsupport:stage(),
@@ -583,7 +575,7 @@
     auto_storage_import_config :: undefined | auto_storage_import_config:config()
 }).
 
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 %% Model that stores configuration of storage import mechanism
 -record(storage_sync_config, {
     import_enabled = false :: boolean(),
@@ -592,13 +584,13 @@
     update_config = #{} :: space_strategies:update_config()
 }).
 
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 %% Model that maps space to storage strategies
 -record(space_strategies, {
     sync_configs = #{} :: space_strategies:sync_configs()
 }).
 
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 -record(storage_sync_monitoring, {
     scans = 0 :: non_neg_integer(), % overall number of finished scans,
     import_start_time :: undefined | time:seconds(),

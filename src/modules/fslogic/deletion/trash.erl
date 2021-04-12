@@ -74,11 +74,15 @@ move_to_trash(FileCtx, UserCtx) ->
     % they names are suffixed with Uuid to avoid conflicts
     TrashUuid = fslogic_uuid:spaceid_to_trash_dir_uuid(SpaceId),
     % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
-    file_qos:clean_up(FileCtx5),
+    file_qos:clean_up_on_no_reference(FileCtx5),
     ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    ok = fslogic_worker:invalidate_file_protection_flags_caches(SpaceId),
-    file_meta:rename(FileDoc, ParentUuid, TrashUuid, ?NAME_IN_TRASH(Name, Uuid)),
-    ok = paths_cache:invalidate_caches_on_all_nodes(SpaceId),
+    NameInTrash = ?NAME_IN_TRASH(Name, Uuid),
+    file_meta:rename(FileDoc, ParentUuid, TrashUuid, NameInTrash),
+    ok = dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
+    ok = paths_cache:invalidate_on_all_nodes(SpaceId),
+    TrashGuid = file_id:pack_guid(TrashUuid, SpaceId),
+    fslogic_event_emitter:emit_file_renamed_no_exclude(
+        FileCtx5, ParentGuid, TrashGuid, NameInTrash, Name),
     FileCtx5.
 
 

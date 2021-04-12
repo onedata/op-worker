@@ -107,7 +107,7 @@ all() -> [
 
     % QoS clean up tests
     qos_cleanup_test,
-    
+
     % QoS status tests
     qos_status_during_traverse_test,
     qos_status_during_traverse_multi_batch_test,

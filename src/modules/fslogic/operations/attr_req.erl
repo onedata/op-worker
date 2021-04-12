@@ -26,7 +26,9 @@
 
     get_file_details/2, get_file_details_insecure/3,
 
-    get_child_attr/5, chmod/3, update_protection_flags/4, update_times/5,
+    get_file_references/2,
+
+    get_child_attr/5, chmod/3, update_times/5,
     chmod_attrs_only_insecure/2,
 
     get_fs_stats/2
@@ -141,7 +143,8 @@ get_file_details(UserCtx, FileCtx0) ->
     get_file_details_insecure(UserCtx, FileCtx1, #{
         allow_deleted_files => false,
         include_size => true,
-        name_conflicts_resolution_policy => resolve_name_conflicts
+        name_conflicts_resolution_policy => resolve_name_conflicts,
+        include_link_count => true
     }).
 
 
@@ -154,20 +157,47 @@ get_file_details(UserCtx, FileCtx0) ->
     fslogic_worker:fuse_response().
 get_file_details_insecure(UserCtx, FileCtx, Opts) ->
     {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
-    {EffFileProtectionFlags, FileCtx3} = file_protection_flags_cache:get_effective_flags(FileCtx2),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
+    {ok, EffectiveMembership, EffProtectionFlags, FileCtx3} =
+        dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
 
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
-            protection_flags = EffFileProtectionFlags,
+            symlink_value = case fslogic_uuid:is_symlink_uuid(file_ctx:get_logical_uuid_const(FileCtx)) of
+                true ->
+                    {ok, SymlinkValue} = file_meta_symlinks:readlink(FileDoc),
+                    SymlinkValue;
+                false ->
+                    undefined
+            end,
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx3),
-            has_direct_qos = file_qos:has_any_qos_entry(FileDoc, direct),
-            has_eff_qos = file_qos:has_any_qos_entry(FileDoc, effective)
+            eff_qos_membership = file_qos:qos_membership(FileDoc),
+            eff_dataset_membership = EffectiveMembership,
+            eff_protection_flags = EffProtectionFlags
         }
+    }.
+
+
+-spec get_file_references(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_file_references(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_attributes_mask)]
+    ),
+    FileCtx2 = file_ctx:assert_not_dir(FileCtx1),
+
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    {ok, RefUuids} = file_ctx:list_references_const(FileCtx2),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_references{references = lists:map(fun(RefUuid) ->
+            file_id:pack_guid(RefUuid, SpaceId)
+        end, RefUuids)}
     }.
 
 
@@ -198,21 +228,6 @@ chmod(UserCtx, FileCtx0, Mode) ->
         [?TRAVERSE_ANCESTORS, ?OWNERSHIP]
     ),
     chmod_insecure(UserCtx, FileCtx1, Mode).
-
-
--spec update_protection_flags(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    data_access_control:bitmask(),
-    data_access_control:bitmask()
-) ->
-    fslogic_worker:fuse_response().
-update_protection_flags(UserCtx, FileCtx0, FlagsToSet, FlagsToUnset) ->
-    file_ctx:assert_not_special_const(FileCtx0),
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors, ?OPERATIONS(?write_attributes_mask)]
-    ),
-    update_protection_flags_insecure(FileCtx1, FlagsToSet, FlagsToUnset).
 
 
 %%--------------------------------------------------------------------
@@ -317,23 +332,6 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
     FileCtx2.
 
 
-%% @private
--spec update_protection_flags_insecure(
-    file_ctx:ctx(),
-    data_access_control:bitmask(),
-    data_access_control:bitmask()
-) ->
-    fslogic_worker:fuse_response().
-update_protection_flags_insecure(FileCtx, FlagsToSet, FlagsToUnset) ->
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    ok = file_meta:update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset),
-
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    ok = fslogic_worker:invalidate_file_protection_flags_caches(SpaceId),
-
-    #fuse_response{status = #status{code = ?OK}}.
-
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -426,8 +424,8 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         maps:get(name_conflicts_resolution_policy, Opts, resolve_name_conflicts)
     ),
 
-    {ok, LinksCount} = case maps:get(include_link_count, Opts, false) of
-        true ->
+    {ok, LinksCount} = case {ShareId, maps:get(include_link_count, Opts, false)} of
+        {undefined, true} ->
             file_ctx:count_references_const(FileCtx7);
         _ ->
             {ok, undefined}

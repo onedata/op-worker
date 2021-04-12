@@ -246,18 +246,15 @@ attrs_to_json(ShareId, #file_attr{
     size = Size,
     shares = Shares,
     provider_id = ProviderId,
-    owner_id = OwnerId
+    owner_id = OwnerId,
+    nlink = LinksCount
 }) ->
     PublicAttrs = #{
         <<"name">> => Name,
         <<"atime">> => ATime,
         <<"mtime">> => MTime,
         <<"ctime">> => CTime,
-        <<"type">> => case Type of
-            ?REGULAR_FILE_TYPE -> <<"reg">>;
-            ?DIRECTORY_TYPE -> <<"dir">>;
-            ?SYMLINK_TYPE -> <<"lnk">>
-        end,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => Size
     },
 
@@ -274,7 +271,8 @@ attrs_to_json(ShareId, #file_attr{
                 <<"storage_group_id">> => Gid,
                 <<"shares">> => Shares,
                 <<"provider_id">> => ProviderId,
-                <<"owner_id">> => OwnerId
+                <<"owner_id">> => OwnerId,
+                <<"hardlinks_count">> => utils:undefined_to_null(LinksCount)
             };
         _ ->
             ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),

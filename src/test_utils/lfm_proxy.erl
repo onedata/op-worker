@@ -19,11 +19,10 @@
 %% API
 -export([init/1, init/2, init/3, teardown/1]).
 -export([
-    stat/3, get_fs_stats/3, get_details/3,
+    stat/3, resolve_symlink/3, get_fs_stats/3, get_details/3,
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
-    update_protection_flags/5,
     set_perms/4,
     update_times/6,
     unlink/3, rm_recursive/3,
@@ -71,7 +70,11 @@
 
     get_effective_file_qos/3,
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
-    check_qos_status/3, check_qos_status/4
+    check_qos_status/3, check_qos_status/4,
+
+    establish_dataset/3, establish_dataset/4, remove_dataset/3, update_dataset/6,
+    get_dataset_info/3, get_file_eff_dataset_summary/3,
+    list_top_datasets/5, list_children_datasets/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -153,6 +156,12 @@ stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_guid(Worker, FileKey))).
 
 
+-spec resolve_symlink(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
+resolve_symlink(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:resolve_symlink(SessId, uuid_to_guid(Worker, FileKey))).
+
+
 -spec get_fs_stats(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, lfm_attrs:fs_stats()} | lfm:error_reply().
 get_fs_stats(Worker, SessId, FileKey) ->
@@ -192,22 +201,11 @@ check_perms(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker, lfm:check_perms(SessId, FileKey, OpenFlag)).
 
 
--spec update_protection_flags(
-    node(),
-    session:id(),
-    lfm:file_key(),
-    data_access_control:bitmask(),
-    data_access_control:bitmask()
-) ->
-    ok | {error, term()}.
-update_protection_flags(Worker, SessId, FileKey, FlagsToSet, FlagsToUnset) ->
-    ?EXEC(Worker, lfm:update_protection_flags(SessId, FileKey, FlagsToSet, FlagsToUnset)).
-
-
 -spec set_perms(node(), session:id(), lfm:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->
     ok | lfm:error_reply().
 set_perms(Worker, SessId, FileKey, NewPerms) ->
     ?EXEC(Worker, lfm:set_perms(SessId, uuid_to_guid(Worker, FileKey), NewPerms)).
+
 
 -spec update_times(node(), session:id(), lfm:file_key(),
     file_meta:time(), file_meta:time(), file_meta:time()) ->
@@ -256,7 +254,6 @@ cp(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
     ok | lfm:error_reply().
 is_dir(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:is_dir(SessId, uuid_to_guid(Worker, FileKey))).
-
 
 
 %%%===================================================================
@@ -738,7 +735,9 @@ remove_share(Worker, SessId, FileKey) ->
 -spec schedule_file_replication(node(), session:id(), lfm:file_key(),
     ProviderId :: oneprovider:id()) -> {ok, transfer:id()} | {error, term()}.
 schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
-    ?EXEC(Worker, lfm:schedule_file_replication(SessId, FileKey, ProviderId, undefined)).
+    ?EXEC(Worker, lfm:schedule_file_transfer(
+        SessId, FileKey, ProviderId, undefined, undefined
+    )).
 
 
 -spec schedule_replication_by_view(
@@ -751,8 +750,9 @@ schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
 ) ->
     {ok, transfer:id()} | {error, term()}.
 schedule_replication_by_view(Worker, SessId, ProviderId, SpaceId, ViewName, QueryViewParams) ->
-    ?EXEC(Worker, lfm:schedule_replication_by_view(
-        SessId, ProviderId, undefined, SpaceId, ViewName, QueryViewParams
+    ?EXEC(Worker, lfm:schedule_view_transfer(
+        SessId, SpaceId, ViewName, QueryViewParams,
+        ProviderId, undefined, undefined
     )).
 
 
@@ -765,7 +765,9 @@ schedule_replication_by_view(Worker, SessId, ProviderId, SpaceId, ViewName, Quer
 ) ->
     {ok, transfer:id()} | {error, term()}.
 schedule_file_replica_eviction(Worker, SessId, FileKey, ProviderId, MigrationProviderId) ->
-    ?EXEC(Worker, lfm:schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId)).
+    ?EXEC(Worker, lfm:schedule_file_transfer(
+        SessId, FileKey, MigrationProviderId, ProviderId, undefined
+    )).
 
 
 -spec schedule_replica_eviction_by_view(
@@ -782,9 +784,9 @@ schedule_replica_eviction_by_view(
     Worker, SessId, ProviderId, MigrationProviderId,
     SpaceId, ViewName, QueryViewParams
 ) ->
-    ?EXEC(Worker, lfm:schedule_replica_eviction_by_view(
-        SessId, ProviderId, MigrationProviderId, SpaceId,
-        ViewName, QueryViewParams
+    ?EXEC(Worker, lfm:schedule_view_transfer(
+        SessId, SpaceId, ViewName, QueryViewParams,
+        MigrationProviderId, ProviderId, undefined
     )).
 
 
@@ -833,6 +835,48 @@ check_qos_status(Worker, SessId, QosEntryId) ->
     {ok, qos_status:summary()} | lfm:error_reply().
 check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
     ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId, FileKey)).
+
+
+%%%===================================================================
+%%% Datasets functions
+%%%===================================================================
+
+-spec establish_dataset(node(), session:id(), lfm:file_key()) ->
+    {ok, dataset:id()} | lfm:error_reply().
+establish_dataset(Worker, SessId, FileKey) ->
+    establish_dataset(Worker, SessId, FileKey, 0).
+
+-spec establish_dataset(node(), session:id(), lfm:file_key(), data_access_control:bitmask()) ->
+    {ok, dataset:id()} | lfm:error_reply().
+establish_dataset(Worker, SessId, FileKey, ProtectionFlags) ->
+    ?EXEC(Worker, lfm:establish_dataset(SessId, FileKey, ProtectionFlags)).
+
+-spec remove_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+remove_dataset(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:remove_dataset(SessId, DatasetId)).
+
+-spec update_dataset(node(), session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),
+    data_access_control:bitmask()) -> ok | lfm:error_reply().
+update_dataset(Worker, SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
+    ?EXEC(Worker, lfm:update_dataset(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset)).
+
+-spec get_dataset_info(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | lfm:error_reply().
+get_dataset_info(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:get_dataset_info(SessId, DatasetId)).
+
+-spec get_file_eff_dataset_summary(node(), session:id(), lfm:file_key()) -> {ok, lfm_datasets:file_eff_summary()} | lfm:error_reply().
+get_file_eff_dataset_summary(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_file_eff_dataset_summary(SessId, FileKey)).
+
+-spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
+list_top_datasets(Worker, SessId, SpaceId, State, Opts) ->
+    ?EXEC(Worker, lfm:list_top_datasets(SessId, SpaceId, State, Opts)).
+
+-spec list_children_datasets(node(), session:id(), dataset:id(), datasets_structure:opts()) ->
+    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
+list_children_datasets(Worker, SessId, DatasetId, Opts) ->
+    ?EXEC(Worker, lfm:list_children_datasets(SessId, DatasetId, Opts)).
 
 
 %%%===================================================================

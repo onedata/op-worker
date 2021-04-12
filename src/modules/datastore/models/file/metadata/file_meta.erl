@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
@@ -26,13 +27,17 @@
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
+-export([get_protection_flags/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,
     list_children/2, list_children_whitelisted/3
 ]).
 -export([get_name/1, set_name/2]).
--export([get_active_perms_type/1, update_mode/2, update_protection_flags/3, protection_flags_to_json/1, update_acl/2]).
+-export([
+    get_active_perms_type/1, update_mode/2,  update_acl/2,
+    update_protection_flags/3, protection_flags_to_json/1, protection_flags_from_json/1
+]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/6, new_doc/7, new_share_root_dir_doc/2, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1, get_effective_type/1,
@@ -59,6 +64,7 @@
 -type posix_permissions() :: non_neg_integer().
 -type permissions_type() :: posix | acl.
 -type conflicts() :: [link()].
+-type path_type() :: ?CANONICAL_PATH | ?UUID_BASED_PATH.
 
 
 -type list_offset() :: file_meta_forest:offset().
@@ -73,7 +79,7 @@
 -export_type([
     doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
     type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
-    conflicts/0
+    conflicts/0, path_type/0
 ]).
 
 -export_type([
@@ -474,16 +480,20 @@ get_locations_by_uuid(FileUuid) ->
 rename(SourceDoc, #document{key = SourceParentUuid}, #document{key = TargetParentUuid}, TargetName) ->
     rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName);
 rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
-    #document{key = FileUuid, value = #file_meta{name = FileName}, scope = Scope} = SourceDoc,
-    {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
+    #document{
+        key = FileUuid,
+        value = #file_meta{name = FileName},
+        scope = Scope
+    } = SourceDoc,
+    {ok, TargetDoc} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{
             name = TargetName,
             parent_uuid = TargetParentUuid
         }}
     end),
     ok = file_meta_forest:add(TargetParentUuid, Scope, TargetName, FileUuid),
-    ok = file_meta_forest:delete(SourceParentUuid, Scope, FileName, FileUuid).
-
+    ok = file_meta_forest:delete(SourceParentUuid, Scope, FileName, FileUuid),
+    dataset_api:move_if_applicable(SourceDoc, TargetDoc).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -637,12 +647,12 @@ setup_onedata_user(UserId, EffSpaces) ->
 %% Add shareId to file meta.
 %% @end
 %%--------------------------------------------------------------------
--spec add_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()}  | {error, term()}.
+-spec add_share(file_ctx:ctx(), od_share:id()) -> ok | {error, term()}.
 add_share(FileCtx, ShareId) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
         {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
-    end).
+    end)).
 
 
 %%--------------------------------------------------------------------
@@ -650,10 +660,10 @@ add_share(FileCtx, ShareId) ->
 %% Remove shareId from file meta.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()} | {error, term()}.
+-spec remove_share(file_ctx:ctx(), od_share:id()) -> ok | {error, term()}.
 remove_share(FileCtx, ShareId) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
         Result = lists:foldl(fun(ShId, {IsMember, Acc}) ->
             case ShareId == ShId of
                 true -> {found, Acc};
@@ -667,7 +677,7 @@ remove_share(FileCtx, ShareId) ->
             {not_found, _} ->
                 {error, not_found}
         end
-    end).
+    end)).
 
 
 -spec get_shares(doc() | file_meta()) -> [od_share:id()].
@@ -749,7 +759,8 @@ new_share_root_dir_doc(ShareRootDirUuid, SpaceId) ->
                 {ok, _} -> false;
                 ?ERROR_NOT_FOUND -> true
             end
-        }
+        },
+        scope = SpaceId
     }.
 
 
@@ -819,6 +830,13 @@ is_child_of_hidden_dir(Path) ->
     is_hidden(Parent).
 
 
+-spec get_protection_flags(file_meta() | doc()) -> data_access_control:bitmask().
+get_protection_flags(#document{value = FM}) ->
+    get_protection_flags(FM);
+get_protection_flags(#file_meta{protection_flags = ProtectionFlags}) ->
+    ProtectionFlags.
+
+
 -spec get_name(doc()) -> binary().
 get_name(#document{value = #file_meta{name = Name}}) ->
     Name.
@@ -858,6 +876,13 @@ update_mode(FileUuid, NewMode) ->
     end).
 
 
+-spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
+update_acl(FileUuid, NewAcl) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+        {ok, FileMeta#file_meta{acl = NewAcl}}
+    end)).
+
+
 -spec update_protection_flags(uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
     ok | {error, term()}.
 update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
@@ -868,9 +893,9 @@ update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
 
 
 -spec protection_flags_to_json(data_access_control:bitmask()) -> [binary()].
-protection_flags_to_json(FileFlags) ->
+protection_flags_to_json(ProtectionFlags) ->
     lists:filtermap(fun({FlagName, FlagMask}) ->
-        case ?has_all_flags(FileFlags, FlagMask) of
+        case ?has_all_flags(ProtectionFlags, FlagMask) of
             true -> {true, FlagName};
             false -> false
         end
@@ -880,11 +905,17 @@ protection_flags_to_json(FileFlags) ->
     ]).
 
 
--spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
-update_acl(FileUuid, NewAcl) ->
-    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
-        {ok, FileMeta#file_meta{acl = NewAcl}}
-    end)).
+-spec protection_flags_from_json([binary()]) -> data_access_control:bitmask().
+protection_flags_from_json(ProtectionFlagsJson) ->
+    lists:foldl(fun(ProtectionFlag, Bitmask) ->
+        ?set_flags(Bitmask, protection_flag_from_json(ProtectionFlag))
+    end, ?no_flags_mask, ProtectionFlagsJson).
+
+
+%% @private
+-spec protection_flag_from_json(binary()) -> data_access_control:bitmask().
+protection_flag_from_json(?DATA_PROTECTION_BIN) -> ?DATA_PROTECTION;
+protection_flag_from_json(?METADATA_PROTECTION_BIN) -> ?METADATA_PROTECTION.
 
 
 -spec check_name_and_get_conflicting_files(doc()) ->

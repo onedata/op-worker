@@ -71,9 +71,9 @@
     is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, count_references_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
-    is_share_root_dir_const/1, is_special_const/1,
+    is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
-    is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1,
+    is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1,
     assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
@@ -304,8 +304,7 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            {Path, FileCtx2} = resolve_canonical_path_tokens(FileCtx),
-            CanonicalPath = filename:join(Path),
+            {CanonicalPath, FileCtx2} = resolve_and_cache_path(FileCtx, ?CANONICAL_PATH),
             {CanonicalPath, FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
@@ -314,9 +313,8 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
 
 -spec get_uuid_based_path(ctx()) -> {file_meta:uuid_based_path(), ctx()}.
 get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = undefined}) ->
-    {UuidPathTokens, FileCtx2} = resolve_uuid_based_path_tokens(FileCtx),
-    UuidPath = filename:join(UuidPathTokens),
-    {UuidPath, FileCtx2#file_ctx{uuid_based_path = UuidPath}};
+    {UuidBasedPath, FileCtx2} = resolve_and_cache_path(FileCtx, ?UUID_BASED_PATH),
+    {UuidBasedPath, FileCtx2#file_ctx{uuid_based_path = UuidBasedPath}};
 get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = UuidPath}) ->
     {UuidPath, FileCtx}.
 
@@ -1040,6 +1038,11 @@ is_share_root_dir_const(#file_ctx{guid = Guid}) ->
     fslogic_uuid:is_share_root_dir_guid(Guid).
 
 
+-spec is_symlink_const(ctx()) -> boolean().
+is_symlink_const(FileCtx) ->
+    fslogic_uuid:is_symlink_uuid(get_logical_uuid_const(FileCtx)).
+
+
 -spec is_special_const(ctx()) -> boolean().
 is_special_const(#file_ctx{guid = Guid}) ->
     fslogic_uuid:is_special_guid(Guid).
@@ -1202,6 +1205,13 @@ assert_is_dir(FileCtx) ->
         {true, FileCtx2} -> FileCtx2
     end.
 
+-spec assert_not_dir(ctx()) -> ctx().
+assert_not_dir(FileCtx) ->
+    case is_dir(FileCtx) of
+        {true, _} -> throw(?EISDIR);
+        {false, FileCtx2} -> FileCtx2
+    end.
+
 -spec is_readonly_storage(ctx()) -> {boolean(), ctx()}.
 is_readonly_storage(FileCtx) ->
     {StorageId, FileCtx2} = get_storage_id(FileCtx),
@@ -1252,55 +1262,36 @@ assert_file_exists(FileCtx0) ->
 %%% Internal functions
 %%%===================================================================
 
--spec resolve_canonical_path_tokens(ctx()) -> {[file_meta:name()], ctx()}.
-resolve_canonical_path_tokens(FileCtx) ->
-    resolve_and_cache_path(FileCtx, name).
+-spec resolve_and_cache_path(ctx(), file_meta:path_type()) -> {file_meta:uuid() | file_meta:name(), ctx()}.
+resolve_and_cache_path(FileCtx, PathType) ->
+    {#document{
+        key = Uuid,
+        value = #file_meta{
+            type = FileType,
+            name = Filename
+        },
+        scope = SpaceId
+    } = Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
 
--spec resolve_uuid_based_path_tokens(ctx()) -> {[file_meta:uuid()], ctx()}.
-resolve_uuid_based_path_tokens(FileCtx) ->
-    resolve_and_cache_path(FileCtx, uuid).
-
--spec resolve_and_cache_path(ctx(), name | uuid) -> {[file_meta:uuid() | file_meta:name()], ctx()}.
-resolve_and_cache_path(FileCtx, Type) ->
-    Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}, scope = SpaceId}, ParentValue, CalculationInfo]) ->
-        case fslogic_uuid:is_root_dir_uuid(Uuid) of
-            true ->
-                {ok, [<<"/">>], CalculationInfo};
-            false ->
-                case fslogic_uuid:is_space_dir_uuid(Uuid) of
-                    true ->
-                        {ok, [<<"/">>, SpaceId], CalculationInfo};
-                    false ->
-                        NameOrUuid = case Type of
-                            uuid -> Uuid;
-                            name -> Name
-                        end,
-                        {ok, ParentValue ++ [NameOrUuid], CalculationInfo}
-                end
-        end
-    end,
-
-    {#document{key = Uuid, value = #file_meta{type = FileType, name = Filename}, scope = SpaceId} = Doc, FileCtx2} =
-        get_file_doc_including_deleted(FileCtx),
-    {FilenameOrUuid, CacheName} = case Type of
-        name -> {Filename, paths_cache:get_canonical_paths_cache_name(SpaceId)};
-        uuid -> {Uuid, paths_cache:get_uuid_based_paths_cache_name(SpaceId)}
-    end,
     case FileType of
         ?DIRECTORY_TYPE ->
-            case effective_value:get_or_calculate(CacheName, Doc, Callback) of
-                {ok, Path, _} ->
+            case paths_cache:get(SpaceId, Doc, PathType) of
+                {ok, Path} ->
                     {Path, FileCtx2};
-                {error, {file_meta_missing, _}} ->
+                ?ERROR_NOT_FOUND ->
                     throw(?ERROR_NOT_FOUND)
             end;
         _ ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
             {ok, ParentDoc} = file_meta:get_including_deleted(ParentUuid),
-            case effective_value:get_or_calculate(CacheName, ParentDoc, Callback) of
-                {ok, Path, _} ->
-                    {Path ++ [FilenameOrUuid], FileCtx2};
-                {error, {file_meta_missing, _}} ->
+            case paths_cache:get(SpaceId, ParentDoc, PathType) of
+                {ok, Path} ->
+                    FilenameOrUuid = case PathType of
+                        ?CANONICAL_PATH -> Filename;
+                        ?UUID_BASED_PATH -> Uuid
+                    end,
+                    {filename:join(Path, FilenameOrUuid), FileCtx2};
+                ?ERROR_NOT_FOUND ->
                     throw(?ERROR_NOT_FOUND)
             end
     end.

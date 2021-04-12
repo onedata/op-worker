@@ -14,6 +14,7 @@
 
 -include("api_test_runner.hrl").
 -include("api_file_test_utils.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
@@ -197,10 +198,14 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> acl;
             false -> posix
         end,
-        protection_flags = ?no_flags_mask,
-        has_metadata = HasMetadata,
-        has_direct_qos = HasDirectQos,
-        has_eff_qos = HasParentQos orelse HasDirectQos
+        eff_protection_flags = ?no_flags_mask,
+        eff_qos_membership = case {HasDirectQos, HasParentQos} of
+            {true, _} -> ?DIRECT_QOS_MEMBERSHIP;
+            {_, true} -> ?ANCESTOR_QOS_MEMBERSHIP;
+            _ -> ?NONE_QOS_MEMBERSHIP
+        end,
+        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
+        has_metadata = HasMetadata
     },
 
     {FileType, FilePath, FileGuid, FileDetails}.
@@ -433,20 +438,19 @@ file_details_to_gs_json(undefined, #file_details{
         mtime = MTime,
         shares = Shares,
         owner_id = OwnerId,
-        provider_id = ProviderId
+        provider_id = ProviderId,
+        nlink = LinksCount
     },
     index_startid = IndexStartId,
     active_permissions_type = ActivePermissionsType,
-    protection_flags = EffFileProtectionFlags,
-    has_metadata = HasMetadata,
-    has_direct_qos = HasDirectQos,
-    has_eff_qos = HasEffQos
+    eff_protection_flags = EffFileProtectionFlags,
+    eff_qos_membership = EffQosMembership,
+    eff_dataset_membership = EffDatasetMembership,
+    has_metadata = HasMetadata
 }) ->
-    {DisplayedType, DisplayedSize} = case Type of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, Size}
+    DisplayedSize = case Type of
+        ?DIRECTORY_TYPE -> null;
+        _ -> Size
     end,
 
     #{
@@ -463,14 +467,15 @@ file_details_to_gs_json(undefined, #file_details{
             false -> ParentGuid
         end,
         <<"mtime">> => MTime,
-        <<"type">> => DisplayedType,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => DisplayedSize,
         <<"shares">> => Shares,
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
         <<"providerId">> => ProviderId,
         <<"ownerId">> => OwnerId,
-        <<"hasDirectQos">> => HasDirectQos,
-        <<"hasEffQos">> => HasEffQos
+        <<"effQosMembership">> => atom_to_binary(EffQosMembership, utf8),
+        <<"effDatasetMembership">> => atom_to_binary(EffDatasetMembership, utf8),
+        <<"hardlinksCount">> => utils:undefined_to_null(LinksCount)
     };
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{
@@ -487,11 +492,9 @@ file_details_to_gs_json(ShareId, #file_details{
     active_permissions_type = ActivePermissionsType,
     has_metadata = HasMetadata
 }) ->
-    {DisplayedType, DisplayedSize} = case Type of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, Size}
+    DisplayedSize = case Type of
+        ?DIRECTORY_TYPE -> null;
+        _ -> Size
     end,
     IsShareRoot = lists:member(ShareId, Shares),
 
@@ -506,7 +509,7 @@ file_details_to_gs_json(ShareId, #file_details{
             false -> file_id:guid_to_share_guid(ParentGuid, ShareId)
         end,
         <<"mtime">> => MTime,
-        <<"type">> => DisplayedType,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => DisplayedSize,
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];

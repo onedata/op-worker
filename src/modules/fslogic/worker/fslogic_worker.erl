@@ -25,7 +25,7 @@
 -export([supervisor_flags/0, supervisor_children_spec/0]).
 -export([
     init_paths_caches/1,
-    init_file_protection_flags_caches/1, invalidate_file_protection_flags_caches/1
+    init_dataset_eff_caches/1
 ]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
@@ -33,7 +33,7 @@
 % exported for RPC
 -export([
     schedule_init_paths_caches/1,
-    schedule_init_file_protection_flags_caches/1, schedule_invalidate_file_protection_flags_caches/1
+    schedule_init_datasets_cache/1
 ]).
 
 %%%===================================================================
@@ -66,13 +66,7 @@
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_PATHS_CACHES(Space), {init_paths_caches, Space}).
-
--define(INIT_FILE_PROTECTION_FLAGS_CACHES(Space),
-    {init_file_protection_flags_caches, Space}
-).
--define(INVALIDATE_FILE_PROTECTION_FLAGS_CACHES(Space),
-    {invalidate_file_protection_flags_caches, Space}
-).
+-define(INIT_DATASETS_CACHE(Space), {init_datasets_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
@@ -111,6 +105,7 @@
     get_parent,
     % TODO VFS-6057 resolve share path up to share not user root dir
     %%    get_file_path,
+    resolve_symlink,
 
     list_xattr,
     get_xattr,
@@ -180,17 +175,12 @@ init_paths_caches(Space) ->
     rpc:multicall(Nodes, ?MODULE, schedule_init_paths_caches, [Space]),
     ok.
 
--spec init_file_protection_flags_caches(od_space:id() | all) -> ok.
-init_file_protection_flags_caches(Space) ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    rpc:multicall(Nodes, ?MODULE, schedule_init_file_protection_flags_caches, [Space]),
-    ok.
 
--spec invalidate_file_protection_flags_caches(od_space:id() | all) -> ok.
-invalidate_file_protection_flags_caches(Space) ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    rpc:multicall(Nodes, ?MODULE, schedule_invalidate_file_protection_flags_caches, [Space]),
-    ok.
+-spec init_dataset_eff_caches(od_space:id() | all) -> ok.
+init_dataset_eff_caches(Space) ->
+    lists:foreach(fun(Node) ->
+        rpc:call(Node, ?MODULE, schedule_init_datasets_cache, [Space])
+    end, consistent_hashing:get_all_nodes()).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -204,10 +194,7 @@ invalidate_file_protection_flags_caches(Space) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    paths_cache:init_group(),
-    schedule_init_paths_caches(all),
-    schedule_init_file_protection_flags_caches(all),
-
+    init_effective_caches(),
     transfer:init(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
@@ -293,11 +280,9 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
 handle(?INIT_PATHS_CACHES(Space)) ->
-    paths_cache:init_caches(Space);
-handle(?INIT_FILE_PROTECTION_FLAGS_CACHES(Space)) ->
-    file_protection_flags_cache:init(Space);
-handle(?INVALIDATE_FILE_PROTECTION_FLAGS_CACHES(Space)) ->
-    file_protection_flags_cache:invalidate(Space);
+    paths_cache:init(Space);
+handle(?INIT_DATASETS_CACHE(Space)) ->
+    dataset_eff_cache:init(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -359,6 +344,15 @@ init_report() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec init_effective_caches() -> ok.
+init_effective_caches() ->
+    % TODO VFS-7412 refactor effective_value cache
+    paths_cache:init_group(),
+    dataset_eff_cache:init_group(),
+    schedule_init_paths_caches(all),
+    schedule_init_datasets_cache(all).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -553,6 +547,8 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus,
     include_link_count = IncludeLinkCount}, FileCtx) ->
     attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_file_references{}, FileCtx) ->
+    attr_req:get_file_references(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
     attr_req:get_file_details(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_child_attr{name = Name,
@@ -560,8 +556,6 @@ handle_file_request(UserCtx, #get_child_attr{name = Name,
     attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus, IncludeLinkCount);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
-handle_file_request(UserCtx, #update_protection_flags{set = FlagsToSet, unset = FlagsToUnset}, FileCtx) ->
-    attr_req:update_protection_flags(UserCtx, FileCtx, FlagsToSet, FlagsToUnset);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
     attr_req:update_times(UserCtx, FileCtx, ATime, MTime, CTime);
 handle_file_request(UserCtx, #delete_file{silent = Silent}, FileCtx) ->
@@ -628,7 +622,9 @@ handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
 handle_file_request(UserCtx, #read_symlink{}, FileCtx) ->
-    file_req:read_symlink(UserCtx, FileCtx);
+    symlink_req:read(UserCtx, FileCtx);
+handle_file_request(UserCtx, #resolve_symlink{}, FileCtx) ->
+    symlink_req:resolve(UserCtx, FileCtx);
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,
@@ -763,7 +759,27 @@ handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->
 handle_provider_request(UserCtx, #remove_qos_entry{id = QosEntryId}, FileCtx) ->
     qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
 handle_provider_request(UserCtx, #check_qos_status{qos_id = QosEntryId}, FileCtx) ->
-    qos_req:check_status(UserCtx, FileCtx, QosEntryId).
+    qos_req:check_status(UserCtx, FileCtx, QosEntryId);
+handle_provider_request(UserCtx, #establish_dataset{protection_flags = ProtectionFlags}, FileCtx) ->
+    dataset_req:establish(FileCtx, ProtectionFlags, UserCtx);
+handle_provider_request(UserCtx, #update_dataset{
+    id = DatasetId,
+    state = NewState,
+    flags_to_set = FlagsToSet,
+    flags_to_unset = FlagsToUnset
+}, SpaceDirCtx) ->
+    dataset_req:update(SpaceDirCtx, DatasetId, NewState, FlagsToSet, FlagsToUnset, UserCtx);
+handle_provider_request(UserCtx, #remove_dataset{id = DatasetId}, SpaceDirCtx) ->
+    dataset_req:remove(SpaceDirCtx, DatasetId, UserCtx);
+handle_provider_request(UserCtx, #get_dataset_info{id = DatasetId}, SpaceDirCtx) ->
+    dataset_req:get_info(SpaceDirCtx, DatasetId, UserCtx);
+handle_provider_request(UserCtx, #get_file_eff_dataset_summary{}, FileCtx) ->
+    dataset_req:get_file_eff_summary(FileCtx, UserCtx);
+handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts}, SpaceDirCtx) ->
+    dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, UserCtx, Opts);
+handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts}, SpaceDirCtx) ->
+    dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, UserCtx, Opts).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -800,11 +816,8 @@ schedule_periodical_spaces_autocleaning_check() ->
 schedule_init_paths_caches(Space) ->
     schedule(?INIT_PATHS_CACHES(Space), 0).
 
-schedule_init_file_protection_flags_caches(Space) ->
-    schedule(?INIT_FILE_PROTECTION_FLAGS_CACHES(Space), 0).
-
-schedule_invalidate_file_protection_flags_caches(Space) ->
-    schedule(?INVALIDATE_FILE_PROTECTION_FLAGS_CACHES(Space), 0).
+schedule_init_datasets_cache(Space) ->
+    schedule(?INIT_DATASETS_CACHE(Space), 0).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->

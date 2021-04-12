@@ -132,7 +132,8 @@ list_references(Doc = #document{key = TargetKey, value = #file_meta{references =
     ReferencesList = references_to_list(References),
     case file_meta:is_deleted(Doc) of
         true -> {ok, ReferencesList};
-        false -> {ok, [TargetKey | ReferencesList]}
+        %% @TODO VFS-7555 Allow for listing file references using any file doc
+        false -> {ok, [TargetKey | ReferencesList]}  
     end;
 list_references(Key) ->
     case file_meta:get_including_deleted(Key) of

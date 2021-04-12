@@ -14,7 +14,7 @@
 
 -include("api_file_test_utils.hrl").
 -include("api_test_runner.hrl").
--include("onenv_file_test_utils.hrl").
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -255,7 +255,7 @@ get_share_test(_Config) ->
                             <<"shareId">> => ShareId,
                             <<"name">> => ShareName,
                             <<"description">> => Description,
-                            <<"fileType">> => FileType,
+                            <<"rootFileType">> => FileType,
                             <<"publicUrl">> => build_share_public_url(ShareId),
                             <<"publicRestUrl">> => build_share_public_rest_url(ShareId),
                             <<"rootFileId">> => ShareObjectId,
@@ -576,14 +576,13 @@ generate_random_file_spec() ->
 
 %% @private
 -spec generate_random_file_spec([onenv_file_test_utils:shares_spec()]) ->
-    {api_test_utils:file_type(), onenv_file_test_utils:file_spec()}.
+    {binary(), onenv_file_test_utils:file_spec()}.
 generate_random_file_spec(ShareSpecs) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FileSpec = case FileType of
-        <<"file">> -> #file_spec{shares = ShareSpecs};
-        <<"dir">> -> #dir_spec{shares = ShareSpecs}
-    end,
-    {FileType, FileSpec}.
+    case FileType of
+        <<"file">> -> {<<"REG">>, #file_spec{shares = ShareSpecs}};
+        <<"dir">> -> {<<"DIR">>, #dir_spec{shares = ShareSpecs}}
+    end.
 
 
 %% @private
@@ -595,7 +594,10 @@ generate_random_file_spec(ShareSpecs) ->
 verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, FileType, UserId) ->
     ExpPublicUrl = build_share_public_url(ShareId),
     ExpPublicRestUrl = build_share_public_rest_url(ShareId),
-    ExpFileType = binary_to_atom(FileType, utf8),
+    ExpFileType = case FileType of
+        <<"REG">> -> file;
+        <<"DIR">> -> dir
+    end,
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     lists:foreach(fun(Provider) ->
@@ -646,9 +648,9 @@ assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileG
         }),
         <<"name">> => ShareName,
         <<"description">> => Description,
-        <<"fileType">> => FileType,
         <<"publicUrl">> => build_share_public_url(ShareId),
         <<"publicRestUrl">> => build_share_public_rest_url(ShareId),
+        <<"rootFileType">> => FileType,
         <<"rootFile">> => gri:serialize(#gri{
             type = op_file,
             id = ShareFileGuid,

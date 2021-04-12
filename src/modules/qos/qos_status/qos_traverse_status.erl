@@ -10,7 +10,7 @@
 %%% For more details consult `qos_status` module doc.
 %%% @end
 %%%-------------------------------------------------------------------
--module(qos_status_traverse).
+-module(qos_traverse_status).
 -author("Michal Stanisz").
 
 -include("modules/datastore/qos.hrl").
@@ -45,11 +45,8 @@
 check(FileCtx, #document{key = QosEntryId} = QosEntryDoc) ->
     {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntryDoc),
     AllTraverseIds = qos_traverse_req:get_traverse_ids(AllTraverseReqs),
-    {ok, QosRootFileUuid} = qos_entry:get_file_uuid(QosEntryDoc),
-    
-    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx),
     NotFinishedTraverseIds = lists:filter(fun(TraverseId) ->
-        (not is_traverse_finished_for_file(TraverseId, FileCtx1, QosRootFileUuid, IsDir))
+        (not is_traverse_finished_for_file(TraverseId, FileCtx, QosEntryDoc))
     end, AllTraverseIds),
     
     % fetch traverse list again to secure against possible race
@@ -65,7 +62,6 @@ report_started(TraverseId, FileCtx) ->
     {ok, case file_ctx:is_dir(FileCtx) of
         {true, FileCtx1} ->
             {ok, _} = qos_status_model:create(file_ctx:get_space_id_const(FileCtx), TraverseId,
-                % TODO VFS-7435 - Integrate hardlinks with QoS
                 file_ctx:get_logical_uuid_const(FileCtx), ?QOS_STATUS_TRAVERSE_START_DIR),
             FileCtx1;
         {false, FileCtx1} -> 
@@ -151,22 +147,51 @@ report_file_deleted(FileCtx, QosEntryDoc, OriginalRootParentCtx) ->
 
 
 %% @private
--spec is_traverse_finished_for_file(traverse:id(), file_ctx:ctx(),
-    QosRootFileUuid :: file_meta:uuid(), IsDir :: boolean()) -> boolean().
-is_traverse_finished_for_file(TraverseId, FileCtx, QosRootFileUuid, _IsDir = true) ->
-    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
-    case qos_status_model:get(TraverseId, Uuid) of
+-spec is_traverse_finished_for_file(traverse:id(), file_ctx:ctx(), qos_entry:doc()) -> boolean().
+is_traverse_finished_for_file(TraverseId, FileCtx, QosEntryDoc) ->
+    {ok, QosRootFileUuid} = qos_entry:get_file_uuid(QosEntryDoc),
+    {ok, SpaceId} = qos_entry:get_space_id(QosEntryDoc),
+    QosRootFileCtx = file_ctx:new_by_uuid(QosRootFileUuid, SpaceId),
+    {QosRootFileUuidPath, _} = file_ctx:get_uuid_based_path(QosRootFileCtx),
+    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx),
+    
+    {ok, References} = file_ctx:list_references_const(FileCtx1),
+    LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx1),
+    ReferencesFileCtx = lists:map(
+        fun (FileUuid) when FileUuid == LogicalUuid -> FileCtx1;
+            (FileUuid) -> file_ctx:new_by_uuid(FileUuid, SpaceId)
+        end,
+    References),
+    ReferencesInQosSubtree = lists:filtermap(fun(InternalFileCtx) ->
+        {FileUuidPath, InternalFileCtx1} = file_ctx:get_uuid_based_path(InternalFileCtx),
+        case string:prefix(FileUuidPath, QosRootFileUuidPath) of
+            nomatch -> false;
+            _ -> {true, InternalFileCtx1}
+        end
+    end, ReferencesFileCtx),
+        
+    lists:any(fun(InternalFileCtx) ->
+            is_traverse_finished_for_file_in_qos_subtree(TraverseId, InternalFileCtx, QosRootFileUuid, IsDir)
+    end, ReferencesInQosSubtree).
+
+
+%% @private
+-spec is_traverse_finished_for_file_in_qos_subtree(traverse:id(), file_ctx:ctx(), file_meta:uuid(), boolean()) -> 
+    boolean().
+is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, QosRootFileUuid, _IsDir = true) ->
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    % qos_status document exists only for directories, so it does not matter whether referenced or logical uuid is used
+    case qos_status_model:get(TraverseId, InodeUuid) of
         {ok, _} ->
             false;
         ?ERROR_NOT_FOUND ->
-            has_traverse_link(TraverseId, FileCtx) orelse is_parent_fulfilled(TraverseId, FileCtx, Uuid, QosRootFileUuid);
-        {error, _} = Error -> Error
+            has_traverse_link(TraverseId, FileCtx) orelse is_parent_fulfilled(TraverseId, FileCtx, InodeUuid, QosRootFileUuid)
     end;
-is_traverse_finished_for_file(TraverseId, FileCtx, QosRootFileUuid, _IsDir = false) ->
-    {FileName, _} = file_ctx:get_aliased_name(FileCtx, undefined),
+is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, QosRootFileUuid, _IsDir = false) ->
     {ParentFileCtx, FileCtx1} = files_tree:get_parent(FileCtx, undefined),
-    Uuid = file_ctx:get_logical_uuid_const(FileCtx1),
+    {FileName, FileCtx2} = file_ctx:get_aliased_name(FileCtx1, undefined),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
+    LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case qos_status_model:get(TraverseId, ParentUuid) of
         {ok, #document{
             value = #qos_status{
@@ -175,11 +200,9 @@ is_traverse_finished_for_file(TraverseId, FileCtx, QosRootFileUuid, _IsDir = fal
             }
         }} ->
             FileName =< PreviousBatchLastFilename orelse
-                (not (FileName > LastFilename) and not lists:member(Uuid, FilesList));
+                (not (FileName > LastFilename) and not lists:member(LogicalUuid, FilesList));
         ?ERROR_NOT_FOUND ->
-            is_parent_fulfilled(TraverseId, FileCtx1, Uuid, QosRootFileUuid);
-        {error, _} = Error ->
-            Error
+            is_parent_fulfilled(TraverseId, FileCtx2, LogicalUuid, QosRootFileUuid)
     end.
 
 
@@ -193,7 +216,7 @@ is_parent_fulfilled(TraverseId, FileCtx, _Uuid, QosRootFileUuid) ->
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     has_traverse_link(TraverseId, ParentFileCtx)
         orelse (not has_qos_status_doc(TraverseId, ParentUuid)
-        andalso  is_parent_fulfilled(TraverseId, ParentFileCtx, ParentUuid, QosRootFileUuid)).
+        andalso is_parent_fulfilled(TraverseId, ParentFileCtx, ParentUuid, QosRootFileUuid)).
 
 
 %% @private

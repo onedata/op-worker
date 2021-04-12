@@ -171,6 +171,7 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 
 %% @private
 -spec get_plugin(gri:entity_type()) -> module() | no_return().
+get_plugin(op_dataset) -> dataset_middleware;
 get_plugin(op_file) -> file_middleware;
 get_plugin(op_group) -> group_middleware;
 get_plugin(op_handle) -> handle_middleware;
@@ -362,8 +363,9 @@ process_request(#req_ctx{
     versioned_entity = {Entity, Rev}
 }) ->
     case Plugin:get(Req, Entity) of
-        {ok, Data} -> {ok, {Data, Rev}};
         {ok, value, _} = Res -> Res;
+        {ok, ResultGri, Data} -> {ok, ResultGri, {Data, Rev}};
+        {ok, Data} -> {ok, {Data, Rev}};
         {error, _} = Error -> Error
     end;
 
