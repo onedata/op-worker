@@ -34,6 +34,8 @@
     establish_dataset_attached_to_dir/1,
     establish_dataset_attached_to_file/1,
     establish_dataset_attached_to_hardlink/1,
+    establish_dataset_attached_to_file_symlink/1,
+    establish_dataset_attached_to_dir_symlink/1,
     detach_and_reattach_dataset/1,
     remove_attached_dataset/1,
     remove_detached_dataset/1,
@@ -58,6 +60,8 @@ all() -> ?ALL([
     establish_dataset_attached_to_dir,
     establish_dataset_attached_to_file,
     establish_dataset_attached_to_hardlink,
+    establish_dataset_attached_to_file_symlink,
+    establish_dataset_attached_to_dir_symlink,
     detach_and_reattach_dataset,
     remove_attached_dataset,
     remove_detached_dataset,
@@ -187,6 +191,42 @@ establish_dataset_attached_to_hardlink(_Config) ->
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags).
+
+
+establish_dataset_attached_to_file_symlink(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    SpaceId = oct_background:get_space_id(space1),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    FileName = ?FILE_NAME(),
+    ProtectionFlags = ?RAND_PROTECTION_FLAGS(),
+    lfm_proxy:create(P1Node, UserSessIdP1, SpaceGuid, FileName, ?DEFAULT_DIR_PERMS),
+    SymLinkName = <<FileName/binary, <<"_sym_link">>/binary>>,
+    LinkPath = filename:join(["/", oct_background:get_space_name(space1), SymLinkName]),
+    LinkTarget = filename:join(["/", oct_background:get_space_name(space1), FileName]),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, UserSessIdP1, LinkPath, LinkTarget),
+    {ok, DatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, {guid, LinkGuid}, ProtectionFlags)),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
+    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags).
+
+
+establish_dataset_attached_to_dir_symlink(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    SpaceId = oct_background:get_space_id(space1),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    DirName = ?DIR_NAME(),
+    ProtectionFlags = ?RAND_PROTECTION_FLAGS(),
+    {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
+    LinkTarget = filename:join(["/", oct_background:get_space_name(space1), DirName]),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, UserSessIdP1, {guid, Guid}, DirName, LinkTarget),
+    {ok, DatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, {guid, LinkGuid}, ProtectionFlags)),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
+    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags).
+
+
 
 detach_and_reattach_dataset(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
