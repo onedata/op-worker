@@ -22,7 +22,7 @@
 -record(resolution_ctx, {
     user_ctx :: user_ctx:ctx(),
     space_id :: od_space:id(),
-    symlinks_encountered :: ordsets:ordset(file_id:file_guid())
+    symlinks_encountered :: pos_integer()
 }).
 -type ctx() :: #resolution_ctx{}.
 
@@ -51,7 +51,7 @@ resolve(UserCtx, SymlinkFileCtx) ->
     ResolutionCtx = #resolution_ctx{
         user_ctx = UserCtx,
         space_id = file_ctx:get_space_id_const(SymlinkFileCtx),
-        symlinks_encountered = ordsets:new()
+        symlinks_encountered = 0
     },
 
     {TargetFileCtx, _} = resolve_symlink(SymlinkFileCtx, ResolutionCtx),
@@ -86,10 +86,16 @@ read_symlink(UserCtx, FileCtx0) ->
 -spec resolve_symlink(file_ctx:ctx(), ctx()) -> {file_ctx:ctx(), ctx()} | no_return().
 resolve_symlink(SymlinkFileCtx, #resolution_ctx{
     user_ctx = UserCtx,
-    space_id = SpaceId
+    space_id = SpaceId,
+    symlinks_encountered = PrevSymlinksEncountered
 } = ResolutionCtx) ->
+    SymlinksEncountered = 1 + PrevSymlinksEncountered,
+    NewResolutionCtx = case SymlinksEncountered > ?SYMLINK_HOPS_LIMIT of
+        true -> throw(?ELOOP);
+        false -> ResolutionCtx#resolution_ctx{symlinks_encountered = SymlinksEncountered}
+    end,
+
     SpaceIdSize = byte_size(SpaceId),
-    NewResolutionCtx = assert_hops_limit_not_reached(SymlinkFileCtx, ResolutionCtx),
 
     case filepath_utils:split(read_symlink(UserCtx, SymlinkFileCtx)) of
         [] ->
@@ -108,26 +114,6 @@ resolve_symlink(SymlinkFileCtx, #resolution_ctx{
             % relative path
             {ParentCtx, _} = files_tree:get_parent(SymlinkFileCtx, UserCtx),
             resolve_symlink_path(PathTokens, ParentCtx, NewResolutionCtx)
-    end.
-
-
-%% @private
--spec assert_hops_limit_not_reached(file_ctx:ctx(), ctx()) -> ctx() | no_return().
-assert_hops_limit_not_reached(SymlinkFileCtx, #resolution_ctx{
-    symlinks_encountered = Symlinks
-} = ResolutionCtx) ->
-    SymlinkGuid = file_ctx:get_logical_guid_const(SymlinkFileCtx),
-
-    AlreadyEncountered = ordsets:is_element(SymlinkGuid, Symlinks),
-    HopsLimitReached = (1 + ordsets:size(Symlinks)) > ?SYMLINK_HOPS_LIMIT,
-
-    case AlreadyEncountered orelse HopsLimitReached of
-        true ->
-            throw(?ELOOP);
-        false ->
-            ResolutionCtx#resolution_ctx{
-                symlinks_encountered = ordsets:add_element(SymlinkGuid, Symlinks)
-            }
     end.
 
 
