@@ -33,6 +33,7 @@
     establish_dataset_attached_to_space_dir/1,
     establish_dataset_attached_to_dir/1,
     establish_dataset_attached_to_file/1,
+    establish_dataset_attached_to_hardlink/1,
     detach_and_reattach_dataset/1,
     remove_attached_dataset/1,
     remove_detached_dataset/1,
@@ -56,6 +57,7 @@ all() -> ?ALL([
     establish_dataset_attached_to_space_dir,
     establish_dataset_attached_to_dir,
     establish_dataset_attached_to_file,
+    establish_dataset_attached_to_hardlink,
     detach_and_reattach_dataset,
     remove_attached_dataset,
     remove_detached_dataset,
@@ -168,6 +170,23 @@ establish_dataset_attached_to_file(_Config) ->
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags).
+
+
+establish_dataset_attached_to_hardlink(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    SpaceId = oct_background:get_space_id(space1),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    FileName = ?FILE_NAME(),
+    ProtectionFlags = ?RAND_PROTECTION_FLAGS(),
+    {ok, Guid} = lfm_proxy:create(P1Node, UserSessIdP1, SpaceGuid, FileName, ?DEFAULT_DIR_PERMS),
+    HardLinkName = <<FileName/binary, <<"_hard_link">>/binary>>,
+    LinkPath = filename:join(["/", oct_background:get_space_name(space1), HardLinkName]),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, LinkPath, Guid),
+    {ok, DatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, {guid, LinkGuid}, ProtectionFlags)),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
+    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags).
 
 detach_and_reattach_dataset(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -417,7 +436,7 @@ establish_nested_datasets_structure(_Config) ->
         ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
         ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, ExpParentDatasetIds, ProtectionFlags),
         {ChildGuid, ChildDatasetId, [DatasetId | ExpParentDatasetIds]}
-    end, {SpaceGuid, SpaceDatasetId, []} , tl(GuidsAndDatasets)).
+    end, {SpaceGuid, SpaceDatasetId, []}, tl(GuidsAndDatasets)).
 
 establish_nested_datasets_structure_end_detach_all(_Config) ->
     Depth = 10,
@@ -451,7 +470,7 @@ establish_nested_datasets_structure_end_detach_all(_Config) ->
         ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
         ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask),
         {ChildGuid, ChildDatasetId, DatasetId}
-    end, {SpaceGuid, SpaceDatasetId, undefined} , tl(GuidsAndDatasets)).
+    end, {SpaceGuid, SpaceDatasetId, undefined}, tl(GuidsAndDatasets)).
 
 all_files_in_dataset_should_have_ancestor_dataset_membership(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),

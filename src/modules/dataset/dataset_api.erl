@@ -215,7 +215,7 @@ detach_internal(DatasetId) ->
     {ok, DatasetPath} = dataset_path:get(SpaceId, DatasetId),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {FilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-    FileType = file_meta:get_type(FileDoc),
+    FileType = file_meta:get_effective_type(FileDoc),
     DatasetName = filename:basename(FilePath),
     ok = dataset:mark_detached(DatasetId, DatasetPath, FilePath, FileType, CurrProtectionFlags),
     detached_datasets:add(SpaceId, DatasetPath, DatasetName),
@@ -260,7 +260,7 @@ collect_attached_info(DatasetDoc) ->
     {ok, FileDoc} = file_meta:get(Uuid),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {FileRootPath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-    FileRootType = file_meta:get_type(FileDoc),
+    FileRootType = file_meta:get_effective_type(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(FileDoc),
     #dataset_info{
         id = Uuid,
