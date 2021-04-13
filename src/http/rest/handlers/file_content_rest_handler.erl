@@ -202,7 +202,7 @@ process_request(#op_req{
             TargetFileGuid = maps:get(<<"target_file_id">>, Params),
 
             {ok, #file_attr{guid = LinkGuid}} = ?check(lfm:make_link(
-                SessionId, ?FILE_REF(TargetFileGuid), ParentGuid, Name
+                SessionId, ?FILE_REF(TargetFileGuid), ?FILE_REF(ParentGuid), Name
             )),
             {LinkGuid, Req};
         ?SYMLINK_TYPE ->

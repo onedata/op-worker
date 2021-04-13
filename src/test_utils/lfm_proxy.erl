@@ -101,9 +101,11 @@
 init(Config) ->
     init(Config, true).
 
+
 -spec init(Config :: list(), boolean()) -> list().
 init(Config, Link) ->
     init(Config, Link, ?config(op_worker_nodes, Config)).
+
 
 -spec init(Config :: list(), boolean(), [node()]) -> list().
 init(Config, Link, Workers) ->
@@ -235,8 +237,9 @@ rm_recursive(Worker, SessId, FileKey) ->
 
 -spec mv(node(), session:id(), lfm:file_key(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
-mv(Worker, SessId, FileKeyFrom, PathTo) ->
-    ?EXEC(Worker, lfm:mv(SessId, FileKeyFrom, PathTo)).
+mv(Worker, SessId, FileKey, TargetPath) ->
+    {TargetName, TargetDirPath} = filepath_utils:basename_and_parent_dir(TargetPath),
+    mv(Worker, SessId, FileKey, {path, TargetDirPath}, TargetName).
 
 
 -spec mv(node(), session:id(), lfm:file_key(), lfm:file_key(),
@@ -247,8 +250,9 @@ mv(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
 
 -spec cp(node(), session:id(), lfm:file_key(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
-cp(Worker, SessId, FileKeyFrom, PathTo) ->
-    ?EXEC(Worker, lfm:cp(SessId, FileKeyFrom, PathTo)).
+cp(Worker, SessId, FileKey, TargetPath) ->
+    {TargetName, TargetDirPath} = filepath_utils:basename_and_parent_dir(TargetPath),
+    cp(Worker, SessId, FileKey, {path, TargetDirPath}, TargetName).
 
 
 -spec cp(node(), session:id(), lfm:file_key(), lfm:file_key(),
@@ -302,18 +306,22 @@ create(Worker, SessId, ParentGuid, Name, Mode) ->
 -spec make_link(node(), session:id(), file_meta:path(), fslogic_worker:file_guid()) ->
     {ok, #file_attr{}} | lfm:error_reply().
 make_link(Worker, SessId, LinkPath, FileGuid) ->
-    ?EXEC(Worker, lfm:make_link(SessId, LinkPath, FileGuid)).
-
--spec make_link(node(), session:id(), lfm:file_key(),
-    fslogic_worker:file_guid(), file_meta:name()) -> {ok, #file_attr{}} | lfm:error_reply().
-make_link(Worker, SessId, FileKey, TargetParentGuid, Name) ->
-    ?EXEC(Worker, lfm:make_link(SessId, FileKey, TargetParentGuid, Name)).
+    {LinkName, TargetParentPath} = filepath_utils:basename_and_parent_dir(LinkPath),
+    make_link(Worker, SessId, ?FILE_REF(FileGuid), {path, TargetParentPath}, LinkName).
 
 
--spec make_symlink(node(), session:id(), LinkPath :: file_meta:path(), LinkTarget :: file_meta_symlinks:symlink()) ->
+-spec make_link(node(), session:id(), lfm:file_key(), lfm:file_key(), file_meta:name()) ->
     {ok, #file_attr{}} | lfm:error_reply().
-make_symlink(Worker, SessId, LinkPath, LinkTarget) ->
-    ?EXEC(Worker, lfm:make_symlink(SessId, LinkPath, LinkTarget)).
+make_link(Worker, SessId, FileKey, TargetParentKey, Name) ->
+    ?EXEC(Worker, lfm:make_link(SessId, FileKey, TargetParentKey, Name)).
+
+
+-spec make_symlink(node(), session:id(), file_meta:path(), file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(Worker, SessId, SymlinkPath, SymlinkValue) ->
+    {Name, TargetParentPath} = filepath_utils:basename_and_parent_dir(SymlinkPath),
+    make_symlink(Worker, SessId, {path, TargetParentPath}, Name, SymlinkValue).
+
 
 -spec make_symlink(node(), session:id(), ParentKey :: lfm:file_key(),
     Name :: file_meta:name(), LinkTarget :: file_meta_symlinks:symlink()) ->
@@ -326,17 +334,10 @@ make_symlink(Worker, SessId, ParentKey, Name, Link) ->
     {ok, {fslogic_worker:file_guid(), lfm:handle()}} |
     lfm:error_reply().
 create_and_open(Worker, SessId, Path) ->
-    ?EXEC(Worker,
-        case lfm:create_and_open(SessId, Path, rdwr) of
-            {ok, {Guid, Handle}} ->
-                TestHandle = crypto:strong_rand_bytes(10),
-                ets:insert(lfm_handles, {TestHandle, Handle}),
-                {ok, {Guid, TestHandle}};
-            Other -> Other
-        end).
+    create_and_open(Worker, SessId, Path, undefined).
 
 
--spec create_and_open(node(), session:id(), file_meta:path(), file_meta:posix_permissions()) ->
+-spec create_and_open(node(), session:id(), file_meta:path(), undefined | file_meta:posix_permissions()) ->
     {ok, {fslogic_worker:file_guid(), lfm:handle()}} |
     lfm:error_reply().
 create_and_open(Worker, SessId, Path, Mode) ->
@@ -518,10 +519,10 @@ truncate(Worker, SessId, FileKey, Size) ->
 -spec mkdir(node(), session:id(), binary()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 mkdir(Worker, SessId, Path) ->
-    ?EXEC(Worker, lfm:mkdir(SessId, Path)).
+    mkdir(Worker, SessId, Path, undefined).
 
 
--spec mkdir(node(), session:id(), binary(), file_meta:posix_permissions()) ->
+-spec mkdir(node(), session:id(), binary(), undefined | file_meta:posix_permissions()) ->
     {ok, DirUuid :: file_meta:uuid()} | lfm:error_reply().
 mkdir(Worker, SessId, Path, Mode) ->
     ?EXEC(Worker, lfm:mkdir(SessId, Path, Mode)).
@@ -848,37 +849,45 @@ check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
 %%% Datasets functions
 %%%===================================================================
 
+
 -spec establish_dataset(node(), session:id(), lfm:file_key()) ->
     {ok, dataset:id()} | lfm:error_reply().
 establish_dataset(Worker, SessId, FileKey) ->
     establish_dataset(Worker, SessId, FileKey, 0).
+
 
 -spec establish_dataset(node(), session:id(), lfm:file_key(), data_access_control:bitmask()) ->
     {ok, dataset:id()} | lfm:error_reply().
 establish_dataset(Worker, SessId, FileKey, ProtectionFlags) ->
     ?EXEC(Worker, lfm:establish_dataset(SessId, FileKey, ProtectionFlags)).
 
+
 -spec remove_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
 remove_dataset(Worker, SessId, DatasetId) ->
     ?EXEC(Worker, lfm:remove_dataset(SessId, DatasetId)).
+
 
 -spec update_dataset(node(), session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),
     data_access_control:bitmask()) -> ok | lfm:error_reply().
 update_dataset(Worker, SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
     ?EXEC(Worker, lfm:update_dataset(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset)).
 
+
 -spec get_dataset_info(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | lfm:error_reply().
 get_dataset_info(Worker, SessId, DatasetId) ->
     ?EXEC(Worker, lfm:get_dataset_info(SessId, DatasetId)).
+
 
 -spec get_file_eff_dataset_summary(node(), session:id(), lfm:file_key()) -> {ok, lfm_datasets:file_eff_summary()} | lfm:error_reply().
 get_file_eff_dataset_summary(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_eff_dataset_summary(SessId, FileKey)).
 
+
 -spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
     {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
 list_top_datasets(Worker, SessId, SpaceId, State, Opts) ->
     ?EXEC(Worker, lfm:list_top_datasets(SessId, SpaceId, State, Opts)).
+
 
 -spec list_children_datasets(node(), session:id(), dataset:id(), datasets_structure:opts()) ->
     {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().

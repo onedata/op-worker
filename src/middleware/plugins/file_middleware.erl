@@ -1021,7 +1021,7 @@ create_file(SessionId, ParentGuid, Name, ?REGULAR_FILE_TYPE, undefined) ->
 create_file(SessionId, ParentGuid, Name, ?DIRECTORY_TYPE, undefined) ->
     lfm:mkdir(SessionId, ParentGuid, Name, undefined);
 create_file(SessionId, ParentGuid, Name, ?LINK_TYPE, TargetGuid) ->
-    lfm:make_link(SessionId, ?FILE_REF(TargetGuid), ParentGuid, Name);
+    lfm:make_link(SessionId, ?FILE_REF(TargetGuid), ?FILE_REF(ParentGuid), Name);
 create_file(SessionId, ParentGuid, Name, ?SYMLINK_TYPE, TargetPath) ->
     lfm:make_symlink(SessionId, ?FILE_REF(ParentGuid), Name, TargetPath).
 

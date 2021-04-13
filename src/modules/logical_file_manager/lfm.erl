@@ -41,23 +41,23 @@
     get_parent/2,
 
     is_dir/2,
-    resolve_symlink/2,
 
     update_times/5,
-    mv/3, mv/4,
-    cp/3, cp/4,
+    mv/4,
+    cp/4,
     rm_recursive/2, unlink/3
 ]).
 %% Hardlink/symlink specific operations
 -export([
-    make_link/3, make_link/4,
-    make_symlink/3, make_symlink/4,
-    read_symlink/2
+    make_link/4,
+    make_symlink/4,
+    read_symlink/2,
+    resolve_symlink/2
 ]).
 %% Regular file specific operations
 -export([
     create/2, create/3, create/4,
-    create_and_open/3, create_and_open/4, create_and_open/5,
+    create_and_open/4, create_and_open/5,
     open/3, monitored_open/3,
     fsync/1, fsync/3,
     write/3, read/3,
@@ -70,7 +70,7 @@
 ]).
 %% Directory specific operations
 -export([
-    mkdir/2, mkdir/3, mkdir/4,
+    mkdir/3, mkdir/4,
     get_children/3,
     get_child_attr/3,
     get_children_attrs/3,
@@ -237,12 +237,6 @@ is_dir(SessId, FileEntry) ->
     ?run(lfm_files:is_dir(SessId, FileEntry)).
 
 
--spec resolve_symlink(session:id(), file_key()) ->
-    {ok, file_id:file_guid()} | error_reply().
-resolve_symlink(SessId, FileKey) ->
-    ?run(lfm_attrs:resolve_symlink(SessId, FileKey)).
-
-
 -spec update_times(
     session:id(),
     file_key(),
@@ -255,22 +249,10 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
     ?run(lfm_attrs:update_times(SessId, FileKey, ATime, MTime, CTime)).
 
 
--spec mv(session:id(), file_key(), file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | error_reply().
-mv(SessId, FileEntry, TargetPath) ->
-    ?run(lfm_files:mv(SessId, FileEntry, TargetPath)).
-
-
 -spec mv(session:id(), file_key(), file_key(), file_meta:name()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 mv(SessId, FileKey, TargetParentKey, TargetName) ->
     ?run(lfm_files:mv(SessId, FileKey, TargetParentKey, TargetName)).
-
-
--spec cp(session:id(), file_key(), file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | error_reply().
-cp(SessId, FileEntry, TargetPath) ->
-    ?run(lfm_files:cp(SessId, FileEntry, TargetPath)).
 
 
 -spec cp(session:id(), file_key(), file_key(), file_meta:name()) ->
@@ -302,34 +284,28 @@ unlink(SessId, FileEntry, Silent) ->
 %%%===================================================================
 
 
--spec make_link(session:id(), file_meta:path(), fslogic_worker:file_guid()) ->
+-spec make_link(session:id(), file_key(), file_key(), file_meta:name()) ->
     {ok, #file_attr{}} | error_reply().
-make_link(SessId, LinkPath, FileGuid) ->
-    ?run(lfm_files:make_link(SessId, LinkPath, FileGuid)).
-
-
--spec make_link(session:id(), file_key(), fslogic_worker:file_guid(), file_meta:name()) ->
-    {ok, #file_attr{}} | error_reply().
-make_link(SessId, FileKey, TargetParentGuid, Name) ->
-    ?run(lfm_files:make_link(SessId, FileKey, TargetParentGuid, Name)).
-
-
--spec make_symlink(session:id(), file_meta:path(), file_meta_symlinks:symlink()) ->
-    {ok, #file_attr{}} | lfm:error_reply().
-make_symlink(SessId, LinkPath, LinkTarget) ->
-    ?run(lfm_files:make_symlink(SessId, LinkPath, LinkTarget)).
+make_link(SessId, FileKey, TargetParentKey, Name) ->
+    ?run(lfm_files:make_link(SessId, FileKey, TargetParentKey, Name)).
 
 
 -spec make_symlink(session:id(), file_key(), file_meta:name(), file_meta_symlinks:symlink()) ->
     {ok, #file_attr{}} | lfm:error_reply().
-make_symlink(SessId, ParentKey, Name, Link) ->
-    ?run(lfm_files:make_symlink(SessId, ParentKey, Name, Link)).
+make_symlink(SessId, ParentKey, Name, SymlinkValue) ->
+    ?run(lfm_files:make_symlink(SessId, ParentKey, Name, SymlinkValue)).
 
 
 -spec read_symlink(session:id(), file_key()) ->
     {ok, file_meta_symlinks:symlink()} | lfm:error_reply().
 read_symlink(SessId, FileKey) ->
     ?run(lfm_files:read_symlink(SessId, FileKey)).
+
+
+-spec resolve_symlink(session:id(), file_key()) ->
+    {ok, file_id:file_guid()} | error_reply().
+resolve_symlink(SessId, FileKey) ->
+    ?run(lfm_attrs:resolve_symlink(SessId, FileKey)).
 
 
 %%%===================================================================
@@ -358,12 +334,6 @@ create(SessId, Path, Mode) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, ParentGuid, Name, Mode) ->
     ?run(lfm_files:create(SessId, ParentGuid, Name, Mode)).
-
-
--spec create_and_open(session:id(), file_meta:path(), fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), handle()}}| error_reply().
-create_and_open(SessId, Path, OpenFlag) ->
-    ?run(lfm_files:create_and_open(SessId, Path, OpenFlag)).
 
 
 -spec create_and_open(
@@ -501,12 +471,6 @@ get_file_distribution(SessId, FileKey) ->
 %%%===================================================================
 %%% Directory specific operations
 %%%===================================================================
-
-
--spec mkdir(session:id(), file_meta:path()) ->
-    {ok, DirGuid :: file_meta:uuid()} | error_reply().
-mkdir(SessId, Path) ->
-    ?run(lfm_dirs:mkdir(SessId, Path)).
 
 
 -spec mkdir(session:id(), file_meta:path(), file_meta:posix_permissions() | undefined) ->

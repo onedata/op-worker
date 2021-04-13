@@ -12,11 +12,11 @@
 -module(lfm_symlinks_resolution_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_file_test_utils.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
-%%-include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 
 -export([

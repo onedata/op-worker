@@ -1419,7 +1419,9 @@ qos_on_hardlink_test_base(Config, SpaceId) ->
     SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     
     {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid), SpaceGuid, generator:gen_name()),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(
+        Worker1, SessId(Worker1), ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), generator:gen_name()
+    ),
     
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), ?FILE_REF(FileGuid)), ?ATTEMPTS),
@@ -1455,7 +1457,9 @@ effective_qos_with_hardlinks_test_base(Config, SpaceId) ->
     {ok, Dir2Guid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
     
     {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid), Dir2Guid, generator:gen_name()),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(
+        Worker1, SessId(Worker1), ?FILE_REF(FileGuid), ?FILE_REF(Dir2Guid), generator:gen_name()
+    ),
     
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), ?FILE_REF(FileGuid)), ?ATTEMPTS),
@@ -1492,7 +1496,9 @@ qos_status_during_traverse_with_hardlinks_test_base(Config, SpaceId) ->
     
     {ok, FileGuid1} = lfm_proxy:create(Worker1, SessId(Worker1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, FileGuid2} = lfm_proxy:create(Worker1, SessId(Worker1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid1), Dir2Guid, generator:gen_name()),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(
+        Worker1, SessId(Worker1), ?FILE_REF(FileGuid1), ?FILE_REF(Dir2Guid), generator:gen_name()
+    ),
     
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), ?FILE_REF(FileGuid1)), ?ATTEMPTS),
@@ -1521,7 +1527,9 @@ qos_with_hardlink_deletion_test_base(Config, SpaceId) ->
     SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     
     {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, #file_attr{guid = LinkGuid1}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid), SpaceGuid, generator:gen_name()),
+    {ok, #file_attr{guid = LinkGuid1}} = lfm_proxy:make_link(
+        Worker1, SessId(Worker1), ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), generator:gen_name()
+    ),
     
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), ?FILE_REF(FileGuid)), ?ATTEMPTS),
@@ -1534,7 +1542,9 @@ qos_with_hardlink_deletion_test_base(Config, SpaceId) ->
     ok = lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(LinkGuid1)),
     ?assertMatch({ok, {#{QosEntryId1 := _}, _}}, lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(FileGuid))),
     
-    {ok, #file_attr{guid = LinkGuid2}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid), SpaceGuid, generator:gen_name()),
+    {ok, #file_attr{guid = LinkGuid2}} = lfm_proxy:make_link(
+        Worker1, SessId(Worker1), ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), generator:gen_name()
+    ),
     
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId(Worker), ?FILE_REF(LinkGuid2)), ?ATTEMPTS)

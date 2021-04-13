@@ -17,7 +17,7 @@
 
 %% API
 -export([
-    mkdir/2, mkdir/3, mkdir/4,
+    mkdir/3, mkdir/4,
     get_children/3,
     get_children_attrs/3,
     get_child_attr/3,
@@ -29,12 +29,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec mkdir(session:id(), file_meta:path()) ->
-    {ok, file_id:file_guid()} | lfm:error_reply().
-mkdir(SessId, Path) ->
-    mkdir(SessId, Path, undefined).
 
 
 -spec mkdir(session:id(), file_meta:path(), undefined | file_meta:posix_permissions()) ->
