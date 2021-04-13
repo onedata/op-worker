@@ -137,10 +137,10 @@ assert_hops_limit_not_reached(SymlinkFileCtx, #resolution_ctx{
 resolve_symlink_path([], FileCtx, ResolutionCtx) ->
     {FileCtx, ResolutionCtx};
 
-resolve_symlink_path([<<".">> | RestTokens], FileCtx, ResolutionCtx) ->
+resolve_symlink_path([<<?CURRENT_DIRECTORY>> | RestTokens], FileCtx, ResolutionCtx) ->
     resolve_symlink_path(RestTokens, FileCtx, ResolutionCtx);
 
-resolve_symlink_path([<<"..">> | RestTokens], FileCtx, #resolution_ctx{
+resolve_symlink_path([<<?PARENT_DIRECTORY>> | RestTokens], FileCtx, #resolution_ctx{
     user_ctx = UserCtx
 } = ResolutionCtx) ->
     NewFileCtx = case file_ctx:is_space_dir_const(FileCtx) of

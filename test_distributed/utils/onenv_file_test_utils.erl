@@ -59,8 +59,12 @@ resolve_file(FileSelector) ->
     end.
 
 
--spec create_and_sync_file_tree(oct_background:entity_selector(), object_selector(), object_spec()) ->
-    object().
+-spec create_and_sync_file_tree(
+    oct_background:entity_selector(),
+    object_selector(),
+    object_spec() | [object_spec()]
+) ->
+    object() | [object()].
 create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
     {_ParentGuid, SpaceId} = resolve_file(ParentSelector),
     [CreationProvider | _] = oct_background:get_space_supporting_providers(
@@ -72,10 +76,15 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
 -spec create_and_sync_file_tree(
     oct_background:entity_selector(),
     object_selector(),
-    object_spec(),
+    object_spec() | [object_spec()],
     oct_background:entity_selector()
 ) ->
-    object().
+    object() | [object()].
+create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProviderSelector) when is_list(FilesDesc) ->
+    lists_utils:pmap(fun(FileDesc) ->
+        create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProviderSelector)
+    end, FilesDesc);
+
 create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProviderSelector) ->
     UserId = oct_background:get_user_id(UserSelector),
     {ParentGuid, SpaceId} = resolve_file(ParentSelector),
