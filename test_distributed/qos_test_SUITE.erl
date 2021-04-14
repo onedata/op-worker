@@ -66,8 +66,6 @@
     % QoS status tests
     qos_status_during_traverse_test/1,
     qos_status_during_traverse_multi_batch_test/1,
-    qos_status_during_traverse_with_file_deletion/1,
-    qos_status_during_traverse_with_dir_deletion/1,
     qos_status_during_traverse_file_without_qos_test/1,
     qos_status_after_failed_transfers/1,
     qos_status_after_failed_transfers_deleted_file/1,
@@ -539,12 +537,6 @@ qos_status_during_traverse_test(Config) ->
 qos_status_during_traverse_multi_batch_test(Config) ->
     % same test as previous one, batch size is set in init_per_testcase
     qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_PATH1, 8).
-
-qos_status_during_traverse_with_file_deletion(Config) ->
-    qos_test_base:qos_status_during_traverse_with_file_deletion_test_base(Config, ?SPACE_PATH1, 2).
-
-qos_status_during_traverse_with_dir_deletion(Config) ->
-    qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_PATH1, 2).
 
 qos_status_during_traverse_file_without_qos_test(Config) ->
     qos_test_base:qos_status_during_traverse_file_without_qos_test_base(Config, ?SPACE_PATH1).

@@ -48,7 +48,8 @@
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
     qos_membership/1, has_any_qos_entry/2, 
-    clean_up_on_no_reference/1, clean_up_on_no_reference/2,
+    cleanup_reference_related_documents/1, cleanup_reference_related_documents/2, 
+    cleanup_on_no_reference/1,
     delete_associated_entries_on_no_references/1
 ]).
 
@@ -271,17 +272,13 @@ has_any_qos_entry(UuidOrDoc, effective) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes documents created to maintain QoS for given reference. 
-%% If there are no more references all documents to maintain file are deleted.
+%% Performs cleanup necessary for each file reference deletion.
 %% @end
 %%--------------------------------------------------------------------
--spec clean_up_on_no_reference(file_ctx:ctx()) -> ok.
-clean_up_on_no_reference(FileCtx) ->
-  clean_up_on_no_reference(FileCtx, undefined).
+cleanup_reference_related_documents(FileCtx) ->
+    cleanup_reference_related_documents(FileCtx, undefined).
 
-
--spec clean_up_on_no_reference(file_ctx:ctx(), file_ctx:ctx() | undefined) -> ok.
-clean_up_on_no_reference(FileCtx, OriginalParentCtx) ->
+cleanup_reference_related_documents(FileCtx, OriginalParentCtx) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
     %% This is used when directory is being moved to trash. In such case, to 
     %% calculate effective QoS before deletion, QoS for given directory needs to be 
@@ -298,12 +295,16 @@ clean_up_on_no_reference(FileCtx, OriginalParentCtx) ->
         {error, _} = Error ->
             ?warning("Error during QoS clean up procedure:~p", [Error]),
             ok
-    end,
-    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx1),
-    case {OriginalParentCtx, file_meta_hardlinks:count_references(FileDoc)} of
-        {undefined, {ok, 0}} -> ok = delete(InodeUuid);
-        _ -> ok
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Performs necessary cleanup on last file reference deletion.
+%% @end
+%%--------------------------------------------------------------------
+-spec cleanup_on_no_reference(file_ctx:ctx()) -> ok.
+cleanup_on_no_reference(FileCtx) ->
+    ok = delete(file_ctx:get_referenced_uuid_const(FileCtx)).
 
 
 %%--------------------------------------------------------------------

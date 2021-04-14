@@ -61,11 +61,17 @@
 
     qos_status_during_traverse_test/1,
     qos_status_during_traverse_with_file_deletion_test/1,
+    qos_status_during_traverse_with_hardlink_deletion_test/1,
+    qos_status_during_traverse_with_file_and_hardlink_deletion_test/1,
     qos_status_during_traverse_with_dir_deletion_test/1,
+    qos_status_during_traverse_with_dir_deletion_with_hardlinks_test/1,
+    qos_status_during_traverse_with_dir_deletion_with_mixed_children_test/1,
     qos_status_during_reconciliation_test/1,
     qos_status_during_reconciliation_prefix_file_test/1,
     qos_status_during_reconciliation_with_file_deletion_test/1,
-    qos_status_during_reconciliation_with_dir_deletion_test/1,
+    qos_status_during_reconciliation_with_hardlink_deletion_test/1,
+    qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test/1,
+    qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test/1,
     qos_status_during_traverse_file_without_qos_test/1,
     qos_status_after_failed_transfers/1,
     qos_status_after_failed_transfers_deleted_file/1,
@@ -79,7 +85,9 @@
     
     qos_on_hardlink_test/1,
     effective_qos_with_hardlinks_test/1,
+    qos_with_inode_deletion_test/1,
     qos_with_hardlink_deletion_test/1,
+    qos_with_mixed_deletion_test/1,
     qos_status_during_traverse_with_hardlinks_test/1,
     qos_on_symlink_test/1,
     effective_qos_with_symlink_test/1
@@ -115,12 +123,19 @@ all() -> [
     reconcile_qos_using_file_meta_posthooks_test,
 
     qos_status_during_traverse_test,
+    qos_status_during_traverse_with_hardlinks_test,
     qos_status_during_traverse_with_file_deletion_test,
+    qos_status_during_traverse_with_hardlink_deletion_test,
+    qos_status_during_traverse_with_file_and_hardlink_deletion_test,
     qos_status_during_traverse_with_dir_deletion_test,
+    qos_status_during_traverse_with_dir_deletion_with_hardlinks_test,
+    qos_status_during_traverse_with_dir_deletion_with_mixed_children_test,
     qos_status_during_reconciliation_test,
     qos_status_during_reconciliation_prefix_file_test,
     qos_status_during_reconciliation_with_file_deletion_test,
-    qos_status_during_reconciliation_with_dir_deletion_test,
+    qos_status_during_reconciliation_with_hardlink_deletion_test,
+    qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test,
+    qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test,
     qos_status_during_traverse_file_without_qos_test,
     qos_status_after_failed_transfers,
     qos_status_after_failed_transfers_deleted_file,
@@ -134,8 +149,9 @@ all() -> [
 
     qos_on_hardlink_test,
     effective_qos_with_hardlinks_test,
-    qos_status_during_traverse_with_hardlinks_test,
+    qos_with_inode_deletion_test,
     qos_with_hardlink_deletion_test,
+    qos_with_mixed_deletion_test,
     qos_on_symlink_test,
     effective_qos_with_symlink_test
 ].
@@ -150,31 +166,6 @@ all() -> [
 
 -define(PROVIDER_ID(Worker), ?GET_DOMAIN_BIN(Worker)).
 -define(GET_FILE_UUID(Worker, SessId, FilePath), qos_tests_utils:get_guid(Worker, SessId, FilePath)).
-
-
--define(simple_dir_structure(Name, Distribution),
-    {?SPACE_ID, [
-        {Name, ?TEST_DATA, Distribution}
-    ]}
-).
--define(nested_dir_structure(Name, Distribution),
-    {?SPACE_ID, [
-        {Name, [
-            {?filename(Name, 1), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution},
-                {?filename(Name, 2), ?TEST_DATA, Distribution},
-                {?filename(Name, 3), ?TEST_DATA, Distribution},
-                {?filename(Name, 4), ?TEST_DATA, Distribution}
-            ]},
-            {?filename(Name, 2), [
-                {?filename(Name, 1), ?TEST_DATA, Distribution},
-                {?filename(Name, 2), ?TEST_DATA, Distribution},
-                {?filename(Name, 3), ?TEST_DATA, Distribution},
-                {?filename(Name, 4), ?TEST_DATA, Distribution}
-            ]}
-        ]}
-    ]}
-).
 
 -define(ATTEMPTS, 60).
 
@@ -703,15 +694,27 @@ qos_status_during_traverse_test(Config) ->
     qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_ID, 8).
 
 qos_status_during_traverse_with_file_deletion_test(Config) ->
-    qos_test_base:qos_status_during_traverse_with_file_deletion_test_base(Config, ?SPACE_ID, 8).
+    qos_test_base:qos_status_during_traverse_with_file_deletion_test_base(Config, ?SPACE_ID, 8, reg_file).
+
+qos_status_during_traverse_with_hardlink_deletion_test(Config) ->
+    qos_test_base:qos_status_during_traverse_with_file_deletion_test_base(Config, ?SPACE_ID, 8, hardlink).
+
+qos_status_during_traverse_with_file_and_hardlink_deletion_test(Config) ->
+    qos_test_base:qos_status_during_traverse_with_file_deletion_test_base(Config, ?SPACE_ID, 16, mixed).
 
 qos_status_during_traverse_with_dir_deletion_test(Config) ->
-    qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_ID, 1).
+    qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_ID, 4, reg_file).
+
+qos_status_during_traverse_with_dir_deletion_with_hardlinks_test(Config) ->
+    qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_ID, 4, hardlink).
+
+qos_status_during_traverse_with_dir_deletion_with_mixed_children_test(Config) ->
+    qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_ID, 8, mixed).
 
 qos_status_during_reconciliation_test(Config) ->
     [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     Filename = generator:gen_name(),
-    DirStructure = ?nested_dir_structure(Filename, [?GET_DOMAIN_BIN(Worker1)]),
+    DirStructure = ?nested_dir_structure(?SPACE_ID, Filename, [?GET_DOMAIN_BIN(Worker1)]),
     qos_test_base:qos_status_during_reconciliation_test_base(Config, ?SPACE_ID, DirStructure, Filename).
 
 qos_status_during_reconciliation_prefix_file_test(Config) ->
@@ -728,10 +731,16 @@ qos_status_during_reconciliation_prefix_file_test(Config) ->
     qos_test_base:qos_status_during_reconciliation_test_base(Config, ?SPACE_ID, DirStructure, Name).
 
 qos_status_during_reconciliation_with_file_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_file_deletion_test_base(Config, ?SPACE_ID).
+    qos_test_base:qos_status_during_reconciliation_with_file_deletion_test_base(Config, ?SPACE_ID, 8, reg_file).
 
-qos_status_during_reconciliation_with_dir_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID).
+qos_status_during_reconciliation_with_hardlink_deletion_test(Config) ->
+    qos_test_base:qos_status_during_reconciliation_with_file_deletion_test_base(Config, ?SPACE_ID, 8, hardlink).
+
+qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test(Config) ->
+    qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID, 8, reg_file).
+
+qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test(Config) ->
+    qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID, 8, hardlink).
 
 qos_status_during_traverse_file_without_qos_test(Config) ->
     qos_test_base:qos_status_during_traverse_file_without_qos_test_base(Config, ?SPACE_ID).
@@ -1021,13 +1030,19 @@ qos_traverse_cancellation_test(Config) ->
 %%%===================================================================
 
 qos_on_hardlink_test(Config) ->
-    qos_test_base:qos_on_hardlink_test_base(Config, ?SPACE_ID).
+    qos_test_base:qos_with_hardlink_test_base(Config, ?SPACE_ID, direct).
 
 effective_qos_with_hardlinks_test(Config) ->
-    qos_test_base:effective_qos_with_hardlinks_test_base(Config, ?SPACE_ID).
+    qos_test_base:qos_with_hardlink_test_base(Config, ?SPACE_ID, effective).
+
+qos_with_inode_deletion_test(Config) ->
+    qos_test_base:qos_with_hardlink_deletion_test_base(Config, ?SPACE_ID, inode).
 
 qos_with_hardlink_deletion_test(Config) ->
-    qos_test_base:qos_with_hardlink_deletion_test_base(Config, ?SPACE_ID).
+    qos_test_base:qos_with_hardlink_deletion_test_base(Config, ?SPACE_ID, hardlink).
+
+qos_with_mixed_deletion_test(Config) ->
+    qos_test_base:qos_with_hardlink_deletion_test_base(Config, ?SPACE_ID, mixed).
 
 qos_status_during_traverse_with_hardlinks_test(Config) ->
     qos_test_base:qos_status_during_traverse_with_hardlinks_test_base(Config, ?SPACE_ID).
@@ -1071,11 +1086,17 @@ end_per_suite(Config) ->
 init_per_testcase(Case, Config) when
     Case =:= qos_status_during_traverse_test;
     Case =:= qos_status_during_traverse_with_file_deletion_test;
+    Case =:= qos_status_during_traverse_with_hardlink_deletion_test;
+    Case =:= qos_status_during_traverse_with_file_and_hardlink_deletion_test;
     Case =:= qos_status_during_traverse_with_dir_deletion_test;
+    Case =:= qos_status_during_traverse_with_dir_deletion_with_hardlinks_test;
+    Case =:= qos_status_during_traverse_with_dir_deletion_with_mixed_children_test;
     Case =:= qos_status_during_reconciliation_test;
     Case =:= qos_status_during_reconciliation_prefix_file_test;
     Case =:= qos_status_during_reconciliation_with_file_deletion_test;
-    Case =:= qos_status_during_reconciliation_with_dir_deletion_test;
+    Case =:= qos_status_during_reconciliation_with_hardlink_deletion_test;
+    Case =:= qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test;
+    Case =:= qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test;
     Case =:= qos_status_during_traverse_file_without_qos_test;
     Case =:= qos_status_after_failed_transfers;
     Case =:= qos_status_after_failed_transfers_deleted_file;
@@ -1157,11 +1178,11 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename, WaitForQos) ->
     [Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     {DirStructure, DirStructureAfter} = case DirStructureType of
         simple ->
-            {?simple_dir_structure(QosFilename, [?GET_DOMAIN_BIN(Worker1)]),
-                ?simple_dir_structure(QosFilename, [?GET_DOMAIN_BIN(Worker1), ?GET_DOMAIN_BIN(Worker3)])};
+            {?simple_dir_structure(?SPACE_ID, QosFilename, [?GET_DOMAIN_BIN(Worker1)]),
+                ?simple_dir_structure(?SPACE_ID, QosFilename, [?GET_DOMAIN_BIN(Worker1), ?GET_DOMAIN_BIN(Worker3)])};
         nested ->
-            {?nested_dir_structure(QosFilename, [?GET_DOMAIN_BIN(Worker1)]),
-                ?nested_dir_structure(QosFilename, [?GET_DOMAIN_BIN(Worker1), ?GET_DOMAIN_BIN(Worker3)])}
+            {?nested_dir_structure(?SPACE_ID, QosFilename, [?GET_DOMAIN_BIN(Worker1)]),
+                ?nested_dir_structure(?SPACE_ID, QosFilename, [?GET_DOMAIN_BIN(Worker1), ?GET_DOMAIN_BIN(Worker3)])}
     end,
 
     #fulfill_qos_test_spec{
@@ -1210,9 +1231,10 @@ run_tests(Config, FileTypes, SourceProviderWorker, TargetProvidersWorkers, TestS
         TestSpec = case FileType of
             file ->
                 ct:pal("Starting for file"),
-                InitialDirStructure = get_initial_structure_with_single_file(SourceProviderWorker),
-                ExpectedDirStructure = get_expected_structure_for_single_file(TargetProvidersWorkers),
-                TestSpecFun(?TEST_FILE_PATH, InitialDirStructure, ExpectedDirStructure);
+                Filename = generator:gen_name(),
+                InitialDirStructure = get_initial_structure_with_single_file(SourceProviderWorker, Filename),
+                ExpectedDirStructure = get_expected_structure_for_single_file(TargetProvidersWorkers, Filename),
+                TestSpecFun(?FILE_PATH(Filename), InitialDirStructure, ExpectedDirStructure);
             dir ->
                 ct:pal("Starting for dir"),
                 InitialDirStructure = get_initial_structure_with_single_dir(SourceProviderWorker),
@@ -1223,19 +1245,19 @@ run_tests(Config, FileTypes, SourceProviderWorker, TargetProvidersWorkers, TestS
     end, FileTypes).
 
 
-get_initial_structure_with_single_file(Worker) ->
+get_initial_structure_with_single_file(Worker, Filename) ->
     #test_dir_structure{
         worker = Worker,
         dir_structure = {?SPACE_ID, [
-            {<<"file1">>, <<"test_data">>, [?PROVIDER_ID(Worker)]}
+            {Filename, <<"test_data">>, [?PROVIDER_ID(Worker)]}
         ]}
     }.
 
 
-get_expected_structure_for_single_file(ProviderIdList) ->
+get_expected_structure_for_single_file(ProviderIdList, Filename) ->
     #test_dir_structure{
         dir_structure = {?SPACE_ID, [
-            {<<"file1">>, <<"test_data">>, ProviderIdList}
+            {Filename, <<"test_data">>, ProviderIdList}
         ]}
     }.
 
