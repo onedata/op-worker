@@ -775,10 +775,10 @@ handle_provider_request(UserCtx, #get_dataset_info{id = DatasetId}, SpaceDirCtx)
     dataset_req:get_info(SpaceDirCtx, DatasetId, UserCtx);
 handle_provider_request(UserCtx, #get_file_eff_dataset_summary{}, FileCtx) ->
     dataset_req:get_file_eff_summary(FileCtx, UserCtx);
-handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts}, SpaceDirCtx) ->
-    dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, UserCtx, Opts);
-handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts}, SpaceDirCtx) ->
-    dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, UserCtx, Opts).
+handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
+    dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, UserCtx, Opts, ListingMode);
+handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
+    dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, UserCtx, Opts, ListingMode).
 
 
 %%--------------------------------------------------------------------

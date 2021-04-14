@@ -86,11 +86,11 @@ set_up_dataset(_CreationProvider, _UserId, _FileGuid, undefined) ->
     undefined;
 set_up_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
     state = State,
-    protection_flags = ProtectionFlagsJon
+    protection_flags = ProtectionFlagsJson
 }) ->
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
-    Flags = file_meta:protection_flags_from_json(ProtectionFlagsJon),
+    Flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
 
     {ok, DatasetId} = ?assertMatch(
         {ok, _},
@@ -110,7 +110,7 @@ set_up_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
     #dataset_object{
         id = DatasetId,
         state = State,
-        protection_flags = ProtectionFlagsJon
+        protection_flags = ProtectionFlagsJson
     }.
 
 
@@ -128,11 +128,11 @@ await_dataset_sync(_CreationProvider, _SyncProviders, _UserId, undefined) ->
 await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     id = DatasetId,
     state = State,
-    protection_flags = ProtectionFlagsJon
+    protection_flags = ProtectionFlagsJson
 }) ->
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     CreationNodeSessId = oct_background:get_user_session_id(UserId, CreationProvider),
-    Flags = file_meta:protection_flags_from_json(ProtectionFlagsJon),
+    Flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
 
     {ok, DatasetInfo} = ?assertMatch(
         {ok, #dataset_info{state = State, id = DatasetId, protection_flags = Flags}},
@@ -157,7 +157,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     dataset:id(),
     onenv_file_test_utils:object()
 ) ->
-    [{file_meta:name(), dataset:id(), lfm_datasets:attrs()}].
+    [{file_meta:name(), dataset:id(), lfm_datasets:info()}].
 get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, #object{dataset = #dataset_object{
     id = ParentDatasetId
 }} = Object) ->
@@ -195,7 +195,7 @@ cleanup_all_datasets(ProviderSelectors, SpaceSelector) ->
     dataset:id(),
     onenv_file_test_utils:object()
 ) ->
-    [{file_meta:name(), dataset:id(), lfm_datasets:attrs()}].
+    [{file_meta:name(), dataset:id(), lfm_datasets:info()}].
 get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
     type = ObjType,
     name = ObjName,
@@ -203,23 +203,24 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
     dataset = #dataset_object{
         id = DatasetId,
         state = State,
-        protection_flags = ProtectionFlags
+        protection_flags = ProtectionFlagsJson
     }
 }) ->
     ObjPath = filename:join(["/", ParentDirPath, ObjName]),
     CreationTime = time_test_utils:get_frozen_time_seconds(),
 
-    DatasetDetails = #dataset_info{
+    DatasetInfo = #dataset_info{
         id = DatasetId,
         state = State,
         root_file_guid = ObjGuid,
         root_file_path = ObjPath,
         root_file_type = ObjType,
         creation_time = CreationTime,
-        protection_flags = ProtectionFlags,
-        parent = ParentDatasetId
+        protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
+        parent = ParentDatasetId,
+        index = datasets_structure:pack_entry_index(ObjName, DatasetId)
     },
-    {ObjName, DatasetId, DatasetDetails};
+    {ObjName, DatasetId, DatasetInfo};
 
 get_exp_child_datasets_internal(_State, _ParentDirPath, _ParentDatasetId, #object{
     type = ?REGULAR_FILE_TYPE
@@ -251,7 +252,7 @@ cleanup_and_verify_datasets(Nodes, SpaceId, ForestType) ->
 -spec cleanup_datasets(node(), od_space:id(), datasets_structure:forest_type()) -> ok.
 cleanup_datasets(Node, SpaceId, ForestType) ->
     {ok, Datasets} = rpc:call(Node, datasets_structure, list_all_unsafe, [SpaceId, ForestType]),
-    lists:foreach(fun({_DatasetPath, {DatasetId, _DatasetName}}) ->
+    lists:foreach(fun({_DatasetPath, {DatasetId, _DatasetName, _Index}}) ->
         ok = rpc:call(Node, dataset_api, remove, [DatasetId])
     end, Datasets).
 

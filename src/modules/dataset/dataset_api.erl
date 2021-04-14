@@ -20,19 +20,29 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([establish/2, update/4, detach/1, remove/1, move_if_applicable/2]).
+-export([establish/2, update/4, detach/1, remove/1, move_if_applicable/2, extend_with_info/1]).
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
--export([list_top_datasets/3, list_children_datasets/2]).
+-export([list_top_datasets/4, list_children_datasets/3]).
 -export([get_associated_file_ctx/1]).
 
--type id() :: file_meta:uuid().
 -type error() :: {error, term()}.
 
--export_type([id/0]).
+-type info() :: #dataset_info{}.
 
-% TODO VFS-7510 browsing dataset structures using index
+-type basic_entry() :: datasets_structure:entry().
+-type basic_entries() :: [basic_entry()].
+-type extended_entries() :: [info()].
+-type entries() :: basic_entries() | extended_entries().
+
+-type listing_opts() :: datasets_structure:opts().
+-type listing_mode() :: ?BASIC_INFO | ?EXTENDED_INFO.
+-type index() :: datasets_structure:index().
+
+-export_type([entries/0, listing_opts/0, index/0, listing_mode/0]).
+
 % TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
 % TODO VFS-7526 handle hardlink's dataset
+% TODO VFS-7563 add tests concerning datasets
 
 -define(CRITICAL_SECTION(DatasetId, Function), critical_section:run({dataset, DatasetId}, Function)).
 
@@ -158,22 +168,27 @@ get_effective_summary(FileCtx) ->
     }}.
 
 
--spec list_top_datasets(od_space:id(), dataset:state(), datasets_structure:opts()) ->
-    {ok, datasets_structure:entries(), boolean()}.
-list_top_datasets(SpaceId, ?ATTACHED_DATASET, Opts) ->
-    attached_datasets:list_top_datasets(SpaceId, Opts);
-list_top_datasets(SpaceId, ?DETACHED_DATASET, Opts) ->
-    detached_datasets:list_top_datasets(SpaceId, Opts).
+-spec list_top_datasets(od_space:id(), dataset:state(), listing_opts(), listing_mode()) ->
+    {ok, entries(), boolean()}.
+list_top_datasets(SpaceId, State, Opts, ListingMode) ->
+    {ok, DatasetEntries, IsLast} = list_top_datasets_internal(SpaceId, State, Opts),
+    case ListingMode of
+        ?BASIC_INFO ->
+            {ok, DatasetEntries, IsLast};
+        ?EXTENDED_INFO ->
+            {ok, extend_with_info(DatasetEntries), IsLast}
+    end.
 
 
--spec list_children_datasets(dataset:id(), datasets_structure:opts()) ->
-    {ok, datasets_structure:entries(), boolean()}.
-list_children_datasets(DatasetId, Opts) ->
-    {ok, Doc} = dataset:get(DatasetId),
-    {ok, State} = dataset:get_state(Doc),
-    case State of
-        ?ATTACHED_DATASET -> attached_datasets:list_children_datasets(Doc, Opts);
-        ?DETACHED_DATASET -> detached_datasets:list_children_datasets(Doc, Opts)
+-spec list_children_datasets(dataset:id(), listing_opts(), listing_mode()) ->
+    {ok, entries(), boolean()}.
+list_children_datasets(DatasetId, Opts, ListingMode) ->
+    {ok, DatasetEntries, IsLast} = list_children_datasets_internal(DatasetId, Opts),
+    case ListingMode of
+        ?BASIC_INFO ->
+            {ok, DatasetEntries, IsLast};
+        ?EXTENDED_INFO ->
+            {ok, extend_with_info(DatasetEntries), IsLast}
     end.
 
 
@@ -242,43 +257,53 @@ remove_from_datasets_structure(Doc) ->
     end.
 
 
--spec collect_state_dependant_info(dataset:id()) -> #dataset_info{}.
+-spec collect_state_dependant_info(dataset:id()) -> info().
 collect_state_dependant_info(DatasetId) ->
+    collect_state_dependant_info(DatasetId, undefined).
+
+
+-spec collect_state_dependant_info(dataset:id(), index() | undefined) -> info().
+collect_state_dependant_info(DatasetId, IndexOrUndefined) ->
     {ok, DatasetDoc} = dataset:get(DatasetId),
     {ok, State} = dataset:get_state(DatasetDoc),
     case State of
-        ?ATTACHED_DATASET -> collect_attached_info(DatasetDoc);
-        ?DETACHED_DATASET -> collect_detached_info(DatasetDoc)
+        ?ATTACHED_DATASET -> collect_attached_info(DatasetDoc, IndexOrUndefined);
+        ?DETACHED_DATASET -> collect_detached_info(DatasetDoc, IndexOrUndefined)
     end.
 
 
--spec collect_attached_info(dataset:doc()) -> #dataset_info{}.
-collect_attached_info(DatasetDoc) ->
+-spec collect_attached_info(dataset:doc(), index() | undefined) -> info().
+collect_attached_info(DatasetDoc, IndexOrUndefined) ->
     {ok, Uuid} = dataset:get_id(DatasetDoc),
     {ok, CreationTime} = dataset:get_creation_time(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     {ok, FileDoc} = file_meta:get(Uuid),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    {FileRootPath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-    FileRootType = file_meta:get_type(FileDoc),
+    {FilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+    FileType = file_meta:get_type(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(FileDoc),
+    FinalIndex = case IndexOrUndefined of
+        undefined -> entry_index(Uuid, FilePath);
+        Index -> Index
+    end,
     #dataset_info{
         id = Uuid,
         root_file_guid = file_ctx:get_logical_guid_const(FileCtx),
         creation_time = CreationTime,
         state = ?ATTACHED_DATASET,
-        root_file_path = FileRootPath,
-        root_file_type = FileRootType,
+        root_file_path = FilePath,
+        root_file_type = FileType,
         protection_flags = file_meta:get_protection_flags(FileDoc),
         parent = case length(EffAncestorDatasets) == 0 of
             true -> undefined;
             false -> hd(EffAncestorDatasets)
-        end
+        end,
+        index = FinalIndex
     }.
 
 
--spec collect_detached_info(dataset:doc()) -> #dataset_info{}.
-collect_detached_info(DatasetDoc) ->
+-spec collect_detached_info(dataset:doc(), index() | undefined) -> info().
+collect_detached_info(DatasetDoc, IndexOrUndefined) ->
     {ok, Uuid} = dataset:get_id(DatasetDoc),
     {ok, CreationTime} = dataset:get_creation_time(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
@@ -287,6 +312,10 @@ collect_detached_info(DatasetDoc) ->
     RootFileType = detached_dataset_info:get_root_file_type(DetachedInfo),
     DetachedDatasetPath = detached_dataset_info:get_path(DetachedInfo),
     ProtectionFlags = detached_dataset_info:get_protection_flags(DetachedInfo),
+    FinalIndex = case IndexOrUndefined of
+        undefined -> entry_index(Uuid, RootFilePath);
+        Index -> Index
+    end,
     #dataset_info{
         id = Uuid,
         root_file_guid = file_id:pack_guid(Uuid, SpaceId),
@@ -295,5 +324,43 @@ collect_detached_info(DatasetDoc) ->
         root_file_path = RootFilePath,
         root_file_type = RootFileType,
         protection_flags = ProtectionFlags,
-        parent = detached_datasets:get_parent(SpaceId, DetachedDatasetPath)
+        parent = detached_datasets:get_parent(SpaceId, DetachedDatasetPath),
+        index = FinalIndex
     }.
+
+
+-spec list_top_datasets_internal(od_space:id(), dataset:state(), listing_opts()) ->
+    {ok, basic_entries(), boolean()}.
+list_top_datasets_internal(SpaceId, ?ATTACHED_DATASET, Opts) ->
+    attached_datasets:list_top_datasets(SpaceId, Opts);
+list_top_datasets_internal(SpaceId, ?DETACHED_DATASET, Opts) ->
+    detached_datasets:list_top_datasets(SpaceId, Opts).
+
+
+-spec list_children_datasets_internal(dataset:id(), listing_opts()) ->
+    {ok, basic_entries(), boolean()}.
+list_children_datasets_internal(DatasetId, Opts) ->
+    {ok, Doc} = dataset:get(DatasetId),
+    {ok, State} = dataset:get_state(Doc),
+    case State of
+        ?ATTACHED_DATASET -> attached_datasets:list_children_datasets(Doc, Opts);
+        ?DETACHED_DATASET -> detached_datasets:list_children_datasets(Doc, Opts)
+    end.
+
+
+-spec extend_with_info(basic_entries()) -> extended_entries().
+extend_with_info(DatasetEntries) ->
+    lists:filtermap(fun({DatasetId, _DatasetName, Index}) ->
+        try
+            {true, collect_state_dependant_info(DatasetId, Index)}
+        catch
+            error:{badmatch, ?ERROR_NOT_FOUND} ->
+                false
+        end
+    end, DatasetEntries).
+
+
+-spec entry_index(dataset:id(), file_meta:path()) -> index().
+entry_index(DatasetId, RootFilePath) ->
+    DatasetName = filename:basename(RootFilePath),
+    datasets_structure:pack_entry_index(DatasetName, DatasetId).

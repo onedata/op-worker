@@ -404,7 +404,7 @@ establish_nested_datasets_structure(_Config) ->
 
     GuidsAndDatasets = lists:reverse(GuidsAndDatasetsReversed),
 
-    ?assertMatch({ok, [{SpaceDatasetId, SpaceName}], true},
+    ?assertMatch({ok, [{SpaceDatasetId, SpaceName, _}], true},
         lfm_proxy:list_top_datasets(P1Node, UserSessIdP1, SpaceId, attached, #{offset => 0, limit => 100})),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, detached),
 
@@ -441,7 +441,7 @@ establish_nested_datasets_structure_end_detach_all(_Config) ->
 
     GuidsAndDatasets = lists:reverse(GuidsAndDatasetsReversed),
 
-    ?assertMatch({ok, [{SpaceDatasetId, SpaceName}], true},
+    ?assertMatch({ok, [{SpaceDatasetId, SpaceName, _}], true},
         lfm_proxy:list_top_datasets(P1Node, UserSessIdP1, SpaceId, detached, #{offset => 0, limit => 100})),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
 
@@ -627,7 +627,8 @@ establish_datasets_with_the_same_names(_Config) ->
 
     {ok, Datasets, true} =
         lfm_proxy:list_top_datasets(P1Node, UserSessIdP1, SpaceId, attached, #{offset => 0, limit => 100}),
-    ?assertEqual(lists:sort(ExpectedDatasets), lists:sort(Datasets)),
+    DatasetsWithoutIndices = [{DN, DI} || {DN, DI, _} <- Datasets],
+    ?assertEqual(lists:sort(ExpectedDatasets), lists:sort(DatasetsWithoutIndices)),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, detached).
 
 
@@ -701,11 +702,11 @@ assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentD
     case ExpectedParentDatasetId =/= undefined of
         true ->
             % check whether dataset is visible on parent dataset's list
-            ?assertMatch({ok, [{DatasetId, Name}], true},
+            ?assertMatch({ok, [{DatasetId, Name, _}], true},
                 lfm_proxy:list_children_datasets(Node, SessionId, ExpectedParentDatasetId, #{offset => 0, limit => 100}), ?ATTEMPTS);
         false ->
             % check whether dataset is visible on space top dataset list
             SpaceId = file_id:guid_to_space_id(ExpectedRootFileGuid),
-            ?assertMatch({ok, [{DatasetId, Name}], true},
+            ?assertMatch({ok, [{DatasetId, Name, _}], true},
                 lfm_proxy:list_top_datasets(Node, SessionId, SpaceId, ExpectedState, #{offset => 0, limit => 100}), ?ATTEMPTS)
     end.

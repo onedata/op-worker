@@ -62,5 +62,21 @@ get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
         <<"fileId">> => SpaceDirObjectId,
         <<"providers">> => Providers
     });
+get_response(#gri{aspect = datasets}, {Datasets, IsLast}) ->
+    Response = #{
+        <<"datasets">> => lists:map(fun({DatasetId, DatasetName, Index}) ->
+            #{
+                <<"id">> => DatasetId,
+                <<"name">> => DatasetName,
+                <<"index">> => Index
+            }
+        end, Datasets),
+        <<"isLast">> => IsLast
+    },
+    NextPageToken = case length(Datasets) =:= 0 of
+        true -> null;
+        false -> element(3, lists:last(Datasets))
+    end,
+    ?OK_REPLY(Response#{<<"nextPageToken">> => NextPageToken});
 get_response(_, SpaceData) ->
     ?OK_REPLY(SpaceData).

@@ -22,6 +22,9 @@
     translate_dataset_info/1
 ]).
 
+%% Util functions
+-export([build_list_dataset_details_response/2]).
+
 
 %%%===================================================================
 %%% API
@@ -29,8 +32,8 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = children, scope = private}, Children) ->
-    Children.
+translate_value(#gri{aspect = children_details, scope = private}, {Datasets, IsLast}) ->
+    build_list_dataset_details_response(Datasets, IsLast).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
@@ -39,7 +42,7 @@ translate_resource(#gri{aspect = instance, scope = private}, DatasetInfo) ->
     translate_dataset_info(DatasetInfo).
 
 
--spec translate_dataset_info(lfm_datasets:attrs()) -> map().
+-spec translate_dataset_info(lfm_datasets:info()) -> json_utils:json_map().
 translate_dataset_info(#dataset_info{
     id = DatasetId,
     state = State,
@@ -48,7 +51,8 @@ translate_dataset_info(#dataset_info{
     root_file_type = RootFileType,
     creation_time = CreationTime,
     protection_flags = ProtectionFlags,
-    parent = ParentId
+    parent = ParentId,
+    index = Index
 }) ->
     #{
         <<"gri">> => gri:serialize(#gri{
@@ -72,5 +76,25 @@ translate_dataset_info(#dataset_info{
         <<"rootFilePath">> => RootFilePath,
         <<"state">> => atom_to_binary(State, utf8),
         <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),
-        <<"creationTime">> => CreationTime
+        <<"creationTime">> => CreationTime,
+        <<"index">> => Index
     }.
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+-spec build_list_dataset_details_response([lfm_datasets:info()], boolean()) -> json_utils:json_map().
+build_list_dataset_details_response(Datasets, IsLast) ->
+    TranslatedDatasets = lists:map(fun(DatasetInfo) ->
+        translate_dataset_info(DatasetInfo)
+    end, Datasets),
+    Result = #{
+        <<"datasets">> => TranslatedDatasets,
+        <<"isLast">> => IsLast
+    },
+    NextPageToken = case length(TranslatedDatasets) =:= 0 of
+        true -> null;
+        false -> maps:get(<<"index">>, lists:last(TranslatedDatasets))
+    end,
+    Result#{<<"nextPageToken">> => NextPageToken}.

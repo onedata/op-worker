@@ -52,7 +52,8 @@ get_response(#gri{aspect = instance}, #dataset_info{
     root_file_type = RootFileType,
     creation_time = CreationTime,
     protection_flags = ProtectionFlags,
-    parent = ParentId
+    parent = ParentId,
+    index = Index
 }) ->
     {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
 
@@ -64,8 +65,23 @@ get_response(#gri{aspect = instance}, #dataset_info{
         <<"rootFileType">> => str_utils:to_binary(RootFileType),
         <<"rootFilePath">> => RootFilePath,
         <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),
-        <<"creationTime">> => CreationTime
+        <<"creationTime">> => CreationTime,
+        <<"index">> => Index
     });
 
-get_response(#gri{aspect = children}, Children) ->
-    ?OK_REPLY(Children).
+get_response(#gri{aspect = children}, {Datasets, IsLast}) ->
+    Response = #{
+        <<"datasets">> => lists:map(fun({DatasetId, DatasetName, Index}) ->
+            #{
+                <<"id">> => DatasetId,
+                <<"name">> => DatasetName,
+                <<"index">> => Index
+            }
+        end, Datasets),
+        <<"isLast">> => IsLast
+    },
+    NextPageToken = case length(Datasets) =:= 0 of
+        true -> null;
+        false -> element(3, lists:last(Datasets))
+    end,
+    ?OK_REPLY(Response#{<<"nextPageToken">> => NextPageToken}).

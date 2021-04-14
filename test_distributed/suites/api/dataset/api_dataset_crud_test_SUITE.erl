@@ -349,7 +349,7 @@ get_dataset_test_base(
                     prepare_args_fun = build_get_dataset_prepare_rest_args_fun(DatasetId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
                         CreationTime = get_global_time(TestNode),
-
+                        DatasetName = filename:basename(RootFilePath),
                         ExpDatasetData = #{
                             <<"datasetId">> => DatasetId,
                             <<"parentId">> => utils:undefined_to_null(ParentId),
@@ -358,7 +358,8 @@ get_dataset_test_base(
                             <<"rootFilePath">> => RootFilePath,
                             <<"state">> => StateBin,
                             <<"protectionFlags">> => ProtectionFlags,
-                            <<"creationTime">> => CreationTime
+                            <<"creationTime">> => CreationTime,
+                            <<"index">> => datasets_structure:pack_entry_index(DatasetName, DatasetId)
                         },
                         ?assertEqual({?HTTP_200_OK, ExpDatasetData}, {RespCode, RespBody})
                     end
@@ -792,7 +793,8 @@ build_dataset_gs_instance(
         root_file_type = RootFileType,
         creation_time = CreationTime,
         protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
-        parent = ParentId
+        parent = ParentId,
+        index = datasets_structure:pack_entry_index(filename:basename(RootFilePath), DatasetId)
     }),
     BasicInfo#{<<"revision">> => 1}.
 
@@ -827,28 +829,29 @@ verify_dataset(
             root_file_type = RootFileType,
             creation_time = CreationTime,
             protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
-            parent = ParentId
+            parent = ParentId,
+            index = datasets_structure:pack_entry_index(filename:basename(RootFilePath), DatasetId)
         },
         ?assertEqual({ok, ExpDatasetInfo}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId), ?ATTEMPTS)
     end, Providers).
 
 
 %% @private
--spec list_top_dataset_ids(node(), session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
+-spec list_top_dataset_ids(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts()) ->
     [dataset:id()].
 list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts) ->
     {ok, Datasets, _} = lfm_proxy:list_top_datasets(
         Node, UserSessId, SpaceId, State, ListOpts
     ),
-    lists:map(fun({DatasetId, _}) -> DatasetId end, Datasets).
+    lists:map(fun({DatasetId, _, _}) -> DatasetId end, Datasets).
 
 
 %% @private
--spec list_child_dataset_ids(node(), session:id(), dataset:id(), datasets_structure:opts()) ->
+-spec list_child_dataset_ids(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
     [dataset:id()].
 list_child_dataset_ids(Node, UserSessId, ParentId, ListOpts) ->
     {ok, Datasets, _} = lfm_proxy:list_children_datasets(Node, UserSessId, ParentId, ListOpts),
-    lists:map(fun({DatasetId, _}) -> DatasetId end, Datasets).
+    lists:map(fun({DatasetId, _, _}) -> DatasetId end, Datasets).
 
 
 %% @private
