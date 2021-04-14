@@ -61,7 +61,8 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) -
         file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks),
     case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
         [#file_block{offset = 0, size = Size}] ->
-            FLC = #file_location_changed{file_location = FL,
+            LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx2),
+            FLC = #file_location_changed{file_location = FL#file_location{uuid = LogicalUuid},
                 change_beg_offset = 0, change_end_offset = Size},
             #fuse_response{status = #status{code = ?OK}, fuse_response = FLC};
         _ ->
@@ -71,8 +72,10 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) -
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     case replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
         Prefetch, TransferId, Priority) of
-        {ok, Ans} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
+        {ok, #file_location_changed{file_location = FL} = Ans} ->
+            LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = Ans#file_location_changed{file_location = FL#file_location{uuid = LogicalUuid}}};
         {error, Reason} ->
             throw(Reason)
     end.
@@ -121,8 +124,8 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     SessId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
 
-    {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Range,
-        Prefetch, undefined, Priority),
+    {ok, #file_location_changed{file_location = FL} = Ans} =
+        replica_synchronizer:synchronize(UserCtx, FileCtx, Range, Prefetch, undefined, Priority),
 
     %TODO VFS-7393 do not use lfm, operate on fslogic directly
     {ok, Handle} = lfm:open(SessId, {guid, FileGuid}, read),
@@ -131,11 +134,12 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     lfm:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
+    LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #sync_response{
             checksum = Checksum,
-            file_location_changed = Ans
+            file_location_changed = Ans#file_location_changed{file_location = FL#file_location{uuid = LogicalUuid}}
         }
     }.
 
