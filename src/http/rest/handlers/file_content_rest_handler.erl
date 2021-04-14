@@ -154,19 +154,19 @@ process_request(#op_req{
     gri = #gri{id = FileGuid, aspect = content},
     data = Params
 }, Req) ->
-    FileKey = ?FILE_REF(FileGuid),
+    FileRef = ?FILE_REF(FileGuid),
 
     Offset = case maps:get(<<"offset">>, Params, undefined) of
         undefined ->
             % Overwrite file if no explicit offset was given
-            ?check(lfm:truncate(SessionId, FileKey, 0)),
+            ?check(lfm:truncate(SessionId, FileRef, 0)),
             0;
         Num ->
             % Otherwise leave previous content and start writing from specified offset
             Num
     end,
 
-    Req2 = write_req_body_to_file(SessionId, FileKey, Offset, Req),
+    Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
     http_req:send_response(?NO_CONTENT_REPLY, Req2);
 
 process_request(#op_req{
@@ -184,17 +184,17 @@ process_request(#op_req{
             {DirGuid, Req};
         ?REGULAR_FILE_TYPE ->
             {ok, FileGuid} = ?check(lfm:create(SessionId, ParentGuid, Name, Mode)),
-            FileKey = ?FILE_REF(FileGuid),
+            FileRef = ?FILE_REF(FileGuid),
 
             case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
                 {0, false} ->
                     {FileGuid, Req};
                 {Offset, _} ->
                     try
-                        Req2 = write_req_body_to_file(SessionId, FileKey, Offset, Req),
+                        Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
                         {FileGuid, Req2}
                     catch Type:Reason ->
-                        lfm:unlink(SessionId, FileKey, false),
+                        lfm:unlink(SessionId, FileRef, false),
                         erlang:Type(Reason)
                     end
             end;
@@ -224,13 +224,13 @@ process_request(#op_req{
 %% @private
 -spec write_req_body_to_file(
     session:id(),
-    lfm:file_key(),
+    lfm:file_ref(),
     Offset :: non_neg_integer(),
     cowboy_req:req()
 ) ->
     cowboy_req:req() | no_return().
-write_req_body_to_file(SessionId, FileKey, Offset, Req) ->
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileKey, write)),
+write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileRef, write)),
 
     {ok, Req2} = file_upload_utils:upload_file(
         FileHandle, Offset, Req,

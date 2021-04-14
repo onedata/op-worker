@@ -31,13 +31,13 @@
 
 -record(file_ref, {
     guid :: file_id:file_guid(),
-    % In case of symlink guid, indicates whether the operation should be performed
-    % on the symlink itself or on the target file that it points to:
+    % Indicates whether the operation should be performed on the symlink itself
+    % or on the target file that it points to (in case of symlink guid):
     % 1) `false` - operation should be performed on the symlink itself.
-    % 2) `true` - operation should be performed on the target file symlink points to.
-    % 3) `default` - operation dependent meaning that for some symlink will be resolved
-    %                (e.g. 'open', 'create', etc.) while for others not (e.g. 'unlink').
-    %                This simulated default UNIX behaviour.
+    % 2) `true` - operation should be performed on the target file the symlink points to.
+    % 3) `default` - depending on operation the symlink will be resolved (e.g. 'open',
+    %                'create', etc.) or not (e.g. 'unlink').
+    %                This simulates default UNIX behaviour.
     follow_symlink = default :: false | true | default
 }).
 

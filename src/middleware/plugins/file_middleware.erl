@@ -341,16 +341,16 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = attrs}})
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
     SessionId = Auth#auth.session_id,
-    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+    FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
     lists:foreach(fun({XattrName, XattrValue}) ->
         Xattr = #xattr{name = XattrName, value = XattrValue},
-        ?check(lfm:set_xattr(SessionId, FileKey, Xattr, false, false))
+        ?check(lfm:set_xattr(SessionId, FileRef, Xattr, false, false))
     end, maps:to_list(maps:get(<<"metadata">>, Data)));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
     SessionId = Auth#auth.session_id,
-    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+    FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
     JSON = maps:get(<<"metadata">>, Data),
     Filter = maps:get(<<"filter">>, Data, undefined),
@@ -364,15 +364,15 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json
             binary:split(Filter, <<".">>, [global])
     end,
 
-    ?check(lfm:set_metadata(SessionId, FileKey, json, JSON, FilterList));
+    ?check(lfm:set_metadata(SessionId, FileRef, json, JSON, FilterList));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
     SessionId = Auth#auth.session_id,
-    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+    FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
     Rdf = maps:get(<<"metadata">>, Data),
 
-    ?check(lfm:set_metadata(SessionId, FileKey, rdf, Rdf, []));
+    ?check(lfm:set_metadata(SessionId, FileRef, rdf, Rdf, []));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
@@ -659,7 +659,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, 
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
     SessionId = Auth#auth.session_id,
-    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+    FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
     Inherited = maps:get(<<"inherited">>, Data, false),
     ShowInternal = maps:get(<<"show_internal">>, Data, false),
@@ -667,24 +667,24 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}
     case maps:get(<<"attribute">>, Data, undefined) of
         undefined ->
             {ok, Xattrs} = ?check(lfm:list_xattr(
-                SessionId, FileKey, Inherited, ShowInternal
+                SessionId, FileRef, Inherited, ShowInternal
             )),
             {ok, value, lists:foldl(fun(XattrName, Acc) ->
                 {ok, #xattr{value = Value}} = ?check(lfm:get_xattr(
-                    SessionId, FileKey, XattrName, Inherited
+                    SessionId, FileRef, XattrName, Inherited
                 )),
                 Acc#{XattrName => Value}
             end, #{}, Xattrs)};
         XattrName ->
             {ok, #xattr{value = Val}} = ?check(lfm:get_xattr(
-                SessionId, FileKey, XattrName, Inherited
+                SessionId, FileRef, XattrName, Inherited
             )),
             {ok, value, #{XattrName => Val}}
     end;
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}, _) ->
     SessionId = Auth#auth.session_id,
-    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+    FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
     Inherited = maps:get(<<"inherited">>, Data, false),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
@@ -699,13 +699,13 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
             binary:split(Filter, <<".">>, [global])
     end,
 
-    {ok, Result} = ?check(lfm:get_metadata(SessionId, FileKey, json, FilterList, Inherited)),
+    {ok, Result} = ?check(lfm:get_metadata(SessionId, FileRef, json, FilterList, Inherited)),
     {ok, value, Result};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
-    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+    FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
-    {ok, Result} = ?check(lfm:get_metadata(Auth#auth.session_id, FileKey, rdf, [], false)),
+    {ok, Result} = ?check(lfm:get_metadata(Auth#auth.session_id, FileRef, rdf, [], false)),
     {ok, value, Result};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
@@ -938,29 +938,29 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{id = FileGuid, aspect = instance}}) ->
-    FileKey = ?FILE_REF(FileGuid),
+    FileRef = ?FILE_REF(FileGuid),
 
-    case ?check(lfm:stat(SessionId, FileKey)) of
+    case ?check(lfm:stat(SessionId, FileRef)) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-            ?check(lfm:rm_recursive(SessionId, FileKey));
+            ?check(lfm:rm_recursive(SessionId, FileRef));
         {ok, _} ->
-            ?check(lfm:unlink(SessionId, FileKey, false))
+            ?check(lfm:unlink(SessionId, FileRef, false))
     end;
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
-    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+    FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
     lists:foreach(fun(XattrName) ->
-        ?check(lfm:remove_xattr(Auth#auth.session_id, FileKey, XattrName))
+        ?check(lfm:remove_xattr(Auth#auth.session_id, FileRef, XattrName))
     end, maps:get(<<"keys">>, Data));
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
-    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
-    ?check(lfm:remove_metadata(Auth#auth.session_id, FileKey, json));
+    FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+    ?check(lfm:remove_metadata(Auth#auth.session_id, FileRef, json));
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
-    FileKey = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
-    ?check(lfm:remove_metadata(Auth#auth.session_id, FileKey, rdf)).
+    FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
+    ?check(lfm:remove_metadata(Auth#auth.session_id, FileRef, rdf)).
 
 
 %%%===================================================================

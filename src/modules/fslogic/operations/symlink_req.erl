@@ -22,7 +22,7 @@
 -record(resolution_ctx, {
     user_ctx :: user_ctx:ctx(),
     space_id :: od_space:id(),
-    symlinks_encountered :: pos_integer()
+    symlinks_encountered :: non_neg_integer()
 }).
 -type ctx() :: #resolution_ctx{}.
 

@@ -260,13 +260,13 @@ remove_stale_uploads(Uploads) ->
     Now = ?NOW(),
     maps:fold(fun
         (FileGuid, {UserId, CheckupTime}, Acc) when CheckupTime < Now ->
-            FileKey = ?FILE_REF(FileGuid),
+            FileRef = ?FILE_REF(FileGuid),
 
-            case lfm:stat(?ROOT_SESS_ID, FileKey) of
+            case lfm:stat(?ROOT_SESS_ID, FileRef) of
                 {ok, #file_attr{mtime = MTime}} when MTime + ?INACTIVITY_PERIOD > Now ->
                     Acc#{FileGuid => {UserId, MTime + ?INACTIVITY_PERIOD}};
                 {ok, _} ->
-                    lfm:unlink(?ROOT_SESS_ID, FileKey, false),
+                    lfm:unlink(?ROOT_SESS_ID, FileRef, false),
                     Acc;
                 {error, _} ->
                     Acc

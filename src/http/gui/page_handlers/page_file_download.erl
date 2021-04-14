@@ -93,13 +93,13 @@ handle(<<"GET">>, Req) ->
 %% streaming started.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_sync_first_file_block(session:id(), [fslogic_worker:file_guid()]) -> ok.
+-spec maybe_sync_first_file_block(session:id(), [file_id:file_guid()]) -> ok.
 maybe_sync_first_file_block(SessionId, [FileGuid]) ->
-    FileKey = ?FILE_REF(FileGuid),
+    FileRef = ?FILE_REF(FileGuid),
 
-    case ?check(lfm:stat(SessionId, FileKey)) of
+    case ?check(lfm:stat(SessionId, FileRef)) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
-            {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileKey, read)),
+            {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileRef, read)),
             ReadBlockSize = http_streamer:get_read_block_size(FileHandle),
             case lfm:read(FileHandle, 0, ReadBlockSize) of
                 {error, ?ENOSPC} ->

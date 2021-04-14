@@ -160,7 +160,7 @@ get_directory_info(RequestedInfo, #cdmi_req{
         parent_guid = ParentGuid
     } = Attrs
 }) ->
-    FileKey = ?FILE_REF(Guid),
+    FileRef = ?FILE_REF(Guid),
 
     lists:foldl(fun
         (<<"objectType">>, Acc) ->
@@ -190,14 +190,14 @@ get_directory_info(RequestedInfo, #cdmi_req{
             Acc#{<<"completionStatus">> => <<"Complete">>};
         (<<"metadata">>, Acc) ->
             Acc#{<<"metadata">> => cdmi_metadata:prepare_metadata(
-                SessionId, FileKey, <<>>, Attrs
+                SessionId, FileRef, <<>>, Attrs
             )};
         ({<<"metadata">>, Prefix}, Acc) ->
             Acc#{<<"metadata">> => cdmi_metadata:prepare_metadata(
-                SessionId, FileKey, Prefix, Attrs
+                SessionId, FileRef, Prefix, Attrs
             )};
         (<<"childrenrange">>, Acc) ->
-            {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, FileKey)),
+            {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, FileRef)),
             {From, To} = case lists:keyfind(<<"children">>, 1, RequestedInfo) of
                 {<<"children">>, Begin, End} ->
                     MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
@@ -221,15 +221,15 @@ get_directory_info(RequestedInfo, #cdmi_req{
             Acc#{<<"childrenrange">> => BinaryRange};
         ({<<"children">>, From, To}, Acc) ->
             MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
-            {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, FileKey)),
+            {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, FileRef)),
             {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
-            {ok, List, _} = ?check(lfm:get_children(SessionId, FileKey, #{offset => From1, size => To1 - From1 + 1})),
+            {ok, List, _} = ?check(lfm:get_children(SessionId, FileRef, #{offset => From1, size => To1 - From1 + 1})),
             Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
                 distinguish_directories(SessionId, FileGuid, Name)
             end, List)};
         (<<"children">>, Acc) ->
             MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
-            {ok, List, _} = ?check(lfm:get_children(SessionId, FileKey, #{offset => 0, size => MaxChildren + 1})),
+            {ok, List, _} = ?check(lfm:get_children(SessionId, FileRef, #{offset => 0, size => MaxChildren + 1})),
             case length(List) > MaxChildren of
                 true ->
                     throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));

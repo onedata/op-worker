@@ -719,7 +719,7 @@ remove_share(SessId, ShareID) ->
 
 -spec schedule_file_transfer(
     session:id(),
-    lfm:file_key(),
+    file_key(),
     ReplicatingProviderId :: undefined | od_provider:id(),
     EvictingProviderId :: undefined | od_provider:id(),
     transfer:callback()

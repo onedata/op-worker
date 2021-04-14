@@ -188,12 +188,12 @@ validate(#op_req{operation = Op, gri = #gri{aspect = instance}},
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
-    FileKey = ?FILE_REF(get_root_file_guid(Data)),
+    FileRef = ?FILE_REF(get_root_file_guid(Data)),
 
     Name = maps:get(<<"name">>, Data),
     Description = maps:get(<<"description">>, Data, <<"">>),
 
-    {ok, ShareId} = ?check(lfm:create_share(SessionId, FileKey, Name, Description)),
+    {ok, ShareId} = ?check(lfm:create_share(SessionId, FileRef, Name, Description)),
 
     case share_logic:get(SessionId, ShareId) of
         {ok, #document{value = ShareRec}} ->
