@@ -147,7 +147,8 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, TaskId) ->
         #{mode := precalculate_dir} ->
             {Doc, _} = file_ctx:get_file_doc(FileCtx),
             Callback = fun(Args) -> get_file_level(Args) end,
-            {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, 0, []),
+            {ok, _, CalculationInfo} = effective_value:get_or_calculate(
+                ?CACHE, Doc, Callback, #{initial_calculation_info => 0}),
             case CalculationInfo of
                 0 ->
                     tree_traverse:do_master_job(Job, TaskId);
@@ -163,7 +164,8 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, TaskId) ->
 do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, _TaskId) ->
     Callback = fun(Args) -> get_file_level(Args) end,
     {Doc, _} = file_ctx:get_file_doc(FileCtx),
-    {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, 0, []),
+    {ok, _, CalculationInfo} = effective_value:get_or_calculate(
+        ?CACHE, Doc, Callback, #{initial_calculation_info => 0}),
     case CalculationInfo of
         1 -> ok;
         _ -> {ok, #{dirs_evaluation => CalculationInfo}}
