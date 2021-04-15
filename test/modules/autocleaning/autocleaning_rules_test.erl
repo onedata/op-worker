@@ -188,5 +188,5 @@ get_field(Record, FieldName) ->
     element(Index + 1, Record).
 
 index(Key, List) ->
-    {Index, _} = lists:keyfind(Key, 2, lists:zip(lists:seq(1, length(List)), List)),
+    {Index, _} = lists:keyfind(Key, 2, lists_utils:enumerate(List)),
     Index.

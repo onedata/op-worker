@@ -81,7 +81,7 @@ translate_dataset_info(#dataset_info{
     }.
 
 %%%===================================================================
-%%% API
+%%% Util functions
 %%%===================================================================
 
 -spec build_list_dataset_details_response([lfm_datasets:info()], boolean()) -> json_utils:json_map().

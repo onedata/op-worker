@@ -327,13 +327,11 @@ listing_with_start_index_and_negative_offset(_Config) ->
             list_top_datasets_and_skip_indices(P1Node, SpaceId, #{offset => Offset, start_index => Index10}))
     end, lists:seq(0, -20, -1)).
 
+rename_depth_1(_Config) ->
+    rename_dataset_test_base(1).
 
 rename_depth_2(_Config) ->
     rename_dataset_test_base(2).
-
-
-rename_depth_1(_Config) ->
-    rename_dataset_test_base(1).
 
 rename_depth_10(_Config) ->
     rename_dataset_test_base(10).
@@ -867,19 +865,19 @@ iterate_over_children_empty_datasets_using_start_index_test_base(ChildrenCount, 
 iterate_over_children_non_empty_datasets_using_start_index_test_base(ChildrenCount, Limit) ->
     iterate_over_datasets_test_base(ChildrenCount, 3, Limit, children_datasets, start_index).
 
-iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, Mode, ListingMode) ->
+iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, ListingType, StartingPoint) ->
     % This test generates and creates ChildrenCount direct children datasets.
     % Each of them has Depth - 1 nested datasets
-    % Then the test checks whether dataset entries are correctly listed using ListingMode.
-    % Listing mode is an enum: [offset, start_index]
-    % Mode is an enum: [top_datasets, children_datasets] which decides whether
+    % Then the test checks whether dataset entries are correctly listed using StartingPoint.
+    % StartingPoint is an enum: [offset, start_index]
+    % ListingType is an enum: [top_datasets, children_datasets] which decides whether
     % datasets will be listed as top datasets or as children datasets of dataset attached to space directory
     [P1Node] = oct_background:get_provider_nodes(krakow),
     SpaceId = oct_background:get_space_id(space1),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
 
-    case Mode of
+    case ListingType of
         top_datasets ->
             ok;
         children_datasets ->
@@ -898,11 +896,11 @@ iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, Mode, ListingMode) 
         {TopDatasetId, TopDatasetName}
     end, lists:seq(1, ChildrenCount)),
     SortedExpectedDatasets = sort(ExpectedDirectChildrenDatasets),
-    case Mode of
+    case ListingType of
         top_datasets ->
-            check_if_all_top_datasets_listed(P1Node, SpaceId, SortedExpectedDatasets, Limit, ListingMode);
+            check_if_all_top_datasets_listed(P1Node, SpaceId, SortedExpectedDatasets, Limit, StartingPoint);
         children_datasets ->
-            check_if_all_datasets_listed(P1Node, SpaceId, SpaceDatasetPath, SortedExpectedDatasets, Limit, ListingMode)
+            check_if_all_datasets_listed(P1Node, SpaceId, SpaceDatasetPath, SortedExpectedDatasets, Limit, StartingPoint)
     end.
 
 
@@ -1023,8 +1021,8 @@ generate_nested_datasets(RootPath, Depth, GenerateEntryForRoot) ->
     end.
 
 
-check_if_all_top_datasets_listed(Node, SpaceId, SortedExpectedDatasets, Limit, ListingMode) ->
-    check_if_all_datasets_listed(Node, SpaceId, undefined, SortedExpectedDatasets, Limit, ListingMode).
+check_if_all_top_datasets_listed(Node, SpaceId, SortedExpectedDatasets, Limit, StartingPoint) ->
+    check_if_all_datasets_listed(Node, SpaceId, undefined, SortedExpectedDatasets, Limit, StartingPoint).
 
 
 check_if_all_datasets_listed(Node, SpaceId, DatasetPath, SortedExpectedDatasets, Limit, offset) ->
@@ -1035,7 +1033,7 @@ check_if_all_datasets_listed(Node, SpaceId, DatasetPath, SortedExpectedDatasets,
     check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, SortedExpectedDatasets, Opts, start_index).
 
 
-check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, SortedExpectedDatasets, Opts, ListingMode) ->
+check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, SortedExpectedDatasets, Opts, StartingPoint) ->
     {ok, ListedDatasets, AllListed} = case DatasetPath =:= undefined of
         true -> list_top_datasets(Node, SpaceId, Opts);
         false -> list_children_datasets(Node, SpaceId, DatasetPath, Opts)
@@ -1048,8 +1046,8 @@ check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, SortedExpectedDa
         {_, true} ->
             ok;
         {false, false} ->
-            NewOpts = update_opts(ListingMode, Opts, ListedDatasets),
-            check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, RestSortedExpectedDatasets, NewOpts, ListingMode)
+            NewOpts = update_opts(StartingPoint, Opts, ListedDatasets),
+            check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, RestSortedExpectedDatasets, NewOpts, StartingPoint)
     end.
 
 update_opts(offset, Opts, ListedDatasets) ->

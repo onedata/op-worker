@@ -320,7 +320,7 @@ get_transfer_value(Transfer, FieldName) ->
     element(Index + 1, Transfer).
 
 index(Key, List) ->
-    case lists:keyfind(Key, 2, lists:zip(lists:seq(1, length(List)), List)) of
+    case lists:keyfind(Key, 2, lists_utils:enumerate(List)) of
         false ->
             throw({wrong_assertion_key, Key, List});
         {Index, _} ->

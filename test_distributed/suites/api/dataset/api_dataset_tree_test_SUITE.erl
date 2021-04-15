@@ -172,7 +172,6 @@ get_top_datasets_test(Config) ->
     [{file_meta:name(), dataset:id(), lfm_datasets:info()}]) ->
     true | no_return().
 get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
-    % pick  random value for index param
     % pick first and last index as token test values
     {_, _, #dataset_info{index = FirstIndex}} = hd(TopDatasets),
     {_, _, #dataset_info{index = LastIndex}} = lists:last(TopDatasets),
@@ -441,18 +440,18 @@ build_prepare_get_child_datasets_gs_args_fun(DatasetId, Aspect) ->
     Format :: rest | graph_sync
 ) ->
     ok | no_return().
-validate_listed_datasets(ListingResult, Params, AllDatasets, Format) ->
+validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
     Limit = maps:get(<<"limit">>, Params, 1000),
     Offset = maps:get(<<"offset">>, Params, 0),
     Index = maps:get(<<"index">>, Params, <<>>),
     Token = maps:get(<<"token">>, Params, undefined),
 
-    StrippedDatasets = lists:filter(fun({_FileName, _DatasetId, #dataset_info{index = DatasetIndex}}) ->
+    StrippedDatasets = lists:dropwhile(fun({_FileName, _DatasetId, #dataset_info{index = DatasetIndex}}) ->
         case Token =:= undefined of
-            true -> DatasetIndex >= Index;
-            false -> DatasetIndex > Token
+            true -> DatasetIndex < Index;
+            false -> DatasetIndex =< Token
         end
-    end, AllDatasets),
+    end, AllDatasetsSorted),
 
     {ExpDatasets1, IsLast} = case Offset >= length(StrippedDatasets) of
         true ->

@@ -12,6 +12,7 @@
 -module(dataset_api).
 -author("Jakub Kudzia").
 
+-include("global_definitions.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
@@ -45,6 +46,9 @@
 % TODO VFS-7563 add tests concerning datasets
 
 -define(CRITICAL_SECTION(DatasetId, Function), critical_section:run({dataset, DatasetId}, Function)).
+
+-define(MAX_LIST_EXTENDED_DATASET_INFO_PROCS,
+    application:get_env(?APP_NAME, max_list_extended_dataset_info_procs, 20)).
 
 %%%===================================================================
 %%% API functions
@@ -350,14 +354,19 @@ list_children_datasets_internal(DatasetId, Opts) ->
 
 -spec extend_with_info(basic_entries()) -> extended_entries().
 extend_with_info(DatasetEntries) ->
-    lists:filtermap(fun({DatasetId, _DatasetName, Index}) ->
+    MapFun = fun({DatasetId, _DatasetName, Index}) ->
         try
-            {true, collect_state_dependant_info(DatasetId, Index)}
-        catch
-            error:{badmatch, ?ERROR_NOT_FOUND} ->
-                false
+            collect_state_dependant_info(DatasetId, Index)
+        catch _:_ ->
+            % File can be not synchronized with other provider
+            error
         end
-    end, DatasetEntries).
+    end,
+    FilterFun = fun
+        (error) -> false;
+        (_Entry) -> true
+    end,
+    lists_utils:pfiltermap(MapFun, FilterFun, DatasetEntries, ?MAX_LIST_EXTENDED_DATASET_INFO_PROCS).
 
 
 -spec entry_index(dataset:id(), file_meta:path()) -> index().
