@@ -513,7 +513,7 @@ get_parent(Entry) ->
 %% Returns file's parent uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent_uuid(entry()) -> {ok, uuid()} | {error, term()}.
+-spec get_parent_uuid(uuid() | entry()) -> {ok, uuid()} | {error, term()}.
 get_parent_uuid(Entry) ->
     ?run(begin
         {ok, #document{value = #file_meta{parent_uuid = ParentUuid}}} =
