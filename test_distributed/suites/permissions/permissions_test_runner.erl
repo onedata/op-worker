@@ -16,8 +16,9 @@
 -module(permissions_test_runner).
 -author("Bartosz Walkowicz").
 
--include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("permissions_test.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -422,7 +423,7 @@ await_caches_clearing(Node, SpaceId, UserId, ExtraData) ->
     end,
 
     lists:foreach(fun
-        ({guid, FileGuid}) ->
+        (?FILE_REF(FileGuid)) ->
             FileUuid = file_id:guid_to_uuid(FileGuid),
             ?assertMatch(false, AreProtectionFlagsCached(FileUuid), Attempts, Interval),
             ?assertMatch(false, IsPermEntryCached({{user_perms_matrix, UserId, FileGuid}}), Attempts, Interval);
@@ -523,7 +524,7 @@ run_caveats_scenario(ScenarioCtx = #scenario_ctx{
     scenario_root_dir_path = ScenarioRootDirPath,
     extra_data = ExtraData
 }, MainToken) ->
-    {guid, ScenarioRootDirGuid} = maps:get(ScenarioRootDirPath, ExtraData),
+    ?FILE_REF(ScenarioRootDirGuid) = maps:get(ScenarioRootDirPath, ExtraData),
     {ok, ScenarioRootDirObjectId} = file_id:guid_to_objectid(ScenarioRootDirGuid),
 
     DummyGuid = <<"Z3VpZCNfaGFzaF9mNmQyOGY4OTNjOTkxMmVh">>,
@@ -610,8 +611,8 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
             Node, FileOwnerUserSessId, TestCaseRootDirKey, ScenarioName
         ),
         ExtraData1 = maps:map(fun
-            (_, {guid, FileGuid}) ->
-                {guid, file_id:guid_to_share_guid(FileGuid, ShareId)};
+            (_, #file_ref{guid = FileGuid} = FileRef) ->
+                FileRef#file_ref{guid = file_id:guid_to_share_guid(FileGuid, ShareId)};
             (_, Val) ->
                 Val
         end, ExtraData0),
@@ -1272,7 +1273,7 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #file{
 
     ExtraData = case HookFun of
         undefined ->
-            #{FilePath => {guid, FileGuid}};
+            #{FilePath => ?FILE_REF(FileGuid)};
         _ when is_function(HookFun, 2) ->
             #{FilePath => HookFun(FileOwnerSessId, FileGuid)}
     end,
@@ -1297,7 +1298,7 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #dir{
 
     ExtraData1 = case HookFun of
         undefined ->
-            ExtraData0#{DirPath => {guid, DirGuid}};
+            ExtraData0#{DirPath => ?FILE_REF(DirGuid)};
         _ when is_function(HookFun, 2) ->
             ExtraData0#{DirPath => HookFun(FileOwnerSessId, DirGuid)}
     end,

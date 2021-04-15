@@ -14,11 +14,12 @@
 -author("Michal Cwiertnia").
 -author("Michal Stanisz").
 
--include("qos_tests_utils.hrl").
 -include("global_definitions.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("qos_tests_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
@@ -1142,7 +1143,7 @@ basic_qos_restoration_test_base(Config, DirStructureType) ->
         [_, _ | PathTokens] = binary:split(Path, <<"/">>, [global]),
         StoragePath = storage_file_path(Worker3, SpaceId, filename:join(PathTokens)),
         ?assertEqual({ok, ?TEST_DATA}, read_file(Worker3, StoragePath)),
-        {ok, FileHandle} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid}, write),
+        {ok, FileHandle} = lfm_proxy:open(Worker1, SessionId1, ?FILE_REF(Guid), write),
         {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, NewData),
         ok = lfm_proxy:close(Worker1, FileHandle),
         StoragePath

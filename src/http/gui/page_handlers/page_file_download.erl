@@ -93,11 +93,13 @@ handle(<<"GET">>, Req) ->
 %% streaming started.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_sync_first_file_block(session:id(), [fslogic_worker:file_guid()]) -> ok.
+-spec maybe_sync_first_file_block(session:id(), [file_id:file_guid()]) -> ok.
 maybe_sync_first_file_block(SessionId, [FileGuid]) ->
-    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
+    FileRef = ?FILE_REF(FileGuid),
+
+    case ?check(lfm:stat(SessionId, FileRef)) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
-            {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, read)),
+            {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileRef, read)),
             ReadBlockSize = http_streamer:get_read_block_size(FileHandle),
             case lfm:read(FileHandle, 0, ReadBlockSize) of
                 {error, ?ENOSPC} ->
@@ -122,15 +124,15 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
 ) ->
     cowboy_req:req().
 handle_http_download(SessionId, FileGuids, OnSuccessCallback, Req0) ->
-    FileAttrsList = lists_utils:foldl_while(
-        fun (FileGuid, Acc) ->
-            case lfm:stat(SessionId, {guid, FileGuid}) of
-                {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
-                {error, ?EACCES} -> {cont, Acc};
-                {error, ?EPERM} -> {cont, Acc};
-                {error, _Errno} = Error -> {halt, Error}
-            end
+    FileAttrsList = lists_utils:foldl_while(fun (FileGuid, Acc) ->
+        case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
+            {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
+            {error, ?EACCES} -> {cont, Acc};
+            {error, ?EPERM} -> {cont, Acc};
+            {error, _Errno} = Error -> {halt, Error}
+        end
     end, [], FileGuids),
+
     case FileAttrsList of
         {error, Errno} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req0);

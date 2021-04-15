@@ -17,6 +17,7 @@
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -128,7 +129,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
         replica_synchronizer:synchronize(UserCtx, FileCtx, Range, Prefetch, undefined, Priority),
 
     %TODO VFS-7393 do not use lfm, operate on fslogic directly
-    {ok, Handle} = lfm:open(SessId, {guid, FileGuid}, read),
+    {ok, Handle} = lfm:open(SessId, ?FILE_REF(FileGuid), read),
     % does sync internally
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, off),
     lfm:release(Handle),

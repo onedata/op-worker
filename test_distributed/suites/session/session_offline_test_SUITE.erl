@@ -15,6 +15,7 @@
 -include("api_file_test_utils.hrl").
 -include("modules/auth/offline_access_manager.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 -export([
@@ -77,7 +78,7 @@ offline_session_should_work_as_any_other_session_test(_Config) ->
 
     ?assertMatch(
         {ok, [{SpaceKrkGuid, _}]},
-        lfm_proxy:get_children(?NODE, SessionId, {guid, UserRootDirGuid}, 0, 100)
+        lfm_proxy:get_children(?NODE, SessionId, ?FILE_REF(UserRootDirGuid), 0, 100)
     ),
 
     % Check that even in case of various environment situations everything is resolved
@@ -87,7 +88,7 @@ offline_session_should_work_as_any_other_session_test(_Config) ->
 
         ?assertMatch(
             {ok, #file_attr{guid = SpaceKrkGuid}},
-            lfm_proxy:stat(?NODE, SessionId, {guid, SpaceKrkGuid}),
+            lfm_proxy:stat(?NODE, SessionId, ?FILE_REF(SpaceKrkGuid)),
             ?ATTEMPTS
         )
     end, [

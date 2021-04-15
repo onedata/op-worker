@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -287,7 +288,7 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
 %% @private
 -spec ls(node(), file_id:file_guid()) -> [file_id:file_guid()] | {error, term()}.
 ls(Node, DirGuid) ->
-    case lfm_proxy:get_children(Node, ?ROOT_SESS_ID, {guid, DirGuid}, 0, 10000) of
+    case lfm_proxy:get_children(Node, ?ROOT_SESS_ID, ?FILE_REF(DirGuid), 0, 10000) of
         {ok, Children} ->
             lists:sort(lists:map(fun({Guid, _Name}) -> Guid end, Children));
         {error, _} = Error ->
@@ -586,7 +587,7 @@ gui_registering_upload_for_non_empty_file_should_fail(_Config) ->
     [Worker] = oct_background:get_provider_nodes(krakow),
 
     {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
-    {ok, FileHandle} = lfm_proxy:open(Worker, UserSessId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(Worker, UserSessId, ?FILE_REF(FileGuid), write),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, FileHandle, 0, crypto:strong_rand_bytes(5))),
     lfm_proxy:fsync(Worker, FileHandle),
     lfm_proxy:close(Worker, FileHandle),
@@ -638,7 +639,7 @@ gui_upload_test(_Config) ->
     [Worker] = oct_background:get_provider_nodes(krakow),
 
     {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid))),
 
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
     ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
@@ -650,10 +651,10 @@ gui_upload_test(_Config) ->
 
     ?assertMatch(
         {ok, #file_attr{size = 250}},
-        lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid}),
+        lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid)),
         ?ATTEMPTS
     ),
-    {ok, FileHandle} = lfm_proxy:open(Worker, UserSessId, {guid, FileGuid}, read),
+    {ok, FileHandle} = lfm_proxy:open(Worker, UserSessId, ?FILE_REF(FileGuid), read),
     {ok, Data} = ?assertMatch({ok, _}, lfm_proxy:read(Worker, FileHandle, 0, 250)),
     ?assert(lists:all(fun(X) -> X == true end, [$a == Char || <<Char>> <= Data])),
     lfm_proxy:close(Worker, FileHandle).
@@ -665,19 +666,19 @@ gui_stale_upload_file_should_be_deleted(_Config) ->
     [Worker] = oct_background:get_provider_nodes(krakow),
 
     {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid))),
 
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
     ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
 
     % file being uploaded shouldn't be deleted after only 30s of inactivity
     timer:sleep(timer:seconds(30)),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid})),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid))),
     ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
 
     % but if upload is not resumed or finished before INACTIVITY_PERIOD then file should be deleted
     ?assertMatch(false, is_gui_upload_registered(UserId, FileGuid, Worker), 100),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, {guid, FileGuid}), ?ATTEMPTS).
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS).
 
 
 gui_upload_with_time_warps_test(_Config) ->
@@ -688,7 +689,7 @@ gui_upload_with_time_warps_test(_Config) ->
     CurrTime = time_test_utils:get_frozen_time_seconds(),
     {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
 
-    FileKey = {guid, FileGuid},
+    FileKey = ?FILE_REF(FileGuid),
     ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
 
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
