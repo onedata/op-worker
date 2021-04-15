@@ -53,14 +53,16 @@
     args => args(),
     use_referenced_key => boolean(), % use referenced key to find/cache value instead of key of file doc
                                      % passed by get_or_calculate function argument
-    multi_path_merge_callback => merge_callback() % Note - if calculate callback acts the same for all references of
-                                                  % particular file, use_referenced_key should be true for more
-                                                  % optimal caching
+    multi_path_merge_callback => merge_callback(), % Note - if calculate callback acts the same for all references of
+                                                   % particular file, use_referenced_key should be true for more
+                                                   % optimal caching
+    force_execution_on_inode => boolean() % force execution of callback on inode even if reference of original file
+                                          % is deleted
 }.
 % Type that defines return value of get_or_calculate functions and helper functions (used to shorten specs)
 -type get_return_value() :: {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
 
--export_type([cache/0]).
+-export_type([cache/0, get_options/0]).
 -define(CRITICAL_SECTION(Cache, Key), {effective_value_insert, Cache, Key}).
 
 %%%===================================================================
@@ -198,15 +200,29 @@ get_or_calculate_single_path(Cache, Key, FileDoc, CalculateCallback, Options) ->
 
 -spec get_or_calculate_multi_path(bounded_cache:cache(), file_meta:uuid(), file_meta:doc(), bounded_cache:callback(),
     get_options()) -> get_return_value().
-get_or_calculate_multi_path(Cache, Key, FileDoc, CalculateCallback, Options) ->
+get_or_calculate_multi_path(Cache, Key, #document{key = DocKey} = FileDoc, CalculateCallback, Options) ->
     MergeCallback = maps:get(multi_path_merge_callback, Options),
     References = get_references(FileDoc),
     case calculate_for_references(Cache, References, CalculateCallback, MergeCallback,
         Options, undefined) of
-        {ok, CalculatedValue, _} = OkAns ->
+        {ok, Acc, CalculationInfo} = OkAns ->
+            {ok, CalculatedValue, _} = FinalAns = case maps:get(force_execution_on_inode, Options, false) of
+                true ->
+                    INodeKey = fslogic_uuid:ensure_referenced_uuid(Key),
+                    case lists:member(INodeKey, [DocKey | References]) of
+                        true ->
+                            OkAns;
+                        false ->
+                            force_execution_on_inode(
+                                INodeKey, CalculateCallback, MergeCallback, CalculationInfo, Acc, Options)
+                    end;
+                false ->
+                    OkAns
+            end,
+
             Timestamp = maps:get(timestamp, Options),
             bounded_cache:cache(Cache, Key, CalculatedValue, Timestamp),
-            OkAns;
+            FinalAns;
         Error ->
             Error
     end.
@@ -220,10 +236,8 @@ get_or_calculate_multi_path(Cache, Key, FileDoc, CalculateCallback, Options) ->
 calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) ->
     {ok, ParentUuid} = get_parent(Key, FileDoc),
     case file_meta:get_including_deleted(ParentUuid) of
-        {ok, ParentDoc} ->
-            get_or_calculate(Cache, ParentDoc, CalculateCallback, Options);
-        _ ->
-            {error, {file_meta_missing, ParentUuid}}
+        {ok, ParentDoc} -> get_or_calculate(Cache, ParentDoc, CalculateCallback, Options);
+        _ -> {error, {file_meta_missing, ParentUuid}}
     end.
 
 -spec calculate_reference(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(), get_options()) ->
@@ -246,11 +260,8 @@ calculate_for_references(_Cache, _References, _CalculateCallback, _MergeCallback
 calculate_for_references(Cache, [FileDoc | Tail], CalculateCallback, MergeCallback, Options, undefined) ->
     % It is first reference so answer merging is not needed
     case calculate_reference(Cache, FileDoc, CalculateCallback, Options) of
-        {ok, _, _} = OkAns ->
-            calculate_for_references(Cache, Tail, CalculateCallback, MergeCallback,
-                Options, OkAns);
-        {error, _} = Error ->
-            Error
+        {ok, _, _} = OkAns -> calculate_for_references(Cache, Tail, CalculateCallback, MergeCallback, Options, OkAns);
+        {error, _} = Error -> Error
     end;
 calculate_for_references(Cache, [FileDoc | Tail], CalculateCallback, MergeCallback, Options, {ok, Acc, CalculationInfo}) ->
     % Calculate reference and merge answer with Acc
@@ -258,8 +269,7 @@ calculate_for_references(Cache, [FileDoc | Tail], CalculateCallback, MergeCallba
     case calculate_reference(Cache, FileDoc, CalculateCallback, Options2) of
         {ok, Value, NewCalculationInfo} ->
             MergedAns = MergeCallback(Value, Acc, NewCalculationInfo),
-            calculate_for_references(Cache, Tail, CalculateCallback, MergeCallback,
-                Options2, MergedAns);
+            calculate_for_references(Cache, Tail, CalculateCallback, MergeCallback, Options2, MergedAns);
         {error, _} = Error ->
             Error
     end.
@@ -285,9 +295,23 @@ get_references(#document{key = DocKey} = FileDoc) ->
         ReferencedUuid -> file_meta_hardlinks:list_references(ReferencedUuid)
     end,
 
-    lists:foldl(fun(Uuid, Acc) ->
+    [FileDoc | lists:filtermap(fun(Uuid) ->
         case file_meta:get(Uuid) of
-            {ok, Doc} -> [Doc | Acc];
-            {error, not_found} -> Acc
+            {ok, Doc} -> {true, Doc};
+            {error, not_found} -> false
         end
-    end, [FileDoc], References -- [DocKey]).
+    end, References -- [DocKey])].
+
+-spec force_execution_on_inode(file_meta:uuid(), bounded_cache:callback(), merge_callback(),
+    bounded_cache:additional_info(), bounded_cache:value(), get_options()) -> get_return_value().
+force_execution_on_inode(INodeKey, CalculateCallback, MergeCallback, CalculationInfo, Acc, Options) ->
+    Args = maps:get(args, Options, []),
+    case file_meta:get_including_deleted(INodeKey) of
+        {ok, FileDoc} ->
+            case CalculateCallback([FileDoc, undefined, CalculationInfo | Args]) of
+                {ok, Value, NewCalculationInfo} -> MergeCallback(Value, Acc, NewCalculationInfo);
+                {error, _} = Error -> Error
+            end;
+        _ ->
+            {error, {file_meta_missing, INodeKey}}
+    end.

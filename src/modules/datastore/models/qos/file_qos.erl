@@ -372,50 +372,24 @@ get_effective(#document{key = FileUuid} = FileDoc, OriginalParentDoc) ->
                 end
         end
     end,
-    %% @TODO VFS-7555 Use FileDoc for listing references after it is allowed
-    {ok, References} = case fslogic_uuid:ensure_referenced_uuid(FileUuid) of
-        FileUuid -> file_meta_hardlinks:list_references(FileDoc);
-        ReferencedUuid -> file_meta_hardlinks:list_references(ReferencedUuid)
+    MergeCallback = fun(NewEntry, Acc, CalculationInfo) ->
+        {ok, merge_file_qos(Acc, NewEntry), CalculationInfo}
     end,
-    ReferencesDocs = map_references_to_docs(References -- [FileUuid]),
-    % file_qos for all references is stored only in one doc (under InodeUuid), 
-    % so ensure it is taken into account when original file was deleted
-    InitialAcc = get_inode_effective_qos(FileUuid),
-    merge_eff_qos_for_files([OriginalParentDoc, FileDoc | ReferencesDocs], Callback, InitialAcc).
+    Options = #{multi_path_merge_callback => MergeCallback, use_referenced_key => true, force_execution_on_inode => true},
+
+    merge_eff_qos_for_files([OriginalParentDoc, FileDoc], Callback, Options).
 
 
 %% @private
--spec get_inode_effective_qos(file_meta:uuid()) -> 
-    undefined | effective_file_qos().
-get_inode_effective_qos(FileUuid) ->
-    InodeUuid = fslogic_uuid:ensure_referenced_uuid(FileUuid),
-    case get(InodeUuid) of
-        {ok, #document{value = Value}} ->  file_qos_to_eff_file_qos(Value);
-        _ -> undefined
-    end.
-
-
-%% @private
--spec map_references_to_docs([file_meta:uuid()]) -> [file_meta:doc()].
-map_references_to_docs(References) ->
-    lists:filtermap( fun (LogicalUuid) ->
-        case file_meta:get(LogicalUuid) of
-            {ok, Doc} -> {true, Doc};
-            ?ERROR_NOT_FOUND -> false
-        end
-    end, References).
-
-
-%% @private
--spec merge_eff_qos_for_files([file_meta:doc()], bounded_cache:callback(), effective_file_qos() | undefined) -> 
+-spec merge_eff_qos_for_files([file_meta:doc()], bounded_cache:callback(), effective_value:get_options()) ->
     effective_file_qos() | undefined.
-merge_eff_qos_for_files(FileDocs, Callback, InitialAcc) ->
+merge_eff_qos_for_files(FileDocs, Callback, Options) ->
     MergedEffQos = lists_utils:foldl_while(fun(FileDoc, Acc) ->
-        case get_effective_qos_for_single_file(FileDoc, Callback) of
+        case get_effective_qos_for_single_file(FileDoc, Callback, Options) of
             {ok, EffQos} -> {cont, merge_file_qos(Acc, EffQos)};
             {error, _} = Error -> {halt, Error}
         end
-    end, InitialAcc, FileDocs),
+    end, undefined, FileDocs),
     case MergedEffQos of
         {error, _} = Error -> Error;
         undefined -> undefined;
@@ -424,11 +398,11 @@ merge_eff_qos_for_files(FileDocs, Callback, InitialAcc) ->
     
 
 %% @private
--spec get_effective_qos_for_single_file(undefined | file_meta:doc(), bounded_cache:callback()) -> 
+-spec get_effective_qos_for_single_file(undefined | file_meta:doc(), bounded_cache:callback(), effective_value:get_options()) ->
     effective_file_qos() | undefined | {error, term()}.
-get_effective_qos_for_single_file(undefined, _Callback) -> {ok, undefined};
-get_effective_qos_for_single_file(#document{scope = SpaceId} = FileDoc, Callback) ->
-    case effective_value:get_or_calculate(?CACHE_TABLE_NAME(SpaceId), FileDoc, Callback) of
+get_effective_qos_for_single_file(undefined, _Callback, _Options) -> {ok, undefined};
+get_effective_qos_for_single_file(#document{scope = SpaceId} = FileDoc, Callback, Options) ->
+    case effective_value:get_or_calculate(?CACHE_TABLE_NAME(SpaceId), FileDoc, Callback, Options) of
         {ok, EffQos, _} ->
             {ok, EffQos};
         {error, {file_meta_missing, _MissingUuid}} = Error ->

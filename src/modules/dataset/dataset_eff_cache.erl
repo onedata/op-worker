@@ -156,7 +156,12 @@ get(FileDoc = #document{key = FileUuid}) ->
             Callback = fun([Doc, ParentEntry, CalculationInfo]) ->
                 {ok, calculate(Doc, ParentEntry), CalculationInfo}
             end,
-            case effective_value:get_or_calculate(CacheName, FileDoc, Callback) of
+            MergeCallback = fun(NewEntry, EntryAcc, CalculationInfo) ->
+                {ok, merge_entries_of_references(NewEntry, EntryAcc), CalculationInfo}
+            end,
+            Options = #{multi_path_merge_callback => MergeCallback},
+
+            case effective_value:get_or_calculate(CacheName, FileDoc, Callback, Options) of
                 {ok, Entry, _} ->
                     {ok, Entry};
                 {error, {file_meta_missing, _}} ->
@@ -199,6 +204,25 @@ calculate(Doc = #document{}, #entry{
         direct_attached_dataset = file_meta_dataset:get_id_if_attached(Doc),
         eff_ancestor_datasets = EffAncestorDatasets,
         eff_protection_flags = ?set_flags(ParentEffProtectionFlags, ProtectionFlags)
+    }.
+
+-spec merge_entries_of_references(entry(), entry() | undefined) -> entry().
+merge_entries_of_references(NewerEntry, undefined) ->
+    NewerEntry;
+merge_entries_of_references(#entry{
+    eff_protection_flags = EffProtectionFlags2
+} = _NewerEntry, #entry{
+    direct_attached_dataset = DirectAttachedDataset1,
+    eff_ancestor_datasets = EffAncestorDatasets1,
+    eff_protection_flags = EffProtectionFlags1
+} = _OlderEntry) ->
+    % Reference for which effective_value:get_or_calculate is called is always calculated first.
+    % We want to keep information about dataset calculated using only this reference and protection flags
+    % calculated using all references.
+    #entry{
+        direct_attached_dataset = DirectAttachedDataset1,
+        eff_ancestor_datasets = EffAncestorDatasets1,
+        eff_protection_flags = ?set_flags(EffProtectionFlags1, EffProtectionFlags2)
     }.
 
 
