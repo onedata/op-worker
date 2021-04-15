@@ -201,8 +201,16 @@ check_type(atom, _Key, Binary) when is_binary(Binary) ->
 check_type(atom, Key, _) ->
     throw(?ERROR_BAD_VALUE_ATOM(Key));
 
+check_type(binary, _Param, <<"null">>) ->
+    <<>>;
+check_type(binary, _Param, <<"undefined">>) ->
+    <<>>;
 check_type(binary, _Param, Binary) when is_binary(Binary) ->
     Binary;
+check_type(binary, _Param, null) ->
+    <<>>;
+check_type(binary, _Param, undefined) ->
+    <<>>;
 check_type(binary, _Param, Atom) when is_atom(Atom) ->
     atom_to_binary(Atom, utf8);
 check_type(binary, Param, _) ->

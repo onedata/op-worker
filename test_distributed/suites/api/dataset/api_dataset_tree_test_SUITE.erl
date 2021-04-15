@@ -190,7 +190,7 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
                 #scenario_template{
                     name = <<"Get top datasets using REST API">>,
                     type = rest,
-                    prepare_args_fun = build_get_top_datasets_prepare_rest_args_fun(SpaceId, State),
+                    prepare_args_fun = build_get_top_datasets_prepare_rest_args_fun(SpaceId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_datasets(Response, Data, TopDatasets, rest)
                     end
@@ -198,19 +198,21 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
                 #scenario_template{
                     name = <<"GET top datasets using GS API">>,
                     type = gs,
-                    prepare_args_fun = build_get_top_datasets_prepare_gs_args_fun(SpaceId, State),
+                    prepare_args_fun = build_get_top_datasets_prepare_gs_args_fun(SpaceId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
                         validate_listed_datasets(Result, Data, TopDatasets, graph_sync)
                     end
                 }
             ],
             data_spec = #data_spec{
+                required = [<<"state">>],
                 optional = [<<"limit">>, <<"offset">>, <<"index">>, <<"token">>],
                 correct_values = #{
+                    <<"state">> => [State],
                     <<"limit">> => [1, 100],
                     <<"offset">> => [1, 3, 10],
-                    <<"index">> => [RandomIndex, <<"zzzzzzzzzzzz">>],
-                    <<"token">> => [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]
+                    <<"index">> => [null, RandomIndex, <<"zzzzzzzzzzzz">>],
+                    <<"token">> => [null | [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentSpace">>, ?ERROR_FORBIDDEN},
@@ -232,13 +234,12 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
 
 
 %% @private
--spec build_get_top_datasets_prepare_rest_args_fun(od_space:id(), dataset:state()) ->
+-spec build_get_top_datasets_prepare_rest_args_fun(od_space:id()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_get_top_datasets_prepare_rest_args_fun(SpaceId, State) ->
+build_get_top_datasets_prepare_rest_args_fun(SpaceId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        Data2 = inject_state_if_not_defined(State, Data1),
-        {Id, Data3} = api_test_utils:maybe_substitute_bad_id(SpaceId, Data2),
+        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(SpaceId, Data1),
 
         RestPath = <<"spaces/", Id/binary, "/datasets">>,
 
@@ -246,52 +247,32 @@ build_get_top_datasets_prepare_rest_args_fun(SpaceId, State) ->
             method = get,
             path = http_utils:append_url_parameters(
                 RestPath,
-                maps:with([<<"limit">>, <<"offset">>, <<"state">>, <<"index">>, <<"token">>], Data3)
+                maps:with([<<"limit">>, <<"offset">>, <<"state">>, <<"index">>, <<"token">>], Data2)
             )
         }
     end.
 
 
 %% @private
--spec build_get_top_datasets_prepare_gs_args_fun(od_space:id(), dataset:state()) ->
+-spec build_get_top_datasets_prepare_gs_args_fun(od_space:id()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_get_top_datasets_prepare_gs_args_fun(SpaceId, State) ->
-    build_prepare_get_top_datasets_gs_args_fun(SpaceId, State, datasets_details).
+build_get_top_datasets_prepare_gs_args_fun(SpaceId) ->
+    build_prepare_get_top_datasets_gs_args_fun(SpaceId, datasets_details).
 
 
 %% @private
--spec build_prepare_get_top_datasets_gs_args_fun(od_space:id(), dataset:state(), gri:aspect()) ->
+-spec build_prepare_get_top_datasets_gs_args_fun(od_space:id(), gri:aspect()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_prepare_get_top_datasets_gs_args_fun(SpaceId, State, Aspect) ->
+build_prepare_get_top_datasets_gs_args_fun(SpaceId, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
-        Data2 = inject_state_if_not_defined(State, Data1),
-        {GriId, Data3} = api_test_utils:maybe_substitute_bad_id(SpaceId, Data2),
+        {GriId, Data2} = api_test_utils:maybe_substitute_bad_id(SpaceId, Data1),
 
         #gs_args{
             operation = get,
             gri = #gri{type = op_space, id = GriId, aspect = Aspect, scope = private},
-            data = Data3
+            data = Data2
         }
-    end.
-
-
-%% @private
--spec inject_state_if_not_defined(dataset:state(), map()) -> map().
-inject_state_if_not_defined(_State, #{<<"state">> := _} = Data) ->
-    Data;
-inject_state_if_not_defined(State, Data) ->
-    case State of
-        ?ATTACHED_DATASET ->
-            case rand:uniform(2) of
-                1 ->
-                    % Attached state should be taken as default
-                    Data;
-                2 ->
-                    Data#{<<"state">> => <<"attached">>}
-            end;
-        ?DETACHED_DATASET ->
-            Data#{<<"state">> => <<"detached">>}
     end.
 
 
@@ -369,7 +350,7 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
                     <<"limit">> => [1, 100],
                     <<"offset">> => [1, 3, 10],
                     <<"index">> => [RandomIndex, <<"zzzzzzzzzzzz">>],
-                    <<"token">> => [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]
+                    <<"token">> => [null | [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND},
@@ -443,9 +424,14 @@ build_prepare_get_child_datasets_gs_args_fun(DatasetId, Aspect) ->
 validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
     Limit = maps:get(<<"limit">>, Params, 1000),
     Offset = maps:get(<<"offset">>, Params, 0),
-    Index = maps:get(<<"index">>, Params, <<>>),
+    Index = case maps:get(<<"index">>, Params, undefined) of
+        undefined -> <<>>;
+        null -> <<>>;
+        DefinedIndex -> DefinedIndex
+    end,
     Token = case maps:get(<<"token">>, Params, undefined) of
         undefined -> undefined;
+        null -> undefined;
         EncodedToken -> base64url:decode(EncodedToken)
     end,
 

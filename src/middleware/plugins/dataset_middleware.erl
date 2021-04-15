@@ -260,15 +260,16 @@ delete(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}) ->
 -spec build_dataset_listing_opts(middleware:data()) -> dataset_api:listing_opts().
 build_dataset_listing_opts(Data) ->
     Opts = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT)},
-    case maps:get(<<"token">>, Data, undefined) of
-        undefined ->
+    Token = maps:get(<<"token">>, Data, undefined),
+    case Token =:= undefined orelse Token =:= <<>> of
+        true ->
             Opts2 = maps_utils:put_if_defined(Opts, offset, maps:get(<<"offset">>, Data, undefined)),
             maps_utils:put_if_defined(Opts2, start_index, maps:get(<<"index">>, Data, undefined));
-        EncodedToken ->
+        false ->
             % if token is passed, offset has to be increased by 1
             % to ensure that listing using token is exclusive
             Opts#{
-                start_index => base64url:decode(EncodedToken),
+                start_index => base64url:decode(Token),
                 offset => maps:get(<<"offset">>, Data, 0) + 1
             }
     end.
