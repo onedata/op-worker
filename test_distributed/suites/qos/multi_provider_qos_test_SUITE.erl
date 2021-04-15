@@ -59,24 +59,6 @@
     qos_reconciliation_dir_test/1,
     reconcile_qos_using_file_meta_posthooks_test/1,
 
-    qos_status_during_traverse_test/1,
-    qos_status_during_traverse_with_file_deletion_test/1,
-    qos_status_during_traverse_with_hardlink_deletion_test/1,
-    qos_status_during_traverse_with_file_and_hardlink_deletion_test/1,
-    qos_status_during_traverse_with_dir_deletion_test/1,
-    qos_status_during_traverse_with_dir_deletion_with_hardlinks_test/1,
-    qos_status_during_traverse_with_dir_deletion_with_mixed_children_test/1,
-    qos_status_during_reconciliation_test/1,
-    qos_status_during_reconciliation_prefix_file_test/1,
-    qos_status_during_reconciliation_with_file_deletion_test/1,
-    qos_status_during_reconciliation_with_hardlink_deletion_test/1,
-    qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test/1,
-    qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test/1,
-    qos_status_during_traverse_file_without_qos_test/1,
-    qos_status_after_failed_transfers/1,
-    qos_status_after_failed_transfers_deleted_file/1,
-    qos_status_after_failed_transfers_deleted_entry/1,
-
     reevaluate_impossible_qos_test/1,
     reevaluate_impossible_qos_race_test/1,
     reevaluate_impossible_qos_conflict_test/1,
@@ -88,7 +70,6 @@
     qos_with_inode_deletion_test/1,
     qos_with_hardlink_deletion_test/1,
     qos_with_mixed_deletion_test/1,
-    qos_status_during_traverse_with_hardlinks_test/1,
     qos_on_symlink_test/1,
     effective_qos_with_symlink_test/1
 ]).
@@ -121,25 +102,6 @@ all() -> [
     qos_reconciliation_file_test,
     qos_reconciliation_dir_test,
     reconcile_qos_using_file_meta_posthooks_test,
-
-    qos_status_during_traverse_test,
-    qos_status_during_traverse_with_hardlinks_test,
-    qos_status_during_traverse_with_file_deletion_test,
-    qos_status_during_traverse_with_hardlink_deletion_test,
-    qos_status_during_traverse_with_file_and_hardlink_deletion_test,
-    qos_status_during_traverse_with_dir_deletion_test,
-    qos_status_during_traverse_with_dir_deletion_with_hardlinks_test,
-    qos_status_during_traverse_with_dir_deletion_with_mixed_children_test,
-    qos_status_during_reconciliation_test,
-    qos_status_during_reconciliation_prefix_file_test,
-    qos_status_during_reconciliation_with_file_deletion_test,
-    qos_status_during_reconciliation_with_hardlink_deletion_test,
-    qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test,
-    qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test,
-    qos_status_during_traverse_file_without_qos_test,
-    qos_status_after_failed_transfers,
-    qos_status_after_failed_transfers_deleted_file,
-    qos_status_after_failed_transfers_deleted_entry,
 
     reevaluate_impossible_qos_test,
     reevaluate_impossible_qos_race_test,
@@ -687,78 +649,6 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
 
 
 %%%===================================================================
-%%% QoS status tests
-%%%===================================================================
-
-qos_status_during_traverse_test(Config) ->
-    qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_ID, 8).
-
-qos_status_during_traverse_with_file_deletion_test(Config) ->
-    qos_test_base:qos_status_during_traverse_with_file_deletion_test_base(Config, ?SPACE_ID, 8, reg_file).
-
-qos_status_during_traverse_with_hardlink_deletion_test(Config) ->
-    qos_test_base:qos_status_during_traverse_with_file_deletion_test_base(Config, ?SPACE_ID, 8, hardlink).
-
-qos_status_during_traverse_with_file_and_hardlink_deletion_test(Config) ->
-    qos_test_base:qos_status_during_traverse_with_file_deletion_test_base(Config, ?SPACE_ID, 16, mixed).
-
-qos_status_during_traverse_with_dir_deletion_test(Config) ->
-    qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_ID, 4, reg_file).
-
-qos_status_during_traverse_with_dir_deletion_with_hardlinks_test(Config) ->
-    qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_ID, 4, hardlink).
-
-qos_status_during_traverse_with_dir_deletion_with_mixed_children_test(Config) ->
-    qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_ID, 8, mixed).
-
-qos_status_during_reconciliation_test(Config) ->
-    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
-    Filename = generator:gen_name(),
-    DirStructure = ?nested_dir_structure(?SPACE_ID, Filename, [?GET_DOMAIN_BIN(Worker1)]),
-    qos_test_base:qos_status_during_reconciliation_test_base(Config, ?SPACE_ID, DirStructure, Filename).
-
-qos_status_during_reconciliation_prefix_file_test(Config) ->
-    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
-    Name = generator:gen_name(),
-    DirStructure =
-        {?SPACE_ID, [
-            {Name, [
-                {?filename(Name, 1), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]},
-                {?filename(Name, 11), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}
-            ]}
-        ]},
-    
-    qos_test_base:qos_status_during_reconciliation_test_base(Config, ?SPACE_ID, DirStructure, Name).
-
-qos_status_during_reconciliation_with_file_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_file_deletion_test_base(Config, ?SPACE_ID, 8, reg_file).
-
-qos_status_during_reconciliation_with_hardlink_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_file_deletion_test_base(Config, ?SPACE_ID, 8, hardlink).
-
-qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID, 8, reg_file).
-
-qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID, 8, hardlink).
-
-qos_status_during_traverse_file_without_qos_test(Config) ->
-    qos_test_base:qos_status_during_traverse_file_without_qos_test_base(Config, ?SPACE_ID).
-
-qos_status_after_failed_transfers(Config) ->
-    [_Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
-    qos_test_base:qos_status_after_failed_transfer(Config, ?SPACE_ID, Worker3).
-
-qos_status_after_failed_transfers_deleted_file(Config) ->
-    [_Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
-    qos_test_base:qos_status_after_failed_transfer_deleted_file(Config, ?SPACE_ID, Worker3).
-
-qos_status_after_failed_transfers_deleted_entry(Config) ->
-    [_Worker1, _Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
-    qos_test_base:qos_status_after_failed_transfer_deleted_entry(Config, ?SPACE_ID, Worker3).
-
-
-%%%===================================================================
 %%% QoS reevaluate
 %%%===================================================================
 
@@ -1044,9 +934,6 @@ qos_with_hardlink_deletion_test(Config) ->
 qos_with_mixed_deletion_test(Config) ->
     qos_test_base:qos_with_hardlink_deletion_test_base(Config, ?SPACE_ID, mixed).
 
-qos_status_during_traverse_with_hardlinks_test(Config) ->
-    qos_test_base:qos_status_during_traverse_with_hardlinks_test_base(Config, ?SPACE_ID).
-
 qos_on_symlink_test(Config) ->
     qos_test_base:qos_on_symlink_test_base(Config, ?SPACE_ID).
 
@@ -1059,70 +946,23 @@ effective_qos_with_symlink_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        lists:foreach(fun(Worker) ->
-            test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?APP_NAME, qos_retry_failed_files_interval_seconds, 5)
-        end, ?config(op_worker_nodes, NewConfig)),
-        initializer:mock_auth_manager(NewConfig),
-        application:start(ssl),
-        hackney:start(),
-        NewConfig
-    end,
-    [
-        {?ENV_UP_POSTHOOK, Posthook},
-        {?LOAD_MODULES, [initializer, transfers_test_utils, transfers_test_mechanism, qos_tests_utils, ?MODULE]}
-        | Config
-    ].
+    qos_test_base:init_per_suite(Config).
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
-    application:stop(ssl),
-    initializer:unmock_auth_manager(Config).
+    qos_test_base:end_per_suite(Config).
 
 
-init_per_testcase(Case, Config) when
-    Case =:= qos_status_during_traverse_test;
-    Case =:= qos_status_during_traverse_with_file_deletion_test;
-    Case =:= qos_status_during_traverse_with_hardlink_deletion_test;
-    Case =:= qos_status_during_traverse_with_file_and_hardlink_deletion_test;
-    Case =:= qos_status_during_traverse_with_dir_deletion_test;
-    Case =:= qos_status_during_traverse_with_dir_deletion_with_hardlinks_test;
-    Case =:= qos_status_during_traverse_with_dir_deletion_with_mixed_children_test;
-    Case =:= qos_status_during_reconciliation_test;
-    Case =:= qos_status_during_reconciliation_prefix_file_test;
-    Case =:= qos_status_during_reconciliation_with_file_deletion_test;
-    Case =:= qos_status_during_reconciliation_with_hardlink_deletion_test;
-    Case =:= qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test;
-    Case =:= qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test;
-    Case =:= qos_status_during_traverse_file_without_qos_test;
-    Case =:= qos_status_after_failed_transfers;
-    Case =:= qos_status_after_failed_transfers_deleted_file;
-    Case =:= qos_status_after_failed_transfers_deleted_entry;
-    Case =:= qos_status_after_failed_transfers; 
-    Case =:= qos_traverse_cancellation_test ->
-    
+init_per_testcase(qos_traverse_cancellation_test , Config) ->
     Workers = ?config(op_worker_nodes, Config),
     qos_tests_utils:mock_transfers(Workers),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
-    ct:timetrap(timer:minutes(10)),
-    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(NewConfig),
-    NewConfig.
+    qos_test_base:init_per_testcase(Config).
 
 
 end_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    transfers_test_utils:unmock_replication_worker(Workers),
-    transfers_test_utils:unmock_replica_synchronizer_failure(Workers),
-    transfers_test_utils:remove_transfers(Config),
-    transfers_test_utils:remove_all_views(Workers, ?SPACE_ID),
-    transfers_test_utils:ensure_transfers_removed(Config),
-    test_utils:mock_unload(Workers, providers_qos),
-    initializer:clean_test_users_and_spaces_no_validate(Config).
+    qos_test_base:end_per_testcase(Config).
 
 %%%===================================================================
 %%% Test bases

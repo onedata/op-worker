@@ -110,8 +110,6 @@ all() -> [
     % QoS status tests
     qos_status_during_traverse_test,
     qos_status_during_traverse_multi_batch_test,
-    qos_status_during_traverse_with_file_deletion,
-    qos_status_during_traverse_with_dir_deletion,
     qos_status_during_traverse_file_without_qos_test,
     qos_status_after_failed_transfers,
     qos_status_after_failed_transfers_deleted_file,

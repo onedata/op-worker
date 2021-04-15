@@ -69,11 +69,16 @@
     effective_qos_with_symlink_test_base/2
 ]).
 
+-export([
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/1, end_per_testcase/1
+]).
+
 % file_type can be one of 
 %   * reg_file - created file is a regular file
 %   * hardlink - created file is a hardlink
-%   * mixed - created file is randomly chosen between regular file and hardlink
--type file_type() :: reg_file | hardlink | mixed.
+%   * random - created file is randomly chosen between regular file and hardlink
+-type file_type() :: reg_file | hardlink | random.
 
 -define(ATTEMPTS, 120).
 
@@ -1452,7 +1457,6 @@ qos_status_after_failed_transfer_deleted_entry(Config, SpaceId, TargetWorker) ->
 %%%===================================================================
 %%% QoS with links test bases
 %%%===================================================================
-%% @TODO VFS-7550 generalize these tests
 
 qos_with_hardlink_test_base(Config, SpaceId, Mode) ->
     % Mode can be one of 
@@ -1575,6 +1579,49 @@ effective_qos_with_symlink_test_base(Config, SpaceId) ->
     qos_tests_utils:finish_all_transfers([FileGuid]),
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS).
 
+%%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
+
+init_per_suite(Config) ->
+    Posthook = fun(NewConfig) ->
+        lists:foreach(fun(Worker) ->
+            test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
+            test_utils:set_env(Worker, ?APP_NAME, qos_retry_failed_files_interval_seconds, 5)
+        end, ?config(op_worker_nodes, NewConfig)),
+        initializer:mock_auth_manager(NewConfig),
+        application:start(ssl),
+        hackney:start(),
+        NewConfig
+    end,
+    [
+        {?ENV_UP_POSTHOOK, Posthook},
+        {?LOAD_MODULES, [initializer, qos_tests_utils, ?MODULE]}
+        | Config
+    ].
+
+
+end_per_suite(_Config) ->
+    hackney:stop(),
+    application:stop(ssl).
+
+
+init_per_testcase(Config) ->
+    ct:timetrap(timer:minutes(10)),
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    lfm_proxy:init(NewConfig),
+    NewConfig.
+
+
+end_per_testcase(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers),
+    initializer:clean_test_users_and_spaces_no_validate(Config).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %% @private
 prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
@@ -1670,15 +1717,12 @@ prepare_type_spec(hardlink, Workers, SessIdFun, {target, FileToLinkGuid}) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessIdFun(Worker), ?FILE_REF(FileToLinkGuid)), ?ATTEMPTS)
     end, Workers),
     {hardlink, FileToLinkGuid};
-prepare_type_spec(mixed, Workers, SessIdFun, SpaceIdOrTarget) -> 
+prepare_type_spec(random, Workers, SessIdFun, SpaceIdOrTarget) -> 
     NewFileType = case rand:uniform(2) of
         1 -> reg_file;
         2 -> hardlink
     end,
-    prepare_type_spec(NewFileType, Workers, SessIdFun, SpaceIdOrTarget);
-prepare_type_spec(A, Workers, SessIdFun, SpaceIdOrTarget) -> 
-    ct:print("~p~n~p~n~p~n~p~n", [A, Workers, SessIdFun, SpaceIdOrTarget]),
-    throw(error).
+    prepare_type_spec(NewFileType, Workers, SessIdFun, SpaceIdOrTarget).
 
 
 %% @private
