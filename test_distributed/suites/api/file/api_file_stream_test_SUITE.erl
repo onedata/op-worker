@@ -14,8 +14,9 @@
 
 -include("api_file_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/common_messages.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -921,9 +922,9 @@ build_download_file_setup_fun(MemRef, Spec) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
     
     fun() ->
-        Object = lists:map(fun(SingleFileSpec) ->
-            onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, SingleFileSpec, krakow)
-        end, utils:ensure_list(Spec)),
+        Object = onenv_file_test_utils:create_and_sync_file_tree(
+            user3, SpaceId, utils:ensure_list(Spec), krakow
+        ),
         api_test_memory:set(MemRef, file_tree_object, Object)
     end.
 
@@ -989,11 +990,13 @@ make_hardlink(Config, TargetGuid, ParentGuid) ->
     UserSessId = oct_background:get_user_session_id(user3, krakow),
     [Node | _] = oct_background:get_provider_nodes(krakow),
     LinkName = generator:gen_name(),
-    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Node, UserSessId, {guid, TargetGuid}, ParentGuid, LinkName),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(
+        Node, UserSessId, ?FILE_REF(TargetGuid), ?FILE_REF(ParentGuid), LinkName
+    ),
     Providers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
         SessId = oct_background:get_user_session_id(user3, rpc:call(Worker, oneprovider, get_id, [])),
-        ?assertMatch({ok, _},  lfm_proxy:stat(Worker, SessId, {guid, LinkGuid}), ?ATTEMPTS)
+        ?assertMatch({ok, _},  lfm_proxy:stat(Worker, SessId, ?FILE_REF(LinkGuid)), ?ATTEMPTS)
     end, Providers),
     onenv_file_test_utils:get_object_attributes(Node, UserSessId, LinkGuid).
 

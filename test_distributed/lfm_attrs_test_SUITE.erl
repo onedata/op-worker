@@ -14,10 +14,11 @@
 
 -behaviour(traverse_behaviour).
 
--include("tree_traverse.hrl").
--include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("tree_traverse.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -212,8 +213,8 @@ empty_xattr_test(Config) ->
     Name1 = <<"t1_name1">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)).
+    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(Guid), Name1)),
+    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, ?FILE_REF(Guid), false, true)).
 
 crud_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -226,12 +227,12 @@ crud_xattr_test(Config) ->
     UpdatedXattr1 = #xattr{name = Name1, value = Value2},
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
     WholeCRUD = fun() ->
-        ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
-        ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-        ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, UpdatedXattr1)),
-        ?assertEqual({ok, UpdatedXattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
-        ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name1)),
-        ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1))
+        ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr1)),
+        ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(Guid), Name1)),
+        ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), UpdatedXattr1)),
+        ?assertEqual({ok, UpdatedXattr1}, lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(Guid), Name1)),
+        ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, ?FILE_REF(Guid), Name1)),
+        ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(Guid), Name1))
     end,
 
     WholeCRUD(),
@@ -249,11 +250,11 @@ list_xattr_test(Config) ->
     Xattr2 = #xattr{name = Name2, value = Value2},
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2)),
-    ?assertEqual({ok, [Name1, Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
-    ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name1)),
-    ?assertEqual({ok, [Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)).
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr2)),
+    ?assertEqual({ok, [Name1, Name2]}, lfm_proxy:list_xattr(Worker, SessId, ?FILE_REF(Guid), false, true)),
+    ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, ?FILE_REF(Guid), Name1)),
+    ?assertEqual({ok, [Name2]}, lfm_proxy:list_xattr(Worker, SessId, ?FILE_REF(Guid), false, true)).
 
 xattr_create_flag(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -271,15 +272,15 @@ xattr_create_flag(Config) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     % create first xattr
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, true, false)),
-    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr1, true, false)),
+    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(Guid), Name1)),
 
     % fail to replace xattr
-    ?assertEqual({error, ?EEXIST}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2, true, false)),
+    ?assertEqual({error, ?EEXIST}, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr2, true, false)),
 
     % create second xattr
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, OtherXattr, true, false)),
-    ?assertEqual({ok, OtherXattr}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, OtherName)).
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), OtherXattr, true, false)),
+    ?assertEqual({ok, OtherXattr}, lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(Guid), OtherName)).
 
 xattr_replace_flag(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -297,18 +298,18 @@ xattr_replace_flag(Config) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     % fail to create first xattr with replace flag
-    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, false, true)),
+    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr1, false, true)),
 
     % create first xattr
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, false, false)),
-    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr1, false, false)),
+    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(Guid), Name1)),
 
     % replace first xattr
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2, false, true)),
-    ?assertEqual({ok, Xattr2}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr2, false, true)),
+    ?assertEqual({ok, Xattr2}, lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(Guid), Name1)),
 
     % fail to create second xattr
-    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, OtherXattr, false, true)).
+    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), OtherXattr, false, true)).
 
 xattr_replace_and_create_flag_in_conflict(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -326,17 +327,17 @@ xattr_replace_and_create_flag_in_conflict(Config) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     % fail to create first xattr due to replace flag
-    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, true, true)),
+    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr1, true, true)),
 
     % create first xattr
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, false, false)),
-    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr1, false, false)),
+    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(Guid), Name1)),
 
     % fail to set xattr due to create flag
-    ?assertEqual({error, ?EEXIST}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2, true, true)),
+    ?assertEqual({error, ?EEXIST}, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr2, true, true)),
 
     % fail to create second xattr due to replace flag
-    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, OtherXattr, true, true)).
+    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), OtherXattr, true, true)).
 
 remove_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -348,13 +349,13 @@ remove_file_test(Config) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
     Uuid = file_id:guid_to_uuid(Guid),
 
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
-    ?assertEqual({ok, [Name1]}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
-    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, Guid})),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr1)),
+    ?assertEqual({ok, [Name1]}, lfm_proxy:list_xattr(Worker, SessId, ?FILE_REF(Guid), false, true)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Guid))),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:list_xattr(Worker, SessId, ?FILE_REF(Guid), false, true)),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(Guid), Name1)),
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid2}, false, true)),
+    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, ?FILE_REF(Guid2), false, true)),
     ?assertEqual({error, not_found}, rpc:call(Worker, custom_metadata, get, [Uuid])),
     ?assertEqual({error, not_found}, rpc:call(Worker, times, get, [Uuid])).
 
@@ -367,8 +368,8 @@ modify_cdmi_attrs(Config) ->
     Xattr1 = #xattr{name = Name1, value = Value1},
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual({error, ?EPERM}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)).
+    ?assertEqual({error, ?EPERM}, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr1)),
+    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, ?FILE_REF(Guid), false, true)).
 
 create_and_query_view(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -398,9 +399,9 @@ create_and_query_view(Config) ->
     {ok, FileId1} = file_id:guid_to_objectid(Guid1),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     {ok, FileId3} = file_id:guid_to_objectid(Guid3),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid1}, json, MetaBlue, [])),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, MetaRed, [])),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid3}, json, MetaBlue, [])),
+    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid1), json, MetaBlue, [])),
+    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid2), json, MetaRed, [])),
+    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid3), json, MetaBlue, [])),
     ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
     ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
     FinalCheck = fun() ->
@@ -431,7 +432,7 @@ get_empty_json(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, {guid, Guid}, json, [], false)).
+    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, ?FILE_REF(Guid), json, [], false)).
 
 get_empty_rdf(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -439,7 +440,7 @@ get_empty_rdf(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, {guid, Guid}, rdf, [], false)).
+    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, [], false)).
 
 has_custom_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -448,23 +449,23 @@ has_custom_metadata_test(Config) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
     % json
-    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, #{}, [])),
-    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, json)),
+    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
+    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, #{}, [])),
+    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
+    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, ?FILE_REF(Guid), json)),
 
     % rdf
-    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, <<"<xml>">>, [])),
-    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, rdf)),
+    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
+    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, <<"<xml>">>, [])),
+    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
+    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, ?FILE_REF(Guid), rdf)),
 
     % xattr
-    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, #xattr{name = <<"name">>, value = <<"value">>})),
-    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})),
-    ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, <<"name">>)),
-    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, Guid})).
+    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), #xattr{name = <<"name">>, value = <<"value">>})),
+    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
+    ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, ?FILE_REF(Guid), <<"name">>)),
+    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))).
 
 resolve_guid_of_root_should_return_root_guid(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -498,7 +499,7 @@ custom_metadata_doc_should_contain_file_objectid(Config) ->
     Path = <<"/", SpaceName/binary, "/custom_meta_file">>,
     Xattr1 = #xattr{name = <<"name">>, value = <<"value">>},
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr1)),
     FileUuid = file_id:guid_to_uuid(Guid),
 
     {ok, #document{value = #custom_metadata{file_objectid = FileObjectid}}} =
@@ -546,12 +547,12 @@ create_and_query_view_mapping_one_file_to_many_rows(Config) ->
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     {ok, FileId3} = file_id:guid_to_objectid(Guid3),
 
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr1)),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr2)),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid1}, Xattr3)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid1), Xattr1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid1), Xattr2)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid1), Xattr3)),
 
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr1)),
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid2}, Xattr2)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid2), Xattr1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid2), Xattr2)),
 
     ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
     ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
@@ -602,15 +603,15 @@ do_not_overwrite_space_dir_attrs_on_make_space_exist_test(Config) ->
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
-    {ok, ShareId} = lfm_proxy:create_share(Worker, SessId, {guid, SpaceGuid}, <<"szer">>),
+    {ok, ShareId} = lfm_proxy:create_share(Worker, SessId, ?FILE_REF(SpaceGuid), <<"szer">>),
     {ok, SpaceAttrs} = ?assertMatch(
         {ok, #file_attr{shares = [ShareId]}},
-        lfm_proxy:stat(Worker, SessId, {guid, SpaceGuid})
+        lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceGuid))
     ),
 
     lists:foreach(fun(_) ->
         ?assertEqual(ok, rpc:call(Worker, file_meta, make_space_exist, [SpaceId])),
-        ?assertMatch({ok, SpaceAttrs}, lfm_proxy:stat(Worker, SessId, {guid, SpaceGuid}))
+        ?assertMatch({ok, SpaceAttrs}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceGuid)))
     end, lists:seq(1, 10)).
 
 
@@ -640,20 +641,20 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
 
     Content = <<"content">>,
     ContentSize = size(Content),
-    {ok, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, NormalSessId, {guid, File4Guid}, write)),
+    {ok, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, NormalSessId, ?FILE_REF(File4Guid), write)),
     ?assertMatch({ok, ContentSize}, lfm_proxy:write(Worker, Handle1, 0, Content)),
     ?assertMatch(ok, lfm_proxy:close(Worker, Handle1)),
 
     % Assert that when listing in normal mode all space files are returned
     ?assertMatch(
         {ok, [{DirGuid, _}, {File1Guid, _}, {File2Guid, _}, {File3Guid, _}]},
-        lfm_proxy:get_children(Worker, NormalSessId, {guid, SpaceGuid}, 0, 100)
+        lfm_proxy:get_children(Worker, NormalSessId, ?FILE_REF(SpaceGuid), 0, 100)
     ),
 
     % Assert that listing in open_handle mode should return nothing as there are no shares with open handle
     ?assertMatch(
         {ok, []},
-        lfm_proxy:get_children(Worker, OpenHandleSessId, {guid, SpaceGuid}, 0, 100)
+        lfm_proxy:get_children(Worker, OpenHandleSessId, ?FILE_REF(SpaceGuid), 0, 100)
     ),
 
     BuildShareRootDirFun = fun(ShareId) ->
@@ -711,14 +712,14 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
                 shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
             }
         ], #{is_last := true}},
-        lfm_proxy:get_children_attrs(Worker, OpenHandleSessId, {guid, SpaceGuid},  #{offset => 0, size => 100})
+        lfm_proxy:get_children_attrs(Worker, OpenHandleSessId, ?FILE_REF(SpaceGuid),  #{offset => 0, size => 100})
     ),
 
     % Assert listing virtual share root dir returns only share root file
     lists:foreach(fun({ShareRootFileGuid, ShareRootFileName, ShareRootDirGuid}) ->
         ?assertMatch(
             {ok, [{ShareRootFileGuid, ShareRootFileName}]},
-            lfm_proxy:get_children(Worker, OpenHandleSessId, {guid, ShareRootDirGuid}, 0, 100)
+            lfm_proxy:get_children(Worker, OpenHandleSessId, ?FILE_REF(ShareRootDirGuid), 0, 100)
         )
     end, [
         {DirShareGuid, <<"dir">>, DirShareRootDirGuid},
@@ -736,22 +737,22 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
 
     ?assertMatch(
         {ok, [{DirSpaceShareGuid, _}, {File1SpaceShareGuid, _}, {File2SpaceShareGuid, _}, {File3SpaceShareGuid, _}]},
-        lfm_proxy:get_children(Worker, OpenHandleSessId, {guid, SpaceShareGuid}, 0, 100)
+        lfm_proxy:get_children(Worker, OpenHandleSessId, ?FILE_REF(SpaceShareGuid), 0, 100)
     ),
 
     % Assert it is possible to operate on file4 using Share4Id (direct share of file4)
     % but is not possible via space/dir share (those are shares created on parents so
     % permissions check must assert traverse ancestors for them too - dir has 8#770 perms
     % and in 'open_handle' mode 'other' bits are checked so permissions will be denied)
-    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, OpenHandleSessId, {guid, File4ShareGuid}, read)),
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, OpenHandleSessId, ?FILE_REF(File4ShareGuid), read)),
     ?assertMatch({ok, Content}, lfm_proxy:read(Worker, Handle2, 0, 100)),
     ?assertMatch(ok, lfm_proxy:close(Worker, Handle2)),
 
     File4DirShareGuid = file_id:guid_to_share_guid(File4Guid, DirShareId),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, OpenHandleSessId, {guid, File4DirShareGuid}, read)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, OpenHandleSessId, ?FILE_REF(File4DirShareGuid), read)),
 
     File4SpaceShareGuid = file_id:guid_to_share_guid(File4Guid, SpaceShareId),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, OpenHandleSessId, {guid, File4SpaceShareGuid}, read)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, OpenHandleSessId, ?FILE_REF(File4SpaceShareGuid), read)),
 
     ok.
 

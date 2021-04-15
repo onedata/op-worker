@@ -15,6 +15,7 @@
 -include("api_file_test_utils.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/file_details.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
@@ -218,7 +219,7 @@ create_get_children_tests_env(TestMode) ->
             undefined;
         share_mode ->
             {ok, ShId} = lfm_proxy:create_share(
-                P1Node, SpaceOwnerSessIdP1, {guid, DirGuid}, <<"share">>
+                P1Node, SpaceOwnerSessIdP1, ?FILE_REF(DirGuid), <<"share">>
             ),
             ShId
     end,

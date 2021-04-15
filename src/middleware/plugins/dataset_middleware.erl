@@ -191,11 +191,11 @@ validate(#op_req{operation = Op, gri = #gri{aspect = As}}, DatasetDoc) when
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
-    FileKey = {guid, maps:get(<<"rootFileId">>, Data)},
+    FileRef = ?FILE_REF(maps:get(<<"rootFileId">>, Data)),
     ProtectionFlags = file_meta:protection_flags_from_json(
         maps:get(<<"protectionFlags">>, Data, [])
     ),
-    {ok, DatasetId} = ?check(lfm:establish_dataset(SessionId, FileKey, ProtectionFlags)),
+    {ok, DatasetId} = ?check(lfm:establish_dataset(SessionId, FileRef, ProtectionFlags)),
     {ok, DatasetInfo} = ?check(lfm:get_dataset_info(SessionId, DatasetId)),
     {ok, resource, {GRI#gri{id = DatasetId}, DatasetInfo}}.
 

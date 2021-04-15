@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -104,7 +105,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
     % Wait until dbsync synchronizes all files
     lists:foreach(fun(File) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileSize}},
-            lfm_proxy:stat(WorkerP2, SessIdP2, {guid, File}), Attempts)
+            lfm_proxy:stat(WorkerP2, SessIdP2, ?FILE_REF(File)), Attempts)
     end, AllFiles),
 
     % Schedule on_the_fly blocks replications
@@ -125,7 +126,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
                 rpc:call(WorkerP2, sync_req, request_block_synchronization,
                     [UserCtxP2, FileCtx, #file_block{offset = Offset, size = 1}, false, undefined, Priority]))
         end, lists:seq(0, 9)),
-        lfm_proxy:schedule_file_replication(WorkerP2, SessIdP2, {guid, File}, P2)
+        lfm_proxy:schedule_file_replication(WorkerP2, SessIdP2, ?FILE_REF(File), P2)
     end, Files2),
 
     % Verify transfers scheduling
@@ -175,7 +176,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
         ?assertMatch({ok, [
             #{<<"blocks">> := [[0, FileSize]], <<"totalBlocksSize">> := FileSize},
             #{<<"blocks">> := [[0, FileSize]], <<"totalBlocksSize">> := FileSize}
-        ]}, lfm_proxy:get_file_distribution(WorkerP2, UpdatedSessIdP2, {guid, File}), Attempts)
+        ]}, lfm_proxy:get_file_distribution(WorkerP2, UpdatedSessIdP2, ?FILE_REF(File)), Attempts)
     end, FilesToCheckDistribution),
 
     ok.

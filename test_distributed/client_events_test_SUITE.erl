@@ -11,8 +11,9 @@
 -module(client_events_test_SUITE).
 -author("Michal Wrzeszcz").
 
--include("modules/events/routing.hrl").
 -include("fuse_test_utils.hrl").
+-include("modules/events/routing.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include_lib("clproto/include/messages.hrl").
@@ -84,7 +85,7 @@ subscribe_on_dir_test(Config) ->
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
 
-    ?assertEqual(ok, lfm_proxy:unlink(Worker1, <<"0">>, {guid, FileGuid})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker1, <<"0">>, ?FILE_REF(FileGuid))),
     receive_events_and_check(file_removed, FileGuid),
 
     ?assertEqual(ok, ssl:send(Sock,
@@ -202,9 +203,9 @@ events_on_conflicts_test(Config) ->
 
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
-    ?assertMatch({ok, _}, lfm_proxy:mv(Worker1, SessionId, {guid, FileGuid},
+    ?assertMatch({ok, _}, lfm_proxy:mv(Worker1, SessionId, ?FILE_REF(FileGuid),
         <<"/space_name1/", Dirname/binary, "/", ?CONFLICTING_FILE_AFTER_RENAME_STR>>)),
-    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessionId, {guid, FileGuid})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessionId, ?FILE_REF(FileGuid))),
 
     % Events triggered by mv and unlink
     CheckList = receive_events_and_check(file_renamed, FileGuid),
@@ -332,9 +333,9 @@ subscribe_on_replication_info_multiprovider_test(Config) ->
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, false]), 10),
 
     % Prepare handles to edit file
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessionIdWorker2, {guid, FileGuid}), 30),
-    {ok, Worker1Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker1, SessionIdUser2, {guid, FileGuid}, rdwr)),
-    {ok, Worker2Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionIdWorker2, {guid, FileGuid}, rdwr)),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessionIdWorker2, ?FILE_REF(FileGuid)), 30),
+    {ok, Worker1Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker1, SessionIdUser2, ?FILE_REF(FileGuid), rdwr)),
+    {ok, Worker2Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionIdWorker2, ?FILE_REF(FileGuid), rdwr)),
 
     % Test status change after write on remote provider
     ?assertEqual({ok, 3}, lfm_proxy:write(Worker2, Worker2Handle, 0, <<"xxx">>)),
@@ -366,7 +367,7 @@ subscribe_on_replication_info_multiprovider_test(Config) ->
     receive_events_and_check({receive_replication_changed, undefined}, FileGuid),
 
     % Change status to verify read operations
-    ?assertMatch({ok, #file_attr{size = 9}}, lfm_proxy:stat(Worker2, SessionIdWorker2, {guid, FileGuid}), 30),
+    ?assertMatch({ok, #file_attr{size = 9}}, lfm_proxy:stat(Worker2, SessionIdWorker2, ?FILE_REF(FileGuid)), 30),
     ?assertEqual({ok, 3}, lfm_proxy:write(Worker2, Worker2Handle, 0, <<"xxx">>)),
     ?assertEqual(ok, lfm_proxy:fsync(Worker2, Worker2Handle)),
     receive_events_and_check({receive_replication_changed, false}, FileGuid),
