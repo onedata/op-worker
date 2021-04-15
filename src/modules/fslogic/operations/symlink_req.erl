@@ -104,7 +104,11 @@ resolve_symlink(SymlinkFileCtx, #resolution_ctx{
             % absolute path with no space id prefix - not supported
             throw(?ENOENT);
         [<<?SPACE_ID_PREFIX, SpaceId:SpaceIdSize/binary, ?SPACE_ID_SUFFIX>> | RestTokens] ->
-            % absolute path with space id prefix (start at space dir)
+            % absolute path with space id prefix (start at space dir).
+            % Share Id is added to starting space guid so that it will be passed on
+            % during file tree navigation. Checks if the file pointed to by the symlink
+            % is part of the share is done by checking ?TRAVERSE_ANCESTORS permissions
+            % in 'resolve' function.
             ShareId = file_ctx:get_share_id_const(SymlinkFileCtx),
             SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
             SpaceDirShareGuid = file_id:guid_to_share_guid(SpaceDirGuid, ShareId),
