@@ -114,6 +114,7 @@ get_or_calculate(Cache, FileDoc, CalculateCallback) ->
 -spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(), get_options()) ->
     get_return_value().
 get_or_calculate(Cache, #document{key = DocKey} = FileDoc, CalculateCallback, Options) ->
+    % use_referenced_key option will be used only for main file, set false for ancestors
     {Key, Options2} = case maps:get(use_referenced_key, Options, false) of
         true -> {fslogic_uuid:ensure_referenced_uuid(DocKey), Options#{use_referenced_key => false}};
         false -> {DocKey, Options}

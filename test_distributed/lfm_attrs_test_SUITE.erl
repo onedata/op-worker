@@ -205,21 +205,34 @@ effective_value_test(Config) ->
         {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
         ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, #{initial_calculation_info => []}])),
 
+    ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
+    % Sleep to be sure that next operations are perceived as following after invalidation,
+    % not parallel to invalidation (millisecond clock is used by effective value)
+    timer:sleep(5),
+
+    % Calculation should work with in_critical_section set to true
+    ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
+        {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]}, ?CALL_CACHE(Worker, get_or_calculate,
+        [Doc3, Callback, #{initial_calculation_info => [], in_critical_section => true}])),
+    ?assertEqual({ok, <<"dir3">>, []}, ?CALL_CACHE(Worker, get_or_calculate,
+        [Doc3, Callback, #{initial_calculation_info => [], in_critical_section => true}])),
     ok.
 
 multipath_effective_value_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Dir1 = filename:join(["/", SpaceName, "multipath_ev_dir1"]),
+    Dir0 = filename:join(["/", SpaceName, "multipath_ev_dir0"]),
+    Dir1 = filename:join([Dir0, "multipath_ev_dir1"]),
     Dir2 = filename:join([Dir1, "multipath_ev_dir2"]),
     Dir3 = filename:join(["/", SpaceName, "multipath_ev_dir3"]),
     Link = filename:join(["/", SpaceName, Dir3, "link"]),
 
+    % Create dirs, file and link used during the test
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir0)),
     {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir1)),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir2)),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir3)),
-
     FileGuid = file_ops_test_utils:create_file(Worker, SessId, DirGuid, <<"file">>, <<"xyz">>),
     {ok, #file_attr{guid = LinkGuid}} = ?assertMatch({ok, _}, lfm_proxy:make_link(Worker, SessId, Link, FileGuid)),
     FileUuid = file_id:guid_to_uuid(FileGuid),
@@ -227,6 +240,7 @@ multipath_effective_value_test(Config) ->
     {ok, FileDoc} = ?assertMatch({ok, _}, rpc:call(Worker, file_meta, get, [{uuid, FileUuid}])),
     {ok, LinkDoc} = ?assertMatch({ok, _}, rpc:call(Worker, file_meta, get, [{uuid, LinkUuid}])),
 
+    % Define callback functions
     Callback = fun([#document{value = #file_meta{name = Name}}, ParentValue, CalculationInfo]) ->
         {ok, Name, [{Name, ParentValue} | CalculationInfo]}
     end,
@@ -236,62 +250,93 @@ multipath_effective_value_test(Config) ->
         {ok, Value, CalculationInfo}
     end,
 
+    % Calculate value for file and hardlink - different paths should be used during calculation
     ?assertEqual({ok, <<"file">>,
-        [{<<"file">>, <<"multipath_ev_dir1">>}, {<<"multipath_ev_dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
+        [{<<"file">>, <<"multipath_ev_dir1">>}, {<<"multipath_ev_dir1">>, <<"multipath_ev_dir0">>},
+            {<<"multipath_ev_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
         ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback, #{initial_calculation_info => []}])),
     ?assertEqual({ok, <<"link">>, [{<<"link">>, <<"multipath_ev_dir3">>}, {<<"multipath_ev_dir3">>, <<"space_id1">>}]},
         ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback, #{initial_calculation_info => []}])),
 
+    % Test usage of use_referenced_key parameter - value for file should be read from cache
+    % (calculation info should be empty)
     ?assertEqual({ok, <<"file">>, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], use_referenced_key => true}])),
 
+    % Invalidate cache for further tests
     ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
     % Sleep to be sure that next operations are perceived as following after invalidation,
     % not parallel to invalidation (millisecond clock is used by effective value)
     timer:sleep(5),
 
+    % Test calculation using more than one path (path of file and hardlink should be used)
     CalculationInfo1 = [{<<"link">>, <<"multipath_ev_dir3">>}, {<<"multipath_ev_dir3">>, <<"space_id1">>},
-        {<<"file">>, <<"multipath_ev_dir1">>}, {<<"multipath_ev_dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
+        {<<"file">>, <<"multipath_ev_dir1">>}, {<<"multipath_ev_dir1">>, <<"multipath_ev_dir0">>},
+        {<<"multipath_ev_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
     ?assertEqual({ok, <<"link">>, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
-            #{initial_calculation_info => [], use_referenced_key => true, multipath_merge_callback => MergeCallback}])),
+            #{initial_calculation_info => [], use_referenced_key => true, multi_path_merge_callback => MergeCallback}])),
     verify_merge_message({<<"link">>, <<"file">>, CalculationInfo1}),
     verify_merge_message(timeout),
 
+    % Value calculated using multiple paths should provider from cache for both file and link
     ?assertEqual({ok, <<"link">>, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
-            #{initial_calculation_info => [], use_referenced_key => true, multipath_merge_callback => MergeCallback}])),
+            #{initial_calculation_info => [], use_referenced_key => true, multi_path_merge_callback => MergeCallback}])),
     verify_merge_message(timeout),
-
     ?assertEqual({ok, <<"link">>, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback,
-            #{initial_calculation_info => [], use_referenced_key => true, multipath_merge_callback => MergeCallback}])),
+            #{initial_calculation_info => [], use_referenced_key => true, multi_path_merge_callback => MergeCallback}])),
     verify_merge_message(timeout),
 
+    % Cached parent values should be used without use_referenced_key parameter set to true
     CalculationInfo2 = [{<<"link">>, <<"multipath_ev_dir3">>}, {<<"file">>, <<"multipath_ev_dir1">>}],
     ?assertEqual({ok, <<"link">>, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
-            #{initial_calculation_info => [], multipath_merge_callback => MergeCallback}])),
+            #{initial_calculation_info => [], multi_path_merge_callback => MergeCallback}])),
     verify_merge_message({<<"link">>, <<"file">>, CalculationInfo2}),
     verify_merge_message(timeout),
-
+    % Value calculated without use_referenced_key parameter set to true should be cached
     ?assertEqual({ok, <<"link">>, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
-            #{initial_calculation_info => [], multipath_merge_callback => MergeCallback}])),
+            #{initial_calculation_info => [], multi_path_merge_callback => MergeCallback}])),
     verify_merge_message(timeout),
 
-
+    % Value for space dir should be calculated 2 times because timestamp is before invalidation
     Timestamp = rpc:call(Worker, bounded_cache, get_timestamp, []),
     ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
     CalculationInfo3 =
         [{<<"link">>, <<"multipath_ev_dir3">>}, {<<"multipath_ev_dir3">>, <<"space_id1">>}, {<<"space_id1">>, undefined},
-        {<<"file">>, <<"multipath_ev_dir1">>}, {<<"multipath_ev_dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
+        {<<"file">>, <<"multipath_ev_dir1">>}, {<<"multipath_ev_dir1">>, <<"multipath_ev_dir0">>},
+            {<<"multipath_ev_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
     ?assertEqual({ok, <<"link">>, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
-            #{initial_calculation_info => [], timestamp => Timestamp, multipath_merge_callback => MergeCallback}])),
+            #{initial_calculation_info => [], timestamp => Timestamp, multi_path_merge_callback => MergeCallback}])),
     verify_merge_message({<<"link">>, <<"file">>, CalculationInfo3}),
     verify_merge_message(timeout),
 
     % Sleep to be sure that next operations are perceived as following after invalidation,
     % not parallel to invalidation (millisecond clock is used by effective value)
     timer:sleep(5),
+    % Value for space dir should be calculated only once as we are after invalidation
     ?assertEqual({ok, <<"link">>, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
-            #{initial_calculation_info => [], multipath_merge_callback => MergeCallback}])),
+            #{initial_calculation_info => [], multi_path_merge_callback => MergeCallback}])),
     verify_merge_message({<<"link">>, <<"file">>, CalculationInfo1}),
+    verify_merge_message(timeout),
+
+    % Invalidate cache for further tests
+    ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
+    % Sleep to be sure that next operations are perceived as following after invalidation,
+    % not parallel to invalidation (millisecond clock is used by effective value)
+    timer:sleep(5),
+
+    % Calculation should work with in_critical_section set to true
+    ?assertEqual({ok, <<"link">>, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
+        #{initial_calculation_info => [], multi_path_merge_callback => MergeCallback, in_critical_section => true}])),
+    verify_merge_message({<<"link">>, <<"file">>, CalculationInfo1}),
+    verify_merge_message(timeout),
+
+    % Calculation should work with in_critical_section set to true and no caching because of timestamp
+    Timestamp2 = rpc:call(Worker, bounded_cache, get_timestamp, []),
+    ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
+    ?assertEqual({ok, <<"link">>, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
+        #{initial_calculation_info => [], timestamp => Timestamp2, multi_path_merge_callback => MergeCallback,
+            in_critical_section => true}])),
+    verify_merge_message({<<"link">>, <<"file">>, CalculationInfo3}),
     verify_merge_message(timeout),
 
     ok.
@@ -920,6 +965,7 @@ end_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_trave
     ?assertEqual(ok, rpc:call(Worker, tree_traverse, stop, [?MODULE])),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case, Config) when Case =:= effective_value_test ; Case =:= multipath_effective_value_test ->
+    timer:sleep(5000),
     CachePid = ?config(cache_pid, Config),
     CachePid ! {finish, self()},
     ok = receive
