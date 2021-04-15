@@ -13,6 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/acl.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -428,7 +429,7 @@ schedule_migration_by_view(Config, Type) ->
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction, [], [ProviderId1, ProviderId2]),
@@ -516,24 +517,24 @@ schedule_migration_of_regular_file_by_view_with_reduce(Config, Type) ->
     Xattr22 = #xattr{name = XattrName2, value = XattrValue22},
 
     % File1: xattr1=1, xattr2=1, should be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid1}, Xattr11),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid1}, Xattr21),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid1), Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid1), Xattr21),
 
     % File2: xattr1=1, xattr2=2, should not be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid2}, Xattr11),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid2}, Xattr22),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid2), Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid2), Xattr22),
 
     % File3: xattr1=1, xattr2=null, should not be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid3}, Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid3), Xattr11),
 
     % File4: xattr1=2, xattr2=null, should not be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid4}, Xattr12),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid4), Xattr12),
 
     % File5: xattr1=null, xattr2=null, should not be replicated
 
     % File6: xattr1=1, xattr2=1, should be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr11),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr21),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid6), Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid6), Xattr21),
 
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName1, XattrName2),
@@ -616,7 +617,7 @@ scheduling_migration_by_not_existing_view_should_fail(Config, Type) ->
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
 
     transfers_test_mechanism:run_test(
@@ -667,7 +668,7 @@ scheduling_replica_migration_by_view_with_function_returning_wrong_value_should_
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
     WrongValue = <<"random_value_instead_of_file_id">>,
     %functions does not emit file id in values
     MapFunction = <<
@@ -743,7 +744,7 @@ scheduling_replica_migration_by_view_returning_not_existing_file_should_not_fail
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
 
     NotExistingUuid = <<"not_existing_uuid">>,
     NotExistingGuid = file_id:pack_guid(NotExistingUuid, SpaceId),
@@ -870,7 +871,7 @@ scheduling_migration_by_not_existing_key_in_view_should_succeed(Config, Type) ->
     XattrValue = 1,
     XattrValue2 = 2,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction, [], [ProviderId1, ProviderId2]),
@@ -943,7 +944,7 @@ schedule_migration_of_100_regular_files_by_view(Config, Type) ->
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
     FileIds = lists:map(fun({FileGuid, _}) ->
-        ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+        ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
         {ok, FileId} = file_id:guid_to_objectid(FileGuid),
         FileId
     end, FileGuidsAndPaths),
@@ -1193,7 +1194,7 @@ rerun_view_migration(Config, Type) ->
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction, [], [ProviderId1, ProviderId2]),

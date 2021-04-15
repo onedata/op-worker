@@ -15,6 +15,7 @@
 -include("api_test_runner.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -144,7 +145,7 @@ build_create_view_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, Use
 
         FilesToTransfer = lists:map(fun(_) ->
             FileGuid = create_file(SrcNode, SessId1, RootDirPath),
-            ?assertMatch(ok, lfm_proxy:set_xattr(SrcNode, SessId1, {guid, FileGuid}, Xattr)),
+            ?assertMatch(ok, lfm_proxy:set_xattr(SrcNode, SessId1, ?FILE_REF(FileGuid), Xattr)),
             FileGuid
         end, lists:seq(1, FilesToTransferNum)),
 

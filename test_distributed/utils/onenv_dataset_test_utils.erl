@@ -14,6 +14,7 @@
 
 -include("onenv_test_utils.hrl").
 -include("modules/dataset/dataset.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -94,7 +95,7 @@ set_up_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
 
     {ok, DatasetId} = ?assertMatch(
         {ok, _},
-        lfm_proxy:establish_dataset(CreationNode, UserSessId, {guid, FileGuid}, Flags),
+        lfm_proxy:establish_dataset(CreationNode, UserSessId, ?FILE_REF(FileGuid), Flags),
         ?ATTEMPTS
     ),
     case State of

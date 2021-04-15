@@ -14,6 +14,7 @@
 
 -include("api_file_test_utils.hrl").
 -include("api_test_runner.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -705,7 +706,7 @@ get_file_shares(ProviderSelector, UserSelector, FileGuid) ->
 
     {ok, #file_attr{shares = FileShares}} = ?assertMatch(
         {ok, _},
-        lfm_proxy:stat(Node, UserSessId, {guid, FileGuid})
+        lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid))
     ),
     lists:sort(FileShares).
 

@@ -141,7 +141,7 @@ process_request(#op_req{
     auth = #auth{session_id = SessionId},
     gri = #gri{id = FileGuid, aspect = content}
 }, Req) ->
-    case ?check(lfm:stat(SessionId, ?INDIRECT_GUID_KEY(FileGuid))) of
+    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, true))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{} = FileAttrs} ->
@@ -154,19 +154,19 @@ process_request(#op_req{
     gri = #gri{id = FileGuid, aspect = content},
     data = Params
 }, Req) ->
-    FileKey = {guid, FileGuid},
+    FileRef = ?FILE_REF(FileGuid),
 
     Offset = case maps:get(<<"offset">>, Params, undefined) of
         undefined ->
             % Overwrite file if no explicit offset was given
-            ?check(lfm:truncate(SessionId, FileKey, 0)),
+            ?check(lfm:truncate(SessionId, FileRef, 0)),
             0;
         Num ->
             % Otherwise leave previous content and start writing from specified offset
             Num
     end,
 
-    Req2 = write_req_body_to_file(SessionId, FileKey, Offset, Req),
+    Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
     http_req:send_response(?NO_CONTENT_REPLY, Req2);
 
 process_request(#op_req{
@@ -184,16 +184,17 @@ process_request(#op_req{
             {DirGuid, Req};
         ?REGULAR_FILE_TYPE ->
             {ok, FileGuid} = ?check(lfm:create(SessionId, ParentGuid, Name, Mode)),
+            FileRef = ?FILE_REF(FileGuid),
 
             case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
                 {0, false} ->
                     {FileGuid, Req};
                 {Offset, _} ->
                     try
-                        Req2 = write_req_body_to_file(SessionId, {guid, FileGuid}, Offset, Req),
+                        Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
                         {FileGuid, Req2}
                     catch Type:Reason ->
-                        lfm:unlink(SessionId, {guid, FileGuid}, false),
+                        lfm:unlink(SessionId, FileRef, false),
                         erlang:Type(Reason)
                     end
             end;
@@ -201,14 +202,14 @@ process_request(#op_req{
             TargetFileGuid = maps:get(<<"target_file_id">>, Params),
 
             {ok, #file_attr{guid = LinkGuid}} = ?check(lfm:make_link(
-                SessionId, ?GUID_KEY(TargetFileGuid), ParentGuid, Name
+                SessionId, ?FILE_REF(TargetFileGuid), ?FILE_REF(ParentGuid), Name
             )),
             {LinkGuid, Req};
         ?SYMLINK_TYPE ->
             TargetFilePath = maps:get(<<"target_file_path">>, Params),
 
             {ok, #file_attr{guid = SymlinkGuid}} = ?check(lfm:make_symlink(
-                SessionId, ?GUID_KEY(ParentGuid), Name, TargetFilePath
+                SessionId, ?FILE_REF(ParentGuid), Name, TargetFilePath
             )),
             {SymlinkGuid, Req}
     end,
@@ -223,13 +224,13 @@ process_request(#op_req{
 %% @private
 -spec write_req_body_to_file(
     session:id(),
-    lfm:file_key(),
+    lfm:file_ref(),
     Offset :: non_neg_integer(),
     cowboy_req:req()
 ) ->
     cowboy_req:req() | no_return().
-write_req_body_to_file(SessionId, FileKey, Offset, Req) ->
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileKey, write)),
+write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileRef, write)),
 
     {ok, Req2} = file_upload_utils:upload_file(
         FileHandle, Offset, Req,

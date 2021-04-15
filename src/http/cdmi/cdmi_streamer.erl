@@ -50,7 +50,7 @@ stream_cdmi(Req, #cdmi_req{
         Range1, Size, Encoding, JsonBodyPrefix, JsonBodySuffix
     ),
 
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, Guid}, read)),
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, ?FILE_REF(Guid), read)),
     try
         ReadBlockSize0 = http_streamer:get_read_block_size(FileHandle),
         ReadBlockSize = case Encoding of

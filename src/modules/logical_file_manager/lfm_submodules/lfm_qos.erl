@@ -13,6 +13,7 @@
 -author("Michal Cwiertnia").
 
 -include("modules/datastore/qos.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("common_test/include/ct.hrl").
@@ -44,7 +45,7 @@ add_qos_entry(SessId, FileKey, RawExpression, ReplicasNum, EntryType) ->
         true -> qos_expression:parse(RawExpression);
         false -> RawExpression
     end,
-    Guid = lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
 
     remote_utils:call_fslogic(SessId, provider_request, Guid,
         #add_qos_entry{
@@ -63,7 +64,7 @@ get_effective_file_qos(SessId, FileKey) ->
     remote_utils:call_fslogic(
         SessId,
         provider_request,
-        lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+        lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
         #get_effective_file_qos{},
         fun(#eff_qos_response{entries_with_status = EntriesWithStatus, assigned_entries = AssignedEntries}) ->
             {ok, {EntriesWithStatus, AssignedEntries}}
@@ -120,14 +121,14 @@ check_qos_status(SessId, QosEntryId, undefined) ->
         {error, _} = Error ->
             Error;
         {ok, QosRootFileGuid} ->
-            check_qos_status(SessId, QosEntryId, {guid, QosRootFileGuid})
+            check_qos_status(SessId, QosEntryId, ?FILE_REF(QosRootFileGuid))
     end;
 
 check_qos_status(SessId, QosEntryId, FileKey) ->
     remote_utils:call_fslogic(
         SessId,
         provider_request,
-        lfm_file_key_utils:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+        lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
         #check_qos_status{qos_id = QosEntryId},
         fun(#qos_status_response{status = Status}) -> {ok, Status} end
     ).

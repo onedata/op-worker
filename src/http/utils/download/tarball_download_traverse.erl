@@ -20,6 +20,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("tree_traverse.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -202,7 +203,7 @@ handle_multiple_files(
     file_meta:path()) -> tar_utils:stream().
 stream_file(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
     #file_attr{size = FileSize, guid = Guid} = FileAttrs,
-    case check_read_result(lfm:monitored_open(SessionId, {guid, Guid}, read)) of
+    case check_read_result(lfm:monitored_open(SessionId, ?FILE_REF(Guid), read)) of
         {ok, FileHandle} ->
             {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, StartingDirPath),
             http_streamer:send_data_chunk(Bytes, Req),
@@ -225,7 +226,7 @@ stream_file(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
     file_meta:path()) -> tar_utils:stream().
 stream_symlink(TarStream, Req, SessionId, FileAttrs, StartingDirPath) ->
     #file_attr{guid = Guid} = FileAttrs,
-    case check_read_result(lfm:read_symlink(SessionId, {guid, Guid})) of
+    case check_read_result(lfm:read_symlink(SessionId, ?FILE_REF(Guid))) of
         {ok, LinkPath} ->
             {Bytes, TarStream1} = new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, LinkPath),
             http_streamer:send_data_chunk(Bytes, Req),

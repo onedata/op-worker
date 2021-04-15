@@ -53,14 +53,14 @@
 %% without "cdmi_" prefix.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_metadata(session:id(), lfm:file_key()) -> map().
-get_user_metadata(SessionId, FileKey) ->
-    {ok, Names} = ?check(lfm:list_xattr(SessionId, FileKey, false, true)),
+-spec get_user_metadata(session:id(), lfm:file_ref()) -> map().
+get_user_metadata(SessionId, FileRef) ->
+    {ok, Names} = ?check(lfm:list_xattr(SessionId, FileRef, false, true)),
     filter_user_metadata_map(lists:foldl(fun
         (<<?USER_METADATA_FORBIDDEN_PREFIX_STRING, _/binary>>, Acc) ->
             Acc;
         (Name, Acc) ->
-            case lfm:get_xattr(SessionId, FileKey, Name, false) of
+            case lfm:get_xattr(SessionId, FileRef, Name, false) of
                 {ok, #xattr{value = XattrValue}} ->
                     Acc#{Name => XattrValue};
                 {error, ?ENOATTR} ->
@@ -72,11 +72,11 @@ get_user_metadata(SessionId, FileKey) ->
 
 
 %%--------------------------------------------------------------------
-%% @equiv update_user_metadata(Auth, FileKey, UserMetadata, []).
+%% @equiv update_user_metadata(Auth, FileRef, UserMetadata, []).
 %%--------------------------------------------------------------------
--spec update_user_metadata(session:id(), lfm:file_key(), map()) -> ok.
-update_user_metadata(SessionId, FileKey, UserMetadata) ->
-    update_user_metadata(SessionId, FileKey, UserMetadata, []).
+-spec update_user_metadata(session:id(), lfm:file_ref(), map()) -> ok.
+update_user_metadata(SessionId, FileRef, UserMetadata) ->
+    update_user_metadata(SessionId, FileRef, UserMetadata, []).
 
 
 %%--------------------------------------------------------------------
@@ -87,21 +87,21 @@ update_user_metadata(SessionId, FileKey, UserMetadata) ->
 %% a file.
 %% @end
 %%--------------------------------------------------------------------
--spec update_user_metadata(session:id(), lfm:file_key(),
+-spec update_user_metadata(session:id(), lfm:file_ref(),
     UserMetadata :: undefined | map(), URIMetadataNames :: [Name :: binary()]) ->
     ok | no_return().
-update_user_metadata(_SessionId, _FileKey, undefined, []) ->
+update_user_metadata(_SessionId, _FileRef, undefined, []) ->
     ok;
-update_user_metadata(SessionId, FileKey, undefined, URIMetadataNames) ->
-    update_user_metadata(SessionId, FileKey, #{}, URIMetadataNames);
-update_user_metadata(SessionId, FileKey, UserMetadata, AllURIMetadataNames) ->
+update_user_metadata(SessionId, FileRef, undefined, URIMetadataNames) ->
+    update_user_metadata(SessionId, FileRef, #{}, URIMetadataNames);
+update_user_metadata(SessionId, FileRef, UserMetadata, AllURIMetadataNames) ->
     BodyMetadata = filter_user_metadata_map(UserMetadata),
     BodyMetadataNames = maps:keys(BodyMetadata),
     DeleteAttributeFunction = fun
         (?ACL_XATTR_NAME) ->
-            ?check(lfm:remove_acl(SessionId, FileKey));
+            ?check(lfm:remove_acl(SessionId, FileRef));
         (Name) ->
-            ?check(lfm:remove_xattr(SessionId, FileKey, Name))
+            ?check(lfm:remove_xattr(SessionId, FileRef, Name))
     end,
     ReplaceAttributeFunction = fun
         ({?ACL_XATTR_NAME, Value}) ->
@@ -111,10 +111,10 @@ update_user_metadata(SessionId, FileKey, UserMetadata, AllURIMetadataNames) ->
                 ?debug_stacktrace("Acl conversion error ~p", [Error]),
                 throw(?ERROR_BAD_DATA(<<"acl">>))
             end,
-            ?check(lfm:set_acl(SessionId, FileKey, ACL));
+            ?check(lfm:set_acl(SessionId, FileRef, ACL));
         ({Name, Value}) ->
             ?check(lfm:set_xattr(
-                SessionId, FileKey,
+                SessionId, FileRef,
                 #xattr{name = Name, value = Value},
                 false, false
             ))
@@ -123,7 +123,7 @@ update_user_metadata(SessionId, FileKey, UserMetadata, AllURIMetadataNames) ->
         [] ->
             lists:foreach(
                 DeleteAttributeFunction,
-                maps:keys(get_user_metadata(SessionId, FileKey)) -- BodyMetadataNames
+                maps:keys(get_user_metadata(SessionId, FileRef)) -- BodyMetadataNames
             ),
             lists:foreach(ReplaceAttributeFunction, maps:to_list(BodyMetadata));
         _ ->
@@ -142,16 +142,16 @@ update_user_metadata(SessionId, FileKey, UserMetadata, AllURIMetadataNames) ->
 %%--------------------------------------------------------------------
 %% @doc Prepares cdmi user and storage system metadata with given prefix.
 %%--------------------------------------------------------------------
--spec prepare_metadata(session:id(), FileKey :: lfm:file_key(),
+-spec prepare_metadata(session:id(), FileRef :: lfm:file_ref(),
     Prefix :: binary(), #file_attr{}) -> map().
-prepare_metadata(SessionId, FileKey, Prefix, Attrs) ->
+prepare_metadata(SessionId, FileRef, Prefix, Attrs) ->
     StorageSystemMetadata = prepare_cdmi_metadata(
-        ?DEFAULT_STORAGE_SYSTEM_METADATA, FileKey,
+        ?DEFAULT_STORAGE_SYSTEM_METADATA, FileRef,
         SessionId, Attrs, Prefix
     ),
     UserMetadata = maps:filter(fun(Name, _Value) ->
         str_utils:binary_starts_with(Name, Prefix)
-    end, get_user_metadata(SessionId, FileKey)),
+    end, get_user_metadata(SessionId, FileRef)),
     maps:merge(StorageSystemMetadata, UserMetadata).
 
 
@@ -161,9 +161,9 @@ prepare_metadata(SessionId, FileKey, Prefix, Attrs) ->
 %% no mimetype could be found.
 %% @end
 %%--------------------------------------------------------------------
--spec get_mimetype(session:id(), lfm:file_key()) -> binary().
-get_mimetype(SessionId, FileKey) ->
-    case lfm:get_mimetype(SessionId, FileKey) of
+-spec get_mimetype(session:id(), lfm:file_ref()) -> binary().
+get_mimetype(SessionId, FileRef) ->
+    case lfm:get_mimetype(SessionId, FileRef) of
         {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
@@ -179,9 +179,9 @@ get_mimetype(SessionId, FileKey) ->
 %% if no value_transfer_encoding could be found.
 %% @end
 %%--------------------------------------------------------------------
--spec get_encoding(session:id(), lfm:file_key()) -> binary().
-get_encoding(SessionId, FileKey) ->
-    case lfm:get_transfer_encoding(SessionId, FileKey) of
+-spec get_encoding(session:id(), lfm:file_ref()) -> binary().
+get_encoding(SessionId, FileRef) ->
+    case lfm:get_transfer_encoding(SessionId, FileRef) of
         {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
@@ -198,9 +198,9 @@ get_encoding(SessionId, FileKey) ->
 %% binary("Complete") | binary("Processing") | binary("Error")
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi_completion_status(session:id(), lfm:file_key()) -> binary().
-get_cdmi_completion_status(SessionId, FileKey) ->
-    case lfm:get_cdmi_completion_status(SessionId, FileKey) of
+-spec get_cdmi_completion_status(session:id(), lfm:file_ref()) -> binary().
+get_cdmi_completion_status(SessionId, FileRef) ->
+    case lfm:get_cdmi_completion_status(SessionId, FileRef) of
         {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
@@ -213,38 +213,38 @@ get_cdmi_completion_status(SessionId, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Updates mimetype associated with file
 %%--------------------------------------------------------------------
--spec update_mimetype(session:id(), lfm:file_key(), binary()) ->
+-spec update_mimetype(session:id(), lfm:file_ref(), binary()) ->
     ok | no_return().
-update_mimetype(_SessionId, _FileKey, undefined) ->
+update_mimetype(_SessionId, _FileRef, undefined) ->
     ok;
-update_mimetype(SessionId, FileKey, Mimetype) ->
-    ?check(lfm:set_mimetype(SessionId, FileKey, Mimetype)).
+update_mimetype(SessionId, FileRef, Mimetype) ->
+    ?check(lfm:set_mimetype(SessionId, FileRef, Mimetype)).
 
 
 %%--------------------------------------------------------------------
 %% @doc Updates value_transfer_encoding associated with file.
 %%--------------------------------------------------------------------
--spec update_encoding(session:id(), lfm:file_key(), binary() | undefined) ->
+-spec update_encoding(session:id(), lfm:file_ref(), binary() | undefined) ->
     ok | no_return().
-update_encoding(_SessionId, _FileKey, undefined) ->
+update_encoding(_SessionId, _FileRef, undefined) ->
     ok;
-update_encoding(SessionId, FileKey, Encoding) ->
-    ?check(lfm:set_transfer_encoding(SessionId, FileKey, Encoding)).
+update_encoding(SessionId, FileRef, Encoding) ->
+    ?check(lfm:set_transfer_encoding(SessionId, FileRef, Encoding)).
 
 
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file
 %%--------------------------------------------------------------------
--spec update_cdmi_completion_status(session:id(), lfm:file_key(), binary()) ->
+-spec update_cdmi_completion_status(session:id(), lfm:file_ref(), binary()) ->
     ok | no_return().
-update_cdmi_completion_status(_SessionId, _FileKey, undefined) ->
+update_cdmi_completion_status(_SessionId, _FileRef, undefined) ->
     ok;
-update_cdmi_completion_status(SessionId, FileKey, CompletionStatus) when
+update_cdmi_completion_status(SessionId, FileRef, CompletionStatus) when
     CompletionStatus =:= <<"Complete">>;
     CompletionStatus =:= <<"Processing">>;
     CompletionStatus =:= <<"Error">>
 ->
-    ?check(lfm:set_cdmi_completion_status(SessionId, FileKey, CompletionStatus)).
+    ?check(lfm:set_cdmi_completion_status(SessionId, FileRef, CompletionStatus)).
 
 
 %%--------------------------------------------------------------------
@@ -253,12 +253,12 @@ update_cdmi_completion_status(SessionId, FileKey, CompletionStatus) when
 %% according to X-CDMI-Partial flag
 %% @end
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status_according_to_partial_flag(session:id(), lfm:file_key(), binary()) ->
+-spec set_cdmi_completion_status_according_to_partial_flag(session:id(), lfm:file_ref(), binary()) ->
     ok | no_return().
-set_cdmi_completion_status_according_to_partial_flag(_SessionId, _FileKey, <<"true">>) ->
+set_cdmi_completion_status_according_to_partial_flag(_SessionId, _FileRef, <<"true">>) ->
     ok;
-set_cdmi_completion_status_according_to_partial_flag(SessionId, FileKey, _) ->
-    update_cdmi_completion_status(SessionId, FileKey, <<"Complete">>).
+set_cdmi_completion_status_according_to_partial_flag(SessionId, FileRef, _) ->
+    update_cdmi_completion_status(SessionId, FileRef, <<"Complete">>).
 
 
 %%%===================================================================
@@ -321,13 +321,13 @@ filter_URI_Names(UserMetadata, URIMetadataNames) ->
 %% Returns system metadata with given prefix.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_cdmi_metadata(MetadataNames :: [binary()], lfm:file_key(),
+-spec prepare_cdmi_metadata(MetadataNames :: [binary()], lfm:file_ref(),
     session:id(), #file_attr{}, Prefix :: binary()) -> map().
-prepare_cdmi_metadata(MetadataNames, FileKey, SessionId, Attrs, Prefix) ->
+prepare_cdmi_metadata(MetadataNames, FileRef, SessionId, Attrs, Prefix) ->
     lists:foldl(fun(Name, Metadata) ->
         case str_utils:binary_starts_with(Name, Prefix) of
             true ->
-                fill_cdmi_metadata(Name, Metadata, SessionId, FileKey, Attrs);
+                fill_cdmi_metadata(Name, Metadata, SessionId, FileRef, Attrs);
             false ->
                 Metadata
         end
@@ -336,20 +336,20 @@ prepare_cdmi_metadata(MetadataNames, FileKey, SessionId, Attrs, Prefix) ->
 
 %% @private
 -spec fill_cdmi_metadata(MetadataName :: binary(), Metadata :: map(),
-    session:id(), lfm:file_key(), #file_attr{}) -> map().
-fill_cdmi_metadata(<<"cdmi_size">>, Metadata, _SessionId, _FileKey, Attrs) ->
+    session:id(), lfm:file_ref(), #file_attr{}) -> map().
+fill_cdmi_metadata(<<"cdmi_size">>, Metadata, _SessionId, _FileRef, Attrs) ->
     % TODO VFS-7288 clarify what should be written to cdmi_size for directories
     Metadata#{<<"cdmi_size">> => integer_to_binary(Attrs#file_attr.size)};
-fill_cdmi_metadata(<<"cdmi_atime">>, Metadata, _SessionId, _FileKey, Attrs) ->
+fill_cdmi_metadata(<<"cdmi_atime">>, Metadata, _SessionId, _FileRef, Attrs) ->
     Metadata#{<<"cdmi_atime">> => time:seconds_to_iso8601(Attrs#file_attr.atime)};
-fill_cdmi_metadata(<<"cdmi_mtime">>, Metadata, _SessionId, _FileKey, Attrs) ->
+fill_cdmi_metadata(<<"cdmi_mtime">>, Metadata, _SessionId, _FileRef, Attrs) ->
     Metadata#{<<"cdmi_mtime">> => time:seconds_to_iso8601(Attrs#file_attr.mtime)};
-fill_cdmi_metadata(<<"cdmi_ctime">>, Metadata, _SessionId, _FileKey, Attrs) ->
+fill_cdmi_metadata(<<"cdmi_ctime">>, Metadata, _SessionId, _FileRef, Attrs) ->
     Metadata#{<<"cdmi_ctime">> => time:seconds_to_iso8601(Attrs#file_attr.ctime)};
-fill_cdmi_metadata(<<"cdmi_owner">>, Metadata, _SessionId, _FileKey, Attrs) ->
+fill_cdmi_metadata(<<"cdmi_owner">>, Metadata, _SessionId, _FileRef, Attrs) ->
     Metadata#{<<"cdmi_owner">> => Attrs#file_attr.owner_id};
-fill_cdmi_metadata(?ACL_XATTR_NAME, Metadata, SessionId, FileKey, _Attrs) ->
-    case lfm:get_xattr(SessionId, FileKey, ?ACL_XATTR_NAME, false) of
+fill_cdmi_metadata(?ACL_XATTR_NAME, Metadata, SessionId, FileRef, _Attrs) ->
+    case lfm:get_xattr(SessionId, FileRef, ?ACL_XATTR_NAME, false) of
         {ok, #xattr{name = ?ACL_XATTR_NAME, value = Acl}} ->
             Metadata#{?ACL_XATTR_NAME => Acl};
         {error, ?ENOATTR} ->

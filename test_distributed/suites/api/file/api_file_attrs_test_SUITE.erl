@@ -701,7 +701,7 @@ get_file_distribution_test(Config) ->
     FileType = <<"file">>,
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
@@ -744,7 +744,7 @@ get_dir_distribution_test(Config) ->
     FileType = <<"dir">>,
     DirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, DirGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, DirGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(DirGuid), <<"share">>),
     file_test_utils:await_sync(P2Node, DirGuid),
 
     ExpDist = [],
@@ -769,7 +769,7 @@ wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
     SortedExpDistribution = lists:usort(ExpDistribution),
 
     GetDistFun = fun() ->
-        case lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}) of
+        case lfm_proxy:get_file_distribution(Node, SessId, ?FILE_REF(FileGuid)) of
             {ok, Dist} -> {ok, lists:usort(Dist)};
             {error, _} = Error -> Error
         end
