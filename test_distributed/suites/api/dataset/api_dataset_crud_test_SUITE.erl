@@ -785,7 +785,7 @@ build_dataset_gs_instance(
     State, DatasetId, ParentId, ProtectionFlagsJson, CreationTime,
     RootFileGuid, RootFileType, RootFilePath
 ) ->
-    BasicInfo = dataset_gui_gs_translator:translate_dataset_info(#dataset_info{
+    BasicInfo = dataset_middleware:translate_dataset_info(#dataset_info{
         id = DatasetId,
         state = State,
         root_file_guid = RootFileGuid,

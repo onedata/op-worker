@@ -70,18 +70,4 @@ get_response(#gri{aspect = instance}, #dataset_info{
     });
 
 get_response(#gri{aspect = children}, {Datasets, IsLast}) ->
-    Response = #{
-        <<"datasets">> => lists:map(fun({DatasetId, DatasetName, Index}) ->
-            #{
-                <<"id">> => DatasetId,
-                <<"name">> => DatasetName,
-                <<"index">> => Index
-            }
-        end, Datasets),
-        <<"isLast">> => IsLast
-    },
-    NextPageToken = case length(Datasets) =:= 0 of
-        true -> null;
-        false -> element(3, lists:last(Datasets))
-    end,
-    ?OK_REPLY(Response#{<<"nextPageToken">> => NextPageToken}).
+    ?OK_REPLY(dataset_middleware:build_list_dataset_response(Datasets, IsLast)).

@@ -19,6 +19,7 @@
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -export([
@@ -31,7 +32,7 @@
 -export([create/1, get/2, update/1, delete/1]).
 
 % Util functions
--export([build_dataset_listing_opts/1]).
+-export([build_dataset_listing_opts/1, build_list_dataset_response/2, translate_dataset_info/1]).
 
 -define(MAX_LIST_LIMIT, 1000).
 -define(DEFAULT_LIST_LIMIT, 100).
@@ -263,11 +264,70 @@ build_dataset_listing_opts(Data) ->
         undefined ->
             Opts2 = maps_utils:put_if_defined(Opts, offset, maps:get(<<"offset">>, Data, undefined)),
             maps_utils:put_if_defined(Opts2, start_index, maps:get(<<"index">>, Data, undefined));
-        Token ->
+        EncodedToken ->
             % if token is passed, offset has to be increased by 1
             % to ensure that listing using token is exclusive
             Opts#{
-                start_index => Token,
+                start_index => base64url:decode(EncodedToken),
                 offset => maps:get(<<"offset">>, Data, 0) + 1
             }
     end.
+
+
+-spec build_list_dataset_response([dataset_api:entries()], boolean()) -> json_utils:json_map().
+build_list_dataset_response(Datasets, IsLast) ->
+    TranslatedDatasets = lists:map(fun
+        (DatasetInfo = #dataset_info{}) ->
+            translate_dataset_info(DatasetInfo);
+        ({DatasetId, DatasetName, Index}) ->
+            #{<<"id">> => DatasetId, <<"name">> => DatasetName, <<"index">> => Index}
+    end, Datasets),
+
+    Result = #{
+        <<"datasets">> => TranslatedDatasets,
+        <<"isLast">> => IsLast
+    },
+    NextPageToken = case length(TranslatedDatasets) =:= 0 of
+        true -> null;
+        false -> base64url:encode(maps:get(<<"index">>, lists:last(TranslatedDatasets)))
+    end,
+    Result#{<<"nextPageToken">> => NextPageToken}.
+
+
+-spec translate_dataset_info(lfm_datasets:info()) -> json_utils:json_map().
+translate_dataset_info(#dataset_info{
+    id = DatasetId,
+    state = State,
+    root_file_guid = RootFileGuid,
+    root_file_path = RootFilePath,
+    root_file_type = RootFileType,
+    creation_time = CreationTime,
+    protection_flags = ProtectionFlags,
+    parent = ParentId,
+    index = Index
+}) ->
+    #{
+        <<"gri">> => gri:serialize(#gri{
+            type = op_dataset, id = DatasetId,
+            aspect = instance, scope = private
+        }),
+        <<"parent">> => case ParentId of
+            undefined ->
+                null;
+            _ ->
+                gri:serialize(#gri{
+                    type = op_dataset, id = ParentId,
+                    aspect = instance, scope = private
+                })
+        end,
+        <<"rootFile">> => gri:serialize(#gri{
+            type = op_file, id = RootFileGuid,
+            aspect = instance, scope = private
+        }),
+        <<"rootFileType">> => str_utils:to_binary(RootFileType),
+        <<"rootFilePath">> => RootFilePath,
+        <<"state">> => atom_to_binary(State, utf8),
+        <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),
+        <<"creationTime">> => CreationTime,
+        <<"index">> => Index
+    }.

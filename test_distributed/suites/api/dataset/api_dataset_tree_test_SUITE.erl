@@ -210,7 +210,7 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
                     <<"limit">> => [1, 100],
                     <<"offset">> => [1, 3, 10],
                     <<"index">> => [RandomIndex, <<"zzzzzzzzzzzz">>],
-                    <<"token">> => [FirstIndex, RandomIndex, LastIndex]
+                    <<"token">> => [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentSpace">>, ?ERROR_FORBIDDEN},
@@ -369,7 +369,7 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
                     <<"limit">> => [1, 100],
                     <<"offset">> => [1, 3, 10],
                     <<"index">> => [RandomIndex, <<"zzzzzzzzzzzz">>],
-                    <<"token">> => [FirstIndex, RandomIndex, LastIndex]
+                    <<"token">> => [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND},
@@ -444,7 +444,10 @@ validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
     Limit = maps:get(<<"limit">>, Params, 1000),
     Offset = maps:get(<<"offset">>, Params, 0),
     Index = maps:get(<<"index">>, Params, <<>>),
-    Token = maps:get(<<"token">>, Params, undefined),
+    Token = case maps:get(<<"token">>, Params, undefined) of
+        undefined -> undefined;
+        EncodedToken -> base64url:decode(EncodedToken)
+    end,
 
     StrippedDatasets = lists:dropwhile(fun({_FileName, _DatasetId, #dataset_info{index = DatasetIndex}}) ->
         case Token =:= undefined of
@@ -469,12 +472,12 @@ validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
                     <<"index">> => datasets_structure:pack_entry_index(FileName, DatasetId)
                 };
             graph_sync ->
-                dataset_gui_gs_translator:translate_dataset_info(DatasetInfo)
+                dataset_middleware:translate_dataset_info(DatasetInfo)
         end
     end, ExpDatasets1),
     NextPageToken = case length(ExpDatasets2) =:= 0 of
         true -> null;
-        false -> maps:get(<<"index">>, lists:last(ExpDatasets2))
+        false -> base64url:encode(maps:get(<<"index">>, lists:last(ExpDatasets2)))
     end,
     ExpResult = #{
         <<"datasets">> => ExpDatasets2,

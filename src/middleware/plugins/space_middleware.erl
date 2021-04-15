@@ -202,8 +202,10 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
     when Aspect =:= datasets
     orelse Aspect =:= datasets_details
 -> #{
+    required => #{
+        <<"state">> => {atom, [?ATTACHED_DATASET, ?DETACHED_DATASET]}
+    },
     optional => #{
-        <<"state">> => {atom, [?ATTACHED_DATASET, ?DETACHED_DATASET]},
         <<"offset">> => {integer, any},
         <<"index">> => {binary, any},
         <<"token">> => {binary, any},
