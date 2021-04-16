@@ -312,7 +312,7 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, Includ
         allow_deleted_files => false,
         include_size => true
     },
-    MapFun = fun({Num, ChildCtx}) ->
+    FilterMapFun = fun({Num, ChildCtx}) ->
         try
             #fuse_response{
                 status = #status{code = ?OK},
@@ -334,14 +334,10 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, Includ
                         include_link_count => IncludeLinkCount
                     })
             end,
-            Result
+            {true, Result}
         catch _:_ ->
             % File can be not synchronized with other provider
-            error
+            false
         end
     end,
-    FilterFun = fun
-        (error) -> false;
-        (_Attrs) -> true
-    end,
-    lists_utils:pfiltermap(MapFun, FilterFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).
+    lists_utils:pfiltermap(FilterMapFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).

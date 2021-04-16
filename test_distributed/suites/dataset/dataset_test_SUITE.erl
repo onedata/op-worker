@@ -90,7 +90,10 @@ all() -> ?ALL([
 ).
 
 -define(assertAttachedDataset(Node, SessionId, DatasetId, Guid, ExpectedParentDatasetId, ExpectedProtectionFlags),
-    assert_attached_dataset(Node, SessionId, DatasetId, Guid, ExpectedParentDatasetId, ExpectedProtectionFlags)
+    assert_attached_dataset(Node, SessionId, DatasetId, Guid, ExpectedParentDatasetId, ExpectedProtectionFlags, ExpectedProtectionFlags)
+).
+-define(assertAttachedDataset(Node, SessionId, DatasetId, Guid, ExpectedParentDatasetId, ExpectedProtectionFlags, ExpectedEffProtectionFlags),
+    assert_attached_dataset(Node, SessionId, DatasetId, Guid, ExpectedParentDatasetId, ExpectedProtectionFlags, ExpectedEffProtectionFlags)
 ).
 
 -define(assertDetachedDataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId,
@@ -667,22 +670,24 @@ detach(Node, SessionId, DatasetId) ->
 reattach(Node, SessionId, DatasetId) ->
     lfm_proxy:update_dataset(Node, SessionId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
 
-assert_attached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedProtectionFlags) ->
+assert_attached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId,
+    ExpectedProtectionFlags,ExpectedEffProtectionFlags
+) ->
     {ok, #file_attr{type = ExpectedRootFileType}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(ExpectedRootFileGuid)),
     {ok, ExpectedRootFilePath} = lfm_proxy:get_file_path(Node, SessionId, ExpectedRootFileGuid),
     assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedRootFilePath,
-        ExpectedRootFileType, ?ATTACHED_DATASET, ExpectedProtectionFlags).
+        ExpectedRootFileType, ?ATTACHED_DATASET, ExpectedProtectionFlags, ExpectedEffProtectionFlags).
 
 
 assert_detached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId,
     ExpectedRootFilePath, ExpectedRootFileType, ExpectedProtectionFlags
 ) ->
     assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedRootFilePath,
-        ExpectedRootFileType, ?DETACHED_DATASET, ExpectedProtectionFlags).
+        ExpectedRootFileType, ?DETACHED_DATASET, ExpectedProtectionFlags, ?no_flags_mask).
 
 
 assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedRootFilePath,
-    ExpectedRootFileType, ExpectedState, ExpectedProtectionFlags
+    ExpectedRootFileType, ExpectedState, ExpectedProtectionFlags, ExpectedEffProtectionFlags
 ) ->
     % check dataset info
     ?assertMatch({ok, #dataset_info{
@@ -692,7 +697,8 @@ assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentD
         root_file_path = ExpectedRootFilePath,
         root_file_type = ExpectedRootFileType,
         parent = ExpectedParentDatasetId,
-        protection_flags = ExpectedProtectionFlags
+        protection_flags = ExpectedProtectionFlags,
+        eff_protection_flags = ExpectedEffProtectionFlags
     }}, lfm_proxy:get_dataset_info(Node, SessionId, DatasetId), ?ATTEMPTS),
 
     % check dataset structure entry

@@ -36,7 +36,7 @@
     mark_parent_as_dataset_depth_10/1,
     nested_dirs_visible_on_space_dataset_list/1,
     basic_sort/1,
-    listing_with_start_index_and_negative_offset/1,
+    list_with_start_index_and_negative_offset/1,
     rename_depth_1/1,
     rename_depth_2/1,
     rename_depth_10/1,
@@ -97,7 +97,7 @@ all() -> ?ALL([
     mark_parent_as_dataset_depth_10,
     nested_dirs_visible_on_space_dataset_list,
     basic_sort,
-    listing_with_start_index_and_negative_offset,
+    list_with_start_index_and_negative_offset,
     rename_depth_1,
     rename_depth_2,
     rename_depth_10,
@@ -274,7 +274,7 @@ basic_sort(_Config) ->
     ?assertMatch({ok, SortedDatasetIdsAndNamesSublist2, false},
         list_top_datasets_and_skip_indices(P1Node, SpaceId, #{offset => 8, limit => 1})).
 
-listing_with_start_index_and_negative_offset(_Config) ->
+list_with_start_index_and_negative_offset(_Config) ->
     % This test creates DatasetsCount datasets entries on the top level
     % and checks whether they are correctly sorted and listed using start_index and negative offset
     DatasetsCount = 10,

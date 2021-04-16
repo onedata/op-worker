@@ -74,17 +74,9 @@ assert_field(Field, ExpectedValue, Record) ->
 %% @private
 get_record_field(Record, Field) ->
     FieldsList = record_info(fields, file_info),
-    Index = index(Field, FieldsList),
+    Index = lists_utils:index_of(Field, FieldsList),
     element(Index + 1, Record).
 
-%% @private
-index(Key, List) ->
-    case lists:keyfind(Key, 2, lists_utils:enumerate(List)) of
-        false ->
-            throw({wrong_assertion_key, Key, List});
-        {Index, _} ->
-            Index
-    end.
 
 read_file(Worker, FilePath) ->
     rpc:call(Worker, file, read_file, [FilePath]).

@@ -210,6 +210,11 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
     ObjPath = filename:join(["/", ParentDirPath, ObjName]),
     CreationTime = time_test_utils:get_frozen_time_seconds(),
 
+    EffProtectionFlags = case State of
+        ?ATTACHED_DATASET -> file_meta:protection_flags_from_json(ProtectionFlagsJson);
+        ?DETACHED_DATASET -> ?no_flags_mask
+    end,
+
     DatasetInfo = #dataset_info{
         id = DatasetId,
         state = State,
@@ -218,6 +223,7 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
         root_file_type = ObjType,
         creation_time = CreationTime,
         protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
+        eff_protection_flags = EffProtectionFlags,
         parent = ParentDatasetId,
         index = datasets_structure:pack_entry_index(ObjName, DatasetId)
     },

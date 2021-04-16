@@ -208,7 +208,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
     optional => #{
         <<"offset">> => {integer, any},
         <<"index">> => {binary, any},
-        <<"token">> => {binary, any},
+        <<"token">> => {binary, non_empty},
         <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
     }
 };
@@ -546,11 +546,14 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = views}}, _) ->
 
     case index:list(SpaceId, StartId, Offset, Limit) of
         {ok, Views} ->
-            NextPageToken = case length(Views) of
-                Limit -> #{<<"nextPageToken">> => lists:last(Views)};
-                _ -> #{}
+            NextPageToken = case length(Views) =:= Limit of
+                true -> lists:last(Views);
+                false -> null
             end,
-            {ok, maps:merge(#{<<"views">> => Views}, NextPageToken)};
+            {ok, #{
+                <<"views">> => Views,
+                <<"nextPageToken">> => NextPageToken
+            }};
         {error, _} = Error ->
             Error
     end;
@@ -637,7 +640,10 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
                 <<"nextPageToken">> => NextPageToken
             };
         _ ->
-            #{<<"transfers">> => Transfers}
+            #{
+                <<"transfers">> => Transfers,
+                <<"nextPageToken">> => null
+            }
     end,
     {ok, value, Result};
 
@@ -710,7 +716,7 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = Aspect}, data = Data}
     orelse Aspect =:= datasets_details
 ->
     State = maps:get(<<"state">>, Data, ?ATTACHED_DATASET),
-    ListingOpts = dataset_middleware:build_dataset_listing_opts(Data),
+    ListingOpts = dataset_middleware:gather_dataset_listing_opts(Data),
     ListingMode = case Aspect of
         datasets -> ?BASIC_INFO;
         datasets_details -> ?EXTENDED_INFO

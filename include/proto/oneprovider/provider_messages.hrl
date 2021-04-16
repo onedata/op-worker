@@ -267,6 +267,7 @@
     root_file_type :: file_meta:type(),
     creation_time :: time:seconds(),
     protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
+    eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     parent :: undefined | dataset:id(),
     index :: dataset_api:index()
 }).

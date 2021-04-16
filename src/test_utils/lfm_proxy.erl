@@ -888,11 +888,12 @@ get_file_eff_dataset_summary(Worker, SessId, FileKey) ->
 list_top_datasets(Worker, SessId, SpaceId, State, Opts) ->
     list_top_datasets(Worker, SessId, SpaceId, State, Opts, undefined).
 
-
-%%-spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts()) ->
-%%    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
+-spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts(),
+    dataset_api:listing_mode() | undefined) ->
+    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
 list_top_datasets(Worker, SessId, SpaceId, State, Opts, ListingMode) ->
     ?EXEC(Worker, lfm:list_top_datasets(SessId, SpaceId, State, Opts, ListingMode)).
+
 
 -spec list_children_datasets(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
     {ok, dataset_api:entries(), boolean()} | lfm:error_reply().

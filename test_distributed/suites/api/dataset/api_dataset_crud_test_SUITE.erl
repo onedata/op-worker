@@ -100,7 +100,7 @@ establish_dataset_test(Config) ->
                     validate_result_fun = build_establish_dataset_validate_gs_call_result_fun(MemRef, Config)
                 }
             ],
-            randomly_select_scenarios = true,
+%%            randomly_select_scenarios = true,
             data_spec = api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                 % Operations should be rejected even before checking if share exists
                 % (in case of using share file id) so it is not necessary to use
@@ -349,7 +349,6 @@ get_dataset_test_base(
                     prepare_args_fun = build_get_dataset_prepare_rest_args_fun(DatasetId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
                         CreationTime = get_global_time(TestNode),
-                        DatasetName = filename:basename(RootFilePath),
                         ExpDatasetData = #{
                             <<"datasetId">> => DatasetId,
                             <<"parentId">> => utils:undefined_to_null(ParentId),
@@ -358,8 +357,8 @@ get_dataset_test_base(
                             <<"rootFilePath">> => RootFilePath,
                             <<"state">> => StateBin,
                             <<"protectionFlags">> => ProtectionFlags,
-                            <<"creationTime">> => CreationTime,
-                            <<"index">> => datasets_structure:pack_entry_index(DatasetName, DatasetId)
+                            <<"effectiveProtectionFlags">> => ProtectionFlags,
+                            <<"creationTime">> => CreationTime
                         },
                         ?assertEqual({?HTTP_200_OK, ExpDatasetData}, {RespCode, RespBody})
                     end
@@ -785,7 +784,7 @@ build_dataset_gs_instance(
     State, DatasetId, ParentId, ProtectionFlagsJson, CreationTime,
     RootFileGuid, RootFileType, RootFilePath
 ) ->
-    BasicInfo = dataset_middleware:translate_dataset_info(#dataset_info{
+    BasicInfo = dataset_gui_gs_translator:translate_dataset_info(#dataset_info{
         id = DatasetId,
         state = State,
         root_file_guid = RootFileGuid,
@@ -793,6 +792,7 @@ build_dataset_gs_instance(
         root_file_type = RootFileType,
         creation_time = CreationTime,
         protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
+        eff_protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
         parent = ParentId,
         index = datasets_structure:pack_entry_index(filename:basename(RootFilePath), DatasetId)
     }),
@@ -821,6 +821,11 @@ verify_dataset(
 
         ?assertEqual(true, lists:member(DatasetId, GetDatasetsFun()), ?ATTEMPTS),
 
+        EffProtectionFlags = case State of
+            ?ATTACHED_DATASET -> file_meta:protection_flags_from_json(ProtectionFlagsJson);
+            ?DETACHED_DATASET -> ?no_flags_mask
+        end,
+
         ExpDatasetInfo = #dataset_info{
             id = DatasetId,
             state = State,
@@ -829,6 +834,7 @@ verify_dataset(
             root_file_type = RootFileType,
             creation_time = CreationTime,
             protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
+            eff_protection_flags = EffProtectionFlags,
             parent = ParentId,
             index = datasets_structure:pack_entry_index(filename:basename(RootFilePath), DatasetId)
         },

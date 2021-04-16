@@ -45,18 +45,31 @@ all() -> [
     {group, all_tests}
 ].
 
+-define(PROTECTION_FLAGS, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]).
 
 -define(FILE_TREE_SPEC, #dir_spec{children = [
     #dir_spec{
         name = <<"get_top_datasets">>,
         children = [
-            #file_spec{dataset = #dataset_spec{state = ?ATTACHED_DATASET}},
-            #file_spec{dataset = #dataset_spec{state = ?ATTACHED_DATASET}},
-            #file_spec{dataset = #dataset_spec{state = ?ATTACHED_DATASET}},
-            #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}},
+            #file_spec{dataset = #dataset_spec{
+                state = ?ATTACHED_DATASET,
+                protection_flags = ?PROTECTION_FLAGS
+            }},
+            #file_spec{dataset = #dataset_spec{
+                state = ?ATTACHED_DATASET,
+                protection_flags = ?PROTECTION_FLAGS
+            }},
+            #file_spec{dataset = #dataset_spec{
+                state = ?ATTACHED_DATASET,
+                protection_flags = ?PROTECTION_FLAGS
+            }},
             #file_spec{dataset = #dataset_spec{
                 state = ?DETACHED_DATASET,
-                protection_flags = [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
+                protection_flags = ?PROTECTION_FLAGS
+            }},
+            #file_spec{dataset = #dataset_spec{
+                state = ?DETACHED_DATASET,
+                protection_flags = ?PROTECTION_FLAGS
             }}
         ]
     },
@@ -64,34 +77,40 @@ all() -> [
         name = <<"get_child_datasets_test">>,
         dataset = #dataset_spec{
             state = ?ATTACHED_DATASET,
-            protection_flags = [?METADATA_PROTECTION_BIN]
+            protection_flags = ?PROTECTION_FLAGS
         },
         children = [#dir_spec{
             dataset = #dataset_spec{
                 state = ?DETACHED_DATASET,
-                protection_flags = [?DATA_PROTECTION_BIN]
+                protection_flags = ?PROTECTION_FLAGS
             },
             children = [#dir_spec{
                 dataset = #dataset_spec{
                     state = ?ATTACHED_DATASET,
-                    protection_flags = [?DATA_PROTECTION_BIN]
+                    protection_flags = ?PROTECTION_FLAGS
                 },
                 children = [#dir_spec{
                     name = <<"dir_with_no_dataset_in_the_middle">>,
                     children = [
                         #file_spec{dataset = #dataset_spec{
                             state = ?ATTACHED_DATASET,
-                            protection_flags = [?DATA_PROTECTION_BIN]
+                            protection_flags = ?PROTECTION_FLAGS
                         }},
-                        #file_spec{dataset = #dataset_spec{state = ?ATTACHED_DATASET}},
                         #file_spec{dataset = #dataset_spec{
                             state = ?ATTACHED_DATASET,
-                            protection_flags = [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
+                            protection_flags = ?PROTECTION_FLAGS
                         }},
-                        #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}},
+                        #file_spec{dataset = #dataset_spec{
+                            state = ?ATTACHED_DATASET,
+                            protection_flags = ?PROTECTION_FLAGS
+                        }},
                         #file_spec{dataset = #dataset_spec{
                             state = ?DETACHED_DATASET,
-                            protection_flags = [?METADATA_PROTECTION_BIN]
+                            protection_flags = ?PROTECTION_FLAGS
+                        }},
+                        #file_spec{dataset = #dataset_spec{
+                            state = ?DETACHED_DATASET,
+                            protection_flags = ?PROTECTION_FLAGS
                         }}
                     ]
                 }]
@@ -102,25 +121,28 @@ all() -> [
         name = <<"get_file_dataset_summary_test">>,
         dataset = #dataset_spec{
             state = ?ATTACHED_DATASET,
-            protection_flags = [?METADATA_PROTECTION_BIN]
+            protection_flags = ?PROTECTION_FLAGS
         },
         children = [#dir_spec{
             dataset = #dataset_spec{
                 state = ?DETACHED_DATASET,
-                protection_flags = [?DATA_PROTECTION_BIN]
+                protection_flags = ?PROTECTION_FLAGS
             },
             children = [#dir_spec{
                 name = <<"dir_with_no_dataset_in_the_middle">>,
                 children = [#dir_spec{
-                    dataset = #dataset_spec{state = ?ATTACHED_DATASET},
+                    dataset = #dataset_spec{
+                        state = ?ATTACHED_DATASET,
+                        protection_flags = ?PROTECTION_FLAGS
+                    },
                     children = [#dir_spec{children = [
                         #file_spec{dataset = #dataset_spec{
                             state = ?ATTACHED_DATASET,
-                            protection_flags = [?DATA_PROTECTION_BIN]
+                            protection_flags = ?PROTECTION_FLAGS
                         }},
                         #dir_spec{dataset = #dataset_spec{
                             state = ?DETACHED_DATASET,
-                            protection_flags = [?DATA_PROTECTION_BIN]
+                            protection_flags = ?PROTECTION_FLAGS
                         }},
                         #file_spec{}
                     ]}]
@@ -211,8 +233,8 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
                     <<"state">> => [State],
                     <<"limit">> => [1, 100],
                     <<"offset">> => [1, 3, 10],
-                    <<"index">> => [null, RandomIndex, <<"zzzzzzzzzzzz">>],
-                    <<"token">> => [null | [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
+                    <<"index">> => [<<"null">>, null, RandomIndex, <<"zzzzzzzzzzzz">>],
+                    <<"token">> => [<<"null">>, null | [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentSpace">>, ?ERROR_FORBIDDEN},
@@ -349,8 +371,8 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
                 correct_values = #{
                     <<"limit">> => [1, 100],
                     <<"offset">> => [1, 3, 10],
-                    <<"index">> => [RandomIndex, <<"zzzzzzzzzzzz">>],
-                    <<"token">> => [null | [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
+                    <<"index">> => [<<"null">>, null, RandomIndex, <<"zzzzzzzzzzzz">>],
+                    <<"token">> => [<<"null">>, null | [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND},
@@ -426,12 +448,12 @@ validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
     Offset = maps:get(<<"offset">>, Params, 0),
     Index = case maps:get(<<"index">>, Params, undefined) of
         undefined -> <<>>;
-        null -> <<>>;
+        Null when Null =:= null orelse Null =:= <<"null">> -> <<>>;
         DefinedIndex -> DefinedIndex
     end,
     Token = case maps:get(<<"token">>, Params, undefined) of
         undefined -> undefined;
-        null -> undefined;
+        Null2 when Null2 =:= null orelse Null2 =:= <<"null">> -> undefined;
         EncodedToken -> base64url:decode(EncodedToken)
     end,
 
@@ -451,25 +473,14 @@ validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
     end,
     ExpDatasets2 = lists:map(fun({FileName, DatasetId, DatasetInfo}) ->
         case Format of
-            rest ->
-                #{
-                    <<"name">> => FileName,
-                    <<"id">> => DatasetId,
-                    <<"index">> => datasets_structure:pack_entry_index(FileName, DatasetId)
-                };
-            graph_sync ->
-                dataset_middleware:translate_dataset_info(DatasetInfo)
+            rest -> {DatasetId, FileName, DatasetInfo#dataset_info.index};
+            graph_sync -> DatasetInfo
         end
     end, ExpDatasets1),
-    NextPageToken = case length(ExpDatasets2) =:= 0 of
-        true -> null;
-        false -> base64url:encode(maps:get(<<"index">>, lists:last(ExpDatasets2)))
+    ExpResult = case Format of
+        graph_sync -> dataset_gui_gs_translator:translate_datasets_details_list(ExpDatasets2, IsLast);
+        rest -> dataset_rest_translator:translate_datasets_list(ExpDatasets2, IsLast)
     end,
-    ExpResult = #{
-        <<"datasets">> => ExpDatasets2,
-        <<"isLast">> => IsLast,
-        <<"nextPageToken">> => NextPageToken
-    },
     ?assertEqual(ExpResult, ListingResult).
 
 

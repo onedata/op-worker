@@ -63,6 +63,6 @@ get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
         <<"providers">> => Providers
     });
 get_response(#gri{aspect = datasets}, {Datasets, IsLast}) ->
-    ?OK_REPLY(dataset_middleware:build_list_dataset_response(Datasets, IsLast));
+    ?OK_REPLY(dataset_rest_translator:translate_datasets_list(Datasets, IsLast));
 get_response(_, SpaceData) ->
     ?OK_REPLY(SpaceData).

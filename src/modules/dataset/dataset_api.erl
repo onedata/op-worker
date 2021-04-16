@@ -285,7 +285,9 @@ collect_attached_info(DatasetDoc, IndexOrUndefined) ->
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {FilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
     FileType = file_meta:get_type(FileDoc),
-    {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(FileDoc),
+    {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
+    {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
+    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
     FinalIndex = case IndexOrUndefined of
         undefined -> entry_index(Uuid, FilePath);
         Index -> Index
@@ -298,6 +300,7 @@ collect_attached_info(DatasetDoc, IndexOrUndefined) ->
         root_file_path = FilePath,
         root_file_type = FileType,
         protection_flags = file_meta:get_protection_flags(FileDoc),
+        eff_protection_flags = EffProtectionFlags,
         parent = case length(EffAncestorDatasets) == 0 of
             true -> undefined;
             false -> hd(EffAncestorDatasets)
@@ -328,6 +331,7 @@ collect_detached_info(DatasetDoc, IndexOrUndefined) ->
         root_file_path = RootFilePath,
         root_file_type = RootFileType,
         protection_flags = ProtectionFlags,
+        eff_protection_flags = ?no_flags_mask,
         parent = detached_datasets:get_parent(SpaceId, DetachedDatasetPath),
         index = FinalIndex
     }.
@@ -354,19 +358,15 @@ list_children_datasets_internal(DatasetId, Opts) ->
 
 -spec extend_with_info(basic_entries()) -> extended_entries().
 extend_with_info(DatasetEntries) ->
-    MapFun = fun({DatasetId, _DatasetName, Index}) ->
+    FilterMapFun = fun({DatasetId, _DatasetName, Index}) ->
         try
-            collect_state_dependant_info(DatasetId, Index)
+            {true, collect_state_dependant_info(DatasetId, Index)}
         catch _:_ ->
             % File can be not synchronized with other provider
-            error
+            false
         end
     end,
-    FilterFun = fun
-        (error) -> false;
-        (_Entry) -> true
-    end,
-    lists_utils:pfiltermap(MapFun, FilterFun, DatasetEntries, ?MAX_LIST_EXTENDED_DATASET_INFO_PROCS).
+    lists_utils:pfiltermap(FilterMapFun, DatasetEntries, ?MAX_LIST_EXTENDED_DATASET_INFO_PROCS).
 
 
 -spec entry_index(dataset:id(), file_meta:path()) -> index().

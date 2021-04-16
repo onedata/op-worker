@@ -304,21 +304,14 @@ strip(Entries, Opts) ->
     Offset = maps:get(offset, Opts, 0),
     Limit = maps:get(limit, Opts),
     Length = length(Entries),
-    {FoundStartingPoint, StartingPoint} = lists:foldl(fun
-        (_, {true, Offset}) ->
-            % starting point has already been found
-            {true, Offset};
-        ({_DatasetId, _DatasetName, Index}, {false, AccOffset}) ->
+    StartingPoint = lists_utils:foldl_while(fun
+        ({_DatasetId, _DatasetName, Index}, AccOffset) ->
             case StartIndex =< Index of
-                true -> {true, AccOffset};
-                false -> {false, AccOffset + 1}
+                true -> {halt, AccOffset};
+                false -> {cont, AccOffset + 1}
             end
-    end, {false, 0}, Entries),
-    FinalStartingPoint = case FoundStartingPoint of
-        true -> StartingPoint;
-        false -> length(Entries)
-    end,
-    FinalOffset = max(FinalStartingPoint + Offset, 0) + 1,
+    end, 0, Entries),
+    FinalOffset = max(StartingPoint + Offset, 0) + 1,
     case FinalOffset > Length of
         true ->
             {[], true};

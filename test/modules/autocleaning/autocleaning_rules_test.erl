@@ -184,9 +184,5 @@ list_fields() ->
 
 get_field(Record, FieldName) ->
     FieldsList = list_fields(),
-    Index = index(FieldName, FieldsList),
+    Index = lists_utils:index_of(FieldName, FieldsList),
     element(Index + 1, Record).
-
-index(Key, List) ->
-    {Index, _} = lists:keyfind(Key, 2, lists_utils:enumerate(List)),
-    Index.

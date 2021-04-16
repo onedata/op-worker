@@ -136,8 +136,8 @@ sanitize_param({aspect, Param}, RawData, ParamsSpec) ->
     % not valid
     {true, sanitize_param(TypeConstraint, ValueConstraint, Param, RawValue)};
 sanitize_param(Param, RawData, ParamsSpec) ->
-    case maps:get(Param, RawData, undefined) of
-        undefined ->
+    case maps:get(Param, RawData, null) of
+        Null when Null =:= null orelse Null =:= <<"null">> ->
             false;
         RawValue ->
             {TypeConstraint, ValueConstraint} = maps:get(Param, ParamsSpec),
@@ -201,16 +201,8 @@ check_type(atom, _Key, Binary) when is_binary(Binary) ->
 check_type(atom, Key, _) ->
     throw(?ERROR_BAD_VALUE_ATOM(Key));
 
-check_type(binary, _Param, <<"null">>) ->
-    <<>>;
-check_type(binary, _Param, <<"undefined">>) ->
-    <<>>;
 check_type(binary, _Param, Binary) when is_binary(Binary) ->
     Binary;
-check_type(binary, _Param, null) ->
-    <<>>;
-check_type(binary, _Param, undefined) ->
-    <<>>;
 check_type(binary, _Param, Atom) when is_atom(Atom) ->
     atom_to_binary(Atom, utf8);
 check_type(binary, Param, _) ->
@@ -260,10 +252,6 @@ check_type(gri, Param, EncodedGri) when is_binary(EncodedGri) ->
 check_type(gri, Param, _) ->
     throw(?ERROR_BAD_DATA(Param));
 
-check_type(page_token, _Param, null) ->
-    undefined;
-check_type(page_token, _Param, <<"null">>) ->
-    undefined;
 check_type(page_token, _Param, undefined) ->
     undefined;
 check_type(page_token, _Param, <<"undefined">>) ->
