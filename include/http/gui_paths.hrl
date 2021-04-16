@@ -47,8 +47,24 @@
 % Expands to a centralized endpoint in Onezone used to fetch info and contents
 % of any file/directory being a part of any share (by file id) - redirects
 % to a REST endpoint in one of the supporting providers.
--define(ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE(SubPath),
+-define(ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE(SubPath), str_utils:format_bin("curl -L ~s", [
     oneprovider:get_oz_url(<<"/api/v3/onezone/shares/data/{{id}}", SubPath>>)
+])).
+
+-define(XROOTD_DOWNLOAD_SHARED_FILE_COMMAND_TEMPLATE(XRootDServerDomain),
+    str_utils:format_bin("xrdcp root://~s//data/{{spaceId}}/{{spaceId}}/{{shareId}}{{path}} .", [
+        XRootDServerDomain
+    ])
+).
+-define(XROOTD_DOWNLOAD_SHARED_DIRECTORY_COMMAND_TEMPLATE(XRootDServerDomain),
+    str_utils:format_bin("xrdcp -r root://~s//data/{{spaceId}}/{{spaceId}}/{{shareId}}{{path}} .", [
+        XRootDServerDomain
+    ])
+).
+-define(XROOTD_LIST_SHARED_DIRECTORY_COMMAND_TEMPLATE(XRootDServerDomain),
+    str_utils:format_bin("xrdfs root://~s ls /data/{{spaceId}}/{{spaceId}}/{{shareId}}{{path}}", [
+        XRootDServerDomain
+    ])
 ).
 
 %% All requests to this endpoint will be proxied to onepanel.
