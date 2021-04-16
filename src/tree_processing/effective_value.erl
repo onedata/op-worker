@@ -32,20 +32,25 @@
 -type init_options() :: bounded_cache:cache_options().
 -type group() :: bounded_cache:group().
 -type group_options() :: bounded_cache:group_options().
--type initial_calculation_info() :: term(). % Function that calculates value returns additional information
-                                            % (CalculationInfo) that can be useful for further work
-                                            % (e.g., calculating function can include datastore documents getting and
-                                            % these documents can be used later without calling datastore).
-                                            % Such returned value is provided to calculate function when processing
-                                            % child in case of recursive value calculation.
-                                            % This type represents initial value provided to function when processing
-                                            % space directory (see get_or_calculate/7).
+-type initial_calculation_info() :: calculation_info(). % Function that calculates value returns additional information
+                                                        % (CalculationInfo) that can be useful for further work
+                                                        % (e.g., calculating function can include datastore documents getting and
+                                                        % these documents can be used later without calling datastore).
+                                                        % Such returned value is provided to calculate function when processing
+                                                        % child in case of recursive value calculation.
+                                                        % This type represents initial value provided to function when processing
+                                                        % space directory (see get_or_calculate/7).
+-type calculation_info() :: term().
 -type args() :: list().
 -type in_critical_section() :: boolean() | parent. % parent = use section starting from parent directory
+% Type that defines return value of get_or_calculate functions and helper functions (used to shorten specs)
+-type get_return_value() :: {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
 % Merge callback is used to merge values calculated using different references of file.
 % If it is not present, only reference pointing at file doc passed by get_or_calculate function argument is used.
--type merge_callback() :: fun((bounded_cache:value(), bounded_cache:value(), bounded_cache:additional_info()) ->
-    {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}).
+-type merge_callback() :: fun((bounded_cache:value(), bounded_cache:value(),
+    bounded_cache:additional_info(), bounded_cache:additional_info()) -> get_return_value()).
+-type postprocessing_callback() :: fun((bounded_cache:value(), bounded_cache:value(), bounded_cache:additional_info()) ->
+    {ok, bounded_cache:value()} | {error, term()}).
 -type get_options() :: #{
     timestamp => time:millis(),
     in_critical_section => in_critical_section(),
@@ -56,11 +61,10 @@
     multi_path_merge_callback => merge_callback(), % Note - if calculate callback acts the same for all references of
                                                    % particular file, use_referenced_key should be true for more
                                                    % optimal caching
+    multi_path_postprocessing_callback => postprocessing_callback(),
     force_execution_on_inode => boolean() % force execution of callback on inode even if reference of original file
                                           % is deleted
 }.
-% Type that defines return value of get_or_calculate functions and helper functions (used to shorten specs)
--type get_return_value() :: {ok, bounded_cache:value(), bounded_cache:additional_info()} | {error, term()}.
 
 -export_type([cache/0, get_options/0]).
 -define(CRITICAL_SECTION(Cache, Key), {effective_value_insert, Cache, Key}).
@@ -203,10 +207,13 @@ get_or_calculate_single_path(Cache, Key, FileDoc, CalculateCallback, Options) ->
 get_or_calculate_multi_path(Cache, Key, #document{key = DocKey} = FileDoc, CalculateCallback, Options) ->
     MergeCallback = maps:get(multi_path_merge_callback, Options),
     References = get_references(FileDoc),
-    case calculate_for_references(Cache, References, CalculateCallback, MergeCallback,
-        Options, undefined) of
-        {ok, Acc, CalculationInfo} = OkAns ->
-            {ok, CalculatedValue, _} = FinalAns = case maps:get(force_execution_on_inode, Options, false) of
+    ReferencesValues = lists:map(fun(ReferenceDoc) ->
+        calculate_reference(Cache, ReferenceDoc, CalculateCallback, Options)
+    end, References),
+
+    case merge_references_values(ReferencesValues, undefined, MergeCallback) of
+        {ok, Acc, CalculationInfoAcc} = OkAns ->
+            {ok, CalculatedValue, CalculationInfo} = case maps:get(force_execution_on_inode, Options, false) of
                 true ->
                     INodeKey = fslogic_uuid:ensure_referenced_uuid(Key),
                     case lists:member(INodeKey, [DocKey | References]) of
@@ -214,15 +221,16 @@ get_or_calculate_multi_path(Cache, Key, #document{key = DocKey} = FileDoc, Calcu
                             OkAns;
                         false ->
                             force_execution_on_inode(
-                                INodeKey, CalculateCallback, MergeCallback, CalculationInfo, Acc, Options)
+                                INodeKey, CalculateCallback, MergeCallback, CalculationInfoAcc, Acc, Options)
                     end;
                 false ->
                     OkAns
             end,
 
+            PostprocessingCallback = maps:get(multi_path_postprocessing_callback, Options, undefined),
             Timestamp = maps:get(timestamp, Options),
-            bounded_cache:cache(Cache, Key, CalculatedValue, Timestamp),
-            FinalAns;
+            finish_multipath_calculation(Cache, Key, CalculatedValue, CalculationInfo, 
+                References, ReferencesValues, Timestamp, PostprocessingCallback);
         Error ->
             Error
     end.
@@ -251,27 +259,45 @@ calculate_reference(Cache, #document{key = Key} = FileDoc, CalculateCallback, Op
             Error
     end.
 
--spec calculate_for_references(bounded_cache:cache(), [file_meta:doc()], bounded_cache:callback(), merge_callback(),
-    get_options(), undefined | get_return_value()) -> get_return_value().
-calculate_for_references(_Cache, [], _CalculateCallback, _MergeCallback, _Options, Acc) ->
+-spec merge_references_values([get_return_value()], undefined | get_return_value(), merge_callback()) ->
+    get_return_value().
+merge_references_values([], Acc, _MergeCallback) ->
     Acc; % No references left - return answer
-calculate_for_references(_Cache, _References, _CalculateCallback, _MergeCallback, _Options, {error, _} = Acc) ->
-    Acc; % Error occures - return answer
-calculate_for_references(Cache, [FileDoc | Tail], CalculateCallback, MergeCallback, Options, undefined) ->
-    % It is first reference so answer merging is not needed
-    case calculate_reference(Cache, FileDoc, CalculateCallback, Options) of
-        {ok, _, _} = OkAns -> calculate_for_references(Cache, Tail, CalculateCallback, MergeCallback, Options, OkAns);
-        {error, _} = Error -> Error
-    end;
-calculate_for_references(Cache, [FileDoc | Tail], CalculateCallback, MergeCallback, Options, {ok, Acc, CalculationInfo}) ->
-    % Calculate reference and merge answer with Acc
-    Options2 = Options#{initial_calculation_info => CalculationInfo},
-    case calculate_reference(Cache, FileDoc, CalculateCallback, Options2) of
-        {ok, Value, NewCalculationInfo} ->
-            MergedAns = MergeCallback(Value, Acc, NewCalculationInfo),
-            calculate_for_references(Cache, Tail, CalculateCallback, MergeCallback, Options2, MergedAns);
-        {error, _} = Error ->
+merge_references_values([Value | Tail], undefined, MergeCallback) ->
+    merge_references_values(Tail, Value, MergeCallback); % First value - nothing to be merged
+merge_references_values(_ReferenceValues, {error, _} = Acc, _MergeCallback) ->
+    Acc; % Error occurred - return answer
+merge_references_values([{ok, Value, CalculationInfo} | Tail], {ok, AccValue, AccCalculationInfo}, MergeCallback) ->
+    merge_references_values(Tail, MergeCallback(AccValue, Value, AccCalculationInfo, CalculationInfo), MergeCallback).
+
+-spec finish_multipath_calculation(bounded_cache:cache(), file_meta:uuid(), bounded_cache:value(), calculation_info(),
+    [file_meta:doc()], [get_return_value()], time:millis(), postprocessing_callback()) -> get_return_value().
+finish_multipath_calculation(Cache, Key, MergedValue, CalculationInfo,
+    _References, _ReferencesValues, Timestamp, undefined) ->
+    bounded_cache:cache(Cache, Key, MergedValue, Timestamp),
+    {ok, MergedValue, CalculationInfo};
+finish_multipath_calculation(Cache, _Key, MergedValue, CalculationInfo,
+    References, ReferencesValues, Timestamp, PostprocessingCallback) ->
+    FoldlAns = lists:foldl(fun
+        ({ok, ReferenceValue, _}, {ok, Acc}) ->
+            case PostprocessingCallback(ReferenceValue, MergedValue, CalculationInfo) of
+                {ok, NewValue} -> {ok, [NewValue | Acc]};
+                Other -> Other
+            end;
+        (_, Error) ->
             Error
+    end, {ok, []}, ReferencesValues),
+
+    case FoldlAns of
+        {ok, ReversedMappedReferencesValues} ->
+            [ReturnValue | _] = MappedReferencesValues = lists:reverse(ReversedMappedReferencesValues),
+            lists:foreach(fun({#document{key = CacheKey}, ValueToCache}) ->
+                bounded_cache:cache(Cache, CacheKey, ValueToCache, Timestamp)
+            end, lists:zip(References, MappedReferencesValues)),    
+            
+            {ok, ReturnValue, CalculationInfo};
+        FoldlError ->
+            FoldlError
     end.
 
 %%--------------------------------------------------------------------
@@ -305,11 +331,12 @@ get_references(#document{key = DocKey} = FileDoc) ->
 -spec force_execution_on_inode(file_meta:uuid(), bounded_cache:callback(), merge_callback(),
     bounded_cache:additional_info(), bounded_cache:value(), get_options()) -> get_return_value().
 force_execution_on_inode(INodeKey, CalculateCallback, MergeCallback, CalculationInfo, Acc, Options) ->
-    Args = maps:get(args, Options, []),
     case file_meta:get_including_deleted(INodeKey) of
         {ok, FileDoc} ->
-            case CalculateCallback([FileDoc, undefined, CalculationInfo | Args]) of
-                {ok, Value, NewCalculationInfo} -> MergeCallback(Value, Acc, NewCalculationInfo);
+            Args = maps:get(args, Options, []),
+            InitialCalculationInfo = maps:get(initial_calculation_info, Options, undefined),
+            case CalculateCallback([FileDoc, undefined, InitialCalculationInfo | Args]) of
+                {ok, Value, NewCalculationInfo} -> MergeCallback(Acc, Value, CalculationInfo, NewCalculationInfo);
                 {error, _} = Error -> Error
             end;
         _ ->

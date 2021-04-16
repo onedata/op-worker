@@ -156,10 +156,14 @@ get(FileDoc = #document{key = FileUuid}) ->
             Callback = fun([Doc, ParentEntry, CalculationInfo]) ->
                 {ok, calculate(Doc, ParentEntry), CalculationInfo}
             end,
-            MergeCallback = fun(NewEntry, EntryAcc, CalculationInfo) ->
-                {ok, merge_entries_of_references(NewEntry, EntryAcc), CalculationInfo}
+            MergeCallback = fun(NewEntry, EntryAcc, CalculationInfo1, _CalculationInfo2) ->
+                {ok, merge_entries_of_references(NewEntry, EntryAcc), CalculationInfo1}
             end,
-            Options = #{multi_path_merge_callback => MergeCallback},
+            PostprocessingCallback = fun(ReferenceEntry, MergedEntry, _CalculationInfo) ->
+                {ok, prepare_entry_to_cache(ReferenceEntry, MergedEntry)}
+            end,
+            Options = #{multi_path_merge_callback => MergeCallback,
+                multi_path_postprocessing_callback => PostprocessingCallback},
 
             case effective_value:get_or_calculate(CacheName, FileDoc, Callback, Options) of
                 {ok, Entry, _} ->
@@ -212,17 +216,26 @@ merge_entries_of_references(NewerEntry, undefined) ->
 merge_entries_of_references(#entry{
     eff_protection_flags = EffProtectionFlags2
 } = _NewerEntry, #entry{
-    direct_attached_dataset = DirectAttachedDataset1,
-    eff_ancestor_datasets = EffAncestorDatasets1,
     eff_protection_flags = EffProtectionFlags1
 } = _OlderEntry) ->
     % Reference for which effective_value:get_or_calculate is called is always calculated first.
     % We want to keep information about dataset calculated using only this reference and protection flags
     % calculated using all references.
     #entry{
-        direct_attached_dataset = DirectAttachedDataset1,
-        eff_ancestor_datasets = EffAncestorDatasets1,
         eff_protection_flags = ?set_flags(EffProtectionFlags1, EffProtectionFlags2)
+    }.
+
+-spec prepare_entry_to_cache(entry(), entry()) -> entry().
+prepare_entry_to_cache(#entry{
+    direct_attached_dataset = DirectAttachedDataset,
+    eff_ancestor_datasets = EffAncestorDatasets
+} = _ReferenceEntry, #entry{
+    eff_protection_flags = EffProtectionFlags
+} = _MergedEntry) ->
+    #entry{
+        direct_attached_dataset = DirectAttachedDataset,
+        eff_ancestor_datasets = EffAncestorDatasets,
+        eff_protection_flags = EffProtectionFlags
     }.
 
 
