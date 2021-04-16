@@ -42,7 +42,6 @@
 -export_type([entries/0, listing_opts/0, index/0, listing_mode/0]).
 
 % TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
-% TODO VFS-7526 handle hardlink's dataset
 % TODO VFS-7563 add tests concerning datasets
 
 -define(CRITICAL_SECTION(DatasetId, Function), critical_section:run({dataset, DatasetId}, Function)).
@@ -234,7 +233,7 @@ detach_internal(DatasetId) ->
     {ok, DatasetPath} = dataset_path:get(SpaceId, DatasetId),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {FilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-    FileType = file_meta:get_type(FileDoc),
+    FileType = file_meta:get_effective_type(FileDoc),
     DatasetName = filename:basename(FilePath),
     ok = dataset:mark_detached(DatasetId, DatasetPath, FilePath, FileType, CurrProtectionFlags),
     detached_datasets:add(SpaceId, DatasetPath, DatasetName),
@@ -284,7 +283,7 @@ collect_attached_info(DatasetDoc, IndexOrUndefined) ->
     {ok, FileDoc} = file_meta:get(Uuid),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {FilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-    FileType = file_meta:get_type(FileDoc),
+    FileType = file_meta:get_effective_type(FileDoc),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
     {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
