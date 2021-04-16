@@ -49,6 +49,7 @@
     create_and_query_view_mapping_one_file_to_many_rows/1,
     effective_value_test/1,
     multipath_effective_value_test/1,
+    concurent_multipath_effective_value_test/1,
     traverse_test/1,
     file_traverse_job_test/1,
     do_not_overwrite_space_dir_attrs_on_make_space_exist_test/1,
@@ -78,6 +79,7 @@ all() ->
         custom_metadata_doc_should_contain_file_objectid,
         effective_value_test,
         multipath_effective_value_test,
+        concurent_multipath_effective_value_test,
         traverse_test,
         file_traverse_job_test,
         do_not_overwrite_space_dir_attrs_on_make_space_exist_test,
@@ -209,6 +211,15 @@ effective_value_test(Config) ->
         [Doc3, Callback, #{initial_calculation_info => [], in_critical_section => true}])),
     ?assertEqual({ok, <<"dir3">>, []}, ?CALL_CACHE(Worker, get_or_calculate,
         [Doc3, Callback, #{initial_calculation_info => [], in_critical_section => true}])),
+
+    % Invalidate cache for further tests
+    invalidate_effective_value_cache(Worker),
+
+    % Test calculation when dir is deleted
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, Guid3})),
+    ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
+        {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
+        ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, #{initial_calculation_info => []}])),
 
     ok.
 
@@ -378,7 +389,83 @@ multipath_effective_value_test(Config) ->
             force_execution_on_inode => true}])),
     verify_merge_message(timeout),
 
+    % Invalidate cache for further tests
+    invalidate_effective_value_cache(Worker),
+
+    % Test calculation for deleted file
+    ?assertEqual({ok, <<"file">>, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback,
+        #{initial_calculation_info => [], use_referenced_key => true, multi_path_merge_callback => MergeCallback}])),
+    verify_merge_message(timeout),
+
     ok.
+
+concurent_multipath_effective_value_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    Dir0 = filename:join(["/", SpaceName, "concurent_ev_dir0"]),
+    Dir1 = filename:join([Dir0, "concurent_ev_dir1"]),
+    Dir2 = filename:join([Dir1, "concurent_ev_dir2"]),
+    Dir3 = filename:join(["/", SpaceName, "concurent_ev_dir3"]),
+    Link = filename:join(["/", SpaceName, Dir3, "link"]),
+
+    % Create dirs, file and link used during the test
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir0)),
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir1)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir2)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Dir3)),
+    FileGuid = file_ops_test_utils:create_file(Worker, SessId, DirGuid, <<"file">>, <<"xyz">>),
+    {ok, #file_attr{guid = LinkGuid}} = ?assertMatch({ok, _}, lfm_proxy:make_link(Worker, SessId, Link, FileGuid)),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    LinkUuid = file_id:guid_to_uuid(LinkGuid),
+    {ok, FileDoc} = ?assertMatch({ok, _}, rpc:call(Worker, file_meta, get, [{uuid, FileUuid}])),
+    {ok, LinkDoc} = ?assertMatch({ok, _}, rpc:call(Worker, file_meta, get, [{uuid, LinkUuid}])),
+
+    execute_and_check_concurrent_multipath_effective_value_calls(Worker, LinkDoc, FileDoc, false),
+    execute_and_check_concurrent_multipath_effective_value_calls(Worker, LinkDoc, FileDoc, true),
+
+    ok.
+
+execute_and_check_concurrent_multipath_effective_value_calls(Worker, LinkDoc, FileDoc, CriticalSection) ->
+    % Define callback functions
+    Callback = fun
+        ([#document{value = #file_meta{name = Name}}, undefined, CalculationInfo]) ->
+            {ok, [Name], CalculationInfo};
+        ([#document{value = #file_meta{name = Name}}, ParentValue, CalculationInfo]) ->
+            {ok, lists:sort([Name | ParentValue]), CalculationInfo}
+    end,
+    MergeCallback = fun(Value, Acc, CalculationInfo) ->
+        {ok, lists:sort(Value ++ Acc), CalculationInfo}
+    end,
+
+    Master = self(),
+    ProcsNum = 100,
+    ExpectedAns = lists:sort([<<"file">>, <<"concurent_ev_dir1">>, <<"concurent_ev_dir0">>, <<"space_id1">>,
+        <<"link">>, <<"concurent_ev_dir3">>, <<"space_id1">>]),
+
+    % Execute 100 parallel calls and check their results
+    lists:foreach(fun(N) ->
+        spawn(fun() ->
+            Doc = case N rem 2 of
+                0 -> LinkDoc;
+                1 -> FileDoc
+            end,
+
+            CallAns = ?CALL_CACHE(Worker, get_or_calculate, [Doc, Callback, #{use_referenced_key => true,
+                multi_path_merge_callback => MergeCallback, in_critical_section => CriticalSection}]),
+            Master ! {call_ans, CallAns}
+        end)
+    end, lists:seq(1, ProcsNum)),
+
+    lists:foreach(fun(_) ->
+        Ans = receive
+            {call_ans, RecievedAns} -> RecievedAns
+        after
+            5000 -> timeout
+        end,
+
+        ?assertEqual({ok, ExpectedAns, undefined}, Ans)
+    end, lists:seq(1, ProcsNum)).
 
 empty_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -974,7 +1061,8 @@ init_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_trav
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10])),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
-init_per_testcase(Case, Config) when Case =:= effective_value_test ; Case =:= multipath_effective_value_test ->
+init_per_testcase(Case, Config) when Case =:= effective_value_test ; Case =:= multipath_effective_value_test ;
+    Case =:= concurent_multipath_effective_value_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     CachePid = spawn(Worker, fun() -> cache_proc(
         #{check_frequency => timer:minutes(5), size => 100}) end),
@@ -995,7 +1083,8 @@ end_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_trave
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, rpc:call(Worker, tree_traverse, stop, [?MODULE])),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-end_per_testcase(Case, Config) when Case =:= effective_value_test ; Case =:= multipath_effective_value_test ->
+end_per_testcase(Case, Config) when Case =:= effective_value_test ; Case =:= multipath_effective_value_test ;
+    Case =:= concurent_multipath_effective_value_test ->
     timer:sleep(5000),
     CachePid = ?config(cache_pid, Config),
     CachePid ! {finish, self()},
