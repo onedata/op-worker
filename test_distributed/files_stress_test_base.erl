@@ -268,7 +268,6 @@ many_files_creation_tree_test_base(Config, Options) ->
                         try
                             case UseHardlinks of
                                 true ->
-                                    % TODOD - dodac argument multipath do effective value
                                     INodeGuid = maps:get(N, ReferencedFilesMap),
                                     {ok, _} = lfm_proxy:make_link(W, S, {guid, INodeGuid}, GUID, N2),
                                     file_ok;

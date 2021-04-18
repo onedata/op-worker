@@ -225,7 +225,7 @@ set_ev_options(Job) ->
             MergeCallback = fun(Value1, Value2, CalculationInfo) ->
                 merge_paths_info(Value1, Value2, CalculationInfo)
             end,
-            Options#{use_referenced_key => true, multi_path_merge_callback => MergeCallback};
+            Options#{use_referenced_key => true, merge_callback => MergeCallback};
         false ->
             Options
     end.

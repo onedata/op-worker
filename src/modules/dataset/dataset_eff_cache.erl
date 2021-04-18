@@ -156,14 +156,14 @@ get(FileDoc = #document{key = FileUuid}) ->
             Callback = fun([Doc, ParentEntry, CalculationInfo]) ->
                 {ok, calculate(Doc, ParentEntry), CalculationInfo}
             end,
-            MergeCallback = fun(NewEntry, EntryAcc, CalculationInfo1, _CalculationInfo2) ->
-                {ok, merge_entries_of_references(NewEntry, EntryAcc), CalculationInfo1}
+            MergeCallback = fun(NewEntry, EntryAcc, EntryCalculationInfo, _CalculationInfoAcc) ->
+                {ok, merge_entries_protection_flags(NewEntry, EntryAcc), EntryCalculationInfo}
             end,
-            PostprocessingCallback = fun(ReferenceEntry, MergedEntry, _CalculationInfo) ->
+            DifferentiateCallback = fun(ReferenceEntry, MergedEntry, _CalculationInfo) ->
                 {ok, prepare_entry_to_cache(ReferenceEntry, MergedEntry)}
             end,
-            Options = #{multi_path_merge_callback => MergeCallback,
-                multi_path_postprocessing_callback => PostprocessingCallback},
+            Options = #{merge_callback => MergeCallback,
+                differentiate_callback => DifferentiateCallback},
 
             case effective_value:get_or_calculate(CacheName, FileDoc, Callback, Options) of
                 {ok, Entry, _} ->
@@ -210,17 +210,15 @@ calculate(Doc = #document{}, #entry{
         eff_protection_flags = ?set_flags(ParentEffProtectionFlags, ProtectionFlags)
     }.
 
--spec merge_entries_of_references(entry(), entry() | undefined) -> entry().
-merge_entries_of_references(NewerEntry, undefined) ->
+-spec merge_entries_protection_flags(entry(), entry() | undefined) -> entry().
+merge_entries_protection_flags(NewerEntry, undefined) ->
     NewerEntry;
-merge_entries_of_references(#entry{
+merge_entries_protection_flags(#entry{
     eff_protection_flags = EffProtectionFlags2
 } = _NewerEntry, #entry{
     eff_protection_flags = EffProtectionFlags1
 } = _OlderEntry) ->
-    % Reference for which effective_value:get_or_calculate is called is always calculated first.
-    % We want to keep information about dataset calculated using only this reference and protection flags
-    % calculated using all references.
+    % Only protection flags are calculated together for all references
     #entry{
         eff_protection_flags = ?set_flags(EffProtectionFlags1, EffProtectionFlags2)
     }.
