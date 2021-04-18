@@ -208,7 +208,7 @@ resource_exists(Req, #cdmi_req{
 } = CdmiReq) ->
     try
         {ok, FileGuid} = middleware_utils:resolve_file_path(SessionId, Path),
-        case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
+        case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid))) of
             {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} when Type == container ->
                 {true, Req, CdmiReq#cdmi_req{file_attrs = Attr}};
             {ok, #file_attr{type = ?DIRECTORY_TYPE}} when Type == dataobject ->

@@ -127,7 +127,7 @@ decode_object_id(ObjectId, Key) ->
 -spec assert_file_exists(aai:auth(), file_id:file_guid()) ->
     ok | no_return().
 assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
-    ?check(lfm:stat(SessionId, {guid, FileGuid})),
+    ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid))),
     ok.
 
 

@@ -653,7 +653,7 @@ autocleaning_should_not_evict_opened_file_replica(Config) ->
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
     % read file to be replicated and leave it opened
-    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, Guid}, read), ?ATTEMPTS),
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), read), ?ATTEMPTS),
     {ok, _} = ?assertMatch({ok, _}, lfm_proxy:read(W1, H, 0, Size), ?ATTEMPTS),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertOneOfReports({ok, #{
@@ -932,7 +932,7 @@ enable_periodical_spaces_autocleaning_check(Worker) ->
 
 write_file(Worker, SessId, FilePath, Size) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessId, FilePath),
-    {ok, H} = lfm_proxy:open(Worker, SessId, {guid, Guid}, write),
+    {ok, H} = lfm_proxy:open(Worker, SessId, ?FILE_REF(Guid), write),
     {ok, _} = lfm_proxy:write(Worker, H, 0, crypto:strong_rand_bytes(Size)),
     ok = lfm_proxy:close(Worker, H),
     Guid.
@@ -945,7 +945,7 @@ write_files(Worker, SessId, DirPath, FilePrefix, Size, Num) ->
 
 read_file(Worker, SessId, Guid, Size) ->
     ?assertEqual(Size, try
-        {ok, H} = lfm_proxy:open(Worker, SessId, {guid, Guid}, read),
+        {ok, H} = lfm_proxy:open(Worker, SessId, ?FILE_REF(Guid), read),
         {ok, Data} = lfm_proxy:read(Worker, H, 0, Size),
         ok = lfm_proxy:close(Worker, H),
         byte_size(Data)
@@ -955,8 +955,8 @@ read_file(Worker, SessId, Guid, Size) ->
     end, ?ATTEMPTS).
 
 schedule_file_replication(Worker, SessId, Guid, ProviderId) ->
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, {guid, Guid}), ?ATTEMPTS),
-    {ok, _} = lfm_proxy:schedule_file_replication(Worker, SessId, {guid, Guid}, ProviderId).
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    {ok, _} = lfm_proxy:schedule_file_replication(Worker, SessId, ?FILE_REF(Guid), ProviderId).
 
 enable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, enable, [SpaceId]).

@@ -29,12 +29,22 @@
     <<"type">>, <<"size">>, <<"shares">>
 ]).
 
--define(GUID_KEY(__GUID), {guid, __GUID}).
--define(DIRECT_GUID_KEY(__GUID), {direct_guid, __GUID}).
--define(INDIRECT_GUID_KEY(__GUID), {indirect_guid, __GUID}).
+-record(file_ref, {
+    guid :: file_id:file_guid(),
+    % Indicates whether the operation should be performed on the symlink itself
+    % or on the target file that it points to (in case of symlink guid):
+    % 1) `false` - operation should be performed on the symlink itself.
+    % 2) `true` - operation should be performed on the target file the symlink points to.
+    % 3) `default` - depending on operation the symlink will be resolved (e.g. 'open',
+    %                'create', etc.) or not (e.g. 'unlink').
+    %                This simulates default UNIX behaviour.
+    follow_symlink = default :: false | true | default
+}).
 
--define(PATH_KEY(__PATH), {path, __PATH}).
--define(DIRECT_PATH_KEY(__PATH), {direct_path, __PATH}).
--define(INDIRECT_PATH_KEY(__PATH), {indirect_path, __PATH}).
+-define(FILE_REF(__GUID), #file_ref{guid = __GUID}).
+-define(FILE_REF(__GUID, __FOLLOW_SYMLINK), #file_ref{
+    guid = __GUID,
+    follow_symlink = __FOLLOW_SYMLINK
+}).
 
 -endif.

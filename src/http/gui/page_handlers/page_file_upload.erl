@@ -121,7 +121,7 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
 
     SpaceId = file_id:guid_to_space_id(FileGuid),
     Offset = ChunkSize * (ChunkNumber - 1),
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, write)),
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, ?FILE_REF(FileGuid), write)),
 
     try
         file_upload_utils:upload_file(

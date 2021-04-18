@@ -367,11 +367,10 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS), Stora
     % get StorageFileId before location is deleted as it's stored in file_location doc
     {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
     FileCtx4 = delete_location(FileCtx3),
-    FileCtx5 = detach_dataset(FileCtx4),
-    FileCtx6 = delete_file_meta(FileCtx5),
-    remove_associated_documents(FileCtx6, StorageFileDeleted, StorageFileId),
-    FileCtx7 = remove_deletion_marker(FileCtx6, UserCtx, StorageFileId),
-    maybe_try_to_delete_parent(FileCtx7, UserCtx, ?ALL_DOCS, StorageFileId);
+    FileCtx5 = delete_file_meta(FileCtx4),
+    remove_associated_documents(FileCtx5, StorageFileDeleted, StorageFileId),
+    FileCtx6 = remove_deletion_marker(FileCtx5, UserCtx, StorageFileId),
+    maybe_try_to_delete_parent(FileCtx6, UserCtx, ?ALL_DOCS, StorageFileId);
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?LOCAL_DOCS), StorageFileDeleted) ->
     % get StorageFileId before location is deleted as it's stored in file_location doc
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
@@ -489,9 +488,10 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
 delete_file_meta(FileCtx) ->
     % use get_file_doc_including_deleted because doc can be marked as deleted
     % inside file_meta record and get_file_doc could fail
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    FileCtx2 = detach_dataset(FileCtx),
+    {FileDoc, FileCtx3} = file_ctx:get_file_doc_including_deleted(FileCtx2),
     ok = file_meta:delete(FileDoc),
-    FileCtx2.
+    FileCtx3.
 
 -spec delete_referenced_file_meta(file_ctx:ctx()) -> file_ctx:ctx().
 delete_referenced_file_meta(FileCtx) ->

@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("cluster_worker/include/modules/datastore/ha_datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -269,7 +270,7 @@ many_files_creation_tree_test_base(Config, Options) ->
                             case UseHardlinks of
                                 true ->
                                     INodeGuid = maps:get(N, ReferencedFilesMap),
-                                    {ok, _} = lfm_proxy:make_link(W, S, {guid, INodeGuid}, GUID, N2),
+                                    {ok, _} = lfm_proxy:make_link(W, S, ?FILE_REF(INodeGuid), GUID, N2),
                                     file_ok;
                                 false ->
                                     {ok, FileGUID} = case CacheGUIDS of
@@ -285,7 +286,7 @@ many_files_creation_tree_test_base(Config, Options) ->
                                                 false ->
                                                     lfm_proxy:open(W, S, {path, F}, rdwr);
                                                 _ ->
-                                                    lfm_proxy:open(W, S, {guid, FileGUID}, rdwr)
+                                                    lfm_proxy:open(W, S, ?FILE_REF(FileGUID), rdwr)
                                             end,
                                             WriteBuf = generator:gen_name(),
                                             WriteSize = size(WriteBuf),
@@ -304,7 +305,7 @@ many_files_creation_tree_test_base(Config, Options) ->
                                                 false ->
                                                     lfm_proxy:set_xattr(W, S, {path, F}, Xattr);
                                                 _ ->
-                                                    lfm_proxy:set_xattr(W, S, {guid, FileGUID}, Xattr)
+                                                    lfm_proxy:set_xattr(W, S, ?FILE_REF(FileGUID), Xattr)
                                             end,
                                             file_ok;
                                         _ ->
