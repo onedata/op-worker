@@ -221,7 +221,7 @@ effective_value_test(Config) ->
     invalidate_effective_value_cache(Worker),
 
     % Test calculation when dir is deleted
-    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, Guid3})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Guid3))),
     ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
         {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]},
         ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, #{initial_calculation_info => []}])),
@@ -369,7 +369,7 @@ deleted_reference_effective_value_test(Config) ->
     {Callback, MergeCallback} = prepare_effective_value_callbacks(),
 
     % Test calculation for hardlink when file is deleted but hardlink is not deleted
-    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(FileGuid))),
     CalculationInfo1 = [{<<"link">>, <<"del_ev_dir3">>}, {<<"del_ev_dir3">>, <<"space_id1">>},
         {<<"space_id1">>, undefined}],
     ?assertEqual({ok, <<"link">>, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
