@@ -108,6 +108,9 @@ rename_file_test(Config) ->
     %% with illegal overwrite
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/renamed_file3_target"))),
     ?assertEqual({error, ?EISDIR}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, filename(1, TestDir, "/renamed_file3_target"))),
+    
+    %% with illegal target filename
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, {path, filename(1, TestDir, "")}, <<"path/with/slash">>)),
 
     {ok, Children} = lfm_proxy:get_children(W, SessId, {guid, DirGuid}, 0, 10),
     ActualLs = ordsets:from_list([Name || {_, Name} <- Children]),
@@ -169,7 +172,9 @@ move_file_test(Config) ->
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/target_dir/moved_file2_target")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle4)),
-
+    
+    %% with illegal target filename
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, {path, filename(1, TestDir, "")}, <<"path/with/slash">>)),
 
     %% with illegal overwrite
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/target_dir/moved_file3_target"))),
