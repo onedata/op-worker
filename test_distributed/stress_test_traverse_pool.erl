@@ -43,7 +43,7 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, TaskId) ->
     case tree_traverse:get_traverse_info(Job) of
         #{mode := precalculate_dir} ->
             {Doc, _} = file_ctx:get_file_doc(FileCtx),
-            Callback = fun(Args) -> get_file_level(Args) end,
+            Callback = fun(Args) -> process_file(Args) end,
             {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, set_ev_options(Job)),
             case CalculationInfo of
                 {0, _} ->
@@ -58,7 +58,7 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, TaskId) ->
     end.
 
 do_slave_job(Job = #tree_traverse_slave{file_ctx = FileCtx}, _TaskId) ->
-    Callback = fun(Args) -> get_file_level(Args) end,
+    Callback = fun(Args) -> process_file(Args) end,
     {Doc, _} = file_ctx:get_file_doc(FileCtx),
     {ok, _, CalculationInfo} = effective_value:get_or_calculate(?CACHE, Doc, Callback, set_ev_options(Job)),
     case CalculationInfo of
@@ -166,13 +166,13 @@ cache_proc() ->
             Pid ! finished
     end.
 
-get_file_level([_, undefined, {ItemsTraversed, PathsTraversed}]) ->
+process_file([_, undefined, {ItemsTraversed, PathsTraversed}]) ->
     {ok, 0, {ItemsTraversed + 1, PathsTraversed}};
-get_file_level([_, ParentValue, {ItemsTraversed, PathsTraversed}]) ->
+process_file([_, ParentValue, {ItemsTraversed, PathsTraversed}]) ->
     {ok, ParentValue + 1, {ItemsTraversed + 1, PathsTraversed}}.
 
-merge_paths_info(Value1, Value2, {ItemsTraversed, PathsTraversed}) ->
-    {ok, Value1 + Value2, {ItemsTraversed, PathsTraversed + 1}}.
+merge_paths_info(Value1, Value2, {ItemsTraversed1, PathsTraversed1}, {ItemsTraversed2, PathsTraversed2}) ->
+    {ok, Value1 + Value2, {ItemsTraversed1 + ItemsTraversed2, PathsTraversed1 + PathsTraversed2}}.
 
 start_traverse(Config, TraverseInfo, ID) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -222,8 +222,8 @@ set_ev_options(Job) ->
 
     case maps:get(multipath_ev, TraverseInfo, false) of
         true ->
-            MergeCallback = fun(Value1, Value2, CalculationInfo) ->
-                merge_paths_info(Value1, Value2, CalculationInfo)
+            MergeCallback = fun(NewValue, ValueAcc, NewCalculationInfo, CalculationInfoAcc) ->
+                merge_paths_info(NewValue, ValueAcc, NewCalculationInfo, CalculationInfoAcc)
             end,
             Options#{use_referenced_key => true, merge_callback => MergeCallback};
         false ->
