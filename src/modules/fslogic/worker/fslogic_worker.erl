@@ -358,7 +358,7 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
             {FileCtx0, file_ctx:get_share_id_const(FileCtx0)}
     end,
     ok = fslogic_log:report_file_access_operation(
-        Request, FileCtx1, user_ctx:get_user_id(UserCtx0), ShareId),
+        Request, FileCtx1, user_ctx:get_user_id(UserCtx0)),
     try
         UserCtx1 = case ShareId of
             undefined ->

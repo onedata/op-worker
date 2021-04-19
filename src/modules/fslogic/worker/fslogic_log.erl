@@ -17,7 +17,7 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 
 %% API
--export([report_file_access_operation/4]).
+-export([report_file_access_operation/3]).
 -export([mask_data_in_message/1]).
 
 -type logged_record() :: fslogic_worker:request() | fuse_request_type() | file_request_type() 
@@ -29,17 +29,15 @@
 %%% API
 %%%===================================================================
 
--spec report_file_access_operation(
-    fslogic_worker:request(), file_ctx:ctx(), od_user:id(), od_share:id() | undefined
-) -> 
-    ok.
-report_file_access_operation(Request, FileCtx, UserId, ShareId) ->
+-spec report_file_access_operation(fslogic_worker:request(), file_ctx:ctx(), od_user:id()) -> ok.
+report_file_access_operation(Request, FileCtx, UserId) ->
     case op_worker:get_env(file_access_audit_log_enabled, false) of
         false -> ok;
         true ->
             FormattedRequest = format_request(Request),
             Uuid = file_ctx:get_uuid_const(FileCtx),
-            FormattedShareId = str_utils:to_list(utils:undefined_to_null(ShareId)),
+            FormattedShareId = 
+                str_utils:to_list(utils:undefined_to_null(file_ctx:get_share_id_const(FileCtx))),
             FilePath = try
                 {Path, _} = file_ctx:get_canonical_path(FileCtx),
                 Path
@@ -48,7 +46,7 @@ report_file_access_operation(Request, FileCtx, UserId, ShareId) ->
                 <<"">>
             end,
             ok = lager:log(file_access_audit_lager_event, info, self(),
-                "request: ~s; user: ~s; file_uuid: ~s; share_id: ~s; path: ~s",
+                "request: ~s; user: ~s; file_uuid: ~s; share_id: ~s; path: ~ts",
                     [FormattedRequest, UserId, Uuid, FormattedShareId, FilePath]
             )
     end.
