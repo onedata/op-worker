@@ -432,13 +432,13 @@ dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(C
     storage_import_test_base:dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(Config, ?POSIX_HELPER_NAME).
 
 dir_and_its_child_with_metadata_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_metadata_protection_should_not_be_deleted_test(Config, ?POSIX_HELPER_NAME).
+    storage_import_test_base:dir_and_its_child_with_metadata_protection_should_not_be_deleted_test(Config).
 
 dir_and_its_child_with_data_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_data_protection_should_not_be_deleted_test(Config, ?POSIX_HELPER_NAME).
+    storage_import_test_base:dir_and_its_child_with_data_protection_should_not_be_deleted_test(Config).
 
 dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(Config, ?POSIX_HELPER_NAME).
+    storage_import_test_base:dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(Config).
 
 delete_empty_directory_update_test(Config) ->
     storage_import_test_base:delete_empty_directory_update_test(Config).
