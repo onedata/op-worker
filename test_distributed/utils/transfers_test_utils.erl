@@ -316,11 +316,11 @@ assert_transfer_field(ExpectedValueOrPredicate, Transfer, FieldName) ->
 
 get_transfer_value(Transfer, FieldName) ->
     FieldsList = record_info(fields, transfer),
-    Index = lists_utils:index_of(FieldName, FieldsList),
-    case Index =:= undefined of
-        true ->
+
+    case lists_utils:index_of(FieldName, FieldsList) of
+        undefined ->
             throw({wrong_assertion_key, FieldName, FieldsList});
-        false ->
+        Index ->
             element(Index + 1, Transfer)
     end.
 

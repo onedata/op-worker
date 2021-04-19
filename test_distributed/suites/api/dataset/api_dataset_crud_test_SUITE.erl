@@ -100,7 +100,6 @@ establish_dataset_test(Config) ->
                     validate_result_fun = build_establish_dataset_validate_gs_call_result_fun(MemRef, Config)
                 }
             ],
-%%            randomly_select_scenarios = true,
             data_spec = api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                 % Operations should be rejected even before checking if share exists
                 % (in case of using share file id) so it is not necessary to use

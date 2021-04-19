@@ -25,7 +25,7 @@
     set_up_dataset/4,
     await_dataset_sync/4,
 
-    get_exp_child_datasets/4,
+    get_exp_child_datasets/5,
 
     cleanup_all_datasets/1,
     cleanup_all_datasets/2
@@ -156,17 +156,20 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     dataset:state(),
     file_meta:path(),
     dataset:id(),
+    [binary()],
     onenv_file_test_utils:object()
 ) ->
     [{file_meta:name(), dataset:id(), lfm_datasets:info()}].
-get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, #object{dataset = #dataset_object{
+get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, ParentEffProtectionFlagsJson,
+    #object{dataset = #dataset_object{
     id = ParentDatasetId
 }} = Object) ->
-    get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, Object#object{dataset = undefined});
+    get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, ParentEffProtectionFlagsJson,
+        Object#object{dataset = undefined});
 
-get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, Object) ->
+get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, ParentEffProtectionFlagsJson, Object) ->
     lists:keysort(1, lists:flatten(get_exp_child_datasets_internal(
-        State, ParentDirPath, ParentDatasetId, Object
+        State, ParentDirPath, ParentDatasetId, ParentEffProtectionFlagsJson, Object
     ))).
 
 -spec cleanup_all_datasets(oct_background:entity_selector()) -> ok.
@@ -194,10 +197,11 @@ cleanup_all_datasets(ProviderSelectors, SpaceSelector) ->
     dataset:state(),
     file_meta:path(),
     dataset:id(),
+    [binary()],
     onenv_file_test_utils:object()
 ) ->
     [{file_meta:name(), dataset:id(), lfm_datasets:info()}].
-get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
+get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, ParentEffProtectionFlagsJson, #object{
     type = ObjType,
     name = ObjName,
     guid = ObjGuid,
@@ -209,10 +213,9 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
 }) ->
     ObjPath = filename:join(["/", ParentDirPath, ObjName]),
     CreationTime = time_test_utils:get_frozen_time_seconds(),
-
     EffProtectionFlags = case State of
-        ?ATTACHED_DATASET -> file_meta:protection_flags_from_json(ProtectionFlagsJson);
-        ?DETACHED_DATASET -> ?no_flags_mask
+        ?ATTACHED_DATASET -> lists:usort(ProtectionFlagsJson ++ ParentEffProtectionFlagsJson);
+        ?DETACHED_DATASET -> []
     end,
 
     DatasetInfo = #dataset_info{
@@ -223,18 +226,18 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
         root_file_type = ObjType,
         creation_time = CreationTime,
         protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
-        eff_protection_flags = EffProtectionFlags,
+        eff_protection_flags = file_meta:protection_flags_from_json(EffProtectionFlags),
         parent = ParentDatasetId,
         index = datasets_structure:pack_entry_index(ObjName, DatasetId)
     },
     {ObjName, DatasetId, DatasetInfo};
 
-get_exp_child_datasets_internal(_State, _ParentDirPath, _ParentDatasetId, #object{
+get_exp_child_datasets_internal(_State, _ParentDirPath, _ParentDatasetId, _ParentEffProtectionFlagsJson, #object{
     type = ?REGULAR_FILE_TYPE
 }) ->
     [];
 
-get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
+get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, ParentEffProtectionFlagsJson, #object{
     type = ?DIRECTORY_TYPE,
     name = DirName,
     children = Children
@@ -242,7 +245,7 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, #object{
     DirPath = filename:join(["/", ParentDirPath, DirName]),
 
     lists:map(fun(Child) ->
-        get_exp_child_datasets_internal(State, DirPath, ParentDatasetId, Child)
+        get_exp_child_datasets_internal(State, DirPath, ParentDatasetId, ParentEffProtectionFlagsJson, Child)
     end, Children).
 
 

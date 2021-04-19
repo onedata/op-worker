@@ -20,7 +20,7 @@
 %% API
 -export([create_response/4, get_response/2]).
 % Util functions
--export([translate_dataset_info/1, translate_datasets_list/2]).
+-export([translate_datasets_list/2]).
 
 %%%===================================================================
 %%% API
@@ -91,6 +91,6 @@ translate_datasets_list(Datasets, IsLast) ->
         <<"datasets">> => lists:reverse(TranslatedDatasetsReversed),
         <<"nextPageToken">> => case IsLast of
             true -> null;
-            false -> base64url:encode(NextPageToken)
+            false -> mochiweb_base64url:encode(NextPageToken)
         end
     }.

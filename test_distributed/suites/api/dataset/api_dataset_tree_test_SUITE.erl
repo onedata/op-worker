@@ -45,31 +45,18 @@ all() -> [
     {group, all_tests}
 ].
 
--define(PROTECTION_FLAGS, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]).
 
 -define(FILE_TREE_SPEC, #dir_spec{children = [
     #dir_spec{
         name = <<"get_top_datasets">>,
         children = [
-            #file_spec{dataset = #dataset_spec{
-                state = ?ATTACHED_DATASET,
-                protection_flags = ?PROTECTION_FLAGS
-            }},
-            #file_spec{dataset = #dataset_spec{
-                state = ?ATTACHED_DATASET,
-                protection_flags = ?PROTECTION_FLAGS
-            }},
-            #file_spec{dataset = #dataset_spec{
-                state = ?ATTACHED_DATASET,
-                protection_flags = ?PROTECTION_FLAGS
-            }},
+            #file_spec{dataset = #dataset_spec{state = ?ATTACHED_DATASET}},
+            #file_spec{dataset = #dataset_spec{state = ?ATTACHED_DATASET}},
+            #file_spec{dataset = #dataset_spec{state = ?ATTACHED_DATASET}},
+            #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}},
             #file_spec{dataset = #dataset_spec{
                 state = ?DETACHED_DATASET,
-                protection_flags = ?PROTECTION_FLAGS
-            }},
-            #file_spec{dataset = #dataset_spec{
-                state = ?DETACHED_DATASET,
-                protection_flags = ?PROTECTION_FLAGS
+                protection_flags = [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
             }}
         ]
     },
@@ -77,40 +64,34 @@ all() -> [
         name = <<"get_child_datasets_test">>,
         dataset = #dataset_spec{
             state = ?ATTACHED_DATASET,
-            protection_flags = ?PROTECTION_FLAGS
+            protection_flags = [?METADATA_PROTECTION_BIN]
         },
         children = [#dir_spec{
             dataset = #dataset_spec{
                 state = ?DETACHED_DATASET,
-                protection_flags = ?PROTECTION_FLAGS
+                protection_flags = [?DATA_PROTECTION_BIN]
             },
             children = [#dir_spec{
                 dataset = #dataset_spec{
                     state = ?ATTACHED_DATASET,
-                    protection_flags = ?PROTECTION_FLAGS
+                    protection_flags = [?DATA_PROTECTION_BIN]
                 },
                 children = [#dir_spec{
                     name = <<"dir_with_no_dataset_in_the_middle">>,
                     children = [
                         #file_spec{dataset = #dataset_spec{
                             state = ?ATTACHED_DATASET,
-                            protection_flags = ?PROTECTION_FLAGS
+                            protection_flags = [?DATA_PROTECTION_BIN]
                         }},
+                        #file_spec{dataset = #dataset_spec{state = ?ATTACHED_DATASET}},
                         #file_spec{dataset = #dataset_spec{
                             state = ?ATTACHED_DATASET,
-                            protection_flags = ?PROTECTION_FLAGS
+                            protection_flags = [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
                         }},
-                        #file_spec{dataset = #dataset_spec{
-                            state = ?ATTACHED_DATASET,
-                            protection_flags = ?PROTECTION_FLAGS
-                        }},
+                        #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}},
                         #file_spec{dataset = #dataset_spec{
                             state = ?DETACHED_DATASET,
-                            protection_flags = ?PROTECTION_FLAGS
-                        }},
-                        #file_spec{dataset = #dataset_spec{
-                            state = ?DETACHED_DATASET,
-                            protection_flags = ?PROTECTION_FLAGS
+                            protection_flags = [?METADATA_PROTECTION_BIN]
                         }}
                     ]
                 }]
@@ -121,28 +102,25 @@ all() -> [
         name = <<"get_file_dataset_summary_test">>,
         dataset = #dataset_spec{
             state = ?ATTACHED_DATASET,
-            protection_flags = ?PROTECTION_FLAGS
+            protection_flags = [?METADATA_PROTECTION_BIN]
         },
         children = [#dir_spec{
             dataset = #dataset_spec{
                 state = ?DETACHED_DATASET,
-                protection_flags = ?PROTECTION_FLAGS
+                protection_flags = [?DATA_PROTECTION_BIN]
             },
             children = [#dir_spec{
                 name = <<"dir_with_no_dataset_in_the_middle">>,
                 children = [#dir_spec{
-                    dataset = #dataset_spec{
-                        state = ?ATTACHED_DATASET,
-                        protection_flags = ?PROTECTION_FLAGS
-                    },
+                    dataset = #dataset_spec{state = ?ATTACHED_DATASET},
                     children = [#dir_spec{children = [
                         #file_spec{dataset = #dataset_spec{
                             state = ?ATTACHED_DATASET,
-                            protection_flags = ?PROTECTION_FLAGS
+                            protection_flags = [?DATA_PROTECTION_BIN]
                         }},
                         #dir_spec{dataset = #dataset_spec{
                             state = ?DETACHED_DATASET,
-                            protection_flags = ?PROTECTION_FLAGS
+                            protection_flags = [?DATA_PROTECTION_BIN]
                         }},
                         #file_spec{}
                     ]}]
@@ -174,7 +152,7 @@ get_top_datasets_test(Config) ->
     TopAttachedDatasets = case SpaceDirDataset of
         undefined ->
             onenv_dataset_test_utils:get_exp_child_datasets(
-                ?ATTACHED_DATASET, SpaceDirPath, undefined, FileTree
+                ?ATTACHED_DATASET, SpaceDirPath, undefined, [], FileTree
             );
         {_, _, _} ->
             [SpaceDirDataset]
@@ -184,7 +162,7 @@ get_top_datasets_test(Config) ->
     ct:pal("Test listing top detached datasets"),
 
     TopDetachedDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
-        ?DETACHED_DATASET, SpaceDirPath, undefined, FileTree
+        ?DETACHED_DATASET, SpaceDirPath, undefined, [], FileTree
     ),
     get_top_datasets_test_base(SpaceId, ?DETACHED_DATASET, TopDetachedDatasets).
 
@@ -234,7 +212,7 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
                     <<"limit">> => [1, 100],
                     <<"offset">> => [1, 3, 10],
                     <<"index">> => [<<"null">>, null, RandomIndex, <<"zzzzzzzzzzzz">>],
-                    <<"token">> => [<<"null">>, null | [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
+                    <<"token">> => [<<"null">>, null | [mochiweb_base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentSpace">>, ?ERROR_FORBIDDEN},
@@ -307,30 +285,38 @@ get_child_datasets_test(Config) ->
     FileTree = ?config(file_tree, Config),
 
     % See 'create_env' for how file tree looks like
-    #object{name = RootDirName, children = [_, #object{name = TestDirName, children = [
-        DirWithDetachedDataset = #object{
-            name = DirWithDetachedDatasetName,
-            dataset = #dataset_object{id = DetachedDatasetId},
-            children = [DirWithAttachedDataset = #object{
-                dataset = #dataset_object{id = AttachedDatasetId}
-            }]
-        }
-    ]}, _]} = FileTree,
+    #object{name = RootDirName, children = [_, #object{
+        name = TestDirName,
+        dataset = #dataset_object{protection_flags = TestDirProtectionFlags},
+        children = [
+            DirWithDetachedDataset = #object{
+                name = DirWithDetachedDatasetName,
+                dataset = #dataset_object{id = DetachedDatasetId},
+                children = [DirWithAttachedDataset = #object{
+                    dataset = #dataset_object{
+                        id = AttachedDatasetId,
+                        protection_flags = AttachedDatasetProtectionFlags
+                    }
+                }]
+            }
+        ]} | _]} = FileTree,
 
     TestDirPath = filename:join(["/", ?SPACE_KRK_PAR, RootDirName, TestDirName]),
     DirWithDetachedDatasetPath = filename:join([TestDirPath, DirWithDetachedDatasetName]),
+    DirWithAttachedDatasetEffProtectionFlags = lists:usort(AttachedDatasetProtectionFlags ++ TestDirProtectionFlags),
 
     ct:pal("Listing child datasets of attached dataset"),
 
     AttachedChildDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
-        ?ATTACHED_DATASET, DirWithDetachedDatasetPath, AttachedDatasetId, DirWithAttachedDataset
+        ?ATTACHED_DATASET, DirWithDetachedDatasetPath, AttachedDatasetId, DirWithAttachedDatasetEffProtectionFlags,
+        DirWithAttachedDataset
     ),
     get_child_datasets_test_base(AttachedDatasetId, AttachedChildDatasets),
 
     ct:pal("Listing child datasets of detached dataset"),
 
     DetachedChildDatasets = onenv_dataset_test_utils:get_exp_child_datasets(
-        ?DETACHED_DATASET, TestDirPath, DetachedDatasetId, DirWithDetachedDataset
+        ?DETACHED_DATASET, TestDirPath, DetachedDatasetId, TestDirProtectionFlags, DirWithDetachedDataset
     ),
     get_child_datasets_test_base(DetachedDatasetId, DetachedChildDatasets).
 
@@ -372,7 +358,7 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
                     <<"limit">> => [1, 100],
                     <<"offset">> => [1, 3, 10],
                     <<"index">> => [<<"null">>, null, RandomIndex, <<"zzzzzzzzzzzz">>],
-                    <<"token">> => [<<"null">>, null | [base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
+                    <<"token">> => [<<"null">>, null | [mochiweb_base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND},
@@ -454,7 +440,7 @@ validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
     Token = case maps:get(<<"token">>, Params, undefined) of
         undefined -> undefined;
         Null2 when Null2 =:= null orelse Null2 =:= <<"null">> -> undefined;
-        EncodedToken -> base64url:decode(EncodedToken)
+        EncodedToken -> mochiweb_base64url:decode(EncodedToken)
     end,
 
     StrippedDatasets = lists:dropwhile(fun({_FileName, _DatasetId, #dataset_info{index = DatasetIndex}}) ->
