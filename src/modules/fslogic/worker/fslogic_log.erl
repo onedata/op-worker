@@ -17,7 +17,7 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 
 %% API
--export([add_audit_log_entry/3, format/2]).
+-export([report_file_access_operation/4]).
 -export([mask_data_in_message/1]).
 
 -type logged_record() :: fslogic_worker:request() | fuse_request_type() | file_request_type() 
@@ -29,22 +29,27 @@
 %%% API
 %%%===================================================================
 
--spec format(lager_msg:lager_msg(),list()) -> any().
-format(Msg, _Config) ->
-    lager_default_formatter:format(Msg, [date, " ", time, ";", message, "\n"]).
-
-
--spec add_audit_log_entry(fslogic_worker:request(), file_ctx:ctx(), od_user:id()) -> ok.
-add_audit_log_entry(Request, FileCtx, UserId) ->
+-spec report_file_access_operation(
+    fslogic_worker:request(), file_ctx:ctx(), od_user:id(), od_share:id() | undefined
+) -> 
+    ok.
+report_file_access_operation(Request, FileCtx, UserId, ShareId) ->
     case op_worker:get_env(file_access_audit_log_enabled, false) of
         false -> ok;
         true ->
             FormattedRequest = format_request(Request),
             Uuid = file_ctx:get_uuid_const(FileCtx),
-            {FilePath, _} = file_ctx:get_canonical_path(FileCtx),
+            FormattedShareId = str_utils:to_list(utils:undefined_to_null(ShareId)),
+            FilePath = try
+                {Path, _} = file_ctx:get_canonical_path(FileCtx),
+                Path
+            catch _:_ ->
+                % could not resolve file path, log anyway
+                <<"">>
+            end,
             ok = lager:log(file_access_audit_lager_event, info, self(),
-                "request: ~s; file_id: ~s; path: ~s, user: ~s",
-                [FormattedRequest, Uuid, FilePath, UserId]
+                "request: ~s; user: ~s; file_uuid: ~s; share_id: ~s; path: ~s",
+                    [FormattedRequest, UserId, Uuid, FormattedShareId, FilePath]
             )
     end.
 
@@ -93,12 +98,12 @@ format_request(#provider_request{provider_request = SubRecord} = Record) ->
 format_request(#proxyio_request{proxyio_request = SubRecord} = Record) ->
     format_inner_record(Record, SubRecord);
 format_request(Record) -> 
-    str_utils:format("~p", [element(1, Record)]).
+    str_utils:format("~tp", [utils:record_type(Record)]).
 
 
 -spec format_inner_record(logged_record(), logged_record()) -> string().
 format_inner_record(Record, SubRecord) ->
-    str_utils:format("~p::~s", [element(1, Record), format_request(SubRecord)]).
+    str_utils:format("~tp::~s", [utils:record_type(Record), format_request(SubRecord)]).
 
 
 %%--------------------------------------------------------------------
