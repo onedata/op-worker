@@ -170,7 +170,7 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
 
     {ok, QosEntryId} = ?check(lfm:add_qos_entry(
-        SessionId, {guid, FileGuid}, Expression, ReplicasNum
+        SessionId, ?FILE_REF(FileGuid), Expression, ReplicasNum
     )),
     {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
 

@@ -12,10 +12,11 @@
 -module(permissions_test_utils).
 -author("Bartosz Walkowicz").
 
--include("storage_files_test_SUITE.hrl").
--include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("permissions_test.hrl").
 -include("proto/common/handshake_messages.hrl").
+-include("storage_files_test_SUITE.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -86,7 +87,7 @@ assert_user_is_file_owner_on_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSes
 -spec ensure_file_created_on_storage(node(), file_id:file_guid()) -> ok.
 ensure_file_created_on_storage(Node, FileGuid) ->
     % Open and close file in dir to ensure it is created on storage.
-    {ok, Handle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, {guid, FileGuid}, write),
+    {ok, Handle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), write),
     ok = lfm_proxy:close(Node, Handle).
 
 
@@ -96,11 +97,11 @@ ensure_dir_created_on_storage(Node, DirGuid) ->
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
         Node, ?ROOT_SESS_ID, DirGuid, <<"__tmp_file">>, 8#777
     )),
-    {ok, Handle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, {guid, FileGuid}, write),
+    {ok, Handle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), write),
     ok = lfm_proxy:close(Node, Handle),
 
     % Remove file to ensure it will not disturb tests
-    ok = lfm_proxy:unlink(Node, ?ROOT_SESS_ID, {guid, FileGuid}).
+    ok = lfm_proxy:unlink(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)).
 
 
 -spec create_session(node(), od_user:id(), tokens:serialized()) ->
@@ -209,7 +210,7 @@ posix_perm_to_mode(_, _)         -> 8#0.
 set_modes(Node, ModePerFile) ->
     maps:fold(fun(Guid, Mode, _) ->
         ?assertEqual(ok, lfm_proxy:set_perms(
-            Node, ?ROOT_SESS_ID, {guid, Guid}, Mode
+            Node, ?ROOT_SESS_ID, ?FILE_REF(Guid), Mode
         ))
     end, ok, ModePerFile).
 
@@ -225,7 +226,7 @@ set_modes(Node, ModePerFile) ->
 set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
     maps:fold(fun(Guid, Perms, _) ->
         ?assertEqual(ok, lfm_proxy:set_acl(
-            Node, ?ROOT_SESS_ID, {guid, Guid},
+            Node, ?ROOT_SESS_ID, ?FILE_REF(Guid),
             [?ALLOW_ACE(AceWho, AceFlags, perms_to_bitmask(Perms))])
         )
     end, ok, maps:without(maps:keys(DeniedPermsPerFile), AllowedPermsPerFile)),
@@ -234,7 +235,7 @@ set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
         AllPerms = all_perms(Node, Guid),
 
         ?assertEqual(ok, lfm_proxy:set_acl(
-            Node, ?ROOT_SESS_ID, {guid, Guid},
+            Node, ?ROOT_SESS_ID, ?FILE_REF(Guid),
             [
                 ?DENY_ACE(AceWho, AceFlags, perms_to_bitmask(Perms)),
                 ?ALLOW_ACE(AceWho, AceFlags, perms_to_bitmask(AllPerms))

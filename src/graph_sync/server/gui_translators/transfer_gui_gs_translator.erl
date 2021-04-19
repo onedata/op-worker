@@ -14,6 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -77,7 +78,7 @@ translate_resource(#gri{aspect = instance, scope = private}, #transfer{
         {DataSourceType, DataSourceId, DataSourceName} = case ViewName of
             undefined ->
                 FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-                FileType = case lfm:stat(SessionId, {guid, FileGuid}) of
+                FileType = case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
                     {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> <<"dir">>;
                     {ok, _} -> <<"file">>;
                     {error, ?ENOENT} -> <<"deleted">>;

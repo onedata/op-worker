@@ -181,7 +181,7 @@ translate_dataset_summary(#file_eff_dataset_summary{
 -spec translate_distribution(file_id:file_guid(), Distribution :: [file_distribution()]) ->
     distribution_per_provider().
 translate_distribution(FileGuid, Distribution) ->
-    {ok, #file_attr{size = FileSize}} = lfm:stat(?ROOT_SESS_ID, {guid, FileGuid}),
+    {ok, #file_attr{size = FileSize}} = lfm:stat(?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
 
     DistributionMap = lists:foldl(fun(#{
         <<"providerId">> := ProviderId,

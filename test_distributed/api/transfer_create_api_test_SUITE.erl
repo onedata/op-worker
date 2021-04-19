@@ -112,7 +112,7 @@ create_file_transfer(Config, Type) ->
     % Shared file will be used to assert that shared file transfer will be forbidden
     % (it will be added to '#data_spec.bad_values')
     FileGuid = transfer_api_test_utils:create_file(P1, SessIdP1, filename:join(["/", ?SPACE_2])),
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, ?FILE_REF(FileGuid), <<"share">>),
     file_test_utils:await_sync(P2, FileGuid),
 
     RequiredPrivs = create_file_transfer_required_privs(Type),

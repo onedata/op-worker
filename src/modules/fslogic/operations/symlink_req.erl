@@ -22,7 +22,7 @@
 -record(resolution_ctx, {
     user_ctx :: user_ctx:ctx(),
     space_id :: od_space:id(),
-    symlinks_encountered :: ordsets:ordset(file_id:file_guid())
+    symlinks_encountered :: non_neg_integer()
 }).
 -type ctx() :: #resolution_ctx{}.
 
@@ -51,7 +51,7 @@ resolve(UserCtx, SymlinkFileCtx) ->
     ResolutionCtx = #resolution_ctx{
         user_ctx = UserCtx,
         space_id = file_ctx:get_space_id_const(SymlinkFileCtx),
-        symlinks_encountered = ordsets:new()
+        symlinks_encountered = 0
     },
 
     {TargetFileCtx, _} = resolve_symlink(SymlinkFileCtx, ResolutionCtx),
@@ -86,10 +86,16 @@ read_symlink(UserCtx, FileCtx0) ->
 -spec resolve_symlink(file_ctx:ctx(), ctx()) -> {file_ctx:ctx(), ctx()} | no_return().
 resolve_symlink(SymlinkFileCtx, #resolution_ctx{
     user_ctx = UserCtx,
-    space_id = SpaceId
+    space_id = SpaceId,
+    symlinks_encountered = PrevSymlinksEncountered
 } = ResolutionCtx) ->
+    SymlinksEncountered = 1 + PrevSymlinksEncountered,
+    NewResolutionCtx = case SymlinksEncountered > ?SYMLINK_HOPS_LIMIT of
+        true -> throw(?ELOOP);
+        false -> ResolutionCtx#resolution_ctx{symlinks_encountered = SymlinksEncountered}
+    end,
+
     SpaceIdSize = byte_size(SpaceId),
-    NewResolutionCtx = assert_hops_limit_not_reached(SymlinkFileCtx, ResolutionCtx),
 
     case filepath_utils:split(read_symlink(UserCtx, SymlinkFileCtx)) of
         [] ->
@@ -98,7 +104,11 @@ resolve_symlink(SymlinkFileCtx, #resolution_ctx{
             % absolute path with no space id prefix - not supported
             throw(?ENOENT);
         [<<?SPACE_ID_PREFIX, SpaceId:SpaceIdSize/binary, ?SPACE_ID_SUFFIX>> | RestTokens] ->
-            % absolute path with space id prefix (start at space dir)
+            % absolute path with space id prefix (start at space dir).
+            % Share Id is added to starting space guid so that it will be passed on
+            % during file tree navigation. Checks if the file pointed to by the symlink
+            % is part of the share is done by checking ?TRAVERSE_ANCESTORS permissions
+            % in 'resolve' function.
             ShareId = file_ctx:get_share_id_const(SymlinkFileCtx),
             SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
             SpaceDirShareGuid = file_id:guid_to_share_guid(SpaceDirGuid, ShareId),
@@ -112,35 +122,15 @@ resolve_symlink(SymlinkFileCtx, #resolution_ctx{
 
 
 %% @private
--spec assert_hops_limit_not_reached(file_ctx:ctx(), ctx()) -> ctx() | no_return().
-assert_hops_limit_not_reached(SymlinkFileCtx, #resolution_ctx{
-    symlinks_encountered = Symlinks
-} = ResolutionCtx) ->
-    SymlinkGuid = file_ctx:get_logical_guid_const(SymlinkFileCtx),
-
-    AlreadyEncountered = ordsets:is_element(SymlinkGuid, Symlinks),
-    HopsLimitReached = (1 + ordsets:size(Symlinks)) > ?SYMLINK_HOPS_LIMIT,
-
-    case AlreadyEncountered orelse HopsLimitReached of
-        true ->
-            throw(?ELOOP);
-        false ->
-            ResolutionCtx#resolution_ctx{
-                symlinks_encountered = ordsets:add_element(SymlinkGuid, Symlinks)
-            }
-    end.
-
-
-%% @private
 -spec resolve_symlink_path(filepath_utils:tokens(), file_ctx:ctx(), ctx()) ->
     {file_ctx:ctx(), ctx()} | no_return().
 resolve_symlink_path([], FileCtx, ResolutionCtx) ->
     {FileCtx, ResolutionCtx};
 
-resolve_symlink_path([<<".">> | RestTokens], FileCtx, ResolutionCtx) ->
+resolve_symlink_path([<<?CURRENT_DIRECTORY>> | RestTokens], FileCtx, ResolutionCtx) ->
     resolve_symlink_path(RestTokens, FileCtx, ResolutionCtx);
 
-resolve_symlink_path([<<"..">> | RestTokens], FileCtx, #resolution_ctx{
+resolve_symlink_path([<<?PARENT_DIRECTORY>> | RestTokens], FileCtx, #resolution_ctx{
     user_ctx = UserCtx
 } = ResolutionCtx) ->
     NewFileCtx = case file_ctx:is_space_dir_const(FileCtx) of

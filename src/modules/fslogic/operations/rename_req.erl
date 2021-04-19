@@ -18,6 +18,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 
@@ -39,6 +40,7 @@
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
+    validate_target_name(TargetName),
     file_ctx:assert_not_special_const(SourceFileCtx),
     file_ctx:assert_not_trash_dir_const(TargetParentFileCtx, TargetName),
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
@@ -78,7 +80,7 @@ rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) -
         {_, undefined} ->
             copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
         {TheSameType, TheSameType} ->
-            ok = lfm:unlink(SessId, {guid, TargetGuid}, false),
+            ok = lfm:unlink(SessId, ?FILE_REF(TargetGuid), false),
             copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
         {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
             throw(?EISDIR);
@@ -102,7 +104,7 @@ copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx),
     case file_copy:copy(SessId, SourceGuid, TargetParentGuid, TargetName) of
         {ok, NewCopiedGuid, ChildEntries} ->
-            case lfm:rm_recursive(SessId, {guid, SourceGuid}) of
+            case lfm:rm_recursive(SessId, ?FILE_REF(SourceGuid)) of
                 ok ->
                     RenameChildEntries = lists:map(
                         fun({OldGuid, NewGuid, NewParentGuid, NewName}) ->
@@ -323,7 +325,7 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
             ok;
         _ ->
             SessId = user_ctx:get_session_id(UserCtx),
-            ok = lfm:unlink(SessId, {guid, TargetGuid}, false)
+            ok = lfm:unlink(SessId, ?FILE_REF(TargetGuid), false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
     on_successful_rename(UserCtx, SourceFileCtx3, SourceParentFileCtx2, TargetParentFileCtx2, TargetName),
@@ -378,7 +380,7 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
                 TargetParentFileCtx, TargetName, TargetGuid
             );
         _ ->
-            ok = lfm:unlink(SessId, {guid, TargetGuid}, false),
+            ok = lfm:unlink(SessId, ?FILE_REF(TargetGuid), false),
             copy_and_remove(UserCtx, SourceFileCtx1, TargetParentFileCtx, TargetName)
     end;
 rename_into_different_place_within_non_posix_space(_, _, _, _,
@@ -650,3 +652,12 @@ on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFi
     ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime),
     ok = fslogic_times:update_ctime(SourceFileCtx2, CurrentTime),
     ok = fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx2, ParentGuid, TargetName, PrevName, UserCtx).
+
+
+%% @private
+-spec validate_target_name(file_meta:name()) -> ok | no_return().
+validate_target_name(TargetName) ->
+    case re:run(TargetName, <<"/">>, [{capture, none}]) of
+        match -> throw(?EINVAL);
+        nomatch -> ok
+    end.

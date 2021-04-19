@@ -16,6 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/import/storage_import.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -77,7 +78,7 @@ replicate_stage_test(Config) ->
     Promise = rpc:async_call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
     {ok, {EntriesMap, _}} = ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0, 
-        lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, SpaceGuid}), 
+        lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid)),
         ?ATTEMPTS),
     [QosEntryId] = maps:keys(EntriesMap),
     
@@ -93,9 +94,9 @@ replicate_stage_test(Config) ->
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G1),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G2),
     
-    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
-    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
-    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}).
+    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(G1)),
+    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(G2)),
+    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(DirGuid)).
 
 
 replicate_stage_persistence_test(Config) ->
@@ -153,9 +154,9 @@ cleanup_traverse_stage_test(Config) ->
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
     
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G1}),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G2}),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, DirGuid}).
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(G1)),
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(G2)),
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(DirGuid)).
 
 
 cleanup_traverse_stage_with_import_test(Config) ->
@@ -185,9 +186,9 @@ cleanup_traverse_stage_with_import_test(Config) ->
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
 
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G1}),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G2}),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, DirGuid}),
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(G1)),
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(G2)),
+    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(DirGuid)),
     
     % files on storage have to be deleted manually as only file location documents have 
     % been deleted during cleanup traverse on imported storage
@@ -254,9 +255,9 @@ delete_synced_documents_stage_test(Config) ->
     
     assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID),
     
-    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), {guid, G1}),
-    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), {guid, G2}),
-    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), {guid, DirGuid}).
+    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), ?FILE_REF(G1)),
+    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), ?FILE_REF(G2)),
+    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), ?FILE_REF(DirGuid)).
     
 
 delete_local_documents_stage_test(Config) ->
@@ -379,7 +380,7 @@ init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     lists:foreach(fun(Worker) ->
-        ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, {guid, SpaceGuid}, 0, 10), ?ATTEMPTS),
+        ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, ?FILE_REF(SpaceGuid), 0, 10), ?ATTEMPTS),
         assert_space_on_storage_cleaned_up(Worker, initializer:get_supporting_storage_id(Worker, ?SPACE_ID), ?SPACE_ID)
     end, Workers),
     ct:timetrap({minutes, 30}),
@@ -530,18 +531,18 @@ create_files_and_dirs(Worker, SessId) ->
     {{DirGuid, ?filename(Name, 0)}, {G1, filename:join([?filename(Name, 0), ?filename(Name, 1)])}, {G2, ?filename(Name, 2)}}.
 
 create_qos_entry(Worker, SessId, FileGuid, Expression) ->
-    lfm_proxy:add_qos_entry(Worker, SessId(Worker), {guid, FileGuid}, Expression, 1).
+    lfm_proxy:add_qos_entry(Worker, SessId(Worker), ?FILE_REF(FileGuid), Expression, 1).
 
 create_custom_metadata(Worker, SessId, FileGuid) ->
-    lfm_proxy:set_metadata(Worker, SessId(Worker), {guid, FileGuid}, json,
+    lfm_proxy:set_metadata(Worker, SessId(Worker), ?FILE_REF(FileGuid), json,
         #{<<"key">> => <<"value">>}, []).
 
 create_replication(Worker, SessId, FileGuid, TargetWorker) ->
-    lfm_proxy:schedule_file_replication(Worker, SessId(Worker), {guid, FileGuid},
+    lfm_proxy:schedule_file_replication(Worker, SessId(Worker), ?FILE_REF(FileGuid),
         ?GET_DOMAIN_BIN(TargetWorker)).
 
 create_eviction(Worker, SessId, FileGuid, TargetWorker) ->
-    lfm_proxy:schedule_file_replica_eviction(Worker, SessId(Worker), {guid, FileGuid},
+    lfm_proxy:schedule_file_replica_eviction(Worker, SessId(Worker), ?FILE_REF(FileGuid),
         ?GET_DOMAIN_BIN(TargetWorker), undefined).
 
 create_view(Worker, SpaceId, TargetWorker) ->
@@ -572,7 +573,7 @@ check_distribution(Workers, SessId, Desc, Guid) ->
     end, ExpectedDistribution),
     lists:foreach(fun(Worker) ->
     ?assertEqual({ok, ExpectedDistributionSorted}, 
-            lfm_proxy:get_file_distribution(Worker, SessId(Worker), {guid, Guid}), ?ATTEMPTS
+            lfm_proxy:get_file_distribution(Worker, SessId(Worker), ?FILE_REF(Guid)), ?ATTEMPTS
         )
     end, Workers).
 

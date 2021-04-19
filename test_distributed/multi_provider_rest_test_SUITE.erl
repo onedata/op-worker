@@ -17,6 +17,7 @@
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("rest_test_utils.hrl").
@@ -648,18 +649,18 @@ create_file_counter(N, FilesToCreate, ParentPid, Files) ->
 
 verify_file(Worker, SessionId, FileGuid) ->
     {ok, #file_attr{type = Type}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), 10 * ?ATTEMPTS),
+        lfm_proxy:stat(Worker, SessionId, ?FILE_REF(FileGuid)), 10 * ?ATTEMPTS),
     case Type of
         ?REGULAR_FILE_TYPE ->
             ?assertMatch({ok, #file_attr{size = ?TEST_DATA_SIZE}},
-                lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}), ?ATTEMPTS);
+                lfm_proxy:stat(Worker, SessionId, ?FILE_REF(FileGuid)), ?ATTEMPTS);
         _ ->
             ok
     end,
     ?SYNC_FILE_COUNTER ! verified.
 
 verify_distribution(Worker, ExpectedDistribution, Config, FileGuid, FilePath, SessionId) ->
-    case lfm_proxy:stat(Worker, SessionId, {guid, FileGuid}) of
+    case lfm_proxy:stat(Worker, SessionId, ?FILE_REF(FileGuid)) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             ?SYNC_FILE_COUNTER ! verified;
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
@@ -741,7 +742,7 @@ schedule_file_replication(Worker, ProviderId, FileGuid, Config) ->
 
 create_test_file(Worker, SessionId, File, TestData) ->
     {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File),
-    {ok, Handle} = lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write),
+    {ok, Handle} = lfm_proxy:open(Worker, SessionId, ?FILE_REF(FileGuid), write),
     lfm_proxy:write(Worker, Handle, 0, TestData),
     lfm_proxy:fsync(Worker, Handle),
     lfm_proxy:close(Worker, Handle),
@@ -751,7 +752,7 @@ create_test_file_by_size(Worker, SessionId, File, Size) ->
     ChunkSize = 100 * 1024 * 1024,
     Chunks = Size div (ChunkSize + 1) + 1,
     {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, File),
-    {ok, Handle} = lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write),
+    {ok, Handle} = lfm_proxy:open(Worker, SessionId, ?FILE_REF(FileGuid), write),
     Data = crypto:strong_rand_bytes(ChunkSize),
     lists:foldl(fun(_ChunkNum, WrittenSum) ->
         {ok, Written} = lfm_proxy:write(Worker, Handle, WrittenSum, binary_part(Data, 0, min(Size - WrittenSum, ChunkSize))),
