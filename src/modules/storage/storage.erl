@@ -647,7 +647,12 @@ migrate_space_support(SpaceId) ->
                         Error1 -> throw(Error1)
                     end
             end,
-            ok = storage_logic:set_imported(StorageId, lists:member(StorageId, MiR)),
+            case storage_logic:is_imported(StorageId) of
+                {ok, <<"unknown">>} ->
+                    ok = storage_logic:set_imported(StorageId, lists:member(StorageId, MiR));
+                {ok, Value} ->
+                    ?info("Imported storage value of storage ~p is already set to ~p", [StorageId, Value])
+            end,
             case space_storage:delete(SpaceId) of
                 ok -> ok;
                 ?ERROR_NOT_FOUND -> ok;
