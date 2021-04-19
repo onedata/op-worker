@@ -16,6 +16,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("transfers_test_mechanism.hrl").
 -include("rest_test_utils.hrl").
 -include("proto/common/credentials.hrl").
@@ -921,7 +922,7 @@ prereplicate_file(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts)
     execute_in_worker(fun() ->
         ?assertMatch(ExpectedSize, begin
             try
-                {ok, Handle} = lfm_proxy:open(Node, SessionId, {guid, FileGuid}, read),
+                {ok, Handle} = lfm_proxy:open(Node, SessionId, ?FILE_REF(FileGuid), read),
                 {ok, Data} = lfm_proxy:read(Node, Handle, 0, ExpectedSize),
                 lfm_proxy:close(Node, Handle),
                 byte_size(Data)
@@ -961,7 +962,7 @@ cast_file_distribution_assertion(Expected, Node, SessionId, FileGuid, CounterRef
 
 assert_file_visible(Node, SessId, FileGuid, CounterRef, Attempts) ->
     execute_in_worker(fun() ->
-        ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, {guid, FileGuid}), Attempts),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid)), Attempts),
         countdown_server:decrease(Node, CounterRef, FileGuid)
     end).
 
@@ -969,7 +970,7 @@ assert_file_distribution(Expected, Node, SessId, FileGuid, CounterRef, Attempts)
     Expected2 = lists:sort(Expected),
     execute_in_worker(fun() ->
         ?assertMatch(Expected2, begin
-            {ok, Distribution} = lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}),
+            {ok, Distribution} = lfm_proxy:get_file_distribution(Node, SessId, ?FILE_REF(FileGuid)),
             lists:sort(Distribution)
         end, Attempts),
         countdown_server:decrease(Node, CounterRef, FileGuid)
@@ -1040,10 +1041,10 @@ cast_file_creation(Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate) 
 
 create_file(Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate) ->
     {ok, Guid} = lfm_proxy:create(Node, SessionId, FilePath, Mode),
-    {ok, Handle} = lfm_proxy:open(Node, SessionId, {guid, Guid}, write),
+    {ok, Handle} = lfm_proxy:open(Node, SessionId, ?FILE_REF(Guid), write),
     case Truncate of
         true ->
-            ok = lfm_proxy:truncate(Node, SessionId, {guid, Guid}, Size);
+            ok = lfm_proxy:truncate(Node, SessionId, ?FILE_REF(Guid), Size);
         _ ->
             {ok, _} = lfm_proxy:write(Node, Handle, 0, crypto:strong_rand_bytes(Size))
     end,
@@ -1124,7 +1125,7 @@ schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, rest)
 schedule_file_replication_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config) ->
     erlang:error(not_implemented).
 
-schedule_file_replication_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config) ->
+schedule_file_replication_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid), Config) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     schedule_transfer_by_rest(
         Worker,
@@ -1177,7 +1178,7 @@ schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, rest)
 schedule_replica_eviction_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config) ->
     erlang:error(not_implemented).
 
-schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config, MigrationProviderId) ->
+schedule_replica_eviction_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid), Config, MigrationProviderId) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     case MigrationProviderId of
         % eviction
@@ -1415,7 +1416,7 @@ modify_storage_timeout(Node, StorageId, NewValue) ->
 
 
 file_key(Guid, _Path, guid) ->
-    {guid, Guid};
+    ?FILE_REF(Guid);
 file_key(_Guid, Path, path) ->
     {path, Path}.
 

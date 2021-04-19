@@ -22,6 +22,8 @@
 %%% requires calculating effective_file_qos as file_qos is inherited from all
 %%% parents.
 %%%
+%%% Only one file_qos document exists per inode i.e when QoS entry is added to 
+%%% hardlink it is saved in inode file_qos document.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_qos).
@@ -45,7 +47,9 @@
     get_effective/1, 
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
-    has_any_qos_entry/2, clean_up/1, clean_up/2, delete_associated_entries/1
+    qos_membership/1, has_any_qos_entry/2, 
+    clean_up_on_no_reference/1, clean_up_on_no_reference/2,
+    delete_associated_entries_on_no_references/1
 ]).
 
 %% higher-level functions operating on effective_file_qos record.
@@ -65,8 +69,9 @@
 -type pred() :: datastore_doc:pred(record()).
 -type effective_file_qos() :: #effective_file_qos{}.
 -type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
+-type membership() :: ?NONE_QOS_MEMBERSHIP | ?DIRECT_QOS_MEMBERSHIP | ?ANCESTOR_QOS_MEMBERSHIP.
 
--export_type([assigned_entries/0]).
+-export_type([assigned_entries/0, membership/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -79,7 +84,7 @@
 %%% Functions operating on file_qos document using datastore_model API
 %%%===================================================================
 
--spec get(key()) -> {ok, doc()}.
+-spec get(key()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
 
@@ -237,6 +242,19 @@ is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
     end.
 
 
+-spec qos_membership(file_meta:uuid() | file_meta:doc()) -> membership().
+qos_membership(FileUuidOrDoc) ->
+    case has_any_qos_entry(FileUuidOrDoc, direct) of
+        true ->
+            ?DIRECT_QOS_MEMBERSHIP;
+        false ->
+            case has_any_qos_entry(FileUuidOrDoc, effective) of
+                true -> ?ANCESTOR_QOS_MEMBERSHIP;
+                false -> ?NONE_QOS_MEMBERSHIP
+            end
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks whether given file has any QoS entry (effective or direct).
@@ -253,18 +271,24 @@ has_any_qos_entry(UuidOrDoc, effective) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes documents created to maintain QoS for given file.
+%% Deletes documents created to maintain QoS for given reference. 
+%% If there are no more references all documents to maintain file are deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec clean_up(file_ctx:ctx()) -> ok.
-clean_up(FileCtx) ->
-  clean_up(FileCtx, undefined).
+-spec clean_up_on_no_reference(file_ctx:ctx()) -> ok.
+clean_up_on_no_reference(FileCtx) ->
+  clean_up_on_no_reference(FileCtx, undefined).
 
 
--spec clean_up(file_ctx:ctx(), file_ctx:ctx() | undefined) -> ok.
-clean_up(FileCtx, OriginalParentCtx) ->
+-spec clean_up_on_no_reference(file_ctx:ctx(), file_ctx:ctx() | undefined) -> ok.
+clean_up_on_no_reference(FileCtx, OriginalParentCtx) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    case get_effective(FileDoc, OriginalParentCtx) of
+    %% This is used when directory is being moved to trash. In such case, to 
+    %% calculate effective QoS before deletion, QoS for given directory needs to be 
+    %% merged with effective QoS for parent before deletion (OriginalParent)
+    %% TODO VFS-7133 take original parent uuid from file_meta doc
+    ParentDoc = get_original_parent_doc(OriginalParentCtx),
+    case get_effective(FileDoc, ParentDoc) of
         undefined -> ok;
         % clean up all potential documents related to status calculation
         {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
@@ -275,29 +299,29 @@ clean_up(FileCtx, OriginalParentCtx) ->
             ?warning("Error during QoS clean up procedure:~p", [Error]),
             ok
     end,
-    % TODO VFS-7435 - Integrate hardlinks with QoS
-    Uuid = file_ctx:get_logical_uuid_const(FileCtx1),
-    case OriginalParentCtx of
-        undefined -> ok = delete(Uuid);
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx1),
+    case {OriginalParentCtx, file_meta_hardlinks:count_references(FileDoc)} of
+        {undefined, {ok, 0}} -> ok = delete(InodeUuid);
         _ -> ok
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes all QoS entries added to given file.
+%% Deletes all QoS entries added to given file if all references were deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_associated_entries(key()) -> ok.
-delete_associated_entries(Uuid) ->
-    % TODO VFS-7435 - Integrate hardlinks with QoS
-    case datastore_model:get(?CTX, Uuid) of
-        {ok, #document{value = #file_qos{qos_entries = QosEntries}}} ->
+-spec delete_associated_entries_on_no_references(file_ctx:ctx()) -> ok.
+delete_associated_entries_on_no_references(FileCtx) ->
+    {ok, ReferencesCount} = file_ctx:count_references_const(FileCtx),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    case {get(InodeUuid), ReferencesCount} of
+        {{ok, #document{value = #file_qos{qos_entries = QosEntries}}}, 0} ->
             lists:foreach(fun(QosEntryId) ->
                 ok = qos_hooks:handle_entry_delete(QosEntryId),
                 ok = qos_entry:delete(QosEntryId)
             end, QosEntries);
-        ?ERROR_NOT_FOUND -> ok
+        {_, _} -> ok
     end.
 
 %%%===================================================================
@@ -330,16 +354,16 @@ get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
 %%%===================================================================
 
 %% @private
--spec get_effective(file_meta:doc(), undefined | file_ctx:ctx()) ->
+-spec get_effective(file_meta:doc(), undefined | file_meta:doc()) ->
     {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
-get_effective(FileDoc, OriginalParentCtx) ->
+get_effective(#document{key = FileUuid} = FileDoc, OriginalParentDoc) ->
     Callback = fun([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
         case fslogic_uuid:is_trash_dir_uuid(Uuid) of
             true ->
                 % qos cannot be set on trash directory
                 {ok, #effective_file_qos{in_trash = true}, CalculationInfo};
             false ->
-                case datastore_model:get(?CTX, Uuid) of
+                case get(Uuid) of
                     ?ERROR_NOT_FOUND ->
                         {ok, ParentEffQos, CalculationInfo};
                     {ok, #document{value = FileQos}} ->
@@ -348,43 +372,72 @@ get_effective(FileDoc, OriginalParentCtx) ->
                 end
         end
     end,
-    get_effective(FileDoc, Callback, OriginalParentCtx).
+    %% @TODO VFS-7555 Use FileDoc for listing references after it is allowed
+    {ok, References} = case fslogic_uuid:ensure_referenced_uuid(FileUuid) of
+        FileUuid -> file_meta_hardlinks:list_references(FileDoc);
+        ReferencedUuid -> file_meta_hardlinks:list_references(ReferencedUuid)
+    end,
+    ReferencesDocs = map_references_to_docs(References -- [FileUuid]),
+    % file_qos for all references is stored only in one doc (under InodeUuid), 
+    % so ensure it is taken into account when original file was deleted
+    InitialAcc = get_inode_effective_qos(FileUuid),
+    merge_eff_qos_for_files([OriginalParentDoc, FileDoc | ReferencesDocs], Callback, InitialAcc).
+
 
 %% @private
--spec get_effective(file_meta:doc(), bounded_cache:callback(), undefined | file_ctx:ctx()) ->
-    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
-get_effective(#document{scope = SpaceId} = FileDoc, Callback, undefined) ->
-    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheTableName, FileDoc, Callback, [], []) of
-        {ok, undefined, _} ->
-            undefined;
-        {ok, FinalEffQos, _} ->
-            {ok, FinalEffQos};
-        {error, {file_meta_missing, _MissingUuid}} = Error ->
-            % documents are not synchronized yet
-            Error
-    end;
-get_effective(#document{scope = SpaceId} = FileDoc, Callback, OriginalParentCtx) ->
-    % This clause is used when directory is being moved to trash. In such case, to 
-    % calculate effective QoS before deletion, QoS for given directory needs to be 
-    % merged with effective QoS for parent before deletion (OriginaParent)
-    %% TODO VFS-7133 take original parent uuid from file_meta doc
-    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
-    {ParentDoc, _} = file_ctx:get_file_doc(OriginalParentCtx),
-    case effective_value:get_or_calculate(CacheTableName, FileDoc, Callback, [], []) of
-        {ok, undefined, _} ->
-            get_effective(ParentDoc);
-        {ok, FinalEffQos, _} ->
-            case get_effective(ParentDoc) of
-                undefined -> {ok, FinalEffQos};
-                {ok, OriginalParentEffQos} -> {ok, merge_file_qos(OriginalParentEffQos, FinalEffQos)}
-            end;
+-spec get_inode_effective_qos(file_meta:uuid()) -> 
+    undefined | effective_file_qos().
+get_inode_effective_qos(FileUuid) ->
+    InodeUuid = fslogic_uuid:ensure_referenced_uuid(FileUuid),
+    case get(InodeUuid) of
+        {ok, #document{value = Value}} ->  file_qos_to_eff_file_qos(Value);
+        _ -> undefined
+    end.
+
+
+%% @private
+-spec map_references_to_docs([file_meta:uuid()]) -> [file_meta:doc()].
+map_references_to_docs(References) ->
+    lists:filtermap( fun (LogicalUuid) ->
+        case file_meta:get(LogicalUuid) of
+            {ok, Doc} -> {true, Doc};
+            ?ERROR_NOT_FOUND -> false
+        end
+    end, References).
+
+
+%% @private
+-spec merge_eff_qos_for_files([file_meta:doc()], bounded_cache:callback(), effective_file_qos() | undefined) -> 
+    effective_file_qos() | undefined.
+merge_eff_qos_for_files(FileDocs, Callback, InitialAcc) ->
+    MergedEffQos = lists_utils:foldl_while(fun(FileDoc, Acc) ->
+        case get_effective_qos_for_single_file(FileDoc, Callback) of
+            {ok, EffQos} -> {cont, merge_file_qos(Acc, EffQos)};
+            {error, _} = Error -> {halt, Error}
+        end
+    end, InitialAcc, FileDocs),
+    case MergedEffQos of
+        {error, _} = Error -> Error;
+        undefined -> undefined;
+        _ -> {ok, MergedEffQos}
+    end.
+    
+
+%% @private
+-spec get_effective_qos_for_single_file(undefined | file_meta:doc(), bounded_cache:callback()) -> 
+    effective_file_qos() | undefined | {error, term()}.
+get_effective_qos_for_single_file(undefined, _Callback) -> {ok, undefined};
+get_effective_qos_for_single_file(#document{scope = SpaceId} = FileDoc, Callback) ->
+    case effective_value:get_or_calculate(?CACHE_TABLE_NAME(SpaceId), FileDoc, Callback) of
+        {ok, EffQos, _} ->
+            {ok, EffQos};
         {error, {file_meta_missing, _MissingUuid}} = Error ->
             % documents are not synchronized yet
             Error
     end.
 
 
+%% @private
 -spec file_qos_to_eff_file_qos(record()) -> effective_file_qos().
 file_qos_to_eff_file_qos(#file_qos{
     qos_entries = QosEntries,
@@ -396,39 +449,42 @@ file_qos_to_eff_file_qos(#file_qos{
     }.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Merge parent's file_qos with child's file_qos. Used when calculating
-%% effective_file_qos.
-%% @end
-%%--------------------------------------------------------------------
--spec merge_file_qos(undefined | effective_file_qos(), effective_file_qos() | record()) -> effective_file_qos().
-merge_file_qos(ParentEffQos, ChildQos = #file_qos{}) ->
-    merge_file_qos(ParentEffQos, file_qos_to_eff_file_qos(ChildQos));
-merge_file_qos(undefined, ChildEffQos = #effective_file_qos{}) ->
-    ChildEffQos;
-merge_file_qos(ParentEffQos, ChildEffQos) ->
+-spec merge_file_qos(
+    undefined | effective_file_qos() | record(), 
+    undefined | effective_file_qos() | record()
+) -> 
+    effective_file_qos() | undefined.
+merge_file_qos(FileQos = #file_qos{}, SecondEffQos) ->
+    merge_file_qos(file_qos_to_eff_file_qos(FileQos), SecondEffQos);
+merge_file_qos(FirstEffQos, FileQos = #file_qos{}) ->
+    merge_file_qos(FirstEffQos, file_qos_to_eff_file_qos(FileQos));
+merge_file_qos(undefined, SecondEffQos) ->
+    SecondEffQos;
+merge_file_qos(FirstEffQos, undefined) ->
+    FirstEffQos;
+merge_file_qos(FirstEffQos, SecondEffQos) ->
     #effective_file_qos{
         qos_entries = lists:usort(
-            ParentEffQos#effective_file_qos.qos_entries ++ ChildEffQos#effective_file_qos.qos_entries
+            FirstEffQos#effective_file_qos.qos_entries ++ SecondEffQos#effective_file_qos.qos_entries
         ),
         assigned_entries = merge_assigned_entries(
-            ParentEffQos#effective_file_qos.assigned_entries,
-            ChildEffQos#effective_file_qos.assigned_entries
+            FirstEffQos#effective_file_qos.assigned_entries,
+            SecondEffQos#effective_file_qos.assigned_entries
         ),
-        in_trash = ParentEffQos#effective_file_qos.in_trash
+        in_trash = FirstEffQos#effective_file_qos.in_trash orelse SecondEffQos#effective_file_qos.in_trash
     }.
 
 
 %% @private
 -spec merge_assigned_entries(assigned_entries(), assigned_entries()) -> assigned_entries().
-merge_assigned_entries(ParentAssignedEntries, ChildAssignedEntries) ->
+merge_assigned_entries(FirstAssignedEntries, SecondAssignedEntries) ->
     maps:fold(fun(StorageId, StorageQosEntries, Acc) ->
         maps:update_with(StorageId, fun(ParentStorageQosEntries) ->
-            ParentStorageQosEntries ++ StorageQosEntries
+            % usort to remove duplicated entries
+            lists:usort(ParentStorageQosEntries ++ StorageQosEntries)
         end, StorageQosEntries, Acc)
-    end, ParentAssignedEntries, ChildAssignedEntries).
+    end, FirstAssignedEntries, SecondAssignedEntries).
 
 
 %% @private
@@ -438,6 +494,14 @@ has_any_qos_entry({ok, #document{value = #file_qos{qos_entries = [_ | _]}}}) -> 
 has_any_qos_entry({ok, #effective_file_qos{in_trash = true}}) -> false;
 has_any_qos_entry({ok, #effective_file_qos{qos_entries = [_|_]}}) -> true;
 has_any_qos_entry(_) -> false.
+
+
+%% @private
+-spec get_original_parent_doc(undefined | file_ctx:ctx()) -> undefined | file_meta:doc().
+get_original_parent_doc(undefined) -> undefined;
+get_original_parent_doc(OriginalParentCtx) ->
+    {ParentDoc, _} = file_ctx:get_file_doc(OriginalParentCtx),
+    ParentDoc.
 
 
 %%%===================================================================

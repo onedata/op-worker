@@ -488,13 +488,26 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
 delete_file_meta(FileCtx) ->
     % use get_file_doc_including_deleted because doc can be marked as deleted
     % inside file_meta record and get_file_doc could fail
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    FileCtx2 = detach_dataset(FileCtx),
+    {FileDoc, FileCtx3} = file_ctx:get_file_doc_including_deleted(FileCtx2),
     ok = file_meta:delete(FileDoc),
-    FileCtx2.
+    FileCtx3.
 
 -spec delete_referenced_file_meta(file_ctx:ctx()) -> file_ctx:ctx().
 delete_referenced_file_meta(FileCtx) ->
     delete_file_meta(file_ctx:ensure_based_on_referenced_guid(FileCtx)).
+
+
+-spec detach_dataset(file_ctx:ctx()) -> file_ctx:ctx().
+detach_dataset(FileCtx) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    case file_meta_dataset:is_attached(FileDoc) of
+        true ->
+            dataset_api:detach(file_ctx:get_logical_uuid_const(FileCtx2));
+        false ->
+            ok
+    end,
+    FileCtx2.
 
 
 -spec update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
@@ -643,7 +656,7 @@ remove_synced_associated_documents(FileCtx) ->
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
     ok = transferred_file:clean_up(FileGuid),
-    ok = file_qos:delete_associated_entries(FileUuid).
+    ok = file_qos:delete_associated_entries_on_no_references(FileCtx).
 
 
 -spec remove_local_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id()) -> ok.
@@ -651,7 +664,7 @@ remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
-    ok = file_qos:clean_up(FileCtx),
+    ok = file_qos:clean_up_on_no_reference(FileCtx),
     ok = file_meta_posthooks:delete(FileUuid),
     ok = file_popularity:delete(FileUuid).
 

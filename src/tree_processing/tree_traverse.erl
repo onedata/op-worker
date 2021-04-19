@@ -83,7 +83,9 @@
     batch_size => batch_size(),
     traverse_info => traverse_info(),
     % Provider which should execute task
-    target_provider_id => oneprovider:id()
+    target_provider_id => oneprovider:id(),
+    % if set to 'single', only one master job is performed in parallel for each task - see master_job_mode type definition
+    master_job_mode => traverse:master_job_mode()
 }.
 
 
@@ -259,8 +261,6 @@ do_master_job(Job = #tree_traverse{
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     Job2 = Job#tree_traverse{file_ctx = FileCtx2},
     case file_meta:get_effective_type(FileDoc) of
-        ?REGULAR_FILE_TYPE ->
-            {ok, #{slave_jobs => [get_child_slave_job(Job2, FileCtx2)]}};
         ?DIRECTORY_TYPE ->
             case list_children(Job2, MasterJobArgs) of
                 {error, ?EACCES} ->
@@ -290,7 +290,9 @@ do_master_job(Job = #tree_traverse{
                         async -> async_master_jobs
                     end,
                     {ok, #{slave_jobs => SlaveJobs, ChildrenMasterJobsKey => FinalMasterJobs}}
-            end
+            end;
+        _ ->
+            {ok, #{slave_jobs => [get_child_slave_job(Job2, FileCtx2)]}}
         end.
 
 
@@ -401,7 +403,7 @@ generate_children_jobs(MasterJob = #tree_traverse{child_dirs_job_generation_poli
                         generate_master_jobs ->
                             {SlavesAcc, [ChildMasterJob | MastersAcc]}
                     end;
-                ?REGULAR_FILE_TYPE ->
+                _ ->
                     {[get_child_slave_job(MasterJob, ChildCtx2) | SlavesAcc], MastersAcc}
             end
         catch

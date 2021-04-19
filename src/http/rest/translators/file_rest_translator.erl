@@ -15,6 +15,7 @@
 
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 -export([create_response/4, get_response/2]).
 
@@ -48,6 +49,33 @@ get_response(#gri{aspect = As}, Result) when
     As =:= object_id
 ->
     ?OK_REPLY(Result);
+
+get_response(#gri{aspect = As}, RdfMetadata) when
+    As =:= rdf_metadata;
+    As =:= symlink_value
+->
+    ?OK_REPLY({binary, RdfMetadata});
+
+get_response(#gri{aspect = As}, Metadata) when
+    As =:= attrs;
+    As =:= distribution;
+    As =:= qos_summary;
+    As =:= xattrs;
+    As =:= json_metadata
+->
+    ?OK_REPLY(Metadata);
+
+get_response(#gri{aspect = dataset_summary}, #file_eff_dataset_summary{
+    direct_dataset = DatasetId,
+    eff_ancestor_datasets = EffAncestorDatasets,
+    eff_protection_flags = EffProtectionFlags
+}) ->
+    ?OK_REPLY(#{
+        <<"directDataset">> => utils:undefined_to_null(DatasetId),
+        <<"effectiveAncestorDatasets">> => EffAncestorDatasets,
+        <<"effectiveProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
+    });
+
 get_response(#gri{aspect = children}, {Children, IsLast}) ->
     ?OK_REPLY(#{
         <<"children">> => lists:map(fun({Guid, Name}) ->
@@ -59,17 +87,9 @@ get_response(#gri{aspect = children}, {Children, IsLast}) ->
         end, Children),
         <<"isLast">> => IsLast
     });
-get_response(#gri{aspect = As}, Metadata) when
-    As =:= attrs;
-    As =:= xattrs;
-    As =:= json_metadata
-->
-    ?OK_REPLY(Metadata);
-get_response(#gri{aspect = rdf_metadata}, RdfMetadata) ->
-    ?OK_REPLY({binary, RdfMetadata});
 
-get_response(#gri{aspect = As}, EffQosResp) when
-    As =:= distribution;
-    As =:= file_qos_summary
-->
-    ?OK_REPLY(EffQosResp).
+get_response(#gri{aspect = hardlinks}, Hardlinks) ->
+    ?OK_REPLY(lists:map(fun(FileGuid) ->
+        {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+        ObjectId
+    end, Hardlinks)).

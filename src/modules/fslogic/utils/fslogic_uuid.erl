@@ -30,7 +30,7 @@
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
 -export([gen_link_uuid/1, is_link_uuid/1, ensure_referenced_uuid/1]).
--export([gen_symlink_uuid/0, is_symlink_uuid/1]).
+-export([gen_symlink_uuid/0, is_symlink_uuid/1, is_symlink_guid/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
@@ -250,6 +250,12 @@ gen_symlink_uuid() ->
 -spec is_symlink_uuid(file_meta:uuid()) -> boolean().
 is_symlink_uuid(<<?SYMLINK_UUID_PREFIX, _/binary>>) -> true;
 is_symlink_uuid(_) -> false.
+
+
+-spec is_symlink_guid(file_id:file_guid()) -> boolean().
+is_symlink_guid(FileGuid) ->
+    is_symlink_uuid(file_id:guid_to_uuid(FileGuid)).
+
 
 %%%===================================================================
 %%% Internal functions

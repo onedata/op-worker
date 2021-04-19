@@ -298,7 +298,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     {ok, TransferId} = case maps:get(<<"dataSourceType">>, Data) of
         file ->
             ?check(lfm:schedule_file_transfer(
-                SessionId, maps:get(<<"fileId">>, Data),
+                SessionId, ?FILE_REF(maps:get(<<"fileId">>, Data)),
                 ReplicatingProviderId, EvictingProviderId,
                 Callback
             ));

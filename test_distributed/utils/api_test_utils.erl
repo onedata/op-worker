@@ -14,8 +14,10 @@
 
 -include("api_test_runner.hrl").
 -include("api_file_test_utils.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("test_utils/initializer.hrl").
 
@@ -97,7 +99,7 @@ create_shared_file_in_space_krk() ->
     FileType = randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessId, FilePath),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, {guid, FileGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, ?FILE_REF(FileGuid), <<"share">>),
 
     {FileType, FilePath, FileGuid, ShareId}.
 
@@ -129,7 +131,7 @@ create_and_sync_shared_file_in_space_krk_par(FileType, FileName, Mode) ->
 
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
@@ -197,10 +199,14 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> acl;
             false -> posix
         end,
-        protection_flags = ?no_flags_mask,
-        has_metadata = HasMetadata,
-        has_direct_qos = HasDirectQos,
-        has_eff_qos = HasParentQos orelse HasDirectQos
+        eff_protection_flags = ?no_flags_mask,
+        eff_qos_membership = case {HasDirectQos, HasParentQos} of
+            {true, _} -> ?DIRECT_QOS_MEMBERSHIP;
+            {_, true} -> ?ANCESTOR_QOS_MEMBERSHIP;
+            _ -> ?NONE_QOS_MEMBERSHIP
+        end,
+        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
+        has_metadata = HasMetadata
     },
 
     {FileType, FilePath, FileGuid, FileDetails}.
@@ -249,7 +255,7 @@ fill_file_with_dummy_data(Node, SessId, FileGuid, Offset, Size) ->
 -spec write_file(node(), session:id(), file_id:file_guid(), Offset :: non_neg_integer(),
     Size :: non_neg_integer()) -> ok.
 write_file(Node, SessId, FileGuid, Offset, Content) ->
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {guid, FileGuid}, write)),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, Offset, Content)),
     ?assertMatch(ok, lfm_proxy:fsync(Node, Handle)),
     ?assertMatch(ok, lfm_proxy:close(Node, Handle)).
@@ -258,7 +264,7 @@ write_file(Node, SessId, FileGuid, Offset, Content) ->
 -spec read_file(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
     Content :: binary().
 read_file(Node, SessId, FileGuid, Size) ->
-    {ok, ReadHandle} = lfm_proxy:open(Node, SessId, {guid, FileGuid}, read),
+    {ok, ReadHandle} = lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), read),
     {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, Size),
     ok = lfm_proxy:close(Node, ReadHandle),
     Content.
@@ -269,7 +275,7 @@ read_file(Node, SessId, FileGuid, Size) ->
 share_file_and_sync_file_attrs(CreationNode, SessionId, SyncNodes, FileGuid) ->
     {ok, ShareId} = ?assertMatch(
         {ok, _},
-        lfm_proxy:create_share(CreationNode, SessionId, {guid, FileGuid}, <<"share">>),
+        lfm_proxy:create_share(CreationNode, SessionId, ?FILE_REF(FileGuid), <<"share">>),
         ?ATTEMPTS
     ),
     lists:foreach(fun(Node) ->
@@ -295,18 +301,18 @@ set_and_sync_metadata(Nodes, FileGuid, MetadataType, Metadata) ->
 
 -spec set_metadata(node(), file_id:file_guid(), metadata_type(), term()) -> ok.
 set_metadata(Node, FileGuid, <<"rdf">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, Metadata, []);
+    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, Metadata, []);
 set_metadata(Node, FileGuid, <<"json">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, Metadata, []);
+    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, Metadata, []);
 set_metadata(Node, FileGuid, <<"xattrs">>, Metadata) ->
     set_xattrs(Node, FileGuid, Metadata).
 
 
 -spec get_metadata(node(), file_id:file_guid(), metadata_type()) -> {ok, term()}.
 get_metadata(Node, FileGuid, <<"rdf">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, [], false);
+    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false);
 get_metadata(Node, FileGuid, <<"json">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, [], false);
+    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false);
 get_metadata(Node, FileGuid, <<"xattrs">>) ->
     get_xattrs(Node, FileGuid).
 
@@ -315,7 +321,7 @@ get_metadata(Node, FileGuid, <<"xattrs">>) ->
 set_xattrs(Node, FileGuid, Xattrs) ->
     lists:foreach(fun({Key, Val}) ->
         ?assertMatch(ok, lfm_proxy:set_xattr(
-            Node, ?ROOT_SESS_ID, {guid, FileGuid}, #xattr{
+            Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), #xattr{
                 name = Key,
                 value = Val
             }
@@ -325,7 +331,7 @@ set_xattrs(Node, FileGuid, Xattrs) ->
 
 -spec get_xattrs(node(), file_id:file_guid()) -> {ok, map()}.
 get_xattrs(Node, FileGuid) ->
-    FileKey = {guid, FileGuid},
+    FileKey = ?FILE_REF(FileGuid),
 
     {ok, Keys} = ?assertMatch(
         {ok, _}, lfm_proxy:list_xattr(Node, ?ROOT_SESS_ID, FileKey, false, true), ?ATTEMPTS
@@ -348,7 +354,7 @@ randomly_add_qos(Nodes, FileGuid, Expression, ReplicasNum) ->
         1 ->
             RandNode = lists_utils:random_element(Nodes),
             {ok, QosEntryId} = ?assertMatch({ok, _}, lfm_proxy:add_qos_entry(
-                RandNode, ?ROOT_SESS_ID, {guid, FileGuid}, Expression, ReplicasNum
+                RandNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), Expression, ReplicasNum
             ), ?ATTEMPTS),
             lists:foreach(fun(Node) ->
                 ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(Node, ?ROOT_SESS_ID, QosEntryId), ?ATTEMPTS)
@@ -363,7 +369,7 @@ randomly_add_qos(Nodes, FileGuid, Expression, ReplicasNum) ->
 randomly_set_metadata(Nodes, FileGuid) ->
     case rand:uniform(2) of
         1 ->
-            FileKey = {guid, FileGuid},
+            FileKey = ?FILE_REF(FileGuid),
             RandNode = lists_utils:random_element(Nodes),
             ?assertMatch(ok, lfm_proxy:set_metadata(
                 RandNode, ?ROOT_SESS_ID, FileKey, rdf, ?RDF_METADATA_1, []
@@ -385,10 +391,10 @@ randomly_set_metadata(Nodes, FileGuid) ->
 randomly_set_acl(Nodes, FileGuid) ->
     case rand:uniform(2) of
         1 ->
-            FileKey = {guid, FileGuid},
+            FileKey = ?FILE_REF(FileGuid),
             RandNode = lists_utils:random_element(Nodes),
             ?assertMatch(ok, lfm_proxy:set_acl(
-                RandNode, ?ROOT_SESS_ID, {guid, FileGuid}, acl:from_json(?OWNER_ONLY_ALLOW_ACL, cdmi)
+                RandNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), acl:from_json(?OWNER_ONLY_ALLOW_ACL, cdmi)
             ), ?ATTEMPTS),
             lists:foreach(fun(Node) ->
                 ?assertMatch({ok, [_]}, lfm_proxy:get_acl(Node, ?ROOT_SESS_ID, FileKey), ?ATTEMPTS)
@@ -405,7 +411,7 @@ randomly_create_share(Node, SessionId, FileGuid) ->
     case rand:uniform(2) of
         1 ->
             {ok, ShId} = ?assertMatch({ok, _}, lfm_proxy:create_share(
-                Node, SessionId, {guid, FileGuid}, <<"share">>
+                Node, SessionId, ?FILE_REF(FileGuid), <<"share">>
             )),
             ShId;
         2 ->
@@ -433,20 +439,19 @@ file_details_to_gs_json(undefined, #file_details{
         mtime = MTime,
         shares = Shares,
         owner_id = OwnerId,
-        provider_id = ProviderId
+        provider_id = ProviderId,
+        nlink = LinksCount
     },
     index_startid = IndexStartId,
     active_permissions_type = ActivePermissionsType,
-    protection_flags = EffFileProtectionFlags,
-    has_metadata = HasMetadata,
-    has_direct_qos = HasDirectQos,
-    has_eff_qos = HasEffQos
+    eff_protection_flags = EffFileProtectionFlags,
+    eff_qos_membership = EffQosMembership,
+    eff_dataset_membership = EffDatasetMembership,
+    has_metadata = HasMetadata
 }) ->
-    {DisplayedType, DisplayedSize} = case Type of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, Size}
+    DisplayedSize = case Type of
+        ?DIRECTORY_TYPE -> null;
+        _ -> Size
     end,
 
     #{
@@ -463,14 +468,15 @@ file_details_to_gs_json(undefined, #file_details{
             false -> ParentGuid
         end,
         <<"mtime">> => MTime,
-        <<"type">> => DisplayedType,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => DisplayedSize,
         <<"shares">> => Shares,
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
         <<"providerId">> => ProviderId,
         <<"ownerId">> => OwnerId,
-        <<"hasDirectQos">> => HasDirectQos,
-        <<"hasEffQos">> => HasEffQos
+        <<"effQosMembership">> => atom_to_binary(EffQosMembership, utf8),
+        <<"effDatasetMembership">> => atom_to_binary(EffDatasetMembership, utf8),
+        <<"hardlinksCount">> => utils:undefined_to_null(LinksCount)
     };
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{
@@ -487,11 +493,9 @@ file_details_to_gs_json(ShareId, #file_details{
     active_permissions_type = ActivePermissionsType,
     has_metadata = HasMetadata
 }) ->
-    {DisplayedType, DisplayedSize} = case Type of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, Size}
+    DisplayedSize = case Type of
+        ?DIRECTORY_TYPE -> null;
+        _ -> Size
     end,
     IsShareRoot = lists:member(ShareId, Shares),
 
@@ -506,7 +510,7 @@ file_details_to_gs_json(ShareId, #file_details{
             false -> file_id:guid_to_share_guid(ParentGuid, ShareId)
         end,
         <<"mtime">> => MTime,
-        <<"type">> => DisplayedType,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => DisplayedSize,
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];

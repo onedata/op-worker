@@ -319,8 +319,9 @@ get_child_safe(FileCtx, ChildName) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info = #{parent_ctx := ParentCtx}) ->
     {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    {EffFlags, FileCtx2} = file_protection_flags_cache:get_effective_flags(FileCtx),
-    case EffFlags == ?no_flags_mask of
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    {ok, ProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
+    case ProtectionFlags == ?no_flags_mask of
         true ->
             case file_meta:type(StMode) of
                 ?DIRECTORY_TYPE ->
@@ -1114,7 +1115,8 @@ update_mode(FileCtx, NewMode) ->
         true ->
             ok;
         _ ->
-            ok = attr_req:chmod_attrs_only_insecure(FileCtx, NewMode)
+            attr_req:chmod_attrs_only_insecure(FileCtx, NewMode),
+            ok
     end.
 
 -spec maybe_update_times(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->

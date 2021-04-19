@@ -264,7 +264,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
         fun attr_req:get_file_details_insecure/3,
         Children,
         false,
-        false
+        true
     ),
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},

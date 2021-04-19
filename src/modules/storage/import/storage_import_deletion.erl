@@ -342,20 +342,23 @@ new_flat_iterator_child_master_job(Job = #storage_traverse_master{
 maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     try
-        {ProtectionFlags, FileCtx2} = file_protection_flags_cache:get_effective_flags(FileCtx),
+        {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
+        {IsStorageFileCreated, FileCtx3} = file_ctx:is_storage_file_created(FileCtx2),
+        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+        Uuid = file_ctx:get_logical_uuid_const(FileCtx3),
+        IsNotSymlink = not fslogic_uuid:is_symlink_uuid(Uuid),
+        {FileDoc, FileCtx5} = file_ctx:get_file_doc_including_deleted(FileCtx4),
+        {ok, ProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
         IsProtected = ProtectionFlags =/= ?no_flags_mask,
-        {SDHandle, FileCtx3} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx2),
-        {IsStorageFileCreated, FileCtx4} = file_ctx:is_storage_file_created(FileCtx3),
-        {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx4),
-
         case
-            not IsProtected andalso
-            IsStorageFileCreated and
-            not storage_driver:exists(SDHandle)
+            IsNotSymlink
+            andalso IsStorageFileCreated
+            andalso (not storage_driver:exists(SDHandle))
+            andalso (not IsProtected)
         of
             true ->
                 % file is still missing on storage we can delete it from db
-                delete_file_and_update_counters(FileCtx4, SpaceId, StorageId);
+                delete_file_and_update_counters(FileCtx5, SpaceId, StorageId);
             false ->
                 case IsProtected of
                     true -> storage_sync_info:mark_skipped_file(filename:dirname(StorageFileId), SpaceId);

@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
@@ -54,19 +55,19 @@ create_files_and_dirs(Worker, SessId, ParentGuid, DirsNum, FilesNum) ->
 verify_files_and_dirs(Worker, SessId, #test_data{dir_guids = DirGuids, file_guids = FileGuids}, Attempts) ->
     lists:foreach(fun(Dir) ->
         ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-            lfm_proxy:stat(Worker, SessId, {guid, Dir}), Attempts)
+            lfm_proxy:stat(Worker, SessId, ?FILE_REF(Dir)), Attempts)
     end, DirGuids),
 
     FileDataSize = size(?FILE_DATA),
     lists:foreach(fun(File) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileDataSize}},
-            lfm_proxy:stat(Worker, SessId, {guid, File}), Attempts)
+            lfm_proxy:stat(Worker, SessId, ?FILE_REF(File)), Attempts)
     end, FileGuids),
 
     lists:foreach(fun(File) ->
         ?assertEqual(FileDataSize,
             begin
-                {ok, Handle} = lfm_proxy:open(Worker, SessId, {guid, File}, rdwr),
+                {ok, Handle} = lfm_proxy:open(Worker, SessId, ?FILE_REF(File), rdwr),
                 try
                     {ok, ReadData} = lfm_proxy:check_size_and_read(Worker, Handle, 0, 1000), % use check_size_and_read because of null helper usage
                     size(ReadData) % compare size because of null helper usage
@@ -80,13 +81,13 @@ verify_files_and_dirs(Worker, SessId, #test_data{dir_guids = DirGuids, file_guid
 
 test_read_operations_on_error(Worker, SessId, #test_data{dir_guids = DirGuids, file_guids = FileGuids}, ErrorType) ->
     lists:foreach(fun(Dir) ->
-        ?assertMatch({error, ErrorType}, lfm_proxy:stat(Worker, SessId, {guid, Dir})),
-        ?assertMatch({error, ErrorType}, lfm_proxy:get_children_attrs(Worker, SessId, {guid, Dir}, #{offset => 0, size => 100}))
+        ?assertMatch({error, ErrorType}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(Dir))),
+        ?assertMatch({error, ErrorType}, lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Dir), #{offset => 0, size => 100}))
     end, DirGuids),
 
     lists:foreach(fun(File) ->
-        ?assertMatch({error, ErrorType}, lfm_proxy:stat(Worker, SessId, {guid, File})),
-        ?assertMatch({error, ErrorType}, lfm_proxy:open(Worker, SessId, {guid, File}, rdwr))
+        ?assertMatch({error, ErrorType}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(File))),
+        ?assertMatch({error, ErrorType}, lfm_proxy:open(Worker, SessId, ?FILE_REF(File), rdwr))
     end, FileGuids).
 
 
@@ -108,12 +109,12 @@ create_file(Worker, SessId, ParentGuid, FileName, FileContent) when is_binary(Fi
     FileGuid.
 
 write_byte_to_file(W, SessId, FileGuid, Offset) ->
-    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W, SessId, ?FILE_REF(FileGuid), rdwr),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, Handle, Offset, <<"t">>)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
 empty_write_to_file(W, SessId, FileGuid, Offset) ->
-    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W, SessId, ?FILE_REF(FileGuid), rdwr),
     ?assertEqual({ok, 0}, lfm_proxy:write(W, Handle, Offset, <<>>)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 

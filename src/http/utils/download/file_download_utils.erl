@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("http/rest.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -57,7 +58,7 @@ download_single_file(SessionId, #file_attr{
         Ranges ->
             Req1 = ensure_content_type_header_set(FileName, Req0),
 
-            case lfm:monitored_open(SessionId, {guid, FileGuid}, read) of
+            case lfm:monitored_open(SessionId, ?FILE_REF(FileGuid), read) of
                 {ok, FileHandle} ->
                     try
                         {Boundary, Req2} = stream_file_internal(Ranges, FileHandle, FileSize, Req1),

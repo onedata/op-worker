@@ -17,6 +17,7 @@
 -include("rest_test_utils.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -183,7 +184,7 @@ create_directory(Worker, SessionId, DirPath) ->
 
 create_file(Worker, SessionId, FilePath, FileContent) ->
     {ok, FileGuid} = ?assertMatch({ok, _FileGuid}, lfm_proxy:create(Worker, SessionId, FilePath)),
-    {ok, Handle} = ?assertMatch({ok, _Handle}, lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write)),
+    {ok, Handle} = ?assertMatch({ok, _Handle}, lfm_proxy:open(Worker, SessionId, ?FILE_REF(FileGuid), write)),
     Size = size(FileContent),
     ?assertMatch({ok, Size}, lfm_proxy:write(Worker, Handle, 0, FileContent)),
     ?assertMatch(ok, lfm_proxy:fsync(Worker, Handle)),
@@ -315,7 +316,7 @@ mock_transfers(Workers) ->
     TestPid = self(),
     ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
         fun(_, FileCtx, _, _, _, _) ->
-            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+            FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
             TestPid ! {qos_slave_job, self(), FileGuid},
             receive {completed, FileGuid} -> {ok, FileGuid} end
         end).
@@ -552,7 +553,7 @@ assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, Fil
 
 get_effective_qos_by_lfm(Config, Worker, FileGuid) ->
     {ok, {QosEntriesWithStatus, AssignedEntries}} = 
-        lfm_proxy:get_effective_file_qos(Worker, ?SESS_ID(Config, Worker), {guid, FileGuid}),
+        lfm_proxy:get_effective_file_qos(Worker, ?SESS_ID(Config, Worker), ?FILE_REF(FileGuid)),
     {ok, #effective_file_qos{
         assigned_entries = AssignedEntries,
         qos_entries = maps:keys(QosEntriesWithStatus)
@@ -611,7 +612,7 @@ assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDi
             fill_in_expected_distribution(ExpectedFileDistribution, FileContent)
         ),
 
-        FileLocationsSorted = case lfm_proxy:get_file_distribution(Worker, SessId, {guid, FileGuid}) of
+        FileLocationsSorted = case lfm_proxy:get_file_distribution(Worker, SessId, ?FILE_REF(FileGuid)) of
             {ok, FileLocations} ->
                 lists:sort(FileLocations);
             Error ->
@@ -643,7 +644,7 @@ gather_not_matching_statuses_on_all_workers(Config, Guids, QosList, ExpectedStat
     end, 
     lists:flatmap(fun(Worker) ->
         lists:filtermap(fun(Guid) ->
-            case lfm_proxy:check_qos_status(Worker, SessId(Worker), QosList, {guid, Guid}) of
+            case lfm_proxy:check_qos_status(Worker, SessId(Worker), QosList, ?FILE_REF(Guid)) of
                 ExpectedStatusMatcher -> false;
                 NotExpectedStatus -> {true, {Worker, Guid, NotExpectedStatus}}
             end

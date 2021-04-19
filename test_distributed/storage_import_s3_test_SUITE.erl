@@ -82,6 +82,17 @@
     delete_many_subfiles_test/1,
     create_delete_race_test/1,
     create_list_race_test/1,
+    properly_handle_hardlink_when_file_and_hardlink_are_not_deleted/1,
+    properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_not_deleted/1,
+    properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_not_deleted/1,
+    properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted_when_opened/1,
+    properly_handle_hardlink_when_file_and_hardlink_are_deleted_when_opened/1,
+    properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_deleted_when_opened/1,
+    properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted/1,
+    properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_deleted/1,
+    properly_handle_hardlink_when_file_and_hardlink_are_deleted/1,
+    symlink_is_ignored_by_initial_scan/1,
+    symlink_is_ignored_by_continuous_scan/1,
 
     append_file_update_test/1,
     append_empty_file_update_test/1,
@@ -157,6 +168,17 @@
     delete_many_subfiles_test,
     create_delete_race_test,
     create_list_race_test,
+    properly_handle_hardlink_when_file_and_hardlink_are_not_deleted,
+    properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_not_deleted,
+    properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_not_deleted,
+    properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted_when_opened,
+    properly_handle_hardlink_when_file_and_hardlink_are_deleted_when_opened,
+    properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_deleted_when_opened,
+    properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted,
+    properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_deleted,
+    properly_handle_hardlink_when_file_and_hardlink_are_deleted,
+    symlink_is_ignored_by_initial_scan,
+    symlink_is_ignored_by_continuous_scan,
 
     append_file_update_test,
     append_empty_file_update_test,
@@ -335,6 +357,39 @@ create_delete_race_test(Config) ->
 
 create_list_race_test(Config) ->
     storage_import_s3_test_base:create_list_race_test(Config).
+
+properly_handle_hardlink_when_file_and_hardlink_are_not_deleted(Config) ->
+    storage_import_test_base:properly_handle_hardlink_when_file_and_hardlink_are_not_deleted(Config, ?S3_HELPER_NAME).
+
+properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_not_deleted(Config) ->
+    storage_import_test_base:properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_not_deleted(Config, ?S3_HELPER_NAME).
+
+properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_not_deleted(Config) ->
+    storage_import_test_base:properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_not_deleted(Config, ?S3_HELPER_NAME).
+
+properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted_when_opened(Config) ->
+    storage_import_test_base:properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted_when_opened(Config, ?S3_HELPER_NAME).
+
+properly_handle_hardlink_when_file_and_hardlink_are_deleted_when_opened(Config) ->
+    storage_import_test_base:properly_handle_hardlink_when_file_and_hardlink_are_deleted_when_opened(Config, ?S3_HELPER_NAME).
+
+properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_deleted_when_opened(Config) ->
+    storage_import_test_base:properly_handle_hardlink_when_file_is_deleted_and_hardlink_is_deleted_when_opened(Config, ?S3_HELPER_NAME).
+
+properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted(Config) ->
+    storage_import_test_base:properly_handle_hardlink_when_file_is_not_deleted_and_hardlink_is_deleted(Config, ?S3_HELPER_NAME).
+
+properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_deleted(Config) ->
+    storage_import_test_base:properly_handle_hardlink_when_file_is_deleted_when_opened_and_hardlink_is_deleted(Config, ?S3_HELPER_NAME).
+
+properly_handle_hardlink_when_file_and_hardlink_are_deleted(Config) ->
+    storage_import_test_base:properly_handle_hardlink_when_file_and_hardlink_are_deleted(Config, ?S3_HELPER_NAME).
+
+symlink_is_ignored_by_initial_scan(Config) ->
+    storage_import_test_base:symlink_is_ignored_by_initial_scan(Config).
+
+symlink_is_ignored_by_continuous_scan(Config) ->
+    storage_import_test_base:symlink_is_ignored_by_continuous_scan(Config, ?S3_HELPER_NAME).
 
 
 append_file_update_test(Config) ->
