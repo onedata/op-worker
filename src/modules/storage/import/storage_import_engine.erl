@@ -171,6 +171,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                     case deletion_marker:check(ParentUuid, FileName) of
                         {error, not_found} ->
                             FileCtx = file_ctx:new_by_uuid(FileUuid2, SpaceId),
+                            % call by module to mock in tests
                             storage_import_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
                         {ok, _} ->
                             {?FILE_UNMODIFIED, undefined, StorageFileCtx}
@@ -316,13 +317,22 @@ get_child_safe(FileCtx, ChildName) ->
 
 -spec check_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
-check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info) ->
+check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info = #{parent_ctx := ParentCtx}) ->
     {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    case file_meta:type(StMode) of
-        ?DIRECTORY_TYPE ->
-            check_dir_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
-        ?REGULAR_FILE_TYPE ->
-            check_file_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info)
+    {EffFlags, FileCtx2} = file_protection_flags_cache:get_effective_flags(FileCtx),
+    case EffFlags == ?no_flags_mask of
+        true ->
+            case file_meta:type(StMode) of
+                ?DIRECTORY_TYPE ->
+                    check_dir_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
+                ?REGULAR_FILE_TYPE ->
+                    check_file_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info)
+            end;
+        false ->
+            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+            {ParentStorageFileId, _} = file_ctx:get_storage_file_id(ParentCtx),
+            ok = storage_sync_info:mark_skipped_file(ParentStorageFileId, SpaceId),
+            {?FILE_UNMODIFIED, FileCtx2, StorageFileCtx2}
     end.
 
 -spec check_dir_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), info()) ->

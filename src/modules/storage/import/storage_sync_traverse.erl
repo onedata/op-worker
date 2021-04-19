@@ -612,9 +612,16 @@ traverse(TraverseJob = #storage_traverse_master{
     case storage_traverse:do_master_job(TraverseJob, Args) of
         {ok, MasterJobMap, HashesReversed} ->
             BatchHash = storage_import_hash:hash(lists:reverse(HashesReversed)),
-            case storage_import_hash:children_attrs_hash_has_changed(BatchHash, Offset, BatchSize, SSIDoc) of
+            AnyFileSkipped = case SSIDoc =:= undefined of
+                true -> false;
+                false -> storage_sync_info:get_skipped_files(SSIDoc)
+            end,
+            case
+                storage_import_hash:children_attrs_hash_has_changed(BatchHash, Offset, BatchSize, SSIDoc)
+                orelse AnyFileSkipped
+            of
                 true ->
-                    schedule_jobs_for_all_files(TraverseJob, MasterJobMap, BatchHash, DetectDeletions);
+                    schedule_jobs_for_all_files(TraverseJob, MasterJobMap, BatchHash, DetectDeletions orelse AnyFileSkipped);
                 false ->
                     % Hash hasn't changed, therefore we can schedule jobs only for directories
                     schedule_jobs_for_directories_only(TraverseJob, MasterJobMap, DetectDeletions)
@@ -845,7 +852,7 @@ increment_counter(?FILE_UNMODIFIED, SpaceId) ->
     storage_import_monitoring:mark_unmodified_file(SpaceId).
 
 
--spec get_storage_sync_info_doc(master_job()) -> storage_sync_info:doc().
+-spec get_storage_sync_info_doc(master_job()) -> storage_sync_info:doc() | undefined.
 get_storage_sync_info_doc(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     offset = 0

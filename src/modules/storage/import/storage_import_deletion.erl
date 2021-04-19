@@ -18,6 +18,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/storage/traverse/storage_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -86,6 +87,13 @@ do_master_job(Job = #storage_traverse_master{
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+
+    % reset skipped files field in case of first batch job
+    case FMToken =:= ?INITIAL_LS_TOKEN andalso SLToken =:= #link_token{} of
+        true -> storage_sync_info:reset_skipped_files(StorageFileId, SpaceId);
+        false -> ok
+    end,
+
     Result = try
         case refill_file_meta_children(FMChildren, FileCtx, FMToken) of
             {error, not_found} ->
@@ -334,13 +342,25 @@ new_flat_iterator_child_master_job(Job = #storage_traverse_master{
 maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     try
-        {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
-        {IsStorageFileCreated, FileCtx3} = file_ctx:is_storage_file_created(FileCtx2),
-        case IsStorageFileCreated and not storage_driver:exists(SDHandle) of
+        {ProtectionFlags, FileCtx2} = file_protection_flags_cache:get_effective_flags(FileCtx),
+        IsProtected = ProtectionFlags =/= ?no_flags_mask,
+        {SDHandle, FileCtx3} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx2),
+        {IsStorageFileCreated, FileCtx4} = file_ctx:is_storage_file_created(FileCtx3),
+        {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx4),
+
+        case
+            not IsProtected andalso
+            IsStorageFileCreated and
+            not storage_driver:exists(SDHandle)
+        of
             true ->
                 % file is still missing on storage we can delete it from db
-               delete_file_and_update_counters(FileCtx3, SpaceId, StorageId);
+                delete_file_and_update_counters(FileCtx4, SpaceId, StorageId);
             false ->
+                case IsProtected of
+                    true -> storage_sync_info:mark_skipped_file(filename:dirname(StorageFileId), SpaceId);
+                    false -> ok
+                end,
                 storage_import_monitoring:mark_processed_job(SpaceId)
         end
     catch
