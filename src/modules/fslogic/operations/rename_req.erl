@@ -40,6 +40,7 @@
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
+    validate_target_name(TargetName),
     file_ctx:assert_not_special_const(SourceFileCtx),
     file_ctx:assert_not_trash_dir_const(TargetParentFileCtx, TargetName),
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
@@ -651,3 +652,12 @@ on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFi
     ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime),
     ok = fslogic_times:update_ctime(SourceFileCtx2, CurrentTime),
     ok = fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx2, ParentGuid, TargetName, PrevName, UserCtx).
+
+
+%% @private
+-spec validate_target_name(file_meta:name()) -> ok | no_return().
+validate_target_name(TargetName) ->
+    case re:run(TargetName, <<"/">>, [{capture, none}]) of
+        match -> throw(?EINVAL);
+        nomatch -> ok
+    end.
