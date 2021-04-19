@@ -229,7 +229,7 @@ get_spaces(StorageId) ->
     end.
 
 
--spec is_imported(storage:id()) -> {ok, boolean()} | errors:error().
+-spec is_imported(storage:id()) -> {ok, boolean() | binary()} | errors:error().
 is_imported(StorageId) ->
     case get(StorageId) of
         {ok, #document{value = #od_storage{imported = ImportedStorage}}} ->
