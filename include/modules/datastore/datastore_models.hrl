@@ -961,4 +961,12 @@
     all_batches_listed = false :: boolean()
 }).
 
+%% Model that holds information about an ongoing (or completed) workflow execution
+-record(atm_workflow, {
+    space_id :: binary(),
+    schedule_time = 0 :: time:seconds(),
+    start_time = 0 :: time:seconds(),
+    finish_time = 0 :: time:seconds()
+}).
+
 -endif.
