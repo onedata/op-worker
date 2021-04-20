@@ -1524,6 +1524,8 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),
 
+    test_utils:mock_expect(AllWorkers, provider_logic, get_service_configuration, fun(_) -> {ok, #{}} end),
+
     test_utils:mock_expect(AllWorkers, token_logic, verify_provider_identity_token, VerifyProviderIdentityFun).
 
 %%--------------------------------------------------------------------
