@@ -137,8 +137,11 @@ sanitize_param({aspect, Param}, RawData, ParamsSpec) ->
     {true, sanitize_param(TypeConstraint, ValueConstraint, Param, RawValue)};
 sanitize_param(Param, RawData, ParamsSpec) ->
     case maps:get(Param, RawData, null) of
-        Null when Null =:= null orelse Null =:= <<"null">> ->
-            false;
+        Null when Null =:= null ->
+            case ParamsSpec of
+                {any, _} -> true;
+                _ -> false
+            end;
         RawValue ->
             {TypeConstraint, ValueConstraint} = maps:get(Param, ParamsSpec),
             {true, sanitize_param(

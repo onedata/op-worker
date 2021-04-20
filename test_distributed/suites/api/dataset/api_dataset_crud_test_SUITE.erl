@@ -348,6 +348,10 @@ get_dataset_test_base(
                     prepare_args_fun = build_get_dataset_prepare_rest_args_fun(DatasetId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
                         CreationTime = get_global_time(TestNode),
+                        EffProtectionFlags = case State of
+                            ?ATTACHED_DATASET -> ProtectionFlags;
+                            ?DETACHED_DATASET -> []
+                        end,
                         ExpDatasetData = #{
                             <<"datasetId">> => DatasetId,
                             <<"parentId">> => utils:undefined_to_null(ParentId),
@@ -356,7 +360,7 @@ get_dataset_test_base(
                             <<"rootFilePath">> => RootFilePath,
                             <<"state">> => StateBin,
                             <<"protectionFlags">> => ProtectionFlags,
-                            <<"effectiveProtectionFlags">> => ProtectionFlags,
+                            <<"effectiveProtectionFlags">> => EffProtectionFlags,
                             <<"creationTime">> => CreationTime
                         },
                         ?assertEqual({?HTTP_200_OK, ExpDatasetData}, {RespCode, RespBody})
@@ -783,6 +787,10 @@ build_dataset_gs_instance(
     State, DatasetId, ParentId, ProtectionFlagsJson, CreationTime,
     RootFileGuid, RootFileType, RootFilePath
 ) ->
+    EffProtectionFlagsJson = case State of
+        ?ATTACHED_DATASET -> ProtectionFlagsJson;
+        ?DETACHED_DATASET -> []
+    end,
     BasicInfo = dataset_gui_gs_translator:translate_dataset_info(#dataset_info{
         id = DatasetId,
         state = State,
@@ -791,7 +799,7 @@ build_dataset_gs_instance(
         root_file_type = RootFileType,
         creation_time = CreationTime,
         protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
-        eff_protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
+        eff_protection_flags = file_meta:protection_flags_from_json(EffProtectionFlagsJson),
         parent = ParentId,
         index = datasets_structure:pack_entry_index(filename:basename(RootFilePath), DatasetId)
     }),

@@ -434,12 +434,15 @@ validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
     Offset = maps:get(<<"offset">>, Params, 0),
     Index = case maps:get(<<"index">>, Params, undefined) of
         undefined -> <<>>;
-        Null when Null =:= null orelse Null =:= <<"null">> -> <<>>;
+        null when Format == rest -> <<"null">>;
+        null -> <<>>;
         DefinedIndex -> DefinedIndex
     end,
+
     Token = case maps:get(<<"token">>, Params, undefined) of
         undefined -> undefined;
-        Null2 when Null2 =:= null orelse Null2 =:= <<"null">> -> undefined;
+        null when Format == rest -> mochiweb_base64url:decode(<<"null">>);
+        null -> undefined;
         EncodedToken -> mochiweb_base64url:decode(EncodedToken)
     end,
 
