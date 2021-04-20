@@ -212,7 +212,7 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
                     <<"limit">> => [1, 100],
                     <<"offset">> => [1, 3, 10],
                     <<"index">> => [<<"null">>, null, RandomIndex, <<"zzzzzzzzzzzz">>],
-                    <<"token">> => [<<"null">>, null | [mochiweb_base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
+                    <<"token">> => [<<"null">>, null | [http_utils:base64url_encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentSpace">>, ?ERROR_FORBIDDEN},
@@ -358,7 +358,7 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
                     <<"limit">> => [1, 100],
                     <<"offset">> => [1, 3, 10],
                     <<"index">> => [<<"null">>, null, RandomIndex, <<"zzzzzzzzzzzz">>],
-                    <<"token">> => [<<"null">>, null | [mochiweb_base64url:encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
+                    <<"token">> => [<<"null">>, null | [http_utils:base64url_encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND},
@@ -441,9 +441,9 @@ validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
 
     Token = case maps:get(<<"token">>, Params, undefined) of
         undefined -> undefined;
-        null when Format == rest -> mochiweb_base64url:decode(<<"null">>);
+        null when Format == rest -> http_utils:base64url_decode(<<"null">>);
         null -> undefined;
-        EncodedToken -> mochiweb_base64url:decode(EncodedToken)
+        EncodedToken -> http_utils:base64url_decode(EncodedToken)
     end,
 
     StrippedDatasets = lists:dropwhile(fun({_FileName, _DatasetId, #dataset_info{index = DatasetIndex}}) ->

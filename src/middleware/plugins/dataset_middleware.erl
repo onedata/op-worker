@@ -268,7 +268,7 @@ gather_dataset_listing_opts(Data) ->
             % if token is passed, offset has to be increased by 1
             % to ensure that listing using token is exclusive
             Opts#{
-                start_index => mochiweb_base64url:decode(Token),
+                start_index => http_utils:base64url_decode(Token),
                 offset => maps:get(<<"offset">>, Data, 0) + 1
             }
     end.

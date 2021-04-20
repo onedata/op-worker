@@ -136,11 +136,16 @@ sanitize_param({aspect, Param}, RawData, ParamsSpec) ->
     % not valid
     {true, sanitize_param(TypeConstraint, ValueConstraint, Param, RawValue)};
 sanitize_param(Param, RawData, ParamsSpec) ->
-    case maps:get(Param, RawData, null) of
-        Null when Null =:= null ->
-            case ParamsSpec of
-                {any, _} -> true;
-                _ -> false
+    case maps:get(Param, RawData, undefined) of
+        undefined ->
+            false;
+        null ->
+            case maps:get(Param, ParamsSpec, undefined) of
+                {any, ValueConstraint} ->
+                    {true, sanitize_param(any, ValueConstraint, Param, null)};
+                _ ->
+                    % null values are ignored for any other TypeConstraints than "any"
+                    false
             end;
         RawValue ->
             {TypeConstraint, ValueConstraint} = maps:get(Param, ParamsSpec),

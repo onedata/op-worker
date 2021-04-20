@@ -91,6 +91,6 @@ translate_datasets_list(Datasets, IsLast) ->
         <<"datasets">> => lists:reverse(TranslatedDatasetsReversed),
         <<"nextPageToken">> => case IsLast of
             true -> null;
-            false -> mochiweb_base64url:encode(NextPageToken)
+            false -> http_utils:base64url_encode(NextPageToken)
         end
     }.
