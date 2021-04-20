@@ -204,7 +204,7 @@
     provider :: od_provider:id() | undefined,
     spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
-    imported = false :: boolean() | undefined,
+    imported = false :: boolean() | binary() | undefined, % binary <<"unknown">> is allowed during upgrade procedure
     readonly = false :: boolean(),
     cache_state = #{} :: cache_state()
 }).
