@@ -35,7 +35,7 @@ report_file_access_operation(Request, FileCtx, UserId) ->
         false -> ok;
         true ->
             FormattedRequest = format_request(Request),
-            Uuid = file_ctx:get_uuid_const(FileCtx),
+            Uuid = file_ctx:get_logical_uuid_const(FileCtx),
             FormattedShareId = 
                 str_utils:to_list(utils:undefined_to_null(file_ctx:get_share_id_const(FileCtx))),
             FilePath = try
