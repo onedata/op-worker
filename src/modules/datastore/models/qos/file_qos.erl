@@ -372,8 +372,8 @@ get_effective(#document{key = FileUuid} = FileDoc, OriginalParentDoc) ->
                 end
         end
     end,
-    MergeCallback = fun(NewEntry, Acc, EntryCalculationInfo, _CalculationInfoAcc) ->
-        {ok, merge_file_qos(Acc, NewEntry), EntryCalculationInfo}
+    MergeCallback = fun(Acc, NewEntry, CalculationInfoAcc, _EntryCalculationInfo) ->
+        {ok, merge_file_qos(Acc, NewEntry), CalculationInfoAcc}
     end,
     Options = #{merge_callback => MergeCallback, use_referenced_key => true, force_execution_on_inode => true},
 
@@ -381,7 +381,7 @@ get_effective(#document{key = FileUuid} = FileDoc, OriginalParentDoc) ->
 
 
 %% @private
--spec merge_eff_qos_for_files([file_meta:doc()], bounded_cache:callback(), effective_value:get_options()) ->
+-spec merge_eff_qos_for_files([file_meta:doc()], effective_value:callback(), effective_value:get_or_calculate_options()) ->
     effective_file_qos() | undefined.
 merge_eff_qos_for_files(FileDocs, Callback, Options) ->
     MergedEffQos = lists_utils:foldl_while(fun(FileDoc, Acc) ->
@@ -398,8 +398,8 @@ merge_eff_qos_for_files(FileDocs, Callback, Options) ->
     
 
 %% @private
--spec get_effective_qos_for_single_file(undefined | file_meta:doc(), bounded_cache:callback(), effective_value:get_options()) ->
-    effective_file_qos() | undefined | {error, term()}.
+-spec get_effective_qos_for_single_file(undefined | file_meta:doc(), effective_value:callback(),
+    effective_value:get_or_calculate_options()) -> effective_file_qos() | undefined | {error, term()}.
 get_effective_qos_for_single_file(undefined, _Callback, _Options) -> {ok, undefined};
 get_effective_qos_for_single_file(#document{scope = SpaceId} = FileDoc, Callback, Options) ->
     case effective_value:get_or_calculate(?CACHE_TABLE_NAME(SpaceId), FileDoc, Callback, Options) of

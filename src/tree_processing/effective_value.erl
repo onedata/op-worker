@@ -16,7 +16,7 @@
 %%% The module allows recursive calculation of value basing on single
 %%% reference of file or all file's references. Three modes are possible:
 %%%    - calculation only for single reference (no additional options needed),
-%%%    - calculation using all references where final value is aggregated
+%%%    - calculation using all references where final value is merged
 %%%      using values calculated for all references - merge_callback has to
 %%%      be provided for reference values` aggregation
 %%%    - calculation using all references where final value is calculated using
@@ -24,7 +24,7 @@
 %%%      references - merge_callback has to  be provided for reference values`
 %%%      aggregation and differentiate_callback has to be provider to calculate
 %%%      final value of the reference using value calculated using ancestors of
-%%%      this reference and value aggregated from all references by merge_callback.
+%%%      this reference and value merged from all references by merge_callback.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(effective_value).
@@ -43,32 +43,32 @@
 -type init_options() :: bounded_cache:cache_options().
 -type group() :: bounded_cache:group().
 -type group_options() :: bounded_cache:group_options().
--type calculation_info() :: term(). % Function that calculates value returns additional information
-                                    % (CalculationInfo) that can be useful for further work
-                                    % (e.g., calculating function can include datastore documents getting and
-                                    % these documents can be used later without calling datastore).
-                                    % Such returned value is provided to calculate function when processing
-                                    % child in case of recursive value calculation
-                                    % (see bounded_cache in cluster_worker repository)).
--type initial_calculation_info() :: calculation_info(). % This type represents initial value provided to function
-                                                        % when processing first item.
+-type calculation_info() :: bounded_cache:additional_info(). % Function that calculates value returns additional information
+                                                             % (CalculationInfo) that can be useful for further work
+                                                             % (e.g., calculating function can include datastore documents getting and
+                                                             % these documents can be used later without calling datastore).
+                                                             % Such returned value is provided to calculate function when processing
+                                                             % child in case of recursive value calculation
+                                                             % (see bounded_cache in cluster_worker repository)).
 -type args() :: list().
 -type in_critical_section() :: boolean() | parent. % parent = use section starting from parent directory
 % Type that defines return value of get_or_calculate functions and helper functions (used to shorten specs)
 -type get_return_value() :: {ok, bounded_cache:value(), calculation_info()} | {error, term()}.
+-type callback() :: bounded_cache:callback().
 % Merge callback is used to merge values calculated using different references of file.
 % If it is not present, only reference pointing at file doc passed by get_or_calculate function argument is used.
--type merge_callback() :: fun((Ref1Value :: bounded_cache:value(), Ref2Value :: bounded_cache:value(),
-    Ref1CalculationInfo :: calculation_info(), RefCalculationInfo :: calculation_info()) -> get_return_value()).
+-type merge_callback() :: fun((ValueAcc :: bounded_cache:value(), RefValue :: bounded_cache:value(),
+    CalculationInfoAcc :: calculation_info(), RefCalculationInfo :: calculation_info()) -> get_return_value()).
 % Callback that allows caching of different values for different references of the same file during single call.
 % It uses value calculated for reference and value provided by merge_callback to obtain final value for particular
 % reference.
 -type differentiate_callback() :: fun((RefValue :: bounded_cache:value(), MergedValue :: bounded_cache:value(),
     calculation_info()) -> {ok, bounded_cache:value()} | {error, term()}).
--type get_options() :: #{
+-type get_or_calculate_options() :: #{
     timestamp => time:millis(),
     in_critical_section => in_critical_section(),
-    initial_calculation_info => initial_calculation_info(),
+    initial_calculation_info => calculation_info(), % Represents initial value provided to function
+                                                    % when processing first item.
     args => args(),
     use_referenced_key => boolean(), % use referenced key to find/cache value instead of key of file doc
                                      % passed by get_or_calculate function argument
@@ -79,7 +79,7 @@
                                           % is deleted
 }.
 
--export_type([cache/0, get_options/0]).
+-export_type([cache/0, callback/0, get_or_calculate_options/0]).
 -define(CRITICAL_SECTION(Cache, Key), {effective_value_insert, Cache, Key}).
 
 %%%===================================================================
@@ -101,17 +101,12 @@ cache_exists(Cache) ->
     bounded_cache:cache_exists(Cache).
 
 
--spec invalidate(bounded_cache:cache()) -> ok.
+-spec invalidate(cache()) -> ok.
 invalidate(Cache) ->
     bounded_cache:invalidate(Cache).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv get_or_calculate(Cache, FileDoc, CalculateCallback, #{})
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback()) -> get_return_value().
+-spec get_or_calculate(cache(), file_meta:doc(), callback()) -> get_return_value().
 get_or_calculate(Cache, FileDoc, CalculateCallback) ->
     get_or_calculate(Cache, FileDoc, CalculateCallback, #{}).
 
@@ -128,7 +123,7 @@ get_or_calculate(Cache, FileDoc, CalculateCallback) ->
 %% Note: it is possible to calculate value using all references of file - see main doc.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_calculate(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(), get_options()) ->
+-spec get_or_calculate(cache(), file_meta:doc(), callback(), get_or_calculate_options()) ->
     get_return_value().
 get_or_calculate(Cache, #document{key = DocKey} = FileDoc, CalculateCallback, Options) ->
     % use_referenced_key option should be used only for file for which function is called, set false for ancestors
@@ -154,8 +149,8 @@ get_or_calculate(Cache, #document{key = DocKey} = FileDoc, CalculateCallback, Op
 %%% get_or_calculate - internal functions
 %%%===================================================================
 
--spec get_or_calculate_in_critical_section(bounded_cache:cache(), file_meta:uuid(), file_meta:doc(),
-    bounded_cache:callback(), get_options()) -> get_return_value().
+-spec get_or_calculate_in_critical_section(cache(), file_meta:uuid(), file_meta:doc(),
+    callback(), get_or_calculate_options()) -> get_return_value().
 get_or_calculate_in_critical_section(Cache, Key, FileDoc, CalculateCallback, Options) ->
     case bounded_cache:get(Cache, Key) of
         {ok, Value} ->
@@ -166,8 +161,8 @@ get_or_calculate_in_critical_section(Cache, Key, FileDoc, CalculateCallback, Opt
             end)
     end.
 
--spec get_or_calculate_internal(bounded_cache:cache(), file_meta:uuid(), file_meta:doc(), bounded_cache:callback(),
-    get_options()) -> get_return_value().
+-spec get_or_calculate_internal(cache(), file_meta:uuid(), file_meta:doc(), callback(),
+    get_or_calculate_options()) -> get_return_value().
 get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
     % Note - argument Key and field key if FileDoc can differ - see use_referenced_key option
     case bounded_cache:get(Cache, Key) of
@@ -175,13 +170,11 @@ get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
             {ok, Value, maps:get(initial_calculation_info, Options, undefined)};
         {error, not_found} ->
             MergeCallback = maps:get(merge_callback, Options, undefined),
-            MultiRefs = case {MergeCallback, file_meta:get_effective_type(FileDoc)} of
-                {undefined, _} -> false; % merge_callback is undefined - calculate only for single reference
-                {_, ?REGULAR_FILE_TYPE} -> true; % only reg files and hardlinks can have multiple references
-                _ -> false
-            end,
+            % only reg files and hardlinks can have multiple references
+            ShouldProcessMultipleRefs = (MergeCallback =/= undefined)
+                andalso (file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE),
 
-            case {fslogic_uuid:is_space_dir_uuid(Key), fslogic_uuid:is_root_dir_uuid(Key), MultiRefs} of
+            case {fslogic_uuid:is_space_dir_uuid(Key), fslogic_uuid:is_root_dir_uuid(Key), ShouldProcessMultipleRefs} of
                 {false, false, false} ->
                     get_or_calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Options);
                 {false, false, true} ->
@@ -200,8 +193,8 @@ get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
             end
     end.
 
--spec get_or_calculate_single_reference(bounded_cache:cache(), file_meta:uuid(), file_meta:doc(),
-    bounded_cache:callback(), get_options()) -> get_return_value().
+-spec get_or_calculate_single_reference(cache(), file_meta:uuid(), file_meta:doc(),
+    callback(), get_or_calculate_options()) -> get_return_value().
 get_or_calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Options) ->
     case calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) of
         {ok, ParentValue, CalculationInfo} ->
@@ -213,17 +206,17 @@ get_or_calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Option
             Error
     end.
 
--spec get_or_calculate_multiple_references(bounded_cache:cache(), file_meta:uuid(), file_meta:doc(),
-    bounded_cache:callback(), get_options()) -> get_return_value().
+-spec get_or_calculate_multiple_references(cache(), file_meta:uuid(), file_meta:doc(),
+    callback(), get_or_calculate_options()) -> get_return_value().
 get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileDoc, CalculateCallback, Options) ->
     MergeCallback = maps:get(merge_callback, Options),
     References = get_references(FileDoc),
     ReferencesValues = lists:map(fun(ReferenceDoc) ->
-        calculate_reference(Cache, ReferenceDoc, CalculateCallback, Options)
+        calculate_for_reference(Cache, ReferenceDoc, CalculateCallback, Options)
     end, References),
 
     case merge_references_values(ReferencesValues, undefined, MergeCallback) of
-        {ok, Acc, CalculationInfoAcc} = OkAns ->
+        {ok, MergedValue, MergeCalculationInfo} = OkAns ->
             {ok, CalculatedValue, CalculationInfo} = case maps:get(force_execution_on_inode, Options, false) of
                 true ->
                     INodeKey = fslogic_uuid:ensure_referenced_uuid(Key),
@@ -232,7 +225,7 @@ get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileD
                             OkAns;
                         false ->
                             force_execution_on_inode(
-                                INodeKey, CalculateCallback, MergeCallback, CalculationInfoAcc, Acc, Options)
+                                INodeKey, CalculateCallback, MergeCallback, MergeCalculationInfo, MergedValue, Options)
                     end;
                 false ->
                     OkAns
@@ -250,8 +243,8 @@ get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileD
 %%% Helper functions
 %%%===================================================================
 
--spec calculate_for_parent(bounded_cache:cache(), file_meta:uuid(), file_meta:doc(), bounded_cache:callback(),
-    get_options()) -> get_return_value().
+-spec calculate_for_parent(cache(), file_meta:uuid(), file_meta:doc(), callback(),
+    get_or_calculate_options()) -> get_return_value().
 calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) ->
     {ok, ParentUuid} = get_parent(Key, FileDoc),
     case file_meta:get_including_deleted(ParentUuid) of
@@ -259,9 +252,9 @@ calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) ->
         _ -> {error, {file_meta_missing, ParentUuid}}
     end.
 
--spec calculate_reference(bounded_cache:cache(), file_meta:doc(), bounded_cache:callback(), get_options()) ->
+-spec calculate_for_reference(cache(), file_meta:doc(), callback(), get_or_calculate_options()) ->
     get_return_value().
-calculate_reference(Cache, #document{key = Key} = FileDoc, CalculateCallback, Options) ->
+calculate_for_reference(Cache, #document{key = Key} = FileDoc, CalculateCallback, Options) ->
     case calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) of
         {ok, ParentValue, ParentCalculationInfo} ->
             Args = maps:get(args, Options, []),
@@ -281,7 +274,7 @@ merge_references_values(_ReferenceValues, {error, _} = Acc, _MergeCallback) ->
 merge_references_values([{ok, Value, CalculationInfo} | Tail], {ok, AccValue, AccCalculationInfo}, MergeCallback) ->
     merge_references_values(Tail, MergeCallback(AccValue, Value, AccCalculationInfo, CalculationInfo), MergeCallback).
 
--spec differentiate_and_cache_references(bounded_cache:cache(), file_meta:uuid(), bounded_cache:value(),
+-spec differentiate_and_cache_references(cache(), file_meta:uuid(), bounded_cache:value(),
     calculation_info(), [file_meta:doc()], [get_return_value()], time:millis(), differentiate_callback()) ->
     get_return_value().
 differentiate_and_cache_references(Cache, Key, MergedValue, CalculationInfo,
@@ -301,9 +294,10 @@ differentiate_and_cache_references(Cache, _Key, MergedValue, CalculationInfo,
             Error
     end, {ok, []}, ReferencesValues),
 
-    % Cache reference is all callback calls succeeded
+    % Cache reference if all callback calls succeeded
     case FoldlAns of
         {ok, ReversedMappedReferencesValues} ->
+            % Head of list is value calculated for reference for which get_or_calculate function has been called
             [ReturnValue | _] = MappedReferencesValues = lists:reverse(ReversedMappedReferencesValues),
             lists:foreach(fun({#document{key = CacheKey}, ValueToCache}) ->
                 bounded_cache:cache(Cache, CacheKey, ValueToCache, Timestamp)
@@ -314,8 +308,8 @@ differentiate_and_cache_references(Cache, _Key, MergedValue, CalculationInfo,
             FoldlError
     end.
 
--spec force_execution_on_inode(file_meta:uuid(), bounded_cache:callback(), merge_callback(),
-    calculation_info(), bounded_cache:value(), get_options()) -> get_return_value().
+-spec force_execution_on_inode(file_meta:uuid(), callback(), merge_callback(),
+    calculation_info(), bounded_cache:value(), get_or_calculate_options()) -> get_return_value().
 force_execution_on_inode(INodeKey, CalculateCallback, MergeCallback, CalculationInfo, Acc, Options) ->
     case file_meta:get_including_deleted(INodeKey) of
         {ok, FileDoc} ->
@@ -340,7 +334,7 @@ get_parent(Key, #document{key = Key} = FileDoc) ->
     file_meta:get_parent_uuid(FileDoc);
 get_parent(Key, _FileDoc) ->
     % Key differs from key inside FileDoc (see use_referenced_key option) - file doc for Key 
-    % will be get inside get_parent_uuid function
+    % will be got inside get_parent_uuid function
     file_meta:get_parent_uuid(Key).
 
 -spec get_references(file_meta:doc()) -> [file_meta:doc()].

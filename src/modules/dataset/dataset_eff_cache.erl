@@ -156,14 +156,16 @@ get(FileDoc = #document{key = FileUuid}) ->
             Callback = fun([Doc, ParentEntry, CalculationInfo]) ->
                 {ok, calculate(Doc, ParentEntry), CalculationInfo}
             end,
-            MergeCallback = fun(NewEntry, EntryAcc, EntryCalculationInfo, _CalculationInfoAcc) ->
-                {ok, merge_entries_protection_flags(NewEntry, EntryAcc), EntryCalculationInfo}
+            MergeCallback = fun(EntryAcc, NewEntry, CalculationInfoAcc, _EntryCalculationInfo) ->
+                {ok, merge_entries_protection_flags(EntryAcc, NewEntry), CalculationInfoAcc}
             end,
             DifferentiateCallback = fun(ReferenceEntry, MergedEntry, _CalculationInfo) ->
                 {ok, prepare_entry_to_cache(ReferenceEntry, MergedEntry)}
             end,
-            Options = #{merge_callback => MergeCallback,
-                differentiate_callback => DifferentiateCallback},
+            Options = #{
+                merge_callback => MergeCallback,
+                differentiate_callback => DifferentiateCallback
+            },
 
             case effective_value:get_or_calculate(CacheName, FileDoc, Callback, Options) of
                 {ok, Entry, _} ->
@@ -210,31 +212,22 @@ calculate(Doc = #document{}, #entry{
         eff_protection_flags = ?set_flags(ParentEffProtectionFlags, ProtectionFlags)
     }.
 
--spec merge_entries_protection_flags(entry(), entry() | undefined) -> entry().
-merge_entries_protection_flags(NewerEntry, undefined) ->
-    NewerEntry;
+-spec merge_entries_protection_flags(entry(), entry()) -> entry().
 merge_entries_protection_flags(#entry{
     eff_protection_flags = EffProtectionFlags2
-} = _NewerEntry, #entry{
+} = _EntryAcc, #entry{
     eff_protection_flags = EffProtectionFlags1
-} = _OlderEntry) ->
+} = _Entry) ->
     % Only protection flags are calculated together for all references
     #entry{
         eff_protection_flags = ?set_flags(EffProtectionFlags1, EffProtectionFlags2)
     }.
 
 -spec prepare_entry_to_cache(entry(), entry()) -> entry().
-prepare_entry_to_cache(#entry{
-    direct_attached_dataset = DirectAttachedDataset,
-    eff_ancestor_datasets = EffAncestorDatasets
-} = _ReferenceEntry, #entry{
+prepare_entry_to_cache(ReferenceEntry, #entry{
     eff_protection_flags = EffProtectionFlags
 } = _MergedEntry) ->
-    #entry{
-        direct_attached_dataset = DirectAttachedDataset,
-        eff_ancestor_datasets = EffAncestorDatasets,
-        eff_protection_flags = EffProtectionFlags
-    }.
+    ReferenceEntry#entry{eff_protection_flags = EffProtectionFlags}.
 
 
 -spec get_protection_flags_if_dataset_attached(file_meta:doc()) -> data_access_control:bitmask().

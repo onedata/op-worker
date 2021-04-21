@@ -96,6 +96,8 @@ all() ->
 -define(CACHE, test_cache).
 -define(CALL_CACHE(Worker, Op, Args), rpc:call(Worker, effective_value, Op, [?CACHE | Args])).
 
+-define(assertNotReceivedMergeMessage, ?assertNotReceivedMatch({merge_callback, _})).
+
 %%%====================================================================
 %%% Test function
 %%%====================================================================
@@ -256,27 +258,27 @@ multiple_references_effective_value_test(Config) ->
     ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
     verify_merge_message({<<"file">>, <<"link">>, CalculationInfo1}),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Value calculated using multiple paths should be provided from cache for both file and link
     ?assertEqual({ok, {<<"file">>, <<"link">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
     ?assertEqual({ok, {<<"file">>, <<"link">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback,
             #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Cached parent values should be used without use_referenced_key parameter set to true
     CalculationInfo2 = [{<<"file">>, <<"mr_ev_dir1">>}, {<<"link">>, <<"mr_ev_dir3">>}],
     ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], merge_callback => MergeCallback}])),
     verify_merge_message({<<"file">>, <<"link">>, CalculationInfo2}),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Value calculated without use_referenced_key parameter set to true should be cached
     ?assertEqual({ok, {<<"file">>, <<"link">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], merge_callback => MergeCallback}])),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Value for space dir should be calculated 2 times because timestamp is before invalidation
     Timestamp = rpc:call(Worker, bounded_cache, get_timestamp, []),
@@ -287,13 +289,13 @@ multiple_references_effective_value_test(Config) ->
     ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], timestamp => Timestamp, merge_callback => MergeCallback}])),
     verify_merge_message({<<"file">>, <<"link">>, CalculationInfo3}),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Value for space dir should be calculated only once as we are after invalidation
     ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], merge_callback => MergeCallback}])),
     verify_merge_message({<<"file">>, <<"link">>, CalculationInfo1}),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     ok.
 
@@ -311,7 +313,7 @@ multiple_references_effective_value_params_test(Config) ->
     ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc,
         Callback, #{initial_calculation_info => [], merge_callback => MergeCallback, force_execution_on_inode => true}])),
     verify_merge_message({<<"link">>, <<"file">>, CalculationInfo1}),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Invalidate cache for further tests
     invalidate_effective_value_cache(Worker),
@@ -323,7 +325,7 @@ multiple_references_effective_value_params_test(Config) ->
     ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc,
         Callback, #{initial_calculation_info => [], merge_callback => MergeCallback, in_critical_section => true}])),
     verify_merge_message({<<"file">>, <<"link">>, CalculationInfo2}),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Calculation should work with in_critical_section set to true and no caching because of timestamp
     Timestamp2 = rpc:call(Worker, bounded_cache, get_timestamp, []),
@@ -335,7 +337,7 @@ multiple_references_effective_value_params_test(Config) ->
         Callback, #{initial_calculation_info => [], timestamp => Timestamp2, merge_callback => MergeCallback,
             in_critical_section => true}])),
     verify_merge_message({<<"file">>, <<"link">>, CalculationInfo3}),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Invalidate cache for further tests
     invalidate_effective_value_cache(Worker),
@@ -348,17 +350,17 @@ multiple_references_effective_value_params_test(Config) ->
         [LinkDoc, Callback, #{initial_calculation_info => [], merge_callback => MergeCallback,
             differentiate_callback => DifferentiateCallback}])),
     verify_merge_message({<<"file">>, <<"link">>, CalculationInfo2}),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Value calculated using postprocessing callback should be provided from cache for both file and link
     ?assertEqual({ok, {<<"link">>, {<<"file">>, <<"link">>}}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc,
         Callback, #{initial_calculation_info => [], merge_callback => MergeCallback,
             differentiate_callback => DifferentiateCallback}])),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
     ?assertEqual({ok, {<<"file">>, {<<"file">>, <<"link">>}}, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc,
         Callback, #{initial_calculation_info => [], merge_callback => MergeCallback,
             differentiate_callback => DifferentiateCallback}])),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     ok.
 
@@ -374,15 +376,15 @@ deleted_reference_effective_value_test(Config) ->
         {<<"space_id1">>, undefined}],
     ?assertEqual({ok, <<"link">>, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Calculated value should be provided from cache for both link and deleted file
     ?assertEqual({ok, <<"link">>, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
     ?assertEqual({ok, <<"link">>, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Invalidate cache for further tests
     invalidate_effective_value_cache(Worker),
@@ -394,17 +396,17 @@ deleted_reference_effective_value_test(Config) ->
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback,
             force_execution_on_inode => true}])),
     verify_merge_message({<<"file">>, <<"link">>, CalculationInfo2}),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Value calculated using force_execution_on_inode flag should be provided from cache for both link and deleted file
     ?assertEqual({ok, {<<"file">>, <<"link">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback,
             force_execution_on_inode => true}])),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
     ?assertEqual({ok, {<<"file">>, <<"link">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback,
             force_execution_on_inode => true}])),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     % Invalidate cache for further tests
     invalidate_effective_value_cache(Worker),
@@ -416,7 +418,7 @@ deleted_reference_effective_value_test(Config) ->
     ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc,
         Callback, #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
     verify_merge_message({<<"link">>, <<"file">>, CalculationInfo3}),
-    verify_merge_message(timeout),
+    ?assertNotReceivedMergeMessage,
 
     ok.
 
@@ -1205,12 +1207,7 @@ prepare_effective_value_callbacks() ->
     {MainCallback, MergeCallback}.
 
 verify_merge_message(Expected) ->
-    MergeMsg = receive
-        {merge_callback, Msg} -> Msg
-    after
-        0 -> timeout
-    end,
-    ?assertEqual(Expected, MergeMsg).
+    ?assertReceivedEqual({merge_callback, Expected}, 0).
 
 invalidate_effective_value_cache(Worker) ->
     ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
