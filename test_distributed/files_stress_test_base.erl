@@ -270,7 +270,7 @@ many_files_creation_tree_test_base(Config, Options) ->
                             case UseHardlinks of
                                 true ->
                                     INodeGuid = maps:get(N, ReferencedFilesMap),
-                                    {ok, _} = lfm_proxy:make_link(W, S, ?FILE_REF(INodeGuid), GUID, N2),
+                                    {ok, _} = lfm_proxy:make_link(W, S, ?FILE_REF(INodeGuid), ?FILE_REF(GUID), N2),
                                     file_ok;
                                 false ->
                                     {ok, FileGUID} = case CacheGUIDS of
